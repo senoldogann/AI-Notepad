@@ -259,8 +259,8 @@ private func processJob(
             language = locked
         } else if job.isFinal {
             let logProbs: [String: Float] = try await engine.detectLanguage(samples: job.samples)
-            votes = try addVote(votes: votes, logProbs: logProbs)
-            language = try pickLanguage(logProbs: logProbs)
+            votes = addVote(votes: votes, logProbs: logProbs)
+            language = resolveSegmentLanguage(detected: pickLanguage(logProbs: logProbs), votes: votes)
         } else if let leading = leadingLanguage(votes: votes) {
             language = leading
         } else {

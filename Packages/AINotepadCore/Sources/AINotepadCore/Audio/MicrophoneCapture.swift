@@ -4,8 +4,8 @@ import os
 
 /// Mikrofonu 16 kHz mono Float parçalar halinde yakalar ("Sen" akışı).
 ///
-/// Giriş cihazı değişirse (ör. AirPods bağlanınca) motor yeni formatla yeniden kurulur;
-/// kurulamazsa akış bitirilir ve hata loglanır.
+/// Giriş cihazı değişirse (ör. AirPods bağlanınca) motor yeni formatla, geri çekilmeli denemelerle
+/// yeniden kurulur; kurulamazsa akış bitirilir ve hata loglanır.
 @MainActor
 public final class MicrophoneCapture {
     private nonisolated static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MicrophoneCapture")
@@ -13,11 +13,16 @@ public final class MicrophoneCapture {
     private let engine: AVAudioEngine = AVAudioEngine()
     private var continuation: AsyncStream<[Float]>.Continuation?
     private var configurationObserver: (any NSObjectProtocol)?
+    /// Her yeniden kurma isteğinde artar; eski denemeler yenisi gelince vazgeçer.
+    private var restartGeneration: Int = 0
 
     public init() {}
 
     /// İzni ister, yakalamayı başlatır ve ses parçalarının akışını döndürür.
     public func start() async throws -> AsyncStream<[Float]> {
+        guard continuation == nil else {
+            throw AudioCaptureError.alreadyRunning(source: "MicrophoneCapture")
+        }
         guard await AVAudioApplication.requestRecordPermission() else {
             throw AudioCaptureError.microphonePermissionDenied
         }
@@ -35,8 +40,8 @@ public final class MicrophoneCapture {
             object: engine,
             queue: .main
         ) { [weak self] (_: Notification) -> Void in
-            MainActor.assumeIsolated {
-                self?.restartAfterConfigurationChange()
+            Task { @MainActor in
+                await self?.restartAfterConfigurationChange()
             }
         }
         return stream
@@ -73,17 +78,35 @@ public final class MicrophoneCapture {
         engine.stop()
     }
 
-    /// Cihaz değişince motoru yeni formatla yeniden kurar.
-    private func restartAfterConfigurationChange() {
-        guard let continuation else {
+    /// Cihaz değişince motoru yeni formatla yeniden kurar; yeni cihaz henüz hazır olmayabileceği
+    /// için birkaç kez dener. Daha yeni bir istek gelirse ya da yakalama durdurulursa çekilir.
+    private func restartAfterConfigurationChange() async {
+        guard continuation != nil else {
             return
         }
-        stopEngine()
+        restartGeneration += 1
+        let generation: Int = restartGeneration
         do {
-            try startEngine(continuation: continuation)
+            try await retryWithBackoff(
+                attempts: 4,
+                delaySec: 0.25,
+                operation: {
+                    guard generation == self.restartGeneration, let continuation = self.continuation else {
+                        return
+                    }
+                    self.stopEngine()
+                    try self.startEngine(continuation: continuation)
+                },
+                onFailure: { (attempt: Int, error: any Error) -> Void in
+                    Self.logger.warning("Mikrofon yeniden başlatılamadı, deneme \(attempt, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
+            )
             Self.logger.info("Mikrofon yeni giriş cihazıyla yeniden başlatıldı")
         } catch {
-            Self.logger.error("Mikrofon yeniden başlatılamadı: \(String(describing: error), privacy: .public)")
+            guard generation == restartGeneration else {
+                return
+            }
+            Self.logger.error("Mikrofon yeniden başlatılamadı, akış bitiriliyor: \(String(describing: error), privacy: .public)")
             stop()
         }
     }

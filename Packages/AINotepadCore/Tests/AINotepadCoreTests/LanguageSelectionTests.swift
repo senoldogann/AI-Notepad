@@ -3,23 +3,36 @@ import Testing
 @testable import AINotepadCore
 
 @Suite struct LanguageSelectionTests {
-    @Test func picksHigherOfFinnishAndEnglish() throws {
-        #expect(try pickLanguage(logProbs: ["fi": -0.2, "en": -2.0]) == .finnish)
-        #expect(try pickLanguage(logProbs: ["fi": -3.0, "en": -0.1]) == .english)
+    @Test func picksHigherOfFinnishAndEnglish() {
+        #expect(pickLanguage(logProbs: ["fi": -0.2, "en": -2.0]) == .finnish)
+        #expect(pickLanguage(logProbs: ["fi": -3.0, "en": -0.1]) == .english)
     }
 
-    @Test func ignoresOtherLanguages() throws {
-        #expect(try pickLanguage(logProbs: ["et": -0.1, "fi": -1.0, "en": -3.0]) == .finnish)
+    @Test func ignoresOtherLanguages() {
+        #expect(pickLanguage(logProbs: ["et": -0.1, "fi": -1.0, "en": -3.0]) == .finnish)
     }
 
-    @Test func missingCodesThrow() {
-        #expect(throws: TranscriptionError.languageProbabilitiesMissing(availableCodes: ["et"])) {
-            try pickLanguage(logProbs: ["et": -0.1])
-        }
+    // WhisperKit yalnızca en olası dili döndürür: kısa Fince bölüm "et" gelebilir.
+    @Test func topLanguageOutsideFinnishEnglishGivesNoVote() {
+        #expect(pickLanguage(logProbs: ["et": -0.1]) == nil)
+        #expect(addVote(votes: LanguageVotes(finnish: 0.7, english: 0), logProbs: ["et": -0.1]) == LanguageVotes(finnish: 0.7, english: 0))
     }
 
-    @Test func votesAccumulateAsProbabilities() throws {
-        let votes: LanguageVotes = try addVote(
+    @Test func singleKeyVoteCountsOnlyThatLanguage() {
+        let votes: LanguageVotes = addVote(votes: .empty, logProbs: ["en": Float(log(0.9))])
+        #expect(abs(votes.english - 0.9) < 1e-6)
+        #expect(votes.finnish == 0)
+    }
+
+    @Test func segmentLanguageUsesDetectionThenLeaderThenFinnish() {
+        let englishLead: LanguageVotes = LanguageVotes(finnish: 0.1, english: 0.8)
+        #expect(resolveSegmentLanguage(detected: .finnish, votes: englishLead) == .finnish)
+        #expect(resolveSegmentLanguage(detected: nil, votes: englishLead) == .english)
+        #expect(resolveSegmentLanguage(detected: nil, votes: .empty) == .finnish)
+    }
+
+    @Test func votesAccumulateAsProbabilities() {
+        let votes: LanguageVotes = addVote(
             votes: .empty,
             logProbs: ["fi": Float(log(0.8)), "en": Float(log(0.1))]
         )

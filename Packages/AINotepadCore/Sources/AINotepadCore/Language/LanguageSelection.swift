@@ -14,19 +14,35 @@ public struct LanguageVotes: Sendable, Equatable {
 }
 
 /// Whisper'ın dil log olasılıklarından Fince ile İngilizce arasında seçim yapar.
-/// Diğer diller yok sayılır; ikisi de yoksa hata fırlatılır. Eşitlikte Fince seçilir.
-public func pickLanguage(logProbs: [String: Float]) throws -> MeetingLanguage {
-    let pair: (finnish: Float, english: Float) = try finnishAndEnglish(logProbs: logProbs)
-    return pair.english > pair.finnish ? .english : .finnish
+/// Diğer diller yok sayılır; ikisi de yoksa nil (bu bölüm dil oyu vermez).
+/// WhisperKit yalnızca en olası dili döndürdüğü için kısa ya da gürültülü bölümlerde
+/// sonuç "et" gibi başka bir dil olabilir. Eşitlikte Fince seçilir.
+public func pickLanguage(logProbs: [String: Float]) -> MeetingLanguage? {
+    let finnish: Float? = logProbs[MeetingLanguage.finnish.rawValue]
+    let english: Float? = logProbs[MeetingLanguage.english.rawValue]
+    switch (finnish, english) {
+    case (nil, nil):
+        return nil
+    case (.some, nil):
+        return .finnish
+    case (nil, .some):
+        return .english
+    case (.some(let fi), .some(let en)):
+        return en > fi ? .english : .finnish
+    }
 }
 
-/// Bir bölümün dil olasılıklarını (log → olasılık) oylara ekler.
-public func addVote(votes: LanguageVotes, logProbs: [String: Float]) throws -> LanguageVotes {
-    let pair: (finnish: Float, english: Float) = try finnishAndEnglish(logProbs: logProbs)
-    return LanguageVotes(
-        finnish: votes.finnish + exp(Double(pair.finnish)),
-        english: votes.english + exp(Double(pair.english))
-    )
+/// Bir bölümün Fince/İngilizce olasılıklarını (log → olasılık) oylara ekler; ikisi de yoksa oylar değişmez.
+public func addVote(votes: LanguageVotes, logProbs: [String: Float]) -> LanguageVotes {
+    let finnish: Double = logProbs[MeetingLanguage.finnish.rawValue].map { (value: Float) -> Double in exp(Double(value)) } ?? 0
+    let english: Double = logProbs[MeetingLanguage.english.rawValue].map { (value: Float) -> Double in exp(Double(value)) } ?? 0
+    return LanguageVotes(finnish: votes.finnish + finnish, english: votes.english + english)
+}
+
+/// Dil kilitlenmeden önce bir bölümün hangi dilde yazıya döküleceği:
+/// bölümün kendi algılaması, yoksa öndeki dil, o da yoksa Fince (kullanıcının ana toplantı dili).
+public func resolveSegmentLanguage(detected: MeetingLanguage?, votes: LanguageVotes) -> MeetingLanguage {
+    detected ?? leadingLanguage(votes: votes) ?? .finnish
 }
 
 /// Kilit süresi dolduysa ve oy varsa çoğunluk dilini döndürür; aksi halde nil.
@@ -43,15 +59,4 @@ public func leadingLanguage(votes: LanguageVotes) -> MeetingLanguage? {
         return nil
     }
     return votes.english > votes.finnish ? .english : .finnish
-}
-
-/// Fince ve İngilizce log olasılıklarını çıkarır; ikisinden biri yoksa hata.
-/// Tek dilin eksik olduğu durumda eksik olan çok düşük olasılık sayılır.
-private func finnishAndEnglish(logProbs: [String: Float]) throws -> (finnish: Float, english: Float) {
-    let finnish: Float? = logProbs[MeetingLanguage.finnish.rawValue]
-    let english: Float? = logProbs[MeetingLanguage.english.rawValue]
-    guard finnish != nil || english != nil else {
-        throw TranscriptionError.languageProbabilitiesMissing(availableCodes: logProbs.keys.sorted())
-    }
-    return (finnish ?? -Float.infinity, english ?? -Float.infinity)
 }

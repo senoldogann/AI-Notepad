@@ -3,6 +3,8 @@ import Foundation
 /// Ses yakalama, dönüştürme ve kaydetme hataları.
 public enum AudioCaptureError: Error, Equatable {
     case microphonePermissionDenied
+    /// `start()` yakalama zaten çalışırken çağrıldı.
+    case alreadyRunning(source: String)
     case systemAudioPermissionDenied
     case converterCreationFailed(inputDescription: String)
     case conversionFailed(reason: String)

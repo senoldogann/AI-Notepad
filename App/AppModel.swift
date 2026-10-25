@@ -18,6 +18,8 @@ final class AppModel {
 
     var modelStatus: ModelStatus = .loading
     var isRecording: Bool = false
+    /// İzin pencereleri açıkken ikinci bir başlatmayı engeller.
+    var isStarting: Bool = false
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
     var transcript: [LiveSegment] = []
@@ -45,9 +47,11 @@ final class AppModel {
     /// İki ses akışını başlatır ve canlı oturumu çalıştırır.
     /// Akışlardan biri başlatılamazsa hata gösterilir, diğeriyle devam edilir.
     func startRecording() async {
-        guard let engine, !isRecording else {
+        guard let engine, !isRecording, !isStarting else {
             return
         }
+        isStarting = true
+        defer { isStarting = false }
         transcript = []
         lockedLanguage = nil
         errorMessages = []

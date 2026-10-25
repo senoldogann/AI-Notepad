@@ -38,7 +38,7 @@ private struct MenuContent: View {
                     panel.show()
                 }
             }
-            .disabled(model.modelStatus != .ready)
+            .disabled(model.modelStatus != .ready || model.isStarting)
         }
 
         Picker("Dil", selection: $model.languageMode) {
