@@ -104,7 +104,7 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   Dil: Fince → `language=fi`, İngilizce → `language=en`, Otomatik → `language=multi`
   (Deepgram belgelerine göre Fince'yi kapsar; Fince kalitesi plan başında ölçülür, kötüyse kullanıcıya sorulur).
   Bağlantı koparsa geri çekilmeli yeniden bağlanır; arada gelen ses tamponda bekleyip sonra gönderilir.
-  Sessizlikte bağlantıyı açık tutmak için `KeepAlive` gönderilir.
+  Yakalama sessizlikte de sürekli ses ürettiği için `KeepAlive` gerekmez.
 - **WhisperKit (Mac'te):** mevcut `TranscriptionEngine` + bölümleyici + seri işçi (aşama 1).
   Model yalnızca bu motor seçiliyse yüklenir. Dil 30 sn sonra kilitlenir.
 
