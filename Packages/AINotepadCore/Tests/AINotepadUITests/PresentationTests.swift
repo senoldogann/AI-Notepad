@@ -1,0 +1,46 @@
+import AINotepadCore
+import Foundation
+import SwiftUI
+import Testing
+@testable import AINotepadUI
+
+func seg(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, person: Int?) -> LiveSegment {
+    LiveSegment(id: SegmentID(speaker: speaker, index: index), startSec: start, endSec: start + 2, text: text, isFinal: true, failureMessage: nil, person: person)
+}
+
+func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> LiveViewState {
+    makeLiveViewState(transcript: transcript, isRecording: isRecording, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
+}
+
+@Suite struct PresentationTests {
+    @Test func personColorWraps() {
+        #expect(personColor(person: 7) == personColor(person: 1))
+        #expect(personColor(person: 2) != personColor(person: 1))
+    }
+
+    @Test func latestSentenceTruncatesFromStart() {
+        let long: String = String(repeating: "a", count: 190) + "lopussa"
+        let result: String = truncateFromStart(text: long, maxCharacters: 140)
+        #expect(result.count == 141)
+        #expect(result.hasPrefix("…"))
+        #expect(result.hasSuffix("lopussa"))
+        #expect(truncateFromStart(text: "lyhyt", maxCharacters: 140) == "lyhyt")
+    }
+
+    @Test func islandHiddenWhenNotRecording() {
+        #expect(state(transcript: [], isRecording: false, errors: []).isIslandVisible == false)
+        #expect(state(transcript: [], isRecording: true, errors: []).isIslandVisible == true)
+    }
+
+    @Test func viewStateUsesEchoFilteredTranscript() {
+        let others: LiveSegment = seg(.others, 0, 1, "Tässä lähetyksessä tapaamme Jarnon", person: 1)
+        let echo: LiveSegment = seg(.me, 0, 1.2, "Tässä lähetyksessä tapaamme Jarnon", person: nil)
+        let viewState: LiveViewState = state(transcript: [others, echo], isRecording: true, errors: [])
+        #expect(viewState.blocks.map(\.speaker) == [.others])
+        #expect(viewState.latestOthersSentence == "Tässä lähetyksessä tapaamme Jarnon")
+    }
+
+    @Test func errorsKeepLastThree() {
+        #expect(state(transcript: [], isRecording: true, errors: ["1", "2", "3", "4"]).errors == ["2", "3", "4"])
+    }
+}
