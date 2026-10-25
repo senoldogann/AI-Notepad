@@ -75,8 +75,9 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - Sistem sesi: Core Audio process tap (kendi süreci hariç tüm sistem çıkışı). Ekran kaydı
   izni gerektirmez; `NSAudioCaptureUsageDescription` ile ses yakalama izni ister.
 - Çıktı: iki akış, 16 kHz mono Float32 — `speaker = .me` ve `speaker = .others`.
-- Eşzamanlı olarak diske 2 kanallı `.caf` yazar (sol: Sen, sağ: Diğerleri).
-  Toplantı bitince `.m4a`'ya dönüştürülür ve `.caf` silinir.
+- Eşzamanlı olarak diske iki mono `.caf` yazar (`me.caf`, `others.caf`; 16 kHz Int16). İki cihazın
+  saatleri farklı olduğu için akışlar ayrı dosyalarda tutulur. Toplantı bitince ikisi tek bir
+  2 kanallı `.m4a`'da birleştirilir (sol: Sen, sağ: Diğerleri) ve `.caf`'ler silinir.
 - STT/LLM'den tamamen bağımsızdır: aşağı akıştaki hiçbir hata kaydı durdurmaz.
 
 **Transcription**
@@ -102,8 +103,8 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 **PostProcessing**
 1. `.m4a` seçilen "toplantı sonrası motor" ile yeniden yazıya dökülür (`pass = final`).
 2. "Diğerleri" kanalında konuşmacı ayrıştırma → `speaker1`, `speaker2`, …
-   Yerelde açık kaynak bir CoreML diarization kütüphanesi (aday: FluidAudio — lisans ve
-   kalite plan aşamasında doğrulanacak), bulutta diarization destekleyen bir model.
+   Yerelde WhisperKit paketindeki SpeakerKit (MIT, aynı bağımlılık), bulutta diarization
+   destekleyen bir model.
 3. `generateMeetingNote` çağrısı. Kullanıcının adı (ayarlardan) görev sahipliğini belirlemek için kullanılır.
 4. Canlı transkript silinmez; ikinci geçiş ayrı saklanır.
 
@@ -170,7 +171,7 @@ ses saklama süresi (gün, varsayılan 30); dil (Otomatik | Fince | İngilizce);
 ## 7. Test stratejisi
 
 Swift Testing; `AINotepadCore` için `swift test`.
-- **Entegrasyon (gerçek ses):** Açık lisanslı Fince ve İngilizce kısa kayıtlar (Common Voice / FLEURS).
+- **Entegrasyon (gerçek ses):** macOS `say` (Satu / Samantha sesleri) ile üretilip repoya eklenen kısa Fince ve İngilizce kayıtlar.
   WhisperKit gerçekten çalıştırılır; dil doğru algılanmalı, beklenen anahtar kelimeler geçmeli.
 - **Gerçek API testleri:** LLM ve bulut STT için mock yok. Yalnızca ilgili API anahtarı ortam
   değişkeninde tanımlıysa çalışır; CI'da çalışmaz.
@@ -195,5 +196,5 @@ Her aşama ayrı bir uygulama planıyla yapılır ve sonunda çalışan bir uygu
 - **Fince STT kalitesi:** Whisper'ın Fince doğruluğu İngilizceden düşüktür. Aşama 1'de gerçek bir
   Fince toplantı kaydıyla ölçülür; yetersizse bulut motoru varsayılan yapılabilir.
 - **Ekran paylaşımı görünmezliği** garanti değildir (bkz. 4.1 UI).
-- **Diarization kütüphanesi** (FluidAudio adayı) plan aşamasında doğrulanacak.
+- **SpeakerKit diarization kalitesi** aşama 3'te gerçek bir toplantı kaydıyla ölçülecek.
 - **OpenAI uyumlu sağlayıcılar** (ör. OpenCode Go) gerçek bir çağrıyla test edilecek.
