@@ -7,7 +7,8 @@ struct LiveTranscriptView: View {
     let model: AppModel
 
     var body: some View {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: model.transcript)
+        // Hoparlörden mikrofona giren ses ("Diğerleri"nin "Sen" altında tekrarı) gösterilmez.
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: model.transcript))
         VStack(alignment: .leading, spacing: 0) {
             StatusBar(model: model, blocks: blocks)
                 .padding(10)

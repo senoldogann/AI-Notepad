@@ -16,14 +16,20 @@ func pacedStream(samples: [Float]) -> AsyncStream<[Float]> {
     return stream
 }
 
-func cloudConfig(directory: URL, firstDiarizationAfterSec: Double, minDiarizationAudioSec: Double) throws -> CloudSessionConfig {
+func cloudConfig(
+    directory: URL,
+    firstDiarizationAfterSec: Double,
+    diarizationIntervalSec: Double,
+    minDiarizationAudioSec: Double,
+    elevenLabsKey: String
+) throws -> CloudSessionConfig {
     CloudSessionConfig(
         languageMode: .automatic,
         recordingDirectory: directory,
         deepgramKey: try cloudKey(account: .deepgram),
-        elevenLabsKey: try cloudKey(account: .elevenlabs),
+        elevenLabsKey: elevenLabsKey,
         firstDiarizationAfterSec: firstDiarizationAfterSec,
-        diarizationIntervalSec: 1000,
+        diarizationIntervalSec: diarizationIntervalSec,
         diarizationWindowSec: 120,
         minDiarizationAudioSec: minDiarizationAudioSec,
         languageConfidence: 0.8
@@ -61,7 +67,7 @@ extension CloudTests {
         let fixture: [Float] = try loadFixture(name: "fi-dialog")
         let directory: URL = try temporaryDirectory()
         // Yalnızca oturum sonundaki son pencere çalışır.
-        let config: CloudSessionConfig = try cloudConfig(directory: directory, firstDiarizationAfterSec: 1000, minDiarizationAudioSec: 5)
+        let config: CloudSessionConfig = try cloudConfig(directory: directory, firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000, minDiarizationAudioSec: 5, elevenLabsKey: try cloudKey(account: .elevenlabs))
         let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
             config: config,
             meAudio: pacedStream(samples: silence(seconds: 12)),
@@ -83,7 +89,7 @@ extension CloudTests {
     @Test func englishMeetingSwitchesLanguage() async throws {
         let english: [Float] = try loadFixture(name: "en-meeting")
         let others: [Float] = english + english
-        let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 5, minDiarizationAudioSec: 3)
+        let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 5, diarizationIntervalSec: 1000, minDiarizationAudioSec: 3, elevenLabsKey: try cloudKey(account: .elevenlabs))
         let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
             config: config,
             meAudio: pacedStream(samples: silence(seconds: Double(others.count) / 16000)),
@@ -93,6 +99,35 @@ extension CloudTests {
         #expect(events.contains(.languageLocked(.english)))
         let text: String = finalOthersText(events: events)
         #expect(text.contains("presentation"), "metin: \(text)")
+        #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
+    }
+
+    // Geçersiz anahtar her pencerede aynı hatayı üretmemeli: bir kez bildirilir, ayırma durur.
+    @Test func invalidElevenLabsKeyReportsOnce() async throws {
+        let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 2, diarizationIntervalSec: 3, minDiarizationAudioSec: 1, elevenLabsKey: "gecersiz")
+        let fixture: [Float] = try loadFixture(name: "fi-dialog")
+        let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
+            config: config,
+            meAudio: pacedStream(samples: silence(seconds: Double(fixture.count) / 16000)),
+            othersAudio: pacedStream(samples: fixture)
+        ))
+        let diarizationFailures: [LiveSessionEvent] = events.filter { (event: LiveSessionEvent) -> Bool in
+            if case .diarizationFailed = event { return true }
+            return false
+        }
+        #expect(diarizationFailures.count == 1, "hatalar: \(diarizationFailures)")
+        #expect(finalOthersText(events: events).contains("raport"), "metin akmaya devam etmeli")
+    }
+
+    // Durdurma anında süren konuşmacı ayırma isteği sahte "iptal" hatası üretmemeli.
+    @Test func stopDuringDiarizationIsClean() async throws {
+        let fixture: [Float] = try loadFixture(name: "fi-dialog")
+        let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 13, diarizationIntervalSec: 1000, minDiarizationAudioSec: 1, elevenLabsKey: try cloudKey(account: .elevenlabs))
+        let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
+            config: config,
+            meAudio: pacedStream(samples: silence(seconds: Double(fixture.count) / 16000)),
+            othersAudio: pacedStream(samples: fixture)
+        ))
         #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
     }
 }

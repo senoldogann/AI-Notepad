@@ -82,5 +82,25 @@ extension CloudTests {
         }
         #expect(message.contains("401"), "mesaj: \(message)")
     }
+
+    // Bağlantı konuşma ortasında koparsa yeniden bağlanmalı, kesinleşmemiş ses yeniden gönderilmeli.
+    @Test func forcedDisconnectKeepsTranscribing() async throws {
+        let key: String = try cloudKey(account: .deepgram)
+        let stream: DeepgramStream = startDeepgramStream(apiKey: key, language: .finnish, audio: pacedStream(samples: try loadFixture(name: "fi-dialog")))
+        Task {
+            // 2. cümlenin ortası ("Minulla on raportti valmiina").
+            try await Task.sleep(for: .seconds(4.5))
+            await stream.dropConnectionForTesting()
+        }
+        var finals: [(text: String, start: Double)] = []
+        for await event in stream.events {
+            if case .final(let text, let start, _) = event { finals.append((text, start)) }
+            if case .failed(let message) = event { Issue.record("hata: \(message)") }
+        }
+        let joined: String = finals.map(\.text).joined(separator: " ").lowercased()
+        #expect(joined.contains("minulla") || joined.contains("raportti valmiina"), "metin: \(joined)")
+        #expect(joined.contains("huomenna"), "metin: \(joined)")
+        #expect(finals.map(\.start) == finals.map(\.start).sorted(), "başlangıçlar: \(finals.map(\.start))")
+    }
 }
 }

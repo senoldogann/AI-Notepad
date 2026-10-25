@@ -94,7 +94,7 @@ final class AppModel {
                     try readSecret(service: keychainService, account: .elevenlabs)
                 )
             } catch {
-                errorMessages.append(userMessage(error: error))
+                errorMessages = appendUnique(messages: errorMessages, message: userMessage(error: error))
                 return
             }
         case .whisperKit:
@@ -105,7 +105,7 @@ final class AppModel {
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: Date())
         } catch {
-            errorMessages.append("Kayıt klasörü oluşturulamadı: \(userMessage(error: error))")
+            errorMessages = appendUnique(messages: errorMessages, message: "Kayıt klasörü oluşturulamadı: \(userMessage(error: error))")
             return
         }
 
@@ -115,7 +115,7 @@ final class AppModel {
             meAudio = try await microphone.start()
             startedStreams += 1
         } catch {
-            errorMessages.append(userMessage(error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: userMessage(error: error))
             meAudio = finishedStream()
         }
         let othersAudio: AsyncStream<[Float]>
@@ -123,7 +123,7 @@ final class AppModel {
             othersAudio = try await systemAudio.start()
             startedStreams += 1
         } catch {
-            errorMessages.append(userMessage(error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: userMessage(error: error))
             othersAudio = finishedStream()
         }
         guard startedStreams > 0 else {
@@ -163,7 +163,7 @@ final class AppModel {
             )
         } else {
             // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
-            errorMessages.append("Konuşma tanıma modeli hazır değil.")
+            errorMessages = appendUnique(messages: errorMessages, message: "Konuşma tanıma modeli hazır değil.")
             microphone.stop()
             systemAudio.stop()
             return
@@ -198,16 +198,16 @@ final class AppModel {
             lockedLanguage = language
         case .captureEnded(let speaker):
             if !isStopping {
-                errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) ses akışı beklenmedik şekilde durdu.")
+                errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) ses akışı beklenmedik şekilde durdu.")
             }
         case .recordingFailed(let speaker, let message):
-            errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) sesi diske yazılamadı: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) sesi diske yazılamadı: \(message)")
         case .speakersAssigned:
             break
         case .streamFailed(let speaker, let message):
-            errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)")
         case .diarizationFailed(let message):
-            errorMessages.append("Konuşmacı ayırma başarısız: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: "Konuşmacı ayırma başarısız: \(message)")
         }
     }
 

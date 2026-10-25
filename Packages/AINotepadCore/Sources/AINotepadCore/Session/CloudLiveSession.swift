@@ -81,7 +81,8 @@ public func runCloudLiveSession(
                 await consumeTranscripts(speaker: .others, stream: othersStream, state: state, events: sink)
             }
         }
-        diarizer.cancel()
+        // İptal yerine durdurma işareti: süren ElevenLabs isteği yarıda kesilmez (sahte iptal hatası olmaz).
+        await state.requestStop()
         await diarizer.value
         // Oturumun son dakikası da etiketlensin.
         await runDiarizationWindow(config: config, state: state, streams: streams, events: sink)
@@ -110,6 +111,9 @@ private actor CloudSessionState {
     private var othersFinals: [LiveSegment] = []
     private var mapping: SpeakerMapping = .initial
     private var lockedLanguage: MeetingLanguage?
+    private var stopRequested: Bool = false
+    /// Anahtar reddedildiyse (401/403) sonraki pencereler gönderilmez.
+    private var diarizationDisabled: Bool = false
 
     init(windowSamples: Int) {
         self.windowSamples = windowSamples
@@ -153,6 +157,22 @@ private actor CloudSessionState {
 
     func lock(language: MeetingLanguage) {
         lockedLanguage = language
+    }
+
+    func requestStop() {
+        stopRequested = true
+    }
+
+    func isStopping() -> Bool {
+        stopRequested
+    }
+
+    func disableDiarization() {
+        diarizationDisabled = true
+    }
+
+    func isDiarizationDisabled() -> Bool {
+        diarizationDisabled
     }
 }
 
@@ -211,8 +231,9 @@ private func consumeTranscripts(
                 id: SegmentID(speaker: speaker, index: index),
                 startSec: start, endSec: end, text: text, isFinal: true, failureMessage: nil, person: nil
             )
+            // Boş kesin sonuç da yayınlanır: reducer ekrandaki geçici metni siler.
             events.yield(.segment(segment))
-            if speaker == .others {
+            if speaker == .others, !text.isEmpty {
                 await state.addOthersFinal(segment: segment)
             }
             index += 1
@@ -222,7 +243,8 @@ private func consumeTranscripts(
     }
 }
 
-/// İlk pencere `firstDiarizationAfterSec`'te, sonrakiler `diarizationIntervalSec` aralıkla; iptal edilene kadar.
+/// İlk pencere `firstDiarizationAfterSec`'te, sonrakiler `diarizationIntervalSec` aralıkla;
+/// durdurma işaretine kadar. Bekleme kısa adımlarla yapılır ki durdurma hemen fark edilsin.
 private func runDiarizationSchedule(
     config: CloudSessionConfig,
     state: CloudSessionState,
@@ -230,11 +252,20 @@ private func runDiarizationSchedule(
     events: AsyncStream<LiveSessionEvent>.Continuation
 ) async {
     var delay: Double = config.firstDiarizationAfterSec
-    while !Task.isCancelled {
-        do {
-            try await Task.sleep(for: .seconds(delay))
-        } catch {
-            // Yalnızca iptalde fırlatır: oturum bitiyor, son pencereyi çağıran çalıştırır.
+    while true {
+        let deadline: ContinuousClock.Instant = .now + .seconds(delay)
+        while ContinuousClock.now < deadline {
+            if await state.isStopping() {
+                return
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                // Bu görev iptal edilmez; yine de iptal gelirse zamanlayıcı biter.
+                return
+            }
+        }
+        if await state.isStopping() {
             return
         }
         await runDiarizationWindow(config: config, state: state, streams: streams, events: events)
@@ -249,6 +280,9 @@ private func runDiarizationWindow(
     streams: [DeepgramStream],
     events: AsyncStream<LiveSessionEvent>.Continuation
 ) async {
+    guard !(await state.isDiarizationDisabled()) else {
+        return
+    }
     let window: (samples: [Float], startSec: Double) = await state.window()
     guard Double(window.samples.count) >= config.minDiarizationAudioSec * Double(cloudSampleRate) else {
         return
@@ -261,10 +295,15 @@ private func runDiarizationWindow(
     } catch {
         cloudLogger.error("Konuşmacı ayırma penceresi başarısız: \(String(describing: error), privacy: .public)")
         events.yield(.diarizationFailed(message: elevenLabsFailureMessage(error: error)))
+        if case CloudSTTError.http(_, let status, _) = error, status == 401 || status == 403 {
+            // Anahtar reddedildi: her dakika aynı hatayı üretmek yerine ayırma durur.
+            await state.disableDiarization()
+        }
         return
     }
 
-    if case .automatic = config.languageMode, locked == nil,
+    // Oturum bitiyorsa (son pencere) dil değiştirmek yeni, sahipsiz bağlantı açar.
+    if case .automatic = config.languageMode, locked == nil, !(await state.isStopping()),
        let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence) {
         await state.lock(language: detected)
         events.yield(.languageLocked(detected))
