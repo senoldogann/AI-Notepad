@@ -228,9 +228,12 @@ Her aşama ayrı bir uygulama planıyla yapılır ve sonunda çalışan bir uygu
 
 ## 9. Riskler ve açık noktalar
 
-- **Deepgram ilk saniyeler:** ölçümde nova-3 akışı kaydın ilk ~11 sn'sini vermedi; aşama 2'nin ilk
-  görevinde nedeni bulunur (bağlantı/ilk paket zamanlaması mı, model mi).
-- **`language=multi` Fince kalitesi** ölçülmedi; aşama 2 başında `fi` ile karşılaştırılır.
+- **Deepgram `language=fi` ilk saniyeler:** ikinci ölçümde nedeni bulundu — model kaydın ilk 13 sn'si
+  için boş kesin sonuç döndürüyor (kısa, hızlı çocuk konuşması); bağlantı sorunu değil. Aynı kayıtta
+  `language=multi` bu kısmı yakaladı ve genel kalitesi `fi` kadar iyiydi (tek örnek). Otomatik (varsayılan)
+  mod `multi` kullanır.
+- **`multi` geçici sonuçları** kısa süre başka dil/yazı gösterebilir (ölçümde ilk geçici kelime Farsça);
+  kesin sonuçlar Fince'ydi. Geçici metin soluk gösterildiği için kabul edilir.
 - **Konuşmacı eşleme hataları:** pencereler arası eşleme yanlışsa bir kişi iki numara alabilir;
   toplantı sonrası tüm kayıt üzerinden yapılan ayırma kesin sonucu verir.
 - **Maliyet:** iki Deepgram akışı ~0,6–0,9 $/sa + ElevenLabs (örtüşme nedeniyle sesin ~2 katı)
