@@ -1,6 +1,6 @@
 # AI-Notepad — Tasarım Belgesi
 
-Tarih: 2026-10-25 · Durum: Onay bekliyor
+Tarih: 2026-10-25 · Durum: Onaylandı
 
 ## 1. Amaç
 
@@ -122,16 +122,17 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - **Cam panel** (`NSPanel`, Liquid Glass, taşınabilir, boyutlanabilir, her zaman üstte):
   kaydırılabilir transkript (orijinal + Türkçe), "Ne kaçırdım?" butonu, soru kutusu.
   "Sadece Türkçe" görünümünde "Sen" bölümleri çevrilmediği için orijinal haliyle gösterilir.
-  Kısayolla gizlenir/gösterilir; gizliyken yalnızca ada kalır.
+  Paneldeki küçültme butonuyla gizlenir; gizliyken yalnızca ada kalır, adaya tıklayınca geri gelir.
 - Ada ve panel `sharingType = .none` ile açılır. Not: macOS 15+ ScreenCaptureKit tabanlı
   yakalamalar bunu her zaman dikkate almaz; görünmezlik garanti edilmez, gerçek Zoom/Teams
-  paylaşımında test edilir. Ek olarak "her şeyi gizle" kısayolu vardır.
+  paylaşımında test edilir. Ek olarak ada + paneli birlikte gizleyen bir kısayol vardır.
 - **Ana pencere**: toplantı listesi (arama ile), toplantı notu, transkript (cümleye tıklayınca
   ses o andan çalar), konuşmacıları adlandırma, Markdown dışa aktarma/kopyalama,
   sesi silme, "Tekrar işle".
 - **Karşılama ekranı**: mikrofon ve sistem sesi izinlerini kontrol eder; adı, LLM sağlayıcısını
   ve anahtarı ister; WhisperKit modelini indirir.
-- Kısayollar (değiştirilebilir): kayıt ⌃⌥R, paneli göster/gizle ⌃⌥P, her şeyi gizle ⌃⌥H.
+- Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir:
+  kayıt başlat/durdur ⌃⌥R, ada + paneli göster/gizle ⌃⌥Space.
 
 ### 4.2 Toplantı durum makinesi
 
