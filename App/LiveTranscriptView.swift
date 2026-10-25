@@ -1,28 +1,31 @@
 import AINotepadCore
+import AppKit
 import SwiftUI
 
-/// Canlı transkript: üstte durum satırı, ortada bölümler, altta hatalar.
+/// Canlı transkript: üstte durum satırı, ortada konuşmacı blokları, altta hatalar.
 struct LiveTranscriptView: View {
     let model: AppModel
 
     var body: some View {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: model.transcript)
         VStack(alignment: .leading, spacing: 0) {
-            StatusBar(model: model)
+            StatusBar(model: model, blocks: blocks)
                 .padding(10)
             Divider()
             ScrollViewReader { (proxy: ScrollViewProxy) in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(model.transcript) { (segment: LiveSegment) in
-                            SegmentRow(segment: segment)
-                                .id(segment.id)
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(blocks) { (block: SpeakerBlock) in
+                            BlockRow(block: block)
+                                .id(block.id)
                         }
                     }
                     .padding(10)
                 }
-                .onChange(of: model.transcript.last?.id) { (_: SegmentID?, newValue: SegmentID?) in
-                    if let newValue {
-                        withAnimation { proxy.scrollTo(newValue, anchor: .bottom) }
+                // Blok içinde metin büyüdüğünde de en alta kaydır.
+                .onChange(of: model.transcript) { (_: [LiveSegment], _: [LiveSegment]) in
+                    if let last = blocks.last {
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
                 }
             }
@@ -43,16 +46,17 @@ struct LiveTranscriptView: View {
     }
 }
 
-/// Model durumu, kayıt süresi ve dil.
+/// Model durumu, kayıt süresi, dil ve "Tümünü kopyala".
 private struct StatusBar: View {
     let model: AppModel
+    let blocks: [SpeakerBlock]
 
     var body: some View {
         HStack(spacing: 8) {
             if model.isRecording, let startedAt = model.recordingStartedAt {
                 Image(systemName: "record.circle.fill").foregroundStyle(.red)
                 TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
-                    Text(elapsedText(from: startedAt, to: context.date)).monospacedDigit()
+                    Text(timestamp(seconds: context.date.timeIntervalSince(startedAt))).monospacedDigit()
                 }
             } else {
                 Text(modelStatusText(status: model.modelStatus))
@@ -61,31 +65,61 @@ private struct StatusBar: View {
             Spacer()
             Text(languageText(locked: model.lockedLanguage, mode: model.languageMode, isRecording: model.isRecording))
                 .foregroundStyle(.secondary)
+            Button {
+                copyToPasteboard(text: plainText(blocks: blocks))
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("Tümünü kopyala")
+            .disabled(blocks.isEmpty)
         }
         .font(.callout)
     }
 }
 
-/// Tek bölüm: konuşmacı etiketi ve metin. Geçici metin soluk, hata kırmızı.
-private struct SegmentRow: View {
-    let segment: LiveSegment
+/// Bir konuşmacı bloğu: etiket, akan metin (geçici kısım soluk), varsa hatalar.
+private struct BlockRow: View {
+    let block: SpeakerBlock
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(speakerLabel(speaker: segment.id.speaker))
+            Text(speakerLabel(speaker: block.speaker))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(segment.id.speaker == .me ? Color.accentColor : Color.secondary)
-            if let failure = segment.failureMessage {
-                Text("Yazıya dökülemedi: \(failure)")
+                .foregroundStyle(block.speaker == .me ? Color.accentColor : Color.secondary)
+            blockText
+                .textSelection(.enabled)
+            ForEach(block.segments.filter { (segment: LiveSegment) -> Bool in segment.failureMessage != nil }) { (segment: LiveSegment) in
+                Text("Yazıya dökülemedi: \(segment.failureMessage ?? "")")
                     .font(.caption)
                     .foregroundStyle(.red)
-            } else {
-                Text(segment.text)
-                    .opacity(segment.isFinal ? 1 : 0.5)
-                    .textSelection(.enabled)
+            }
+        }
+        .contextMenu {
+            Button("Kopyala") {
+                copyToPasteboard(text: plainText(blocks: [block]))
             }
         }
     }
+
+    /// Bölümleri tek paragrafta birleştirir; geçici metin soluk gösterilir.
+    private var blockText: Text {
+        block.segments
+            .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
+            .enumerated()
+            .reduce(Text("")) { (combined: Text, item: (offset: Int, element: LiveSegment)) -> Text in
+                let piece: Text = Text((item.offset == 0 ? "" : " ") + item.element.text)
+                let styled: Text = item.element.isFinal ? piece : piece.foregroundStyle(.secondary)
+                return Text("\(combined)\(styled)")
+            }
+    }
+}
+
+/// Metni genel panoya yazar.
+@MainActor
+private func copyToPasteboard(text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
 }
 
 private func modelStatusText(status: ModelStatus) -> String {
@@ -113,9 +147,4 @@ func languageName(language: MeetingLanguage) -> String {
     case .finnish: "🇫🇮 Fince"
     case .english: "🇬🇧 İngilizce"
     }
-}
-
-private func elapsedText(from start: Date, to now: Date) -> String {
-    let total: Int = max(0, Int(now.timeIntervalSince(start)))
-    return String(format: "%02d:%02d", total / 60, total % 60)
 }

@@ -10,7 +10,12 @@ struct AINotepadApp: App {
     init() {
         let model: AppModel = AppModel()
         _model = State(initialValue: model)
-        _panel = State(initialValue: LivePanelController(model: model))
+        // Varsayılan: gizli. Kullanıcı menüden değiştirince UserDefaults'a yazılır.
+        UserDefaults.standard.register(defaults: [hideFromScreenCaptureKey: true])
+        _panel = State(initialValue: LivePanelController(
+            model: model,
+            hideFromCapture: UserDefaults.standard.bool(forKey: hideFromScreenCaptureKey)
+        ))
         Task { await model.loadModel() }
     }
 
@@ -25,6 +30,7 @@ struct AINotepadApp: App {
 private struct MenuContent: View {
     @Bindable var model: AppModel
     let panel: LivePanelController
+    @AppStorage(hideFromScreenCaptureKey) private var hideFromCapture: Bool = true
 
     var body: some View {
         if model.isRecording {
@@ -51,6 +57,11 @@ private struct MenuContent: View {
         Button("Paneli göster") {
             panel.show()
         }
+
+        Toggle("Ekran görüntülerinde ve kayıtlarda gizle", isOn: $hideFromCapture)
+            .onChange(of: hideFromCapture) { (_: Bool, newValue: Bool) in
+                panel.setHideFromCapture(hidden: newValue)
+            }
 
         Divider()
         switch model.modelStatus {

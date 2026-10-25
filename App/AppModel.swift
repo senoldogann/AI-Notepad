@@ -145,14 +145,6 @@ final class AppModel {
     }
 }
 
-/// Konuşmacının arayüzdeki adı.
-func speakerLabel(speaker: Speaker) -> String {
-    switch speaker {
-    case .me: "Sen"
-    case .others: "Diğerleri"
-    }
-}
-
 /// Hemen biten boş bir ses akışı (başlatılamayan kaynak yerine).
 private func finishedStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)

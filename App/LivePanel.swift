@@ -17,8 +17,6 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    // Ekran paylaşımında gizlenmeye çalışır; macOS 15+ ScreenCaptureKit bunu her zaman dikkate almaz.
-    panel.sharingType = .none
     panel.contentView = NSHostingView(rootView: rootView)
     if let screen = NSScreen.main {
         let visible: NSRect = screen.visibleFrame
@@ -27,19 +25,37 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     return panel
 }
 
-/// Canlı paneli bir kez oluşturur ve gösterir.
+/// Ekran görüntüsü/kayıt ayarının UserDefaults anahtarı.
+let hideFromScreenCaptureKey: String = "hideFromScreenCapture"
+
+/// Panelin ekran görüntülerinde ve kayıtlarda görünürlüğü.
+/// `.none` gizlemeye çalışır; macOS 15+ ScreenCaptureKit tabanlı yakalamalar bunu her zaman dikkate almaz.
+func sharingType(hideFromCapture: Bool) -> NSWindow.SharingType {
+    hideFromCapture ? .none : .readOnly
+}
+
+/// Canlı paneli bir kez oluşturur, gösterir ve ekran görüntüsü ayarını uygular.
 @MainActor
 final class LivePanelController {
     private let model: AppModel
     private var panel: NSPanel?
+    private var hideFromCapture: Bool
 
-    init(model: AppModel) {
+    init(model: AppModel, hideFromCapture: Bool) {
         self.model = model
+        self.hideFromCapture = hideFromCapture
     }
 
     func show() {
         let target: NSPanel = panel ?? makeLivePanel(rootView: LiveTranscriptView(model: model))
+        target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
         target.orderFrontRegardless()
+    }
+
+    /// Ayar değişince açık panele hemen uygular.
+    func setHideFromCapture(hidden: Bool) {
+        hideFromCapture = hidden
+        panel?.sharingType = sharingType(hideFromCapture: hidden)
     }
 }
