@@ -22,6 +22,11 @@ let package = Package(
             name: "AINotepadUI",
             dependencies: ["AINotepadCore"]
         ),
+        // Tasarımı gözle kontrol etmek için örnek verilerle ada ve paneli açan geliştirme aracı (uygulamaya girmez).
+        .executableTarget(
+            name: "AINotepadPreview",
+            dependencies: ["AINotepadUI", "AINotepadCore"]
+        ),
         .testTarget(
             name: "AINotepadUITests",
             dependencies: ["AINotepadUI", "AINotepadCore"]
