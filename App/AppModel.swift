@@ -130,10 +130,16 @@ final class AppModel {
             lockedLanguage = language
         case .captureEnded(let speaker):
             if !isStopping {
-                errorMessages.append("\(speakerLabel(speaker: speaker)) ses akışı beklenmedik şekilde durdu.")
+                errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) ses akışı beklenmedik şekilde durdu.")
             }
         case .recordingFailed(let speaker, let message):
-            errorMessages.append("\(speakerLabel(speaker: speaker)) sesi diske yazılamadı: \(message)")
+            errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) sesi diske yazılamadı: \(message)")
+        case .speakersAssigned:
+            break
+        case .streamFailed(let speaker, let message):
+            errorMessages.append("\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)")
+        case .diarizationFailed(let message):
+            errorMessages.append("Konuşmacı ayırma başarısız: \(message)")
         }
     }
 

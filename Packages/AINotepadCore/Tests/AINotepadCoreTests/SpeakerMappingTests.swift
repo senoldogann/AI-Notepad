@@ -13,7 +13,7 @@ func words(_ speaker: String, from start: Double, to end: Double) -> [DiarizedWo
 }
 
 func othersSegment(index: Int, start: Double, end: Double) -> LiveSegment {
-    LiveSegment(id: SegmentID(speaker: .others, index: index), startSec: start, endSec: end, text: "t", isFinal: true, failureMessage: nil)
+    LiveSegment(id: SegmentID(speaker: .others, index: index), startSec: start, endSec: end, text: "t", isFinal: true, failureMessage: nil, person: nil)
 }
 
 @Suite struct SpeakerMappingTests {
@@ -87,7 +87,7 @@ func othersSegment(index: Int, start: Double, end: Double) -> LiveSegment {
     }
 
     @Test func meSegmentsAreIgnored() {
-        let me: LiveSegment = LiveSegment(id: SegmentID(speaker: .me, index: 0), startSec: 0, endSec: 10, text: "t", isFinal: true, failureMessage: nil)
+        let me: LiveSegment = LiveSegment(id: SegmentID(speaker: .me, index: 0), startSec: 0, endSec: 10, text: "t", isFinal: true, failureMessage: nil, person: nil)
         #expect(assignPersons(segments: [me], words: [AttributedWord(startSec: 0, endSec: 10, person: 1)]).isEmpty)
     }
 }

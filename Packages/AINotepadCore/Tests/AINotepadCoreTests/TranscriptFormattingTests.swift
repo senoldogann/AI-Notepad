@@ -37,4 +37,23 @@ import Testing
         ])
         #expect(plainText(blocks: blocks) == "[1:02:05] Sen: Selvä.")
     }
+
+    @Test func groupsSplitByPerson() {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+            segment(speaker: .others, index: 0, start: 0, text: "a", isFinal: true, failure: nil, person: 1),
+            segment(speaker: .others, index: 1, start: 2, text: "b", isFinal: true, failure: nil, person: 1),
+            segment(speaker: .others, index: 2, start: 4, text: "c", isFinal: true, failure: nil, person: 2),
+        ])
+        #expect(blocks.map(\.person) == [1, 2])
+        #expect(blocks.map { $0.segments.count } == [2, 1])
+    }
+
+    @Test func plainTextUsesPersonLabel() {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+            segment(speaker: .others, index: 0, start: 5, text: "Hyvää huomenta.", isFinal: true, failure: nil, person: 2),
+        ])
+        #expect(plainText(blocks: blocks) == "[00:05] Konuşmacı 2: Hyvää huomenta.")
+        #expect(speakerLabel(speaker: .others, person: nil) == "Diğerleri")
+        #expect(speakerLabel(speaker: .me, person: nil) == "Sen")
+    }
 }

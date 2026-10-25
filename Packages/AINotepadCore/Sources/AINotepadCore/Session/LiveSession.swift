@@ -269,7 +269,7 @@ private func processJob(
         }
 
         let text: String = try await engine.transcribe(samples: job.samples, language: language)
-        events.yield(.segment(LiveSegment(id: job.id, startSec: job.startSec, endSec: job.endSec, text: text, isFinal: job.isFinal, failureMessage: nil)))
+        events.yield(.segment(LiveSegment(id: job.id, startSec: job.startSec, endSec: job.endSec, text: text, isFinal: job.isFinal, failureMessage: nil, person: nil)))
 
         guard state.locked == nil, job.isFinal,
               let lockedNow = lockedLanguage(votes: votes, elapsedSec: job.endSec, lockAfterSec: config.languageLockAfterSec)
@@ -287,7 +287,8 @@ private func processJob(
                 endSec: job.endSec,
                 text: "",
                 isFinal: true,
-                failureMessage: String(describing: error)
+                failureMessage: String(describing: error),
+                person: nil
             )))
         }
         return WorkerState(votes: state.votes, locked: state.locked, finalized: finalized)

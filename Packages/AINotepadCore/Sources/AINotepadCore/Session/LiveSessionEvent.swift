@@ -10,4 +10,10 @@ public enum LiveSessionEvent: Sendable, Equatable {
     case captureEnded(speaker: Speaker)
     /// Ses dosyasına yazılamadı; yazıya dökme devam eder.
     case recordingFailed(speaker: Speaker, message: String)
+    /// Konuşmacı ayırma bölümlere kişi numarası atadı.
+    case speakersAssigned([SegmentID: Int])
+    /// Bir konuşmacının canlı metin akışı kalıcı olarak durdu (ses kaydı sürer).
+    case streamFailed(speaker: Speaker, message: String)
+    /// Bir konuşmacı ayırma penceresi başarısız oldu; sonraki pencere denenir.
+    case diarizationFailed(message: String)
 }

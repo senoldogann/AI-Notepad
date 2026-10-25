@@ -84,7 +84,7 @@ private struct BlockRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(speakerLabel(speaker: block.speaker))
+            Text(speakerLabel(speaker: block.speaker, person: block.person))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(block.speaker == .me ? Color.accentColor : Color.secondary)
             blockText

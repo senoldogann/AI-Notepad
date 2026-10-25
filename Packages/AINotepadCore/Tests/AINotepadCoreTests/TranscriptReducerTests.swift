@@ -2,15 +2,21 @@ import Foundation
 import Testing
 @testable import AINotepadCore
 
-/// Test için kısa bölüm üretir.
+/// Test için kısa bölüm üretir (kişi atanmamış).
 func segment(speaker: Speaker, index: Int, start: Double, text: String, isFinal: Bool, failure: String?) -> LiveSegment {
+    segment(speaker: speaker, index: index, start: start, text: text, isFinal: isFinal, failure: failure, person: nil)
+}
+
+/// Test için kısa bölüm üretir.
+func segment(speaker: Speaker, index: Int, start: Double, text: String, isFinal: Bool, failure: String?, person: Int?) -> LiveSegment {
     LiveSegment(
         id: SegmentID(speaker: speaker, index: index),
         startSec: start,
         endSec: start + 1,
         text: text,
         isFinal: isFinal,
-        failureMessage: failure
+        failureMessage: failure,
+        person: person
     )
 }
 
@@ -47,5 +53,25 @@ func segment(speaker: Speaker, index: Int, start: Double, text: String, isFinal:
         let existing: [LiveSegment] = [segment(speaker: .me, index: 0, start: 0, text: "a", isFinal: true, failure: nil)]
         #expect(applyEvent(transcript: existing, event: .languageLocked(.finnish)) == existing)
         #expect(applyEvent(transcript: existing, event: .captureEnded(speaker: .me)) == existing)
+    }
+
+    @Test func speakersAssignedSetsPerson() {
+        let others: LiveSegment = segment(speaker: .others, index: 0, start: 0, text: "Hei", isFinal: true, failure: nil)
+        let result: [LiveSegment] = applyEvent(transcript: [others], event: .speakersAssigned([others.id: 2]))
+        #expect(result.map(\.person) == [2])
+    }
+
+    @Test func laterUpdateKeepsAssignedPerson() {
+        let assigned: LiveSegment = segment(speaker: .others, index: 0, start: 0, text: "Hei", isFinal: false, failure: nil, person: 2)
+        let final: LiveSegment = segment(speaker: .others, index: 0, start: 0, text: "Hei kaikki", isFinal: true, failure: nil)
+        let result: [LiveSegment] = applyEvent(transcript: [assigned], event: .segment(final))
+        #expect(result.map(\.person) == [2])
+        #expect(result.map(\.text) == ["Hei kaikki"])
+    }
+
+    @Test func failureEventsDoNotChangeTranscript() {
+        let existing: [LiveSegment] = [segment(speaker: .others, index: 0, start: 0, text: "a", isFinal: true, failure: nil)]
+        #expect(applyEvent(transcript: existing, event: .streamFailed(speaker: .others, message: "x")) == existing)
+        #expect(applyEvent(transcript: existing, event: .diarizationFailed(message: "x")) == existing)
     }
 }
