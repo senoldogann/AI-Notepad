@@ -46,15 +46,15 @@ public func parseDeepgramMessage(data: Data) throws -> DeepgramMessage {
     }
 }
 
-/// Canlı dinleme adresi. Dil: Fince → `fi`, İngilizce → `en`, Otomatik → `multi`.
-public func deepgramListenURL(languageMode: LanguageMode) -> URL {
+/// Canlı dinleme adresi. Her zaman somut dil kullanılır: `multi` ölçümde güvenilmez çıktı.
+public func deepgramListenURL(language: MeetingLanguage) -> URL {
     var components: URLComponents = URLComponents()
     components.scheme = "wss"
     components.host = "api.deepgram.com"
     components.path = "/v1/listen"
     components.queryItems = [
         URLQueryItem(name: "model", value: "nova-3"),
-        URLQueryItem(name: "language", value: deepgramLanguage(languageMode: languageMode)),
+        URLQueryItem(name: "language", value: language.rawValue),
         URLQueryItem(name: "encoding", value: "linear16"),
         URLQueryItem(name: "sample_rate", value: "16000"),
         URLQueryItem(name: "channels", value: "1"),
@@ -63,13 +63,6 @@ public func deepgramListenURL(languageMode: LanguageMode) -> URL {
     ]
     // Sabit bileşenlerden üretildiği için her zaman geçerlidir.
     return components.url!
-}
-
-private func deepgramLanguage(languageMode: LanguageMode) -> String {
-    switch languageMode {
-    case .automatic: "multi"
-    case .fixed(let language): language.rawValue
-    }
 }
 
 // Deepgram JSON alan adları snake_case olduğu için ara tipler aynı adları kullanır.

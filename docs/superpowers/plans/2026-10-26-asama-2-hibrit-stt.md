@@ -15,9 +15,9 @@
 - macOS 26+, Swift 6 strict concurrency; yorumlar ve UI metni Türkçe; varsayılan parametre değeri yok; saf fonksiyonlar; `class`/`actor` yalnızca bağlayıcılarda.
 - Keychain: servis `AINotepad`, hesaplar `deepgram`, `elevenlabs`. Anahtar asla loglanmaz, hata mesajına girmez.
 - Deepgram: `wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&smart_format=true&language=<fi|en|multi>`, başlık `Authorization: Token <anahtar>`; kapanışta metin mesajı `{"type":"CloseStream"}`.
-- Dil eşlemesi: `.fixed(.finnish)`→`fi`, `.fixed(.english)`→`en`, `.automatic`→`multi`.
+- Dil eşlemesi: Deepgram her zaman somut dil alır (`fi` | `en`). Otomatik: `fi` ile başlar, ilk ayırma penceresinin (15. sn) ElevenLabs `language_code` sonucu olasılık ≥ 0,8 ile `eng` ise iki akış `en`'e geçer (bkz. ledger Task 3 kararı).
 - ElevenLabs: `POST https://api.elevenlabs.io/v1/speech-to-text`, başlık `xi-api-key`, multipart alanlar `model_id=scribe_v2`, `diarize=true`, `file` (WAV), `language_code` = `fin` | `eng` (Otomatik'te gönderilmez).
-- Konuşmacı ayırma: her 60 sn, "Diğerleri"nin son 120 sn'si; 5 sn'den kısa pencere gönderilmez.
+- Konuşmacı ayırma: ilk pencere 15. sn, sonra her 60 sn, "Diğerleri"nin son 120 sn'si; 5 sn'den kısa pencere gönderilmez.
 - Dış HTTP çağrıları: 3 deneme, üstel bekleme, her başarısızlıkta uyarı logu, sonra son hata; hata durum kodu + yanıt gövdesi içerir.
 - Deepgram yeniden bağlanma: 4 deneme, 0,25 sn'den başlayan üstel bekleme; kopukken gelen ses tamponlanıp bağlanınca gönderilir.
 - Gizli yedek yok: bulut başarısızsa WhisperKit'e geçilmez; hata panelde görünür; `.caf` kaydı sürer.
@@ -29,7 +29,7 @@
 2. **Geçersiz/süresi dolmuş anahtar ya da kota bitti:** sessiz boş panel değil, Türkçe açık hata; kayıt sürer → Task 3 `invalidKeyFailsWithStatus`, Task 4 `invalidKeyThrowsWithStatus`, Task 8 adım 5.
 3. **Aynı kişi pencereden pencereye farklı numara alır:** örtüşmede eşleme kimliği korumalı → Task 5 `overlapKeepsIdentityWhenLabelsSwap`, `twoLabelsCannotClaimSamePerson`.
 4. **Pencerede hiç konuşma yok (sessizlik, müzik):** hata değil, etiket değişmez → Task 5 `emptyWindowKeepsMapping`, Task 7 kısa pencere atlama.
-5. **`multi` modunda yanlış dil/yazı:** kesin metin Fince kalmalı → Task 3 bulut testi kesin metinde Arap/Kiril harfi olmamasını doğrular.
+5. **Otomatik modda İngilizce toplantı:** dil algılanınca iki akış İngilizceye geçmeli, metin akmaya devam etmeli → Task 3 `switchesLanguageMidStream`, Task 7 `englishMeetingSwitchesLanguage`.
 
 ---
 

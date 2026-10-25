@@ -90,6 +90,7 @@ public final class MicrophoneCapture {
             try await retryWithBackoff(
                 attempts: 4,
                 delaySec: 0.25,
+                isolation: #isolation,
                 operation: {
                     guard generation == self.restartGeneration, let continuation = self.continuation else {
                         return

@@ -101,15 +101,17 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   (`wss://api.deepgram.com/v1/listen`, `model=nova-3`, `encoding=linear16`, `sample_rate=16000`,
   `interim_results=true`, `smart_format=true`). Ek kütüphane yok (`URLSessionWebSocketTask`).
   Geçici sonuçlar soluk, `is_final` sonuçlar kesin bölüm olur.
-  Dil: Fince → `language=fi`, İngilizce → `language=en`, Otomatik → `language=multi`
-  (Deepgram belgelerine göre Fince'yi kapsar; Fince kalitesi plan başında ölçülür, kötüyse kullanıcıya sorulur).
+  Dil: Fince → `language=fi`, İngilizce → `language=en`. Otomatik: kayıt `fi` ile başlar; ilk konuşmacı
+  ayırma penceresinin (15. sn) ElevenLabs dil sonucu olasılık ≥ 0,8 ile `eng` ise iki akış `en`'e geçer
+  (yeniden bağlanma yolu), `fin` ise Fince kalır; dil kilitlenir. Güvensizse sonraki pencere denenir.
+  (`multi` ölçümde güvenilmez çıktı: sentetik Fince diyaloğu Norveççe sandı; kullanıcı bu yolu seçti.)
   Bağlantı koparsa geri çekilmeli yeniden bağlanır; arada gelen ses tamponda bekleyip sonra gönderilir.
   Yakalama sessizlikte de sürekli ses ürettiği için `KeepAlive` gerekmez.
 - **WhisperKit (Mac'te):** mevcut `TranscriptionEngine` + bölümleyici + seri işçi (aşama 1).
   Model yalnızca bu motor seçiliyse yüklenir. Dil 30 sn sonra kilitlenir.
 
 **LiveDiarization** (yalnızca Deepgram motoruyla)
-- Her 60 sn'de, "Diğerleri"nin son 120 sn'si (16 kHz WAV) ElevenLabs `POST /v1/speech-to-text`
+- İlk pencere 15. sn'de (dil algılama için erken), sonra her 60 sn'de, "Diğerleri"nin son 120 sn'si (16 kHz WAV) ElevenLabs `POST /v1/speech-to-text`
   (`model_id=scribe_v2`, `diarize=true`, `language_code=fin|eng`; Otomatik modda gönderilmez,
   ElevenLabs dili kendisi algılar) ile gönderilir.
 - Ardışık pencereler 60 sn örtüşür. Örtüşen bölgedeki kelimelerin zaman çakışmasına göre yeni
@@ -230,10 +232,9 @@ Her aşama ayrı bir uygulama planıyla yapılır ve sonunda çalışan bir uygu
 
 - **Deepgram `language=fi` ilk saniyeler:** ikinci ölçümde nedeni bulundu — model kaydın ilk 13 sn'si
   için boş kesin sonuç döndürüyor (kısa, hızlı çocuk konuşması); bağlantı sorunu değil. Aynı kayıtta
-  `language=multi` bu kısmı yakaladı ve genel kalitesi `fi` kadar iyiydi (tek örnek). Otomatik (varsayılan)
-  mod `multi` kullanır.
-- **`multi` geçici sonuçları** kısa süre başka dil/yazı gösterebilir (ölçümde ilk geçici kelime Farsça);
-  kesin sonuçlar Fince'ydi. Geçici metin soluk gösterildiği için kabul edilir.
+  `language=multi` bu kısmı yakaladı; ancak sentetik Fince diyalogda `multi` tamamen bozuk metin üretti
+  (`fi` kusursuzdu). Bu yüzden `multi` kullanılmaz.
+- **Otomatik modda İngilizce toplantı:** dil algılanana kadar (~15 sn) metin Fince modelle bozuk çıkabilir.
 - **Konuşmacı eşleme hataları:** pencereler arası eşleme yanlışsa bir kişi iki numara alabilir;
   toplantı sonrası tüm kayıt üzerinden yapılan ayırma kesin sonucu verir.
 - **Maliyet:** iki Deepgram akışı ~0,6–0,9 $/sa + ElevenLabs (örtüşme nedeniyle sesin ~2 katı)

@@ -3,19 +3,6 @@ import Foundation
 import Testing
 @testable import AINotepadCore
 
-/// Örnekleri 1600'lük parçalar halinde veren ve sonra biten bir akış.
-func chunkedStream(samples: [Float]) -> AsyncStream<[Float]> {
-    let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
-    var offset: Int = 0
-    while offset < samples.count {
-        let end: Int = min(offset + 1600, samples.count)
-        continuation.yield(Array(samples[offset..<end]))
-        offset = end
-    }
-    continuation.finish()
-    return stream
-}
-
 extension ModelTests {
 @Suite struct LiveSessionTests {
     @Test func finnishMeetingEndToEnd() async throws {
@@ -35,8 +22,8 @@ extension ModelTests {
         for await event in runLiveSession(
             config: config,
             engine: engine,
-            meAudio: chunkedStream(samples: silence(seconds: 10)),
-            othersAudio: chunkedStream(samples: fixture)
+            meAudio: chunkedStream(samples: silence(seconds: 10), chunkSize: 1600),
+            othersAudio: chunkedStream(samples: fixture, chunkSize: 1600)
         ) {
             events.append(event)
         }

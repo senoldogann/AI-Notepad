@@ -34,15 +34,15 @@ import Testing
         }
     }
 
-    @Test func urlUsesMultiForAutomatic() throws {
-        let query: String = try #require(deepgramListenURL(languageMode: .automatic).query)
-        for part in ["language=multi", "model=nova-3", "encoding=linear16", "sample_rate=16000", "channels=1", "interim_results=true", "smart_format=true"] {
+    @Test func urlHasStreamingParameters() throws {
+        let query: String = try #require(deepgramListenURL(language: .finnish).query)
+        for part in ["language=fi", "model=nova-3", "encoding=linear16", "sample_rate=16000", "channels=1", "interim_results=true", "smart_format=true"] {
             #expect(query.contains(part), "eksik: \(part)")
         }
+        #expect(!query.contains("multi"))
     }
 
-    @Test func urlUsesFiForFinnish() throws {
-        #expect(try #require(deepgramListenURL(languageMode: .fixed(.finnish)).query).contains("language=fi"))
-        #expect(try #require(deepgramListenURL(languageMode: .fixed(.english)).query).contains("language=en"))
+    @Test func urlUsesEnForEnglish() throws {
+        #expect(try #require(deepgramListenURL(language: .english).query).contains("language=en"))
     }
 }
