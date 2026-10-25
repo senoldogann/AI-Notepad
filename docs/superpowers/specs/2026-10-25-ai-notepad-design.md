@@ -166,6 +166,34 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir:
   kayıt başlat/durdur ⌃⌥R, ada + paneli göster/gizle ⌃⌥Space.
 
+### 4.3 Görsel tasarım (aşama 3)
+
+**İlke:** kurumsal, temiz, anlaşılır, lüks-sade. Tek vurgu rengi, bol boşluk, SF Pro, Liquid Glass yüzeyler;
+süs, gölge oyunu ve gereksiz ikon yok. Bilgi hiyerarşisi: metin > konuşmacı > durum.
+
+**Tasarım ölçüleri (`DesignTokens`):** boşluk 4/8/12/16/24; köşe yarıçapı panel 22, çip 10;
+yazı: metin 14 pt regular (satır aralığı 4), konuşmacı etiketi 11 pt semibold büyük harf (harf aralığı 0,6),
+durum 12 pt medium, rakamlar tek aralıklı. Geçici metin %55 opaklık. "Sen" vurgu rengi `#3B5BDB`;
+kişi renkleri sırayla `#0CA678`, `#F08C00`, `#D6336C`, `#7048E8`, `#1098AD`, `#5C940D` (7. kişiden itibaren
+başa döner). Hata: sistem kırmızısı, %12 dolgulu ince bant.
+
+**Ada:** yalnızca kayıt sırasında görünür. Çentikli ekranda çentiğe yapışık siyah ada: yükseklik
+`safeAreaInsets.top`, genişlik çentik + 2×120 pt; sol kanatta kırmızı nokta + süre, sağ kanatta dil.
+Fare üstüne gelince yay animasyonuyla aşağı açılır (+64 pt) ve son "Diğerleri" cümlesini 2 satırda gösterir.
+Tıklama paneli aç/kapa yapar. Çentiksiz ekranda menü çubuğunun 8 pt altında ortada aynı içerikli siyah hap.
+
+**Cam panel:** kenarlıksız, arka planından taşınabilir, boyutlanabilir `NSPanel`; içerik
+`.glassEffect(.regular, in: .rect(cornerRadius: 22))`. Üst satır: durum (kayıt noktası + süre ya da "Hazır"),
+dil çipi, kopyala ve küçült düğmeleri. Gövde: konuşmacı blokları (renk noktası + etiket + akan metin).
+Alt: en son 3 hata ince kırmızı bantta.
+
+**Yapı:** görünümler yeni `AINotepadUI` paket hedefinde ve yalnızca değer tipi `LiveViewState` +
+eylem kapanışlarıyla beslenir (uygulama modeline bağlı değil). Görsel kontrol için `AINOTEPAD_SNAPSHOTS=1`
+ile çalışan testler görünümleri örnek verilerle PNG'ye çizer.
+
+**Kısayollar:** ⌃⌥R kayıt başlat/durdur, ⌃⌥Space ada + panel göster/gizle (Carbon `RegisterEventHotKey`,
+erişilebilirlik izni gerektirmez).
+
 ### 4.2 Toplantı durum makinesi
 
 `idle → recording → processing → done`, ayrıca `processing → failed` ve
