@@ -1,5 +1,7 @@
 import AVFoundation
 import Foundation
+import Testing
+@testable import AINotepadCore
 
 /// Test seslerini yüklerken oluşan hatalar.
 enum FixtureError: Error {
@@ -42,4 +44,14 @@ func whiteNoise(seconds: Double, amplitude: Float, seed: UInt64) -> [Float] {
         let unit: Float = Float(state % 1_000_000) / 1_000_000
         return (unit * 2 - 1) * amplitude
     }
+}
+
+/// Gerçek modelle çalışan tüm test grupları bunun altında ve sırayla çalışır:
+/// model bellekte bir kez tutulur ve motora aynı anda iki çağrı gitmez.
+@Suite(.enabled(if: modelTestsEnabled), .serialized)
+struct ModelTests {}
+
+/// Model testlerinin paylaştığı motor; ilk kullanımda bir kez yüklenir.
+let sharedTestEngine: Task<WhisperKitEngine, any Error> = Task {
+    try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: AppPaths.modelsDirectory())
 }
