@@ -3,7 +3,15 @@ import Foundation
 import Observation
 import os
 
-/// Konuşma tanıma modelinin yüklenme durumu.
+/// Canlı metin motoru. Seçim UserDefaults'ta `liveEngineKey` ile saklanır.
+enum LiveEngine: String, CaseIterable {
+    case deepgram
+    case whisperKit
+}
+
+let liveEngineKey: String = "liveEngine"
+
+/// Konuşma tanıma modelinin (WhisperKit) yüklenme durumu.
 enum ModelStatus: Equatable {
     case loading
     case ready
@@ -17,6 +25,7 @@ final class AppModel {
     private static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel")
 
     var modelStatus: ModelStatus = .loading
+    var liveEngine: LiveEngine
     var isRecording: Bool = false
     /// İzin pencereleri açıkken ikinci bir başlatmayı engeller.
     var isStarting: Bool = false
@@ -31,6 +40,24 @@ final class AppModel {
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
     @ObservationIgnored private var isStopping: Bool = false
+
+    init(liveEngine: LiveEngine) {
+        self.liveEngine = liveEngine
+    }
+
+    /// Kayıt başlatılabilir mi: Deepgram'da her zaman, WhisperKit'te model hazırsa.
+    var isReadyToRecord: Bool {
+        liveEngine == .deepgram || modelStatus == .ready
+    }
+
+    /// Motoru değiştirir ve kaydeder; WhisperKit seçilirse model (henüz yoksa) yüklenir.
+    func selectEngine(engine: LiveEngine) async {
+        liveEngine = engine
+        UserDefaults.standard.set(engine.rawValue, forKey: liveEngineKey)
+        if engine == .whisperKit, self.engine == nil {
+            await loadModel()
+        }
+    }
 
     /// Modeli (ilk seferde indirerek) yükler.
     func loadModel() async {
@@ -47,7 +74,7 @@ final class AppModel {
     /// İki ses akışını başlatır ve canlı oturumu çalıştırır.
     /// Akışlardan biri başlatılamazsa hata gösterilir, diğeriyle devam edilir.
     func startRecording() async {
-        guard let engine, !isRecording, !isStarting else {
+        guard !isRecording, !isStarting, isReadyToRecord else {
             return
         }
         isStarting = true
@@ -56,6 +83,23 @@ final class AppModel {
         lockedLanguage = nil
         errorMessages = []
         isStopping = false
+
+        // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz.
+        let cloudKeys: (deepgram: String, elevenLabs: String)?
+        switch liveEngine {
+        case .deepgram:
+            do {
+                cloudKeys = (
+                    try readSecret(service: keychainService, account: .deepgram),
+                    try readSecret(service: keychainService, account: .elevenlabs)
+                )
+            } catch {
+                errorMessages.append(userMessage(error: error))
+                return
+            }
+        case .whisperKit:
+            cloudKeys = nil
+        }
 
         let directory: URL
         do {
@@ -86,23 +130,47 @@ final class AppModel {
             return
         }
 
+        let events: AsyncStream<LiveSessionEvent>
+        if let cloudKeys {
+            events = runCloudLiveSession(
+                config: CloudSessionConfig(
+                    languageMode: languageMode,
+                    recordingDirectory: directory,
+                    deepgramKey: cloudKeys.deepgram,
+                    elevenLabsKey: cloudKeys.elevenLabs,
+                    firstDiarizationAfterSec: 15,
+                    diarizationIntervalSec: 60,
+                    diarizationWindowSec: 120,
+                    minDiarizationAudioSec: 5,
+                    languageConfidence: 0.8
+                ),
+                meAudio: meAudio,
+                othersAudio: othersAudio
+            )
+        } else if let engine {
+            events = runLiveSession(
+                config: LiveSessionConfig(
+                    languageMode: languageMode,
+                    segmenter: .live,
+                    recordingDirectory: directory,
+                    partialIntervalSec: 1.5,
+                    minPartialSpeechSec: 1.0,
+                    languageLockAfterSec: 30
+                ),
+                engine: engine,
+                meAudio: meAudio,
+                othersAudio: othersAudio
+            )
+        } else {
+            // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
+            errorMessages.append("Konuşma tanıma modeli hazır değil.")
+            microphone.stop()
+            systemAudio.stop()
+            return
+        }
         isRecording = true
         recordingStartedAt = Date()
-        let config: LiveSessionConfig = LiveSessionConfig(
-            languageMode: languageMode,
-            segmenter: .live,
-            recordingDirectory: directory,
-            partialIntervalSec: 1.5,
-            minPartialSpeechSec: 1.0,
-            languageLockAfterSec: 30
-        )
-        let events: AsyncStream<LiveSessionEvent> = runLiveSession(
-            config: config,
-            engine: engine,
-            meAudio: meAudio,
-            othersAudio: othersAudio
-        )
-        Self.logger.info("Kayıt başladı: \(directory.path, privacy: .public)")
+        Self.logger.info("Kayıt başladı: \(directory.path, privacy: .public), motor: \(self.liveEngine.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in events {
                 self?.handle(event: event)
@@ -167,6 +235,11 @@ private func userMessage(error: any Error) -> String {
         return "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver."
     case AudioCaptureError.coreAudio(let operation, let status):
         return "Sistem sesi yakalanamadı (\(operation), kod \(status))."
+    case KeychainError.notFound(_, let account):
+        let service: String = account == SecretAccount.deepgram.rawValue ? "Deepgram" : "ElevenLabs"
+        return "\(service) anahtarı kayıtlı değil. Menüden Ayarlar…'ı açıp ekle."
+    case KeychainError.unexpectedStatus(let operation, let status):
+        return "Anahtar Keychain'den okunamadı (\(operation), kod \(status))."
     case TranscriptionError.modelLoadFailed(let model, let reason):
         return "Konuşma tanıma modeli (\(model)) yüklenemedi: \(reason)"
     default:

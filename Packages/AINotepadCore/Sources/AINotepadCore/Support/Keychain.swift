@@ -68,3 +68,17 @@ private func baseQuery(service: String, account: SecretAccount) -> [String: Any]
         kSecAttrAccount as String: account.rawValue,
     ]
 }
+
+/// Anahtarın kayıtlı olup olmadığı. Değeri okumadığı için Keychain izin penceresi açmaz.
+public func secretExists(service: String, account: SecretAccount) throws -> Bool {
+    var query: [String: Any] = baseQuery(service: service, account: account)
+    query[kSecReturnAttributes as String] = true
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
+    var result: CFTypeRef?
+    let status: OSStatus = SecItemCopyMatching(query as CFDictionary, &result)
+    switch status {
+    case errSecSuccess: return true
+    case errSecItemNotFound: return false
+    default: throw KeychainError.unexpectedStatus(operation: "SecItemCopyMatching(attributes)", status: status)
+    }
+}

@@ -8,7 +8,9 @@ struct AINotepadApp: App {
     @State private var panel: LivePanelController
 
     init() {
-        let model: AppModel = AppModel()
+        UserDefaults.standard.register(defaults: [liveEngineKey: LiveEngine.deepgram.rawValue])
+        let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: liveEngineKey) ?? "") ?? .deepgram
+        let model: AppModel = AppModel(liveEngine: engine)
         _model = State(initialValue: model)
         // Varsayılan: gizli. Kullanıcı menüden değiştirince UserDefaults'a yazılır.
         UserDefaults.standard.register(defaults: [hideFromScreenCaptureKey: true])
@@ -16,12 +18,18 @@ struct AINotepadApp: App {
             model: model,
             hideFromCapture: UserDefaults.standard.bool(forKey: hideFromScreenCaptureKey)
         ))
-        Task { await model.loadModel() }
+        // WhisperKit modeli yalnızca o motor seçiliyse yüklenir.
+        if engine == .whisperKit {
+            Task { await model.loadModel() }
+        }
     }
 
     var body: some Scene {
         MenuBarExtra("AI-Notepad", systemImage: model.isRecording ? "record.circle" : "waveform") {
             MenuContent(model: model, panel: panel)
+        }
+        Settings {
+            SettingsView(model: model)
         }
     }
 }
@@ -31,6 +39,7 @@ private struct MenuContent: View {
     @Bindable var model: AppModel
     let panel: LivePanelController
     @AppStorage(hideFromScreenCaptureKey) private var hideFromCapture: Bool = true
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         if model.isRecording {
@@ -44,7 +53,7 @@ private struct MenuContent: View {
                     panel.show()
                 }
             }
-            .disabled(model.modelStatus != .ready || model.isStarting)
+            .disabled(!model.isReadyToRecord || model.isStarting)
         }
 
         Picker("Dil", selection: $model.languageMode) {
@@ -63,8 +72,14 @@ private struct MenuContent: View {
                 panel.setHideFromCapture(hidden: newValue)
             }
 
+        Button("Ayarlar…") {
+            // Menü çubuğu uygulaması: pencere öne gelsin diye önce uygulama etkinleştirilir.
+            NSApplication.shared.activate()
+            openSettings()
+        }
+
         Divider()
-        switch model.modelStatus {
+        switch model.liveEngine == .deepgram ? ModelStatus.ready : model.modelStatus {
         case .loading:
             Text("Model hazırlanıyor… İlk açılışta indirme ve derleme birkaç dakika sürebilir.")
         case .ready:

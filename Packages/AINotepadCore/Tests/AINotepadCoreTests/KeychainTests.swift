@@ -25,4 +25,12 @@ import Testing
             try readSecret(service: service, account: .deepgram)
         }
     }
+
+    @Test func secretExistsReflectsState() throws {
+        try deleteSecret(service: service, account: .elevenlabs)
+        #expect(try secretExists(service: service, account: .elevenlabs) == false)
+        try saveSecret(service: service, account: .elevenlabs, value: "x")
+        #expect(try secretExists(service: service, account: .elevenlabs) == true)
+        try deleteSecret(service: service, account: .elevenlabs)
+    }
 }

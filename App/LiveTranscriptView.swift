@@ -59,7 +59,7 @@ private struct StatusBar: View {
                     Text(timestamp(seconds: context.date.timeIntervalSince(startedAt))).monospacedDigit()
                 }
             } else {
-                Text(modelStatusText(status: model.modelStatus))
+                Text(model.liveEngine == .deepgram ? "Hazır · Deepgram" : modelStatusText(status: model.modelStatus))
                     .foregroundStyle(.secondary)
             }
             Spacer()
