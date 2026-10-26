@@ -76,7 +76,10 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Bitir'e basınca panel "Bitiriliyor…", ardından kendiliğinden toplantı sayfasına geçiyor; en üstte "Senin görevlerin".
 - [ ] PDF düğmesi: İndirilenler'de temiz PDF (görevler, özet, kararlar, sözlük, transkript; sayfa numaraları); "Finder'da göster" çalışıyor; PDF'ten kopyalanan metin doğru.
 - [ ] Ayarlar, Toplantılar ve Kurulum ayrı pencere açmıyor; hepsi panelin içinde, geri düğmesiyle dönülüyor; kayıt sürerken "Kayıtta" ile canlıya dönülüyor.
-- [ ] Panel ayarlarda yazı alırken (anahtar, ad, model) başka uygulama önde kalıyor ama yazılabiliyor.
+- [ ] Panel ayarlarda yazı alırken (anahtar, ad, model) başka uygulama önde kalıyor ama yazılabiliyor; anahtar ⌘V ile ya da "Yapıştır" düğmesiyle yapıştırılabiliyor.
+- [ ] İlk PDF/Markdown dışa aktarmada macOS'un tek seferlik "İndirilenler klasörüne erişim" izni çıkabilir (sistem penceresi; uygulamanın değil).
+- [ ] Toplantıda soruya soruyu tekrar ederek cevap ver ("Joo, teen diat perjantaiksi"): cevabın "Sen" olarak canlıda ve notta duruyor.
+- [ ] Bir toplantı bittikten sonra yeni kayıt (kısayol ya da menü): panel canlı sayfada açılıyor; panel gizliyken toplantı bitince panel toplantı sayfasıyla görünüyor.
 
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

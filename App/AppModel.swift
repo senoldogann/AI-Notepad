@@ -59,6 +59,8 @@ final class AppModel {
     var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
     /// Son biten kaydın toplantısı: panel bitince bu toplantının sayfasını açar.
     var lastFinishedMeetingID: String?
+    /// Yerel konuşmacı ayırma modeli hazır değil (menüde uyarı; canlı kayıt engellenmez).
+    var localDiarizationWarning: String?
     /// Bir sonraki kaydın dil modu (kayıt sırasında dil `setLanguage` ile değişir).
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
@@ -158,8 +160,16 @@ final class AppModel {
 
     /// Görünümü değiştirir ve kaydeder.
     func selectDisplayMode(mode: DisplayMode) {
+        let resumesTranslation: Bool = mode.needsLiveTranslation && !displayMode.needsLiveTranslation
         displayMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: SettingsKey.displayMode)
+        // "Sadece orijinal"den dönünce o sırada çevrilmeyen cümleler de çevrilir (toplantıda Türkçesi eksik kalmasın).
+        if resumesTranslation, isRecording {
+            for segment in transcript where segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty
+                && translations[segment.id] == nil && !failedTranslations.contains(segment.id) {
+                enqueueTranslation(segment: segment)
+            }
+        }
     }
 
     // MARK: Asistan
@@ -357,12 +367,20 @@ final class AppModel {
         do {
             let modelsDirectory: URL = try AppPaths.modelsDirectory()
             engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory)
-            // Konuşmacı ayırma modeli de şimdi indirilir: ilk yerel toplantının son geçişi internetsiz çalışsın.
-            try await prepareLocalDiarization(modelsDirectory: modelsDirectory)
             modelStatus = .ready
         } catch {
             Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .public)")
             modelStatus = .failed(userFacingMessage(error: error))
+            return
+        }
+        // Konuşmacı ayırma modeli de şimdi indirilir: ilk yerel toplantının son geçişi internetsiz çalışsın.
+        // İndirilemezse canlı kayıt engellenmez; uyarı menüde görünür, son geçiş metni tek konuşmacı saklar.
+        do {
+            try await prepareLocalDiarization(modelsDirectory: try AppPaths.modelsDirectory())
+            localDiarizationWarning = nil
+        } catch {
+            Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .public)")
+            localDiarizationWarning = "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas."
         }
     }
 

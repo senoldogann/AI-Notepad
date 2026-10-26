@@ -55,4 +55,13 @@ func timed(_ speaker: Speaker, _ index: Int, _ start: Double, _ end: Double, _ t
         let mine: StoredSegment = StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 20, endSec: 22, text: "Minulla on kysymys raportista")
         #expect(suppressStoredEchoes(segments: [others, echo, mine]) == [others, mine])
     }
+
+    // Soruyu tekrar eden gerçek cevap sorudan sonra gelir: yankı değildir, nota girmeli.
+    @Test func keepsReplyRepeatingTheQuestion() {
+        let question: LiveSegment = timed(.others, 0, 0, 3, "Doğan, voitko tehdä diat perjantaiksi?")
+        let reply: LiveSegment = timed(.me, 0, 3.3, 5, "Joo, teen diat perjantaiksi")
+        let english: LiveSegment = timed(.others, 1, 10, 13, "Can you send the report by Friday?")
+        let answer: LiveSegment = timed(.me, 1, 13.2, 15.5, "Yes, I can send the report by Friday")
+        #expect(suppressEchoes(transcript: [question, reply, english, answer]) == [question, reply, english, answer])
+    }
 }

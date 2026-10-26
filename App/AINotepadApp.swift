@@ -81,8 +81,9 @@ func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: Is
         return
     }
     await model.startRecording()
-    // Başlatma başarısız olsa da panel açılır: hata orada görünür.
-    panel.show()
+    // Başlatma başarısız olsa da panel canlı sayfada açılır: metin ya da hata orada görünür
+    // (önceki toplantının sayfası açık kalmış olabilir).
+    panel.show(page: .live)
     island.show()
 }
 
@@ -134,7 +135,7 @@ private struct MenuContent: View {
         .menuShortcut(binding: shortcuts.currentBinding(action: .toggleWindows))
 
         // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar ve kısayol hataları.
-        ForEach(Array((model.setupProblems + [model.shortcutError].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+        ForEach(Array((model.setupProblems + [model.shortcutError, model.localDiarizationWarning].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
             Text(item.element).foregroundStyle(.red)
         }
 
@@ -185,7 +186,11 @@ private struct MenuContent: View {
                 Divider()
                 Text("Model hazırlanıyor… İlk açılışta birkaç dakika sürebilir.")
             case .ready:
-                EmptyView()
+                if model.localDiarizationWarning != nil {
+                    Button("Modeli yeniden yükle", systemImage: "arrow.clockwise") {
+                        Task { await model.loadModel() }
+                    }
+                }
             case .failed(let message):
                 Divider()
                 Text(message).foregroundStyle(.red)

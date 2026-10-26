@@ -94,8 +94,7 @@ public func runCloudLiveSession(
     return LiveSessionHandle(events: events) { (language: MeetingLanguage) async -> Void in
         // Önce kilit: süren ayırma penceresi otomatik algılamayla dili geri değiştirmesin. Etiket hemen güncellenir;
         // akışlar yeniden bağlanırken (ağ yoksa uzun sürebilir) beklenmez.
-        await state.lock(language: language)
-        sink.yield(.languageLocked(language))
+        await state.lock(language: language, events: sink)
         await switchStreams(streams: streams, state: state)
     }
 }
@@ -180,16 +179,19 @@ private actor CloudSessionState {
         lockedLanguage
     }
 
-    func lock(language: MeetingLanguage) {
+    /// Kullanıcının seçimi: dili kilitler ve olayı aktörün içinde yayınlar (olay sırası kilit sırasıyla aynı olsun).
+    func lock(language: MeetingLanguage, events: AsyncStream<LiveSessionEvent>.Continuation) {
         lockedLanguage = language
+        events.yield(.languageLocked(language))
     }
 
-    /// Dil henüz kilitli değilse kilitler; kullanıcının seçimi araya girmişse dokunmaz (tek adımda, yarışsız).
-    func lockIfUnlocked(language: MeetingLanguage) -> Bool {
+    /// Otomatik algılama: dil henüz kilitli değilse kilitler ve yayınlar; kullanıcının seçimi araya girmişse dokunmaz.
+    func lockIfUnlocked(language: MeetingLanguage, events: AsyncStream<LiveSessionEvent>.Continuation) -> Bool {
         guard lockedLanguage == nil else {
             return false
         }
         lockedLanguage = language
+        events.yield(.languageLocked(language))
         return true
     }
 
@@ -341,8 +343,7 @@ private func runDiarizationWindow(
     // (kullanıcı dili seçince) konmuş olabilir: yeniden okunur.
     if case .automatic = config.languageMode, !(await state.isStopping()),
        let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence),
-       await state.lockIfUnlocked(language: detected) {
-        events.yield(.languageLocked(detected))
+       await state.lockIfUnlocked(language: detected, events: events) {
         if detected != initialLanguage(languageMode: config.languageMode) {
             await switchStreams(streams: streams, state: state)
         }

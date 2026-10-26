@@ -72,11 +72,7 @@ public func parseMeetingNote(text: String) throws -> MeetingNote {
 
 /// Toplantıyı Markdown'a çevirir (Notion, Apple Notes, Obsidian'a yapıştırılabilir). Saf fonksiyondur.
 public func meetingMarkdown(record: MeetingRecord) -> String {
-    let formatter: DateFormatter = DateFormatter()
-    formatter.locale = Locale(identifier: "tr_TR")
-    formatter.dateStyle = .long
-    formatter.timeStyle = .short
-    var lines: [String] = ["# \(record.note?.title ?? record.title)", "", "_\(formatter.string(from: record.startedAt))_", ""]
+    var lines: [String] = ["# \(record.note?.title ?? record.title)", "", "_\(meetingMetaLine(record: record))_", ""]
     if let note = record.note {
         // Toplantıdan çıkınca ilk bakılacak şey: kime ne düştüğü. Sonra özet ve kararlar.
         let mine: [NoteTask] = note.tasks.filter(\.isMine)

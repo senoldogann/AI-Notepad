@@ -1,8 +1,9 @@
 import Foundation
 
-/// Yankı sayılmak için "Sen" bölümünün çevresine bakılan süre.
-let echoWindowSec: Double = 3
-/// "Sen" metninin harf üçlülerinin en az bu oranı çevredeki "Diğerleri" metninde geçiyorsa bölüm yankıdır.
+/// Bir "Sen" bölümünün yankı sayılması için süresinin en az bu oranı "Diğerleri" konuşmasıyla aynı anda olmalı:
+/// yankı hoparlörden aynı anda duyulur; soruyu tekrar eden cevap ise sorudan sonra gelir ve korunur.
+let echoTimeCoverage: Double = 0.5
+/// "Sen" metninin harf üçlülerinin en az bu oranı, aynı sırayla, eş zamanlı "Diğerleri" metninde geçiyorsa yankıdır.
 let echoSimilarity: Double = 0.6
 
 /// Yankı karşılaştırmasında bir bölüm: konuşmacı, zaman ve metin.
@@ -15,10 +16,11 @@ private struct EchoCandidate {
 
 /// Hoparlörden çıkıp mikrofona giren sesi ("Diğerleri"nin "Sen" altında tekrarı) gizler. Saf fonksiyondur.
 ///
-/// Bir "Sen" bölümü, ±`echoWindowSec` içinde kesişen "Diğerleri" bölümleriyle (geçici dahil) karşılaştırılır.
-/// İki tanıyıcı aynı sesi farklı yazabildiği için (Fince bileşik kelimeler: "lehdistä tilaisuuteen" ↔
-/// "lehdistötilaisuuteen", ekler: "kaudelle" ↔ "hallituskaudelle") karşılaştırma kelime değil, boşluksuz harf
-/// üçlüleri üzerindendir. Metni boş "Sen" bölümleri (hata satırları) kalır.
+/// Bir "Sen" bölümü yankıdır: (1) süresinin en az `echoTimeCoverage` oranı "Diğerleri" bölümleriyle (geçici dahil)
+/// aynı anda ve (2) eş zamanlı "Diğerleri" metniyle sıralı harf üçlüsü benzerliği en az `echoSimilarity`. İki tanıyıcı
+/// aynı sesi farklı yazabildiği için (Fince bileşik kelimeler: "lehdistä tilaisuuteen" ↔ "lehdistötilaisuuteen",
+/// ekler: "kaudelle" ↔ "hallituskaudelle") karşılaştırma kelime değil, boşluksuz harf üçlüleri üzerindendir.
+/// Metni boş "Sen" bölümleri (hata satırları) kalır.
 public func suppressEchoes(transcript: [LiveSegment]) -> [LiveSegment] {
     let candidates: [EchoCandidate] = transcript.map { (segment: LiveSegment) -> EchoCandidate in
         EchoCandidate(isMe: segment.id.speaker == .me, startSec: segment.startSec, endSec: segment.endSec, text: segment.text)
@@ -46,28 +48,57 @@ private func echoIndices(candidates: [EchoCandidate]) -> Set<Int> {
 }
 
 private func isEcho(mine: EchoCandidate, others: [EchoCandidate]) -> Bool {
-    let mineGrams: Set<String> = trigrams(text: mine.text)
+    let duration: Double = mine.endSec - mine.startSec
+    let simultaneous: [EchoCandidate] = others
+        .filter { (other: EchoCandidate) -> Bool in other.startSec < mine.endSec && other.endSec > mine.startSec }
+        .sorted { (left: EchoCandidate, right: EchoCandidate) -> Bool in left.startSec < right.startSec }
+    guard duration > 0, coveredDuration(intervals: simultaneous, from: mine.startSec, to: mine.endSec) / duration >= echoTimeCoverage else {
+        return false
+    }
+    let mineGrams: [String] = trigramSequence(text: mine.text)
     guard !mineGrams.isEmpty else {
         return false
     }
-    let nearbyGrams: Set<String> = others
-        .filter { (other: EchoCandidate) -> Bool in
-            other.startSec <= mine.endSec + echoWindowSec && other.endSec >= mine.startSec - echoWindowSec
-        }
-        .reduce(into: Set<String>()) { (grams: inout Set<String>, other: EchoCandidate) -> Void in
-            grams.formUnion(trigrams(text: other.text))
-        }
-    guard !nearbyGrams.isEmpty else {
-        return false
-    }
-    return Double(mineGrams.intersection(nearbyGrams).count) / Double(mineGrams.count) >= echoSimilarity
+    let otherGrams: [String] = trigramSequence(text: simultaneous.map(\.text).joined(separator: " "))
+    return Double(commonSubsequenceLength(left: mineGrams, right: otherGrams)) / Double(mineGrams.count) >= echoSimilarity
 }
 
-/// Metnin küçük harfli, noktalamasız ve boşluksuz harf üçlüleri. Üç harften kısa metinde metnin kendisi.
-func trigrams(text: String) -> Set<String> {
+/// Sıralı aralıkların [from, to] içinde kapladığı toplam süre (örtüşenler bir kez sayılır).
+private func coveredDuration(intervals: [EchoCandidate], from: Double, to: Double) -> Double {
+    var covered: Double = 0
+    var reached: Double = from
+    for interval in intervals {
+        let start: Double = max(interval.startSec, reached)
+        let end: Double = min(interval.endSec, to)
+        if end > start {
+            covered += end - start
+            reached = end
+        }
+    }
+    return covered
+}
+
+/// En uzun ortak alt dizinin uzunluğu (sıra korunarak eşleşen öğe sayısı).
+private func commonSubsequenceLength(left: [String], right: [String]) -> Int {
+    guard !left.isEmpty, !right.isEmpty else {
+        return 0
+    }
+    var previous: [Int] = [Int](repeating: 0, count: right.count + 1)
+    for item in left {
+        var current: [Int] = [Int](repeating: 0, count: right.count + 1)
+        for (index, candidate) in right.enumerated() {
+            current[index + 1] = item == candidate ? previous[index] + 1 : max(previous[index + 1], current[index])
+        }
+        previous = current
+    }
+    return previous[right.count]
+}
+
+/// Metnin sıralı harf üçlüleri (küçük harf, noktalamasız, boşluksuz); üç harften kısa metinde metnin kendisi.
+func trigramSequence(text: String) -> [String] {
     let letters: [Character] = Array(text.lowercased().filter { $0.isLetter || $0.isNumber })
     guard letters.count >= 3 else {
         return letters.isEmpty ? [] : [String(letters)]
     }
-    return Set((0...(letters.count - 3)).map { String(letters[$0..<($0 + 3)]) })
+    return (0...(letters.count - 3)).map { String(letters[$0..<($0 + 3)]) }
 }

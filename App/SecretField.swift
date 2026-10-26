@@ -1,4 +1,5 @@
 import AINotepadCore
+import AppKit
 import SwiftUI
 
 /// Tek bir anahtar alanı: gizli giriş, kaydet/kaldır, kayıt durumu. Kayıtlı değer hiçbir zaman gösterilmez.
@@ -15,6 +16,10 @@ struct SecretField: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 SecureField(title, text: $input, prompt: Text(status == .saved ? "Kayıtlı · değiştirmek için yapıştır" : "Anahtarı yapıştır"))
+                // Panel uygulamayı öne getirmediği için ⌘V menü kısayolu her zaman ulaşmayabilir: panodan doğrudan al.
+                Button("Yapıştır") {
+                    input = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                }
                 Button("Kaydet") {
                     status = save(account: account, value: input.trimmingCharacters(in: .whitespacesAndNewlines))
                     if status == .saved {

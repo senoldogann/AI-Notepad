@@ -19,8 +19,7 @@ final class PanelRouter {
     var page: PanelPage = .live
 }
 
-/// Modeli gözleyip sayfayı seçen kabuk; tüm sayfalara aynı cam yüzeyi verir. Kayıt bitince panel o toplantının
-/// sayfasına geçer: toplantıdan çıkınca ilk bakılacak şey kime ne düştüğüdür.
+/// Modeli gözleyip sayfayı seçen kabuk; tüm sayfalara aynı cam yüzeyi verir.
 struct PanelHost: View {
     let model: AppModel
     let router: PanelRouter
@@ -33,11 +32,6 @@ struct PanelHost: View {
         content
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
-            .onChange(of: model.lastFinishedMeetingID) { (_: String?, id: String?) in
-                if let id {
-                    router.page = .meeting(id: id)
-                }
-            }
     }
 
     @ViewBuilder

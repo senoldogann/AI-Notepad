@@ -18,6 +18,9 @@ public func meetingDocument(record: MeetingRecord) -> NSAttributedString {
         if !mine.isEmpty {
             document.append(styled(text: "SENİN GÖREVLERİN\n", style: .heading))
             mine.forEach { document.append(taskParagraph(task: $0)) }
+        } else {
+            document.append(styled(text: "SENİN GÖREVLERİN\n", style: .heading))
+            document.append(styled(text: "Sana düşen görev yok.\n", style: .listItemMuted))
         }
         document.append(styled(text: "ÖZET\n", style: .heading))
         document.append(styled(text: note.summary + "\n", style: .body))
@@ -50,22 +53,6 @@ public func meetingDocument(record: MeetingRecord) -> NSAttributedString {
         }
     }
     return document
-}
-
-/// "26 Ekim 2026 10:00 · 42 dk · Fince". Saf fonksiyondur.
-public func meetingMetaLine(record: MeetingRecord) -> String {
-    let formatter: DateFormatter = DateFormatter()
-    formatter.locale = Locale(identifier: "tr_TR")
-    formatter.dateStyle = .long
-    formatter.timeStyle = .short
-    var parts: [String] = [formatter.string(from: record.startedAt)]
-    if let endedAt = record.endedAt {
-        parts.append("\(max(1, Int((endedAt.timeIntervalSince(record.startedAt) / 60).rounded()))) dk")
-    }
-    if let language = record.language {
-        parts.append(language == .finnish ? "Fince" : "İngilizce")
-    }
-    return parts.joined(separator: " · ")
 }
 
 /// Belgeyi A4 sayfalara dizip PDF verisi üretir; her sayfanın altında "Sayfa N / M".

@@ -58,3 +58,24 @@ public func paragraphLabel(paragraph: TranscriptParagraph, speakerNames: [Int: S
     }
     return speakerLabel(speaker: paragraph.speaker, person: paragraph.person)
 }
+
+/// Toplantı dilinin Türkçe adı. Saf fonksiyondur.
+public func meetingLanguageName(language: MeetingLanguage) -> String {
+    switch language {
+    case .finnish: "Fince"
+    case .english: "İngilizce"
+    }
+}
+
+/// "26 Ekim 2026 10:00 · 42 dk · Fince": sayfa, Markdown ve PDF'in alt başlığı. Saf fonksiyondur.
+public func meetingMetaLine(record: MeetingRecord) -> String {
+    let formatter: DateFormatter = DateFormatter()
+    formatter.locale = Locale(identifier: "tr_TR")
+    formatter.dateStyle = .long
+    formatter.timeStyle = .short
+    let duration: [String] = record.endedAt.map { (endedAt: Date) -> [String] in
+        ["\(max(1, Int((endedAt.timeIntervalSince(record.startedAt) / 60).rounded()))) dk"]
+    } ?? []
+    let language: [String] = record.language.map { [meetingLanguageName(language: $0)] } ?? []
+    return ([formatter.string(from: record.startedAt)] + duration + language).joined(separator: " · ")
+}

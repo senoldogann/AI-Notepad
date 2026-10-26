@@ -164,7 +164,11 @@ private struct PermissionsStep: View {
         }
         .onAppear { microphone = model.microphonePermission }
         // Kullanıcı izni Sistem Ayarları'nda değiştirip geri dönünce durum yenilenir.
+        // Panel uygulamayı etkinleştirmediği için panelin yeniden anahtar pencere olması da dinlenir.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { (_: Notification) in
+            microphone = model.microphonePermission
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { (_: Notification) in
             microphone = model.microphonePermission
         }
     }

@@ -66,6 +66,25 @@ final class LivePanelController {
     func attach(shortcuts: ShortcutController, onStart: @escaping @MainActor () -> Void) {
         self.shortcuts = shortcuts
         self.onStart = onStart
+        observeFinishedMeetings()
+    }
+
+    /// Kayıt bitince panel (gizli olsa da) o toplantının sayfasında açılır: toplantıdan çıkınca ilk bakılacak şey
+    /// kime ne düştüğüdür.
+    private func observeFinishedMeetings() {
+        withObservationTracking {
+            _ = model.lastFinishedMeetingID
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                if let id = self.model.lastFinishedMeetingID {
+                    self.show(page: .meeting(id: id))
+                }
+                self.observeFinishedMeetings()
+            }
+        }
     }
 
     var isVisible: Bool {

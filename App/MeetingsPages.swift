@@ -168,7 +168,8 @@ struct MeetingDetailPage: View {
                     NoteSections(note: note)
                 }
                 SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
-                TranscriptSection(record: record, player: player, audioURLs: playableAudio)
+                // Paragraflar burada bir kez hesaplanır: çalma sırasında (saniyede 4 güncelleme) yeniden süzülmez.
+                TranscriptSection(record: record, paragraphs: transcriptParagraphs(record: record), player: player, audioURLs: playableAudio)
             }
             .padding(DesignTokens.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -443,11 +444,12 @@ private struct SpeakerNameField: View {
 /// Zaman damgasına tıklayınca o andan çalar; çalan paragraf vurgulanır.
 private struct TranscriptSection: View {
     let record: MeetingRecord
+    let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
     let audioURLs: [Speaker: URL]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+        LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             Text("TRANSKRİPT")
                 .font(DesignTokens.labelFont)
                 .tracking(DesignTokens.labelTracking)
@@ -455,7 +457,7 @@ private struct TranscriptSection: View {
             if let error = player.errorMessage {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
-            ForEach(transcriptParagraphs(record: record)) { (paragraph: TranscriptParagraph) in
+            ForEach(paragraphs) { (paragraph: TranscriptParagraph) in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Circle().fill(dotColor(paragraph: paragraph)).frame(width: 6, height: 6)
