@@ -130,16 +130,24 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   - `generateMeetingNote`: tek çağrı, yapılandırılmış JSON (başlık, özet, kararlar, görevler, sözlük).
 - Prompt oluşturma ve JSON ayrıştırma saf fonksiyonlardır.
 
-**PostProcessing**
-1. `.m4a` seçilen "toplantı sonrası motor" ile yeniden yazıya dökülür (`pass = final`).
-2. "Diğerleri" kanalında tüm kayıt üzerinde konuşmacı ayrıştırma → `speaker1`, `speaker2`, …
-   Bulutta ElevenLabs Scribe v2; yerelde WhisperKit paketindeki SpeakerKit (MIT, aynı bağımlılık).
-3. `generateMeetingNote` çağrısı. Kullanıcının adı (ayarlardan) görev sahipliğini belirlemek için kullanılır.
-4. Canlı transkript silinmez; ikinci geçiş ayrı saklanır.
+**PostProcessing** (aşama 5; kayıt bitince otomatik, "Tekrar işle" ile elle)
+1. `me.caf` ve `others.caf` ayrı ayrı AAC `.m4a`'ya (16 kHz mono) dönüştürülür, `.caf`'ler silinir.
+   (İki kanallı birleştirme yapılmaz: cihaz saatleri farklı, ayrı dosyalar daha sağlam.)
+2. `others.m4a` tek istekle ElevenLabs Scribe v2'ye (`diarize=true`) gönderilir: kaydın tamamında en doğru metin ve
+   kesin konuşmacılar (`speaker_N` → "Konuşmacı N"). Kelimeler konuşmacı değişiminde ya da 1,5 sn'den uzun
+   boşlukta kesin bölümlere ayrılır (`pass = final`). "Sen" için canlı Deepgram bölümleri kullanılır.
+   WhisperKit motorunda bu adım atlanır; not canlı transkriptten üretilir (yerel SpeakerKit sonraki iş).
+3. Not: Claude Opus, yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
+   sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi görev sahipliği için verilir.
+4. Canlı transkript silinmez; son geçiş ayrı saklanır. Bir adım başarısızsa toplantı `failed` olur, hata
+   saklanır; ses dosyaları kaldığı için "Tekrar işle" mümkündür.
 
 **Storage**
-- SQLite + GRDB. Ses dosyaları `~/Library/Application Support/AINotepad/Audio/`.
-- Uygulama açılışında ve günde bir kez süresi dolan ses dosyaları silinir.
+- Her toplantı kendi oturum klasöründe: `Sessions/<yyyyMMdd-HHmmss>/meeting.json` + `me.m4a`, `others.m4a`.
+  SQLite + GRDB yerine JSON seçildi: tek kullanıcı, en fazla birkaç yüz toplantı; ek bağımlılık yok, elle
+  okunabilir, bozulma tek toplantıyla sınırlı; arama bellekte. Yazma atomik (`.atomic`).
+- Uygulama açılışında süresi dolan (varsayılan 30 gün) ses dosyaları silinir; metin ve not kalır.
+- Açılışta `recording` ya da `processing` durumunda kalmış toplantı `interrupted` olur.
 
 **Settings**
 - API anahtarları Keychain'de (servis `AINotepad`, hesaplar `deepgram`, `elevenlabs`); diğer ayarlar
@@ -229,17 +237,16 @@ yanıt gövdesini içerir, anahtar içermez.
 açılışta bulunan `recording` → `interrupted`. `failed` ve `interrupted` toplantılar
 diskteki sesten "Tekrar işle" ile yeniden işlenebilir.
 
-## 5. Veri modeli (SQLite)
+## 5. Veri modeli (`meeting.json`)
 
 ```
-Meeting      id, title, startedAt, endedAt, language(fi|en), status,
-             audioPath?, audioExpiresAt?
-Segment      id, meetingId, pass(live|final), speaker(me|others|speakerN),
-             startSec, endSec, originalText, turkishText?, translationError?
-SpeakerName  meetingId, speakerKey, displayName
-MeetingNote  meetingId, summary, decisions[String], tasks[Task], glossary[GlossaryEntry]
-Task         owner, description, dueDate?, isMine
-GlossaryEntry term, meaning
+MeetingRecord  id (klasör adı), title, startedAt, endedAt?, language?, status (recording|processing|done|failed|interrupted),
+               failureMessage?, liveSegments[StoredSegment], finalSegments[StoredSegment],
+               translations{segmentKey: Türkçe}, speakerNames{kişi: ad}, note?, audioDeleted
+StoredSegment  key ("others-3"), speaker (me|others), person?, startSec, endSec, text
+MeetingNote    title, summary, decisions[String], tasks[NoteTask], glossary[GlossaryEntry]
+NoteTask       owner, description, dueDate?, isMine
+GlossaryEntry  term, meaning
 ```
 
 Ayarlar: kullanıcı adı; canlı motor (Deepgram | Mac'te); Deepgram ve ElevenLabs anahtarları;
