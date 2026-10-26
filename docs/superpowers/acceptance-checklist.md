@@ -28,7 +28,8 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Harici monitörde ya da çentiksiz ekranda ada, menü çubuğunun altında ortada hap olarak görünür; ekran değişince yer değiştirir.
 - [ ] Cam panel: arka planından sürüklenir, köşesinden boyutlanır, açık ve koyu duvar kağıdında okunaklı.
 - [ ] Panelde konuşmacı renkleri: Sen mavi, Konuşmacı 1 yeşil, 2 turuncu…; kesinleşmemiş metin soluk.
-- [ ] ⌃⌥R kayıt başlatır/durdurur, ⌃⌥Space ada + paneli gizler/gösterir (uygulama öndeyken de değilken).
+- [ ] ⌃⌥R kayıt başlatır/durdurur, ⌃⌥P ada + paneli gizler/gösterir (uygulama öndeyken de değilken); ⌃⌥Space klavye dilini değiştirmeye devam eder.
+- [ ] Adaya sağ tık → "Kaydı durdur"; panel başlığında durdur düğmesi.
 - [ ] Menü: ikonlu, kısayollar menüde görünür; Ayarlar penceresi öne gelir.
 
 ## Ekran paylaşımı

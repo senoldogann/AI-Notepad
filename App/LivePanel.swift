@@ -58,6 +58,7 @@ final class LivePanelController {
 
     func show() {
         let target: NSPanel = panel ?? makeLivePanel(rootView: PanelHost(model: model, onHide: { [weak self] in self?.hide() }))
+        target.invalidateShadow()
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
         target.orderFrontRegardless()
@@ -88,6 +89,6 @@ private struct PanelHost: View {
     let onHide: @MainActor () -> Void
 
     var body: some View {
-        TranscriptPanel(state: model.viewState, onHide: onHide)
+        TranscriptPanel(state: model.viewState, onHide: onHide, onStop: { model.stopRecording() })
     }
 }

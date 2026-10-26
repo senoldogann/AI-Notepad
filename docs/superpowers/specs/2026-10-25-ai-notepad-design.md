@@ -164,7 +164,7 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - **Karşılama ekranı**: mikrofon ve sistem sesi izinlerini kontrol eder; adı, LLM sağlayıcısını
   ve anahtarı ister; WhisperKit modelini indirir.
 - Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir:
-  kayıt başlat/durdur ⌃⌥R, ada + paneli göster/gizle ⌃⌥Space.
+  kayıt başlat/durdur ⌃⌥R, ada + paneli göster/gizle ⌃⌥P (⌃⌥Space macOS'ta giriş kaynağı kısayolu olduğu için kullanılmaz).
 
 ### 4.3 Görsel tasarım (aşama 3)
 
@@ -188,11 +188,16 @@ dil çipi, kopyala ve küçült düğmeleri. Gövde: konuşmacı blokları (renk
 Alt: en son 3 hata ince kırmızı bantta.
 
 **Yapı:** görünümler yeni `AINotepadUI` paket hedefinde ve yalnızca değer tipi `LiveViewState` +
-eylem kapanışlarıyla beslenir (uygulama modeline bağlı değil). Görsel kontrol için `AINOTEPAD_SNAPSHOTS=1`
-ile çalışan testler görünümleri örnek verilerle PNG'ye çizer.
+eylem kapanışlarıyla beslenir (uygulama modeline bağlı değil). Görsel kontrol için geliştirme aracı
+`AINotepadPreview` (uygulamaya girmez) ada ve paneli örnek verilerle gerçek pencerelerde açar; görüntü
+`screencapture -l` ile alınır (`ImageRenderer` cam efektini çizemiyor).
+Etiketler nötr renkte, kişi rengi yalnızca noktada (camda okunaklılık). Ada hata olunca sağ kanatta kırmızı uyarı
+gösterir, açık hâlde cümlenin altında tek satır hata; sağ tık menüsünde "Kaydı durdur". Panel başlığında kayıt
+sırasında durdur düğmesi.
 
-**Kısayollar:** ⌃⌥R kayıt başlat/durdur, ⌃⌥Space ada + panel göster/gizle (Carbon `RegisterEventHotKey`,
-erişilebilirlik izni gerektirmez).
+**Kısayollar:** ⌃⌥R kayıt başlat/durdur, ⌃⌥P ada + panel göster/gizle (Carbon `RegisterEventHotKey`, özel kayıt;
+erişilebilirlik izni gerektirmez). Etkin bir macOS sistem kısayoluyla ya da başka uygulamayla çakışan kısayol
+kaydedilmez ve menüde adıyla bildirilir.
 
 ### 4.2 Toplantı durum makinesi
 

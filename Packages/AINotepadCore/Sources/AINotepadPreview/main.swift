@@ -17,7 +17,7 @@ func sampleState() -> LiveViewState {
             segment(.others, 1, 4, "Seuraavalla viikolla meidän pitää palauttaa raportti.", true, 1),
             segment(.me, 0, 9, "Kiitos. Minulla on raportti melkein valmiina.", true, nil),
             segment(.others, 2, 14, "Hienoa. Kuka voisi ottaa vastuun esityksestä", true, 2),
-            segment(.others, 3, 18, "perjantaina?", false, 2),
+            segment(.others, 3, 18, "perjantaina? Ja sitten vielä pitää sopia, kuka tekee diat ja kuka harjoittelee esityksen ennen torstain tapaamista kirjastossa.", false, 2),
         ],
         isRecording: true,
         startedAt: Date(timeIntervalSinceNow: -754),
@@ -45,7 +45,7 @@ let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
     let panel: Int = showWindow(
-        view: TranscriptPanel(state: sampleState(), onHide: {}),
+        view: TranscriptPanel(state: sampleState(), onHide: {}, onStop: {}),
         frame: NSRect(x: 120, y: 200, width: 380, height: 520)
     )
     print("panel \(panel)")
@@ -60,7 +60,7 @@ MainActor.assumeIsolated {
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }),
+            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")

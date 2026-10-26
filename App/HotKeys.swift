@@ -1,3 +1,4 @@
+import AINotepadCore
 import AppKit
 import Carbon.HIToolbox
 import os
@@ -8,6 +9,8 @@ private let hotKeyLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad",
 enum HotKeyError: Error, Equatable {
     case handlerInstallFailed(status: Int32)
     case registrationFailed(keyCode: UInt32, status: Int32)
+    /// Aynı kısayol etkin bir macOS sistem kısayolu (ör. giriş kaynağı değiştirme); sistem önce davranır.
+    case conflictsWithSystemShortcut(keyCode: UInt32, modifiers: UInt32)
 }
 
 /// Uygulama öndeyken de değilken çalışan global kısayollar (Carbon; erişilebilirlik izni gerektirmez).
@@ -24,7 +27,11 @@ final class HotKeyCenter {
     init() {}
 
     /// Kısayolu kaydeder; tuşa basılınca `action` ana aktörde çalışır.
+    /// Sistem kısayoluyla çakışırsa ya da başka uygulama aynı kısayolu özel kaydettiyse hata fırlatır.
     func register(keyCode: UInt32, modifiers: UInt32, action: @escaping @MainActor () -> Void) throws {
+        if isTakenBySystem(keyCode: keyCode, modifiers: modifiers, systemShortcuts: try systemShortcuts()) {
+            throw HotKeyError.conflictsWithSystemShortcut(keyCode: keyCode, modifiers: modifiers)
+        }
         try installHandlerIfNeeded()
         let id: UInt32 = nextID
         nextID += 1
@@ -34,7 +41,8 @@ final class HotKeyCenter {
             modifiers,
             EventHotKeyID(signature: Self.signature, id: id),
             GetApplicationEventTarget(),
-            0,
+            // Başka bir uygulama aynı kısayolu kullanıyorsa kayıt başarısız olsun (sessizce paylaşılmasın).
+            OptionBits(kEventHotKeyExclusive),
             &reference
         )
         guard status == noErr, let reference else {
@@ -43,6 +51,24 @@ final class HotKeyCenter {
         references.append(reference)
         actions[id] = action
         hotKeyLogger.info("Kısayol kaydedildi, tuş: \(keyCode, privacy: .public), değiştirici: \(modifiers, privacy: .public)")
+    }
+
+    /// Etkin/pasif tüm macOS sistem kısayolları.
+    private func systemShortcuts() throws -> [SystemShortcut] {
+        var list: Unmanaged<CFArray>?
+        let status: OSStatus = CopySymbolicHotKeys(&list)
+        guard status == noErr, let entries = list?.takeRetainedValue() as? [[String: Any]] else {
+            throw HotKeyError.registrationFailed(keyCode: 0, status: status)
+        }
+        return entries.compactMap { (entry: [String: Any]) -> SystemShortcut? in
+            guard let code = entry[kHISymbolicHotKeyCode as String] as? Int,
+                  let modifiers = entry[kHISymbolicHotKeyModifiers as String] as? Int,
+                  let enabled = entry[kHISymbolicHotKeyEnabled as String] as? Bool
+            else {
+                return nil
+            }
+            return SystemShortcut(keyCode: UInt32(code), modifiers: UInt32(modifiers), isEnabled: enabled)
+        }
     }
 
     fileprivate func fire(id: UInt32) {
@@ -94,9 +120,10 @@ private let hotKeyCallback: EventHandlerUPP = { (_: EventHandlerCallRef?, event:
     return noErr
 }
 
-/// ⌃⌥R ve ⌃⌥Space tuş kodları ve değiştiricileri.
+/// ⌃⌥R (kayıt) ve ⌃⌥P (pencereler) tuş kodları ve değiştiricileri.
+/// ⌃⌥Space kullanılmaz: macOS'ta "sonraki giriş kaynağı" sistem kısayoludur.
 enum Shortcut {
     static let modifiers: UInt32 = UInt32(controlKey | optionKey)
     static let record: UInt32 = UInt32(kVK_ANSI_R)
-    static let toggleWindows: UInt32 = UInt32(kVK_Space)
+    static let toggleWindows: UInt32 = UInt32(kVK_ANSI_P)
 }

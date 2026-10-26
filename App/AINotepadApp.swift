@@ -1,4 +1,5 @@
 import AINotepadCore
+import os
 import SwiftUI
 
 /// Menü çubuğunda çalışan uygulamanın giriş noktası.
@@ -46,31 +47,54 @@ struct AINotepadApp: App {
     }
 }
 
-/// ⌃⌥R kayıt başlat/durdur, ⌃⌥Space ada + paneli göster/gizle. Hata menüde gösterilir.
+private let shortcutLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Shortcuts")
+
+/// Kaydı başlatır (paneli ve gizlenmiş adayı da gösterir) ya da durdurur. Menü ve ⌃⌥R aynı yolu kullanır.
+@MainActor
+func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: IslandController) async {
+    if model.isRecording {
+        model.stopRecording()
+        return
+    }
+    await model.startRecording()
+    // Başlatma başarısız olsa da panel açılır: hata orada görünür.
+    panel.show()
+    island.show()
+}
+
+/// Ada + paneli birlikte gösterir/gizler. Ada penceresi kayıt yokken saydam olarak hep açık olduğundan
+/// karar panelin durumuna göre verilir.
+@MainActor
+func toggleWindows(panel: LivePanelController, island: IslandController) {
+    if panel.isVisible {
+        panel.hide()
+        island.hide()
+    } else {
+        panel.show()
+        island.show()
+    }
+}
+
+/// ⌃⌥R kayıt başlat/durdur, ⌃⌥P ada + paneli göster/gizle. Her kısayolun hatası ayrı ve adıyla menüde gösterilir.
 @MainActor
 private func registerShortcuts(hotKeys: HotKeyCenter, model: AppModel, panel: LivePanelController, island: IslandController) {
-    do {
-        try hotKeys.register(keyCode: Shortcut.record, modifiers: Shortcut.modifiers) {
-            Task {
-                await model.toggleRecording()
-                if model.isRecording {
-                    panel.show()
-                }
-            }
+    let shortcuts: [(name: String, keyCode: UInt32, action: @MainActor () -> Void)] = [
+        ("⌃⌥R", Shortcut.record, { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } }),
+        ("⌃⌥P", Shortcut.toggleWindows, { toggleWindows(panel: panel, island: island) }),
+    ]
+    var failures: [String] = []
+    for shortcut in shortcuts {
+        do {
+            try hotKeys.register(keyCode: shortcut.keyCode, modifiers: Shortcut.modifiers, action: shortcut.action)
+        } catch HotKeyError.conflictsWithSystemShortcut {
+            shortcutLogger.error("Kısayol sistem kısayoluyla çakışıyor: \(shortcut.name, privacy: .public)")
+            failures.append("\(shortcut.name) bir macOS sistem kısayolu")
+        } catch {
+            shortcutLogger.error("Kısayol kaydedilemedi: \(shortcut.name, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            failures.append("\(shortcut.name) başka bir uygulamada kullanılıyor")
         }
-        try hotKeys.register(keyCode: Shortcut.toggleWindows, modifiers: Shortcut.modifiers) {
-            // Ada penceresi kayıt yokken saydam olarak hep açıktır; karar panelin durumuna göre verilir.
-            if panel.isVisible {
-                panel.hide()
-                island.hide()
-            } else {
-                panel.show()
-                island.show()
-            }
-        }
-    } catch {
-        model.shortcutError = "Kısayol kaydedilemedi (\(error)). Başka bir uygulama ⌃⌥R ya da ⌃⌥Space kullanıyor olabilir."
     }
+    model.shortcutError = failures.isEmpty ? nil : "Kısayol çalışmıyor: " + failures.joined(separator: ", ")
 }
 
 /// Menü çubuğu menüsü.
@@ -89,19 +113,16 @@ private struct MenuContent: View {
             .keyboardShortcut("r", modifiers: [.control, .option])
         } else {
             Button("Kaydı başlat", systemImage: "record.circle") {
-                Task {
-                    await model.startRecording()
-                    panel.show()
-                }
+                Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
             }
             .disabled(!model.isReadyToRecord || model.isStarting)
             .keyboardShortcut("r", modifiers: [.control, .option])
         }
 
-        Button("Paneli göster / gizle", systemImage: "rectangle.on.rectangle") {
-            panel.toggle()
+        Button("Ada ve paneli göster / gizle", systemImage: "rectangle.on.rectangle") {
+            toggleWindows(panel: panel, island: island)
         }
-        .keyboardShortcut(.space, modifiers: [.control, .option])
+        .keyboardShortcut("p", modifiers: [.control, .option])
 
         if let shortcutError = model.shortcutError {
             Text(shortcutError)

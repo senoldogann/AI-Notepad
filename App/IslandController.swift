@@ -118,12 +118,15 @@ private struct IslandHost: View {
                 layout: layout,
                 isExpanded: isExpanded,
                 onTap: onTap,
-                onHover: { (hovering: Bool) -> Void in isExpanded = hovering }
+                onHover: { (hovering: Bool) -> Void in isExpanded = hovering },
+                onStop: { model.stopRecording() }
             )
         } else {
             Color.clear
                 .frame(width: layout.frame.width, height: layout.frame.height)
                 .allowsHitTesting(false)
+                // Kayıt imleç adanın üstündeyken bittiyse sonraki kayıt kapalı başlasın.
+                .onAppear { isExpanded = false }
         }
     }
 }

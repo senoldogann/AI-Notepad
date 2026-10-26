@@ -7,10 +7,12 @@ import SwiftUI
 public struct TranscriptPanel: View {
     let state: LiveViewState
     let onHide: @MainActor () -> Void
+    let onStop: @MainActor () -> Void
 
-    public init(state: LiveViewState, onHide: @escaping @MainActor () -> Void) {
+    public init(state: LiveViewState, onHide: @escaping @MainActor () -> Void, onStop: @escaping @MainActor () -> Void) {
         self.state = state
         self.onHide = onHide
+        self.onStop = onStop
     }
 
     public var body: some View {
@@ -39,6 +41,9 @@ public struct TranscriptPanel: View {
                 .padding(.horizontal, DesignTokens.Spacing.s)
                 .padding(.vertical, 3)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
+            if state.isRecording {
+                IconButton(symbol: "stop.circle", help: "Kaydı durdur", action: onStop)
+            }
             IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala") {
                 copyToPasteboard(text: plainText(blocks: state.blocks))
             }
@@ -116,10 +121,11 @@ struct BlockView: View {
                 .frame(width: 7, height: 7)
                 .alignmentGuide(.firstTextBaseline) { (dimensions: ViewDimensions) -> CGFloat in dimensions[.bottom] }
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                // Renk yalnızca noktada: renkli küçük etiket camda yeterince okunmuyor.
                 Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased())
                     .font(DesignTokens.labelFont)
                     .tracking(DesignTokens.labelTracking)
-                    .foregroundStyle(blockColor(block: block))
+                    .foregroundStyle(.secondary)
                 flowingText
                     .font(DesignTokens.bodyFont)
                     .lineSpacing(DesignTokens.bodyLineSpacing)
