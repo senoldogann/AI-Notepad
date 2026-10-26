@@ -44,6 +44,11 @@ public struct StoredSegment: Sendable, Equatable, Codable {
         self.words = words
     }
 
+    /// Konuşmacısı "Sen" ve kişisiz kopya (son geçiş "Sen" kaydından üretildiğinde).
+    public func asMe() -> StoredSegment {
+        StoredSegment(key: "me-\(key)", speaker: .me, person: nil, startSec: startSec, endSec: endSec, text: text, words: words)
+    }
+
     /// Kişisi değişmiş kopya (konuşmacı birleştirme/düzeltme).
     public func with(person newPerson: Int?) -> StoredSegment {
         StoredSegment(key: key, speaker: speaker, person: newPerson, startSec: startSec, endSec: endSec, text: text, words: words)
@@ -123,12 +128,15 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var engine: RecordingEngine?
     /// Hata olmayan ama kullanıcının bilmesi gereken durum (ör. son geçiş atlandı).
     public private(set) var notice: String?
+    /// "Sen"in canlı metin akışı kayıt sırasında koptu (ör. ağ gitti): canlı metin eksik, son geçiş "Sen" kaydını da
+    /// yazıya döker. Eski toplantılarda nil.
+    public private(set) var meNeedsFinalPass: Bool?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
         failureMessage: String?, liveSegments: [StoredSegment], finalSegments: [StoredSegment],
         translations: [String: String], speakerNames: [Int: String], note: MeetingNote?, audioDeleted: Bool,
-        engine: RecordingEngine?, notice: String?
+        engine: RecordingEngine?, notice: String?, meNeedsFinalPass: Bool?
     ) {
         self.id = id
         self.title = title
@@ -145,6 +153,7 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.audioDeleted = audioDeleted
         self.engine = engine
         self.notice = notice
+        self.meNeedsFinalPass = meNeedsFinalPass
     }
 
     /// Konuşmacı adları değişmiş kopya.

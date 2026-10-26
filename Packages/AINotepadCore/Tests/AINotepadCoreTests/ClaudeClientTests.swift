@@ -7,9 +7,21 @@ func jsonObject(_ data: Data) throws -> [String: Any] {
     try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 }
 
-/// Varsayılan ayar: çeviri Haiku 5.5 (low), özet ve not Opus 5.5 (medium).
+/// Varsayılan ayar: çeviri Haiku 5.5 (low), özet ve not Haiku 5.5 (medium).
 func defaultAnthropicConfig(apiKey: String) -> AnthropicConfig {
-    AnthropicConfig(apiKey: apiKey, fastModel: .haiku, smartModel: .opus, fastEffort: .low, smartEffort: .medium)
+    AnthropicConfig(apiKey: apiKey, fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .medium)
+}
+
+/// Claude akışı (SSE): verilen olay yükleri `data:` satırları olarak.
+func sse(_ events: [String]) -> Data {
+    Data(events.map { "event: x\ndata: \($0)\n\n" }.joined().utf8)
+}
+
+/// Metin parçaları ve durma nedeniyle tam bir akış.
+func completeStream(texts: [String], stopReason: String) -> Data {
+    sse([#"{"type":"message_start","message":{}}"#]
+        + texts.map { #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\#($0)"}}"# }
+        + [#"{"type":"message_delta","delta":{"stop_reason":"\#(stopReason)"}}"#, #"{"type":"message_stop"}"#])
 }
 
 func request(model: ClaudeModel, schema: String?) -> LLMRequest {
@@ -68,28 +80,43 @@ func request(model: ClaudeModel, schema: String?) -> LLMRequest {
         #expect((format["schema"] as? [String: Any])?["type"] as? String == "object")
     }
 
-    @Test func parseJoinsTextSkipsThinking() throws {
-        let data: Data = Data(#"{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":""},{"type":"text","text":"Merhaba"},{"type":"text","text":" dünya"}]}"#.utf8)
-        #expect(try parseClaudeResponse(data: data, model: "m") == "Merhaba dünya")
+    // Düşünme açıkken `max_tokens` en az 64.000 (düşünme de bu sınırdan harcar); kapalıyken isteğin sınırı.
+    @Test func thinkingRaisesTokenLimit() throws {
+        let opus: [String: Any] = try jsonObject(claudeRequestBody(request: request(model: .opus, schema: nil), model: .opus, effort: .max))
+        #expect(opus["max_tokens"] as? Int == 64000)
+        #expect(opus["stream"] as? Bool == true)
+        #expect(claudeMaxTokens(requested: 1024, thinking: ["type": "disabled"]) == 1024)
+        #expect(claudeMaxTokens(requested: 16000, thinking: nil) == 64000)
     }
 
-    // Yalnızca 408/429/5xx yeniden denenir; 200 içindeki reddetme/bozuk yanıt ve diğer 4xx kesin sonuçtur.
+    @Test func streamJoinsTextSkipsThinking() throws {
+        let data: Data = sse([
+            #"{"type":"message_start","message":{}}"#,
+            #"{"type":"ping"}"#,
+            #"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"..."}}"#,
+            #"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Merhaba"}}"#,
+            #"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" dünya"}}"#,
+            #"{"type":"message_delta","delta":{"stop_reason":"end_turn"}}"#,
+            #"{"type":"message_stop"}"#,
+        ])
+        #expect(try parseClaudeStream(data: data, model: "m") == "Merhaba dünya")
+    }
+
+    // Yalnızca 408/429/5xx ve akış içi aşırı yük yeniden denenir; reddetme, kesilme, yarım akış ve diğer 4xx kesindir.
     @Test func classifyRetriesOnlyTransientFailures() {
-        let ok: Data = Data(#"{"stop_reason":"end_turn","content":[{"type":"text","text":"Merhaba"}]}"#.utf8)
-        let refusal: Data = Data(#"{"stop_reason":"refusal","stop_details":{"category":"cyber"},"content":[]}"#.utf8)
-        #expect(classifyClaudeResponse(status: 200, data: ok, model: "m", requestID: nil) == .success("Merhaba"))
+        let refusal: Data = sse([#"{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"}}}"#, #"{"type":"message_stop"}"#])
+        let overloaded: Data = sse([#"{"type":"message_start","message":{}}"#, #"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#])
+        let cutOff: Data = sse([#"{"type":"message_start","message":{}}"#, #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"yarım"}}"#])
+        #expect(classifyClaudeResponse(status: 200, data: completeStream(texts: ["Merhaba"], stopReason: "end_turn"), model: "m", requestID: nil) == .success("Merhaba"))
         #expect(classifyClaudeResponse(status: 200, data: refusal, model: "m", requestID: nil) == .final(.refusal(category: "cyber")))
-        #expect(classifyClaudeResponse(status: 200, data: Data("{".utf8), model: "m", requestID: nil) == .final(.malformed(body: "{")))
+        #expect(classifyClaudeResponse(status: 200, data: completeStream(texts: ["yarım"], stopReason: "max_tokens"), model: "m", requestID: nil) == .final(.truncated(model: "m")))
+        #expect(classifyClaudeResponse(status: 200, data: overloaded, model: "m", requestID: nil) == .retryable(.streamFailed(errorType: "overloaded_error", message: "Overloaded", model: "m")))
+        if case .final(.malformed) = classifyClaudeResponse(status: 200, data: cutOff, model: "m", requestID: nil) {} else {
+            Issue.record("bitmeyen akış kesin hata olmalı")
+        }
         #expect(classifyClaudeResponse(status: 429, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 429, body: "x", model: "m", requestID: "r")))
         #expect(classifyClaudeResponse(status: 503, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 503, body: "x", model: "m", requestID: "r")))
         #expect(classifyClaudeResponse(status: 401, data: Data("x".utf8), model: "m", requestID: "r") == .final(.http(status: 401, body: "x", model: "m", requestID: "r")))
-    }
-
-    @Test func refusalIsError() {
-        let data: Data = Data(#"{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},"content":[]}"#.utf8)
-        #expect(throws: LLMError.refusal(category: "cyber")) {
-            try parseClaudeResponse(data: data, model: "m")
-        }
     }
 }
 

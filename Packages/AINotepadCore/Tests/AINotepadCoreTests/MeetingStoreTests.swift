@@ -7,7 +7,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         id: id, title: "Palaveri", startedAt: startedAt, endedAt: nil, language: .finnish, status: status,
         failureMessage: nil,
         liveSegments: [StoredSegment(key: "others-0", speaker: .others, person: 1, startSec: 0, endSec: 2, text: "Hei", words: nil)],
-        finalSegments: [], translations: ["others-0": "Merhaba"], speakerNames: [1: "Aino"], note: nil, audioDeleted: audioDeleted, engine: .cloud, notice: nil
+        finalSegments: [], translations: ["others-0": "Merhaba"], speakerNames: [1: "Aino"], note: nil, audioDeleted: audioDeleted, engine: .cloud, notice: nil, meNeedsFinalPass: nil
     )
 }
 
@@ -53,6 +53,9 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             record(id: "old", startedAt: now.addingTimeInterval(-31 * 86_400), status: .done, audioDeleted: false),
             record(id: "gone", startedAt: now.addingTimeInterval(-40 * 86_400), status: .done, audioDeleted: true),
             record(id: "new", startedAt: now.addingTimeInterval(-29 * 86_400), status: .done, audioDeleted: false),
+            // Yeniden işlenebilmesi için başarısız ve yarıda kalan toplantının sesi kalır.
+            record(id: "failed", startedAt: now.addingTimeInterval(-60 * 86_400), status: .failed, audioDeleted: false),
+            record(id: "interrupted", startedAt: now.addingTimeInterval(-60 * 86_400), status: .interrupted, audioDeleted: false),
         ]
         #expect(audioToDelete(records: records, now: now, retentionDays: 30) == ["old"])
     }
@@ -76,7 +79,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             id: "b", title: "Proje", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
             liveSegments: [], finalSegments: [StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "Raportti valmis", words: nil)],
             translations: [:], speakerNames: [:],
-            note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false, engine: .cloud, notice: nil
+            note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         #expect(filterMeetings(records: [plain, noted], query: "").map(\.id) == ["a", "b"])
         #expect(filterMeetings(records: [plain, noted], query: "bütçe").map(\.id) == ["b"])

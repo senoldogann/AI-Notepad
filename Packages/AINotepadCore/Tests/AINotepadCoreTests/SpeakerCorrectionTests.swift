@@ -30,7 +30,7 @@ private func others(_ index: Int, person: Int?) -> LiveSegment {
                 StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "a", words: nil),
                 StoredSegment(key: "final-1", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "b", words: nil),
             ],
-            translations: [:], speakerNames: [2: "Aino"], note: nil, audioDeleted: false, engine: .cloud, notice: nil
+            translations: [:], speakerNames: [2: "Aino"], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let merged: MeetingRecord = mergingPersons(record: record, from: 2, into: 1)
         #expect(merged.finalSegments.map(\.person) == [1, 1])

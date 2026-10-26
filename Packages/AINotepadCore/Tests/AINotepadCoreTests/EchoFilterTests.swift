@@ -56,6 +56,32 @@ func timed(_ speaker: Speaker, _ index: Int, _ start: Double, _ end: Double, _ t
         #expect(suppressStoredEchoes(segments: [others, echo, mine]) == [others, mine])
     }
 
+    // Gerçek kayıttan (hoparlörle dinlenen haber): yankının son kelimesi "Diğerleri" bölümü bittikten hemen sonra biter
+    // ve tanıyıcı yankıyı farklı böler ("konetyyppiin" → "kone" | "työhön."); ikisi de "Sen" diye görünüyordu.
+    @Test func hidesTrailingAndSplitWordEchoes() {
+        let others: [LiveSegment] = [
+            timed(.others, 0, 112.73, 115.20, "vähintään seuraavan kolmekymmentä vuoden ajan."),
+            timed(.others, 1, 115.84, 118.31, "F-kolmekymmentäviisi:stä saamamme tarjouksen"),
+            timed(.others, 2, 134.03, 138.60, "hävittäjä oikein on. Toimittajamme Timo Keränen on tutustunut konetyyppiin. Timo."),
+            timed(.others, 3, 138.60, 139.98, "Tältä se näyttää."),
+        ]
+        let echoes: [LiveSegment] = [
+            timed(.me, 0, 112.67, 114.69, "vähintään seuraavaan kolmekymmentä vuoden"),
+            timed(.me, 1, 114.69, 115.85, "ajan."),
+            timed(.me, 2, 135.60, 137.76, "Toimittajamme Timo Keränen on tutustunut kone"),
+            timed(.me, 3, 137.76, 138.02, "työhön."),
+        ]
+        #expect(suppressEchoes(transcript: others + echoes) == others)
+    }
+
+    // Kısa gerçek cevap "Diğerleri" sustuktan sonra gelir; önündeki yankıya bitişik olsa da gizlenmez.
+    @Test func keepsShortAnswerAfterEchoedQuestion() {
+        let question: LiveSegment = timed(.others, 0, 0, 3, "Doğan, voitko tehdä diat perjantaiksi?")
+        let echo: LiveSegment = timed(.me, 0, 0.3, 3.1, "Doğan, voitko tehdä diat perjantaiksi?")
+        let answer: LiveSegment = timed(.me, 1, 3.5, 4.3, "Kyllä.")
+        #expect(suppressEchoes(transcript: [question, echo, answer]) == [question, answer])
+    }
+
     // Soruyu tekrar eden gerçek cevap sorudan sonra gelir: yankı değildir, nota girmeli.
     @Test func keepsReplyRepeatingTheQuestion() {
         let question: LiveSegment = timed(.others, 0, 0, 3, "Doğan, voitko tehdä diat perjantaiksi?")

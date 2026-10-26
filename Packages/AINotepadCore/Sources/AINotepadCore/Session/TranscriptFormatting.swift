@@ -29,26 +29,25 @@ public func promptSpeakerLabel(speaker: Speaker, person: Int?) -> String {
     }
 }
 
-/// Sıralı transkripti, konuşmacı ya da kişi değiştikçe yeni blok başlayacak şekilde gruplar. Saf fonksiyondur.
+/// Sıralı transkripti bloklara gruplar: konuşmacı ya da kişi değişince ya da blok `paragraphMaxSec`'i geçince yeni
+/// blok (toplantı sayfasındaki paragraflarla aynı; saatlerce tek konuşmacı tek dev blok olup her güncellemede baştan
+/// çizilmesin). Bölümler önce gruplara toplanır, bloklar sonda bir kez kurulur (her bölümde blok kopyalamak uzun
+/// toplantıda karesel büyürdü). Saf fonksiyondur.
 public func groupBySpeaker(transcript: [LiveSegment]) -> [SpeakerBlock] {
-    transcript.reduce(into: [SpeakerBlock]()) { (blocks: inout [SpeakerBlock], segment: LiveSegment) -> Void in
-        if let last = blocks.last, last.speaker == segment.id.speaker, last.person == segment.person {
-            blocks[blocks.count - 1] = SpeakerBlock(
-                id: last.id,
-                speaker: last.speaker,
-                person: last.person,
-                startSec: last.startSec,
-                segments: last.segments + [segment]
-            )
+    var groups: [[LiveSegment]] = []
+    for segment in transcript {
+        if let first = groups.last?.first, first.id.speaker == segment.id.speaker, first.person == segment.person,
+           segment.startSec - first.startSec < paragraphMaxSec {
+            groups[groups.count - 1].append(segment)
         } else {
-            blocks.append(SpeakerBlock(
-                id: segment.id,
-                speaker: segment.id.speaker,
-                person: segment.person,
-                startSec: segment.startSec,
-                segments: [segment]
-            ))
+            groups.append([segment])
         }
+    }
+    return groups.compactMap { (group: [LiveSegment]) -> SpeakerBlock? in
+        guard let first = group.first else {
+            return nil
+        }
+        return SpeakerBlock(id: first.id, speaker: first.id.speaker, person: first.person, startSec: first.startSec, segments: group)
     }
 }
 

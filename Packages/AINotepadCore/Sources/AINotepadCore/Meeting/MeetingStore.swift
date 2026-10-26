@@ -95,11 +95,12 @@ public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord
         }
 }
 
-/// Saklama süresi dolmuş ve sesi henüz silinmemiş toplantıların klasör adları. Saf fonksiyondur.
+/// Saklama süresi dolmuş, işlenmesi bitmiş (`done`) ve sesi henüz silinmemiş toplantıların klasör adları. Başarısız ya
+/// da yarıda kalmış toplantının sesi silinmez: "Tekrar işle" için tek eksiksiz kopya odur. Saf fonksiyondur.
 public func audioToDelete(records: [MeetingRecord], now: Date, retentionDays: Int) -> [String] {
     records
         .filter { (record: MeetingRecord) -> Bool in
-            !record.audioDeleted && now.timeIntervalSince(record.startedAt) > Double(retentionDays) * 86_400
+            record.status == .done && !record.audioDeleted && now.timeIntervalSince(record.startedAt) > Double(retentionDays) * 86_400
         }
         .map(\.id)
 }

@@ -45,7 +45,7 @@ Sonuç: canlı metin için Deepgram, konuşmacı ayırma için ElevenLabs toplu 
 **Kapsamda (v1):**
 - Menü çubuğu ikonu + global kısayolla elle kayıt başlatma/durdurma
 - Mikrofon ("Sen") ve sistem sesi ("Diğerleri") ayrı akışlar olarak yakalama
-- Canlı transkript + Türkçe çeviri; görünüm: "İki dil" veya "Sadece Türkçe"
+- Canlı transkript; canlı Türkçe çeviri isteğe bağlı (varsayılan kapalı), açıkken görünüm "İki dil" veya "Sadece Türkçe"
 - Otomatik dil algılama ve elle dil seçimi
 - "Ne kaçırdım?" butonu (son N dk özeti, varsayılan 3) ve Türkçe soru kutusu
 - Toplantı sonrası: ikinci geçiş transkripsiyon, konuşmacı ayrıştırma, yapılandırılmış not
@@ -158,17 +158,27 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
    Kelimeler konuşmacı değişiminde ya da 1,5 sn'den uzun boşlukta kesin bölümlere ayrılır ("Konuşmacı N").
    "Sen" için canlı bölümler kullanılır. Son geçiş yapılamazsa (anahtar yok, `others` sesi yok) toplantıda
    uyarı (`notice`) görünür ve not canlı transkriptten üretilir.
-3. Not: seçili LLM'in akıllı modeli (Claude Opus), yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
-   sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi görev sahipliği için verilir.
-4. Canlı transkript silinmez; son geçiş ayrı saklanır. Bir adım başarısızsa toplantı `failed` olur, hata
-   saklanır; ses dosyaları kaldığı için "Tekrar işle" mümkündür.
+3. Not: seçili LLM'in akıllı modeli (varsayılan Claude Haiku 5.5), yapılandırılmış çıktı `{baslik, ozet, kararlar[],
+   gorevler[{sahip, aciklama, tarih?, benimMi}], sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi
+   görev sahipliği için verilir. Transkript 20.000 karakteri (~12 dk konuşma) aşarsa not parça parça yazılır: parçalar
+   konuşmacı değişiminden kesilir ve sırayla işlenir; her parça önceki parçaların özetlerini ve o ana kadarki numaralı
+   görevleri bağlam olarak görür, yalnızca yeni görev/karar/terimleri ve önceki görevlerdeki değişiklikleri (numarayla;
+   erteleme, iptal) yazar. Görev, karar ve sözlük kodla birleştirilir; son istek yalnızca başlık ve genel özeti yazar.
+   Neden: tek istekte uzun toplantıda model görevleri "her aşama için…" diye toplayıp çoğunu yazmıyordu (ölçüm).
+4. Canlı transkript silinmez; son geçiş ayrı saklanır. Son geçiş başarısızsa (kota, ağ) not yine canlı metinden
+   yazılır ve uyarı kalır; dönüştürme ya da not başarısızsa toplantı `failed` olur, hata saklanır; ses dosyaları
+   kaldığı için "Tekrar işle" mümkündür. Yeni son geçiş konuşmacıları baştan numaraladığı için verilmiş adlar silinir.
+5. Kayıt sırasında "Sen"in canlı akışı koptuysa (`meNeedsFinalPass`), son geçiş "Sen" kaydını da yazıya döker ve
+   canlı "Sen" metninin yerini alır (ağ kopması kullanıcının kendi sözlerini kaybettirmez).
+6. Kayıt ve işleme sürerken Mac boşta uykuya geçmez.
 
 **Storage**
 - Her toplantı kendi oturum klasöründe: `Sessions/<yyyyMMdd-HHmmss>/meeting.json` + `me.m4a`, `others.m4a`.
   SQLite + GRDB yerine JSON seçildi: tek kullanıcı, en fazla birkaç yüz toplantı; ek bağımlılık yok, elle
   okunabilir, bozulma tek toplantıyla sınırlı; arama bellekte. Yazma atomik (`.atomic`).
 - Saklama süresi (Ayarlar, 7–365 gün, varsayılan 30) dolan ses dosyaları açılışta, saatte bir ve Toplantılar
-  penceresi açılınca silinir; kayıttaki/işlenen toplantı atlanır; metin ve not kalır.
+  penceresi açılınca silinir; yalnızca işlenmesi bitmiş (`done`) toplantılar — başarısız ya da yarıda kalan toplantının
+  sesi "Tekrar işle" için tek eksiksiz kopya olduğundan kalır; kayıttaki/işlenen toplantı atlanır; metin ve not kalır.
 - Kayıt sonrası bellekteki toplantı listesi yerinde güncellenir (her kayıtta tüm klasörler yeniden okunmaz).
 - Açılışta `recording` ya da `processing` durumunda kalmış toplantı `interrupted` olur.
 
@@ -230,14 +240,24 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   açılır seçici olur; alt sayfa başlıklarında geri ve "Kayıtta" yalnızca simge olur; hazırlanma kartı kısa panelde
   simge ve açıklamasını bırakır; uzun asistan cevabı kartın içinde kaydırılır. Panel küçük ekranda ekrana sığacak
   boyutta açılır, ekran değişince görünür alanın içine çekilir (`clampedPanelFrame`).
-- **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
-  panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
-  ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
+- **Ana pencere (Dock):** uygulama açılınca standart bir macOS penceresi açılır (Dock simgesi, trafik ışıkları):
+  kenar çubuğunda Ana sayfa (kaydı başlat ve seçenekleri — kendi sesi, canlı çeviri, dil —, eksik ayarlar, sana düşen
+  görevler, son toplantılar), Toplantılar (solda liste, sağda toplantı sayfası), Ayarlar, Kurulum. İlk açılışta Kurulum'da
+  açılır. Pencere kapatılınca uygulama menü çubuğunda sürer; Dock simgesi, menü ve ⌘, pencereyi yeniden açar.
+- **Kayıt sırasında cam panel:** kayıt başlayınca yüzen cam panel ve ada açılır; Ayarlar, Toplantılar, toplantı
+  ayrıntısı ve Kurulum panelde de sayfa olarak vardır (açılır kayıt penceresi ya da uyarı penceresi yok); alt
+  sayfalarda geri düğmesi ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
+- **Simge:** gece mavisi zemin, şampanya altını konuşma balonu; içinde ses dalgası yazı satırlarına dönüşür
+  (`scripts/render-app-icon.swift` üretir; macOS köşe maskesini kendisi uygular).
+- **Dağıtım:** Developer ID imzası, hardened runtime (mikrofon yetkisi `App/AINotepad.entitlements`), Apple noter
+  onayı ve DMG: `scripts/release.sh`; GitHub Releases'te yayınlanır. Lisans Apache 2.0.
 - **Panel başlığı:** durum, dil çipi (kayıtta dokununca dil değişir), kayıt denetimleri — kayıt yokken "Başlat";
   kayıtta Duraklat/Devam, Mikrofon aç/kapat, Bitir — ve Kopyala, Toplantılar, Ayarlar, Gizle.
 - **Duraklat:** iki akış sessizlikle değiştirilir (kayıt sürer, metin üretilmez, zaman çizgisi bozulmaz); durum
-  "Duraklatıldı". **Mikrofonu kapat** ("yalnızca dinliyorum"): "Sen" sessizliğe çevrilir; hoparlörle dinlerken
-  yankıyı kökten önler; tercih saklanır (Ayarlar › Genel › Mikrofon).
+  "Duraklatıldı". **Yalnızca karşı taraf** (Ayarlar › Genel › "Kendi sesimi de kaydet" kapalı ya da kayıt yokken paneldeki
+  mikrofon düğmesi): kayıt mikrofonu hiç açmaz — izin, mikrofon göstergesi ve Deepgram'a sessizlik maliyeti yok, hoparlör
+  yankısı oluşmaz; bu kayıtta mikrofon açılamaz (düğme kapalı). Mikrofonla başlayan kayıtta düğme "Sen"i sessizliğe
+  çevirir (susturma); tercih saklanır.
 - `MenuBarExtra`: kaydı başlat/bitir, duraklat/devam ("Bitiriliyor…" sırasında kapalı), ada + panel, kırmızı kurulum
   sorunları, dil (kayıtta "Dili değiştir"), ekran görüntüsünde gizle, Toplantılar, Ayarlar, Kurulum (panel
   sayfalarını açar), Çık.
@@ -320,17 +340,19 @@ mesajı, `max_completion_tokens`, şema varsa katı `response_format: json_schem
 diğerleri akıllı modelle (ikisi Ayarlar'dan).
 
 **Model ve effort seçimi (Ayarlar › LLM):** Claude'da "Canlı çeviri" ve "Ne kaçırdım?, soru ve not" için ayrı model
-(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Opus/medium. Modellerin
+(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Haiku/medium (senaryo testlerinde not için büyük modellerle aynı
+eksiksizlik). Modellerin
 parametre kuralları (her biri gerçek API'de doğrulandı): hızlı sınıfta düşünme Haiku 5.5'te `disabled`, Sonnet 5.5'te
 `between_tools` ile kapatılır (yalnızca effort ≤ high; üstünde 400); Opus 5.5 ve Fable 5.1'de kapatılamaz (alan
 gönderilmez). Sunucu tarafı yedek (`fallbacks: "default"`) Haiku 5.5 dışındaki modellerde. OpenAI uyumlu sağlayıcıda
 effort isteğe bağlı `reasoning_effort` (low/medium/high ya da gönderme).
 
 **Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
-saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort: medium`, `fallbacks: "default"` +
-`anthropic-beta: server-side-fallback-2026-07-01`). Her yanıtta `stop_reason == "refusal"` önce denetlenir.
+saatte birkaç sent); "Ne kaçırdım?", soru-cevap ve not varsayılan olarak da `claude-haiku-5-5` (`effort: medium`); seçilen model Haiku dışında
+ise `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01`. Her yanıtta `stop_reason == "refusal"` önce denetlenir.
 
-**Canlı çeviri:** yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
+**Canlı çeviri:** isteğe bağlı (Ayarlar › Genel › "Kayıt sırasında Türkçeye çevir", varsayılan kapalı); kapalıyken
+kayıt sırasında hiç LLM çağrısı yapılmaz. Açıkken yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
 bağlam olarak. Panel her bloğun altında Türkçesini gösterir; görünüm ayarı "İki dil" (orijinal soluk + Türkçe),
 "Sadece Türkçe" ya da "Sadece orijinal" (Fince/İngilizce; bu görünümde canlı çeviri yapılmaz — maliyet; toplantı
 sonu Türkçe not yine üretilir; görünüm değişince sonraki cümleler çevrilir). Adanın son cümlesi varsa Türkçesidir. Çeviri hatası panelde tek satır (tekilleştirilmiş).
@@ -352,7 +374,11 @@ onu gizlemez). Kayıt bitince bekleyen çeviriler en fazla 10 sn beklenip toplan
 
 **Hatalar:** 408/429/5xx/ağ hatası 3 deneme (`retry-after` saniyesine uyulur, en fazla 30 sn; yoksa 1, 2 sn; uyarı
 logu), diğer 4xx denenmez; 200 içinde reddetme, `max_tokens`/`length` kesilmesi (`LLMError.truncated`), bozuk ve
-boş yanıt kesin hatadır. `LLMError.http` durum kodu, gövde, model ve istek kimliğini (`request-id` /
+boş yanıt kesin hatadır. Düşünme / akıl yürütme açıkken (Claude'da düşünme kapatılmamışsa, OpenAI uyumluda effort
+seçiliyse) çıktı sınırı en az 64.000'dir: düşünme de bu sınırdan harcar ve `max` effort'ta kısa bir notu bile
+kesiyordu. Claude yanıtları akışla (SSE) alınır; uzun düşünmede bağlantı boşta zaman aşımına düşmez, akış ortası
+aşırı yük yeniden denenir. Yapılandırılmış yanıtlar (not, "Ne kaçırdım?", konuşmacı incelemesi) şemaya uysa da boş
+gelebilir (ör. özeti boş not); boş ya da bozuk yanıt aynı istekle en fazla 3 kez yeniden sorulur. `LLMError.http` durum kodu, gövde, model ve istek kimliğini (`request-id` /
 `x-request-id`) içerir, anahtar içermez; gövde yalnızca özel (private) loglanır.
 
 ### 4.2 Toplantı durum makinesi
@@ -385,7 +411,10 @@ ses saklama süresi (gün, varsayılan 30); dil (Otomatik | Fince | İngilizce);
 - Dış API çağrıları: 3 deneme, üstel bekleme, her başarısız denemede uyarı logu, sonra son hata fırlatılır.
 - Gizli yedek yok: bulut STT çökerse yerele kendiliğinden geçilmez; ada hatayı gösterir.
 - Deepgram bağlantısı koparsa ~120 sn boyunca geri çekilmeli yeniden bağlanır; tükenirse o akış biter ve panelde
-  hata görünür. Ses kaydı her durumda diske yazılmaya devam eder.
+  hata görünür. Ses kaydı her durumda diske yazılmaya devam eder; metin toplantı sonunda son geçişle kayıttan çıkarılır.
+- Kayıt durunca son konuşmacı etiketleri en fazla 20 sn beklenir ("Bitiriliyor…" ağ takılınca dakikalarca sürmez).
+- Uzun toplantı: canlı panel blokları paragraflar gibi en fazla 60 sn; gruplama doğrusal, yankı filtresi yalnızca
+  zamanca çakışabilecek bölümlere bakar (4 saatlik transkriptte bir güncelleme milisaniyeler sürer).
 - Kullanıcıya gösterilen tüm hata metinleri tek saf fonksiyondan (`userFacingMessage`) geçer: Türkçe, ne
   yapılacağını söyler, anahtar ve toplantı metni içermez. Mikrofon ve sistem sesi hataları ayrı adlandırılır;
   ElevenLabs'in kota dolunca döndürdüğü 401 "anahtar geçersiz" değil "kota doldu" olarak gösterilir.
@@ -403,6 +432,8 @@ Swift Testing; `AINotepadCore` için `swift test`.
 - **Gerçek API testleri:** LLM ve bulut STT için mock yok. Anahtarlar Keychain'den (`AINotepad`)
   okunur; yalnızca `AINOTEPAD_CLOUD_TESTS=1` ile çalışır; CI'da çalışmaz. Gerçek Fince ses:
   repoya eklenen kısa, çok konuşmacılı bir kayıt.
+- **Senaryo testleri (pahalı):** `AINOTEPAD_SCENARIO_TESTS=1` (bulut testleriyle birlikte) — 1 saatlik toplantının
+  notu her Claude modelinde `max` effort'ta, asistan istekleri ve konuşmacı incelemesi, her modelde çeviri gecikmesi.
 - **Birim testleri (az):** VAD bölümleme, dil sabitleme, prompt oluşturma, not JSON ayrıştırma.
 - **Elle uçtan uca kontrol listesi:** gerçek Zoom ve Teams görüşmesi, ekran paylaşımı görünmezliği,
   çökme sonrası kurtarma.

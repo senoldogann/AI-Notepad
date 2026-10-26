@@ -440,7 +440,7 @@ private actor DeepgramConnection {
 private func deepgramFailureMessage(error: any Error) -> String {
     switch error {
     case CloudSTTError.connectionFailed:
-        return String(localized: "Deepgram'a \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor.")
+        return String(localized: "Deepgram'a \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.")
     default:
         return userFacingMessage(error: error)
     }

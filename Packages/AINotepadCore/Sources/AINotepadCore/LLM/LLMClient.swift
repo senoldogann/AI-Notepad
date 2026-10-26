@@ -36,6 +36,8 @@ public enum LLMError: Error, Equatable {
     case http(status: Int, body: String, model: String, requestID: String?)
     /// Yanıt `max_tokens` sınırında kesildi.
     case truncated(model: String)
+    /// Akış (SSE) başarılı başladıktan sonra hata olayıyla bitti (ör. `overloaded_error`).
+    case streamFailed(errorType: String, message: String, model: String)
     /// Güvenlik sınıflandırıcısı isteği reddetti.
     case refusal(category: String?)
     case malformed(body: String)
@@ -44,6 +46,22 @@ public enum LLMError: Error, Equatable {
     case invalidSchema(schema: String)
     /// Sağlayıcı ayarı eksik ya da geçersiz (ör. adres yok).
     case notConfigured(detail: String)
+}
+
+/// Model düşünürken / akıl yürütürken çıktı sınırı en az bu kadar: düşünme de bu sınırdan harcar; `max` effort'ta kısa
+/// bir toplantının notu bile 16.000'i doldurup kesiliyordu. 64.000, `xhigh`/`max` için yayımlanan başlangıç değeridir;
+/// sınır yalnızca güvenlik payıdır (kullanılan kadar ödenir).
+let reasoningTokenFloor: Int = 64000
+
+/// Yapılandırılmış yanıtın JSON gövdesi: şemayı yalnızca istemden alan sunucular (ör. Ollama'daki modeller) JSON'u
+/// ```` ```json ```` çitine sarabilir; çit varsa içi döner, yoksa metin aynen. Saf fonksiyondur.
+public func jsonBody(text: String) -> String {
+    let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("```"), trimmed.hasSuffix("```"), let firstNewline = trimmed.firstIndex(of: "\n") else {
+        return trimmed
+    }
+    return String(trimmed[trimmed.index(after: firstNewline)..<trimmed.index(trimmed.endIndex, offsetBy: -3)])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// Modelin ne kadar düşüneceği / çaba seviyesi (Claude `output_config.effort`, OpenAI `reasoning_effort`).
@@ -168,6 +186,30 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
         if attempt < llmAttempts {
             try await Task.sleep(for: .seconds(retryDelay(retryAfterHeader: retryAfter, attempt: attempt)))
         }
+    }
+    throw lastError
+}
+
+/// Yapılandırılmış yanıt ister ve ayrıştırır. Model şemaya uyan ama boş ya da bozuk içerik döndürebilir (ör. Haiku
+/// `max` effort'ta uzun toplantıda arada bir yalnızca başlıklı not); bu aralıklıdır, aynı istek yeniden sorulur
+/// (uyarı logu) ve son denemenin hatası fırlatılır. Diğer hatalar `sendLLM`'in kendi kurallarıyla biter.
+public func requestStructured<Value: Sendable>(
+    provider: LLMProvider, request: LLMRequest, parse: @Sendable (String) throws -> Value
+) async throws -> Value {
+    var lastError: LLMError = .empty
+    for attempt in 1...llmAttempts {
+        do {
+            return try parse(try await sendLLM(provider: provider, request: request))
+        } catch let error as LLMError {
+            switch error {
+            case .malformed, .empty:
+                lastError = error
+                llmLogger.warning("Yapılandırılmış yanıt kullanılamadı, deneme: \(attempt, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            default:
+                throw error
+            }
+        }
+        try Task.checkCancellation()
     }
     throw lastError
 }

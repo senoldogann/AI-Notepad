@@ -37,7 +37,10 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_LSUIElement: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Apple noter onayı (notarization) hardened runtime ister; mikrofon yetkisi entitlements dosyasında.
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: App/AINotepad.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
         MARKETING_VERSION: "0.1.0"

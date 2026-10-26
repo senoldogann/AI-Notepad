@@ -157,7 +157,7 @@ public func speakerReviewRequest(segments: [StoredSegment], speakerNames: [Int: 
 public func parseSpeakerReview(text: String, persons: Set<Int>, speakerNames: [Int: String]) throws -> SpeakerReview {
     let raw: RawSpeakerReview
     do {
-        raw = try JSONDecoder().decode(RawSpeakerReview.self, from: Data(text.utf8))
+        raw = try JSONDecoder().decode(RawSpeakerReview.self, from: Data(jsonBody(text: text).utf8))
     } catch {
         // Ayrıştırma ayrıntısı (eksik alan vb.) hata ayıklamada gerekir.
         throw LLMError.malformed(body: "\(error): \(text)")

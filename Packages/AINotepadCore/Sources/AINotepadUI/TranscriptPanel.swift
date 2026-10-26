@@ -173,11 +173,16 @@ public struct TranscriptPanel: View {
         .accessibilityLabel("Diğer")
     }
 
-    /// Kayıt yokken "Başlat"; kayıtta duraklat/devam, mikrofon ve "Bitir"; bitirilirken hiçbiri.
+    /// Kayıt yokken mikrofon seçimi ve "Başlat"; kayıtta duraklat/devam, mikrofon ve "Bitir"; bitirilirken hiçbiri.
     @ViewBuilder
     private var recordingControls: some View {
         switch state.phase {
         case .idle:
+            IconButton(
+                symbol: state.isMicMuted ? "mic.slash" : "mic",
+                help: state.isMicMuted ? "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)" : "Kendi sesin de kaydedilecek (tıkla: yalnızca karşı taraf)",
+                action: actions.onToggleMic
+            )
             Button(action: actions.onStart) {
                 Label("Başlat", systemImage: "record.circle")
                     .font(DesignTokens.statusFont)
@@ -191,7 +196,13 @@ public struct TranscriptPanel: View {
             .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
         case .recording:
             IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
-            IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
+            if state.canToggleMic {
+                IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
+            } else {
+                // Kayıt mikrofonsuz başladı: mikrofon hiç açılmadı, bu kayıtta açılamaz.
+                IconButton(symbol: "mic.slash", help: "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor", action: actions.onToggleMic)
+                    .disabled(true)
+            }
             IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
         case .finishing:
             EmptyView()

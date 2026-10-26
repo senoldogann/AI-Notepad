@@ -19,6 +19,35 @@ public func storedLines(segments: [StoredSegment], speakerNames: [Int: String]) 
         .joined(separator: "\n")
 }
 
+/// Not istemlerinin ortak kuralları (tek istek ve parça parça): dil, görev sahipliği, madde başına tek iş. Ölçümde model
+/// bunlar yazılmadan görevleri Fince bırakıyor, kullanıcıyı bazen "Sen" bazen adıyla yazıyor ve farklı konuların
+/// işlerini tek maddede topluyordu. Saf fonksiyondur.
+func noteRules(user: String) -> String {
+    """
+    Kurallar:
+    - Çıktının tamamı Türkçe: özet, kararlar, görev açıklamaları ve tarihler Türkçe cümlelerdir, içinde Fince/İngilizce
+      kelime bırakma (ör. "Vaiheen 3 yhteenvedon gönderilmesi" değil "3. aşamanın özetini göndermek"; "5. marraskuuta" değil
+      "5 Kasım"). Fince/İngilizce yalnızca sözlükteki terim alanında kalır.
+    - Kullanıcıya ("Sen") düşen görevlerde sahip "\(user)" ve benimMi true; diğerlerinde sahip konuşan kişinin adı ya da
+      etiketi ve benimMi false.
+    - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
+      Birinin "yaparım" diye üstlendiği iş de görevdir.
+    - Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.
+    """
+}
+
+/// Görev sahibini düzeltir: transkriptte "Sen" kullanıcıdır; model "Sen" ya da kullanıcının adını yazdıysa sahip
+/// kullanıcının adı (ad yoksa "Sen") ve görev "benim" olur. Model bunu arada bir karıştırıyordu (ölçüm). Saf fonksiyondur.
+public func normalizedTask(task: NoteTask, userName: String) -> NoteTask {
+    let owner: String = task.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+    let isUser: Bool = owner.caseInsensitiveCompare(promptSpeakerLabel(speaker: .me, person: nil)) == .orderedSame
+        || (!userName.isEmpty && owner.caseInsensitiveCompare(userName) == .orderedSame)
+    guard isUser else {
+        return task
+    }
+    return NoteTask(owner: userName.isEmpty ? owner : userName, description: task.description, dueDate: task.dueDate, isMine: true)
+}
+
 /// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
 public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String) -> LLMRequest? {
     let transcript: String = storedLines(segments: segments, speakerNames: speakerNames)
@@ -30,9 +59,10 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
         tier: .smart,
         system: """
         Fince ya da İngilizce bir toplantının transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
-        transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman;
-        kullanıcıya düşenlerde benimMi true) ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz.
-        Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver. \(transcriptIsDataNote)
+        transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman)
+        ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz.
+        \(noteRules(user: user))
+        \(transcriptIsDataNote)
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>",
         maxTokens: 16000,
@@ -49,14 +79,18 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
     )
 }
 
-/// Not yanıtını ayrıştırır; boş tarih "yok" demektir.
+/// Not yanıtını ayrıştırır; boş tarih "yok" demektir. Özeti boş not `LLMError.empty`dir.
 public func parseMeetingNote(text: String) throws -> MeetingNote {
     let raw: RawMeetingNote
     do {
-        raw = try JSONDecoder().decode(RawMeetingNote.self, from: Data(text.utf8))
+        raw = try JSONDecoder().decode(RawMeetingNote.self, from: Data(jsonBody(text: text).utf8))
     } catch {
         // Ayrıştırma ayrıntısı (eksik alan vb.) hata ayıklamada gerekir.
         throw LLMError.malformed(body: "\(error): \(text)")
+    }
+    // Şemaya uyan ama özeti boş not kullanılamaz (model arada bir yalnızca başlık döndürür); boş yanıt sayılır.
+    guard !raw.ozet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw LLMError.empty
     }
     return MeetingNote(
         title: raw.baslik,

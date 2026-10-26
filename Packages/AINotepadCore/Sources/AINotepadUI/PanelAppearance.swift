@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 /// Panel metninin yazı tipi ailesi (SF tasarımları; her Mac'te var).
@@ -108,14 +109,33 @@ private struct PanelSurface: ViewModifier {
     }
 }
 
+/// Aynı anda tek ipucu: yeni ipucu açılınca öncekiler kapanır. Panel uygulamayı öne getirmediği için fare çıkışı
+/// bazen gelmez; tek etkin ipucu ve süre sınırı olmazsa ipuçları birikip üst üste binerdi.
+@MainActor
+@Observable
+final class HoverHintCenter {
+    static let shared: HoverHintCenter = HoverHintCenter()
+    /// Görünen ipucunun kimliği; yoksa nil.
+    var activeID: UUID?
+}
+
+/// İpucu bu kadar süre sonra kendiliğinden kapanır (fare çıkışı gelmese de).
+private let hoverHintLifetime: Duration = .seconds(4)
+
 /// Fare üstüne gelince kısa gecikmeyle açıklama gösterir. Panel uygulamayı öne getirmediği için sistem ipuçları
-/// (`help`) her zaman görünmez; bu ipucu panelin içinde çizilir. Erişilebilirlik için `help` de verilir.
+/// (`help`) her zaman görünmez; bu ipucu panelin içinde, kardeş görünümlerin üstünde ve opak çizilir. Erişilebilirlik
+/// için `help` de verilir.
 private struct HoverHint: ViewModifier {
     let text: LocalizedStringKey
     let alignment: HorizontalAlignment
     let edge: VerticalEdge
-    @State private var isVisible: Bool = false
+    @State private var id: UUID = UUID()
     @State private var delay: Task<Void, Never>?
+    private let center: HoverHintCenter = .shared
+
+    private var isVisible: Bool {
+        center.activeID == id
+    }
 
     func body(content: Content) -> some View {
         content
@@ -123,18 +143,24 @@ private struct HoverHint: ViewModifier {
             .onHover { (hovering: Bool) -> Void in
                 delay?.cancel()
                 guard hovering else {
-                    isVisible = false
+                    hide()
                     return
                 }
                 delay = Task {
                     do {
                         try await Task.sleep(for: .milliseconds(450))
+                        center.activeID = id
+                        try await Task.sleep(for: hoverHintLifetime)
                     } catch {
-                        // Fare ayrıldı; ipucu gösterilmez.
+                        // Fare ayrıldı ya da başka ipucu açıldı.
                         return
                     }
-                    isVisible = true
+                    hide()
                 }
+            }
+            .onDisappear {
+                delay?.cancel()
+                hide()
             }
             .overlay(alignment: Alignment(horizontal: alignment, vertical: edge == .bottom ? .bottom : .top)) {
                 if isVisible {
@@ -143,14 +169,23 @@ private struct HoverHint: ViewModifier {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.82), in: Capsule())
+                        .background(Color(white: 0.12), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12)))
                         .fixedSize()
                         .offset(y: edge == .bottom ? 28 : -28)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
             }
+            // Görünürken kardeşlerinin üstünde çizilir (alttaki düğme ya da satır ipucunu örtmesin).
+            .zIndex(isVisible ? 1 : 0)
             .animation(.easeOut(duration: 0.12), value: isVisible)
+    }
+
+    private func hide() {
+        if center.activeID == id {
+            center.activeID = nil
+        }
     }
 }
 

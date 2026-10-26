@@ -44,6 +44,28 @@
         }
       }
     },
+    "\"Sen\" kaydı yazıya dökülemedi: %@ Canlı metin eksik olabilir; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't transcribe the \"You\" recording: %@ The live text may be incomplete; you can try again with \"Reprocess\"."
+          }
+        }
+      }
+    },
+    "\"Sen\" metni eksik: kayıt sırasında akış koptu ve \"Sen\" sesi kaydedilmemiş.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"You\" text is incomplete: the stream dropped during recording and the \"You\" audio wasn't saved."
+          }
+        }
+      }
+    },
     "%@ / %@": {
       "extractionState": "stale",
       "localizations": {
@@ -218,6 +240,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ audio could not be written to disk: %@"
+          }
+        }
+      }
+    },
+    "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ response failed midway (%@). Try again in a moment."
+          }
+        }
+      }
+    },
+    "%@ yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ response hit the output limit and was cut off. Lower the effort in Settings › LLM and try again."
           }
         }
       }
@@ -414,6 +458,26 @@
         }
       }
     },
+    "Ana pencere": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main window"
+          }
+        }
+      }
+    },
+    "Ana sayfa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        }
+      }
+    },
     "Anahtar (Ollama'da gerekmez)": {
       "localizations": {
         "en": {
@@ -535,6 +599,16 @@
         }
       }
     },
+    "Ayarlar…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
+          }
+        }
+      }
+    },
     "Açık": {
       "localizations": {
         "en": {
@@ -628,6 +702,16 @@
         }
       }
     },
+    "Bir toplantı seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a meeting"
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -665,6 +749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finishing…"
+          }
+        }
+      }
+    },
+    "Bitiriliyor… kalan metin ve konuşmacılar tamamlanıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing… completing the remaining text and speakers."
           }
         }
       }
@@ -719,6 +813,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assign this part to"
+          }
+        }
+      }
+    },
+    "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording only captures audio from the computer"
           }
         }
       }
@@ -824,16 +928,6 @@
         }
       }
     },
-    "Canlı çeviri yapılmaz; toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No live translation; the Turkish meeting note (tasks, decisions, summary) is still prepared when the meeting ends."
-          }
-        }
-      }
-    },
     "Cevap hazırlanıyor": {
       "localizations": {
         "en": {
@@ -894,16 +988,6 @@
         }
       }
     },
-    "Daha yüksek effort daha dikkatli ama daha yavaş ve pahalı sonuç verir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Higher effort gives more careful but slower and more expensive results."
-          }
-        }
-      }
-    },
     "Deepgram": {
       "localizations": {
         "en": {
@@ -944,13 +1028,13 @@
         }
       }
     },
-    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor.": {
+    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
       "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded."
+            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
           }
         }
       }
@@ -1324,6 +1408,16 @@
         }
       }
     },
+    "Haiku ve medium/high effort önerilir: uzun toplantı notu parça parça yazılır, büyük model gerekmez. max effort yavaştır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haiku with medium/high effort is recommended: long meeting notes are written part by part, so a bigger model isn't needed. max effort is slow."
+          }
+        }
+      }
+    },
     "Hata": {
       "localizations": {
         "en": {
@@ -1416,6 +1510,26 @@
         }
       }
     },
+    "Henüz toplantı yok. Kaydı başlatınca toplantıların ve notların burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meetings yet. When you start recording, your meetings and notes appear here."
+          }
+        }
+      }
+    },
+    "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each sentence is translated while recording (one LLM call each). After the meeting a Turkish note (tasks, decisions, summary) is prepared."
+          }
+        }
+      }
+    },
     "Herkese günaydın, toplantıya başlayalım.": {
       "localizations": {
         "en": {
@@ -1436,12 +1550,12 @@
         }
       }
     },
-    "Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te düşünme bu görevde kapatılır.": {
+    "Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te high ve altında düşünme kapatılır; Opus, Fable ve xhigh/max'ta düşünme açık kalır, çeviriler gecikip birikebilir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A fast model with low effort is recommended: translations arrive in 1–2 s. Thinking is turned off for this task on Haiku and Sonnet."
+            "value": "A fast model and low effort are recommended: translations arrive in 1–2 s. Haiku and Sonnet turn thinking off at high and below; with Opus, Fable or xhigh/max, thinking stays on and translations can lag and pile up."
           }
         }
       }
@@ -1492,6 +1606,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't remove: %@"
+          }
+        }
+      }
+    },
+    "Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When off, only the audio coming from the computer (the other side) is recorded: the microphone is never opened and speaker echo isn't written as \"You\". You can also choose with the microphone button in the panel before recording; in a recording started with the microphone, the button only mutes it."
           }
         }
       }
@@ -1638,12 +1762,42 @@
         }
       }
     },
+    "Kayıt sürüyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording"
+          }
+        }
+      }
+    },
+    "Kayıt sırasında Türkçeye çevir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate to Turkish while recording"
+          }
+        }
+      }
+    },
     "Kayıt sırasında çentikte adayı göster": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show the island in the notch while recording"
+          }
+        }
+      }
+    },
+    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is translated while recording; only the original text is shown. A Turkish note (tasks, decisions, summary) is still prepared after the meeting."
           }
         }
       }
@@ -1694,6 +1848,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording"
+          }
+        }
+      }
+    },
+    "Kayıttan önce tamamlanmalı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete before recording"
+          }
+        }
+      }
+    },
+    "Kendi sesimi de kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also record my voice"
+          }
+        }
+      }
+    },
+    "Kendi sesimi de kaydet (mikrofon)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also record my voice (microphone)"
+          }
+        }
+      }
+    },
+    "Kendi sesin de kaydedilecek (tıkla: yalnızca karşı taraf)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your voice will be recorded too (click: other side only)"
           }
         }
       }
@@ -1843,16 +2037,6 @@
         }
       }
     },
-    "Konuşmayıp yalnızca dinlediğin toplantılarda kapat: hoparlörden gelen ses \"Sen\" olarak yazılmaz. Panelden kayıt sırasında da değiştirilebilir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turn off for meetings where you only listen: sound from your speakers won't be written as \"You\". You can also change this from the panel while recording."
-          }
-        }
-      }
-    },
     "Kopyala": {
       "localizations": {
         "en": {
@@ -1893,6 +2077,16 @@
         }
       }
     },
+    "Kurulumu aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open setup"
+          }
+        }
+      }
+    },
     "Kısayol kaydedilemedi: %@": {
       "localizations": {
         "en": {
@@ -1919,6 +2113,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shortcut not working: %@"
+          }
+        }
+      }
+    },
+    "Kısayol: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcut: %@"
           }
         }
       }
@@ -2118,16 +2322,6 @@
         }
       }
     },
-    "Mikrofonu kaydet (Sen)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Record microphone (You)"
-          }
-        }
-      }
-    },
     "Model": {
       "localizations": {
         "en": {
@@ -2313,6 +2507,16 @@
         }
       }
     },
+    "Notu, görevleri ve transkripti burada görürsün.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You'll see the note, tasks and transcript here."
+          }
+        }
+      }
+    },
     "Opak": {
       "localizations": {
         "en": {
@@ -2413,6 +2617,16 @@
         }
       }
     },
+    "Paneli göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show panel"
+          }
+        }
+      }
+    },
     "Paneli göster / gizle": {
       "extractionState": "stale",
       "localizations": {
@@ -2475,6 +2689,16 @@
         }
       }
     },
+    "SANA DÜŞEN GÖREVLER": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR TASKS"
+          }
+        }
+      }
+    },
     "SENİN GÖREVLERİN": {
       "localizations": {
         "en": {
@@ -2485,22 +2709,22 @@
         }
       }
     },
+    "SON TOPLANTILAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECENT MEETINGS"
+          }
+        }
+      }
+    },
     "Sadece Türkçe": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Turkish only"
-          }
-        }
-      }
-    },
-    "Sadece orijinal (Fince/İngilizce)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Original only (Finnish/English)"
           }
         }
       }
@@ -2806,13 +3030,13 @@
         }
       }
     },
-    "Son geçiş başarısız": {
+    "Son geçiş başarısız: %@ Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
       "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Final pass failed"
+            "value": "Final pass failed: %@ The note was written from the live text; you can try again with \"Reprocess\"."
           }
         }
       }
@@ -2927,16 +3151,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Meeting"
-          }
-        }
-      }
-    },
-    "Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When the meeting ends, a Turkish note (tasks, decisions, summary) is prepared."
           }
         }
       }
@@ -3094,6 +3308,16 @@
         }
       }
     },
+    "Toplantıyı yazıya döker, Türkçeye çevirir; sonunda sana düşenleri çıkarır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes your meeting, translates it to Turkish, and tells you what's on you afterwards."
+          }
+        }
+      }
+    },
     "Transkript": {
       "localizations": {
         "en": {
@@ -3144,6 +3368,16 @@
         }
       }
     },
+    "Tümü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
     "Tümünü birleştir: %@ →": {
       "extractionState": "stale",
       "localizations": {
@@ -3162,16 +3396,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy all"
-          }
-        }
-      }
-    },
-    "Türkçe çeviri": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turkish translation"
           }
         }
       }
@@ -3237,13 +3461,12 @@
         }
       }
     },
-    "Yanıt çok uzun olduğu için yarıda kesildi. Tekrar dene.": {
-      "extractionState": "stale",
+    "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The response was cut off because it was too long. Try again."
+            "value": "Only the other side will be recorded (click: include your voice)"
           }
         }
       }

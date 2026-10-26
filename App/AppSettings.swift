@@ -130,7 +130,8 @@ func resetAppearanceSettings(defaults: UserDefaults) {
 func registerDefaultSettings() {
     UserDefaults.standard.register(defaults: [
         SettingsKey.liveEngine: LiveEngine.deepgram.rawValue,
-        SettingsKey.displayMode: DisplayMode.bilingual.rawValue,
+        // Canlı çeviri isteğe bağlı: asıl amaç toplantı sonu not; açılınca iki dil gösterilir.
+        SettingsKey.displayMode: DisplayMode.originalOnly.rawValue,
         SettingsKey.hideFromScreenCapture: true,
         SettingsKey.missedWindowMinutes: 3,
         SettingsKey.audioRetentionDays: 30,
@@ -141,7 +142,8 @@ func registerDefaultSettings() {
         SettingsKey.llmFastEffort: "",
         SettingsKey.llmSmartEffort: "",
         SettingsKey.claudeFastModel: ClaudeModel.haiku.rawValue,
-        SettingsKey.claudeSmartModel: ClaudeModel.opus.rawValue,
+        // Not ve özet için de Haiku yeterli (1–4 saatlik senaryo testlerinde büyük modellerle aynı eksiksizlik).
+        SettingsKey.claudeSmartModel: ClaudeModel.haiku.rawValue,
         SettingsKey.claudeFastEffort: LLMEffort.low.rawValue,
         SettingsKey.claudeSmartEffort: LLMEffort.medium.rawValue,
         SettingsKey.onboardingCompleted: false,

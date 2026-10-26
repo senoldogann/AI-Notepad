@@ -21,7 +21,7 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
                     NoteTask(owner: "Aino", description: "Raporu gönder", dueDate: nil, isMine: false)],
             glossary: [GlossaryEntry(term: "palauttaa", meaning: "teslim etmek")]
         ),
-        audioDeleted: false, engine: .cloud, notice: nil
+        audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
     )
 }
 

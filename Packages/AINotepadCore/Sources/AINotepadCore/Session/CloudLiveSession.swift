@@ -86,9 +86,16 @@ public func runCloudLiveSession(
         }
         // İptal yerine durdurma işareti: süren ElevenLabs isteği yarıda kesilmez (sahte iptal hatası olmaz).
         await state.requestStop()
-        await diarizer.value
-        // Oturumun son dakikası da etiketlensin.
-        await runDiarizationWindow(config: config, state: state, streams: streams, events: sink)
+        // Oturumun son dakikası da etiketlensin; ağ takılırsa (her pencere 60 sn × 3 deneme) "Bitiriliyor…" dakikalarca
+        // sürmesin diye en fazla `stopLabelingDeadlineSec` beklenir. Son geçiş konuşmacıları kaydın tamamından yeniden
+        // ayırdığı için geç kalan etiketler kaybolmaz.
+        let labeled: Bool = await finishesWithin(seconds: stopLabelingDeadlineSec) {
+            await diarizer.value
+            await runDiarizationWindow(config: config, state: state, streams: streams, events: sink)
+        }
+        if !labeled {
+            cloudLogger.warning("Kapanışta konuşmacı ayırma süre sınırında bitmedi, süre: \(stopLabelingDeadlineSec, privacy: .public)")
+        }
         sink.finish()
     }
     return LiveSessionHandle(events: events) { (language: MeetingLanguage) async -> Void in
@@ -111,6 +118,8 @@ private func switchStreams(streams: [DeepgramStream], state: CloudSessionState) 
 }
 
 private let cloudSampleRate: Int = 16000
+/// Kayıt durunca son konuşmacı etiketleri için en uzun bekleme.
+private let stopLabelingDeadlineSec: Double = 20
 private let cloudLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "CloudLiveSession")
 
 /// Deepgram'ın başlangıç dili: sabit dil ya da otomatik modda Fince.

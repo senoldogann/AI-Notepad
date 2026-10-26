@@ -86,6 +86,23 @@ extension CloudTests {
         #expect(try AVAudioFile(forReading: directory.appending(path: "others.caf")).length == AVAudioFramePosition(fixture.count))
     }
 
+    // "Yalnızca karşı taraf": mikrofon hiç açılmaz, "Sen" akışı baştan biter; oturum hatasız sürmeli ve karşı tarafı
+    // yazmalı ("Sen" akışının erken bitmesi hata sayılmamalı).
+    @Test func othersOnlyRecordingWithoutMicrophone() async throws {
+        let fixture: [Float] = try loadFixture(name: "fi-dialog")
+        let directory: URL = try temporaryDirectory()
+        let config: CloudSessionConfig = try cloudConfig(directory: directory, firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000, minDiarizationAudioSec: 5, elevenLabsKey: try cloudKey(account: .elevenlabs))
+        let (noMicrophone, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+        continuation.finish()
+        let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
+            config: config, meAudio: noMicrophone, othersAudio: pacedStream(samples: fixture)
+        ).events)
+        let text: String = finalOthersText(events: events)
+        #expect(text.contains("raportti") || text.contains("raportin"), "metin: \(text)")
+        #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
+        #expect(!events.contains { if case .segment(let segment) = $0 { segment.id.speaker == .me } else { false } })
+    }
+
     @Test func englishMeetingSwitchesLanguage() async throws {
         let english: [Float] = try loadFixture(name: "en-meeting")
         let others: [Float] = english + english

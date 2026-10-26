@@ -31,6 +31,7 @@ private struct ViewStateInputs: Equatable {
     let newPersonNumber: Int
     let isPaused: Bool
     let isMicMuted: Bool
+    let canToggleMic: Bool
     let canStart: Bool
     let startedAt: Date?
     let statusText: String
@@ -66,6 +67,9 @@ final class AppModel {
     var isPaused: Bool = false
     /// "Sen" kapalı: hoparlörle dinlerken yankı olmasın. Ayar olarak saklanır.
     var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
+    /// Bu kayıtta mikrofon açıldı mı: mikrofon kapalıyken başlayan kayıt yalnızca bilgisayardan gelen sesi alır, mikrofonu
+    /// hiç açmaz (menü çubuğunda mikrofon göstergesi yanmaz, Deepgram'a sessizlik gönderilip ücretlendirilmez).
+    var micOpenedForRecording: Bool = false
     /// Son biten kaydın toplantısı: panel bitince bu toplantının sayfasını açar.
     var lastFinishedMeetingID: String?
     /// Yerel konuşmacı ayırma modeli hazır değil (menüde uyarı; canlı kayıt engellenmez).
@@ -118,6 +122,10 @@ final class AppModel {
     @ObservationIgnored private var assistantTask: Task<Void, Never>?
     /// Kartı yazmaya yetkili son istek.
     @ObservationIgnored private var assistantRequestID: Int = 0
+    /// Bu kayıtta "Sen"in canlı metin akışı koptu mu (toplantı sonunda "Sen" kaydı da son geçişten geçer).
+    @ObservationIgnored private var meStreamFailed: Bool = false
+    /// Kayıt ve işleme sürerken Mac boşta uykuya geçmesin (uyku kaydı ve son geçiş yüklemesini keser); toplantı başına.
+    @ObservationIgnored private var sleepActivities: [String: any NSObjectProtocol] = [:]
     /// Süren konuşmacı incelemeleri; yenisi ya da kartı kapatmak eskisini iptal eder.
     @ObservationIgnored private var speakerReviewTasks: [String: Task<Void, Never>] = [:]
     /// Ses saklama süresini günde bir uygulayan görev.
@@ -150,7 +158,7 @@ final class AppModel {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
             assistantCard: assistantCard, phase: phase,
-            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
+            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
@@ -160,7 +168,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -251,7 +259,7 @@ final class AppModel {
     }
 
     /// Önceki isteği iptal edip yenisini çalıştırır; sonucu yalnızca hâlâ en son istekse karta yazar.
-    private func runAssistant(request: LLMRequest, title: String, makeCard: @escaping @MainActor (String) throws -> AssistantCard) {
+    private func runAssistant(request: LLMRequest, title: String, makeCard: @escaping @Sendable (String) throws -> AssistantCard) {
         cancelAssistant()
         let requestID: Int = assistantRequestID
         assistantCard = .loading(title: title)
@@ -259,7 +267,7 @@ final class AppModel {
             let card: AssistantCard
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                card = try makeCard(try await sendLLM(provider: provider, request: request))
+                card = try await requestStructured(provider: provider, request: request, parse: makeCard)
             } catch {
                 card = .failed(message: userFacingMessage(error: error))
             }
@@ -434,6 +442,7 @@ final class AppModel {
         defer { isStarting = false }
         transcript = []
         speakerCorrections = .none
+        meStreamFailed = false
         translations = [:]
         failedTranslations = []
         recordingGeneration += 1
@@ -482,13 +491,21 @@ final class AppModel {
         let pauseGate: AudioGate = AudioGate(isOpen: true)
         let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
-        do {
-            let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
-            meAudio = gatedStream(audio: gatedStream(audio: aligned, gate: micGate), gate: pauseGate)
-            startedSpeakers.insert(.me)
-        } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        if isMicMuted {
+            // Yalnızca karşı taraf: mikrofon hiç açılmaz.
             meAudio = finishedStream()
+            micOpenedForRecording = false
+        } else {
+            do {
+                let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+                meAudio = gatedStream(audio: gatedStream(audio: aligned, gate: micGate), gate: pauseGate)
+                startedSpeakers.insert(.me)
+                micOpenedForRecording = true
+            } catch {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                meAudio = finishedStream()
+                micOpenedForRecording = false
+            }
         }
         let othersAudio: AsyncStream<[Float]>
         do {
@@ -545,6 +562,7 @@ final class AppModel {
         recordingStartedAt = startedAt
         session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
+        keepAwake(meetingID: directory.lastPathComponent)
         startCheckpoints(directory: directory, startedAt: startedAt)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
         saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
@@ -597,6 +615,10 @@ final class AppModel {
 
     /// "Sen"i (mikrofon) kapatır/açar; tercih saklanır. Hoparlörle dinlerken yankıyı kökten önler.
     func toggleMicrophone() {
+        // Mikrofonsuz başlayan kayıtta mikrofon açılamaz (akış kayıt başında kurulur); düğme de kapalıdır.
+        guard !isRecording || micOpenedForRecording else {
+            return
+        }
         isMicMuted.toggle()
         UserDefaults.standard.set(isMicMuted, forKey: SettingsKey.micMuted)
         session?.micGate.set(isOpen: !isMicMuted)
@@ -631,6 +653,8 @@ final class AppModel {
         case .speakersAssigned:
             break
         case .streamFailed(let speaker, let message):
+            // "Sen"in metni bu kayıtta eksik kalır; toplantı sonunda "Sen" kaydı da yazıya dökülür.
+            meStreamFailed = meStreamFailed || speaker == .me
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)"))
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
@@ -682,7 +706,8 @@ final class AppModel {
             liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false,
-            engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil
+            engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
+            meNeedsFinalPass: meStreamFailed ? true : nil
         )
     }
 
@@ -717,6 +742,7 @@ final class AppModel {
     private func process(record: MeetingRecord, directory: URL) {
         saveRecord(record: record, directory: directory)
         processingMeetingIDs.insert(record.id)
+        keepAwake(meetingID: record.id)
         // İlerleme kartı yalnızca kayıt sonrası işleme (adımlı) için; "Notu yenile" adım bildirmez, kart açmaz.
         processingSteps[record.id] = .convertingAudio
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
@@ -732,6 +758,23 @@ final class AppModel {
             saveRecord(record: result, directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
+            allowSleep(meetingID: record.id)
+        }
+    }
+
+    /// Toplantının kaydı ya da işlenmesi sürerken boşta uykuyu engeller (kapak kapatma yine uyutur).
+    private func keepAwake(meetingID: String) {
+        guard sleepActivities[meetingID] == nil else {
+            return
+        }
+        sleepActivities[meetingID] = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled], reason: "AI-Notepad toplantı kaydediyor ya da işliyor"
+        )
+    }
+
+    private func allowSleep(meetingID: String) {
+        if let activity = sleepActivities.removeValue(forKey: meetingID) {
+            ProcessInfo.processInfo.endActivity(activity)
         }
     }
 
@@ -836,8 +879,11 @@ final class AppModel {
             let state: SpeakerReviewState
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                let text: String = try await sendLLM(provider: provider, request: request)
-                state = .ready(review: try parseSpeakerReview(text: text, persons: persons, speakerNames: record.speakerNames), applied: 0)
+                let names: [Int: String] = record.speakerNames
+                let review: SpeakerReview = try await requestStructured(provider: provider, request: request) { (text: String) throws -> SpeakerReview in
+                    try parseSpeakerReview(text: text, persons: persons, speakerNames: names)
+                }
+                state = .ready(review: review, applied: 0)
             } catch {
                 // Hata gövdesi toplantı metni içerebilir: yalnızca özel (private) loglanır.
                 Self.logger.error("Konuşmacı incelemesi başarısız, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")

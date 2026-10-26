@@ -81,10 +81,13 @@ public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, window
 public func parseMissedSummary(text: String) throws -> MissedSummary {
     let raw: RawMissedSummary
     do {
-        raw = try JSONDecoder().decode(RawMissedSummary.self, from: Data(text.utf8))
+        raw = try JSONDecoder().decode(RawMissedSummary.self, from: Data(jsonBody(text: text).utf8))
     } catch {
         // Ayrıştırma ayrıntısı (eksik alan vb.) hata ayıklamada gerekir.
         throw LLMError.malformed(body: "\(error): \(text)")
+    }
+    guard !raw.konu.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw LLMError.empty
     }
     return MissedSummary(topic: raw.konu, decisions: raw.kararlar, askedOfYou: raw.sendenIstenenler)
 }
