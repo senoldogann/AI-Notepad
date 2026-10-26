@@ -48,6 +48,8 @@ enum SettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// "Sen" (mikrofon) kapalı mı.
     static let micMuted: String = "micMuted"
+    /// Toplantı özetinde sözlük açık mı.
+    static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
     static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.

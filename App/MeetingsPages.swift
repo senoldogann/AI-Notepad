@@ -42,7 +42,9 @@ struct MeetingsListPage: View {
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, DesignTokens.Spacing.s)
             if model.meetings.isEmpty {
-                ContentUnavailableView("Henüz toplantı yok", systemImage: "waveform", description: Text("Kaydı başlatınca toplantılar burada görünür."))
+                EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantılar burada görünür.")
+            } else if visible.isEmpty {
+                EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -294,11 +296,17 @@ struct MeetingDetailPage: View {
                         if let note = record.note {
                             SummaryTab(note: note, record: record, paragraphs: paragraphs)
                         } else {
-                            Text(isProcessing ? "Not hazırlanıyor…" : "Bu toplantının notu yok.")
-                                .foregroundStyle(.secondary)
+                            if isProcessing {
+                                EmptyStateCard(symbol: "hourglass", title: "Not hazırlanıyor…", message: "Bitince özet, kararlar ve görevler burada görünür.")
+                            } else {
+                                EmptyStateCard(symbol: "doc.text", title: "Bu toplantının notu yok", message: "\"Notu yenile\" ile not yeniden yazılabilir.")
+                            }
                         }
                     case .transcript:
                         SpeakerChips(model: model, record: record, isLocked: isLocked, onPlay: { (startSec: Double) -> Void in play(from: startSec) })
+                        if paragraphs.isEmpty {
+                            EmptyStateCard(symbol: "text.bubble", title: "Bu toplantının metni yok", message: "Kayıt sırasında konuşma algılanmadı.")
+                        }
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
                             canPlay: !playableAudio.isEmpty,
@@ -433,9 +441,10 @@ struct MeetingDetailPage: View {
         let terms: Int = record.note?.glossary.count ?? 0
         return (meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? [])
             + (record.language.map { [meetingLanguageName(language: $0)] } ?? [])
-            + (speakers > 0 ? [String(localized: "\(speakers) konuşmacı")] : [])
-            + (decisions > 0 ? [String(localized: "\(decisions) karar")] : [])
-            + (terms > 0 ? [String(localized: "\(terms) terim")] : [])
+            // İngilizcede tekil ayrı yazılır ("1 speaker").
+            + (speakers == 1 ? [String(localized: "1 konuşmacı")] : speakers > 1 ? [String(localized: "\(speakers) konuşmacı")] : [])
+            + (decisions == 1 ? [String(localized: "1 karar")] : decisions > 1 ? [String(localized: "\(decisions) karar")] : [])
+            + (terms == 1 ? [String(localized: "1 terim")] : terms > 1 ? [String(localized: "\(terms) terim")] : [])
     }
 
     /// Kapaktaki eylemler: "Dinle" ve "Notu yenile" görünür; dışa aktarma simge; yönetim "⋯" menüsünde. Dar panelde
@@ -667,21 +676,7 @@ private struct SummaryTab: View {
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
         return VStack(alignment: .leading, spacing: 30) {
             if mine.isEmpty {
-                HStack(spacing: 10) {
-                    Image(systemName: "checkmark")
-                        .appFont(size: 11, weight: .semibold)
-                        .foregroundStyle(personColor(person: 1))
-                        .frame(width: 26, height: 26)
-                        .background(Theme.card, in: Circle())
-                        .overlay(Circle().strokeBorder(Theme.line))
-                    Text("Bu toplantıda sana düşen görev yok.")
-                        .font(appearance.secondaryFont)
-                        .foregroundStyle(Theme.muted)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                EmptyStateCard(symbol: "checkmark.circle", title: "Bu toplantıda sana düşen görev yok", message: nil)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
@@ -735,26 +730,7 @@ private struct SummaryTab: View {
                 }
             }
             if !note.glossary.isEmpty {
-                section(title: "SÖZLÜK") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8, alignment: .top)], alignment: .leading, spacing: 8) {
-                        ForEach(Array(note.glossary.enumerated()), id: \.offset) { (item: (offset: Int, element: GlossaryEntry)) in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.element.term)
-                                    .font(appearance.font(size: appearance.textSize, weight: .semibold))
-                                Text(item.element.meaning)
-                                    .font(appearance.secondaryFont)
-                                    .foregroundStyle(Theme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
-                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line))
-                        }
-                    }
-                }
+                GlossarySection(glossary: note.glossary)
             }
         }
         // Özet sekmesi transkriptle aynı metin ayarlarını kullanır (Ayarlar › Görünüm); bölüm başlıkları kendi yazı tipinde.
@@ -833,6 +809,108 @@ private struct SummaryTab: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Sözlük: açılıp kapanan bölüm. Kapalıyken terim sayısı ve ilk terimler çip olarak; açıkken solda terim sağda anlamı
+/// olan, ince çizgilerle ayrılmış liste (dar panelde terim anlamının üstünde). Açık/kapalı tercihi hatırlanır.
+private struct GlossarySection: View {
+    let glossary: [GlossaryEntry]
+    @AppStorage(SettingsKey.glossaryExpanded) private var isExpanded: Bool = false
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.smooth(duration: 0.3)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("SÖZLÜK")
+                        .appFont(size: 11, weight: .semibold)
+                        .tracking(DesignTokens.labelTracking)
+                        .foregroundStyle(Theme.muted)
+                    Text("\(glossary.count) terim")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 1)
+                        .background(Theme.soft, in: Capsule())
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .appFont(size: 11, weight: .semibold)
+                        .foregroundStyle(Theme.muted)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.hoverPlain)
+            .hoverHint(isExpanded ? "Sözlüğü kapat" : "Sözlüğü aç", alignment: .trailing, edge: .bottom)
+            .accessibilityValue(isExpanded ? Text("Sözlük açık") : Text("Sözlük kapalı"))
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(glossary.enumerated()), id: \.offset) { (item: (offset: Int, element: GlossaryEntry)) in
+                        if item.offset > 0 {
+                            Rectangle().fill(Theme.line).frame(height: 1)
+                        }
+                        // Genişte yan yana, dar panelde alt alta.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                                term(entry: item.element).frame(width: 200, alignment: .leading)
+                                meaning(entry: item.element).frame(minWidth: 240, idealWidth: 240, maxWidth: .infinity, alignment: .leading)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                term(entry: item.element)
+                                meaning(entry: item.element)
+                            }
+                        }
+                        .padding(.vertical, 10)
+                    }
+                }
+                .textSelection(.enabled)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+                .cardSurface(cornerRadius: 14)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                // Kapalıyken ilk terimler; tıklayınca açılır.
+                FlowLayout(spacing: 6, lineSpacing: 6) {
+                    ForEach(glossary.prefix(6), id: \.term) { (entry: GlossaryEntry) in
+                        Text(entry.term)
+                            .appFont(size: 12, weight: .medium)
+                            .foregroundStyle(Theme.ink.opacity(0.8))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Theme.soft, in: Capsule())
+                    }
+                    if glossary.count > 6 {
+                        Text(verbatim: "+\(glossary.count - 6)")
+                            .appFont(size: 12, weight: .medium)
+                            .foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .overlay(Capsule().strokeBorder(Theme.line))
+                    }
+                }
+                .onTapGesture { withAnimation(.smooth(duration: 0.3)) { isExpanded = true } }
+                .pointerStyle(.link)
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func term(entry: GlossaryEntry) -> some View {
+        Text(entry.term)
+            .font(appearance.font(size: appearance.textSize, weight: .semibold))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func meaning(entry: GlossaryEntry) -> some View {
+        Text(entry.meaning)
+            .font(appearance.font(size: appearance.textSize, weight: .regular))
+            .foregroundStyle(Theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -1190,7 +1268,7 @@ private struct SpeakerReviewCard: View {
                 }
             }
             if !review.hasPendingSuggestions && review.suspicious.isEmpty && applied == 0 {
-                Text("Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.")
+                Label("Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.", systemImage: "lightbulb")
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(.secondary)
             }

@@ -772,11 +772,7 @@ private struct RecentMeetingCards: View {
                 }
             }
             if model.meetings.isEmpty {
-                Text("Henüz toplantı yok. Kaydı başlatınca toplantıların ve notların burada görünür.")
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(DesignTokens.Spacing.l)
-                    .cardSurface(cornerRadius: 16)
+                EmptyStateCard(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantıların ve notların burada görünür.")
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
                     ForEach(model.meetings.prefix(6)) { (record: MeetingRecord) in
@@ -849,11 +845,7 @@ private struct TasksPage: View {
                     .appFont(size: 28, weight: .regular)
                     .tracking(-0.4)
                 if groups.isEmpty {
-                    Text("Henüz sana düşen görev yok. Toplantı notlarında senin adına yazılan işler burada toplanır.")
-                        .foregroundStyle(Theme.muted)
-                        .padding(DesignTokens.Spacing.l)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .cardSurface(cornerRadius: 16)
+                    EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
                 }
                 ForEach(groups, id: \.record.id) { (group: (record: MeetingRecord, tasks: [NoteTask])) in
                     VStack(alignment: .leading, spacing: 6) {
