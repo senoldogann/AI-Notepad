@@ -55,23 +55,58 @@ public struct LiveViewState: Equatable, Sendable {
     public let assistantCard: AssistantCard?
     /// En son en fazla 3 hata.
     public let errors: [String]
-    /// Adada gösterilen son "Diğerleri" bloğu: Türkçesi gelenler Türkçe, bekleyenler orijinal (soluk);
-    /// en yeni kelimeler görünsün diye başından kısaltılmış.
-    public let latestOthersParts: [DisplayPart]
+    /// Adada gösterilen son konuşma (konuşmacı, Türkçesi ve canlı orijinali); konuşma yoksa nil.
+    public let islandLine: IslandLine?
+    /// Transkriptteki kişi numaraları (konuşmacı düzeltme menüsü için).
+    public let persons: [Int]
     public let isIslandVisible: Bool
 
     public var isRecording: Bool {
         phase == .recording
     }
 
-    /// Adadaki metnin düz hali (erişilebilirlik ve testler için); konuşma yoksa nil.
+    /// Adadaki ana metin (erişilebilirlik ve testler için); konuşma yoksa nil.
     public var latestOthersSentence: String? {
-        latestOthersParts.isEmpty ? nil : latestOthersParts.map(\.text).joined(separator: " ")
+        islandLine?.primary
     }
 }
 
-/// Adada gösterilecek en fazla karakter.
-let islandSentenceLimit: Int = 140
+/// Adanın açık hâlindeki satırlar: kim konuşuyor, ne dedi (Türkçesi), şu an ne diyor (orijinal, canlı).
+public struct IslandLine: Sendable, Equatable {
+    public let speaker: Speaker
+    public let person: Int?
+    /// Ana satır: son cümlelerin Türkçesi; çeviri yoksa (ya da "Sadece orijinal"de) orijinali.
+    public let primary: String
+    /// Ana satır henüz çeviri değil (çeviri bekleniyor): biraz soluk gösterilir.
+    public let primaryIsOriginal: Bool
+    /// Alt satır: çevirisi gelmemiş en yeni orijinal metin (canlı); "İki dil"de çevrilenlerin orijinali.
+    public let secondary: String?
+}
+
+/// Adada en fazla bu kadar son bölüm birleştirilir (cümle bağlamı yetsin, ada dolmasın).
+let islandSegmentCount: Int = 2
+
+/// Son "Diğerleri" bloğundan ada satırlarını üretir. Saf fonksiyondur.
+public func makeIslandLine(block: SpeakerBlock, translations: [SegmentID: String], displayMode: DisplayMode) -> IslandLine? {
+    let spoken: [LiveSegment] = block.segments.filter { $0.failureMessage == nil && !$0.text.isEmpty }
+    guard !spoken.isEmpty else {
+        return nil
+    }
+    let recentOriginal: String = spoken.suffix(islandSegmentCount).map(\.text).joined(separator: " ")
+    guard displayMode.needsLiveTranslation, let lastTranslated = spoken.lastIndex(where: { translations[$0.id] != nil }) else {
+        return IslandLine(speaker: block.speaker, person: block.person, primary: recentOriginal, primaryIsOriginal: displayMode.needsLiveTranslation, secondary: nil)
+    }
+    let translated: [LiveSegment] = Array(spoken[...lastTranslated].filter { translations[$0.id] != nil }.suffix(islandSegmentCount))
+    let pending: [LiveSegment] = Array(spoken[(lastTranslated + 1)...])
+    let secondary: String? = pending.isEmpty
+        ? (displayMode == .bilingual ? translated.map(\.text).joined(separator: " ") : nil)
+        : pending.map(\.text).joined(separator: " ")
+    return IslandLine(
+        speaker: block.speaker, person: block.person,
+        primary: translated.compactMap { translations[$0.id] }.joined(separator: " "),
+        primaryIsOriginal: false, secondary: secondary
+    )
+}
 
 /// Uygulama durumundan görünüm durumunu üretir. Saf fonksiyondur.
 public func makeLiveViewState(
@@ -90,13 +125,9 @@ public func makeLiveViewState(
     errors: [String]
 ) -> LiveViewState {
     let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
-    // Son "Diğerleri" bloğunun tamamı: Türkçesi gelenler Türkçe (adada en hızlı anlam lazım), çevirisi
-    // beklenen en yeni metin orijinal haliyle; böylece yeni konuşma çeviri gelene kadar da görünür.
-    let latest: [DisplayPart] = blocks
+    let island: IslandLine? = blocks
         .last { (block: SpeakerBlock) -> Bool in block.speaker == .others }
-        .map { (block: SpeakerBlock) -> [DisplayPart] in
-            truncatePartsFromStart(parts: islandParts(block: block, translations: translations, displayMode: displayMode), maxCharacters: islandSentenceLimit)
-        } ?? []
+        .flatMap { (block: SpeakerBlock) -> IslandLine? in makeIslandLine(block: block, translations: translations, displayMode: displayMode) }
     return LiveViewState(
         phase: phase,
         isPaused: isPaused,
@@ -111,27 +142,10 @@ public func makeLiveViewState(
         displayMode: displayMode,
         assistantCard: assistantCard,
         errors: Array(errors.suffix(3)),
-        latestOthersParts: latest,
+        islandLine: island,
+        persons: knownPersons(transcript: transcript),
         isIslandVisible: phase != .idle
     )
-}
-
-/// Parçaları sondan başa toplam `maxCharacters` karaktere sığdırır; sığmayan ilk parça başından kısaltılır,
-/// daha eskiler atılır. Saf fonksiyondur.
-public func truncatePartsFromStart(parts: [DisplayPart], maxCharacters: Int) -> [DisplayPart] {
-    var remaining: Int = maxCharacters
-    var kept: [DisplayPart] = []
-    for part in parts.reversed() where remaining > 0 {
-        if part.text.count <= remaining {
-            kept.insert(part, at: 0)
-            // Parçalar arasındaki boşluk da sayılır.
-            remaining -= part.text.count + 1
-        } else {
-            kept.insert(DisplayPart(text: truncateFromStart(text: part.text, maxCharacters: remaining), isTranslated: part.isTranslated, isFinal: part.isFinal), at: 0)
-            remaining = 0
-        }
-    }
-    return kept
 }
 
 /// Bloktaki çevirisi başarısız bölümler (sırayla). Saf fonksiyondur.
@@ -161,24 +175,6 @@ public struct DisplayPart: Sendable, Equatable {
         self.isTranslated = isTranslated
         self.isFinal = isFinal
     }
-}
-
-/// Adadaki parçalar: "Sadece orijinal"de orijinal metin, diğer görünümlerde Türkçesi gelenler Türkçe. Saf fonksiyondur.
-public func islandParts(block: SpeakerBlock, translations: [SegmentID: String], displayMode: DisplayMode) -> [DisplayPart] {
-    switch displayMode {
-    case .originalOnly:
-        block.segments
-            .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
-            .map { (segment: LiveSegment) -> DisplayPart in DisplayPart(text: segment.text, isTranslated: false, isFinal: segment.isFinal) }
-    case .bilingual, .turkishOnly:
-        turkishOnlyParts(block: block, translations: translations)
-    }
-}
-
-/// Adada parça soluk mu: kesinleşmemiş metin her zaman; çeviri bekleyen orijinal yalnızca çeviri gösteren görünümlerde.
-/// Saf fonksiyondur.
-public func isDimmedIslandPart(part: DisplayPart, displayMode: DisplayMode) -> Bool {
-    !part.isFinal || (displayMode.needsLiveTranslation && !part.isTranslated)
 }
 
 /// "Sadece Türkçe": çevirisi olan bölüm Türkçe, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;

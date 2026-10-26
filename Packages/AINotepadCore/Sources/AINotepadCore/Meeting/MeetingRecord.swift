@@ -10,6 +10,19 @@ public enum MeetingStatus: String, Sendable, Codable {
     case interrupted
 }
 
+/// Zamanı belli bir kelime (son geçişten); zamanlar kaydın başından itibaren saniye.
+public struct StoredWord: Sendable, Equatable, Codable {
+    public let text: String
+    public let startSec: Double
+    public let endSec: Double
+
+    public init(text: String, startSec: Double, endSec: Double) {
+        self.text = text
+        self.startSec = startSec
+        self.endSec = endSec
+    }
+}
+
 /// Diskte saklanan bölüm. `key` canlı bölüm kimliğidir ("others-3"); son geçişte "final-12".
 public struct StoredSegment: Sendable, Equatable, Codable {
     public let key: String
@@ -18,14 +31,22 @@ public struct StoredSegment: Sendable, Equatable, Codable {
     public let startSec: Double
     public let endSec: Double
     public let text: String
+    /// Son geçişin kelime zamanları (çalarken kelime vurgusu); canlı bölümlerde ve eski kayıtlarda nil.
+    public let words: [StoredWord]?
 
-    public init(key: String, speaker: Speaker, person: Int?, startSec: Double, endSec: Double, text: String) {
+    public init(key: String, speaker: Speaker, person: Int?, startSec: Double, endSec: Double, text: String, words: [StoredWord]?) {
         self.key = key
         self.speaker = speaker
         self.person = person
         self.startSec = startSec
         self.endSec = endSec
         self.text = text
+        self.words = words
+    }
+
+    /// Kişisi değişmiş kopya (konuşmacı birleştirme/düzeltme).
+    public func with(person newPerson: Int?) -> StoredSegment {
+        StoredSegment(key: key, speaker: speaker, person: newPerson, startSec: startSec, endSec: endSec, text: text, words: words)
     }
 }
 
@@ -163,6 +184,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Canlı bölümleri değişmiş kopya.
+    public func with(liveSegments newSegments: [StoredSegment]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.liveSegments = newSegments
+        return copy
+    }
+
     /// Notu değişmiş kopya; başlık nottan gelir.
     public func with(note newNote: MeetingNote) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -191,7 +219,7 @@ public func storedSegments(transcript: [LiveSegment]) -> [StoredSegment] {
         .map { (segment: LiveSegment) -> StoredSegment in
             StoredSegment(
                 key: segmentKey(id: segment.id), speaker: segment.id.speaker, person: segment.person,
-                startSec: segment.startSec, endSec: segment.endSec, text: segment.text
+                startSec: segment.startSec, endSec: segment.endSec, text: segment.text, words: nil
             )
         }
 }

@@ -11,7 +11,7 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
         liveSegments: [],
         finalSegments: (0..<paragraphCount).map { (index: Int) -> StoredSegment in
             StoredSegment(key: "final-\(index)", speaker: .others, person: index % 2 + 1, startSec: Double(index * 10), endSec: Double(index * 10 + 8),
-                          text: "Seuraavalla viikolla meidän pitää palauttaa raportti ja sopia esityksestä numero \(index).")
+                          text: "Seuraavalla viikolla meidän pitää palauttaa raportti ja sopia esityksestä numero \(index).", words: nil)
         },
         translations: ["final-0": "Gelecek hafta raporu teslim etmeliyiz."],
         speakerNames: [1: "Aino"],

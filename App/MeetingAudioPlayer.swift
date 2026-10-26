@@ -13,97 +13,133 @@ func meetingAudioURL(directory: URL, speaker: Speaker) -> URL? {
         .first { FileManager.default.fileExists(atPath: $0.path) }
 }
 
-/// Toplantılar penceresindeki ses çalar: satırın anından çalar, duraklatır, konum değiştirir.
+/// Seçilebilen çalma hızları (sırayla döner).
+let playbackRates: [Float] = [1, 1.25, 1.5, 2, 0.75]
+
+/// Toplantı oynatıcısı: "Sen" ve "Diğerleri" kayıtlarını aynı zaman çizgisinde birlikte çalar (kayıtlar başlangıca
+/// hizalı), duraklatır, sarar, hız değiştirir. Konum saniyede 10 kez güncellenir (kelime vurgusu için).
 @MainActor
 @Observable
 final class MeetingAudioPlayer {
-    /// Çalan toplantı ve konuşmacı kaydı; çalar boşsa nil.
+    /// Çalan toplantı; çalar boşsa nil.
     private(set) var meetingID: String?
-    private(set) var speaker: Speaker?
     private(set) var isPlaying: Bool = false
     private(set) var currentTime: Double = 0
     private(set) var duration: Double = 0
+    private(set) var rate: Float = 1
     private(set) var errorMessage: String?
 
-    @ObservationIgnored private var player: AVAudioPlayer?
+    @ObservationIgnored private var players: [AVAudioPlayer] = []
+    @ObservationIgnored private var loadedURLs: [URL] = []
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
-    /// Dosyayı (gerekirse) açar ve `startSec`'ten biraz önce çalmaya başlar (cümlenin başı kaçmasın).
-    func play(url: URL, meetingID: String, speaker: Speaker, startSec: Double) {
-        do {
-            if player?.url != url {
-                stop()
-                let opened: AVAudioPlayer = try AVAudioPlayer(contentsOf: url)
-                opened.prepareToPlay()
-                player = opened
-                duration = opened.duration
-            }
-            guard let player else {
+    /// Kayıtları (gerekirse) açar ve `startSec`'ten biraz önce birlikte çalmaya başlar (cümlenin başı kaçmasın).
+    func play(meetingID: String, urls: [URL], startSec: Double) {
+        if loadedURLs != urls || self.meetingID != meetingID {
+            stop()
+            do {
+                players = try urls.map { (url: URL) -> AVAudioPlayer in
+                    let player: AVAudioPlayer = try AVAudioPlayer(contentsOf: url)
+                    player.enableRate = true
+                    player.prepareToPlay()
+                    return player
+                }
+            } catch {
+                playerLogger.error("Ses açılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                errorMessage = userFacingMessage(error: StorageError.readFailed(path: urls.first?.path ?? meetingID, reason: error.localizedDescription))
+                players = []
                 return
             }
+            loadedURLs = urls
             self.meetingID = meetingID
-            self.speaker = speaker
-            errorMessage = nil
-            player.currentTime = min(max(0, startSec - 0.3), duration)
-            player.play()
-            isPlaying = true
-            startTicker()
-        } catch {
-            playerLogger.error("Ses açılamadı, dosya: \(url.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            errorMessage = userFacingMessage(error: StorageError.readFailed(path: url.path, reason: error.localizedDescription))
+            duration = players.map(\.duration).max() ?? 0
         }
+        errorMessage = nil
+        start(at: max(0, startSec - 0.3))
     }
 
     func togglePause() {
-        guard let player else {
-            return
-        }
-        if player.isPlaying {
-            player.pause()
+        if isPlaying {
+            players.forEach { $0.pause() }
             isPlaying = false
         } else {
-            player.play()
-            isPlaying = true
-            startTicker()
+            // Sona gelmişse baştan çalar.
+            start(at: currentTime >= duration - 0.2 ? 0 : currentTime)
         }
     }
 
+    /// Konuma gider; çalıyorsa oradan sürer.
     func seek(to seconds: Double) {
-        guard let player else {
-            return
+        let target: Double = min(max(0, seconds), duration)
+        if isPlaying {
+            start(at: target)
+        } else {
+            players.forEach { $0.currentTime = target }
+            currentTime = target
         }
-        player.currentTime = min(max(0, seconds), duration)
-        currentTime = player.currentTime
     }
 
-    /// Çalmayı bitirir ve dosyayı bırakır (toplantı değişince ya da ses silinince).
+    /// İleri/geri sarar (ör. ±10 sn).
+    func skip(by seconds: Double) {
+        seek(to: currentTime + seconds)
+    }
+
+    /// Hızı sıradaki değere geçirir.
+    func cycleRate() {
+        let index: Int = playbackRates.firstIndex(of: rate) ?? 0
+        rate = playbackRates[(index + 1) % playbackRates.count]
+        players.forEach { $0.rate = rate }
+    }
+
+    /// Çalmayı bitirir ve dosyaları bırakır (toplantı değişince ya da ses silinince).
     func stop() {
         ticker?.cancel()
         ticker = nil
-        player?.stop()
-        player = nil
+        players.forEach { $0.stop() }
+        players = []
+        loadedURLs = []
         meetingID = nil
-        speaker = nil
         isPlaying = false
         currentTime = 0
         duration = 0
     }
 
-    /// Konumu çalarken dört kez/sn günceller; çalma bitince durur.
+    /// Tüm kayıtları aynı konumdan, aynı anda başlatır (kayıtlar arası kayma olmasın).
+    private func start(at seconds: Double) {
+        guard let reference = players.first else {
+            return
+        }
+        let startAt: TimeInterval = reference.deviceCurrentTime + 0.05
+        for player in players {
+            player.pause()
+            player.currentTime = min(seconds, player.duration)
+            player.rate = rate
+            if seconds < player.duration {
+                player.play(atTime: startAt)
+            }
+        }
+        currentTime = seconds
+        isPlaying = true
+        startTicker()
+    }
+
+    /// Konumu çalarken saniyede 10 kez günceller; tüm kayıtlar bitince durur.
     private func startTicker() {
         ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, let player = self.player else {
+                guard let self else {
                     return
                 }
-                self.currentTime = player.currentTime
-                if !player.isPlaying {
+                let playing: [AVAudioPlayer] = self.players.filter(\.isPlaying)
+                if let position = playing.map(\.currentTime).max() {
+                    self.currentTime = position
+                } else {
                     self.isPlaying = false
                     return
                 }
                 do {
-                    try await Task.sleep(for: .milliseconds(250))
+                    try await Task.sleep(for: .milliseconds(100))
                 } catch {
                     return
                 }

@@ -6,7 +6,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
     MeetingRecord(
         id: id, title: "Palaveri", startedAt: startedAt, endedAt: nil, language: .finnish, status: status,
         failureMessage: nil,
-        liveSegments: [StoredSegment(key: "others-0", speaker: .others, person: 1, startSec: 0, endSec: 2, text: "Hei")],
+        liveSegments: [StoredSegment(key: "others-0", speaker: .others, person: 1, startSec: 0, endSec: 2, text: "Hei", words: nil)],
         finalSegments: [], translations: ["others-0": "Merhaba"], speakerNames: [1: "Aino"], note: nil, audioDeleted: audioDeleted, engine: .cloud, notice: nil
     )
 }
@@ -65,7 +65,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             LiveSegment(id: SegmentID(speaker: .me, index: 0), startSec: 3, endSec: 4, text: "kesk", isFinal: false, failureMessage: nil, person: nil),
             LiveSegment(id: SegmentID(speaker: .others, index: 4), startSec: 5, endSec: 6, text: "", isFinal: true, failureMessage: "x", person: nil),
         ]
-        #expect(storedSegments(transcript: transcript) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei")])
+        #expect(storedSegments(transcript: transcript) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei", words: nil)])
     }
 }
 
@@ -74,7 +74,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         let plain: MeetingRecord = record(id: "a", startedAt: Date(), status: .done, audioDeleted: false)
         let noted: MeetingRecord = MeetingRecord(
             id: "b", title: "Proje", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
-            liveSegments: [], finalSegments: [StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "Raportti valmis")],
+            liveSegments: [], finalSegments: [StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "Raportti valmis", words: nil)],
             translations: [:], speakerNames: [:],
             note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false, engine: .cloud, notice: nil
         )

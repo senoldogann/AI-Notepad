@@ -50,9 +50,9 @@ func timed(_ speaker: Speaker, _ index: Int, _ start: Double, _ end: Double, _ t
 
     // Saklanan toplantıda da ("Sen" canlı, "Diğerleri" son geçiş) aynı süzme yapılır.
     @Test func storedSegmentsAreFilteredToo() {
-        let others: StoredSegment = StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään")
-        let echo: StoredSegment = StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään")
-        let mine: StoredSegment = StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 20, endSec: 22, text: "Minulla on kysymys raportista")
+        let others: StoredSegment = StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään", words: nil)
+        let echo: StoredSegment = StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään", words: nil)
+        let mine: StoredSegment = StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 20, endSec: 22, text: "Minulla on kysymys raportista", words: nil)
         #expect(suppressStoredEchoes(segments: [others, echo, mine]) == [others, mine])
     }
 

@@ -1,10 +1,10 @@
 import AINotepadCore
 import SwiftUI
 
-/// Adanın açılma payı (tasarım belgesi §4.3).
-public let islandExpansion: CGFloat = 64
-/// Ada kanadının genişliği.
-public let islandWing: CGFloat = 120
+/// Adanın açılma payı: konuşmacı satırı, iki satır Türkçe ve bir satır orijinal (tasarım belgesi §4.3).
+public let islandExpansion: CGFloat = 88
+/// Ada kanadının genişliği (açıkken metin satırı bu genişlikte).
+public let islandWing: CGFloat = 150
 
 /// Çentiğe yapışık siyah ada (çentiksiz ekranda hap). Kapalıyken kanatlarda süre ve dil; açıkken son
 /// "Diğerleri" cümlesi. Pencere açılma payını içerir; saydam kısım tıklamaları geçirir.
@@ -67,26 +67,13 @@ public struct IslandView: View {
             .padding(.horizontal, DesignTokens.Spacing.l)
             .frame(height: layout.collapsedHeight)
             if isExpanded {
-                VStack(alignment: .leading, spacing: 2) {
-                    // Cümle hep görünür; hata varsa altında tek satır kırmızı. En yeni kelimeler için baştan kısaltılır;
-                    // çevirisi beklenen yeni metin soluk.
-                    latestText
-                        .font(.system(size: 13))
-                        .lineLimit(state.errors.isEmpty ? 2 : 1)
-                        .truncationMode(.head)
-                    if let error = state.errors.last {
-                        Text(error)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.red)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, DesignTokens.Spacing.l)
-                .padding(.bottom, DesignTokens.Spacing.m)
-                .frame(height: islandExpansion, alignment: .top)
-                .transition(.opacity)
+                expandedContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DesignTokens.Spacing.l)
+                    .padding(.top, 2)
+                    .padding(.bottom, DesignTokens.Spacing.m)
+                    .frame(height: islandExpansion, alignment: .top)
+                    .transition(.opacity)
             }
         }
         .frame(width: layout.frame.width, height: isExpanded ? layout.collapsedHeight + islandExpansion : layout.collapsedHeight, alignment: .top)
@@ -113,18 +100,54 @@ public struct IslandView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isExpanded)
     }
 
-    /// Son "Diğerleri" metni: Türkçe parçalar parlak, çevirisi beklenen orijinal parçalar soluk.
-    private var latestText: Text {
-        guard !state.latestOthersParts.isEmpty else {
-            return Text("Henüz konuşma yok").foregroundColor(.white.opacity(0.5))
-        }
-        return state.latestOthersParts
-            .enumerated()
-            .reduce(Text("")) { (combined: Text, item: (offset: Int, element: DisplayPart)) -> Text in
-                let piece: Text = Text((item.offset == 0 ? "" : " ") + item.element.text)
-                    .foregroundColor(.white.opacity(isDimmedIslandPart(part: item.element, displayMode: state.displayMode) ? 0.55 : 0.95))
-                return Text("\(combined)\(piece)")
+    /// Açık ada: kim konuşuyor (renkli nokta + ad), ne dedi (Türkçesi, iki satır), şu an ne diyor (orijinal, tek
+    /// satır, soluk). En yeni kelimeler görünsün diye satırlar baştan kısaltılır. Hata varsa orijinal yerine hata satırı.
+    @ViewBuilder
+    private var expandedContent: some View {
+        if let line = state.islandLine {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(line.person.map { personColor(person: $0) } ?? Color.white.opacity(0.6))
+                        .frame(width: 6, height: 6)
+                    Text(speakerLabel(speaker: line.speaker, person: line.person).uppercased(with: interfaceLocale()))
+                        .font(DesignTokens.labelFont)
+                        .tracking(DesignTokens.labelTracking)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                Text(line.primary)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(line.primaryIsOriginal ? 0.75 : 0.98))
+                    .lineLimit(2)
+                    .truncationMode(.head)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = state.errors.last {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else if let secondary = line.secondary {
+                    Text(secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Henüz konuşma yok")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.5))
+                if let error = state.errors.last {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+            }
+        }
     }
 
     private var accessibilitySummary: String {

@@ -90,5 +90,12 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Konuşma akarken transkript kendiliğinden en alta iniyor ve altta boşluk var; yukarı kaydırınca yerinde kalıyor, "Yeni metin" düğmesi çıkıyor.
 - [ ] Panel başlığındaki ve sayfalardaki düğmelerin üzerine gelince açıklama çıkıyor (uygulama arka plandayken de).
 
+## Ada, toplantı sayfası, oynatıcı, konuşmacı düzeltme (aşama 6d)
+- [ ] Ada açılınca: konuşmacı adı, son cümlenin Türkçesi büyük, altında konuşulan orijinal küçük; "…" ile parçalanmış metin yok.
+- [ ] Kayıtta bir "Konuşmacı 2" bloğunun etiketine tıkla → "Konuşmacı 1"e ata: blok anında Konuşmacı 1; sonraki ayırma pencereleri bunu bozmuyor. "Tümünü birleştir" geçmiş ve yeni bölümleri birleştiriyor.
+- [ ] Toplantı sayfasında Özet / Transkript sekmeleri; not varsa Özet'te açılıyor.
+- [ ] "Dinle": iki taraf birlikte duyuluyor; alttaki kartta konuşmacı, konum, ±10 sn, hız çalışıyor; transkriptte söylenen kelime renkleniyor ve çalan paragraf ortaya kayıyor; paragrafa tıklayınca oradan çalıyor.
+- [ ] Toplantı sayfasında konuşmacı satırındaki birleştir simgesiyle iki konuşmacı birleşiyor; ad taşınıyor.
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

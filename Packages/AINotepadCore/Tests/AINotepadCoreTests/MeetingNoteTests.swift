@@ -3,7 +3,7 @@ import Testing
 @testable import AINotepadCore
 
 func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, _ text: String) -> StoredSegment {
-    StoredSegment(key: key, speaker: speaker, person: person, startSec: start, endSec: start + 2, text: text)
+    StoredSegment(key: key, speaker: speaker, person: person, startSec: start, endSec: start + 2, text: text, words: nil)
 }
 
 @Suite struct MeetingNoteTests {
@@ -81,14 +81,14 @@ extension CloudTests {
         let record: MeetingRecord = MeetingRecord(
             id: "x", title: "T", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
             liveSegments: [
-                StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään"),
-                StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 90, endSec: 92, text: "Minulla on kysymys raportista"),
+                StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään", words: nil),
+                StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 90, endSec: 92, text: "Minulla on kysymys raportista", words: nil),
             ],
             finalSegments: [
-                StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään"),
-                StoredSegment(key: "final-1", speaker: .others, person: 1, startSec: 3, endSec: 7, text: "aiheena säästöt."),
-                StoredSegment(key: "final-2", speaker: .others, person: 1, startSec: 65, endSec: 70, text: "Seuraava dia."),
-                StoredSegment(key: "final-3", speaker: .others, person: 2, startSec: 80, endSec: 85, text: "Kiitos."),
+                StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään", words: nil),
+                StoredSegment(key: "final-1", speaker: .others, person: 1, startSec: 3, endSec: 7, text: "aiheena säästöt.", words: nil),
+                StoredSegment(key: "final-2", speaker: .others, person: 1, startSec: 65, endSec: 70, text: "Seuraava dia.", words: nil),
+                StoredSegment(key: "final-3", speaker: .others, person: 2, startSec: 80, endSec: 85, text: "Kiitos.", words: nil),
             ],
             translations: ["final-0": "Basın toplantısından.", "final-1": "Konu tasarruflar."],
             speakerNames: [2: "Riikka"], note: nil, audioDeleted: false, engine: .cloud, notice: nil

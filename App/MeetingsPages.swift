@@ -114,6 +114,12 @@ private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
 
 // MARK: Ayrıntı
 
+/// Toplantı sayfasının sekmeleri.
+private enum MeetingTab {
+    case summary
+    case transcript
+}
+
 /// Dışa aktarmanın sonucu (sayfada satır içinde gösterilir; açılır pencere yok).
 private enum ExportStatus: Equatable {
     case none
@@ -129,6 +135,7 @@ struct MeetingDetailPage: View {
     let player: MeetingAudioPlayer
     let record: MeetingRecord
     @State private var export: ExportStatus = .none
+    @State private var tab: MeetingTab = .summary
 
     private var isProcessing: Bool {
         model.processingMeetingIDs.contains(record.id)
@@ -140,44 +147,47 @@ struct MeetingDetailPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
-                header
-                if isProcessing || record.status == .processing {
-                    HStack(spacing: DesignTokens.Spacing.s) {
-                        ProgressView().controlSize(.small)
-                        Text(record.engine == .local
-                            ? "Konuşmacılar Mac'te ayrılıyor ve not hazırlanıyor…"
-                            : "Kaydın tamamı işleniyor ve not hazırlanıyor…")
-                            .foregroundStyle(.secondary)
+        // Paragraflar burada bir kez hesaplanır: çalma sırasında (saniyede 10 güncelleme) yeniden süzülmez.
+        let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
+        ScrollViewReader { (proxy: ScrollViewProxy) in
+            ScrollView {
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
+                    header
+                    statusLines
+                    Picker("Bölüm", selection: $tab) {
+                        Text("Özet").tag(MeetingTab.summary)
+                        Text("Transkript").tag(MeetingTab.transcript)
                     }
-                    .font(.callout)
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    switch tab {
+                    case .summary:
+                        if let note = record.note {
+                            NoteSections(note: note)
+                        } else {
+                            Text(isProcessing ? "Not hazırlanıyor…" : "Bu toplantının notu yok.")
+                                .foregroundStyle(.secondary)
+                        }
+                    case .transcript:
+                        SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
+                        TranscriptSection(
+                            record: record, paragraphs: paragraphs, player: player, proxy: proxy,
+                            onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                        )
+                    }
                 }
-                if let message = record.failureMessage {
-                    Text(message)
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-                if let notice = record.notice {
-                    Label(notice, systemImage: "info.circle")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                if let note = record.note {
-                    NoteSections(note: note)
-                }
-                SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
-                // Paragraflar burada bir kez hesaplanır: çalma sırasında (saniyede 4 güncelleme) yeniden süzülmez.
-                TranscriptSection(record: record, paragraphs: transcriptParagraphs(record: record), player: player, audioURLs: playableAudio)
+                .padding(DesignTokens.Spacing.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(DesignTokens.Spacing.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .safeAreaInset(edge: .bottom) {
             if player.meetingID == record.id {
-                PlayerBar(player: player, speakerName: player.speaker.map { speakerLabel(speaker: $0, person: nil) } ?? "")
+                NowPlayingBar(player: player, paragraphs: paragraphs, speakerNames: record.speakerNames)
             }
+        }
+        .onAppear {
+            // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
+            tab = record.note == nil ? .transcript : .summary
         }
         .onDisappear { player.stop() }
         // Saklama süresi sesi bu sayfa açıkken silebilir.
@@ -186,6 +196,42 @@ struct MeetingDetailPage: View {
                 player.stop()
             }
         }
+    }
+
+    /// İşleniyor, hata ve uyarı satırları.
+    @ViewBuilder
+    private var statusLines: some View {
+        if isProcessing || record.status == .processing {
+            HStack(spacing: DesignTokens.Spacing.s) {
+                ProgressView().controlSize(.small)
+                Text(record.engine == .local
+                    ? "Konuşmacılar Mac'te ayrılıyor ve not hazırlanıyor…"
+                    : "Kaydın tamamı işleniyor ve not hazırlanıyor…")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.callout)
+        }
+        if let message = record.failureMessage {
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+        }
+        if let notice = record.notice {
+            Label(notice, systemImage: "info.circle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Toplantıyı verilen andan iki kayıt birlikte çalar ve transkripte geçer (kelimeler vurgulansın).
+    private func play(from startSec: Double) {
+        let urls: [URL] = playableAudio
+        guard !urls.isEmpty else {
+            return
+        }
+        tab = .transcript
+        player.play(meetingID: record.id, urls: urls, startSec: startSec)
     }
 
     private var header: some View {
@@ -205,6 +251,16 @@ struct MeetingDetailPage: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: DesignTokens.Spacing.s) {
+                if !playableAudio.isEmpty {
+                    Button("Dinle", systemImage: "play.fill") {
+                        if player.meetingID == record.id {
+                            player.togglePause()
+                        } else {
+                            play(from: 0)
+                        }
+                    }
+                    .help("Toplantıyı baştan dinle; söylenen kelime transkriptte renklenir")
+                }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
                     .help("Temiz bir PDF olarak İndirilenler'e kaydet")
                 Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
@@ -298,19 +354,18 @@ struct MeetingDetailPage: View {
         }
     }
 
-    /// Çalınabilir kayıtlar: ses silinmediyse ve toplantı kayıtta/işlemede değilse (dosya yazılıyor olabilir).
-    private var playableAudio: [Speaker: URL] {
+    /// Çalınabilir kayıtlar ("Sen" ve "Diğerleri"): ses silinmediyse ve toplantı kayıtta/işlemede değilse (dosya
+    /// yazılıyor olabilir).
+    private var playableAudio: [URL] {
         guard !record.audioDeleted, !isLocked else {
-            return [:]
+            return []
         }
         do {
             let directory: URL = try model.sessionDirectory(id: record.id)
-            return [Speaker.me, Speaker.others].reduce(into: [Speaker: URL]()) { (urls: inout [Speaker: URL], speaker: Speaker) -> Void in
-                urls[speaker] = meetingAudioURL(directory: directory, speaker: speaker)
-            }
+            return [Speaker.others, Speaker.me].compactMap { meetingAudioURL(directory: directory, speaker: $0) }
         } catch {
             meetingsLogger.error("Toplantı klasörü alınamadı, kimlik: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            return [:]
+            return []
         }
     }
 }
@@ -398,7 +453,7 @@ private struct TaskRow: View {
     }
 }
 
-/// "Konuşmacı N" etiketlerine ad verme.
+/// "Konuşmacı N" etiketlerine ad verme ve iki konuşmacıyı birleştirme (ayırma aynı kişiyi ikiye böldüyse).
 private struct SpeakerNamesSection: View {
     let model: AppModel
     let record: MeetingRecord
@@ -414,8 +469,27 @@ private struct SpeakerNamesSection: View {
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
                 ForEach(persons, id: \.self) { (person: Int) in
-                    SpeakerNameField(model: model, meetingID: record.id, person: person, current: record.speakerNames[person] ?? "")
-                        .disabled(isLocked)
+                    HStack(spacing: DesignTokens.Spacing.s) {
+                        SpeakerNameField(model: model, meetingID: record.id, person: person, current: record.speakerNames[person] ?? "")
+                        if persons.count > 1 {
+                            Menu {
+                                ForEach(persons.filter { $0 != person }, id: \.self) { (target: Int) in
+                                    Button(record.speakerNames[target].map { "\($0) (\(speakerLabel(speaker: .others, person: target)))" } ?? speakerLabel(speaker: .others, person: target)) {
+                                        model.mergeSpeakers(meetingID: record.id, from: person, into: target)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "arrow.triangle.merge")
+                            }
+                            .menuStyle(.button)
+                            .buttonStyle(.plain)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .foregroundStyle(.secondary)
+                            .hoverHint("Başka konuşmacıyla birleştir", alignment: .trailing, edge: .bottom)
+                        }
+                    }
+                    .disabled(isLocked)
                 }
             }
         }
@@ -442,72 +516,88 @@ private struct SpeakerNameField: View {
 }
 
 /// Paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, yankı süzülmüş); altında Türkçesi.
-/// Zaman damgasına tıklayınca o andan çalar; çalan paragraf vurgulanır.
+/// Çalarken şarkı sözü gibi akar: çalan paragrafta söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecek
+/// kelimeler soluk; çalan paragraf ortaya kaydırılır. Paragrafa tıklayınca oradan çalar.
 private struct TranscriptSection: View {
     let record: MeetingRecord
     let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
-    let audioURLs: [Speaker: URL]
+    let proxy: ScrollViewProxy
+    let onPlay: @MainActor (Double) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
+        let isActivePlayer: Bool = player.meetingID == record.id
+        let time: Double = player.currentTime
         LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
-            Text("TRANSKRİPT")
-                .font(DesignTokens.labelFont)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(.secondary)
             if let error = player.errorMessage {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
             ForEach(paragraphs) { (paragraph: TranscriptParagraph) in
+                let isActive: Bool = isActivePlayer && time >= paragraph.startSec && time < paragraph.endSec + 0.4
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Circle().fill(dotColor(paragraph: paragraph)).frame(width: 6, height: 6)
                         Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames)).fontWeight(.semibold)
-                        if let url = audioURLs[paragraph.speaker] {
-                            Button {
-                                player.play(url: url, meetingID: record.id, speaker: paragraph.speaker, startSec: paragraph.startSec)
-                            } label: {
-                                Label(timestamp(seconds: paragraph.startSec), systemImage: isPlaying(paragraph: paragraph) ? "speaker.wave.2.fill" : "play.fill")
-                                    .monospacedDigit()
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(isPlaying(paragraph: paragraph) ? DesignTokens.meColor : .secondary)
-                            .help("Bu andan çal")
-                            .accessibilityLabel("\(timestamp(seconds: paragraph.startSec)) anından çal")
-                        } else {
-                            Text(timestamp(seconds: paragraph.startSec)).monospacedDigit().foregroundStyle(.secondary)
-                        }
+                        Text(timestamp(seconds: paragraph.startSec)).monospacedDigit().foregroundStyle(.secondary)
                     }
                     .font(.system(size: 11))
-                    Text(paragraph.text)
+                    paragraphText(paragraph: paragraph, isActive: isActive, time: time)
                         .font(appearance.bodyFont)
                         .lineSpacing(appearance.lineSpacing)
-                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     if let turkish = paragraph.turkish {
                         Text(turkish)
                             .font(appearance.secondaryFont)
                             .lineSpacing(appearance.lineSpacing)
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(.leading, isPlaying(paragraph: paragraph) ? 8 : 0)
-                .overlay(alignment: .leading) {
-                    if isPlaying(paragraph: paragraph) {
-                        Capsule().fill(DesignTokens.meColor).frame(width: 3)
-                    }
-                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(isActive ? appearance.accent.color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+                .onTapGesture { onPlay(paragraph.startSec) }
+                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+                .id(paragraph.id)
+            }
+        }
+        // Çalan paragraf değişince ortaya kaydır (şarkı sözü gibi).
+        .onChange(of: activeParagraphID(time: time, isActivePlayer: isActivePlayer)) { (_: String?, id: String?) in
+            if let id, player.isPlaying {
+                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(id, anchor: .center) }
             }
         }
     }
 
-    /// Çalan kayıt bu paragrafın konuşmacısı ve konum paragrafın içinde mi.
-    private func isPlaying(paragraph: TranscriptParagraph) -> Bool {
-        player.meetingID == record.id && player.speaker == paragraph.speaker
-            && player.currentTime >= paragraph.startSec && player.currentTime < paragraph.endSec
+    /// Çalan paragraf: anın içinde kaldığı ilk paragraf ("Diğerleri" önce; aynı anda konuşulduysa).
+    private func activeParagraphID(time: Double, isActivePlayer: Bool) -> String? {
+        guard isActivePlayer else {
+            return nil
+        }
+        return paragraphs.first { time >= $0.startSec && time < $0.endSec + 0.4 }?.id
+    }
+
+    /// Çalan paragrafta kelime kelime renk: söylenenler parlak, o anki vurgu renginde, gelecekler soluk.
+    private func paragraphText(paragraph: TranscriptParagraph, isActive: Bool, time: Double) -> Text {
+        guard isActive, !paragraph.words.isEmpty else {
+            return Text(paragraph.text)
+        }
+        let active: Int? = activeWordIndex(words: paragraph.words, timeSec: time)
+        return paragraph.words.enumerated().reduce(Text("")) { (combined: Text, item: (offset: Int, element: StoredWord)) -> Text in
+            let separator: String = item.offset == 0 ? "" : " "
+            let word: Text = switch active {
+            case .some(let index) where item.offset == index:
+                Text(item.element.text).foregroundColor(appearance.accent.color).fontWeight(.semibold)
+            case .some(let index) where item.offset < index:
+                Text(item.element.text).foregroundColor(.primary)
+            default:
+                Text(item.element.text).foregroundColor(Color.primary.opacity(0.45))
+            }
+            return Text("\(combined)\(separator)\(word)")
+        }
     }
 
     private func dotColor(paragraph: TranscriptParagraph) -> Color {
@@ -519,44 +609,109 @@ private struct TranscriptSection: View {
     }
 }
 
-/// Çalma çubuğu: oynat/duraklat, konum, süre, kapat.
-private struct PlayerBar: View {
+/// Spotify tarzı çalma çubuğu: çalan konuşmacı ve sözü, konum çubuğu ve süreler, 10 sn geri / oynat-duraklat /
+/// 10 sn ileri, hız ve kapat.
+private struct NowPlayingBar: View {
     let player: MeetingAudioPlayer
-    let speakerName: String
+    let paragraphs: [TranscriptParagraph]
+    let speakerNames: [Int: String]
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        HStack(spacing: DesignTokens.Spacing.m) {
-            Button {
-                player.togglePause()
-            } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .frame(width: 20)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
-            Text(speakerName)
-                .font(DesignTokens.labelFont)
+        let time: Double = player.currentTime
+        let current: TranscriptParagraph? = paragraphs.last { $0.startSec <= time }
+        VStack(spacing: 8) {
+            HStack(spacing: DesignTokens.Spacing.s) {
+                if let current {
+                    Circle()
+                        .fill(current.person.map { personColor(person: $0) } ?? (current.speaker == .me ? DesignTokens.meColor : Color.secondary))
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(paragraphLabel(paragraph: current, speakerNames: speakerNames))
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(current.turkish ?? current.text)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: DesignTokens.Spacing.s)
+                Button {
+                    player.cycleRate()
+                } label: {
+                    Text(rateText(rate: player.rate))
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.quaternary, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)
+                Button {
+                    player.stop()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-            Slider(
-                value: Binding<Double>(get: { player.currentTime }, set: { (value: Double) -> Void in player.seek(to: value) }),
-                in: 0...max(player.duration, 0.1)
-            )
-            .accessibilityLabel("Konum")
-            Text("\(timestamp(seconds: player.currentTime)) / \(timestamp(seconds: player.duration))")
-                .font(.system(size: 11))
+                .hoverHint("Çalmayı kapat", alignment: .trailing, edge: .top)
+            }
+            VStack(spacing: 2) {
+                Slider(
+                    value: Binding<Double>(get: { player.currentTime }, set: { (value: Double) -> Void in player.seek(to: value) }),
+                    in: 0...max(player.duration, 0.1)
+                )
+                .controlSize(.small)
+                .tint(appearance.accent.color)
+                .accessibilityLabel("Konum")
+                HStack {
+                    Text(timestamp(seconds: time))
+                    Spacer()
+                    Text("-" + timestamp(seconds: max(0, player.duration - time)))
+                }
+                .font(.system(size: 10))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            Button {
-                player.stop()
-            } label: {
-                Image(systemName: "xmark")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Çalmayı kapat")
+            HStack(spacing: 28) {
+                Button {
+                    player.skip(by: -10)
+                } label: {
+                    Image(systemName: "gobackward.10").font(.system(size: 17, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .hoverHint("10 sn geri", alignment: .center, edge: .top)
+                Button {
+                    player.togglePause()
+                } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(appearance.accent.color, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
+                Button {
+                    player.skip(by: 10)
+                } label: {
+                    Image(systemName: "goforward.10").font(.system(size: 17, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .hoverHint("10 sn ileri", alignment: .center, edge: .top)
+            }
         }
-        .padding(.horizontal, DesignTokens.Spacing.l)
-        .padding(.vertical, DesignTokens.Spacing.s)
-        .glassEffect(.regular, in: .capsule)
         .padding(DesignTokens.Spacing.m)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .padding(.horizontal, DesignTokens.Spacing.m)
+        .padding(.bottom, DesignTokens.Spacing.m)
     }
+}
+
+/// "1×", "1,25×" (arayüz diline göre ondalık ayırıcı).
+private func rateText(rate: Float) -> String {
+    Double(rate).formatted(.number.precision(.fractionLength(0...2)).locale(interfaceLocale())) + "×"
 }

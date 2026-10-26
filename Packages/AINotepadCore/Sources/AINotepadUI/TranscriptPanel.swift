@@ -18,6 +18,10 @@ public struct PanelActions {
     public let onRetryTranslations: @MainActor ([SegmentID]) -> Void
     /// Kayıt sırasında toplantı dilini değiştir.
     public let onSetLanguage: @MainActor (MeetingLanguage) -> Void
+    /// Bir bloğun bölümlerini verilen konuşmacıya ata (otomatik ayırma yanıldıysa).
+    public let onReassignBlock: @MainActor ([SegmentID], Int) -> Void
+    /// Bir konuşmacının tümünü (geçmiş ve gelecek) diğeriyle birleştir.
+    public let onMergePerson: @MainActor (Int, Int) -> Void
 
     public init(
         onHide: @escaping @MainActor () -> Void,
@@ -31,7 +35,9 @@ public struct PanelActions {
         onAsk: @escaping @MainActor (String) -> Void,
         onCloseCard: @escaping @MainActor () -> Void,
         onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
-        onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void
+        onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void,
+        onReassignBlock: @escaping @MainActor ([SegmentID], Int) -> Void,
+        onMergePerson: @escaping @MainActor (Int, Int) -> Void
     ) {
         self.onHide = onHide
         self.onStart = onStart
@@ -45,6 +51,8 @@ public struct PanelActions {
         self.onCloseCard = onCloseCard
         self.onRetryTranslations = onRetryTranslations
         self.onSetLanguage = onSetLanguage
+        self.onReassignBlock = onReassignBlock
+        self.onMergePerson = onMergePerson
     }
 }
 
@@ -175,7 +183,10 @@ public struct TranscriptPanel: View {
                             translations: state.translations,
                             failedTranslations: failedTranslationIDs(block: block, failed: state.failedTranslations),
                             displayMode: state.displayMode,
-                            onRetryTranslations: actions.onRetryTranslations
+                            persons: state.persons,
+                            onRetryTranslations: actions.onRetryTranslations,
+                            onReassign: actions.onReassignBlock,
+                            onMerge: actions.onMergePerson
                         )
                         .id(block.id)
                     }
@@ -346,7 +357,11 @@ struct BlockView: View {
     /// Bu bloğun çevirisi başarısız bölümleri.
     let failedTranslations: [SegmentID]
     let displayMode: DisplayMode
+    /// Transkriptteki kişiler (düzeltme menüsü).
+    let persons: [Int]
     let onRetryTranslations: @MainActor ([SegmentID]) -> Void
+    let onReassign: @MainActor ([SegmentID], Int) -> Void
+    let onMerge: @MainActor (Int, Int) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -357,10 +372,26 @@ struct BlockView: View {
                 .alignmentGuide(.firstTextBaseline) { (dimensions: ViewDimensions) -> CGFloat in dimensions[.bottom] }
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
                 // Renk yalnızca noktada: renkli küçük etiket camda yeterince okunmuyor.
-                Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased(with: interfaceLocale()))
-                    .font(DesignTokens.labelFont)
-                    .tracking(DesignTokens.labelTracking)
-                    .foregroundStyle(.secondary)
+                if block.speaker == .others {
+                    // Otomatik ayırma yanıldıysa etikete tıklayıp düzeltilir.
+                    Menu {
+                        SpeakerCorrectionMenu(block: block, persons: persons, onReassign: onReassign, onMerge: onMerge)
+                    } label: {
+                        HStack(spacing: 3) {
+                            speakerLabelText
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .hoverHint("Konuşmacıyı düzelt", alignment: .leading, edge: .bottom)
+                } else {
+                    speakerLabelText
+                }
                 if displayMode == .turkishOnly && turkish != nil {
                     turkishOnlyText
                         .font(appearance.bodyFont)
@@ -409,6 +440,13 @@ struct BlockView: View {
         }
     }
 
+    private var speakerLabelText: some View {
+        Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased(with: interfaceLocale()))
+            .font(DesignTokens.labelFont)
+            .tracking(DesignTokens.labelTracking)
+            .foregroundStyle(.secondary)
+    }
+
     /// "Sadece Türkçe": çevrilen bölümler Türkçe, henüz çevrilmeyenler orijinal ve soluk.
     private var turkishOnlyText: Text {
         turkishOnlyParts(block: block, translations: translations)
@@ -430,6 +468,33 @@ struct BlockView: View {
                 let styled: Text = item.element.isFinal ? piece : piece.foregroundColor(Color.primary.opacity(DesignTokens.partialOpacity))
                 return Text("\(combined)\(styled)")
             }
+    }
+}
+
+/// "Diğerleri" bloğunun konuşmacı düzeltme menüsü: bloğu başka kişiye ata ya da kişinin tümünü birleştir.
+struct SpeakerCorrectionMenu: View {
+    let block: SpeakerBlock
+    let persons: [Int]
+    let onReassign: @MainActor ([SegmentID], Int) -> Void
+    let onMerge: @MainActor (Int, Int) -> Void
+
+    var body: some View {
+        let ids: [SegmentID] = block.segments.map(\.id)
+        let others: [Int] = persons.filter { $0 != block.person }
+        Section("Bu bölümü ata") {
+            ForEach(others, id: \.self) { (person: Int) in
+                Button(speakerLabel(speaker: .others, person: person)) { onReassign(ids, person) }
+            }
+            Button("Yeni konuşmacı") { onReassign(ids, (persons.max() ?? 0) + 1) }
+        }
+        if let current = block.person, !others.isEmpty {
+            // Ayırma aynı kişiyi iki numaraya böldüyse: geçmiş ve gelecek tüm bölümler birleşir.
+            Section("Tümünü birleştir: \(speakerLabel(speaker: .others, person: current)) →") {
+                ForEach(others, id: \.self) { (person: Int) in
+                    Button(speakerLabel(speaker: .others, person: person)) { onMerge(current, person) }
+                }
+            }
+        }
     }
 }
 

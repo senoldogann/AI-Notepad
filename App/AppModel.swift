@@ -65,6 +65,8 @@ final class AppModel {
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
     var transcript: [LiveSegment] = []
+    /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
+    var speakerCorrections: SpeakerCorrections = .none
     var errorMessages: [String] = []
     var recordingStartedAt: Date?
     /// Global kısayol kaydedilemediyse menüde gösterilen hata.
@@ -131,7 +133,7 @@ final class AppModel {
     /// Ada ve panelin gösterdiği durum; girdiler değişmedikçe önbellekten (ada ve panel aynı değişiklikte iki kez okur).
     var viewState: LiveViewState {
         let inputs: ViewStateInputs = ViewStateInputs(
-            transcript: transcript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
+            transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
             assistantCard: assistantCard, phase: phase, isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
@@ -158,6 +160,31 @@ final class AppModel {
         }
     }
 
+    /// Konuşmacı düzeltmeleri uygulanmış transkript (görünüm, asistan ve kaydedilen toplantı bunu kullanır).
+    var correctedTranscript: [LiveSegment] {
+        applyCorrections(transcript: transcript, corrections: speakerCorrections)
+    }
+
+    /// Bir bloğu başka konuşmacıya atar (otomatik ayırma yanıldıysa); sonraki ayırma pencereleri bunu ezmez.
+    func reassignBlock(segments: [SegmentID], person: Int) {
+        speakerCorrections = speakerCorrections.assigning(segments: segments, to: person)
+    }
+
+    /// Bir konuşmacının tüm bölümlerini (geçmiş ve gelecek) diğeriyle birleştirir.
+    func mergeLivePersons(from: Int, into: Int) {
+        speakerCorrections = speakerCorrections.merging(person: from, into: into)
+    }
+
+    /// Kaydedilmiş toplantıda iki konuşmacıyı birleştirir (ör. son geçiş aynı kişiyi ikiye böldüyse).
+    func mergeSpeakers(meetingID: String, from: Int, into: Int) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: mergingPersons(record: record, from: from, into: into), directory: directory)
+        }
+    }
+
     /// Görünümü değiştirir ve kaydeder.
     func selectDisplayMode(mode: DisplayMode) {
         let resumesTranslation: Bool = mode.needsLiveTranslation && !displayMode.needsLiveTranslation
@@ -177,7 +204,7 @@ final class AppModel {
     /// Son N dakikanın (Ayarlar) Türkçe özeti.
     func askWhatIMissed() {
         let minutes: Int = clampedSetting(key: SettingsKey.missedWindowMinutes, range: SettingsRange.missedWindowMinutes)
-        let segments: [LiveSegment] = suppressEchoes(transcript: transcript)
+        let segments: [LiveSegment] = suppressEchoes(transcript: correctedTranscript)
         let nowSec: Double = transcript.map(\.endSec).max() ?? 0
         guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: Double(minutes * 60)) else {
             cancelAssistant()
@@ -191,7 +218,7 @@ final class AppModel {
 
     /// Toplantı hakkında Türkçe soru; henüz konuşma yoksa istek atılmaz.
     func ask(question: String) {
-        guard let request = questionRequest(segments: suppressEchoes(transcript: transcript), question: question) else {
+        guard let request = questionRequest(segments: suppressEchoes(transcript: correctedTranscript), question: question) else {
             cancelAssistant()
             assistantCard = .answer(question: question, text: String(localized: "Henüz konuşma yok; sorular toplantıda konuşulanlara göre cevaplanır."))
             return
@@ -390,6 +417,7 @@ final class AppModel {
         isStarting = true
         defer { isStarting = false }
         transcript = []
+        speakerCorrections = .none
         translations = [:]
         failedTranslations = []
         recordingGeneration += 1
@@ -635,7 +663,7 @@ final class AppModel {
         MeetingRecord(
             id: directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
-            liveSegments: storedSegments(transcript: transcript), finalSegments: [],
+            liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false,
             engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil

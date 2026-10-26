@@ -201,6 +201,21 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   panelin içinde çizilen ipucu çıkar (kenardaki düğmelerde taşmayacak hizada).
 - **Panel köşeleri:** pencere içeriği panel yarıçapıyla maskelenir ve gölge içerik çizildikten sonra yeniden hesaplanır;
   köşeler saydam, gölge ve kenar yuvarlak (önceden üst köşelerde dikdörtgen kenar görünüyordu).
+- **Ada (açık hâl):** konuşmacı (renkli nokta + ad), son en fazla iki cümlenin Türkçesi (14 pt, iki satır) ve altında
+  çevirisi beklenen en yeni orijinal metin (canlı, soluk, tek satır; "İki dil"de çevrilenlerin orijinali); hata varsa
+  alt satır hatadır. "Sadece orijinal"de ana satır orijinaldir. Parça parça birleştirme ve ortadan kısaltma yok.
+- **Kayıt sırasında konuşmacı düzeltme:** paneldeki "Diğerleri/Konuşmacı N" etiketine tıklayınca "Bu bölümü ata"
+  (başka konuşmacı ya da yeni konuşmacı) ve "Tümünü birleştir" (bu konuşmacının geçmiş ve gelecek tüm bölümleri).
+  Düzeltmeler otomatik ayırmanın sonraki atamalarının üstüne uygulanır; görünüm, "Ne kaçırdım?"/soru ve kaydedilen canlı
+  transkript düzeltilmiş hâli kullanır. Son geçiş konuşmacıları kaydın tamamından yeniden ayırır; toplantı sayfasında
+  iki konuşmacı birleştirilebilir (adı taşınır).
+- **Toplantı sayfası sekmeleri:** "Özet" (görevler, özet, kararlar, sözlük) ve "Transkript" (konuşmacı adları ve
+  birleştirme, paragraflı transkript). Not varsa sayfa Özet'te açılır.
+- **Oynatıcı (Spotify tarzı):** "Dinle" ya da paragrafa tıklama; "Sen" ve "Diğerleri" kayıtları aynı zaman çizgisinde
+  birlikte çalar. Altta cam kart: çalan konuşmacı ve sözü, konum çubuğu ve süreler, 10 sn geri / oynat-duraklat /
+  10 sn ileri, hız (1×, 1,25×, 1,5×, 2×, 0,75×), kapat. Transkript şarkı sözü gibi akar: çalan paragraf vurgulu ve
+  ortaya kaydırılır; söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecekler soluk. Kelime zamanları son
+  geçişten (ElevenLabs ya da WhisperKit) saklanır (`StoredSegment.words`); olmayan bölümlerde harf sayısıyla tahmin.
 - **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
   panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
   ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.

@@ -67,7 +67,7 @@ let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
     let panel: Int = showWindow(
-        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in })).panelSurface(),
+        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in })).panelSurface(),
         frame: NSRect(x: 120, y: 100, width: 400, height: 720)
     )
     print("panel \(panel)")

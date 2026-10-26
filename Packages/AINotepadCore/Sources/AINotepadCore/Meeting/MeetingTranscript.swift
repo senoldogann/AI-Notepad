@@ -11,6 +11,28 @@ public struct TranscriptParagraph: Sendable, Equatable, Identifiable {
     public let text: String
     /// Bölümlerin Türkçeleri sırayla; hiç yoksa nil.
     public let turkish: String?
+    /// Çalarken vurgulanacak kelimeler: son geçişin gerçek zamanları, yoksa bölüm süresine göre tahmin.
+    public let words: [StoredWord]
+}
+
+/// Kelime zamanı olmayan bölüm için tahmini zamanlar: süre kelimelere harf sayısıyla orantılı bölünür. Saf fonksiyondur.
+public func estimatedWords(text: String, startSec: Double, endSec: Double) -> [StoredWord] {
+    let tokens: [String] = text.split(separator: " ").map(String.init)
+    let totalLetters: Double = Double(tokens.reduce(0) { $0 + max(1, $1.count) })
+    guard !tokens.isEmpty, endSec > startSec else {
+        return []
+    }
+    var cursor: Double = startSec
+    return tokens.map { (token: String) -> StoredWord in
+        let duration: Double = (endSec - startSec) * Double(max(1, token.count)) / totalLetters
+        defer { cursor += duration }
+        return StoredWord(text: token, startSec: cursor, endSec: cursor + duration)
+    }
+}
+
+/// Çalma anında vurgulanacak kelime: başlangıcı geçilmiş son kelime; ilk kelimeden önceyse nil. Saf fonksiyondur.
+public func activeWordIndex(words: [StoredWord], timeSec: Double) -> Int? {
+    words.lastIndex { (word: StoredWord) -> Bool in word.startSec <= timeSec }
 }
 
 /// Bir paragraf bu süreyi geçince sonraki bölüm yeni paragraf başlatır (uzun konuşma tek duvar olmasın).
@@ -46,7 +68,10 @@ public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph]
         return TranscriptParagraph(
             id: first.key, speaker: first.speaker, person: first.person, startSec: first.startSec, endSec: last.endSec,
             text: group.map(\.text).joined(separator: " "),
-            turkish: turkish.isEmpty ? nil : turkish.joined(separator: " ")
+            turkish: turkish.isEmpty ? nil : turkish.joined(separator: " "),
+            words: group.flatMap { (segment: StoredSegment) -> [StoredWord] in
+                segment.words ?? estimatedWords(text: segment.text, startSec: segment.startSec, endSec: segment.endSec)
+            }
         )
     }
 }

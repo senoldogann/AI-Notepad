@@ -83,29 +83,27 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         #expect(viewState.latestOthersSentence == "Günaydın.")
     }
 
-    // Çevirisi beklenen en yeni cümle adada orijinal haliyle (soluk) görünür; eski Türkçe onu gizlemez.
-    @Test func islandShowsPendingOriginalAfterTurkish() {
+    // Ada: ana satır son cümlenin Türkçesi, alt satır çevirisi beklenen en yeni orijinal (canlı).
+    @Test func islandShowsTurkishAndPendingOriginal() {
         let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
         let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
         let viewState: LiveViewState = makeLiveViewState(
             transcript: [first, second], translations: [first.id: "Günaydın."], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
             phase: .recording, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
-        #expect(viewState.latestOthersParts == [
-            DisplayPart(text: "Günaydın.", isTranslated: true, isFinal: true),
-            DisplayPart(text: "Aloitetaan.", isTranslated: false, isFinal: true),
-        ])
+        #expect(viewState.islandLine == IslandLine(speaker: .others, person: 1, primary: "Günaydın.", primaryIsOriginal: false, secondary: "Aloitetaan."))
+        #expect(viewState.persons == [1])
     }
 
-    @Test func partsTruncateFromStart() {
-        let parts: [DisplayPart] = [
-            DisplayPart(text: "Eski uzun cümle burada.", isTranslated: true, isFinal: true),
-            DisplayPart(text: "Yeni.", isTranslated: false, isFinal: true),
-        ]
-        let kept: [DisplayPart] = truncatePartsFromStart(parts: parts, maxCharacters: 12)
-        #expect(kept.last == parts.last)
-        #expect(kept.first?.text.hasPrefix("…") == true)
-        #expect(kept.first?.text == "…urada.")
+    // Her şey çevrildiyse "İki dil"de alt satır orijinal, "Sadece Türkçe"de alt satır yok; en fazla son iki cümle.
+    @Test func islandLineModes() {
+        let segments: [LiveSegment] = [seg(.others, 0, 1, "Yksi.", person: 1), seg(.others, 1, 3, "Kaksi.", person: 1), seg(.others, 2, 5, "Kolme.", person: 1)]
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: segments)
+        let all: [SegmentID: String] = [segments[0].id: "Bir.", segments[1].id: "İki.", segments[2].id: "Üç."]
+        #expect(makeIslandLine(block: blocks[0], translations: all, displayMode: .bilingual) == IslandLine(speaker: .others, person: 1, primary: "İki. Üç.", primaryIsOriginal: false, secondary: "Kaksi. Kolme."))
+        #expect(makeIslandLine(block: blocks[0], translations: all, displayMode: .turkishOnly)?.secondary == nil)
+        #expect(makeIslandLine(block: blocks[0], translations: all, displayMode: .originalOnly) == IslandLine(speaker: .others, person: 1, primary: "Kaksi. Kolme.", primaryIsOriginal: false, secondary: nil))
+        #expect(makeIslandLine(block: blocks[0], translations: [:], displayMode: .bilingual)?.primaryIsOriginal == true)
     }
 
     // Kayıt durunca da ada "Bitiriliyor…" için görünür kalır.
@@ -129,14 +127,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         ])
     }
 
-    // "Sadece orijinal": adada orijinal metin parlak, yalnızca kesinleşmemiş kısım soluk; çeviri gerekmez.
-    @Test func originalOnlyIslandShowsOriginalBright() {
-        let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first])
-        let parts: [DisplayPart] = islandParts(block: blocks[0], translations: [first.id: "Günaydın."], displayMode: .originalOnly)
-        #expect(parts.map(\.text) == ["Hyvää huomenta."])
-        #expect(!isDimmedIslandPart(part: parts[0], displayMode: .originalOnly))
-        #expect(isDimmedIslandPart(part: DisplayPart(text: "x", isTranslated: false, isFinal: true), displayMode: .bilingual))
+    @Test func originalOnlySkipsLiveTranslation() {
         #expect(!DisplayMode.originalOnly.needsLiveTranslation)
     }
 }

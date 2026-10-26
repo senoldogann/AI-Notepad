@@ -24,6 +24,10 @@ private func placeholders(text: String) -> [String] {
         let strings: [String: Any] = try #require(catalog["strings"] as? [String: Any])
         #expect(strings.count > 300)
         for (key, entry) in strings {
+            // Çevrilmeyecek işaretli metinler (ör. boş metin) atlanır.
+            if (entry as? [String: Any])?["shouldTranslate"] as? Bool == false {
+                continue
+            }
             let english: String? = ((((entry as? [String: Any])?["localizations"] as? [String: Any])?["en"] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
             let value: String = try #require(english, "İngilizcesi yok: \(key)")
             #expect(!value.isEmpty, "boş çeviri: \(key)")

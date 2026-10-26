@@ -27,7 +27,10 @@ public func finalSegments(words: [DiarizedWord], gapSec: Double) -> [StoredSegme
             person: persons[first.speaker],
             startSec: first.startSec,
             endSec: last.endSec,
-            text: item.element.map(\.text).joined(separator: " ")
+            text: item.element.map(\.text).joined(separator: " "),
+            words: item.element.map { (word: DiarizedWord) -> StoredWord in
+                StoredWord(text: word.text, startSec: word.startSec, endSec: word.endSec)
+            }
         )
     }
 }
