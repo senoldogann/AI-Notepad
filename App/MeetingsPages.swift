@@ -249,8 +249,8 @@ struct MeetingDetailPage: View {
 
     /// Dışa aktarma ve yönetim; kilitliyken değiştirenler kapalı.
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: DesignTokens.Spacing.s) {
+        // Düğmeler satıra sığmazsa alt satıra akar (dar panel).
+        FlowLayout(spacing: DesignTokens.Spacing.s, lineSpacing: 6) {
                 if !playableAudio.isEmpty {
                     Button("Dinle", systemImage: "play.fill") {
                         if player.meetingID == record.id {
@@ -259,36 +259,33 @@ struct MeetingDetailPage: View {
                             play(from: 0)
                         }
                     }
-                    .help("Toplantıyı baştan dinle; söylenen kelime transkriptte renklenir")
+                    .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
                 }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
-                    .help("Temiz bir PDF olarak İndirilenler'e kaydet")
+                    .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .leading, edge: .bottom)
                 Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
-                    .help("Markdown olarak İndirilenler'e kaydet")
+                    .hoverHint("Markdown olarak kaydet", alignment: .leading, edge: .bottom)
                 Button("Kopyala", systemImage: "doc.on.doc") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
                     export = .copied
                 }
-                .help("Markdown olarak panoya kopyala")
-            }
-            HStack(spacing: DesignTokens.Spacing.s) {
+                .hoverHint("Markdown olarak kopyala", alignment: .leading, edge: .bottom)
                 Button("Notu yenile", systemImage: "sparkles") {
                     model.regenerateNote(meetingID: record.id)
                 }
                 .disabled(isLocked)
-                .help("Konuşmacı adlarıyla notu yeniden yazar; ses gerekmez.")
+                .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
                 Button("Tekrar işle", systemImage: "arrow.clockwise") {
                     model.reprocess(meetingID: record.id)
                 }
                 .disabled(isLocked || record.audioDeleted)
-                .help("Kaydın tamamından son geçişi ve notu yeniden yapar.")
+                .hoverHint("Son geçişi ve notu yeniden yap", alignment: .leading, edge: .bottom)
                 Button("Sesi sil", systemImage: "trash", role: .destructive) {
                     player.stop()
                     model.deleteAudio(meetingID: record.id)
                 }
                 .disabled(isLocked || record.audioDeleted)
-            }
         }
         .controlSize(.small)
     }

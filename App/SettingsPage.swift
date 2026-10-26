@@ -29,15 +29,23 @@ struct SettingsPage: View {
     let shortcuts: ShortcutController
     @State private var section: SettingsSection = .general
 
+    private var sectionPicker: some View {
+        Picker("Bölüm", selection: $section) {
+            ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
+                Text(item.title).tag(item)
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Bölüm", selection: $section) {
-                ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
-                    Text(item.title).tag(item)
-                }
+            // Dar panelde sekmeler sığmazsa açılır seçici olur.
+            ViewThatFits(in: .horizontal) {
+                sectionPicker.pickerStyle(.segmented).fixedSize()
+                sectionPicker.pickerStyle(.menu).fixedSize()
             }
-            .pickerStyle(.segmented)
             .labelsHidden()
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, DesignTokens.Spacing.l)
             .padding(.top, DesignTokens.Spacing.m)
             Group {

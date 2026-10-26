@@ -16,11 +16,19 @@ final class KeyablePanel: NSPanel {
     }
 }
 
+/// Panelin en küçük boyutu; tüm sayfalar bu boyuta kadar düzenini korur.
+let panelMinSize: NSSize = NSSize(width: 340, height: 300)
+
 /// Kenarlıksız, saydam, arka planından taşınabilen, uygulamayı öne getirmeyen yüzen panel.
 /// Cam görünüm içerikteki `panelSurface()`'ten gelir.
 @MainActor
 func makeLivePanel(rootView: some View) -> NSPanel {
-    let size: NSSize = NSSize(width: 420, height: 660)
+    // Küçük ekranda panel ekrana sığacak boyutta açılır.
+    let visible: CGRect = NSScreen.screens.first?.visibleFrame ?? CGRect(x: 0, y: 0, width: 420, height: 660)
+    let size: NSSize = clampedPanelFrame(
+        frame: CGRect(x: visible.maxX - 436, y: visible.maxY - 676, width: 420, height: 660),
+        visible: visible, minSize: panelMinSize, margin: 16
+    ).size
     let panel: NSPanel = KeyablePanel(
         contentRect: NSRect(origin: .zero, size: size),
         styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -36,7 +44,7 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    panel.minSize = NSSize(width: 340, height: 300)
+    panel.minSize = panelMinSize
     // İçerik panelin köşe yarıçapıyla maskelenir: köşeler tamamen saydam kalır, pencere gölgesi ve kenar çizgisi
     // dikdörtgen değil yuvarlak çıkar.
     let container: NSView = NSView(frame: NSRect(origin: .zero, size: size))
@@ -49,10 +57,7 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     hosting.autoresizingMask = [.width, .height]
     container.addSubview(hosting)
     panel.contentView = container
-    if let screen = NSScreen.screens.first {
-        let visible: NSRect = screen.visibleFrame
-        panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 16, y: visible.maxY - size.height - 16))
-    }
+    panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 16, y: visible.maxY - size.height - 16))
     return panel
 }
 
@@ -71,6 +76,27 @@ final class LivePanelController {
     init(model: AppModel, hideFromCapture: Bool) {
         self.model = model
         self.hideFromCapture = hideFromCapture
+        // Ekran değişince (monitör çıkarıldı, çözünürlük değişti) panel görünür alanın içine çekilir.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.keepOnScreen()
+            }
+        }
+    }
+
+    private var screenObserver: (any NSObjectProtocol)?
+
+    /// Paneli bulunduğu (yoksa ana) ekranın görünür alanına sığdırır.
+    private func keepOnScreen() {
+        guard let panel, let screen = panel.screen ?? NSScreen.screens.first else {
+            return
+        }
+        let frame: CGRect = clampedPanelFrame(frame: panel.frame, visible: screen.visibleFrame, minSize: panelMinSize, margin: 8)
+        if frame != panel.frame {
+            panel.setFrame(frame, display: true, animate: true)
+        }
     }
 
     /// Kısayollar ve kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.

@@ -104,18 +104,65 @@ public struct TranscriptPanel: View {
             StatusLabel(state: state)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                // Durum hiç görünmez olmasın: önce düğmeler menüye toplanır, durum en son kısalır.
+                // Kayıtta yalnızca nokta + süre (kısa); boşta "Hazır · Deepgram" gibi daha uzun.
+                .frame(minWidth: state.isRecording ? 60 : 96, alignment: .leading)
                 .layoutPriority(-1)
             Spacer(minLength: DesignTokens.Spacing.s)
-            languageChip
-            recordingControls
-            IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala") {
-                copyToPasteboard(text: plainText(blocks: state.blocks))
+            // Genişlik daraldıkça önce gezinme düğmeleri, sonra dil çipi "⋯" menüsüne toplanır; kayıt denetimleri
+            // ve gizle her zaman görünür.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    languageChip
+                    recordingControls
+                    IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala", action: copyAll)
+                        .disabled(state.blocks.isEmpty)
+                    IconButton(symbol: "list.bullet.rectangle", help: "Toplantılar", action: actions.onOpenMeetings)
+                    IconButton(symbol: "gearshape", help: "Ayarlar", action: actions.onOpenSettings)
+                }
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    languageChip
+                    recordingControls
+                    overflowMenu(includesLanguage: false)
+                }
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    recordingControls
+                    overflowMenu(includesLanguage: true)
+                }
             }
-            .disabled(state.blocks.isEmpty)
-            IconButton(symbol: "list.bullet.rectangle", help: "Toplantılar", action: actions.onOpenMeetings)
-            IconButton(symbol: "gearshape", help: "Ayarlar", action: actions.onOpenSettings)
             IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
         }
+    }
+
+    private func copyAll() {
+        copyToPasteboard(text: plainText(blocks: state.blocks))
+    }
+
+    /// Dar panelde sığmayan eylemler: kopyala, Toplantılar, Ayarlar ve (çok darda) dil.
+    private func overflowMenu(includesLanguage: Bool) -> some View {
+        Menu {
+            if includesLanguage, state.isRecording {
+                Menu("Dili değiştir") {
+                    LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
+                }
+            }
+            Button("Tümünü kopyala", systemImage: "doc.on.doc", action: copyAll)
+                .disabled(state.blocks.isEmpty)
+            Button("Toplantılar", systemImage: "list.bullet.rectangle", action: actions.onOpenMeetings)
+            Button("Ayarlar", systemImage: "gearshape", action: actions.onOpenSettings)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .hoverHint("Diğer", alignment: .trailing, edge: .bottom)
+        .accessibilityLabel("Diğer")
     }
 
     /// Kayıt yokken "Başlat"; kayıtta duraklat/devam, mikrofon ve "Bitir"; bitirilirken hiçbiri.
@@ -246,34 +293,56 @@ public struct TranscriptPanel: View {
 
     /// "Ne kaçırdım?" düğmesi ve Türkçe soru alanı.
     private var footer: some View {
-        HStack(spacing: DesignTokens.Spacing.s) {
-            Button(action: actions.onMissed) {
-                Label("Ne kaçırdım?", systemImage: "sparkles")
-                    .font(DesignTokens.statusFont)
-                    .padding(.horizontal, DesignTokens.Spacing.m)
-                    .padding(.vertical, 6)
-                    .background(appearance.accent.color, in: Capsule())
-                    .foregroundStyle(.white)
+        // Dar panelde "Ne kaçırdım?" yalnızca simge olur; soru alanı kalan genişliği alır.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DesignTokens.Spacing.s) {
+                missedButton(showsTitle: true)
+                questionField.frame(minWidth: 150)
             }
-            .buttonStyle(.plain)
-            .disabled(state.blocks.isEmpty)
-            .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
-            .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
-            TextField("Toplantı hakkında sor…", text: $question)
-                .textFieldStyle(.plain)
-                .font(DesignTokens.statusFont)
-                .padding(.horizontal, DesignTokens.Spacing.m)
-                .padding(.vertical, 6)
-                .background(.quaternary, in: Capsule())
-                .onSubmit {
-                    let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else {
-                        return
-                    }
-                    actions.onAsk(trimmed)
-                    question = ""
-                }
+            HStack(spacing: DesignTokens.Spacing.s) {
+                missedButton(showsTitle: false)
+                questionField
+            }
         }
+    }
+
+    private func missedButton(showsTitle: Bool) -> some View {
+        Button(action: actions.onMissed) {
+            Group {
+                if showsTitle {
+                    Label("Ne kaçırdım?", systemImage: "sparkles")
+                } else {
+                    Image(systemName: "sparkles")
+                }
+            }
+            .font(DesignTokens.statusFont)
+            .padding(.horizontal, showsTitle ? DesignTokens.Spacing.m : DesignTokens.Spacing.s)
+            .padding(.vertical, 6)
+            .background(appearance.accent.color, in: Capsule())
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .disabled(state.blocks.isEmpty)
+        .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
+        .accessibilityLabel("Ne kaçırdım?")
+        .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
+    }
+
+    private var questionField: some View {
+        TextField("Toplantı hakkında sor…", text: $question)
+            .textFieldStyle(.plain)
+            .font(DesignTokens.statusFont)
+            .padding(.horizontal, DesignTokens.Spacing.m)
+            .padding(.vertical, 6)
+            .background(.quaternary, in: Capsule())
+            .onSubmit {
+                let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    return
+                }
+                actions.onAsk(trimmed)
+                question = ""
+            }
     }
 
     private var errorBand: some View {
@@ -514,10 +583,14 @@ struct AssistantCardView: View {
                 Spacer()
                 IconButton(symbol: "xmark", help: "Kapat", action: onClose)
             }
-            content
-                .font(appearance.secondaryFont)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            // Uzun cevap kısa panelde transkripti kapatmasın: sığmazsa kartın içinde kaydırılır.
+            ViewThatFits(in: .vertical) {
+                styledContent
+                ScrollView {
+                    styledContent
+                }
+                .frame(maxHeight: 220)
+            }
         }
         .padding(DesignTokens.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -531,6 +604,14 @@ struct AssistantCardView: View {
         case .answer: String(localized: "CEVAP")
         case .failed: String(localized: "HATA")
         }
+    }
+
+    private var styledContent: some View {
+        content
+            .font(appearance.secondaryFont)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

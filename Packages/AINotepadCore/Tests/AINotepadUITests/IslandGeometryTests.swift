@@ -52,4 +52,14 @@ import Testing
         #expect(globalAuxiliaryArea(area: local, screenFrame: primary) == local)
         #expect(globalAuxiliaryArea(area: .zero, screenFrame: secondary) == .zero)
     }
+
+    // Küçük ekranda panel ekrana sığacak kadar küçülür; ekran dışına taşan panel içeri çekilir.
+    @Test func panelFrameClampsToScreen() {
+        let small: CGRect = CGRect(x: 0, y: 0, width: 1280, height: 600)
+        let clamped: CGRect = clampedPanelFrame(frame: CGRect(x: 900, y: 100, width: 420, height: 660), visible: small, minSize: CGSize(width: 340, height: 300), margin: 16)
+        #expect(clamped == CGRect(x: 844, y: 16, width: 420, height: 568))
+        let offscreen: CGRect = clampedPanelFrame(frame: CGRect(x: 3000, y: 900, width: 420, height: 400), visible: small, minSize: CGSize(width: 340, height: 300), margin: 16)
+        #expect(offscreen.maxX == 1264)
+        #expect(offscreen.maxY == 584)
+    }
 }

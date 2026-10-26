@@ -160,8 +160,11 @@ private struct PanelPageView<Content: View>: View {
                 Button {
                     router.page = back
                 } label: {
-                    Label(back == .live ? "Canlı" : "Toplantılar", systemImage: "chevron.left")
-                        .font(DesignTokens.statusFont)
+                    ViewThatFits(in: .horizontal) {
+                        Label(back == .live ? "Canlı" : "Toplantılar", systemImage: "chevron.left")
+                        Image(systemName: "chevron.left")
+                    }
+                    .font(DesignTokens.statusFont)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -169,15 +172,20 @@ private struct PanelPageView<Content: View>: View {
                 Spacer(minLength: DesignTokens.Spacing.s)
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 if model.phase != .idle {
                     // Kayıt sürerken her sayfadan canlı metne tek dokunuşla dönülür.
                     Button {
                         router.page = .live
                     } label: {
-                        Label(model.isFinishing ? "Bitiriliyor" : "Kayıtta", systemImage: "record.circle")
-                            .font(DesignTokens.statusFont)
-                            .foregroundStyle(.red)
+                        ViewThatFits(in: .horizontal) {
+                            Label(model.isFinishing ? "Bitiriliyor" : "Kayıtta", systemImage: "record.circle")
+                            Image(systemName: "record.circle")
+                        }
+                        .font(DesignTokens.statusFont)
+                        .foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
                     .hoverHint("Canlı metne dön", alignment: .trailing, edge: .bottom)
@@ -267,11 +275,19 @@ private struct ProcessingOverlay: View {
     }
 
     var body: some View {
-        VStack(spacing: DesignTokens.Spacing.l) {
-            Image(systemName: "waveform")
-                .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(appearance.accent.color)
-                .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
+        // Kısa panelde önce simge ve açıklama düşer.
+        ViewThatFits(in: .vertical) {
+            card(isCompact: false)
+            card(isCompact: true)
+        }
+        .padding(DesignTokens.Spacing.m)
+    }
+
+    private func card(isCompact: Bool) -> some View {
+        VStack(spacing: isCompact ? DesignTokens.Spacing.m : DesignTokens.Spacing.l) {
+            if !isCompact {
+                waveIcon
+            }
             Text("Toplantı hazırlanıyor")
                 .font(.system(size: 16, weight: .semibold))
             VStack(alignment: .leading, spacing: 10) {
@@ -295,19 +311,28 @@ private struct ProcessingOverlay: View {
             }
             ProgressView(value: Double(progress.stepIndex) + 0.5, total: Double(steps.count))
                 .tint(appearance.accent.color)
-            Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if !isCompact {
+                Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
             Button("Arka planda devam et", action: onDismiss)
                 .buttonStyle(.plain)
                 .font(.callout)
                 .foregroundStyle(appearance.accent.color)
         }
-        .padding(DesignTokens.Spacing.xl)
+        .padding(isCompact ? DesignTokens.Spacing.l : DesignTokens.Spacing.xl)
         .frame(maxWidth: 300)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
         .accessibilityElement(children: .combine)
+    }
+
+    private var waveIcon: some View {
+        Image(systemName: "waveform")
+            .font(.system(size: 34, weight: .medium))
+            .foregroundStyle(appearance.accent.color)
+            .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
     }
 }

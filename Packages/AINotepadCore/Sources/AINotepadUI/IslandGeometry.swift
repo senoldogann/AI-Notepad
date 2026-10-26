@@ -64,3 +64,13 @@ public func islandLayout(
         collapsedHeight: screen.safeAreaTop
     )
 }
+
+/// Paneli görünür ekran alanına sığdırır: büyükse en az `minSize`'a kadar küçültür, taşıyorsa içeri çeker. Saf fonksiyondur.
+public func clampedPanelFrame(frame: CGRect, visible: CGRect, minSize: CGSize, margin: CGFloat) -> CGRect {
+    let available: CGRect = visible.insetBy(dx: margin, dy: margin)
+    let width: CGFloat = max(minSize.width, min(frame.width, available.width))
+    let height: CGFloat = max(minSize.height, min(frame.height, available.height))
+    let x: CGFloat = min(max(frame.minX, available.minX), available.maxX - width)
+    let y: CGFloat = min(max(frame.minY, available.minY), available.maxY - height)
+    return CGRect(x: x, y: y, width: width, height: height)
+}

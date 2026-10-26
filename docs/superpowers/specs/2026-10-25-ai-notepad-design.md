@@ -216,6 +216,12 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   10 sn ileri, hız (1×, 1,25×, 1,5×, 2×, 0,75×), kapat. Transkript şarkı sözü gibi akar: çalan paragraf vurgulu ve
   ortaya kaydırılır; söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecekler soluk. Kelime zamanları son
   geçişten (ElevenLabs ya da WhisperKit) saklanır (`StoredSegment.words`); olmayan bölümlerde harf sayısıyla tahmin.
+- **Duyarlı düzen (en küçük 340×300 pt):** panel başlığında genişlik daraldıkça önce Kopyala/Toplantılar/Ayarlar, çok
+  darda dil çipi "⋯" menüsüne toplanır (kayıt denetimleri ve gizle hep görünür; durum metni en son kısalır);
+  "Ne kaçırdım?" simgeye döner; toplantı sayfası düğmeleri alt satıra akar (`FlowLayout`); Ayarlar sekmeleri sığmazsa
+  açılır seçici olur; alt sayfa başlıklarında geri ve "Kayıtta" yalnızca simge olur; hazırlanma kartı kısa panelde
+  simge ve açıklamasını bırakır; uzun asistan cevabı kartın içinde kaydırılır. Panel küçük ekranda ekrana sığacak
+  boyutta açılır, ekran değişince görünür alanın içine çekilir (`clampedPanelFrame`).
 - **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
   panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
   ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.

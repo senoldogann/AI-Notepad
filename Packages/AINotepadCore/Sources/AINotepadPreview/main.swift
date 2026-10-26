@@ -7,7 +7,7 @@ import AppKit
 import SwiftUI
 
 /// Örnek toplantı: Sen, iki kişi, kesinleşmemiş metin ve bir hata.
-func sampleState() -> LiveViewState {
+func sampleState(phase: RecordingPhase) -> LiveViewState {
     func segment(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, _ final: Bool, _ person: Int?) -> LiveSegment {
         LiveSegment(id: SegmentID(speaker: speaker, index: index), startSec: start, endSec: start + 3, text: text, isFinal: final, failureMessage: nil, person: person)
     }
@@ -38,7 +38,7 @@ func sampleState() -> LiveViewState {
             decisions: ["Rapor gelecek hafta teslim edilecek."],
             askedOfYou: ["Sunum slaytlarını hazırlaman isteniyor."]
         )),
-        phase: .recording,
+        phase: phase,
         isPaused: false,
         isMicMuted: false,
         canStart: true,
@@ -66,10 +66,13 @@ let seconds: Double = Double(CommandLine.arguments.dropFirst().first ?? "") ?? 6
 let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
-    let panel: Int = showWindow(
-        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in })).panelSurface(),
-        frame: NSRect(x: 120, y: 100, width: 400, height: 720)
-    )
+    let actions: PanelActions = PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in })
+    let panel: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions).panelSurface(), frame: NSRect(x: 120, y: 100, width: 400, height: 720))
+    // Dar panel: başlık düğmeleri "⋯" menüsüne toplanmalı, "Ne kaçırdım?" simgeye dönmeli.
+    let narrow: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions).panelSurface(), frame: NSRect(x: 560, y: 100, width: 340, height: 560))
+    let narrowIdle: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .idle), actions: actions).panelSurface(), frame: NSRect(x: 940, y: 100, width: 340, height: 560))
+    print("panel-narrow \(narrow)")
+    print("panel-narrow-idle \(narrowIdle)")
     print("panel \(panel)")
     // Çentikli 14" ekran benzeri düzen; pencereler önizleme için ekranın ortasına konur.
     let notchScreen: ScreenGeometry = ScreenGeometry(
@@ -82,7 +85,7 @@ MainActor.assumeIsolated {
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
+            view: IslandView(state: sampleState(phase: .recording), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")

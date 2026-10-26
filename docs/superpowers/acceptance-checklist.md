@@ -101,5 +101,9 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Bitir'e bas: panel bulanıklaşıyor, ortada animasyonlu kart; adımlar sırayla ✓ oluyor; bitince kart kayboluyor ve toplantı sayfası (görevler üstte) açık.
 - [ ] "Arka planda devam et": kart kapanıyor, panel kullanılabiliyor; aynı kayıt için tekrar açılmıyor; sonraki kayıtta yine çıkıyor.
 
+## Duyarlı düzen
+- [ ] Paneli en küçük boyuta (köşeden) küçült: canlı sayfada başlık taşmıyor (düğmeler "⋯" menüsünde), "Ne kaçırdım?" simge; Toplantılar, toplantı sayfası (düğmeler alt satıra akıyor), Ayarlar (sekmeler açılır seçici), Kurulum taşmadan kullanılabiliyor.
+- [ ] Harici monitörde paneli sağ alta koyup monitörü çıkar: panel dizüstü ekranının içine geliyor ve sığıyor.
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

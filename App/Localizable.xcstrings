@@ -577,6 +577,16 @@
         }
       }
     },
+    "Baştan dinle; çalan kelime renklenir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen from the start; the spoken word lights up"
+          }
+        }
+      }
+    },
     "Beklenmeyen hata: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -1539,16 +1549,6 @@
         }
       }
     },
-    "Kaydın tamamından son geçişi ve notu yeniden yapar.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Redoes the final pass and the note from the full recording."
-          }
-        }
-      }
-    },
     "Kayıt bitince yeniden başlatılabilir": {
       "localizations": {
         "en": {
@@ -1677,16 +1677,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speaker %lld"
-          }
-        }
-      }
-    },
-    "Konuşmacı adlarıyla notu yeniden yazar; ses gerekmez.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rewrites the note with speaker names; no audio needed."
           }
         }
       }
@@ -1935,22 +1925,22 @@
         }
       }
     },
-    "Markdown olarak panoya kopyala": {
+    "Markdown olarak kaydet": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy to clipboard as Markdown"
+            "value": "Save as Markdown"
           }
         }
       }
     },
-    "Markdown olarak İndirilenler'e kaydet": {
+    "Markdown olarak kopyala": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save to Downloads as Markdown"
+            "value": "Copy as Markdown"
           }
         }
       }
@@ -2204,6 +2194,16 @@
         }
       }
     },
+    "Notu adlarla yeniden yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewrite the note with names"
+          }
+        }
+      }
+    },
     "Notu yenile": {
       "localizations": {
         "en": {
@@ -2270,6 +2270,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDF olarak İndirilenler'e kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as PDF to Downloads"
           }
         }
       }
@@ -2720,6 +2730,16 @@
         }
       }
     },
+    "Son geçişi ve notu yeniden yap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo final pass and note"
+          }
+        }
+      }
+    },
     "SÖZLÜK": {
       "localizations": {
         "en": {
@@ -2788,16 +2808,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Base URL"
-          }
-        }
-      }
-    },
-    "Temiz bir PDF olarak İndirilenler'e kaydet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save a clean PDF to Downloads"
           }
         }
       }
@@ -2971,16 +2981,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Understand meetings, miss nothing"
-          }
-        }
-      }
-    },
-    "Toplantıyı baştan dinle; söylenen kelime transkriptte renklenir": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Listen from the start; the spoken word is highlighted in the transcript"
           }
         }
       }
