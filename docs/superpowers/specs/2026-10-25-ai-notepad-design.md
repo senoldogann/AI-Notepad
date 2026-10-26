@@ -211,6 +211,12 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   Düzeltmeler otomatik ayırmanın sonraki atamalarının üstüne uygulanır; görünüm, "Ne kaçırdım?"/soru ve kaydedilen canlı
   transkript düzeltilmiş hâli kullanır. Son geçiş konuşmacıları kaydın tamamından yeniden ayırır; toplantı sayfasında
   iki konuşmacı birleştirilebilir (adı taşınır).
+- **Konuşmacıları gözden geçir:** toplantı sayfasındaki "Gözden geçir" akıllı modele transkriptin tamamını (numaralı
+  etiketlerle) gönderir; model ad önerileri (kendini tanıtma, adıyla hitap), birleştirme önerileri (aynı kişinin ikiye
+  bölünmesi) ve kontrol edilecek anlar döndürür, her biri [mm:ss] kanıtıyla. Öneriler otomatik uygulanmaz: kartta tek
+  tek uygulanır ya da reddedilir (yanlış öneri sessizce notu bozmasın); uygulanamayanlar (bilinmeyen numara, zaten
+  verilmiş ad) gösterilmez, birleştirmeden sonra kalan öneriler yeni numaraya taşınır. Öneri uygulanınca kart
+  "Notu yenile" sunar. "Tekrar işle" numaraları değiştirdiği için kartı kapatır.
 - **Toplantı sayfası sekmeleri:** "Özet" (görevler, özet, kararlar, sözlük) ve "Transkript" (konuşmacı adları ve
   birleştirme, paragraflı transkript). Not varsa sayfa Özet'te açılır.
 - **Oynatıcı (Spotify tarzı):** "Dinle" ya da paragrafa tıklama; "Sen" ve "Diğerleri" kayıtları aynı zaman çizgisinde

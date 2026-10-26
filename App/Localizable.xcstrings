@@ -129,6 +129,16 @@
         }
       }
     },
+    "%@ ile %@ aynı kişi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ and %@ are the same person"
+          }
+        }
+      }
+    },
     "%@ isteği başarısız (HTTP %lld). Biraz sonra tekrar dene.": {
       "extractionState": "stale",
       "localizations": {
@@ -218,6 +228,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ — %@"
+          }
+        }
+      }
+    },
+    "%@ → %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ → %@"
           }
         }
       }
@@ -656,6 +676,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Space"
+          }
+        }
+      }
+    },
+    "Bu andan dinle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen from here"
           }
         }
       }
@@ -1273,6 +1303,16 @@
         }
       }
     },
+    "Gözden geçir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review"
+          }
+        }
+      }
+    },
     "HATA": {
       "extractionState": "stale",
       "localizations": {
@@ -1416,6 +1456,16 @@
         }
       }
     },
+    "KONTROL ET": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CHECK"
+          }
+        }
+      }
+    },
     "KONUŞMACILAR": {
       "localizations": {
         "en": {
@@ -1447,7 +1497,6 @@
       }
     },
     "Kapat": {
-      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1728,6 +1777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The speaker separation model didn't run (first use needs the internet)"
+          }
+        }
+      }
+    },
+    "Konuşmacı önerileri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker suggestions"
           }
         }
       }
@@ -2172,6 +2231,16 @@
         }
       }
     },
+    "Not eski adlarla yazıldı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The note still uses the old names."
+          }
+        }
+      }
+    },
     "Not hazırlanıyor": {
       "localizations": {
         "en": {
@@ -2382,6 +2451,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Denied: turn it on in System Settings"
+          }
+        }
+      }
+    },
+    "Reddet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject"
           }
         }
       }
@@ -3025,6 +3104,26 @@
         }
       }
     },
+    "Transkript okunuyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the transcript…"
+          }
+        }
+      }
+    },
+    "Transkripti okuyup ad ve birleştirme önerir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads the transcript and suggests names and merges"
+          }
+        }
+      }
+    },
     "Turuncu": {
       "localizations": {
         "en": {
@@ -3083,6 +3182,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Serif (New York)"
+          }
+        }
+      }
+    },
+    "Uygula": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
           }
         }
       }
@@ -3400,6 +3509,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "SUMMARY"
+          }
+        }
+      }
+    },
+    "Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No suggestions: the transcript has no clear clues for names or merges."
+          }
+        }
+      }
+    },
+    "Önerileri kapat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close suggestions"
+          }
+        }
+      }
+    },
+    "Öneriyi reddet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject suggestion"
+          }
+        }
+      }
+    },
+    "Öneriyi uygula": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply suggestion"
           }
         }
       }

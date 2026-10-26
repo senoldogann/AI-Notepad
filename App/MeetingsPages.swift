@@ -165,7 +165,10 @@ struct MeetingDetailPage: View {
                                 .foregroundStyle(.secondary)
                         }
                     case .transcript:
-                        SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
+                        SpeakerNamesSection(
+                            model: model, record: record, isLocked: isLocked,
+                            onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                        )
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
                             onPlay: { (startSec: Double) -> Void in play(from: startSec) }
@@ -450,21 +453,35 @@ private struct TaskRow: View {
     }
 }
 
-/// "Konuşmacı N" etiketlerine ad verme ve iki konuşmacıyı birleştirme (ayırma aynı kişiyi ikiye böldüyse).
+/// "Konuşmacı N" etiketlerine ad verme, iki konuşmacıyı birleştirme (ayırma aynı kişiyi ikiye böldüyse) ve akıllı
+/// modelin ad/birleştirme önerileri ("Gözden geçir").
 private struct SpeakerNamesSection: View {
     let model: AppModel
     let record: MeetingRecord
     let isLocked: Bool
+    let onPlay: @MainActor (Double) -> Void
 
     var body: some View {
         // Gösterilen transkriptle aynı bölüm kümesi.
         let persons: [Int] = Array(Set(meetingSegments(record: record).compactMap(\.person))).sorted()
         if !persons.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("KONUŞMACILAR")
-                    .font(DesignTokens.labelFont)
-                    .tracking(DesignTokens.labelTracking)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    Text("KONUŞMACILAR")
+                        .font(DesignTokens.labelFont)
+                        .tracking(DesignTokens.labelTracking)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Gözden geçir", systemImage: "sparkles") {
+                        model.reviewSpeakers(meetingID: record.id)
+                    }
+                    .controlSize(.small)
+                    .disabled(isLocked || model.speakerReviews[record.id] == .loading)
+                    .hoverHint("Transkripti okuyup ad ve birleştirme önerir", alignment: .trailing, edge: .bottom)
+                }
+                if let state = model.speakerReviews[record.id] {
+                    SpeakerReviewCard(model: model, record: record, state: state, isLocked: isLocked, onPlay: onPlay)
+                }
                 ForEach(persons, id: \.self) { (person: Int) in
                     HStack(spacing: DesignTokens.Spacing.s) {
                         SpeakerNameField(model: model, meetingID: record.id, person: person, current: record.speakerNames[person] ?? "")
@@ -489,6 +506,149 @@ private struct SpeakerNamesSection: View {
                     .disabled(isLocked)
                 }
             }
+        }
+    }
+}
+
+/// Konuşmacı incelemesinin önerileri: her biri tek tıkla uygulanır ya da reddedilir; şüpheli anlara tıklayınca
+/// oradan çalınır. Öneri uygulanınca not eski adlarla kaldığı için "Notu yenile" sunulur.
+private struct SpeakerReviewCard: View {
+    let model: AppModel
+    let record: MeetingRecord
+    let state: SpeakerReviewState
+    let isLocked: Bool
+    let onPlay: @MainActor (Double) -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+            HStack(spacing: DesignTokens.Spacing.s) {
+                Label("Konuşmacı önerileri", systemImage: "sparkles")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.tint)
+                Spacer(minLength: 0)
+                Button("Kapat", systemImage: "xmark") { model.closeSpeakerReview(meetingID: record.id) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .hoverHint("Önerileri kapat", alignment: .trailing, edge: .bottom)
+            }
+            content
+        }
+        .padding(DesignTokens.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, DesignTokens.Spacing.xs)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state {
+        case .loading:
+            HStack(spacing: DesignTokens.Spacing.s) {
+                ProgressView().controlSize(.small)
+                Text("Transkript okunuyor…").foregroundStyle(.secondary)
+            }
+            .font(.callout)
+        case .failed(let message):
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+        case .ready(let review, let applied):
+            ForEach(review.names) { (suggestion: SpeakerNameSuggestion) in
+                suggestionRow(
+                    title: Text("\(label(person: suggestion.person)) → \(suggestion.name)"),
+                    reason: suggestion.reason,
+                    onAccept: { model.acceptNameSuggestion(meetingID: record.id, suggestion: suggestion) },
+                    onDismiss: { model.dismissNameSuggestion(meetingID: record.id, suggestion: suggestion) }
+                )
+            }
+            ForEach(review.merges) { (suggestion: SpeakerMergeSuggestion) in
+                suggestionRow(
+                    title: Text("\(label(person: suggestion.from)) ile \(label(person: suggestion.into)) aynı kişi"),
+                    reason: suggestion.reason,
+                    onAccept: { model.acceptMergeSuggestion(meetingID: record.id, suggestion: suggestion) },
+                    onDismiss: { model.dismissMergeSuggestion(meetingID: record.id, suggestion: suggestion) }
+                )
+            }
+            if !review.suspicious.isEmpty {
+                Text("KONTROL ET")
+                    .font(DesignTokens.labelFont)
+                    .tracking(DesignTokens.labelTracking)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, DesignTokens.Spacing.xs)
+                ForEach(review.suspicious) { (passage: SuspiciousPassage) in
+                    suspiciousRow(passage: passage)
+                }
+            }
+            if !review.hasPendingSuggestions && review.suspicious.isEmpty && applied == 0 {
+                Text("Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            if applied > 0 {
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    Text("Not eski adlarla yazıldı.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
+                        .controlSize(.small)
+                        .disabled(isLocked)
+                }
+                .padding(.top, DesignTokens.Spacing.xs)
+            }
+        }
+    }
+
+    /// Konuşmacının şu anki adı ve numarası: "Aino (Konuşmacı 2)" ya da "Konuşmacı 2".
+    private func label(person: Int) -> String {
+        let number: String = speakerLabel(speaker: .others, person: person)
+        return record.speakerNames[person].map { "\($0) (\(number))" } ?? number
+    }
+
+    private func suggestionRow(title: Text, reason: String, onAccept: @escaping () -> Void, onDismiss: @escaping () -> Void) -> some View {
+        HStack(alignment: .top, spacing: DesignTokens.Spacing.s) {
+            VStack(alignment: .leading, spacing: 2) {
+                title.font(appearance.bodyFont.weight(.medium))
+                Text(reason)
+                    .font(appearance.secondaryFont)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("Uygula", systemImage: "checkmark", action: onAccept)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isLocked)
+                .hoverHint("Öneriyi uygula", alignment: .trailing, edge: .bottom)
+            Button("Reddet", systemImage: "xmark", action: onDismiss)
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
+                .hoverHint("Öneriyi reddet", alignment: .trailing, edge: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private func suspiciousRow(passage: SuspiciousPassage) -> some View {
+        let row: some View = HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s) {
+            Text(passage.time)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tint)
+            Text(passage.note)
+                .font(appearance.secondaryFont)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if let seconds = timestampSeconds(text: passage.time), !record.audioDeleted {
+            Button { onPlay(seconds) } label: { row }
+                .buttonStyle(.plain)
+                .hoverHint("Bu andan dinle", alignment: .leading, edge: .bottom)
+        } else {
+            row
         }
     }
 }

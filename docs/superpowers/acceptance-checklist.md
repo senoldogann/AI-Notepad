@@ -96,6 +96,7 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Toplantı sayfasında Özet / Transkript sekmeleri; not varsa Özet'te açılıyor.
 - [ ] "Dinle": iki taraf birlikte duyuluyor; alttaki kartta konuşmacı, konum, ±10 sn, hız çalışıyor; transkriptte söylenen kelime renkleniyor ve çalan paragraf ortaya kayıyor; paragrafa tıklayınca oradan çalıyor.
 - [ ] Toplantı sayfasında konuşmacı satırındaki birleştir simgesiyle iki konuşmacı birleşiyor; ad taşınıyor.
+- [ ] Transkript › "Gözden geçir": kartta ad/birleştirme önerileri nedenleriyle görünüyor; ✓ adı veriyor ya da birleştiriyor, ✕ öneriyi kaldırıyor; "Kontrol et" anına tıklayınca oradan çalıyor; uygulayınca "Notu yenile" notu yeni adlarla yazıyor.
 
 ## Hazırlanma kartı
 - [ ] Bitir'e bas: panel bulanıklaşıyor, ortada animasyonlu kart; adımlar sırayla ✓ oluyor; bitince kart kayboluyor ve toplantı sayfası (görevler üstte) açık.

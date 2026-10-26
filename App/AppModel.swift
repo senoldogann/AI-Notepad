@@ -12,6 +12,14 @@ enum ModelStatus: Equatable {
     case failed(String)
 }
 
+/// Toplantı sayfasındaki "Konuşmacıları gözden geçir" kartı.
+enum SpeakerReviewState: Equatable {
+    case loading
+    /// `applied`: kabul edilen öneri sayısı; sıfırdan büyükse not eski adlarla yazılmıştır ("Notu yenile").
+    case ready(review: SpeakerReview, applied: Int)
+    case failed(String)
+}
+
 /// Görünüm durumunu üreten girdiler; değişmedikçe görünüm durumu yeniden hesaplanmaz.
 private struct ViewStateInputs: Equatable {
     let transcript: [LiveSegment]
@@ -90,6 +98,8 @@ final class AppModel {
     var processingSteps: [String: ProcessingStep] = [:]
     /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
     var activeMeetingID: String?
+    /// Toplantı → konuşmacı incelemesi kartı.
+    var speakerReviews: [String: SpeakerReviewState] = [:]
 
     /// Çeviriler sırayla yapılır: her iş bir öncekini bekler.
     @ObservationIgnored private var translationTail: Task<Void, Never>?
@@ -108,6 +118,8 @@ final class AppModel {
     @ObservationIgnored private var assistantTask: Task<Void, Never>?
     /// Kartı yazmaya yetkili son istek.
     @ObservationIgnored private var assistantRequestID: Int = 0
+    /// Süren konuşmacı incelemeleri; yenisi ya da kartı kapatmak eskisini iptal eder.
+    @ObservationIgnored private var speakerReviewTasks: [String: Task<Void, Never>] = [:]
     /// Ses saklama süresini günde bir uygulayan görev.
     @ObservationIgnored private var retentionTask: Task<Void, Never>?
     @ObservationIgnored private var viewStateCache: (inputs: ViewStateInputs, state: LiveViewState)?
@@ -714,8 +726,8 @@ final class AppModel {
             let llm: LLMProvider? = await optionalLLMProvider()
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName
-            ) { [weak self] (step: ProcessingStep) async -> Void in
-                self?.processingSteps[record.id] = step
+            ) { (step: ProcessingStep) async -> Void in
+                self.processingSteps[record.id] = step
             }
             saveRecord(record: result, directory: directory)
             processingMeetingIDs.remove(record.id)
@@ -761,6 +773,8 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
+        // Son geçiş konuşmacıları yeniden numaralar; eski öneriler başka kişileri gösterirdi.
+        closeSpeakerReview(meetingID: meetingID)
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             process(record: record, directory: directory)
         }
@@ -774,6 +788,12 @@ final class AppModel {
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             processingMeetingIDs.insert(meetingID)
+            // Kabul edilen öneriler artık notta; bekleyen öneri yoksa inceleme kartı kapanır.
+            if case .ready(let review, _) = speakerReviews[meetingID] {
+                speakerReviews[meetingID] = review.hasPendingSuggestions || !review.suspicious.isEmpty
+                    ? .ready(review: review, applied: 0)
+                    : nil
+            }
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, llm: llm, userName: userName)
@@ -794,6 +814,98 @@ final class AppModel {
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             saveRecord(record: record.with(speakerNames: names), directory: directory)
         }
+    }
+
+    // MARK: Konuşmacı incelemesi
+
+    /// Akıllı model transkriptin tamamını okuyup ad, birleştirme ve şüpheli an önerir; öneriler kartta tek tek
+    /// kabul ya da reddedilir (yanlış bir öneri sessizce notu bozmasın diye otomatik uygulanmaz).
+    func reviewSpeakers(meetingID: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        let segments: [StoredSegment] = meetingSegments(record: record)
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName) else {
+            return
+        }
+        let persons: Set<Int> = Set(segments.compactMap(\.person))
+        speakerReviewTasks[meetingID]?.cancel()
+        speakerReviews[meetingID] = .loading
+        speakerReviewTasks[meetingID] = Task { [weak self] in
+            let state: SpeakerReviewState
+            do {
+                let provider: LLMProvider = try await resolveLLMProvider()
+                let text: String = try await sendLLM(provider: provider, request: request)
+                state = .ready(review: try parseSpeakerReview(text: text, persons: persons, speakerNames: record.speakerNames), applied: 0)
+            } catch {
+                // Hata gövdesi toplantı metni içerebilir: yalnızca özel (private) loglanır.
+                Self.logger.error("Konuşmacı incelemesi başarısız, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                state = .failed(userFacingMessage(error: error))
+            }
+            // Kart kapatıldıysa ya da yeni inceleme başladıysa sonuç yazılmaz.
+            guard let self, !Task.isCancelled else {
+                return
+            }
+            self.speakerReviews[meetingID] = state
+            self.speakerReviewTasks[meetingID] = nil
+        }
+    }
+
+    /// Kartı kapatır ve süren incelemeyi iptal eder.
+    func closeSpeakerReview(meetingID: String) {
+        speakerReviewTasks[meetingID]?.cancel()
+        speakerReviewTasks[meetingID] = nil
+        speakerReviews[meetingID] = nil
+    }
+
+    /// Ad önerisini uygular.
+    func acceptNameSuggestion(meetingID: String, suggestion: SpeakerNameSuggestion) {
+        guard case .ready(let review, let applied) = speakerReviews[meetingID], !isLocked(meetingID: meetingID) else {
+            return
+        }
+        // Bu arada elle birleştirilen kişiye ad verilmez; öneri yalnızca düşer.
+        guard currentPersons(meetingID: meetingID).contains(suggestion.person) else {
+            speakerReviews[meetingID] = .ready(review: review.removingName(person: suggestion.person), applied: applied)
+            return
+        }
+        renameSpeaker(meetingID: meetingID, person: suggestion.person, name: suggestion.name)
+        speakerReviews[meetingID] = .ready(review: review.removingName(person: suggestion.person), applied: applied + 1)
+    }
+
+    func dismissNameSuggestion(meetingID: String, suggestion: SpeakerNameSuggestion) {
+        guard case .ready(let review, let applied) = speakerReviews[meetingID] else {
+            return
+        }
+        speakerReviews[meetingID] = .ready(review: review.removingName(person: suggestion.person), applied: applied)
+    }
+
+    /// Birleştirme önerisini uygular; kalan öneriler yeni numaralara taşınır.
+    func acceptMergeSuggestion(meetingID: String, suggestion: SpeakerMergeSuggestion) {
+        guard case .ready(let review, let applied) = speakerReviews[meetingID], !isLocked(meetingID: meetingID) else {
+            return
+        }
+        guard currentPersons(meetingID: meetingID).isSuperset(of: [suggestion.from, suggestion.into]) else {
+            speakerReviews[meetingID] = .ready(review: review.removingMerge(from: suggestion.from, into: suggestion.into), applied: applied)
+            return
+        }
+        mergeSpeakers(meetingID: meetingID, from: suggestion.from, into: suggestion.into)
+        speakerReviews[meetingID] = .ready(review: review.afterMerge(from: suggestion.from, into: suggestion.into), applied: applied + 1)
+    }
+
+    func dismissMergeSuggestion(meetingID: String, suggestion: SpeakerMergeSuggestion) {
+        guard case .ready(let review, let applied) = speakerReviews[meetingID] else {
+            return
+        }
+        speakerReviews[meetingID] = .ready(review: review.removingMerge(from: suggestion.from, into: suggestion.into), applied: applied)
+    }
+
+    /// Toplantının şu anki kişi numaraları (gösterilen bölümlerden).
+    private func currentPersons(meetingID: String) -> Set<Int> {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return []
+        }
+        return Set(meetingSegments(record: record).compactMap(\.person))
     }
 
     /// Ses dosyalarını siler; metin ve not kalır.

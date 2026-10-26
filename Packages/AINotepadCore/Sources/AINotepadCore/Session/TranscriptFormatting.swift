@@ -79,3 +79,12 @@ public func timestamp(seconds: Double) -> String {
         ? String(format: "%d:%02d:%02d", hours, minutes, secs)
         : String(format: "%02d:%02d", minutes, secs)
 }
+
+/// `timestamp(seconds:)` biçimindeki metni ("02:05", "1:02:05") saniyeye çevirir; biçim tutmazsa nil. Saf fonksiyondur.
+public func timestampSeconds(text: String) -> Double? {
+    let parts: [Int] = text.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).split(separator: ":").compactMap { Int($0) }
+    guard (2...3).contains(parts.count), parts.count == text.filter({ $0 == ":" }).count + 1, parts.allSatisfy({ $0 >= 0 }) else {
+        return nil
+    }
+    return Double(parts.reduce(0) { (total: Int, part: Int) -> Int in total * 60 + part })
+}
