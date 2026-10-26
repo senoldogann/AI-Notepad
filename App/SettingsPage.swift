@@ -137,6 +137,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.customVocabulary) private var vocabulary: String = ""
     @AppStorage(SettingsKey.meetingReminders) private var meetingReminders: Bool = true
     @AppStorage(SettingsKey.micSuggestions) private var micSuggestions: Bool = true
+    @AppStorage(SettingsKey.autoRecord) private var autoRecord: Bool = false
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
     @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
@@ -251,6 +252,13 @@ private struct GeneralSettings: View {
                         .settingsToggle()
                         .onChange(of: micSuggestions) { (_: Bool, _: Bool) in model.startCalendarServices() }
                 }
+                SettingsRow(title: Text("Takvimdeki görüşmeleri kendiliğinden kaydet")) {
+                    Text("Takvimde görüşme bağlantısı (Teams, Zoom, Meet) olan bir toplantı sürerken başka bir uygulama mikrofonu açınca kayıt kendiliğinden başlar ve bildirilir; bir kez kur, unut. Katılımcılara kaydettiğini söylemek senin sorumluluğunda.")
+                } control: {
+                    Toggle("Takvimdeki görüşmeleri kendiliğinden kaydet", isOn: $autoRecord)
+                        .settingsToggle()
+                        .onChange(of: autoRecord) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                }
             }
             SettingsRow(title: Text("Not şablonu")) {
                 Text("Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).")
@@ -360,11 +368,32 @@ private struct GeneralSettings: View {
     }
 }
 
-/// Görünüm: tema, vurgu rengi, yazı tipi, metin boyutu, satır aralığı, alt boşluk, ada. Değişiklikler anında görünür.
+/// Yazı tipi menüsünün seçenekleri: gömülü Inter ve SF tasarımları, bu Mac'te bulunan seçkin aileler; şu an seçili
+/// yüklü aile listede yoksa o da eklenir (menü seçimi gösterebilsin).
+@MainActor
+private func fontOptions(current: String) -> [(String, Text)] {
+    let builtIn: [(String, Text)] = [
+        (AppFontChoice.design(.inter).storageValue, Text("Inter (varsayılan)")),
+        (AppFontChoice.design(.system).storageValue, Text("Sistem (SF Pro)")),
+        (AppFontChoice.design(.rounded).storageValue, Text("Yuvarlak (SF Rounded)")),
+        (AppFontChoice.design(.serif).storageValue, Text("Tırnaklı (New York)")),
+        (AppFontChoice.design(.monospaced).storageValue, Text("Eş aralıklı (SF Mono)")),
+    ]
+    let available: Set<String> = Set(NSFontManager.shared.availableFontFamilies)
+    let curated: [String] = ["Avenir Next", "Helvetica Neue", "Futura", "Gill Sans", "Optima", "Charter", "Iowan Old Style", "Georgia", "Palatino", "Baskerville", "Menlo"]
+        .filter { available.contains($0) }
+    let selectedFamily: [String] = if case .installed(let family) = AppFontChoice.parse(storage: current), !curated.contains(family) { [family] } else { [] }
+    return builtIn + (curated + selectedFamily).map { (family: String) -> (String, Text) in
+        (AppFontChoice.installed(family: family).storageValue, Text(verbatim: family).font(.custom(family, size: 13)))
+    }
+}
+
+/// Görünüm: tema, vurgu rengi, yazı tipi, arayüz boyutu, metin boyutu, satır aralığı, alt boşluk, ada. Değişiklikler anında görünür.
 private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.light.rawValue
     @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
-    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
+    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontChoice.storageValue
+    @AppStorage(SettingsKey.uiScale) private var uiScale: Double = PanelAppearance.standard.uiScale
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
@@ -389,15 +418,32 @@ private struct AppearanceSettings: View {
                 })
             }
             SettingsRow(title: Text("Yazı tipi")) {
-                EmptyView()
+                Text("Uygulamanın tamamında; Mac'te yüklü her yazı tipi seçilebilir.")
             } control: {
-                SettingsMenu(selection: $fontDesign, options: [
-                    (PanelFontDesign.inter.rawValue, Text("Inter (varsayılan)")),
-                    (PanelFontDesign.system.rawValue, Text("Sistem (SF Pro)")),
-                    (PanelFontDesign.rounded.rawValue, Text("Yuvarlak (SF Rounded)")),
-                    (PanelFontDesign.serif.rawValue, Text("Tırnaklı (New York)")),
-                    (PanelFontDesign.monospaced.rawValue, Text("Eş aralıklı (SF Mono)")),
-                ])
+                HStack(spacing: 8) {
+                    SettingsMenu(selection: $fontDesign, options: fontOptions(current: fontDesign))
+                    Menu {
+                        ForEach(NSFontManager.shared.availableFontFamilies.filter { !$0.hasPrefix(".") }, id: \.self) { (family: String) in
+                            Button(family) { fontDesign = AppFontChoice.installed(family: family).storageValue }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.pill)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .hoverHint("Tüm yüklü yazı tipleri", alignment: .trailing, edge: .bottom)
+                }
+            }
+            SettingsRow(title: Text("Arayüz boyutu: \(Int((uiScale * 100).rounded()))%")) {
+                Text("Menüler, başlıklar ve düğmeler dahil tüm yazılar.")
+            } control: {
+                HStack(spacing: 10) {
+                    Image(systemName: "textformat.size.smaller").foregroundStyle(Theme.muted)
+                    Slider(value: $uiScale, in: SettingsRange.uiScale, step: 0.05).frame(width: 200)
+                    Image(systemName: "textformat.size.larger").foregroundStyle(Theme.muted)
+                }
             }
             SettingsRow(title: Text("Metin boyutu: \(Int(textSize)) pt")) {
                 EmptyView()

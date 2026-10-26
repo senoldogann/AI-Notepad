@@ -20,6 +20,33 @@ public enum PanelFontDesign: String, Sendable, CaseIterable {
     }
 }
 
+/// Uygulamanın yazı tipi seçimi: Inter ya da SF tasarımları, veya Mac'te yüklü herhangi bir aile (ör. Avenir Next).
+public enum AppFontChoice: Sendable, Equatable, Hashable {
+    case design(PanelFontDesign)
+    case installed(family: String)
+
+    /// Ayarlarda saklanan değer: tasarımın adı (`inter`) ya da `family:<aile>`.
+    public var storageValue: String {
+        switch self {
+        case .design(let design): design.rawValue
+        case .installed(let family): installedFontPrefix + family
+        }
+    }
+
+    /// Saklanan değerden seçim; tanınmıyorsa nil. Saf fonksiyondur.
+    public static func parse(storage: String) -> AppFontChoice? {
+        if let design = PanelFontDesign(rawValue: storage) {
+            return .design(design)
+        }
+        guard storage.hasPrefix(installedFontPrefix), storage.count > installedFontPrefix.count else {
+            return nil
+        }
+        return .installed(family: String(storage.dropFirst(installedFontPrefix.count)))
+    }
+}
+
+private let installedFontPrefix: String = "family:"
+
 /// Vurgu rengi: düğmeler ve "senden istenenler" vurguları ("Sen"in kendi rengi değişmez).
 public enum PanelAccent: String, Sendable, CaseIterable {
     case blue
@@ -41,7 +68,9 @@ public enum PanelAccent: String, Sendable, CaseIterable {
 
 /// Panelin kullanıcı tarafından ayarlanan görünümü.
 public struct PanelAppearance: Equatable, Sendable {
-    public let fontDesign: PanelFontDesign
+    public let fontChoice: AppFontChoice
+    /// Arayüzün tamamındaki yazıların ölçeği (1 = tasarımdaki boyutlar).
+    public let uiScale: Double
     /// Transkript metninin punto değeri.
     public let textSize: Double
     public let lineSpacing: Double
@@ -49,8 +78,9 @@ public struct PanelAppearance: Equatable, Sendable {
     public let bottomSpacing: Double
     public let accent: PanelAccent
 
-    public init(fontDesign: PanelFontDesign, textSize: Double, lineSpacing: Double, bottomSpacing: Double, accent: PanelAccent) {
-        self.fontDesign = fontDesign
+    public init(fontChoice: AppFontChoice, uiScale: Double, textSize: Double, lineSpacing: Double, bottomSpacing: Double, accent: PanelAccent) {
+        self.fontChoice = fontChoice
+        self.uiScale = uiScale
         self.textSize = textSize
         self.lineSpacing = lineSpacing
         self.bottomSpacing = bottomSpacing
@@ -59,25 +89,44 @@ public struct PanelAppearance: Equatable, Sendable {
 
     /// Tasarım belgesindeki varsayılanlar (§4.3).
     public static let standard: PanelAppearance = PanelAppearance(
-        fontDesign: .inter, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .orange
+        fontChoice: .design(.inter), uiScale: 1, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .orange
     )
 
-    /// Seçili ailede (Inter ya da sistem tasarımı) verilen boyut ve ağırlık.
+    /// Sistem denetimlerinin tasarımı (yüklü ailede varsayılan).
+    public var fontDesign: PanelFontDesign {
+        switch fontChoice {
+        case .design(let design): design
+        case .installed: .system
+        }
+    }
+
+    /// Arayüz yazısı: seçili ailede (Inter, sistem tasarımı ya da yüklü aile) verilen boyut arayüz ölçeğiyle çarpılır.
     public func font(size: CGFloat, weight: Font.Weight) -> Font {
-        switch fontDesign {
-        case .inter: .custom(Theme.interFamily, size: size).weight(weight)
-        case .system, .rounded, .serif, .monospaced: .system(size: size, weight: weight, design: fontDesign.design)
+        familyFont(size: size * uiScale, weight: weight)
+    }
+
+    /// Okuma metni (transkript, özet, cevap): boyut "Metin boyutu"ndan gelir, arayüz ölçeğiyle çarpılmaz (ayarda
+    /// görünen punto gerçek boyuttur).
+    public func readingFont(size: CGFloat, weight: Font.Weight) -> Font {
+        familyFont(size: size, weight: weight)
+    }
+
+    private func familyFont(size: CGFloat, weight: Font.Weight) -> Font {
+        switch fontChoice {
+        case .design(.inter): .custom(Theme.interFamily, size: size).weight(weight)
+        case .design(let design): .system(size: size, weight: weight, design: design.design)
+        case .installed(let family): .custom(family, size: size).weight(weight)
         }
     }
 
     /// Transkript metni.
     public var bodyFont: Font {
-        font(size: textSize, weight: .regular)
+        readingFont(size: textSize, weight: .regular)
     }
 
     /// İki dilde soluk orijinal ve kart metinleri: gövdeden bir punto küçük.
     public var secondaryFont: Font {
-        font(size: max(10, textSize - 1), weight: .regular)
+        readingFont(size: max(10, textSize - 1), weight: .regular)
     }
 }
 

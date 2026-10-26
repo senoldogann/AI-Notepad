@@ -44,20 +44,178 @@ public func templateInstructions(template: NoteTemplate) -> String {
     }
 }
 
-/// Notun paylaşım dili (iş arkadaşlarına gönderilecek sürüm).
+/// Notun paylaşım dili (iş arkadaşlarına gönderilecek sürüm); ham değer BCP 47 dil kodudur. Fince ve İngilizce
+/// öne, diğerleri sırayla.
 public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
     case finnish = "fi"
     case english = "en"
+    case swedish = "sv"
+    case norwegian = "nb"
+    case danish = "da"
+    case estonian = "et"
+    case german = "de"
+    case dutch = "nl"
+    case french = "fr"
+    case spanish = "es"
+    case portuguese = "pt"
+    case italian = "it"
+    case polish = "pl"
+    case czech = "cs"
+    case slovak = "sk"
+    case hungarian = "hu"
+    case romanian = "ro"
+    case bulgarian = "bg"
+    case croatian = "hr"
+    case greek = "el"
+    case latvian = "lv"
+    case lithuanian = "lt"
+    case russian = "ru"
+    case ukrainian = "uk"
+    case azerbaijani = "az"
+    case arabic = "ar"
+    case hebrew = "he"
+    case persian = "fa"
+    case hindi = "hi"
+    case chineseSimplified = "zh-Hans"
+    case chineseTraditional = "zh-Hant"
+    case japanese = "ja"
+    case korean = "ko"
+    case indonesian = "id"
+    case vietnamese = "vi"
+    case thai = "th"
+
+    /// Dilin kendi adı (seçicide).
+    public var nativeName: String {
+        switch self {
+        case .finnish: "Suomi"
+        case .english: "English"
+        case .swedish: "Svenska"
+        case .norwegian: "Norsk"
+        case .danish: "Dansk"
+        case .estonian: "Eesti"
+        case .german: "Deutsch"
+        case .dutch: "Nederlands"
+        case .french: "Français"
+        case .spanish: "Español"
+        case .portuguese: "Português"
+        case .italian: "Italiano"
+        case .polish: "Polski"
+        case .czech: "Čeština"
+        case .slovak: "Slovenčina"
+        case .hungarian: "Magyar"
+        case .romanian: "Română"
+        case .bulgarian: "Български"
+        case .croatian: "Hrvatski"
+        case .greek: "Ελληνικά"
+        case .latvian: "Latviešu"
+        case .lithuanian: "Lietuvių"
+        case .russian: "Русский"
+        case .ukrainian: "Українська"
+        case .azerbaijani: "Azərbaycan"
+        case .arabic: "العربية"
+        case .hebrew: "עברית"
+        case .persian: "فارسی"
+        case .hindi: "हिन्दी"
+        case .chineseSimplified: "简体中文"
+        case .chineseTraditional: "繁體中文"
+        case .japanese: "日本語"
+        case .korean: "한국어"
+        case .indonesian: "Bahasa Indonesia"
+        case .vietnamese: "Tiếng Việt"
+        case .thai: "ไทย"
+        }
+    }
+
+    /// İngilizce adı (istemde hedef dil olarak).
+    public var englishName: String {
+        switch self {
+        case .finnish: "Finnish"
+        case .english: "English"
+        case .swedish: "Swedish"
+        case .norwegian: "Norwegian (Bokmål)"
+        case .danish: "Danish"
+        case .estonian: "Estonian"
+        case .german: "German"
+        case .dutch: "Dutch"
+        case .french: "French"
+        case .spanish: "Spanish"
+        case .portuguese: "Portuguese"
+        case .italian: "Italian"
+        case .polish: "Polish"
+        case .czech: "Czech"
+        case .slovak: "Slovak"
+        case .hungarian: "Hungarian"
+        case .romanian: "Romanian"
+        case .bulgarian: "Bulgarian"
+        case .croatian: "Croatian"
+        case .greek: "Greek"
+        case .latvian: "Latvian"
+        case .lithuanian: "Lithuanian"
+        case .russian: "Russian"
+        case .ukrainian: "Ukrainian"
+        case .azerbaijani: "Azerbaijani"
+        case .arabic: "Arabic"
+        case .hebrew: "Hebrew"
+        case .persian: "Persian"
+        case .hindi: "Hindi"
+        case .chineseSimplified: "Chinese (Simplified)"
+        case .chineseTraditional: "Chinese (Traditional)"
+        case .japanese: "Japanese"
+        case .korean: "Korean"
+        case .indonesian: "Indonesian"
+        case .vietnamese: "Vietnamese"
+        case .thai: "Thai"
+        }
+    }
+
+    /// Paylaşım metnindeki başlıklar: özet, kararlar, görevler.
+    public var headings: (summary: String, decisions: String, tasks: String) {
+        switch self {
+        case .finnish: ("Yhteenveto", "Päätökset", "Tehtävät")
+        case .english: ("Summary", "Decisions", "Action items")
+        case .swedish: ("Sammanfattning", "Beslut", "Uppgifter")
+        case .norwegian: ("Sammendrag", "Beslutninger", "Oppgaver")
+        case .danish: ("Resumé", "Beslutninger", "Opgaver")
+        case .estonian: ("Kokkuvõte", "Otsused", "Ülesanded")
+        case .german: ("Zusammenfassung", "Entscheidungen", "Aufgaben")
+        case .dutch: ("Samenvatting", "Besluiten", "Actiepunten")
+        case .french: ("Résumé", "Décisions", "Actions")
+        case .spanish: ("Resumen", "Decisiones", "Tareas")
+        case .portuguese: ("Resumo", "Decisões", "Tarefas")
+        case .italian: ("Riepilogo", "Decisioni", "Attività")
+        case .polish: ("Podsumowanie", "Decyzje", "Zadania")
+        case .czech: ("Shrnutí", "Rozhodnutí", "Úkoly")
+        case .slovak: ("Zhrnutie", "Rozhodnutia", "Úlohy")
+        case .hungarian: ("Összefoglaló", "Döntések", "Feladatok")
+        case .romanian: ("Rezumat", "Decizii", "Sarcini")
+        case .bulgarian: ("Резюме", "Решения", "Задачи")
+        case .croatian: ("Sažetak", "Odluke", "Zadaci")
+        case .greek: ("Περίληψη", "Αποφάσεις", "Εργασίες")
+        case .latvian: ("Kopsavilkums", "Lēmumi", "Uzdevumi")
+        case .lithuanian: ("Santrauka", "Sprendimai", "Užduotys")
+        case .russian: ("Краткое содержание", "Решения", "Задачи")
+        case .ukrainian: ("Підсумок", "Рішення", "Завдання")
+        case .azerbaijani: ("Xülasə", "Qərarlar", "Tapşırıqlar")
+        case .arabic: ("الملخص", "القرارات", "المهام")
+        case .hebrew: ("סיכום", "החלטות", "משימות")
+        case .persian: ("خلاصه", "تصمیم‌ها", "وظایف")
+        case .hindi: ("सारांश", "निर्णय", "कार्य")
+        case .chineseSimplified: ("摘要", "决定", "待办事项")
+        case .chineseTraditional: ("摘要", "決定", "待辦事項")
+        case .japanese: ("概要", "決定事項", "タスク")
+        case .korean: ("요약", "결정 사항", "할 일")
+        case .indonesian: ("Ringkasan", "Keputusan", "Tugas")
+        case .vietnamese: ("Tóm tắt", "Quyết định", "Công việc")
+        case .thai: ("สรุป", "การตัดสินใจ", "งานที่ต้องทำ")
+        }
+    }
 }
 
 /// Türkçe notun paylaşım dilindeki sürümü için istek (akıllı model, notla aynı şema): her alan çevrilir, adlar ve
 /// rakamlar korunur, kullanıcının görevlerinde sahip kullanıcının adıdır ("Sen" değil), sözlük boş kalır (iş
 /// arkadaşları terimleri zaten bilir). Saf fonksiyondur.
 public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userName: String) -> LLMRequest {
-    let target: String = switch language {
-    case .finnish: "Fince (suomi)"
-    case .english: "İngilizce"
-    }
+    let target: String = "\(language.englishName) (\(language.nativeName))"
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let tasks: String = note.tasks.map { (task: NoteTask) -> String in
         "- sahip: \(task.owner); iş: \(task.description); tarih: \(task.dueDate ?? ""); benimMi: \(task.isMine)"
@@ -106,11 +264,9 @@ public func parseSharedNote(text: String, original: MeetingNote) throws -> Meeti
 /// Paylaşılacak not metni (Markdown; e-posta, Slack, Teams sohbetine yapıştırılır): başlık, tarih, özet, kararlar,
 /// görevler (sahibiyle). Türkçe notta sözlük de eklenir. Başlıklar notun dilinde. Saf fonksiyondur.
 public func shareText(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?) -> String {
-    let headings: (summary: String, decisions: String, tasks: String, glossary: String) = switch language {
-    case .finnish: ("Yhteenveto", "Päätökset", "Tehtävät", "")
-    case .english: ("Summary", "Decisions", "Action items", "")
-    case nil: (String(localized: "Özet"), String(localized: "Kararlar"), String(localized: "Görevler"), String(localized: "Sözlük"))
-    }
+    let headings: (summary: String, decisions: String, tasks: String, glossary: String) = language.map { (language: ShareLanguage) -> (summary: String, decisions: String, tasks: String, glossary: String) in
+        (summary: language.headings.summary, decisions: language.headings.decisions, tasks: language.headings.tasks, glossary: "")
+    } ?? (summary: String(localized: "Özet"), decisions: String(localized: "Kararlar"), tasks: String(localized: "Görevler"), glossary: String(localized: "Sözlük"))
     let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: language?.rawValue ?? "tr")))
     var lines: [String] = ["# \(note.title)", "", "_\(date)_", "", "## \(headings.summary)", "", note.summary, ""]
     if language == nil, let outline = note.outline, !outline.isEmpty {

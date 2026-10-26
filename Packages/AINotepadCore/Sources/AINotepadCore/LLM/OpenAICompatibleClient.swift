@@ -17,13 +17,26 @@ public func openAIChatURL(baseURL: URL) -> URL {
 /// `response_format: json_schema`. Bazı uyumlu sunucular (ör. Ollama'daki modeller) `response_format`'ı
 /// uygulamadığı için şema sistem mesajında da verilir. Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
 public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEffort?) throws -> Data {
+    var body: [String: Any] = try openAIRequestFields(request: request, model: model, effort: effort)
+    body["stream"] = false
+    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+}
+
+/// Akışlı (SSE) Chat Completions gövdesi: `openAIRequestBody` ile aynı alanlar, `stream: true`. Saf fonksiyondur.
+public func openAIStreamRequestBody(request: LLMRequest, model: String, effort: LLMEffort?) throws -> Data {
+    var body: [String: Any] = try openAIRequestFields(request: request, model: model, effort: effort)
+    body["stream"] = true
+    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+}
+
+/// İki gövdenin ortak alanları (akış alanı hariç). Saf fonksiyondur.
+private func openAIRequestFields(request: LLMRequest, model: String, effort: LLMEffort?) throws -> [String: Any] {
     let system: String = request.jsonSchema.map { (schema: String) -> String in
         "\(request.system)\n\nYanıtı yalnızca bu JSON şemasına uyan tek bir JSON nesnesi olarak yaz; Markdown, kod bloğu ya da başka metin ekleme:\n\(schema)"
     } ?? request.system
     var body: [String: Any] = [
         "model": model,
         "max_completion_tokens": openAIMaxTokens(requested: request.maxTokens, effort: effort),
-        "stream": false,
         "messages": [
             ["role": "system", "content": system],
             ["role": "user", "content": request.userText],
@@ -38,7 +51,7 @@ public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEff
             "json_schema": ["name": "yanit", "strict": true, "schema": try parsedSchema(text: schemaText)],
         ]
     }
-    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    return body
 }
 
 /// Gönderilecek `max_completion_tokens`: effort seçildiyse model akıl yürütür ve bu tokenlar da sınırdan harcanır,
@@ -81,6 +94,56 @@ public func parseOpenAIResponse(data: Data, model: String) throws -> String {
     return text
 }
 
+/// Akışın (SSE) sonucu: metin parçaları birleştirilir, bitiş nedeni son parçadan gelir. `[DONE]` ya da bitiş nedeni
+/// yoksa akış yarıda kalmıştır. Reddetme ve kesilme hatadır; akış içi hata nesnesi `streamFailed`. Saf fonksiyondur.
+public func parseOpenAIStream(data: Data, model: String) throws -> String {
+    let body: String = String(decoding: data, as: UTF8.self)
+    let payloads: [Substring] = body
+        .split(whereSeparator: \.isNewline)
+        .filter { $0.hasPrefix("data:") }
+        .map { $0.dropFirst("data:".count).drop { $0 == " " } }
+    let chunks: [RawStreamChunk] = try payloads.filter { $0 != "[DONE]" }.map { (payload: Substring) -> RawStreamChunk in
+        do {
+            return try JSONDecoder().decode(RawStreamChunk.self, from: Data(payload.utf8))
+        } catch {
+            throw LLMError.malformed(body: "\(error): \(body)")
+        }
+    }
+    if let failure = chunks.compactMap(\.error).first {
+        throw LLMError.streamFailed(errorType: failure.type ?? "error", message: failure.message ?? "", model: model)
+    }
+    let finish: String? = chunks.compactMap { $0.choices?.first?.finish_reason }.last
+    guard payloads.contains("[DONE]") || finish != nil else {
+        throw LLMError.malformed(body: body)
+    }
+    switch finish {
+    case "content_filter":
+        throw LLMError.refusal(category: "content_filter")
+    case "length":
+        throw LLMError.truncated(model: model)
+    default:
+        break
+    }
+    let text: String = strippingThinkBlock(text: chunks.compactMap { $0.choices?.first?.delta?.content }.joined())
+    guard !text.isEmpty else {
+        throw LLMError.empty
+    }
+    return text
+}
+
+/// Akışın bir satırındaki yanıt metni parçası; metin parçası değilse nil (bozuk satır da nil: akış bitince tamamı
+/// `parseOpenAIStream` ile doğrulanır ve bozukluk orada hata olur). Saf fonksiyondur.
+func openAITextDelta(line: Substring) -> String? {
+    guard line.hasPrefix("data:") else {
+        return nil
+    }
+    let payload: Substring = line.dropFirst("data:".count).drop { $0 == " " }
+    guard payload != "[DONE]", let chunk = try? JSONDecoder().decode(RawStreamChunk.self, from: Data(payload.utf8)) else {
+        return nil
+    }
+    return chunk.choices?.first?.delta?.content
+}
+
 /// Bazı uyumlu sunucuların (akıl yürüten yerel modeller) cevabın başına koyduğu `<think>…</think>` bölümünü atar;
 /// çeviri ya da JSON bu bölümle başlarsa panelde düşünme metni görünür, not ayrıştırılamazdı. Saf fonksiyondur.
 public func strippingThinkBlock(text: String) -> String {
@@ -107,6 +170,43 @@ public func classifyOpenAIResponse(status: Int, data: Data, model: String, reque
         return .retryable(.http(status: status, body: body, model: model, requestID: requestID))
     default:
         return .final(.http(status: status, body: body, model: model, requestID: requestID))
+    }
+}
+
+/// OpenAI uyumlu akışlı Chat Completions çağrısını hazırlar; sonuç tüm akıştan `parseOpenAIStream` ile çıkar.
+func prepareOpenAIStreamCall(config: OpenAICompatibleConfig, request: LLMRequest) throws -> PreparedLLMCall {
+    let model: String = openAIModel(config: config, tier: request.tier)
+    guard !model.isEmpty else {
+        throw LLMError.notConfigured(detail: request.tier == .fast ? String(localized: "çeviri modeli") : String(localized: "özet modeli"))
+    }
+    var urlRequest: URLRequest = URLRequest(url: openAIChatURL(baseURL: config.baseURL))
+    urlRequest.httpMethod = "POST"
+    urlRequest.timeoutInterval = request.timeoutSec
+    let effort: LLMEffort? = request.tier == .fast ? config.fastEffort : config.smartEffort
+    urlRequest.httpBody = try openAIStreamRequestBody(request: request, model: model, effort: effort)
+    for (field, value) in openAIHeaders(apiKey: config.apiKey) {
+        urlRequest.setValue(value, forHTTPHeaderField: field)
+    }
+    return PreparedLLMCall(urlRequest: urlRequest, model: model, requestIDHeader: "x-request-id") { (status: Int, data: Data, requestID: String?) -> LLMOutcome in
+        let body: String = String(decoding: data, as: UTF8.self)
+        switch status {
+        case 200..<300:
+            do {
+                return .success(try parseOpenAIStream(data: data, model: model))
+            } catch let error as LLMError {
+                // Akış ortasındaki aşırı yük ve sunucu hatası Claude'daki gibi yeniden denenir.
+                if case .streamFailed(let errorType, _, _) = error, isRetryableStreamError(errorType: errorType) || ["server_error", "rate_limit_exceeded"].contains(errorType) {
+                    return .retryable(error)
+                }
+                return .final(error)
+            } catch {
+                return .final(.malformed(body: body))
+            }
+        case let status where isRetryableLLMStatus(status: status):
+            return .retryable(.http(status: status, body: body, model: model, requestID: requestID))
+        default:
+            return .final(.http(status: status, body: body, model: model, requestID: requestID))
+        }
     }
 }
 
@@ -142,4 +242,23 @@ private struct RawChoice: Decodable {
 private struct RawMessage: Decodable {
     let content: String?
     let refusal: String?
+}
+
+private struct RawStreamChunk: Decodable {
+    let choices: [RawStreamChoice]?
+    let error: RawStreamFailure?
+}
+
+private struct RawStreamChoice: Decodable {
+    let delta: RawStreamContent?
+    let finish_reason: String?
+}
+
+private struct RawStreamContent: Decodable {
+    let content: String?
+}
+
+private struct RawStreamFailure: Decodable {
+    let type: String?
+    let message: String?
 }

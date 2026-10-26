@@ -141,6 +141,20 @@ public func parseClaudeStream(data: Data, model: String) throws -> String {
     return text
 }
 
+/// Akışın (SSE) bir satırındaki yanıt metni parçası; metin parçası değilse nil (bozuk satır da nil: akış bitince
+/// tamamı `parseClaudeStream` ile doğrulanır ve bozukluk orada hata olur). Saf fonksiyondur.
+func claudeTextDelta(line: Substring) -> String? {
+    guard line.hasPrefix("data:") else {
+        return nil
+    }
+    let payload: Substring = line.dropFirst("data:".count).drop { $0 == " " }
+    guard let event = try? JSONDecoder().decode(RawStreamEvent.self, from: Data(payload.utf8)),
+          event.type == "content_block_delta", event.delta?.type == "text_delta" else {
+        return nil
+    }
+    return event.delta?.text
+}
+
 /// Akış içi hatanın türü yeniden denenebilir mi (aşırı yük, sunucu hatası, hız sınırı).
 func isRetryableStreamError(errorType: String) -> Bool {
     ["overloaded_error", "api_error", "rate_limit_error"].contains(errorType)

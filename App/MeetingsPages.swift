@@ -342,11 +342,29 @@ struct MeetingDetailPage: View {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            PillPicker(selection: $noteLanguage, options: [
-                                (nil, "Türkçe"), (ShareLanguage.finnish, "Suomi"), (ShareLanguage.english, "English"),
-                            ])
-                            .fixedSize()
-                            .hoverHint("İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü", alignment: .leading, edge: .bottom)
+                            HStack(spacing: 8) {
+                                // Fince ve İngilizce hep görünür; seçilen diğer dil de dördüncü olarak eklenir.
+                                let others: [(value: ShareLanguage?, title: LocalizedStringKey)] = noteLanguage.flatMap { (language: ShareLanguage) -> [(value: ShareLanguage?, title: LocalizedStringKey)]? in
+                                    [.finnish, .english].contains(language) ? nil : [(value: language, title: LocalizedStringKey(language.nativeName))]
+                                } ?? []
+                                PillPicker(selection: $noteLanguage, options: [
+                                    (value: nil, title: "Türkçe"), (value: ShareLanguage.finnish, title: "Suomi"), (value: ShareLanguage.english, title: "English"),
+                                ] + others)
+                                .fixedSize()
+                                .hoverHint("İş arkadaşlarına göndermek için notun başka dildeki sürümü", alignment: .leading, edge: .bottom)
+                                Menu {
+                                    ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
+                                        Button(language.nativeName) { noteLanguage = language }
+                                    }
+                                } label: {
+                                    Label("Diğer diller", systemImage: "globe")
+                                }
+                                .menuStyle(.button)
+                                .buttonStyle(.pill)
+                                .menuIndicator(.hidden)
+                                .fixedSize()
+                                .hoverHint("Notu 30'dan fazla dilden birine çevir", alignment: .leading, edge: .bottom)
+                            }
                             if let language = noteLanguage {
                                 // Dil değişince durum (hata, deneme) sıfırlansın.
                                 SharedNoteSection(model: model, record: record, note: note, language: language)
@@ -815,7 +833,7 @@ private struct SummaryTab: View {
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(appearance.accent.color.opacity(0.28)))
             }
             Text(note.summary)
-                .font(appearance.font(size: appearance.textSize + 3, weight: .regular))
+                .font(appearance.readingFont(size: appearance.textSize + 3, weight: .regular))
                 .lineSpacing(appearance.lineSpacing + 3)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1071,13 +1089,13 @@ private struct GlossarySection: View {
 
     private func term(entry: GlossaryEntry) -> some View {
         Text(entry.term)
-            .font(appearance.font(size: appearance.textSize, weight: .semibold))
+            .font(appearance.readingFont(size: appearance.textSize, weight: .semibold))
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func meaning(entry: GlossaryEntry) -> some View {
         Text(entry.meaning)
-            .font(appearance.font(size: appearance.textSize, weight: .regular))
+            .font(appearance.readingFont(size: appearance.textSize, weight: .regular))
             .foregroundStyle(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -1109,7 +1127,7 @@ private struct SharedNoteSection: View {
             } else {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text(language == .finnish ? "Suomenkielinen versio valmistuu…" : "Preparing the English version…")
+                    Text("\(language.nativeName) sürümü hazırlanıyor…")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 }
@@ -1127,9 +1145,12 @@ private struct SharedNoteSection: View {
 
     private func content(shared: MeetingNote) -> some View {
         let text: String = shareText(record: record, note: shared, language: language)
-        let headings: (summary: String, decisions: String, tasks: String) = language == .finnish
-            ? ("YHTEENVETO", "PÄÄTÖKSET", "TEHTÄVÄT")
-            : ("SUMMARY", "DECISIONS", "ACTION ITEMS")
+        let locale: Locale = Locale(identifier: language.rawValue)
+        let headings: (summary: String, decisions: String, tasks: String) = (
+            summary: language.headings.summary.uppercased(with: locale),
+            decisions: language.headings.decisions.uppercased(with: locale),
+            tasks: language.headings.tasks.uppercased(with: locale)
+        )
         return VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 8) {
                 Text(shared.title)
@@ -1146,7 +1167,7 @@ private struct SharedNoteSection: View {
             }
             sharedSection(title: headings.summary) {
                 Text(shared.summary)
-                    .font(appearance.font(size: appearance.textSize + 2, weight: .regular))
+                    .font(appearance.readingFont(size: appearance.textSize + 2, weight: .regular))
                     .lineSpacing(appearance.lineSpacing + 2)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1217,7 +1238,7 @@ private struct OutlineRow: View {
             }
             .frame(width: 64)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title).font(appearance.font(size: appearance.textSize, weight: .semibold))
+                Text(item.title).font(appearance.readingFont(size: appearance.textSize, weight: .semibold))
                 Text(item.summary)
                     .font(appearance.secondaryFont)
                     .foregroundStyle(Theme.muted)

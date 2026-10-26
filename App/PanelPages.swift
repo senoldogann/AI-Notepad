@@ -173,7 +173,8 @@ func launchPage(arguments: [String]) -> PanelPage? {
 struct AppearanceEnvironment: ViewModifier {
     @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.light.rawValue
     @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
-    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
+    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontChoice.storageValue
+    @AppStorage(SettingsKey.uiScale) private var uiScale: Double = PanelAppearance.standard.uiScale
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
@@ -181,7 +182,8 @@ struct AppearanceEnvironment: ViewModifier {
     func body(content: Content) -> some View {
         let standard: PanelAppearance = .standard
         let appearance: PanelAppearance = PanelAppearance(
-            fontDesign: PanelFontDesign(rawValue: fontDesign) ?? standard.fontDesign,
+            fontChoice: AppFontChoice.parse(storage: fontDesign) ?? standard.fontChoice,
+            uiScale: min(max(uiScale, SettingsRange.uiScale.lowerBound), SettingsRange.uiScale.upperBound),
             textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
             accent: PanelAccent(rawValue: accent) ?? standard.accent
         )
@@ -189,6 +191,8 @@ struct AppearanceEnvironment: ViewModifier {
             .environment(\.panelAppearance, appearance)
             .tint(appearance.accent.color)
             .fontDesign(appearance.fontDesign.design)
+            // Yazı tipi belirtilmemiş metinler ve sistem denetimleri de seçili aile ve ölçekte.
+            .font(appearance.font(size: 13, weight: .regular))
             // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
             .buttonStyle(.pill)
             // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.

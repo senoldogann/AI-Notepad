@@ -25,3 +25,18 @@ public func openAICompatibleConfig(
         fastEffort: fastEffort, smartEffort: smartEffort
     )
 }
+
+/// Model sınıfının kullanıcıya gösterilen adı (ör. "Claude Opus 5.5", Ollama'da model adı). Saf fonksiyondur.
+public func llmModelDisplayName(provider: LLMProvider, tier: LLMTier) -> String {
+    switch provider {
+    case .anthropic(let config):
+        switch claudeModel(config: config, tier: tier) {
+        case .haiku: "Claude Haiku 5.5"
+        case .sonnet: "Claude Sonnet 5.5"
+        case .opus: "Claude Opus 5.5"
+        case .fable: "Claude Fable 5.1"
+        }
+    case .openAICompatible(let config):
+        openAIModel(config: config, tier: tier)
+    }
+}

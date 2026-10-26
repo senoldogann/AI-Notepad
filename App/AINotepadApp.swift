@@ -66,6 +66,12 @@ struct AINotepadApp: App {
             }
             Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
         }
+        model.onAutoRecord = {
+            guard !model.isRecording else {
+                return
+            }
+            await toggleRecordingFlow(model: model, panel: panel, island: island)
+        }
         QuitGuard.shared.onBlocked = {
             router.quitWarning = true
             openMainWindow(router: router, section: .home)
