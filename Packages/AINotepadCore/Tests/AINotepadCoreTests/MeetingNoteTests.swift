@@ -109,5 +109,10 @@ extension CloudTests {
         #expect(paragraphs[0].turkish == "Basın toplantısından. Konu tasarruflar.")
         #expect(paragraphs[0].endSec == 7)
         #expect(paragraphLabel(paragraph: paragraphs[2], speakerNames: record.speakerNames) == "Riikka")
+        // Zaman çizgisi uzun sessizlikte bölünür; paylar çok konuşandan aza.
+        let first: SpeakerKey = SpeakerKey(speaker: .others, person: 1)
+        #expect(speakerSpans(paragraphs: paragraphs).map(\.startSec) == [0, 65, 80, 90])
+        #expect(speakerShares(paragraphs: paragraphs).map(\.key) == [first, SpeakerKey(speaker: .others, person: 2), SpeakerKey(speaker: .me, person: nil)])
+        #expect(speakerShares(paragraphs: paragraphs).first?.seconds == 12)
     }
 }

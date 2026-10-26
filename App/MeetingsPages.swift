@@ -281,7 +281,10 @@ struct MeetingDetailPage: View {
         ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
-                    header.zIndex(1)
+                    // İpuçları kapağın altındaki satırların üstünde çizilsin (birbirine girmesin).
+                    hero(paragraphs: paragraphs).zIndex(1)
+                    exportLine
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     statusLines
                     PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
                         .frame(maxWidth: 260)
@@ -289,21 +292,19 @@ struct MeetingDetailPage: View {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            NoteSections(note: note)
+                            SummaryTab(note: note, record: record, paragraphs: paragraphs)
                         } else {
                             Text(isProcessing ? "Not hazırlanıyor…" : "Bu toplantının notu yok.")
                                 .foregroundStyle(.secondary)
                         }
                     case .transcript:
-                        SpeakerNamesSection(
-                            model: model, record: record, isLocked: isLocked,
-                            onPlay: { (startSec: Double) -> Void in play(from: startSec) }
-                        )
+                        SpeakerChips(model: model, record: record, isLocked: isLocked, onPlay: { (startSec: Double) -> Void in play(from: startSec) })
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
                             canPlay: !playableAudio.isEmpty,
                             onPlay: { (startSec: Double) -> Void in play(from: startSec) }
                         )
+                        .frame(maxWidth: 820, alignment: .leading)
                     }
                     }
                     // Sekme değişince içerik yumuşakça geçer.
@@ -311,10 +312,11 @@ struct MeetingDetailPage: View {
                     .transition(.opacity)
                 }
                 .animation(.smooth(duration: 0.25), value: tab)
+                .animation(.smooth(duration: 0.25), value: export)
                 .animation(.smooth(duration: 0.3), value: model.speakerReviews[record.id])
                 .padding(DesignTokens.Spacing.l)
-                // Geniş ana pencerede satırlar okunur uzunlukta kalsın (panelde etkisiz).
-                .frame(maxWidth: 820, alignment: .leading)
+                // Geniş ana pencerede içerik okunur genişlikte kalsın (panelde etkisiz).
+                .frame(maxWidth: 1080, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -377,71 +379,163 @@ struct MeetingDetailPage: View {
         player.play(meetingID: record.id, urls: urls, startSec: startSec)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+    /// Kapak: toplantı kartıyla aynı simli gradyan; tarih, başlık, özet çipleri, eylemler ve konuşmacı zaman çizgisi.
+    private func hero(paragraphs: [TranscriptParagraph]) -> some View {
+        let spans: [SpeakerSpan] = speakerSpans(paragraphs: paragraphs)
+        let totalSec: Double = paragraphs.map(\.endSec).max() ?? 0
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(interfaceLocale())))
+                .appFont(size: 12, weight: .medium)
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .opacity(0.85)
             Text(record.note?.title ?? record.title)
-                .appFont(size: 26, weight: .regular)
-                .tracking(-0.4)
+                .appFont(size: 30, weight: .regular)
+                .tracking(-0.6)
+                .lineLimit(3)
                 .textSelection(.enabled)
-            Text(meetingMetaLine(record: record))
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.secondary)
-            // İpuçları düğmelerin altındaki satırların üstünde çizilsin (birbirine girmesin).
-            actions.zIndex(1)
-            exportLine
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 8)
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
+                    Text(chip)
+                        .appFont(size: 12, weight: .medium)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.16), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22)))
+                }
+            }
+            .padding(.top, 12)
+            heroActions.padding(.top, 20)
+            if !spans.isEmpty, totalSec > 0 {
+                SpeakerTimeline(
+                    spans: spans, totalSec: totalSec, player: player, meetingID: record.id, canPlay: !playableAudio.isEmpty,
+                    onSeek: { (startSec: Double) -> Void in play(from: startSec) }
+                )
+                .padding(.top, 18)
+            }
         }
-        .animation(.smooth(duration: 0.25), value: export)
+        .foregroundStyle(.white)
+        .padding(EdgeInsets(top: 24, leading: 26, bottom: 18, trailing: 26))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Yalnızca zemin kırpılır: düğme ipuçları kapağın dışına taşabilsin.
+        .background {
+            CoverBackground(seed: record.id)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .environment(\.colorScheme, .dark)
     }
 
-    /// Dışa aktarma ve yönetim; kilitliyken değiştirenler kapalı.
-    private var actions: some View {
-        // Düğmeler satıra sığmazsa alt satıra akar (dar panel).
-        FlowLayout(spacing: DesignTokens.Spacing.s, lineSpacing: 6) {
-                if !playableAudio.isEmpty {
-                    Button("Dinle", systemImage: "play.fill") {
-                        if player.meetingID == record.id {
-                            player.togglePause()
-                        } else {
-                            play(from: 0)
-                        }
-                    }
-                    .buttonStyle(.pillPrimary)
-                    .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
-                }
+    /// Kapaktaki çipler: süre, dil, konuşmacı, karar ve terim sayısı (olanlar).
+    private func heroChips(paragraphs: [TranscriptParagraph]) -> [String] {
+        let speakers: Int = speakerShares(paragraphs: paragraphs).count
+        let decisions: Int = record.note?.decisions.count ?? 0
+        let terms: Int = record.note?.glossary.count ?? 0
+        return (meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? [])
+            + (record.language.map { [meetingLanguageName(language: $0)] } ?? [])
+            + (speakers > 0 ? [String(localized: "\(speakers) konuşmacı")] : [])
+            + (decisions > 0 ? [String(localized: "\(decisions) karar")] : [])
+            + (terms > 0 ? [String(localized: "\(terms) terim")] : [])
+    }
+
+    /// Kapaktaki eylemler: "Dinle" ve "Notu yenile" görünür; dışa aktarma simge; yönetim "⋯" menüsünde. Dar panelde
+    /// "Dinle" dışındaki her şey menüye toplanır.
+    private var heroActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DesignTokens.Spacing.s) {
+                listenButton
+                Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
+                    .buttonStyle(.coverGlass)
+                    .disabled(isLocked)
+                    .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
+                Spacer(minLength: DesignTokens.Spacing.s)
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
-                    .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .leading, edge: .bottom)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.coverGlass)
+                    .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .trailing, edge: .bottom)
                 Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
-                    .hoverHint("Markdown olarak kaydet", alignment: .leading, edge: .bottom)
-                Button("Kopyala", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
-                    export = .copied
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.coverGlass)
+                    .hoverHint("Markdown olarak kaydet", alignment: .trailing, edge: .bottom)
+                Button("Kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.coverGlass)
+                    .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
+                moreMenu { manageItems }
+            }
+            HStack(spacing: DesignTokens.Spacing.s) {
+                listenButton
+                Spacer(minLength: DesignTokens.Spacing.s)
+                moreMenu {
+                    exportItems
+                    Divider()
+                    manageItems
                 }
-                .hoverHint("Markdown olarak kopyala", alignment: .leading, edge: .bottom)
-                Button("Notu yenile", systemImage: "sparkles") {
-                    model.regenerateNote(meetingID: record.id)
-                }
-                .disabled(isLocked)
-                .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
-                Button("Tekrar işle", systemImage: "arrow.clockwise") {
-                    model.reprocess(meetingID: record.id)
-                }
-                .disabled(isLocked || record.audioDeleted)
-                .hoverHint("Son geçişi ve notu yeniden yap", alignment: .leading, edge: .bottom)
-                Button("Sesi sil", systemImage: "speaker.slash", role: .destructive) {
-                    player.stop()
-                    model.deleteAudio(meetingID: record.id)
-                }
-                .disabled(isLocked || record.audioDeleted)
-                .hoverHint("Yalnızca ses dosyalarını sil; metin ve not kalır", alignment: .leading, edge: .bottom)
-                Button("Toplantıyı sil", systemImage: "trash", role: .destructive) {
-                    export = .confirmDelete
-                }
-                .disabled(isLocked)
-                .hoverHint("Metin, not ve sesle birlikte Çöp Sepeti'ne taşı", alignment: .leading, edge: .bottom)
+            }
         }
-        .controlSize(.small)
+    }
+
+    /// Baştan dinle; bu toplantı çalıyorsa duraklat/sürdür.
+    @ViewBuilder
+    private var listenButton: some View {
+        if !playableAudio.isEmpty {
+            let isPlayingThis: Bool = player.meetingID == record.id && player.isPlaying
+            Button(isPlayingThis ? "Duraklat" : "Dinle", systemImage: isPlayingThis ? "pause.fill" : "play.fill") {
+                if player.meetingID == record.id {
+                    player.togglePause()
+                } else {
+                    play(from: 0)
+                }
+            }
+            .buttonStyle(.bannerPrimary)
+            .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
+        }
+    }
+
+    /// "⋯" menüsü: kapak üstünde cam daire.
+    private func moreMenu(@ViewBuilder items: () -> some View) -> some View {
+        Menu {
+            items()
+        } label: {
+            // Simge düğmeleriyle aynı genişlikte daire.
+            Image(systemName: "ellipsis").frame(width: 16, height: 16)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.coverGlass)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .hoverHint("Diğer işlemler", alignment: .trailing, edge: .bottom)
+    }
+
+    /// Dar panelde menüye taşınan not ve dışa aktarma eylemleri.
+    @ViewBuilder
+    private var exportItems: some View {
+        Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
+            .disabled(isLocked)
+        Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
+        Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
+        Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
+    }
+
+    /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
+    @ViewBuilder
+    private var manageItems: some View {
+        Button("Tekrar işle", systemImage: "arrow.clockwise") { model.reprocess(meetingID: record.id) }
+            .disabled(isLocked || record.audioDeleted)
+        Divider()
+        Button("Sesi sil", systemImage: "speaker.slash", role: .destructive) {
+            player.stop()
+            model.deleteAudio(meetingID: record.id)
+        }
+        .disabled(isLocked || record.audioDeleted)
+        Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
+            .disabled(isLocked)
+    }
+
+    private func copyMarkdown() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
+        export = .copied
     }
 
     @ViewBuilder
@@ -538,19 +632,56 @@ struct MeetingDetailPage: View {
     }
 }
 
-/// Not: önce sana düşen görevler (vurgulu kart), sonra özet, kararlar, diğer görevler, sözlük.
-private struct NoteSections: View {
+/// Özet sekmesi bir belge gibi okunur: sana düşen görevler, büyük yazılı özet, numaralı kararlar, diğer görevler ve
+/// sözlük; geniş pencerede sağda "Bir bakışta" ve konuşma payları, darda (panel) konuşma payları en altta.
+private struct SummaryTab: View {
     let note: MeetingNote
+    let record: MeetingRecord
+    let paragraphs: [TranscriptParagraph]
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
+        let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) {
+                main.frame(minWidth: 380, idealWidth: 380, maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 12) {
+                    glance(shares: shares)
+                    if !shares.isEmpty {
+                        talkShare(shares: shares)
+                    }
+                }
+                .frame(width: 250)
+            }
+            VStack(alignment: .leading, spacing: 30) {
+                main
+                if !shares.isEmpty {
+                    talkShare(shares: shares)
+                }
+            }
+        }
+    }
+
+    private var main: some View {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
+        return VStack(alignment: .leading, spacing: 30) {
             if mine.isEmpty {
-                Label("Sana düşen görev yok.", systemImage: "checkmark.seal")
-                    .font(appearance.secondaryFont)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark")
+                        .appFont(size: 11, weight: .semibold)
+                        .foregroundStyle(personColor(person: 1))
+                        .frame(width: 26, height: 26)
+                        .background(Theme.card, in: Circle())
+                        .overlay(Circle().strokeBorder(Theme.line))
+                    Text("Bu toplantıda sana düşen görev yok.")
+                        .font(appearance.secondaryFont)
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
@@ -558,36 +689,70 @@ private struct NoteSections: View {
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(appearance.accent.color)
                     ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                        TaskRow(task: item.element)
+                        TaskCard(task: item.element, speakerNames: record.speakerNames)
                     }
                 }
-                .padding(16)
+                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(appearance.accent.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(appearance.accent.color.opacity(0.28)))
+                .background(appearance.accent.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(appearance.accent.color.opacity(0.28)))
             }
-            section(title: "ÖZET") {
-                Text(note.summary).textSelection(.enabled)
-            }
+            Text(note.summary)
+                .font(appearance.font(size: appearance.textSize + 3, weight: .regular))
+                .lineSpacing(appearance.lineSpacing + 3)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
             if !note.decisions.isEmpty {
                 section(title: "KARARLAR") {
-                    ForEach(Array(note.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                        Text("• " + item.element).textSelection(.enabled)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(note.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Rectangle().fill(Theme.line).frame(height: 1)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(decisionNumber(index: item.offset))
+                                        .appFont(size: 22, weight: .light)
+                                        .monospacedDigit()
+                                        .foregroundStyle(Theme.muted)
+                                        .frame(width: 40, alignment: .leading)
+                                    Text(item.element)
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 12)
+                            }
+                        }
                     }
                 }
             }
             if !others.isEmpty {
                 section(title: "DİĞER GÖREVLER") {
-                    ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                        TaskRow(task: item.element)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
+                            TaskCard(task: item.element, speakerNames: record.speakerNames)
+                        }
                     }
                 }
             }
             if !note.glossary.isEmpty {
                 section(title: "SÖZLÜK") {
-                    ForEach(Array(note.glossary.enumerated()), id: \.offset) { (item: (offset: Int, element: GlossaryEntry)) in
-                        let term: Text = Text(item.element.term).fontWeight(.semibold)
-                        Text("\(term) — \(item.element.meaning)").textSelection(.enabled)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8, alignment: .top)], alignment: .leading, spacing: 8) {
+                        ForEach(Array(note.glossary.enumerated()), id: \.offset) { (item: (offset: Int, element: GlossaryEntry)) in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.element.term)
+                                    .font(appearance.font(size: appearance.textSize, weight: .semibold))
+                                Text(item.element.meaning)
+                                    .font(appearance.secondaryFont)
+                                    .foregroundStyle(Theme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
+                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line))
+                        }
                     }
                 }
             }
@@ -597,9 +762,56 @@ private struct NoteSections: View {
         .lineSpacing(appearance.lineSpacing)
     }
 
-    /// Bölüm: beyaz kart içinde küçük büyük harfli başlık ve içerik (ElevenLabs kartı).
-    private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// "Bir bakışta": süre, konuşmacı, karar ve senin görev sayın.
+    private func glance(shares: [SpeakerShare]) -> some View {
+        let stats: [(value: String, label: LocalizedStringKey)] = [
+            (meetingDurationMinutes(record: record).map { String(localized: "\($0) dk") } ?? "–", "süre"),
+            ("\(shares.count)", "konuşmacı"),
+            ("\(note.decisions.count)", "karar"),
+            ("\(note.tasks.filter(\.isMine).count)", "senin görevin"),
+        ]
+        return asideCard(title: "BİR BAKIŞTA") {
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 12) {
+                ForEach(Array(stats.enumerated()), id: \.offset) { (item: (offset: Int, element: (value: String, label: LocalizedStringKey))) in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(item.element.value).appFont(size: 22, weight: .regular).tracking(-0.4)
+                        Text(item.element.label).appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde.
+    private func talkShare(shares: [SpeakerShare]) -> some View {
+        asideCard(title: "KİM NE KADAR KONUŞTU") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(shares, id: \.key) { (share: SpeakerShare) in
+                    HStack(spacing: 10) {
+                        SpeakerAvatar(text: avatarText(key: share.key, speakerNames: record.speakerNames), color: speakerColor(key: share.key), size: 24)
+                        Text(speakerName(key: share.key, speakerNames: record.speakerNames))
+                            .appFont(size: 13, weight: .regular)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Capsule()
+                            .fill(Theme.soft)
+                            .frame(width: 56, height: 6)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(speakerColor(key: share.key)).frame(width: max(3, 56 * share.fraction), height: 6)
+                            }
+                        Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                            .appFont(size: 12, weight: .regular)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func asideCard(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .appFont(size: 11, weight: .semibold)
                 .tracking(DesignTokens.labelTracking)
@@ -608,31 +820,186 @@ private struct NoteSections: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 16)
+    }
+
+    /// Bölüm: kart olmadan küçük büyük harfli başlık ve içerik (belge düzeni).
+    private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .appFont(size: 11, weight: .semibold)
+                .tracking(DesignTokens.labelTracking)
+                .foregroundStyle(Theme.muted)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// "01", "02": karar numarası. Saf fonksiyondur.
+private func decisionNumber(index: Int) -> String {
+    index + 1 < 10 ? "0\(index + 1)" : "\(index + 1)"
+}
+
+/// Görev kartı: sahibinin harf rozeti, sahibi ve iş, varsa tarih çipi.
+private struct TaskCard: View {
+    let task: NoteTask
+    let speakerNames: [Int: String]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SpeakerAvatar(text: ownerInitial(owner: task.owner), color: ownerColor(task: task, speakerNames: speakerNames), size: 26)
+            VStack(alignment: .leading, spacing: 6) {
+                let owner: Text = Text(task.owner).fontWeight(.semibold)
+                Text("\(owner) — \(task.description)")
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let due = task.dueDate {
+                    Label(due, systemImage: "calendar")
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Theme.soft, in: Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .cardSurface(cornerRadius: 14)
     }
 }
 
-private struct TaskRow: View {
-    let task: NoteTask
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+/// Görev sahibinin rozet harfi: "Konuşmacı 2" → "2", "Aino" → "A". Saf fonksiyondur.
+private func ownerInitial(owner: String) -> String {
+    if let number = speakerNumber(owner: owner) {
+        return "\(number)"
+    }
+    return owner.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
+}
+
+/// Not "Konuşmacı N" yazdıysa N (not her zaman Türkçe yazılır). Saf fonksiyondur.
+private func speakerNumber(owner: String) -> Int? {
+    let prefix: String = "Konuşmacı "
+    return owner.hasPrefix(prefix) ? Int(owner.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)) : nil
+}
+
+/// Görev sahibinin rengi: sen mavi, adı verilmiş ya da numaralı konuşmacı kendi rengi, diğerleri addan sabit bir renk.
+/// Saf fonksiyondur.
+private func ownerColor(task: NoteTask, speakerNames: [Int: String]) -> Color {
+    if task.isMine {
+        return DesignTokens.meColor
+    }
+    if let person = speakerNumber(owner: task.owner)
+        ?? speakerNames.first(where: { $0.value.caseInsensitiveCompare(task.owner) == .orderedSame })?.key {
+        return personColor(person: person)
+    }
+    let hash: Int = task.owner.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7FFF_FFFF }
+    return personColor(person: hash % DesignTokens.personPalette.count + 1)
+}
+
+/// Konuşmacının rengi: numaralı kişi kendi rengi, "Sen" mavi, ayrılmamış "Diğerleri" gri. Saf fonksiyondur.
+private func speakerColor(key: SpeakerKey) -> Color {
+    switch (key.speaker, key.person) {
+    case (_, .some(let person)): personColor(person: person)
+    case (.me, nil): DesignTokens.meColor
+    case (.others, nil): Color.gray
+    }
+}
+
+/// Konuşmacının görünen adı: verilen ad, yoksa "Konuşmacı N", "Sen" ya da "Diğerleri". Saf fonksiyondur.
+private func speakerName(key: SpeakerKey, speakerNames: [Int: String]) -> String {
+    if let person = key.person, let name = speakerNames[person], !name.isEmpty {
+        return name
+    }
+    return speakerLabel(speaker: key.speaker, person: key.person)
+}
+
+/// Rozet harfi: adın baş harfi, adsız numaralı kişide numara, "Sen"/"Diğerleri"nde etiketin baş harfi. Saf fonksiyondur.
+private func avatarText(key: SpeakerKey, speakerNames: [Int: String]) -> String {
+    if let person = key.person, speakerNames[person]?.isEmpty ?? true {
+        return "\(person)"
+    }
+    return speakerName(key: key, speakerNames: speakerNames).first.map { String($0).uppercased() } ?? "?"
+}
+
+/// Renkli daire içinde beyaz harf (konuşmacı ve görev sahibi rozeti).
+private struct SpeakerAvatar: View {
+    let text: String
+    let color: Color
+    let size: CGFloat
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "circle")
-                .appFont(size: 9, weight: .regular)
-                .foregroundStyle(task.isMine ? appearance.accent.color : .secondary)
-            let owner: Text = Text("\(task.owner): ").fontWeight(.semibold)
-            let due: Text = Text(task.dueDate.map { " (\($0))" } ?? "").foregroundStyle(.secondary)
-            Text("\(owner)\(task.description)\(due)")
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+        Text(text)
+            .appFont(size: size * 0.44, weight: .semibold)
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(color, in: Circle())
+    }
+}
+
+/// Kapaktaki konuşmacı zaman çizgisi: kim ne zaman konuştu; çalarken beyaz okuma çizgisi; tıklayınca oradan çalar.
+private struct SpeakerTimeline: View {
+    let spans: [SpeakerSpan]
+    let totalSec: Double
+    let player: MeetingAudioPlayer
+    let meetingID: String
+    let canPlay: Bool
+    let onSeek: @MainActor (Double) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            GeometryReader { (proxy: GeometryProxy) in
+                let width: CGFloat = proxy.size.width
+                ZStack(alignment: .leading) {
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(Color.black.opacity(0.28))
+                        ForEach(Array(spans.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerSpan)) in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(speakerColor(key: item.element.key))
+                                .frame(width: max(2, width * (item.element.endSec - item.element.startSec) / totalSec))
+                                .offset(x: width * item.element.startSec / totalSec)
+                        }
+                    }
+                    .frame(height: 8)
+                    .clipShape(Capsule())
+                    if player.meetingID == meetingID {
+                        Capsule()
+                            .fill(Color.white)
+                            .frame(width: 3, height: 14)
+                            .shadow(color: .black.opacity(0.35), radius: 2)
+                            .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)
+                    }
+                }
+                .frame(width: width, height: 14)
+                .contentShape(Rectangle())
+                .onTapGesture(coordinateSpace: .local) { (location: CGPoint) -> Void in
+                    if canPlay {
+                        onSeek(totalSec * min(1, max(0, location.x / width)))
+                    }
+                }
+                .pointerStyle(canPlay ? .link : nil)
+            }
+            .frame(height: 14)
+            HStack(spacing: DesignTokens.Spacing.s) {
+                Text(verbatim: "00:00")
+                Spacer(minLength: 0)
+                Text(canPlay ? "Kim ne zaman konuştu · tıkla, oradan çal" : "Kim ne zaman konuştu")
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(timestamp(seconds: totalSec))
+            }
+            .appFont(size: 11, weight: .regular)
+            .monospacedDigit()
+            .opacity(0.75)
         }
     }
 }
 
-/// "Konuşmacı N" etiketlerine ad verme, iki konuşmacıyı birleştirme (ayırma aynı kişiyi ikiye böldüyse) ve akıllı
-/// modelin ad/birleştirme önerileri ("Gözden geçir").
-private struct SpeakerNamesSection: View {
+/// Konuşmacılar transkriptin başında çip olarak: tıklayınca ad verme ya da başka konuşmacıyla birleştirme (ayırma aynı
+/// kişiyi ikiye böldüyse); yanında akıllı modelin ad/birleştirme önerileri ("Gözden geçir").
+private struct SpeakerChips: View {
     let model: AppModel
     let record: MeetingRecord
     let isLocked: Bool
@@ -642,13 +1009,15 @@ private struct SpeakerNamesSection: View {
         // Gösterilen transkriptle aynı bölüm kümesi.
         let persons: [Int] = Array(Set(meetingSegments(record: record).compactMap(\.person))).sorted()
         if !persons.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: DesignTokens.Spacing.s) {
-                    Text("KONUŞMACILAR")
-                        .appFont(size: 11, weight: .semibold)
-                        .tracking(DesignTokens.labelTracking)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+                HStack(alignment: .top, spacing: DesignTokens.Spacing.s) {
+                    FlowLayout(spacing: 8, lineSpacing: 8) {
+                        ForEach(persons, id: \.self) { (person: Int) in
+                            SpeakerChip(model: model, record: record, person: person, others: persons.filter { $0 != person })
+                                .disabled(isLocked)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Gözden geçir", systemImage: "sparkles") {
                         model.reviewSpeakers(meetingID: record.id)
                     }
@@ -659,31 +1028,92 @@ private struct SpeakerNamesSection: View {
                 if let state = model.speakerReviews[record.id] {
                     SpeakerReviewCard(model: model, record: record, state: state, isLocked: isLocked, onPlay: onPlay)
                 }
-                ForEach(persons, id: \.self) { (person: Int) in
-                    HStack(spacing: DesignTokens.Spacing.s) {
-                        SpeakerNameField(model: model, meetingID: record.id, person: person, current: record.speakerNames[person] ?? "")
-                        if persons.count > 1 {
-                            Menu {
-                                ForEach(persons.filter { $0 != person }, id: \.self) { (target: Int) in
-                                    Button(record.speakerNames[target].map { "\($0) (\(speakerLabel(speaker: .others, person: target)))" } ?? speakerLabel(speaker: .others, person: target)) {
-                                        model.mergeSpeakers(meetingID: record.id, from: person, into: target)
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "arrow.triangle.merge")
-                            }
-                            .menuStyle(.button)
-                            .buttonStyle(.hoverPlain)
-                            .menuIndicator(.hidden)
-                            .fixedSize()
-                            .foregroundStyle(.secondary)
-                            .hoverHint("Başka konuşmacıyla birleştir", alignment: .trailing, edge: .bottom)
-                        }
-                    }
-                    .disabled(isLocked)
-                }
             }
         }
+    }
+}
+
+/// Konuşmacı çipi: rozet ve ad; tıklayınca menü (ad ver, birleştir). Ad verirken çip yazı alanına döner: Enter kaydeder,
+/// Esc vazgeçer, odaktan çıkınca kaydedilir.
+private struct SpeakerChip: View {
+    let model: AppModel
+    let record: MeetingRecord
+    let person: Int
+    let others: [Int]
+    @State private var isEditing: Bool = false
+    @State private var name: String = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        let key: SpeakerKey = SpeakerKey(speaker: .others, person: person)
+        let current: String = record.speakerNames[person] ?? ""
+        Group {
+            if isEditing {
+                HStack(spacing: 8) {
+                    SpeakerAvatar(text: avatarText(key: key, speakerNames: record.speakerNames), color: speakerColor(key: key), size: 24)
+                    TextField("Ad (ör. Aino)", text: $name)
+                        .textFieldStyle(.plain)
+                        .appFont(size: 13, weight: .medium)
+                        .frame(width: 140)
+                        .focused($isFocused)
+                        .onSubmit { commit() }
+                        .onExitCommand { isEditing = false }
+                }
+                .padding(.leading, 4)
+                .padding(.trailing, 12)
+                .padding(.vertical, 4)
+                .background(Theme.card, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.ink))
+                .onAppear { isFocused = true }
+                .onChange(of: isFocused) { (_: Bool, focused: Bool) in
+                    if !focused, isEditing {
+                        commit()
+                    }
+                }
+            } else {
+                Menu {
+                    Button(current.isEmpty ? "Ad ver…" : "Adı değiştir…", systemImage: "pencil") {
+                        name = current
+                        isEditing = true
+                    }
+                    if !others.isEmpty {
+                        Menu("Şununla birleştir") {
+                            ForEach(others, id: \.self) { (target: Int) in
+                                Button(speakerName(key: SpeakerKey(speaker: .others, person: target), speakerNames: record.speakerNames)) {
+                                    model.mergeSpeakers(meetingID: record.id, from: person, into: target)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        SpeakerAvatar(text: avatarText(key: key, speakerNames: record.speakerNames), color: speakerColor(key: key), size: 24)
+                        Text(speakerName(key: key, speakerNames: record.speakerNames))
+                            .appFont(size: 13, weight: .medium)
+                            .foregroundStyle(Theme.ink)
+                        Image(systemName: "chevron.down")
+                            .appFont(size: 9, weight: .semibold)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .padding(.leading, 4)
+                    .padding(.trailing, 12)
+                    .padding(.vertical, 4)
+                    .background(Theme.card, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.line))
+                }
+                .menuStyle(.button)
+                .buttonStyle(.hoverCapsule)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .hoverHint("Ad ver ya da başka konuşmacıyla birleştir", alignment: .leading, edge: .bottom)
+            }
+        }
+        .animation(.smooth(duration: 0.2), value: isEditing)
+    }
+
+    private func commit() {
+        isEditing = false
+        model.renameSpeaker(meetingID: record.id, person: person, name: name)
     }
 }
 
@@ -830,39 +1260,36 @@ private struct SpeakerReviewCard: View {
     }
 }
 
-private struct SpeakerNameField: View {
-    let model: AppModel
-    let meetingID: String
-    let person: Int
-    let current: String
-    @State private var name: String = ""
-
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.s) {
-            Circle().fill(personColor(person: person)).frame(width: 7, height: 7)
-            Text("Konuşmacı \(person)").frame(width: 96, alignment: .leading)
-            TextField("Ad (ör. Aino)", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { model.renameSpeaker(meetingID: meetingID, person: person, name: name) }
-        }
-        .onAppear { name = current }
-        // Birleştirme ya da başka bir yerden ad değişirse alan güncellenir (eski ad yazılıp silinmesin).
-        .onChange(of: current) { (_: String, value: String) in name = value }
-    }
-}
-
-/// Ses varsa paragraf tıklanabilir (el imleci, hover, "Buradan dinle"); yoksa düz metin (tıklanabilir görünmesin).
-private struct PlayableParagraph: ViewModifier {
+/// Ses varsa konuşma satırı tıklanabilir: hover'da soluk zemin ve sağ üstte çal düğmesi, el imleci; yoksa düz metin
+/// (tıklanabilir görünmesin).
+private struct PlayableTurn: ViewModifier {
     let canPlay: Bool
     let onTap: @MainActor () -> Void
+    @State private var isHovering: Bool = false
 
     func body(content: Content) -> some View {
         if canPlay {
             content
-                .contentShape(Rectangle())
+                .background(isHovering ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if isHovering {
+                        Image(systemName: "play.fill")
+                            .appFont(size: 10, weight: .semibold)
+                            .foregroundStyle(Theme.onPrimary)
+                            .frame(width: 28, height: 28)
+                            .background(Theme.primary, in: Circle())
+                            .padding(10)
+                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .onTapGesture { onTap() }
-                .hoverHighlight(cornerRadius: 8)
-                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+                .onHover { (hovering: Bool) -> Void in isHovering = hovering }
+                .pointerStyle(.link)
+                .animation(.easeOut(duration: 0.12), value: isHovering)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Buradan dinle")
         } else {
             content
         }
@@ -885,36 +1312,57 @@ private struct TranscriptSection: View {
     var body: some View {
         let isActivePlayer: Bool = player.meetingID == record.id
         let time: Double = player.currentTime
-        LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+        LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
                 Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
             }
-            ForEach(paragraphs) { (paragraph: TranscriptParagraph) in
+            ForEach(Array(paragraphs.enumerated()), id: \.element.id) { (item: (offset: Int, element: TranscriptParagraph)) in
+                let paragraph: TranscriptParagraph = item.element
+                let key: SpeakerKey = SpeakerKey(speaker: paragraph.speaker, person: paragraph.person)
+                // Aynı konuşmacı sürüyorsa rozet ve ad tekrar edilmez (sohbet gibi).
+                let continues: Bool = item.offset > 0
+                    && SpeakerKey(speaker: paragraphs[item.offset - 1].speaker, person: paragraphs[item.offset - 1].person) == key
                 let isActive: Bool = isActivePlayer && time >= paragraph.startSec && time < paragraph.endSec + 0.4
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Circle().fill(dotColor(paragraph: paragraph)).frame(width: 6, height: 6)
-                        Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames)).fontWeight(.semibold)
-                        Text(timestamp(seconds: paragraph.startSec)).monospacedDigit().foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 12) {
+                    if continues {
+                        Color.clear.frame(width: 32, height: 1)
+                    } else {
+                        SpeakerAvatar(text: avatarText(key: key, speakerNames: record.speakerNames), color: speakerColor(key: key), size: 32)
                     }
-                    .appFont(size: 11, weight: .regular)
-                    paragraphText(paragraph: paragraph, isActive: isActive, time: time)
-                        .font(appearance.bodyFont)
-                        .lineSpacing(appearance.lineSpacing)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let turkish = paragraph.turkish {
-                        Text(turkish)
-                            .font(appearance.secondaryFont)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if !continues {
+                                Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames))
+                                    .appFont(size: 13, weight: .semibold)
+                            }
+                            Text(timestamp(seconds: paragraph.startSec))
+                                .appFont(size: 12, weight: .regular)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.muted)
+                        }
+                        paragraphText(paragraph: paragraph, isActive: isActive, time: time)
+                            .font(appearance.bodyFont)
                             .lineSpacing(appearance.lineSpacing)
-                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        if let turkish = paragraph.turkish {
+                            Text(turkish)
+                                .font(appearance.secondaryFont)
+                                .lineSpacing(appearance.lineSpacing)
+                                .foregroundStyle(Theme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.leading, 10)
+                                .overlay(alignment: .leading) { Rectangle().fill(Theme.line).frame(width: 2) }
+                                .padding(.top, 2)
+                        }
                     }
+                    // Çal düğmesi metnin üstüne binmesin.
+                    .padding(.trailing, canPlay ? 30 : 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(isActive ? appearance.accent.color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-                .modifier(PlayableParagraph(canPlay: canPlay) { onPlay(paragraph.startSec) })
+                .padding(.vertical, continues ? 6 : 12)
+                .padding(.horizontal, 10)
+                .background(isActive ? appearance.accent.color.opacity(0.09) : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .modifier(PlayableTurn(canPlay: canPlay) { onPlay(paragraph.startSec) })
                 .id(paragraph.id)
             }
         }
@@ -941,14 +1389,6 @@ private struct TranscriptSection: View {
         }
         return Text(karaokeText(words: paragraph.words, activeIndex: activeWordIndex(words: paragraph.words, timeSec: time), accent: appearance.accent.color))
     }
-
-    private func dotColor(paragraph: TranscriptParagraph) -> Color {
-        switch (paragraph.speaker, paragraph.person) {
-        case (_, .some(let person)): personColor(person: person)
-        case (.me, nil): DesignTokens.meColor
-        case (.others, nil): .secondary
-        }
-    }
 }
 
 /// Spotify tarzı çalma çubuğu: çalan konuşmacı ve sözü, konum çubuğu ve süreler, 10 sn geri / oynat-duraklat /
@@ -966,7 +1406,7 @@ private struct NowPlayingBar: View {
             HStack(spacing: DesignTokens.Spacing.s) {
                 if let current {
                     Circle()
-                        .fill(current.person.map { personColor(person: $0) } ?? (current.speaker == .me ? DesignTokens.meColor : Color.secondary))
+                        .fill(speakerColor(key: SpeakerKey(speaker: current.speaker, person: current.person)))
                         .frame(width: 7, height: 7)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(paragraphLabel(paragraph: current, speakerNames: speakerNames))

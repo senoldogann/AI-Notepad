@@ -57,7 +57,7 @@ func meshColors(accent: Color) -> [Color] {
 }
 
 /// İnce kumlu doku: sabit tohumlu sözde rastgele noktalar (her çizimde aynı desen; titreşmez).
-private struct GrainOverlay: View {
+struct GrainOverlay: View {
     var body: some View {
         Canvas { (context: inout GraphicsContext, size: CGSize) in
             var seed: UInt64 = 0x9E37_79B9_7F4A_7C15

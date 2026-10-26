@@ -119,7 +119,7 @@ struct MainWindowView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 HStack(spacing: 0) {
-                    Sidebar(model: model, router: router, shortcuts: shortcuts)
+                    Sidebar(model: model, router: router)
                     VStack(spacing: 0) {
                         TopBar(router: router, onShowPanel: onShowPanel)
                         detail
@@ -166,11 +166,10 @@ struct MainWindowView: View {
     }
 }
 
-/// Kenar çubuğu (ElevenLabs): sade simgeli satırlar, seçili satır gri hap, "Son toplantılar" grubu, altta durum kartı.
+/// Kenar çubuğu (ElevenLabs): sade simgeli satırlar, seçili satır gri hap, "Son toplantılar" grubu.
 private struct Sidebar: View {
     let model: AppModel
     let router: MainWindowRouter
-    let shortcuts: ShortcutController
 
     var body: some View {
         let myTaskCount: Int = model.meetings.prefix(10).map { ($0.note?.tasks ?? []).filter(\.isMine).count }.reduce(0, +)
@@ -204,8 +203,6 @@ private struct Sidebar: View {
                     .buttonStyle(.hoverPlain)
                 }
             }
-            Spacer(minLength: DesignTokens.Spacing.m)
-            statusCard
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
@@ -242,26 +239,6 @@ private struct Sidebar: View {
             .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.hoverPlain)
-    }
-
-    private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(model.isRecording ? Color.red : (model.setupProblems.isEmpty ? Color.green : Color.orange))
-                    .frame(width: 7, height: 7)
-                Text(model.isRecording ? String(localized: "Kayıt sürüyor") : model.viewState.statusText)
-                    .appFont(size: 13, weight: .medium)
-                    .lineLimit(1)
-            }
-            Text("Kısayol \(keyBindingDisplay(binding: shortcuts.currentBinding(action: .record))) ile her yerden kaydı başlat.")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface(cornerRadius: 12)
     }
 }
 
@@ -824,10 +801,8 @@ private struct MeetingCover: View {
 
     var body: some View {
         let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
-        let palette: [Color] = coverPalette(seed: record.id)
         ZStack(alignment: .bottomLeading) {
-            RadialGradient(colors: palette, center: UnitPoint(x: 0.28, y: 0.3), startRadius: 4, endRadius: 260)
-            LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
+            CoverBackground(seed: record.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.note?.title ?? record.title)
                     .appFont(size: 14, weight: .medium)
@@ -855,19 +830,6 @@ private struct MeetingCover: View {
         }
         return mine > 0 ? date + " · " + String(localized: "\(mine) görev") : date
     }
-}
-
-/// Kapak paleti: toplantı kimliğinden sabit bir renk ailesi (her açılışta aynı). Saf fonksiyondur.
-private func coverPalette(seed: String) -> [Color] {
-    let families: [[Color]] = [
-        [Color(red: 0.49, green: 0.71, blue: 1.0), Color(red: 0.18, green: 0.36, blue: 0.88), Color(red: 0.04, green: 0.10, blue: 0.33)],
-        [Color(red: 0.66, green: 0.90, blue: 0.81), Color(red: 0.24, green: 0.60, blue: 0.51), Color(red: 0.05, green: 0.23, blue: 0.20)],
-        [Color(red: 0.97, green: 0.71, blue: 0.83), Color(red: 0.71, green: 0.29, blue: 0.53), Color(red: 0.23, green: 0.06, blue: 0.17)],
-        [Color(red: 1.0, green: 0.74, blue: 0.48), Color(red: 0.89, green: 0.34, blue: 0.12), Color(red: 0.16, green: 0.06, blue: 0.02)],
-        [Color(red: 0.80, green: 0.75, blue: 1.0), Color(red: 0.44, green: 0.33, blue: 0.86), Color(red: 0.12, green: 0.07, blue: 0.32)],
-    ]
-    let index: Int = seed.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7FFF_FFFF } % families.count
-    return families[index]
 }
 
 /// Görevlerim: tüm toplantılardan sana düşen işler, toplantıya göre gruplu; başlığa tıklayınca toplantı açılır.
