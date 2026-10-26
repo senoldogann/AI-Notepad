@@ -109,6 +109,22 @@ enum AppTheme: String, CaseIterable {
     case dark
 }
 
+/// Temanın macOS görünümü; sistem temasında nil (sistemi izler). Saf fonksiyondur.
+func nsAppearance(theme: AppTheme) -> NSAppearance? {
+    switch theme {
+    case .system: nil
+    case .light: NSAppearance(named: .aqua)
+    case .dark: NSAppearance(named: .darkAqua)
+    }
+}
+
+/// Temayı uygulamanın tüm pencerelerine birden uygular (pencere bazında atama cam zemini ve adayı eski temada
+/// bırakıyordu).
+@MainActor
+func applyTheme(theme: AppTheme) {
+    NSApplication.shared.appearance = nsAppearance(theme: theme)
+}
+
 /// Ayar aralıkları.
 enum SettingsRange {
     static let missedWindowMinutes: ClosedRange<Int> = 1...10

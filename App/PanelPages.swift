@@ -218,29 +218,13 @@ struct AppearanceEnvironment: ViewModifier {
             .fontDesign(appearance.fontDesign.design)
             // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
             .buttonStyle(.glassAction)
-            .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
-    }
-}
-
-/// Panel penceresinin açık/koyu görünümünü ayarlar (cam malzemesi pencere görünümüne göre çizilir).
-private struct WindowAppearance: NSViewRepresentable {
-    let theme: AppTheme
-
-    func makeNSView(context: Context) -> NSView {
-        NSView()
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        // Pencere görünüm ağacına eklendikten sonra atanır.
-        DispatchQueue.main.async {
-            view.window?.appearance = switch theme {
-            case .system: nil
-            case .light: NSAppearance(named: .aqua)
-            case .dark: NSAppearance(named: .darkAqua)
+            // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.
+            .onChange(of: theme, initial: true) { (_: String, value: String) in
+                applyTheme(theme: AppTheme(rawValue: value) ?? .system)
             }
-        }
     }
 }
+
 
 /// İlerleme kartının durumu: hangi toplantı (bitirilirken henüz yok), kaçıncı adım, yerel motor mu.
 struct ProcessingProgress: Equatable {
