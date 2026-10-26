@@ -16,7 +16,7 @@ private struct HoverSurface: ViewModifier {
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(highlightOpacity))
+                    .fill(highlight)
                     .padding(-hoverOutset)
             }
             // Devre dışıyken soluk: tıklanabilir görünmesin.
@@ -26,14 +26,15 @@ private struct HoverSurface: ViewModifier {
             .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 
-    private var highlightOpacity: Double {
+    /// Hover'da soluk yüzey, basılıyken seçili satır tonu (ElevenLabs).
+    private var highlight: Color {
         guard isEnabled else {
-            return 0
+            return .clear
         }
         if isPressed {
-            return 0.14
+            return Theme.selected
         }
-        return isHovering ? 0.08 : 0
+        return isHovering ? Theme.soft : .clear
     }
 }
 
@@ -69,90 +70,87 @@ public extension ButtonStyle where Self == HoverPlainButtonStyle {
     static var hoverCapsule: HoverPlainButtonStyle { HoverPlainButtonStyle(cornerRadius: 1000) }
 }
 
-/// Liquid Glass düğmenin boyutu: denetim boyutuna göre dolgu ve yazı.
-private struct GlassMetrics {
+/// Hap düğmenin boyutu: denetim boyutuna göre dolgu ve yazı.
+private struct PillMetrics {
     let horizontal: CGFloat
     let vertical: CGFloat
-    let font: Font
+    let size: CGFloat
 }
 
-/// Denetim boyutunun cam düğme ölçüleri. Saf fonksiyondur.
-private func glassMetrics(controlSize: ControlSize) -> GlassMetrics {
+/// Denetim boyutunun hap ölçüleri. Saf fonksiyondur.
+private func pillMetrics(controlSize: ControlSize) -> PillMetrics {
     switch controlSize {
-    case .mini, .small:
-        GlassMetrics(horizontal: 10, vertical: 4, font: .system(size: 12, weight: .medium))
-    case .large, .extraLarge:
-        GlassMetrics(horizontal: 18, vertical: 10, font: .system(size: 15, weight: .semibold))
-    default:
-        GlassMetrics(horizontal: 13, vertical: 6, font: .system(size: 13, weight: .medium))
+    case .mini, .small: PillMetrics(horizontal: 11, vertical: 5, size: 12)
+    case .large, .extraLarge: PillMetrics(horizontal: 18, vertical: 10, size: 15)
+    default: PillMetrics(horizontal: 14, vertical: 7, size: 13)
     }
 }
 
-/// Cam düğmenin gövdesi: etkileşimli Liquid Glass kapsül; `tint` varsa o renkte (ana eylem). Fare üstündeyken hafif
-/// aydınlanır, basılıyken küçülür, el imleci gösterir; etkin değilse soluk.
-private struct GlassButtonBody: View {
+/// Hap düğmenin gövdesi (ElevenLabs): ikincil beyaz zemin + ince çerçeve, ana düğme siyah (koyu temada beyaz).
+/// Fare üstündeyken zemin hafif değişir, basılınca küçülür, el imleci gösterir; etkin değilse soluk.
+private struct PillButtonBody: View {
     let configuration: ButtonStyleConfiguration
-    let tint: Color?
+    let isPrimary: Bool
     @Environment(\.isEnabled) private var isEnabled: Bool
     @Environment(\.controlSize) private var controlSize: ControlSize
     @State private var isHovering: Bool = false
 
     var body: some View {
-        let metrics: GlassMetrics = glassMetrics(controlSize: controlSize)
+        let metrics: PillMetrics = pillMetrics(controlSize: controlSize)
         configuration.label
-            .font(metrics.font)
+            .appFont(size: metrics.size, weight: .medium)
             .foregroundStyle(foreground)
             .padding(.horizontal, metrics.horizontal)
             .padding(.vertical, metrics.vertical)
-            .background {
-                Capsule().fill((tint == nil ? Color.primary : Color.white).opacity(isEnabled && isHovering ? 0.10 : 0))
-            }
-            .glassEffect(glass, in: Capsule())
+            .background(background, in: Capsule())
+            .overlay(Capsule().strokeBorder(isPrimary ? Color.clear : Theme.line))
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(isEnabled ? 1 : 0.45)
+            .opacity(isEnabled || isPrimary ? 1 : 0.45)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
             .pointerStyle(isEnabled ? .link : nil)
             .animation(.easeOut(duration: 0.12), value: isHovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 
-    private var glass: Glass {
-        tint.map { Glass.regular.tint($0).interactive() } ?? Glass.regular.interactive()
-    }
-
-    private var foreground: AnyShapeStyle {
-        if tint != nil {
-            return AnyShapeStyle(Color.white)
+    // Pasif ana düğme soluk griye döner (yarı saydam siyah bulanık bir leke gibi duruyordu).
+    private var background: Color {
+        if isPrimary {
+            return isEnabled ? Theme.primary.opacity(isHovering ? 0.85 : 1) : Theme.soft
         }
-        return configuration.role == .destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary)
+        return isEnabled && isHovering ? Theme.soft : Theme.card
+    }
+
+    private var foreground: Color {
+        if isPrimary {
+            return isEnabled ? Theme.onPrimary : Theme.muted
+        }
+        return configuration.role == .destructive ? Color(red: 0.86, green: 0.15, blue: 0.15) : Theme.ink
     }
 }
 
-/// Varsayılan düğme: etkileşimli Liquid Glass kapsül (panel ve ana pencerenin kökünde verilir).
-public struct GlassActionButtonStyle: ButtonStyle {
+/// İkincil düğme (varsayılan; panel ve ana pencerenin kökünde verilir): beyaz hap, ince çerçeve.
+public struct PillButtonStyle: ButtonStyle {
     public init() {}
 
     public func makeBody(configuration: Configuration) -> some View {
-        GlassButtonBody(configuration: configuration, tint: nil)
+        PillButtonBody(configuration: configuration, isPrimary: false)
     }
 }
 
-/// Ana eylem (ör. "Kaydı başlat"): vurgu renginde Liquid Glass kapsül.
-public struct GlassProminentButtonStyle: ButtonStyle {
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
-
+/// Ana eylem ("Kaydı başlat", "İleri"): siyah hap (koyu temada beyaz).
+public struct PrimaryPillButtonStyle: ButtonStyle {
     public init() {}
 
     public func makeBody(configuration: Configuration) -> some View {
-        GlassButtonBody(configuration: configuration, tint: appearance.accent.color)
+        PillButtonBody(configuration: configuration, isPrimary: true)
     }
 }
 
-public extension ButtonStyle where Self == GlassActionButtonStyle {
-    static var glassAction: GlassActionButtonStyle { GlassActionButtonStyle() }
+public extension ButtonStyle where Self == PillButtonStyle {
+    static var pill: PillButtonStyle { PillButtonStyle() }
 }
 
-public extension ButtonStyle where Self == GlassProminentButtonStyle {
-    static var glassProminentAction: GlassProminentButtonStyle { GlassProminentButtonStyle() }
+public extension ButtonStyle where Self == PrimaryPillButtonStyle {
+    static var pillPrimary: PrimaryPillButtonStyle { PrimaryPillButtonStyle() }
 }

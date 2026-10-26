@@ -43,7 +43,7 @@ struct SetupPage: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Adım \(step.rawValue + 1) / \(OnboardingStep.allCases.count)")
             Text(step.title)
-                .font(.system(size: 20, weight: .semibold))
+                .appFont(size: 20, weight: .semibold)
             Group {
                 switch step {
                 case .welcome: WelcomeStep()
@@ -64,14 +64,14 @@ struct SetupPage: View {
                 Spacer()
                 if step == .ready {
                     Button("Başla") { onFinish() }
-                        .buttonStyle(.glassProminentAction)
+                        .buttonStyle(.pillPrimary)
                         .keyboardShortcut(.defaultAction)
                 } else {
                     Button("Atla") { onFinish() }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(.secondary)
                     Button("İleri") { move(by: 1) }
-                        .buttonStyle(.glassProminentAction)
+                        .buttonStyle(.pillPrimary)
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -95,7 +95,7 @@ private struct WelcomeStep: View {
             FeatureRow(symbol: "doc.text", text: "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.")
             FeatureRow(symbol: "eye.slash", text: "Panel ve ada ekran paylaşımlarında gizlenebilir.")
         }
-        .font(.system(size: 14))
+        .appFont(size: 14, weight: .regular)
     }
 }
 
@@ -166,7 +166,7 @@ private struct PermissionsStep: View {
                 .buttonStyle(.link)
                         .pointerStyle(.link)
             }
-            .font(.callout)
+            .appFont(size: 12, weight: .regular)
         }
         .onAppear { microphone = model.microphonePermission }
         // Kullanıcı izni Sistem Ayarları'nda değiştirip geri dönünce durum yenilenir.
@@ -216,14 +216,14 @@ private struct PermissionRow<Action: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.m) {
             Image(systemName: symbol)
-                .font(.system(size: 18))
+                .appFont(size: 18, weight: .regular)
                 .foregroundStyle(.tint)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline)
+                Text(title).appFont(size: 13, weight: .semibold)
                 Text(detail).foregroundStyle(.secondary)
                 Label(status, systemImage: isGranted ? "checkmark.circle.fill" : "circle.dotted")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(isGranted ? .green : .secondary)
             }
             Spacer()
@@ -260,7 +260,7 @@ private struct ProfileStep: View {
             Text(model.liveEngine == .deepgram
                 ? "Deepgram ve ElevenLabs anahtarı gerekir. Konuşmacılar canlı ayrılır."
                 : "İlk açılışta model (~630 MB) indirilir ve hazırlanır; birkaç dakika sürebilir.")
-                .font(.caption)
+                .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
@@ -281,7 +281,7 @@ private struct KeysStep: View {
             }
             SecretField(title: "Anthropic (Claude)", account: .anthropic, onChange: model.settingsChanged)
             Text("Çeviri, özet ve not için Claude kullanılır. OpenAI, Ollama ya da OpenCode Go'yu Ayarlar › LLM'den seçebilirsin.")
-                .font(.caption)
+                .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
@@ -301,7 +301,7 @@ private struct ReadyStep: View {
                         .monospaced()
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                        .background(Theme.soft, in: RoundedRectangle(cornerRadius: 6))
                     Text(action.title)
                 }
             }
@@ -309,6 +309,6 @@ private struct ReadyStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.system(size: 14))
+        .appFont(size: 14, weight: .regular)
     }
 }

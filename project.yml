@@ -23,6 +23,8 @@ targets:
       properties:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Gömülü Inter (App/Fonts; Resources köküne kopyalanır).
+        ATSApplicationFontsPath: "."
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
     configFiles:
       Debug: Config/Signing.xcconfig

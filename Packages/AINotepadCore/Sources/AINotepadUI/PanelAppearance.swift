@@ -3,6 +3,8 @@ import SwiftUI
 
 /// Panel metninin yazı tipi ailesi (SF tasarımları; her Mac'te var).
 public enum PanelFontDesign: String, Sendable, CaseIterable {
+    /// Inter (uygulamaya gömülü; ElevenLabs'in gövde yazısı). Varsayılan.
+    case inter
     case system
     case rounded
     case serif
@@ -10,7 +12,7 @@ public enum PanelFontDesign: String, Sendable, CaseIterable {
 
     public var design: Font.Design {
         switch self {
-        case .system: .default
+        case .inter, .system: .default
         case .rounded: .rounded
         case .serif: .serif
         case .monospaced: .monospaced
@@ -37,13 +39,6 @@ public enum PanelAccent: String, Sendable, CaseIterable {
     }
 }
 
-/// Panelin arka planı: cam, koyulaştırılmış cam (hareketli duvar kağıdında okunaklı) ya da opak.
-public enum PanelBackground: String, Sendable, CaseIterable {
-    case glass
-    case tintedGlass
-    case solid
-}
-
 /// Panelin kullanıcı tarafından ayarlanan görünümü.
 public struct PanelAppearance: Equatable, Sendable {
     public let fontDesign: PanelFontDesign
@@ -53,30 +48,36 @@ public struct PanelAppearance: Equatable, Sendable {
     /// Transkriptin en altındaki boşluk (son satır kenara yapışmasın).
     public let bottomSpacing: Double
     public let accent: PanelAccent
-    public let background: PanelBackground
 
-    public init(fontDesign: PanelFontDesign, textSize: Double, lineSpacing: Double, bottomSpacing: Double, accent: PanelAccent, background: PanelBackground) {
+    public init(fontDesign: PanelFontDesign, textSize: Double, lineSpacing: Double, bottomSpacing: Double, accent: PanelAccent) {
         self.fontDesign = fontDesign
         self.textSize = textSize
         self.lineSpacing = lineSpacing
         self.bottomSpacing = bottomSpacing
         self.accent = accent
-        self.background = background
     }
 
     /// Tasarım belgesindeki varsayılanlar (§4.3).
     public static let standard: PanelAppearance = PanelAppearance(
-        fontDesign: .system, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .blue, background: .glass
+        fontDesign: .inter, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .orange
     )
+
+    /// Seçili ailede (Inter ya da sistem tasarımı) verilen boyut ve ağırlık.
+    public func font(size: CGFloat, weight: Font.Weight) -> Font {
+        switch fontDesign {
+        case .inter: .custom(Theme.interFamily, size: size).weight(weight)
+        case .system, .rounded, .serif, .monospaced: .system(size: size, weight: weight, design: fontDesign.design)
+        }
+    }
 
     /// Transkript metni.
     public var bodyFont: Font {
-        .system(size: textSize, design: fontDesign.design)
+        font(size: textSize, weight: .regular)
     }
 
     /// İki dilde soluk orijinal ve kart metinleri: gövdeden bir punto küçük.
     public var secondaryFont: Font {
-        .system(size: max(10, textSize - 1), design: fontDesign.design)
+        font(size: max(10, textSize - 1), weight: .regular)
     }
 }
 
@@ -92,20 +93,16 @@ public extension EnvironmentValues {
     }
 }
 
-/// Panelin yüzeyi: seçilen arka plan, yuvarlak köşeler; dolgular köşelerden taşmaz.
+/// Panelin yüzeyi (ElevenLabs): süt beyazı zemin (koyu temada koyu), ince çerçeve, yuvarlak köşeler; dolgular
+/// köşelerden taşmaz.
 private struct PanelSurface: ViewModifier {
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
-
     func body(content: Content) -> some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: DesignTokens.panelRadius, style: .continuous)
-        switch appearance.background {
-        case .glass:
-            content.clipShape(shape).glassEffect(.regular, in: shape)
-        case .tintedGlass:
-            content.clipShape(shape).glassEffect(.regular.tint(Color.black.opacity(0.35)), in: shape)
-        case .solid:
-            content.clipShape(shape).background(Color(nsColor: .windowBackgroundColor), in: shape)
-        }
+        content
+            .foregroundStyle(Theme.ink)
+            .clipShape(shape)
+            .background(Theme.background, in: shape)
+            .overlay(shape.strokeBorder(Theme.line))
     }
 }
 
@@ -165,7 +162,7 @@ private struct HoverHint: ViewModifier {
             .overlay(alignment: Alignment(horizontal: alignment, vertical: edge == .bottom ? .bottom : .top)) {
                 if isVisible {
                     Text(text)
-                        .font(.system(size: 11, weight: .medium))
+                        .appFont(size: 11, weight: .medium)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)

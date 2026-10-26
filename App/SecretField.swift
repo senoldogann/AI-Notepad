@@ -39,11 +39,11 @@ struct SecretField: View {
             case .unknown:
                 EmptyView()
             case .saved:
-                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.green).appFont(size: 11, weight: .regular)
             case .missing:
-                Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange).font(.caption)
+                Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange).appFont(size: 11, weight: .regular)
             case .failed(let message):
-                Text(message).foregroundStyle(.red).font(.caption)
+                Text(message).foregroundStyle(.red).appFont(size: 11, weight: .regular)
             }
         }
         .task {

@@ -94,14 +94,14 @@ private struct PanelPageView<Content: View>: View {
                         Label("Canlı", systemImage: "chevron.left")
                         Image(systemName: "chevron.left")
                     }
-                    .font(DesignTokens.statusFont)
+                    .appFont(size: 12, weight: .medium)
                 }
                 .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Geri", alignment: .leading, edge: .bottom)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .appFont(size: 13, weight: .semibold)
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: DesignTokens.Spacing.s)
@@ -114,7 +114,7 @@ private struct PanelPageView<Content: View>: View {
                             Label(model.isFinishing ? "Bitiriliyor" : "Kayıtta", systemImage: "record.circle")
                             Image(systemName: "record.circle")
                         }
-                        .font(DesignTokens.statusFont)
+                        .appFont(size: 12, weight: .medium)
                         .foregroundStyle(.red)
                     }
                     .buttonStyle(.hoverPlain)
@@ -122,7 +122,7 @@ private struct PanelPageView<Content: View>: View {
                 }
                 Button(action: onHide) {
                     Image(systemName: "minus")
-                        .font(.system(size: 12, weight: .medium))
+                        .appFont(size: 12, weight: .medium)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -158,9 +158,8 @@ func launchPage(arguments: [String]) -> PanelPage? {
 /// denetimleri de kullanır), yazı tipi tasarımı (yazı tipini ayrıca belirtmeyen metinler de) ve pencere teması. Panel ve
 /// ana pencere aynı ayarları kullanır; değişince ikisi de hemen güncellenir.
 struct AppearanceEnvironment: ViewModifier {
-    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.light.rawValue
     @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
-    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
     @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
@@ -171,15 +170,14 @@ struct AppearanceEnvironment: ViewModifier {
         let appearance: PanelAppearance = PanelAppearance(
             fontDesign: PanelFontDesign(rawValue: fontDesign) ?? standard.fontDesign,
             textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
-            accent: PanelAccent(rawValue: accent) ?? standard.accent,
-            background: PanelBackground(rawValue: background) ?? standard.background
+            accent: PanelAccent(rawValue: accent) ?? standard.accent
         )
         content
             .environment(\.panelAppearance, appearance)
             .tint(appearance.accent.color)
             .fontDesign(appearance.fontDesign.design)
             // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
-            .buttonStyle(.glassAction)
+            .buttonStyle(.pill)
             // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.
             .onChange(of: theme, initial: true) { (_: String, value: String) in
                 applyTheme(theme: AppTheme(rawValue: value) ?? .system)
@@ -267,7 +265,7 @@ private struct ProcessingOverlay: View {
                 waveIcon
             }
             Text("Toplantı hazırlanıyor")
-                .font(.system(size: 16, weight: .semibold))
+                .appFont(size: 16, weight: .semibold)
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { (item: (offset: Int, element: LocalizedStringKey)) in
                     HStack(spacing: DesignTokens.Spacing.s) {
@@ -282,7 +280,7 @@ private struct ProcessingOverlay: View {
                         }
                         .frame(width: 18, height: 18)
                         Text(item.element)
-                            .font(.system(size: 13, weight: item.offset == progress.stepIndex ? .semibold : .regular))
+                            .appFont(size: 13, weight: item.offset == progress.stepIndex ? .semibold : .regular)
                             .foregroundStyle(item.offset > progress.stepIndex ? .secondary : .primary)
                     }
                 }
@@ -293,25 +291,25 @@ private struct ProcessingOverlay: View {
             .fontDesign(appearance.fontDesign.design)
             if !isCompact {
                 Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             Button("Arka planda devam et", action: onDismiss)
                 .buttonStyle(.hoverPlain)
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(appearance.accent.color)
         }
         .padding(isCompact ? DesignTokens.Spacing.l : DesignTokens.Spacing.xl)
         .frame(maxWidth: 300)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .cardSurface(cornerRadius: 20)
         .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
         .accessibilityElement(children: .combine)
     }
 
     private var waveIcon: some View {
         Image(systemName: "waveform")
-            .font(.system(size: 34, weight: .medium))
+            .appFont(size: 34, weight: .medium)
             .foregroundStyle(appearance.accent.color)
             .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
     }

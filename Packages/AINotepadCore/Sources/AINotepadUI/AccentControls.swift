@@ -20,13 +20,18 @@ public struct PillPicker<Value: Hashable>: View {
                     selection = item.element.value
                 } label: {
                     Text(item.element.title)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                        .appFont(size: 12, weight: isSelected ? .semibold : .regular)
                         .lineLimit(1)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
-                        .background(isSelected ? appearance.accent.color : Color.clear, in: Capsule())
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        // ElevenLabs bölüm seçicisi: soluk iz üzerinde seçili bölüm beyaz kart.
+                        .background {
+                            if isSelected {
+                                Capsule().fill(Theme.card).shadow(color: .black.opacity(0.10), radius: 2, y: 1)
+                            }
+                        }
+                        .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.hoverCapsule)
@@ -34,7 +39,7 @@ public struct PillPicker<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(.quaternary, in: Capsule())
+        .background(Theme.soft, in: Capsule())
         .animation(.easeOut(duration: 0.15), value: selection)
     }
 }

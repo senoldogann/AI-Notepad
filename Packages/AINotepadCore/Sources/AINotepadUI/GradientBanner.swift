@@ -95,7 +95,7 @@ private struct BannerPrimaryBody: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 14, weight: .semibold))
+            .appFont(size: 14, weight: .semibold)
             .foregroundStyle(Color.black)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)

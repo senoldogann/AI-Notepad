@@ -104,7 +104,7 @@ private struct GeneralSettings: View {
                     let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
                     HStack {
                         Text("Yeniden başlatınca uygulanır.")
-                            .font(.caption)
+                            .appFont(size: 11, weight: .regular)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Şimdi yeniden başlat") {
@@ -118,11 +118,11 @@ private struct GeneralSettings: View {
                         .hoverHint(isBusy ? "Kayıt ve işleme bitince yeniden başlatılabilir" : "Uygulamayı yeni dille yeniden açar", alignment: .trailing, edge: .bottom)
                     }
                     if let relaunchError {
-                        Text(relaunchError).font(.caption).foregroundStyle(.red)
+                        Text(relaunchError).appFont(size: 11, weight: .regular).foregroundStyle(.red)
                     }
                 }
                 Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             Section("Canlı metin") {
@@ -139,13 +139,13 @@ private struct GeneralSettings: View {
                 Text(model.liveEngine == .deepgram
                     ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
                     : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             Section("Sen") {
                 TextField("Adın", text: $userName)
                 Text("Toplantı notunda sana düşen görevleri ayırmak için kullanılır.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             Section("Canlı çeviri") {
@@ -165,7 +165,7 @@ private struct GeneralSettings: View {
                 Text(model.displayMode.needsLiveTranslation
                     ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
                     : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             Section("Mikrofon") {
@@ -178,7 +178,7 @@ private struct GeneralSettings: View {
                     }
                 ))
                 Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             Section("Asistan") {
@@ -196,7 +196,7 @@ private struct GeneralSettings: View {
                     model.applyRetention()
                 }
                 Text("Süre dolunca ses dosyaları silinir; metin ve not kalır.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
         }
@@ -207,9 +207,8 @@ private struct GeneralSettings: View {
 /// Görünüm: tema, vurgu rengi, panel arka planı, yazı tipi, metin boyutu, satır aralığı, alt boşluk, ada.
 /// Değişiklikler panelde anında görünür.
 private struct AppearanceSettings: View {
-    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.light.rawValue
     @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
-    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
     @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
@@ -233,14 +232,10 @@ private struct AppearanceSettings: View {
                             .tag(item.rawValue)
                     }
                 }
-                Picker("Panel arka planı", selection: $background) {
-                    Text("Cam").tag(PanelBackground.glass.rawValue)
-                    Text("Koyu cam (hareketli arka planda okunaklı)").tag(PanelBackground.tintedGlass.rawValue)
-                    Text("Opak").tag(PanelBackground.solid.rawValue)
-                }
             }
             Section("Metin") {
                 Picker("Yazı tipi", selection: $fontDesign) {
+                    Text("Inter (varsayılan)").tag(PanelFontDesign.inter.rawValue)
                     Text("Sistem (SF Pro)").tag(PanelFontDesign.system.rawValue)
                     Text("Yuvarlak (SF Rounded)").tag(PanelFontDesign.rounded.rawValue)
                     Text("Tırnaklı (New York)").tag(PanelFontDesign.serif.rawValue)
@@ -366,7 +361,7 @@ private struct LLMSettings: View {
                     case .succeeded(let reply):
                         Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.green).lineLimit(1)
                     case .failed(let message):
-                        Text(message).foregroundStyle(.red).font(.caption)
+                        Text(message).foregroundStyle(.red).appFont(size: 11, weight: .regular)
                     }
                 }
             }
@@ -484,7 +479,7 @@ private struct KeySettings: View {
             }
             Section {
                 Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
         }
@@ -507,14 +502,14 @@ private struct ShortcutSettings: View {
                             }
                         }
                         if let error = shortcuts.errors[action] {
-                            Text(error).font(.caption).foregroundStyle(.red)
+                            Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
                         }
                     }
                 }
             }
             Section {
                 Text("Kısayola tıklayıp yeni tuşlara bas; vazgeçmek için Esc. ⌃, ⌥ ya da ⌘ ile birlikte bir harf ya da rakam seç.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
         }
