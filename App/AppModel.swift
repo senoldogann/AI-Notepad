@@ -20,6 +20,7 @@ private struct ViewStateInputs: Equatable {
     let displayMode: DisplayMode
     let assistantCard: AssistantCard?
     let phase: RecordingPhase
+    let newPersonNumber: Int
     let isPaused: Bool
     let isMicMuted: Bool
     let canStart: Bool
@@ -136,7 +137,8 @@ final class AppModel {
     var viewState: LiveViewState {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
-            assistantCard: assistantCard, phase: phase, isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
+            assistantCard: assistantCard, phase: phase,
+            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
@@ -146,7 +148,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -703,6 +705,8 @@ final class AppModel {
     private func process(record: MeetingRecord, directory: URL) {
         saveRecord(record: record, directory: directory)
         processingMeetingIDs.insert(record.id)
+        // İlerleme kartı yalnızca kayıt sonrası işleme (adımlı) için; "Notu yenile" adım bildirmez, kart açmaz.
+        processingSteps[record.id] = .convertingAudio
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         let languageMode: LanguageMode = record.language.map { LanguageMode.fixed($0) } ?? .automatic
         Task {

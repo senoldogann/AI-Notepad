@@ -39,6 +39,7 @@ func sampleState(phase: RecordingPhase) -> LiveViewState {
             askedOfYou: ["Sunum slaytlarını hazırlaman isteniyor."]
         )),
         phase: phase,
+        newPersonNumber: 3,
         isPaused: false,
         isMicMuted: false,
         canStart: true,

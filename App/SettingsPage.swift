@@ -41,7 +41,8 @@ struct SettingsPage: View {
         VStack(spacing: 0) {
             // Dar panelde sekmeler sığmazsa açılır seçici olur.
             ViewThatFits(in: .horizontal) {
-                sectionPicker.pickerStyle(.segmented).fixedSize()
+                PillPicker(selection: $section, options: SettingsSection.allCases.map { ($0, $0.title) })
+                    .fixedSize()
                 sectionPicker.pickerStyle(.menu).fixedSize()
             }
             .labelsHidden()
@@ -70,8 +71,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
-    /// Açılışta geçerli olan dil; farklı seçilince yeniden başlatma önerilir.
-    @State private var launchedLanguage: InterfaceLanguage = storedInterfaceLanguage()
+    @State private var relaunchError: String?
 
     var body: some View {
         Form {
@@ -84,17 +84,26 @@ private struct GeneralSettings: View {
                 .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
                     storeInterfaceLanguage(language: language)
                 }
-                if interfaceLanguage != launchedLanguage {
+                if interfaceLanguage != launchInterfaceLanguage {
+                    // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
+                    let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
                     HStack {
                         Text("Yeniden başlatınca uygulanır.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Şimdi yeniden başlat") {
-                            relaunchApplication()
+                            do {
+                                try relaunchApplication()
+                            } catch {
+                                relaunchError = String(localized: "Yeniden başlatılamadı: \(error.localizedDescription)")
+                            }
                         }
-                        .disabled(model.phase != .idle)
-                        .hoverHint(model.phase != .idle ? "Kayıt bitince yeniden başlatılabilir" : "Uygulamayı yeni dille yeniden açar", alignment: .trailing, edge: .bottom)
+                        .disabled(isBusy)
+                        .hoverHint(isBusy ? "Kayıt ve işleme bitince yeniden başlatılabilir" : "Uygulamayı yeni dille yeniden açar", alignment: .trailing, edge: .bottom)
+                    }
+                    if let relaunchError {
+                        Text(relaunchError).font(.caption).foregroundStyle(.red)
                     }
                 }
                 Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
@@ -191,12 +200,12 @@ private struct AppearanceSettings: View {
     var body: some View {
         Form {
             Section("Renkler") {
-                Picker("Tema", selection: $theme) {
-                    Text("Sistem").tag(AppTheme.system.rawValue)
-                    Text("Açık").tag(AppTheme.light.rawValue)
-                    Text("Koyu").tag(AppTheme.dark.rawValue)
+                LabeledContent("Tema") {
+                    PillPicker(selection: $theme, options: [
+                        (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
+                    ])
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
                 Picker("Vurgu rengi", selection: $accent) {
                     ForEach(PanelAccent.allCases, id: \.self) { (item: PanelAccent) in
                         Label(accentName(accent: item), systemImage: "circle.fill")
@@ -292,7 +301,7 @@ private struct LLMSettings: View {
             if provider == LLMProviderKind.anthropic.rawValue {
                 Section {
                     ClaudeModelPicker(selection: $claudeFastModel)
-                    EffortPicker(selection: $claudeFastEffort, allowsNone: false)
+                    ClaudeEffortPicker(selection: $claudeFastEffort)
                 } header: {
                     Text("Canlı çeviri")
                 } footer: {
@@ -300,7 +309,7 @@ private struct LLMSettings: View {
                 }
                 Section {
                     ClaudeModelPicker(selection: $claudeSmartModel)
-                    EffortPicker(selection: $claudeSmartEffort, allowsNone: false)
+                    ClaudeEffortPicker(selection: $claudeSmartEffort)
                 } header: {
                     Text("\"Ne kaçırdım?\", soru ve toplantı notu")
                 } footer: {
@@ -309,13 +318,13 @@ private struct LLMSettings: View {
             } else {
                 Section {
                     TextField("Model", text: $fastModel, prompt: Text("ör. gpt-5-mini, qwen3:8b"))
-                    EffortPicker(selection: $openAIFastEffort, allowsNone: true)
+                    OpenAIEffortPicker(selection: $openAIFastEffort)
                 } header: {
                     Text("Canlı çeviri")
                 }
                 Section {
                     TextField("Model", text: $smartModel, prompt: Text("ör. gpt-5, gpt-oss:120b"))
-                    EffortPicker(selection: $openAISmartEffort, allowsNone: true)
+                    OpenAIEffortPicker(selection: $openAISmartEffort)
                 } header: {
                     Text("\"Ne kaçırdım?\", soru ve toplantı notu")
                 } footer: {
@@ -371,23 +380,31 @@ private struct ClaudeModelPicker: View {
     }
 }
 
-/// Effort seçimi; OpenAI uyumlu sağlayıcıda "Gönderme" (boş) ve yalnızca low/medium/high.
-private struct EffortPicker: View {
+/// Claude effort seçimi: düşükten en yükseğe.
+private struct ClaudeEffortPicker: View {
     @Binding var selection: String
-    let allowsNone: Bool
 
     var body: some View {
         Picker("Effort", selection: $selection) {
-            if allowsNone {
-                Text("Gönderme").tag("")
-            }
             Text("Düşük").tag(LLMEffort.low.rawValue)
             Text("Orta").tag(LLMEffort.medium.rawValue)
             Text("Yüksek").tag(LLMEffort.high.rawValue)
-            if !allowsNone {
-                Text("Çok yüksek").tag(LLMEffort.xhigh.rawValue)
-                Text("En yüksek").tag(LLMEffort.max.rawValue)
-            }
+            Text("Çok yüksek").tag(LLMEffort.xhigh.rawValue)
+            Text("En yüksek").tag(LLMEffort.max.rawValue)
+        }
+    }
+}
+
+/// OpenAI uyumlu effort (`reasoning_effort`): gönderme ya da low/medium/high (sunucuların kabul ettiği değerler).
+private struct OpenAIEffortPicker: View {
+    @Binding var selection: String
+
+    var body: some View {
+        Picker("Effort", selection: $selection) {
+            Text("Gönderme").tag("")
+            Text("Düşük").tag(LLMEffort.low.rawValue)
+            Text("Orta").tag(LLMEffort.medium.rawValue)
+            Text("Yüksek").tag(LLMEffort.high.rawValue)
         }
     }
 }
@@ -399,18 +416,29 @@ private enum ConnectionTest: Equatable {
     case failed(String)
 }
 
-/// Seçili sağlayıcıya kısa bir çeviri isteği gönderir.
+/// Seçili sağlayıcının iki modelini de dener: çeviri (hızlı) ve not (akıllı). Biri başarısızsa hangisi olduğu yazılır.
 @MainActor
 private func testConnection() async -> ConnectionTest {
+    let provider: LLMProvider
     do {
-        let reply: String = try await sendLLM(
-            provider: try await resolveLLMProvider(),
-            request: translationRequest(sentence: "Hyvää huomenta.", context: [])
-        )
-        return .succeeded(reply)
+        provider = try await resolveLLMProvider()
     } catch {
         return .failed(userFacingMessage(error: error))
     }
+    let reply: String
+    do {
+        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: []))
+    } catch {
+        return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
+    }
+    do {
+        _ = try await sendLLM(provider: provider, request: LLMRequest(
+            tier: .smart, system: "Yalnızca \"tamam\" yaz.", userText: "Bağlantı denemesi", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120
+        ))
+    } catch {
+        return .failed(String(localized: "Not modeli: \(userFacingMessage(error: error))"))
+    }
+    return .succeeded(reply)
 }
 
 /// Bulut konuşma tanıma anahtarları.

@@ -123,11 +123,18 @@ public struct TranscriptPanel: View {
                 HStack(spacing: DesignTokens.Spacing.s) {
                     languageChip
                     recordingControls
-                    overflowMenu(includesLanguage: false)
+                    overflowMenu { overflowItems }
                 }
                 HStack(spacing: DesignTokens.Spacing.s) {
                     recordingControls
-                    overflowMenu(includesLanguage: true)
+                    overflowMenu {
+                        if state.isRecording {
+                            Menu("Dili değiştir") {
+                                LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
+                            }
+                        }
+                        overflowItems
+                    }
                 }
             }
             IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
@@ -138,18 +145,19 @@ public struct TranscriptPanel: View {
         copyToPasteboard(text: plainText(blocks: state.blocks))
     }
 
-    /// Dar panelde sığmayan eylemler: kopyala, Toplantılar, Ayarlar ve (çok darda) dil.
-    private func overflowMenu(includesLanguage: Bool) -> some View {
+    /// Dar panelde sığmayan gezinme eylemleri.
+    @ViewBuilder
+    private var overflowItems: some View {
+        Button("Tümünü kopyala", systemImage: "doc.on.doc", action: copyAll)
+            .disabled(state.blocks.isEmpty)
+        Button("Toplantılar", systemImage: "list.bullet.rectangle", action: actions.onOpenMeetings)
+        Button("Ayarlar", systemImage: "gearshape", action: actions.onOpenSettings)
+    }
+
+    /// "⋯" menüsü; içeriği genişliğe göre değişir (çok darda dil de içinde).
+    private func overflowMenu(@ViewBuilder items: () -> some View) -> some View {
         Menu {
-            if includesLanguage, state.isRecording {
-                Menu("Dili değiştir") {
-                    LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
-                }
-            }
-            Button("Tümünü kopyala", systemImage: "doc.on.doc", action: copyAll)
-                .disabled(state.blocks.isEmpty)
-            Button("Toplantılar", systemImage: "list.bullet.rectangle", action: actions.onOpenMeetings)
-            Button("Ayarlar", systemImage: "gearshape", action: actions.onOpenSettings)
+            items()
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 12, weight: .medium))
@@ -231,6 +239,7 @@ public struct TranscriptPanel: View {
                             failedTranslations: failedTranslationIDs(block: block, failed: state.failedTranslations),
                             displayMode: state.displayMode,
                             persons: state.persons,
+                            newPersonNumber: state.newPersonNumber,
                             onRetryTranslations: actions.onRetryTranslations,
                             onReassign: actions.onReassignBlock,
                             onMerge: actions.onMergePerson
@@ -296,27 +305,22 @@ public struct TranscriptPanel: View {
         // Dar panelde "Ne kaçırdım?" yalnızca simge olur; soru alanı kalan genişliği alır.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: DesignTokens.Spacing.s) {
-                missedButton(showsTitle: true)
+                missedButton(horizontalPadding: DesignTokens.Spacing.m) { Label("Ne kaçırdım?", systemImage: "sparkles") }
                 questionField.frame(minWidth: 150)
             }
             HStack(spacing: DesignTokens.Spacing.s) {
-                missedButton(showsTitle: false)
+                missedButton(horizontalPadding: DesignTokens.Spacing.s) { Image(systemName: "sparkles") }
                 questionField
             }
         }
     }
 
-    private func missedButton(showsTitle: Bool) -> some View {
+    /// "Ne kaçırdım?" düğmesi; etiketi (yazılı ya da yalnızca simge) genişliğe göre verilir.
+    private func missedButton(horizontalPadding: CGFloat, @ViewBuilder label: () -> some View) -> some View {
         Button(action: actions.onMissed) {
-            Group {
-                if showsTitle {
-                    Label("Ne kaçırdım?", systemImage: "sparkles")
-                } else {
-                    Image(systemName: "sparkles")
-                }
-            }
+            label()
             .font(DesignTokens.statusFont)
-            .padding(.horizontal, showsTitle ? DesignTokens.Spacing.m : DesignTokens.Spacing.s)
+            .padding(.horizontal, horizontalPadding)
             .padding(.vertical, 6)
             .background(appearance.accent.color, in: Capsule())
             .foregroundStyle(.white)
@@ -428,6 +432,7 @@ struct BlockView: View {
     let displayMode: DisplayMode
     /// Transkriptteki kişiler (düzeltme menüsü).
     let persons: [Int]
+    let newPersonNumber: Int
     let onRetryTranslations: @MainActor ([SegmentID]) -> Void
     let onReassign: @MainActor ([SegmentID], Int) -> Void
     let onMerge: @MainActor (Int, Int) -> Void
@@ -444,7 +449,7 @@ struct BlockView: View {
                 if block.speaker == .others {
                     // Otomatik ayırma yanıldıysa etikete tıklayıp düzeltilir.
                     Menu {
-                        SpeakerCorrectionMenu(block: block, persons: persons, onReassign: onReassign, onMerge: onMerge)
+                        SpeakerCorrectionMenu(block: block, persons: persons, newPersonNumber: newPersonNumber, onReassign: onReassign, onMerge: onMerge)
                     } label: {
                         HStack(spacing: 3) {
                             speakerLabelText
@@ -544,6 +549,7 @@ struct BlockView: View {
 struct SpeakerCorrectionMenu: View {
     let block: SpeakerBlock
     let persons: [Int]
+    let newPersonNumber: Int
     let onReassign: @MainActor ([SegmentID], Int) -> Void
     let onMerge: @MainActor (Int, Int) -> Void
 
@@ -554,7 +560,7 @@ struct SpeakerCorrectionMenu: View {
             ForEach(others, id: \.self) { (person: Int) in
                 Button(speakerLabel(speaker: .others, person: person)) { onReassign(ids, person) }
             }
-            Button("Yeni konuşmacı") { onReassign(ids, (persons.max() ?? 0) + 1) }
+            Button("Yeni konuşmacı") { onReassign(ids, newPersonNumber) }
         }
         if let current = block.person, !others.isEmpty {
             // Ayırma aynı kişiyi iki numaraya böldüyse: geçmiş ve gelecek tüm bölümler birleşir.

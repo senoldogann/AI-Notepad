@@ -87,20 +87,19 @@ func storeInterfaceLanguage(language: InterfaceLanguage) {
     }
 }
 
-/// Uygulamayı yeniden başlatır (arayüz dili değişince).
+/// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
+let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
+
+/// Uygulamayı yeniden başlatır (arayüz dili değişince). Yeni kopya bu kopya kapandıktan sonra açılır: iki kopya aynı
+/// anda çalışırsa yeni kopya kısayolları kaydedemez ve yarıda kalan toplantıları işaretler. Başlatıcı çalıştırılamazsa
+/// hata fırlar (uygulama kapanmaz).
 @MainActor
-func relaunchApplication() {
-    let configuration: NSWorkspace.OpenConfiguration = NSWorkspace.OpenConfiguration()
-    configuration.createsNewApplicationInstance = true
-    NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { (_: NSRunningApplication?, error: (any Error)?) -> Void in
-        if let error {
-            settingsLogger.error("Uygulama yeniden başlatılamadı, hata: \(String(describing: error), privacy: .public)")
-            return
-        }
-        DispatchQueue.main.async {
-            NSApplication.shared.terminate(nil)
-        }
-    }
+func relaunchApplication() throws {
+    let launcher: Process = Process()
+    launcher.executableURL = URL(fileURLWithPath: "/bin/sh")
+    launcher.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", Bundle.main.bundleURL.path]
+    try launcher.run()
+    NSApplication.shared.terminate(nil)
 }
 
 /// Panelin açık/koyu görünümü.
@@ -194,10 +193,10 @@ func resolveLLMProvider() async throws -> LLMProvider {
     case .anthropic:
         return .anthropic(AnthropicConfig(
             apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),
-            fastModel: storedClaudeModel(key: SettingsKey.claudeFastModel, fallback: .haiku),
-            smartModel: storedClaudeModel(key: SettingsKey.claudeSmartModel, fallback: .opus),
-            fastEffort: storedEffort(key: SettingsKey.claudeFastEffort) ?? .low,
-            smartEffort: storedEffort(key: SettingsKey.claudeSmartEffort) ?? .medium
+            fastModel: try storedClaudeModel(key: SettingsKey.claudeFastModel),
+            smartModel: try storedClaudeModel(key: SettingsKey.claudeSmartModel),
+            fastEffort: try requiredEffort(key: SettingsKey.claudeFastEffort),
+            smartEffort: try requiredEffort(key: SettingsKey.claudeSmartEffort)
         ))
     case .openAICompatible:
         return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
@@ -217,9 +216,22 @@ func storedOpenAIConfig(apiKey: String?) throws -> OpenAICompatibleConfig {
     )
 }
 
-/// Kayıtlı Claude modeli; tanınmayan değerde (eski sürüm) varsayılan.
-func storedClaudeModel(key: String, fallback: ClaudeModel) -> ClaudeModel {
-    ClaudeModel(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? fallback
+/// Kayıtlı Claude modeli (varsayılanı kayıtlı); tanınmayan değer `notConfigured` (Ayarlar'dan yeniden seçilir).
+func storedClaudeModel(key: String) throws -> ClaudeModel {
+    let value: String = UserDefaults.standard.string(forKey: key) ?? ""
+    guard let model = ClaudeModel(rawValue: value) else {
+        throw LLMError.notConfigured(detail: String(localized: "Claude modeli (\(value))"))
+    }
+    return model
+}
+
+/// Claude effort'u (varsayılanı kayıtlı); tanınmayan değer `notConfigured`.
+func requiredEffort(key: String) throws -> LLMEffort {
+    let value: String = UserDefaults.standard.string(forKey: key) ?? ""
+    guard let effort = LLMEffort(rawValue: value) else {
+        throw LLMError.notConfigured(detail: String(localized: "effort (\(value))"))
+    }
+    return effort
 }
 
 /// Kayıtlı effort; boş değer "gönderme" demektir (nil).

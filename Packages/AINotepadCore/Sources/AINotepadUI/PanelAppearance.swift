@@ -7,7 +7,7 @@ public enum PanelFontDesign: String, Sendable, CaseIterable {
     case serif
     case monospaced
 
-    var design: Font.Design {
+    public var design: Font.Design {
         switch self {
         case .system: .default
         case .rounded: .rounded

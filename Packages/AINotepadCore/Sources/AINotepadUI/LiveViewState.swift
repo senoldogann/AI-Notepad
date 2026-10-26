@@ -59,6 +59,8 @@ public struct LiveViewState: Equatable, Sendable {
     public let islandLine: IslandLine?
     /// Transkriptteki kişi numaraları (konuşmacı düzeltme menüsü için).
     public let persons: [Int]
+    /// "Yeni konuşmacı" seçilince verilecek, hiç kullanılmamış numara.
+    public let newPersonNumber: Int
     public let isIslandVisible: Bool
 
     public var isRecording: Bool {
@@ -116,6 +118,7 @@ public func makeLiveViewState(
     failedTranslations: Set<SegmentID>,
     assistantCard: AssistantCard?,
     phase: RecordingPhase,
+    newPersonNumber: Int,
     isPaused: Bool,
     isMicMuted: Bool,
     canStart: Bool,
@@ -144,6 +147,7 @@ public func makeLiveViewState(
         errors: Array(errors.suffix(3)),
         islandLine: island,
         persons: knownPersons(transcript: transcript),
+        newPersonNumber: newPersonNumber,
         isIslandVisible: phase != .idle
     )
 }

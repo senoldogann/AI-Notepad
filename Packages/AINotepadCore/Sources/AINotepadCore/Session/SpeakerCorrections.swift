@@ -60,6 +60,15 @@ public func applyCorrections(transcript: [LiveSegment], corrections: SpeakerCorr
     }
 }
 
+/// "Yeni konuşmacı" için kullanılmamış numara: ham transkriptteki, birleştirmelerdeki ve atamalardaki tüm
+/// numaraların üstü (birleştirilip kaybolan bir numara yeniden verilirse eski kişiye geri eşlenirdi). Saf fonksiyondur.
+public func nextFreePerson(transcript: [LiveSegment], corrections: SpeakerCorrections) -> Int {
+    let used: [Int] = transcript.compactMap(\.person)
+        + Array(corrections.merges.keys) + Array(corrections.merges.values)
+        + Array(corrections.overrides.values)
+    return (used.max() ?? 0) + 1
+}
+
 /// Transkriptte görünen kişi numaraları (sıralı). Saf fonksiyondur.
 public func knownPersons(transcript: [LiveSegment]) -> [Int] {
     Array(Set(transcript.compactMap(\.person))).sorted()

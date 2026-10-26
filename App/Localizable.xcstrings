@@ -854,6 +854,16 @@
         }
       }
     },
+    "Claude modeli (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude model (%@)"
+          }
+        }
+      }
+    },
     "Daha yüksek effort daha dikkatli ama daha yavaş ve pahalı sonuç verir.": {
       "localizations": {
         "en": {
@@ -983,6 +993,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen"
+          }
+        }
+      }
+    },
+    "Diğer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More"
           }
         }
       }
@@ -1549,16 +1569,6 @@
         }
       }
     },
-    "Kayıt bitince yeniden başlatılabilir": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You can restart once the recording ends"
-          }
-        }
-      }
-    },
     "Kayıt bitiriliyor": {
       "localizations": {
         "en": {
@@ -1585,6 +1595,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show the island in the notch while recording"
+          }
+        }
+      }
+    },
+    "Kayıt ve işleme bitince yeniden başlatılabilir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can restart once recording and processing finish"
           }
         }
       }
@@ -2168,6 +2188,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing note…"
+          }
+        }
+      }
+    },
+    "Not modeli: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note model: %@"
           }
         }
       }
@@ -3172,6 +3202,16 @@
         }
       }
     },
+    "Yeniden başlatılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't restart: %@"
+          }
+        }
+      }
+    },
     "Yeniden başlatınca uygulanır.": {
       "localizations": {
         "en": {
@@ -3208,6 +3248,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "High"
+          }
+        }
+      }
+    },
+    "effort (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "effort (%@)"
           }
         }
       }
@@ -3290,6 +3340,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Translation off: %@"
+          }
+        }
+      }
+    },
+    "Çeviri modeli: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translation model: %@"
           }
         }
       }

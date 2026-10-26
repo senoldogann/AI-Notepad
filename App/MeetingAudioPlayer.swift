@@ -45,7 +45,7 @@ final class MeetingAudioPlayer {
                     return player
                 }
             } catch {
-                playerLogger.error("Ses açılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                playerLogger.error("Ses açılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessage = userFacingMessage(error: StorageError.readFailed(path: urls.first?.path ?? meetingID, reason: error.localizedDescription))
                 players = []
                 return
@@ -128,6 +128,12 @@ final class MeetingAudioPlayer {
         ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
+                // Önce beklenir: kayıtlar 50 ms sonra başlar (`play(atTime:)`); hemen bakılırsa "çalmıyor" görünür.
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
                 guard let self else {
                     return
                 }
@@ -136,11 +142,6 @@ final class MeetingAudioPlayer {
                     self.currentTime = position
                 } else {
                     self.isPlaying = false
-                    return
-                }
-                do {
-                    try await Task.sleep(for: .milliseconds(100))
-                } catch {
                     return
                 }
             }

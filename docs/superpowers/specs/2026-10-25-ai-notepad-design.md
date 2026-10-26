@@ -190,7 +190,9 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   `AppleLanguages` tercihine yazılır, "Şimdi yeniden başlat" ile uygulanır (kayıt sürerken kapalı). Çekirdekteki
   kullanıcı metinleri `String(localized:)` ile ana paketten çevrilir; tarihler arayüz diline göre biçimlenir. LLM
   istemleri, toplantı notu ve canlı çeviri her zaman Türkçedir; istemdeki konuşmacı etiketleri arayüz dilinden
-  bağımsızdır (`promptSpeakerLabel`). Katalogdaki her metnin İngilizcesi ve aynı yer tutucuları bir testle denetlenir.
+  bağımsızdır (`promptSpeakerLabel`). Katalogdaki her metnin İngilizcesi ve aynı yer tutucuları bir testle denetlenir. Toplantıya
+  yazılan metinler (varsayılan başlık, uyarı, hata) yazıldıkları dilde kalır; dil değişince eski toplantılar çevrilmez.
+  Yeniden başlatma, kayıt ya da toplantı işleme sürerken kapalıdır; yeni kopya eski kopya kapandıktan sonra açılır.
 - **Görünüm ayarları** (Ayarlar › Görünüm, panelde anında): tema (Sistem/Açık/Koyu), vurgu rengi (5), panel arka planı
   (cam / koyu cam / opak), yazı tipi (SF Pro, SF Rounded, New York, SF Mono), metin boyutu (11–24 pt), satır aralığı,
   transkript alt boşluğu, ada açık/kapalı; "varsayılana döndür". Değerler `PanelAppearance` ortam değeriyle tüm panel

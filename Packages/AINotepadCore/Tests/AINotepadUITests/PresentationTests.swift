@@ -9,7 +9,7 @@ func seg(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pers
 }
 
 func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> LiveViewState {
-    makeLiveViewState(transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil, phase: isRecording ? .recording : .idle, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
+    makeLiveViewState(transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil, phase: isRecording ? .recording : .idle, newPersonNumber: 9, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
 }
 
 @Suite struct PresentationTests {
@@ -78,7 +78,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         let others: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
         let viewState: LiveViewState = makeLiveViewState(
             transcript: [others], translations: [others.id: "Günaydın."], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .recording, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .recording, newPersonNumber: 9, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(viewState.latestOthersSentence == "Günaydın.")
     }
@@ -89,7 +89,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
         let viewState: LiveViewState = makeLiveViewState(
             transcript: [first, second], translations: [first.id: "Günaydın."], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .recording, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .recording, newPersonNumber: 9, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(viewState.islandLine == IslandLine(speaker: .others, person: 1, primary: "Günaydın.", primaryIsOriginal: false, secondary: "Aloitetaan."))
         #expect(viewState.persons == [1])
@@ -110,7 +110,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
     @Test func islandVisibleWhileFinishing() {
         let finishing: LiveViewState = makeLiveViewState(
             transcript: [], translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .finishing, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .finishing, newPersonNumber: 9, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(finishing.isIslandVisible)
         #expect(!finishing.isRecording)
@@ -129,5 +129,20 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
 
     @Test func originalOnlySkipsLiveTranslation() {
         #expect(!DisplayMode.originalOnly.needsLiveTranslation)
+    }
+}
+
+@Suite struct KaraokeTests {
+    // Söylenen kelimeler tam renk, o anki kelime vurgulu, gelecekler soluk; metin kelimelerle aynı.
+    @Test func activeWordIsEmphasized() {
+        let words: [StoredWord] = [
+            StoredWord(text: "Hei", startSec: 0, endSec: 1), StoredWord(text: "kaikki", startSec: 1, endSec: 2), StoredWord(text: "taas", startSec: 2, endSec: 3),
+        ]
+        let text: AttributedString = karaokeText(words: words, activeIndex: 1, accent: .blue)
+        #expect(String(text.characters) == "Hei kaikki taas")
+        let emphasized: [String] = text.runs.compactMap { (run: AttributedString.Runs.Run) -> String? in
+            run.inlinePresentationIntent == .stronglyEmphasized ? String(text[run.range].characters) : nil
+        }
+        #expect(emphasized == [" kaikki"])
     }
 }

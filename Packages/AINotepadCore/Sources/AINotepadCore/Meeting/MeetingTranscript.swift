@@ -92,9 +92,12 @@ public func meetingLanguageName(language: MeetingLanguage) -> String {
     }
 }
 
-/// Arayüz dilinin yerel ayarı (tarih biçimleri için): uygulamanın seçili dili, bölge sistemden.
+/// Arayüz dilinin yerel ayarı (tarih biçimleri için): uygulamanın seçili dili, bölge sistemden (Finlandiya'da İngilizce
+/// arayüz 24 saatlik saat ve gün.ay.yıl kullanır). Paketin yerelleştirmesi yoksa (testler) geliştirme dili Türkçe.
 public func interfaceLocale() -> Locale {
-    Locale(identifier: Bundle.main.preferredLocalizations.first ?? "tr")
+    var components: Locale.Components = Locale.Components(identifier: Bundle.main.preferredLocalizations.first ?? "tr")
+    components.region = Locale.current.region
+    return Locale(components: components)
 }
 
 /// "26 Ekim 2026 10:00 · 42 dk · Fince": sayfa, Markdown ve PDF'in alt başlığı. Saf fonksiyondur.

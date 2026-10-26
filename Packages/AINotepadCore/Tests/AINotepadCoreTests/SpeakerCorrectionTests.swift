@@ -47,4 +47,12 @@ private func others(_ index: Int, person: Int?) -> LiveSegment {
         #expect(activeWordIndex(words: words, timeSec: 12) == 0)
         #expect(activeWordIndex(words: words, timeSec: 15) == 1)
     }
+
+    // Birleştirilip görünmez olan numara "Yeni konuşmacı"ya verilmez (yoksa eski kişiye geri eşlenirdi).
+    @Test func newSpeakerNumberSkipsMergedNumbers() {
+        let corrections: SpeakerCorrections = SpeakerCorrections.none.merging(person: 3, into: 2)
+        let transcript: [LiveSegment] = [others(0, person: 1), others(1, person: 2), others(2, person: 3)]
+        #expect(knownPersons(transcript: applyCorrections(transcript: transcript, corrections: corrections)) == [1, 2])
+        #expect(nextFreePerson(transcript: transcript, corrections: corrections) == 4)
+    }
 }

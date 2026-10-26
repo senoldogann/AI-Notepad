@@ -154,12 +154,8 @@ struct MeetingDetailPage: View {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
                     header
                     statusLines
-                    Picker("Bölüm", selection: $tab) {
-                        Text("Özet").tag(MeetingTab.summary)
-                        Text("Transkript").tag(MeetingTab.transcript)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
+                        .frame(maxWidth: 260)
                     switch tab {
                     case .summary:
                         if let note = record.note {
@@ -346,7 +342,7 @@ struct MeetingDetailPage: View {
             }
             return .saved(url)
         } catch {
-            meetingsLogger.error("Dışa aktarılamadı, uzantı: \(fileExtension, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            meetingsLogger.error("Dışa aktarılamadı, uzantı: \(fileExtension, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return .failed(userFacingMessage(error: error))
         }
     }
@@ -361,7 +357,7 @@ struct MeetingDetailPage: View {
             let directory: URL = try model.sessionDirectory(id: record.id)
             return [Speaker.others, Speaker.me].compactMap { meetingAudioURL(directory: directory, speaker: $0) }
         } catch {
-            meetingsLogger.error("Toplantı klasörü alınamadı, kimlik: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            meetingsLogger.error("Toplantı klasörü alınamadı, kimlik: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return []
         }
     }
@@ -513,6 +509,8 @@ private struct SpeakerNameField: View {
                 .onSubmit { model.renameSpeaker(meetingID: meetingID, person: person, name: name) }
         }
         .onAppear { name = current }
+        // Birleştirme ya da başka bir yerden ad değişirse alan güncellenir (eski ad yazılıp silinmesin).
+        .onChange(of: current) { (_: String, value: String) in name = value }
     }
 }
 
@@ -586,19 +584,7 @@ private struct TranscriptSection: View {
         guard isActive, !paragraph.words.isEmpty else {
             return Text(paragraph.text)
         }
-        let active: Int? = activeWordIndex(words: paragraph.words, timeSec: time)
-        return paragraph.words.enumerated().reduce(Text("")) { (combined: Text, item: (offset: Int, element: StoredWord)) -> Text in
-            let separator: String = item.offset == 0 ? "" : " "
-            let word: Text = switch active {
-            case .some(let index) where item.offset == index:
-                Text(item.element.text).foregroundColor(appearance.accent.color).fontWeight(.semibold)
-            case .some(let index) where item.offset < index:
-                Text(item.element.text).foregroundColor(.primary)
-            default:
-                Text(item.element.text).foregroundColor(Color.primary.opacity(0.45))
-            }
-            return Text("\(combined)\(separator)\(word)")
-        }
+        return Text(karaokeText(words: paragraph.words, activeIndex: activeWordIndex(words: paragraph.words, timeSec: time), accent: appearance.accent.color))
     }
 
     private func dotColor(paragraph: TranscriptParagraph) -> Color {

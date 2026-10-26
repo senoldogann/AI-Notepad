@@ -71,6 +71,8 @@ struct PanelHost: View {
             .environment(\.panelAppearance, appearance)
             // Sistem denetimleri (seçiciler, anahtarlar, kaydırıcılar, ilerleme, bağlantılar) da vurgu rengini kullanır.
             .tint(appearance.accent.color)
+            // Seçilen yazı tipi tasarımı yazı tipini ayrıca belirtmeyen tüm metinlere de uygulanır.
+            .fontDesign(appearance.fontDesign.design)
             .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
     }
 
@@ -80,10 +82,9 @@ struct PanelHost: View {
             return dismissedFinishing ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: model.liveEngine == .whisperKit)
         }
         // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
-        guard !dismissedFinishing, let id = model.lastFinishedMeetingID, model.processingMeetingIDs.contains(id), !dismissedProgress.contains(id) else {
+        guard !dismissedFinishing, let id = model.lastFinishedMeetingID, let step = model.processingSteps[id], !dismissedProgress.contains(id) else {
             return nil
         }
-        let step: ProcessingStep = model.processingSteps[id] ?? .convertingAudio
         let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
         return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
     }
@@ -313,6 +314,8 @@ private struct ProcessingOverlay: View {
             }
             ProgressView(value: Double(progress.stepIndex) + 0.5, total: Double(steps.count))
                 .tint(appearance.accent.color)
+            // Seçilen yazı tipi tasarımı yazı tipini ayrıca belirtmeyen tüm metinlere de uygulanır.
+            .fontDesign(appearance.fontDesign.design)
             if !isCompact {
                 Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
                     .font(.caption)
