@@ -31,6 +31,8 @@ final class MainWindowRouter {
     var searchQuery: String = ""
     /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
     var quitWarning: Bool = false
+    /// Açılış ekranı bu açılışta gösterildi.
+    var hasShownSplash: Bool = false
 }
 
 /// Çıkış koruması: kayıt ya da işleme sürerken uygulama hemen kapanmaz (toplantı "yarıda kaldı" olurdu); ana pencere
@@ -127,12 +129,29 @@ struct MainWindowView: View {
                             .transition(.opacity)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    // Çalan toplantı her bölümde altta görünür; sayfa değişince ses durmaz.
+                    .safeAreaInset(edge: .bottom) {
+                        PlayerDock(model: model, player: player) { (id: String) -> Void in
+                            router.selectedMeetingID = id
+                            router.section = .meetings
+                        }
+                        .frame(maxWidth: 720)
+                    }
                     .animation(.smooth(duration: 0.25), value: router.section)
                 }
                 .transition(.opacity)
             }
         }
         .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        // Açılış ekranı: uygulama her açıldığında bir kez (pencere kapatılıp açılınca tekrarlanmaz).
+        .overlay {
+            if !router.hasShownSplash {
+                LaunchSplash {
+                    withAnimation(.smooth(duration: 0.45)) { router.hasShownSplash = true }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 1.02)))
+            }
+        }
         .foregroundStyle(Theme.ink)
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))

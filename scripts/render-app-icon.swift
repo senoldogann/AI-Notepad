@@ -1,11 +1,13 @@
-// Uygulama simgesini çizer: gece mavisi zemin, şampanya altını konuşma balonu; içinde ses dalgası çubukları sağa doğru
-// yazı satırlarına dönüşür (ses → not). Zemin tam kare çizilir; macOS köşeleri kendi maskesiyle yuvarlar.
+// Uygulama simgesini çizer (ElevenLabs sadeliğinde): neredeyse siyah zemin, çok hafif kumlu doku; beyaz üç yuvarlak
+// çubuk sesi, sağdaki yatay çizgi notu anlatır (ses → not). Zemin tam kare çizilir; macOS köşeleri kendi maskesiyle
+// yuvarlar. Açılış ekranındaki işaret (`AppMark`) aynı ölçüleri kullanır.
 // Kullanım: swift scripts/render-app-icon.swift <çıktı.png>
 import AppKit
 import CoreGraphics
 import Foundation
 
 let size: CGFloat = 1024
+let unit: CGFloat = size / 100
 let outputPath: String = CommandLine.arguments[1]
 
 /// sRGB renk.
@@ -19,56 +21,41 @@ let context: CGContext = CGContext(
     space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
 )!
 
-// Zemin: yukarıdan aşağı gece mavisinden siyaha.
-let background: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(30, 38, 72, 1), rgb(9, 12, 24, 1)] as CFArray, locations: [0, 1])!
+// Zemin: yukarıdan aşağı koyu griden siyaha.
+let background: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(34, 34, 34, 1), rgb(6, 6, 6, 1)] as CFArray, locations: [0, 1])!
 context.drawLinearGradient(background, start: CGPoint(x: 0, y: size), end: CGPoint(x: 0, y: 0), options: [])
 
-// Sol üstte yumuşak çivit parıltı.
-let glow: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(92, 110, 230, 0.45), rgb(92, 110, 230, 0)] as CFArray, locations: [0, 1])!
-context.drawRadialGradient(glow, startCenter: CGPoint(x: 300, y: 780), startRadius: 0, endCenter: CGPoint(x: 300, y: 780), endRadius: 560, options: [])
+// Üstte çok hafif ışık (cam gibi derinlik).
+let glow: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(255, 255, 255, 0.07), rgb(255, 255, 255, 0)] as CFArray, locations: [0, 1])!
+context.drawRadialGradient(glow, startCenter: CGPoint(x: size * 0.3, y: size * 0.95), startRadius: 0, endCenter: CGPoint(x: size * 0.3, y: size * 0.95), endRadius: size * 0.9, options: [])
 
-// Altın: açık şampanyadan koyu altına dikey geçiş; çizilen şekle kırpılarak uygulanır.
-let gold: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(250, 230, 186, 1), rgb(214, 172, 98, 1), rgb(160, 116, 52, 1)] as CFArray, locations: [0, 0.55, 1])!
-
-/// Yolu altın gradyanla doldurur.
-func fillGold(path: CGPath) {
-    context.saveGState()
-    context.addPath(path)
-    context.clip()
-    context.drawLinearGradient(gold, start: CGPoint(x: 0, y: 820), end: CGPoint(x: 0, y: 200), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-    context.restoreGState()
+// İnce kumlu doku: sabit tohumlu noktalar (her çizimde aynı).
+var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+for _ in 0..<60000 {
+    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+    let x: CGFloat = CGFloat(seed >> 40) / CGFloat(1 << 24) * size
+    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+    let y: CGFloat = CGFloat(seed >> 40) / CGFloat(1 << 24) * size
+    context.setFillColor(seed & 1 == 0 ? rgb(255, 255, 255, 0.035) : rgb(0, 0, 0, 0.12))
+    context.fill(CGRect(x: x, y: y, width: 2, height: 2))
 }
 
-// Konuşma balonu: yuvarlak dikdörtgen ve sol altta kuyruk tek bir kesintisiz çizgi.
-let bubbleRect: CGRect = CGRect(x: 192, y: 300, width: 640, height: 470)
-let radius: CGFloat = 150
-let stroke: CGFloat = 30
-let bubble: CGMutablePath = CGMutablePath()
-bubble.move(to: CGPoint(x: bubbleRect.minX + radius, y: bubbleRect.maxY))
-bubble.addLine(to: CGPoint(x: bubbleRect.maxX - radius, y: bubbleRect.maxY))
-bubble.addArc(tangent1End: CGPoint(x: bubbleRect.maxX, y: bubbleRect.maxY), tangent2End: CGPoint(x: bubbleRect.maxX, y: bubbleRect.minY), radius: radius)
-bubble.addArc(tangent1End: CGPoint(x: bubbleRect.maxX, y: bubbleRect.minY), tangent2End: CGPoint(x: bubbleRect.minX, y: bubbleRect.minY), radius: radius)
-bubble.addLine(to: CGPoint(x: 462, y: bubbleRect.minY))
-bubble.addLine(to: CGPoint(x: 280, y: 196))
-bubble.addLine(to: CGPoint(x: 352, y: bubbleRect.minY))
-bubble.addArc(tangent1End: CGPoint(x: bubbleRect.minX, y: bubbleRect.minY), tangent2End: CGPoint(x: bubbleRect.minX, y: bubbleRect.maxY), radius: radius)
-bubble.addArc(tangent1End: CGPoint(x: bubbleRect.minX, y: bubbleRect.maxY), tangent2End: CGPoint(x: bubbleRect.maxX, y: bubbleRect.maxY), radius: radius)
-bubble.closeSubpath()
-fillGold(path: bubble.copy(strokingWithWidth: stroke, lineCap: .round, lineJoin: .round, miterLimit: 10))
-
-// İçerik: soldan ses dalgası çubukları, sağa doğru yazı satırları.
-let bar: CGFloat = 34
-let centerY: CGFloat = bubbleRect.midY
-let bars: [(x: CGFloat, height: CGFloat)] = [(300, 110), (362, 220), (424, 300), (486, 170)]
-let content: CGMutablePath = CGMutablePath()
-for item in bars {
-    content.addRoundedRect(in: CGRect(x: item.x - bar / 2, y: centerY - item.height / 2, width: bar, height: item.height), cornerWidth: bar / 2, cornerHeight: bar / 2)
+// İşaret (100 birimlik ızgarada, y yukarı): üç çubuk ve bir çizgi; yatayda ortalanır.
+let marks: [CGRect] = [
+    CGRect(x: 24, y: 40, width: 7, height: 20),
+    CGRect(x: 35, y: 30, width: 7, height: 40),
+    CGRect(x: 46, y: 36, width: 7, height: 28),
+    CGRect(x: 58, y: 46.5, width: 20, height: 7),
+]
+let shift: CGFloat = 50 - (24 + 78) / 2
+context.setShadow(offset: CGSize(width: 0, height: -6), blur: 24, color: rgb(0, 0, 0, 0.45))
+context.setFillColor(rgb(250, 250, 250, 1))
+for mark in marks {
+    let rect: CGRect = CGRect(x: (mark.minX + shift) * unit, y: (100 - mark.maxY) * unit, width: mark.width * unit, height: mark.height * unit)
+    let radius: CGFloat = min(rect.width, rect.height) / 2
+    context.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+    context.fillPath()
 }
-let lines: [(y: CGFloat, width: CGFloat)] = [(centerY + 78, 196), (centerY, 160), (centerY - 78, 112)]
-for line in lines {
-    content.addRoundedRect(in: CGRect(x: 550, y: line.y - bar / 2, width: line.width, height: bar), cornerWidth: bar / 2, cornerHeight: bar / 2)
-}
-fillGold(path: content)
 
 let image: CGImage = context.makeImage()!
 let data: Data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])!
