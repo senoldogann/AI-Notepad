@@ -47,6 +47,8 @@ struct AINotepadApp: App {
         // Pencereler ve kısayollar uygulama açıldıktan sonra kurulur.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
+                // Tema açılışta bir kez uygulanır (hiç pencere açılmasa da ada ve menüler doğru temada olsun).
+                applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .system)
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
