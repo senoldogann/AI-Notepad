@@ -87,16 +87,16 @@ public func processMeeting(
             try convertToM4A(source: caf, destination: directory.appending(path: "\(name).m4a"))
             try FileManager.default.removeItem(at: caf)
         } catch {
-            return failed(record: current, step: "Ses dönüştürülemedi", error: error)
+            return failed(record: current, step: String(localized: "Ses dönüştürülemedi"), error: error)
         }
     }
 
     let othersAudio: URL = directory.appending(path: "others.m4a")
     switch finalPass {
     case .skip(let reason):
-        current = current.with(notice: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı.")
+        current = current.with(notice: String(localized: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı."))
     case .run where !FileManager.default.fileExists(atPath: othersAudio.path):
-        current = current.with(notice: "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı.")
+        current = current.with(notice: String(localized: "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı."))
     case .run(let transcriber):
         do {
             let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: othersAudio, languageMode: languageMode)
@@ -108,7 +108,7 @@ public func processMeeting(
                 .with(finalSegments: result.segments, language: current.language ?? result.language)
                 .with(notice: result.notice)
         } catch {
-            return failed(record: current, step: "Son geçiş başarısız", error: error)
+            return failed(record: current, step: String(localized: "Son geçiş başarısız"), error: error)
         }
     }
 
@@ -123,13 +123,13 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
         return record.with(status: .done, failureMessage: nil)
     }
     guard let llm else {
-        return record.with(status: .failed, failureMessage: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yeniden oluştur\"a bas.")
+        return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
         let note: MeetingNote = try parseMeetingNote(text: try await sendLLM(provider: llm, request: request))
         return record.with(note: note).with(status: .done, failureMessage: nil)
     } catch {
-        return failed(record: record, step: "Not oluşturulamadı", error: error)
+        return failed(record: record, step: String(localized: "Not oluşturulamadı"), error: error)
     }
 }
 

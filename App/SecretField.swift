@@ -5,7 +5,7 @@ import SwiftUI
 /// Tek bir anahtar alanı: gizli giriş, kaydet/kaldır, kayıt durumu. Kayıtlı değer hiçbir zaman gösterilmez.
 /// Kaydetme ya da kaldırma sonrası `onChange` çağrılır (açık kayıtta çeviri yeni anahtarla sürsün).
 struct SecretField: View {
-    let title: String
+    let title: LocalizedStringKey
     let account: SecretAccount
     let onChange: @MainActor () -> Void
 
@@ -74,7 +74,7 @@ private func save(account: SecretAccount, value: String) -> SecretStatus {
         try saveSecret(service: keychainService, account: account, value: value)
         return .saved
     } catch {
-        return .failed("Kaydedilemedi: \(userFacingMessage(error: error))")
+        return .failed(String(localized: "Kaydedilemedi: \(userFacingMessage(error: error))"))
     }
 }
 
@@ -83,6 +83,6 @@ private func remove(account: SecretAccount) -> SecretStatus {
         try deleteSecret(service: keychainService, account: account)
         return .missing
     } catch {
-        return .failed("Kaldırılamadı: \(userFacingMessage(error: error))")
+        return .failed(String(localized: "Kaldırılamadı: \(userFacingMessage(error: error))"))
     }
 }

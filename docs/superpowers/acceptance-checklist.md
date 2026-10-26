@@ -81,5 +81,14 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Toplantıda soruya soruyu tekrar ederek cevap ver ("Joo, teen diat perjantaiksi"): cevabın "Sen" olarak canlıda ve notta duruyor.
 - [ ] Bir toplantı bittikten sonra yeni kayıt (kısayol ya da menü): panel canlı sayfada açılıyor; panel gizliyken toplantı bitince panel toplantı sayfasıyla görünüyor.
 
+## Arayüz dili, görünüm ve modeller (aşama 6c)
+- [ ] Ayarlar › Genel › Arayüz dili: English → "Şimdi yeniden başlat": menü, panel, Ayarlar, Toplantılar, Kurulum, hata mesajları, PDF/Markdown başlıkları İngilizce; tarihler İngilizce; not içeriği ve çeviri Türkçe kalıyor. Türkçe/Sistem'e dönüş çalışıyor.
+- [ ] Mikrofon/sistem sesi izin pencerelerindeki açıklama arayüz diline göre.
+- [ ] Ayarlar › LLM: çeviri modeli Sonnet 5.5 / effort Yüksek, not modeli Fable 5.1 / Orta seç → "Bağlantıyı dene" ve kayıtta çeviri ile not çalışıyor.
+- [ ] Ayarlar › Görünüm: tema Koyu/Açık, vurgu rengi, arka plan "Koyu cam"/"Opak", yazı tipi, metin boyutu, satır aralığı, alt boşluk panelde anında değişiyor; "Varsayılana döndür" çalışıyor; ada kapatılınca kayıtta çentikte görünmüyor.
+- [ ] Panel köşeleri dört köşede de yuvarlak; kenar ve gölge dikdörtgen değil.
+- [ ] Konuşma akarken transkript kendiliğinden en alta iniyor ve altta boşluk var; yukarı kaydırınca yerinde kalıyor, "Yeni metin" düğmesi çıkıyor.
+- [ ] Panel başlığındaki ve sayfalardaki düğmelerin üzerine gelince açıklama çıkıyor (uygulama arka plandayken de).
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

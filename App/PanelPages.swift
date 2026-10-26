@@ -107,7 +107,7 @@ struct PanelHost: View {
 private struct PanelPageView<Content: View>: View {
     let model: AppModel
     let router: PanelRouter
-    let title: String
+    let title: LocalizedStringKey
     let back: PanelPage
     let onHide: @MainActor () -> Void
     @ViewBuilder let content: () -> Content

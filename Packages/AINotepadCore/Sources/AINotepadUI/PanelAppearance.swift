@@ -111,7 +111,7 @@ private struct PanelSurface: ViewModifier {
 /// Fare üstüne gelince kısa gecikmeyle açıklama gösterir. Panel uygulamayı öne getirmediği için sistem ipuçları
 /// (`help`) her zaman görünmez; bu ipucu panelin içinde çizilir. Erişilebilirlik için `help` de verilir.
 private struct HoverHint: ViewModifier {
-    let text: String
+    let text: LocalizedStringKey
     let alignment: HorizontalAlignment
     let edge: VerticalEdge
     @State private var isVisible: Bool = false
@@ -162,7 +162,7 @@ public extension View {
 
     /// Fare üstüne gelince görünen açıklama; `alignment` ipucunun düğmenin hangi kenarına, `edge` altına mı üstüne mi
     /// çizileceği (panel kenarındaki düğmelerde taşmasın diye).
-    func hoverHint(_ text: String, alignment: HorizontalAlignment, edge: VerticalEdge) -> some View {
+    func hoverHint(_ text: LocalizedStringKey, alignment: HorizontalAlignment, edge: VerticalEdge) -> some View {
         modifier(HoverHint(text: text, alignment: alignment, edge: edge))
     }
 }

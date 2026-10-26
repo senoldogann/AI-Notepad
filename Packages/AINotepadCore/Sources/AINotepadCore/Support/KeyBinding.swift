@@ -43,7 +43,8 @@ public func keyBindingDisplay(binding: KeyBinding) -> String {
         (CarbonModifier.control, "⌃"), (CarbonModifier.option, "⌥"), (CarbonModifier.shift, "⇧"), (CarbonModifier.command, "⌘"),
     ]
     let prefix: String = symbols.filter { binding.modifiers & $0.mask != 0 }.map(\.symbol).joined()
-    return prefix + (keyNames[binding.keyCode] ?? "#\(binding.keyCode)")
+    let key: String = binding.keyCode == 0x31 ? String(localized: "Boşluk") : (keyNames[binding.keyCode] ?? "#\(binding.keyCode)")
+    return prefix + key
 }
 
 /// Global kısayol olarak kullanılabilir mi: bilinen tuş ve (işlev tuşları dışında) en az bir ⌃/⌥/⌘;

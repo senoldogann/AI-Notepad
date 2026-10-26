@@ -16,24 +16,24 @@ public func meetingDocument(record: MeetingRecord) -> NSAttributedString {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
         if !mine.isEmpty {
-            document.append(styled(text: "SENİN GÖREVLERİN\n", style: .heading))
+            document.append(styled(text: String(localized: "SENİN GÖREVLERİN") + "\n", style: .heading))
             mine.forEach { document.append(taskParagraph(task: $0)) }
         } else {
-            document.append(styled(text: "SENİN GÖREVLERİN\n", style: .heading))
-            document.append(styled(text: "Sana düşen görev yok.\n", style: .listItemMuted))
+            document.append(styled(text: String(localized: "SENİN GÖREVLERİN") + "\n", style: .heading))
+            document.append(styled(text: String(localized: "Sana düşen görev yok.") + "\n", style: .listItemMuted))
         }
-        document.append(styled(text: "ÖZET\n", style: .heading))
+        document.append(styled(text: String(localized: "ÖZET") + "\n", style: .heading))
         document.append(styled(text: note.summary + "\n", style: .body))
         if !note.decisions.isEmpty {
-            document.append(styled(text: "KARARLAR\n", style: .heading))
+            document.append(styled(text: String(localized: "KARARLAR") + "\n", style: .heading))
             note.decisions.forEach { document.append(styled(text: "•  \($0)\n", style: .listItem)) }
         }
         if !others.isEmpty {
-            document.append(styled(text: "DİĞER GÖREVLER\n", style: .heading))
+            document.append(styled(text: String(localized: "DİĞER GÖREVLER") + "\n", style: .heading))
             others.forEach { document.append(taskParagraph(task: $0)) }
         }
         if !note.glossary.isEmpty {
-            document.append(styled(text: "SÖZLÜK\n", style: .heading))
+            document.append(styled(text: String(localized: "SÖZLÜK") + "\n", style: .heading))
             for entry in note.glossary {
                 document.append(styled(text: entry.term, style: .listItemStrong))
                 document.append(styled(text: " — \(entry.meaning)\n", style: .listItem))
@@ -42,7 +42,7 @@ public func meetingDocument(record: MeetingRecord) -> NSAttributedString {
     }
     let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
     if !paragraphs.isEmpty {
-        document.append(styled(text: "TRANSKRİPT\n", style: .heading))
+        document.append(styled(text: String(localized: "TRANSKRİPT") + "\n", style: .heading))
         for paragraph in paragraphs {
             document.append(styled(text: "\(timestamp(seconds: paragraph.startSec))  ", style: .transcriptTime))
             document.append(styled(text: paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames) + "\n", style: .transcriptLabel))
@@ -91,7 +91,7 @@ public func meetingPDF(record: MeetingRecord) throws -> Data {
         let origin: CGPoint = CGPoint(x: pageMargin, y: pageMargin)
         layout.drawBackground(forGlyphRange: range, at: origin)
         layout.drawGlyphs(forGlyphRange: range, at: origin)
-        let footer: NSAttributedString = styled(text: "Sayfa \(index + 1) / \(containers.count)", style: .footer)
+        let footer: NSAttributedString = styled(text: String(localized: "Sayfa \(index + 1) / \(containers.count)"), style: .footer)
         footer.draw(at: CGPoint(x: (pageSize.width - footer.size().width) / 2, y: pageSize.height - pageMargin))
         NSGraphicsContext.restoreGraphicsState()
         context.endPDFPage()
@@ -110,7 +110,7 @@ public func exportFileURL(directory: URL, title: String, startedAt: Date, fileEx
         .components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>"))
         .joined()
         .trimmingCharacters(in: .whitespacesAndNewlines)
-    let base: String = "\(cleaned.isEmpty ? "Toplantı" : cleaned) \(formatter.string(from: startedAt))"
+    let base: String = "\(cleaned.isEmpty ? String(localized: "Toplantı") : cleaned) \(formatter.string(from: startedAt))"
     let candidates: [URL] = [directory.appending(path: "\(base).\(fileExtension)")]
         + (2...999).map { directory.appending(path: "\(base) \($0).\(fileExtension)") }
     return candidates.first { !FileManager.default.fileExists(atPath: $0.path) } ?? candidates[candidates.count - 1]

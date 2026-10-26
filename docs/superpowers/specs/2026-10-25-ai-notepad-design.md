@@ -185,6 +185,22 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   çeviri yeni anahtarla sürer.
 
 **UI**
+- **Arayüz dili:** Türkçe (kaynak) ve İngilizce; `App/Localizable.xcstrings` (String Catalog, kaynak dil `tr`) ve
+  `App/InfoPlist.xcstrings` (izin metinleri). Ayarlar › Genel › Arayüz dili: Sistem / Türkçe / English — uygulamanın
+  `AppleLanguages` tercihine yazılır, "Şimdi yeniden başlat" ile uygulanır (kayıt sürerken kapalı). Çekirdekteki
+  kullanıcı metinleri `String(localized:)` ile ana paketten çevrilir; tarihler arayüz diline göre biçimlenir. LLM
+  istemleri, toplantı notu ve canlı çeviri her zaman Türkçedir; istemdeki konuşmacı etiketleri arayüz dilinden
+  bağımsızdır (`promptSpeakerLabel`). Katalogdaki her metnin İngilizcesi ve aynı yer tutucuları bir testle denetlenir.
+- **Görünüm ayarları** (Ayarlar › Görünüm, panelde anında): tema (Sistem/Açık/Koyu), vurgu rengi (5), panel arka planı
+  (cam / koyu cam / opak), yazı tipi (SF Pro, SF Rounded, New York, SF Mono), metin boyutu (11–24 pt), satır aralığı,
+  transkript alt boşluğu, ada açık/kapalı; "varsayılana döndür". Değerler `PanelAppearance` ortam değeriyle tüm panel
+  sayfalarına (canlı transkript, asistan kartı, toplantı sayfası) ulaşır.
+- **Canlı metni izleme:** transkript en alttayken yeni ve büyüyen metni kendiliğinden izler; kullanıcı yukarı kaydırdıysa
+  yerinde kalır ve "Yeni metin ↓" düğmesi çıkar. En altta ayarlanabilir boşluk vardır.
+- **İpuçları:** panel uygulamayı öne getirmediği için sistem ipuçları görünmez; düğmelerin üzerine gelince 0,45 sn sonra
+  panelin içinde çizilen ipucu çıkar (kenardaki düğmelerde taşmayacak hizada).
+- **Panel köşeleri:** pencere içeriği panel yarıçapıyla maskelenir ve gölge içerik çizildikten sonra yeniden hesaplanır;
+  köşeler saydam, gölge ve kenar yuvarlak (önceden üst köşelerde dikdörtgen kenar görünüyordu).
 - **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
   panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
   ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
@@ -269,6 +285,13 @@ kaydedilmez ve menüde adıyla bildirilir.
 mesajı, `max_completion_tokens`, şema varsa katı `response_format: json_schema`. Ölçüm: Ollama'daki model
 `response_format`'ı uygulamadı (Markdown döndü), bu yüzden şema sistem mesajında da verilir. Çeviri hızlı modelle,
 diğerleri akıllı modelle (ikisi Ayarlar'dan).
+
+**Model ve effort seçimi (Ayarlar › LLM):** Claude'da "Canlı çeviri" ve "Ne kaçırdım?, soru ve not" için ayrı model
+(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Opus/medium. Modellerin
+parametre kuralları (her biri gerçek API'de doğrulandı): hızlı sınıfta düşünme Haiku 5.5'te `disabled`, Sonnet 5.5'te
+`between_tools` ile kapatılır (yalnızca effort ≤ high; üstünde 400); Opus 5.5 ve Fable 5.1'de kapatılamaz (alan
+gönderilmez). Sunucu tarafı yedek (`fallbacks: "default"`) Haiku 5.5 dışındaki modellerde. OpenAI uyumlu sağlayıcıda
+effort isteğe bağlı `reasoning_effort` (low/medium/high ya da gönderme).
 
 **Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
 saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort: medium`, `fallbacks: "default"` +

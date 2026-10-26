@@ -11,8 +11,17 @@ public struct SpeakerBlock: Sendable, Equatable, Identifiable {
     public let segments: [LiveSegment]
 }
 
-/// Konuşmacının arayüzdeki ve kopyalanan metindeki adı: kişi atandıysa "Konuşmacı N".
+/// Konuşmacının arayüzdeki ve kopyalanan metindeki adı (arayüz dilinde): kişi atandıysa "Konuşmacı N".
 public func speakerLabel(speaker: Speaker, person: Int?) -> String {
+    switch (speaker, person) {
+    case (_, .some(let number)): String(localized: "Konuşmacı \(number)")
+    case (.me, nil): String(localized: "Sen")
+    case (.others, nil): String(localized: "Diğerleri")
+    }
+}
+
+/// LLM istemlerindeki etiket: arayüz dilinden bağımsız Türkçe (sistem istemi "Sen"i kullanıcı olarak tanımlar).
+public func promptSpeakerLabel(speaker: Speaker, person: Int?) -> String {
     switch (speaker, person) {
     case (_, .some(let number)): "Konuşmacı \(number)"
     case (.me, nil): "Sen"

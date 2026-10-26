@@ -129,8 +129,8 @@ public struct IslandView: View {
 
     private var accessibilitySummary: String {
         let status: String = switch state.phase {
-        case .recording: "Kayıtta"
-        case .finishing: "Bitiriliyor"
+        case .recording: String(localized: "Kayıtta")
+        case .finishing: String(localized: "Bitiriliyor")
         case .idle: state.statusText
         }
         return [status, state.languageText, state.latestOthersSentence ?? "", state.errors.last ?? ""]

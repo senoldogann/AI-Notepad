@@ -12,7 +12,7 @@ private enum OnboardingStep: Int, CaseIterable {
     case keys
     case ready
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .welcome: "Toplantıları anla, hiçbir şeyi kaçırma"
         case .permissions: "İzinler"
@@ -96,7 +96,7 @@ private struct WelcomeStep: View {
 
 private struct FeatureRow: View {
     let symbol: String
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.m) {
@@ -175,18 +175,18 @@ private struct PermissionsStep: View {
 
     private var microphoneText: String {
         switch microphone {
-        case .granted: "İzin verildi"
-        case .denied: "Reddedildi: Sistem Ayarları'ndan aç"
-        case .undetermined: "Henüz sorulmadı"
-        @unknown default: "Bilinmiyor"
+        case .granted: String(localized: "İzin verildi")
+        case .denied: String(localized: "Reddedildi: Sistem Ayarları'ndan aç")
+        case .undetermined: String(localized: "Henüz sorulmadı")
+        @unknown default: String(localized: "Bilinmiyor")
         }
     }
 
     private var systemAudioText: String {
         switch systemAudio {
-        case .idle: "macOS bu iznin durumunu göstermez; deneyerek açılır"
-        case .running: "Deneniyor…"
-        case .started: "Yakalama başladı. İzin penceresi çıktıysa \"İzin Ver\"i seçtiysen hazır."
+        case .idle: String(localized: "macOS bu iznin durumunu göstermez; deneyerek açılır")
+        case .running: String(localized: "Deneniyor…")
+        case .started: String(localized: "Yakalama başladı. İzin penceresi çıktıysa \"İzin Ver\"i seçtiysen hazır.")
         case .failed(let message): message
         }
     }
@@ -201,8 +201,8 @@ private enum ProbeState: Equatable {
 
 private struct PermissionRow<Action: View>: View {
     let symbol: String
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
     let status: String
     let isGranted: Bool
     @ViewBuilder let action: () -> Action
@@ -299,7 +299,7 @@ private struct ReadyStep: View {
                     Text(action.title)
                 }
             }
-            Text("Menü çubuğundaki dalga simgesinden kaydı başlat. Toplantı bitince not Toplantılar penceresinde hazır olur.")
+            Text("Kaydı paneldeki \"Başlat\" düğmesiyle ya da menüden başlat. Toplantı bitince panel toplantının sayfasını açar: görevlerin en üstte.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

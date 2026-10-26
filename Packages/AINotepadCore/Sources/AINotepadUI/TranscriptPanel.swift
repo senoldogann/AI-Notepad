@@ -351,7 +351,7 @@ struct BlockView: View {
                 .alignmentGuide(.firstTextBaseline) { (dimensions: ViewDimensions) -> CGFloat in dimensions[.bottom] }
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
                 // Renk yalnızca noktada: renkli küçük etiket camda yeterince okunmuyor.
-                Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased())
+                Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased(with: interfaceLocale()))
                     .font(DesignTokens.labelFont)
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
@@ -455,10 +455,10 @@ struct AssistantCardView: View {
 
     private var title: String {
         switch card {
-        case .loading(let title): title.uppercased()
-        case .summary: "NE KAÇIRDIM?"
-        case .answer: "CEVAP"
-        case .failed: "HATA"
+        case .loading(let title): title.uppercased(with: interfaceLocale())
+        case .summary: String(localized: "NE KAÇIRDIM?")
+        case .answer: String(localized: "CEVAP")
+        case .failed: String(localized: "HATA")
         }
     }
 
@@ -494,7 +494,7 @@ struct AssistantCardView: View {
 /// Sade ikon düğmesi.
 struct IconButton: View {
     let symbol: String
-    let help: String
+    let help: LocalizedStringKey
     let action: @MainActor () -> Void
 
     var body: some View {

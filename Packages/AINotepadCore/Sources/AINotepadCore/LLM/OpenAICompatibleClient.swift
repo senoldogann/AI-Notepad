@@ -97,7 +97,7 @@ public func classifyOpenAIResponse(status: Int, data: Data, model: String, reque
 func prepareOpenAICall(config: OpenAICompatibleConfig, request: LLMRequest) throws -> PreparedLLMCall {
     let model: String = openAIModel(config: config, tier: request.tier)
     guard !model.isEmpty else {
-        throw LLMError.notConfigured(detail: request.tier == .fast ? "çeviri modeli" : "özet modeli")
+        throw LLMError.notConfigured(detail: request.tier == .fast ? String(localized: "çeviri modeli") : String(localized: "özet modeli"))
     }
     var urlRequest: URLRequest = URLRequest(url: openAIChatURL(baseURL: config.baseURL))
     urlRequest.httpMethod = "POST"

@@ -26,8 +26,8 @@ enum ShortcutAction: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .record: "Kaydı başlat / durdur"
-        case .toggleWindows: "Ada ve paneli göster / gizle"
+        case .record: String(localized: "Kaydı başlat / durdur")
+        case .toggleWindows: String(localized: "Ada ve paneli göster / gizle")
         }
     }
 
@@ -215,15 +215,15 @@ func shortcutErrorMessage(error: any Error, binding: KeyBinding) -> String {
     let name: String = keyBindingDisplay(binding: binding)
     switch error {
     case HotKeyError.conflictsWithSystemShortcut:
-        return "\(name) bir macOS sistem kısayolu; başka bir kısayol seç."
+        return String(localized: "\(name) bir macOS sistem kısayolu; başka bir kısayol seç.")
     case HotKeyError.unusableBinding:
-        return "\(name) kullanılamaz: ⌃, ⌥ ya da ⌘ ile birlikte bir harf/rakam seç."
+        return String(localized: "\(name) kullanılamaz: ⌃, ⌥ ya da ⌘ ile birlikte bir harf/rakam seç.")
     case HotKeyError.duplicate:
-        return "\(name) diğer eyleme atanmış."
+        return String(localized: "\(name) diğer eyleme atanmış.")
     case HotKeyError.registrationFailed:
-        return "\(name) başka bir uygulamada kullanılıyor."
+        return String(localized: "\(name) başka bir uygulamada kullanılıyor.")
     default:
-        return "\(name) kaydedilemedi."
+        return String(localized: "\(name) kaydedilemedi.")
     }
 }
 
@@ -273,7 +273,7 @@ final class ShortcutController {
         do {
             try storeKeyBinding(key: action.settingsKey, binding: binding)
         } catch {
-            errors[action] = "Kısayol kaydedilemedi: \(error.localizedDescription)"
+            errors[action] = String(localized: "Kısayol kaydedilemedi: \(error.localizedDescription)")
         }
         publish()
     }
@@ -298,6 +298,6 @@ final class ShortcutController {
         let messages: [String] = ShortcutAction.allCases
             .filter { hotKeys.binding(action: $0) == nil }
             .compactMap { errors[$0] }
-        model.shortcutError = messages.isEmpty ? nil : "Kısayol çalışmıyor: " + messages.joined(separator: " ")
+        model.shortcutError = messages.isEmpty ? nil : String(localized: "Kısayol çalışmıyor: \(messages.joined(separator: " "))")
     }
 }

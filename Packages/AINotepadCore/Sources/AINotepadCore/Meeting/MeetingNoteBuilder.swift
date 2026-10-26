@@ -1,11 +1,11 @@
 import Foundation
 
-/// Saklanan bölümün etiketi: kullanıcının verdiği ad, yoksa "Konuşmacı N", "Sen" ya da "Diğerleri".
+/// İstemdeki bölüm etiketi: kullanıcının verdiği ad, yoksa sabit Türkçe "Konuşmacı N", "Sen" ya da "Diğerleri".
 public func storedLabel(segment: StoredSegment, speakerNames: [Int: String]) -> String {
     if let person = segment.person, let name = speakerNames[person], !name.isEmpty {
         return name
     }
-    return speakerLabel(speaker: segment.speaker, person: segment.person)
+    return promptSpeakerLabel(speaker: segment.speaker, person: segment.person)
 }
 
 /// Bölümleri `[mm:ss] Etiket: metin` satırlarına çevirir (zamana göre sıralı). Saf fonksiyondur.
@@ -77,20 +77,20 @@ public func meetingMarkdown(record: MeetingRecord) -> String {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
         if !mine.isEmpty {
-            lines += ["## Senin görevlerin", ""] + mine.map(taskLine) + [""]
+            lines += ["## " + String(localized: "Senin görevlerin"), ""] + mine.map(taskLine) + [""]
         }
-        lines += ["## Özet", "", note.summary, ""]
+        lines += ["## " + String(localized: "Özet"), "", note.summary, ""]
         if !note.decisions.isEmpty {
-            lines += ["## Kararlar", ""] + note.decisions.map { "- \($0)" } + [""]
+            lines += ["## " + String(localized: "Kararlar"), ""] + note.decisions.map { "- \($0)" } + [""]
         }
         if !others.isEmpty {
-            lines += ["## Diğer görevler", ""] + others.map(taskLine) + [""]
+            lines += ["## " + String(localized: "Diğer görevler"), ""] + others.map(taskLine) + [""]
         }
         if !note.glossary.isEmpty {
-            lines += ["## Sözlük", ""] + note.glossary.map { "- **\($0.term)** — \($0.meaning)" } + [""]
+            lines += ["## " + String(localized: "Sözlük"), ""] + note.glossary.map { "- **\($0.term)** — \($0.meaning)" } + [""]
         }
     }
-    lines += ["## Transkript", ""]
+    lines += ["## " + String(localized: "Transkript"), ""]
     for paragraph in transcriptParagraphs(record: record) {
         lines += ["**[\(timestamp(seconds: paragraph.startSec))] \(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames)):** \(paragraph.text)"]
         if let turkish = paragraph.turkish {

@@ -15,15 +15,15 @@ public func userFacingMessage(error: any Error) -> String {
     case let error as StorageError:
         return storageMessage(error: error)
     case TranscriptionError.modelLoadFailed(let model, _):
-        return "Konuşma tanıma modeli (\(model)) yüklenemedi. İnternet bağlantını ve disk alanını kontrol edip uygulamayı yeniden aç."
+        return String(localized: "Konuşma tanıma modeli (\(model)) yüklenemedi. İnternet bağlantını ve disk alanını kontrol edip uygulamayı yeniden aç.")
     case TranscriptionError.transcriptionFailed:
-        return "Bu bölüm yazıya dökülemedi."
+        return String(localized: "Bu bölüm yazıya dökülemedi.")
     case TranscriptionError.diarizationFailed:
-        return "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)"
+        return String(localized: "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)")
     case let urlError as URLError:
-        return "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene."
+        return String(localized: "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene.")
     default:
-        return "Beklenmeyen hata: \(String(describing: type(of: error)))."
+        return String(localized: "Beklenmeyen hata: \(String(describing: type(of: error))).")
     }
 }
 
@@ -35,73 +35,73 @@ public func isQuotaExceeded(body: String) -> Bool {
 private func audioMessage(error: AudioCaptureError) -> String {
     switch error {
     case .microphonePermissionDenied:
-        "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver."
+        String(localized: "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver.")
     case .microphoneStartFailed(let code):
-        "Mikrofon başlatılamadı (kod \(code)). Giriş cihazını kontrol edip kaydı yeniden başlat."
+        String(localized: "Mikrofon başlatılamadı (kod \(Int(code))). Giriş cihazını kontrol edip kaydı yeniden başlat.")
     case .systemAudioPermissionDenied:
-        "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver."
+        String(localized: "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver.")
     case .coreAudio(let operation, let status):
-        "Sistem sesi yakalanamadı (\(operation), kod \(status)). Çıkış cihazını kontrol edip kaydı yeniden başlat."
+        String(localized: "Sistem sesi yakalanamadı (\(operation), kod \(Int(status))). Çıkış cihazını kontrol edip kaydı yeniden başlat.")
     case .alreadyRunning:
-        "Ses yakalama zaten çalışıyor."
+        String(localized: "Ses yakalama zaten çalışıyor.")
     case .converterCreationFailed, .conversionFailed:
-        "Ses biçimi dönüştürülemedi. Çıkış/giriş cihazını değiştirip kaydı yeniden başlat."
+        String(localized: "Ses biçimi dönüştürülemedi. Çıkış/giriş cihazını değiştirip kaydı yeniden başlat.")
     case .recorderFailed(let path, _):
-        "Ses dosyası işlenemedi: \((path as NSString).lastPathComponent). Disk alanını kontrol et."
+        String(localized: "Ses dosyası işlenemedi: \((path as NSString).lastPathComponent). Disk alanını kontrol et.")
     }
 }
 
 private func keychainMessage(error: KeychainError) -> String {
     switch error {
     case .notFound(_, let account):
-        "\(serviceName(account: account)) anahtarı kayıtlı değil. Menüden Ayarlar…'ı açıp ekle."
+        String(localized: "\(serviceName(account: account)) anahtarı kayıtlı değil. Ayarlar'dan ekle.")
     case .unexpectedStatus(let operation, let status):
-        "Anahtar Keychain'den okunamadı (\(operation), kod \(status)). İzin penceresinde \"Her Zaman İzin Ver\"i seç."
+        String(localized: "Anahtar Keychain'den okunamadı (\(operation), kod \(Int(status))). İzin penceresinde \"Her Zaman İzin Ver\"i seç.")
     }
 }
 
 private func llmMessage(error: LLMError) -> String {
     switch error {
     case .http(let status, _, let model, _) where status == 401 || status == 403:
-        "\(providerName(model: model)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
+        String(localized: "\(providerName(model: model)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et.")
     case .http(let status, _, let model, _):
-        "\(providerName(model: model)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene."
+        String(localized: "\(providerName(model: model)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene.")
     case .truncated:
-        "Yanıt çok uzun olduğu için yarıda kesildi. Tekrar dene."
+        String(localized: "Yanıt çok uzun olduğu için yarıda kesildi. Tekrar dene.")
     case .refusal:
-        "Model bu isteği yanıtlamadı (güvenlik denetimi)."
+        String(localized: "Model bu isteği yanıtlamadı (güvenlik denetimi).")
     case .malformed, .empty, .invalidSchema:
-        "Modelden beklenmeyen yanıt geldi. Tekrar dene."
+        String(localized: "Modelden beklenmeyen yanıt geldi. Tekrar dene.")
     case .notConfigured(let detail):
-        "LLM ayarı eksik: \(detail). Ayarlar'dan tamamla."
+        String(localized: "LLM ayarı eksik: \(detail). Ayarlar'dan tamamla.")
     }
 }
 
 private func cloudMessage(error: CloudSTTError) -> String {
     switch error {
     case .http(let service, let status, let body) where status == 401 && isQuotaExceeded(body: body):
-        "\(serviceDisplayName(service: service)) kotası doldu. Hesabından kota ekle ya da Ayarlar'dan Mac'te motorunu seç."
+        String(localized: "\(serviceDisplayName(service: service)) kotası doldu. Hesabından kota ekle ya da Ayarlar'dan Mac'te motorunu seç.")
     case .http(let service, let status, _) where status == 401 || status == 403:
-        "\(serviceDisplayName(service: service)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
+        String(localized: "\(serviceDisplayName(service: service)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et.")
     case .http(let service, let status, _):
-        "\(serviceDisplayName(service: service)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene."
+        String(localized: "\(serviceDisplayName(service: service)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene.")
     case .malformedMessage(let service, _):
-        "\(serviceDisplayName(service: service)) beklenmeyen bir yanıt verdi."
+        String(localized: "\(serviceDisplayName(service: service)) beklenmeyen bir yanıt verdi.")
     case .connectionFailed(let service, _):
-        "\(serviceDisplayName(service: service)) servisine bağlanılamadı; internet bağlantını kontrol et."
+        String(localized: "\(serviceDisplayName(service: service)) servisine bağlanılamadı; internet bağlantını kontrol et.")
     }
 }
 
 private func storageMessage(error: StorageError) -> String {
     switch error {
     case .readFailed(let path, _):
-        "Dosya okunamadı: \((path as NSString).lastPathComponent)."
+        String(localized: "Dosya okunamadı: \((path as NSString).lastPathComponent).")
     case .writeFailed(let path, _):
-        "Dosya yazılamadı: \((path as NSString).lastPathComponent). Disk alanını kontrol et."
+        String(localized: "Dosya yazılamadı: \((path as NSString).lastPathComponent). Disk alanını kontrol et.")
     case .deleteFailed(let path, _):
-        "Dosya silinemedi: \((path as NSString).lastPathComponent)."
+        String(localized: "Dosya silinemedi: \((path as NSString).lastPathComponent).")
     case .directoryUnavailable(let path, _):
-        "Klasöre erişilemedi: \((path as NSString).lastPathComponent)."
+        String(localized: "Klasöre erişilemedi: \((path as NSString).lastPathComponent).")
     }
 }
 

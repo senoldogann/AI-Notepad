@@ -27,7 +27,7 @@ public func transcriptLines(segments: [LiveSegment]) -> String {
     segments
         .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
         .map { (segment: LiveSegment) -> String in
-            "[\(timestamp(seconds: segment.startSec))] \(speakerLabel(speaker: segment.id.speaker, person: segment.person)): \(segment.text)"
+            "[\(timestamp(seconds: segment.startSec))] \(promptSpeakerLabel(speaker: segment.id.speaker, person: segment.person)): \(segment.text)"
         }
         .joined(separator: "\n")
 }

@@ -1,5 +1,6 @@
 import AINotepadCore
 import AINotepadUI
+import AppKit
 import Foundation
 import os
 
@@ -56,6 +57,50 @@ enum SettingsKey {
     static let lineSpacing: String = "appearance.lineSpacing"
     static let bottomSpacing: String = "appearance.bottomSpacing"
     static let islandEnabled: String = "appearance.islandEnabled"
+}
+
+/// Arayüz dili; macOS'ta uygulama dili yeniden başlatınca uygulanır.
+enum InterfaceLanguage: String, CaseIterable {
+    case system
+    case turkish = "tr"
+    case english = "en"
+}
+
+/// Uygulamanın kendi tercihinde (`AppleLanguages`) kayıtlı arayüz dili; yoksa sistem.
+func storedInterfaceLanguage() -> InterfaceLanguage {
+    guard let identifier = Bundle.main.bundleIdentifier,
+          let languages = UserDefaults.standard.persistentDomain(forName: identifier)?["AppleLanguages"] as? [String],
+          let first = languages.first
+    else {
+        return .system
+    }
+    return InterfaceLanguage(rawValue: String(first.prefix(2))) ?? .system
+}
+
+/// Arayüz dilini kaydeder: yalnızca bu uygulamanın `AppleLanguages` tercihi değişir.
+func storeInterfaceLanguage(language: InterfaceLanguage) {
+    switch language {
+    case .system:
+        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+    case .turkish, .english:
+        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
+    }
+}
+
+/// Uygulamayı yeniden başlatır (arayüz dili değişince).
+@MainActor
+func relaunchApplication() {
+    let configuration: NSWorkspace.OpenConfiguration = NSWorkspace.OpenConfiguration()
+    configuration.createsNewApplicationInstance = true
+    NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { (_: NSRunningApplication?, error: (any Error)?) -> Void in
+        if let error {
+            settingsLogger.error("Uygulama yeniden başlatılamadı, hata: \(String(describing: error), privacy: .public)")
+            return
+        }
+        DispatchQueue.main.async {
+            NSApplication.shared.terminate(nil)
+        }
+    }
 }
 
 /// Panelin açık/koyu görünümü.

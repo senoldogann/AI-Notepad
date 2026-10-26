@@ -1,0 +1,44 @@
+{
+  "sourceLanguage": "tr",
+  "strings": {
+    "CFBundleDisplayName": {
+      "shouldTranslate": false
+    },
+    "CFBundleName": {
+      "shouldTranslate": false
+    },
+    "NSAudioCaptureUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad listens to system audio to transcribe the other participants in your meetings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad uses the microphone to transcribe what you say in meetings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

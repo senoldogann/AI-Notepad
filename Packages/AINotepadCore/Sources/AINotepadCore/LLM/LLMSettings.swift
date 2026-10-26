@@ -13,12 +13,12 @@ public func openAICompatibleConfig(
 ) throws -> OpenAICompatibleConfig {
     let trimmed: String = baseURLText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let url = URL(string: trimmed), let scheme = url.scheme, ["http", "https"].contains(scheme), url.host() != nil else {
-        throw LLMError.notConfigured(detail: "geçerli bir temel adres (ör. http://localhost:11434/v1)")
+        throw LLMError.notConfigured(detail: String(localized: "geçerli bir temel adres (ör. http://localhost:11434/v1)"))
     }
     let fast: String = fastModel.trimmingCharacters(in: .whitespacesAndNewlines)
     let smart: String = smartModel.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !fast.isEmpty, !smart.isEmpty else {
-        throw LLMError.notConfigured(detail: "çeviri ve özet modeli adları")
+        throw LLMError.notConfigured(detail: String(localized: "çeviri ve özet modeli adları"))
     }
     return OpenAICompatibleConfig(
         baseURL: url, apiKey: apiKey.flatMap { $0.isEmpty ? nil : $0 }, fastModel: fast, smartModel: smart,

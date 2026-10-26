@@ -42,7 +42,7 @@ struct MeetingsListPage: View {
                 }
             }
             if !model.meetingLoadFailures.isEmpty {
-                Text("\(model.meetingLoadFailures.count) toplantı okunamadı: " + model.meetingLoadFailures.map(\.folder).joined(separator: ", "))
+                Text("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .padding(DesignTokens.Spacing.m)
@@ -67,7 +67,7 @@ private struct MeetingRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(record.startedAt.formatted(turkishDate(date: .abbreviated)))
+                    Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
                     if let status = statusText(record: record, isProcessing: isProcessing) {
                         Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
                     }
@@ -93,22 +93,22 @@ private struct MeetingRow: View {
     }
 }
 
-/// Türkçe tarih + saat biçimi (uygulama dili İngilizce kalsa da tarihler Türkçe görünür).
-private func turkishDate(date: Date.FormatStyle.DateStyle) -> Date.FormatStyle {
-    Date.FormatStyle(date: date, time: .shortened).locale(Locale(identifier: "tr_TR"))
+/// Arayüz dilinde tarih + saat biçimi.
+private func interfaceDate(date: Date.FormatStyle.DateStyle) -> Date.FormatStyle {
+    Date.FormatStyle(date: date, time: .shortened).locale(interfaceLocale())
 }
 
 /// Liste ve ayrıntıda gösterilen durum; tamamlanmışsa nil.
 private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
     if isProcessing {
-        return "Not hazırlanıyor…"
+        return String(localized: "Not hazırlanıyor…")
     }
     switch record.status {
-    case .recording: return "Kayıtta"
-    case .processing: return "Not hazırlanıyor…"
+    case .recording: return String(localized: "Kayıtta")
+    case .processing: return String(localized: "Not hazırlanıyor…")
     case .done: return nil
-    case .failed: return "Hata"
-    case .interrupted: return "Yarıda kaldı"
+    case .failed: return String(localized: "Hata")
+    case .interrupted: return String(localized: "Yarıda kaldı")
     }
 }
 
@@ -370,7 +370,7 @@ private struct NoteSections: View {
         }
     }
 
-    private func section(title: String, @ViewBuilder content: () -> some View) -> some View {
+    private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(DesignTokens.labelFont)

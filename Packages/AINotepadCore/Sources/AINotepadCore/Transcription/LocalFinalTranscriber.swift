@@ -95,7 +95,7 @@ public struct LocalFinalTranscriber: FinalTranscriber {
         } catch {
             localPassLogger.error("Yerel konuşmacı ayırma başarısız, hata: \(String(describing: error), privacy: .public)")
             turns = []
-            notice = "Konuşmacılar ayrılamadı (\(userFacingMessage(error: error))); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene."
+            notice = String(localized: "Konuşmacılar ayrılamadı (\(userFacingMessage(error: error))); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene.")
         }
         localPassLogger.info("Yerel son geçiş bitti, kelime: \(words.count, privacy: .public), dönem: \(turns.count, privacy: .public)")
         return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language, notice: notice)

@@ -9,7 +9,7 @@ public func languageText(locked: MeetingLanguage?, mode: LanguageMode, isRecordi
     case .fixed(let language):
         return languageName(language: language)
     case .automatic:
-        return isRecording ? "Dil algılanıyor…" : "Dil: Otomatik"
+        return isRecording ? String(localized: "Dil algılanıyor…") : String(localized: "Dil: Otomatik")
     }
 }
 

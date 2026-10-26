@@ -151,9 +151,9 @@ final class AppModel {
     /// Kayıt yokken gösterilen durum metni.
     private var statusText: String {
         switch (liveEngine, modelStatus) {
-        case (.deepgram, _): "Hazır · Deepgram"
-        case (.whisperKit, .loading): "Model hazırlanıyor…"
-        case (.whisperKit, .ready): "Hazır · Mac'te"
+        case (.deepgram, _): String(localized: "Hazır · Deepgram")
+        case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
+        case (.whisperKit, .ready): String(localized: "Hazır · Mac'te")
         case (.whisperKit, .failed(let message)): message
         }
     }
@@ -181,10 +181,10 @@ final class AppModel {
         let nowSec: Double = transcript.map(\.endSec).max() ?? 0
         guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: Double(minutes * 60)) else {
             cancelAssistant()
-            assistantCard = .summary(MissedSummary(topic: "Son \(minutes) dakikada konuşma yok.", decisions: [], askedOfYou: []))
+            assistantCard = .summary(MissedSummary(topic: String(localized: "Son \(minutes) dakikada konuşma yok."), decisions: [], askedOfYou: []))
             return
         }
-        runAssistant(request: request, title: "Ne kaçırdım?") { (text: String) throws -> AssistantCard in
+        runAssistant(request: request, title: String(localized: "Ne kaçırdım?")) { (text: String) throws -> AssistantCard in
             .summary(try parseMissedSummary(text: text))
         }
     }
@@ -193,10 +193,10 @@ final class AppModel {
     func ask(question: String) {
         guard let request = questionRequest(segments: suppressEchoes(transcript: transcript), question: question) else {
             cancelAssistant()
-            assistantCard = .answer(question: question, text: "Henüz konuşma yok; sorular toplantıda konuşulanlara göre cevaplanır.")
+            assistantCard = .answer(question: question, text: String(localized: "Henüz konuşma yok; sorular toplantıda konuşulanlara göre cevaplanır."))
             return
         }
-        runAssistant(request: request, title: "Cevap hazırlanıyor") { (text: String) throws -> AssistantCard in
+        runAssistant(request: request, title: String(localized: "Cevap hazırlanıyor")) { (text: String) throws -> AssistantCard in
             .answer(question: question, text: text)
         }
     }
@@ -271,7 +271,7 @@ final class AppModel {
             }
             failedTranslations.insert(segment.id)
             Self.logger.error("Çeviri başarısız, bölüm: \(segmentKey(id: segment.id), privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            errorMessages = appendUnique(messages: errorMessages, message: "Çeviri: " + userFacingMessage(error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
         }
     }
 
@@ -298,7 +298,7 @@ final class AppModel {
             translationDisabled = false
             return true
         } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: "Çeviri kapalı: " + userFacingMessage(error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri kapalı: \(userFacingMessage(error: error))"))
             return false
         }
     }
@@ -375,7 +375,7 @@ final class AppModel {
             localDiarizationWarning = nil
         } catch {
             Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .public)")
-            localDiarizationWarning = "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas."
+            localDiarizationWarning = String(localized: "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas.")
         }
     }
 
@@ -428,7 +428,7 @@ final class AppModel {
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: Date())
         } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: "Kayıt klasörü oluşturulamadı: \(userFacingMessage(error: error))")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Kayıt klasörü oluşturulamadı: \(userFacingMessage(error: error))"))
             return
         }
 
@@ -492,7 +492,7 @@ final class AppModel {
             )
         } else {
             // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
-            errorMessages = appendUnique(messages: errorMessages, message: "Konuşma tanıma modeli hazır değil.")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşma tanıma modeli hazır değil."))
             microphone.stop()
             systemAudio.stop()
             return
@@ -580,16 +580,16 @@ final class AppModel {
         case .captureEnded(let speaker):
             // Başlatılamamış akışın hatası başlangıçta zaten gösterildi.
             if !isFinishing, startedSpeakers.contains(speaker) {
-                errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) ses akışı beklenmedik şekilde durdu. Cihazı kontrol edip kaydı yeniden başlat.")
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) ses akışı beklenmedik şekilde durdu. Cihazı kontrol edip kaydı yeniden başlat."))
             }
         case .recordingFailed(let speaker, let message):
-            errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) sesi diske yazılamadı: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) sesi diske yazılamadı: \(message)"))
         case .speakersAssigned:
             break
         case .streamFailed(let speaker, let message):
-            errorMessages = appendUnique(messages: errorMessages, message: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)"))
         case .diarizationFailed(let message):
-            errorMessages = appendUnique(messages: errorMessages, message: "Konuşmacı ayırma başarısız: \(message)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }
     }
 
@@ -633,7 +633,7 @@ final class AppModel {
     /// Canlı transkript ve çevirilerden toplantı kaydı.
     private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
         MeetingRecord(
-            id: directory.lastPathComponent, title: "Toplantı", startedAt: startedAt, endedAt: endedAt,
+            id: directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: transcript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
@@ -698,7 +698,7 @@ final class AppModel {
         case .cloud:
             do {
                 guard let key = try await optionalSecretInBackground(service: keychainService, account: .elevenlabs) else {
-                    return .skip(reason: "ElevenLabs anahtarı kayıtlı değil.")
+                    return .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
                 }
                 return .run(ElevenLabsFinalTranscriber(apiKey: key))
             } catch {
@@ -714,7 +714,7 @@ final class AppModel {
         } catch KeychainError.notFound, LLMError.notConfigured {
             return nil
         } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: "LLM ayarı okunamadı: " + userFacingMessage(error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "LLM ayarı okunamadı: \(userFacingMessage(error: error))"))
             return nil
         }
     }
@@ -833,7 +833,7 @@ final class AppModel {
             meetings = upsertMeeting(records: meetings, record: record)
         } catch {
             Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            errorMessages = appendUnique(messages: errorMessages, message: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
         }
     }
 
@@ -847,7 +847,7 @@ final class AppModel {
         do {
             action(try sessionDirectory(id: id))
         } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: "Toplantı klasörüne erişilemedi: \(userFacingMessage(error: error))")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı klasörüne erişilemedi: \(userFacingMessage(error: error))"))
         }
     }
 

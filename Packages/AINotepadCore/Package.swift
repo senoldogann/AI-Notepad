@@ -3,6 +3,8 @@ import PackageDescription
 
 let package = Package(
     name: "AINotepadCore",
+    // Arayüz metinleri Türkçe yazılır; çalışma anında uygulamanın String Catalog'undan (ana paket) çevrilir.
+    defaultLocalization: "tr",
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "AINotepadCore", targets: ["AINotepadCore"]),

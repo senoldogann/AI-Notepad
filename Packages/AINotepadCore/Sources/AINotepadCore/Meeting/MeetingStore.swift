@@ -91,7 +91,7 @@ public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord
     records
         .filter { (record: MeetingRecord) -> Bool in record.status == .recording || record.status == .processing }
         .map { (record: MeetingRecord) -> MeetingRecord in
-            record.with(status: .interrupted, failureMessage: "Uygulama kayıt ya da işleme sırasında kapandı.")
+            record.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
         }
 }
 

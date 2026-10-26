@@ -5,12 +5,22 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Ayarlar bölümleri.
-private enum SettingsSection: String, CaseIterable {
-    case general = "Genel"
-    case appearance = "Görünüm"
-    case llm = "LLM"
-    case keys = "Anahtarlar"
-    case shortcuts = "Kısayollar"
+private enum SettingsSection: CaseIterable {
+    case general
+    case appearance
+    case llm
+    case keys
+    case shortcuts
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .general: "Genel"
+        case .appearance: "Görünüm"
+        case .llm: "LLM"
+        case .keys: "Anahtarlar"
+        case .shortcuts: "Kısayollar"
+        }
+    }
 }
 
 /// Panelin Ayarlar sayfası (ayrı pencere değil): genel, LLM sağlayıcısı, bulut anahtarları ve kısayollar.
@@ -23,7 +33,7 @@ struct SettingsPage: View {
         VStack(spacing: 0) {
             Picker("Bölüm", selection: $section) {
                 ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
-                    Text(item.rawValue).tag(item)
+                    Text(item.title).tag(item)
                 }
             }
             .pickerStyle(.segmented)
@@ -51,9 +61,38 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
+    @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
+    /// Açılışta geçerli olan dil; farklı seçilince yeniden başlatma önerilir.
+    @State private var launchedLanguage: InterfaceLanguage = storedInterfaceLanguage()
 
     var body: some View {
         Form {
+            Section("Arayüz dili") {
+                Picker("Dil", selection: $interfaceLanguage) {
+                    Text("Sistem").tag(InterfaceLanguage.system)
+                    Text(verbatim: "Türkçe").tag(InterfaceLanguage.turkish)
+                    Text(verbatim: "English").tag(InterfaceLanguage.english)
+                }
+                .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
+                    storeInterfaceLanguage(language: language)
+                }
+                if interfaceLanguage != launchedLanguage {
+                    HStack {
+                        Text("Yeniden başlatınca uygulanır.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Şimdi yeniden başlat") {
+                            relaunchApplication()
+                        }
+                        .disabled(model.phase != .idle)
+                        .hoverHint(model.phase != .idle ? "Kayıt bitince yeniden başlatılabilir" : "Uygulamayı yeni dille yeniden açar", alignment: .trailing, edge: .bottom)
+                    }
+                }
+                Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Canlı metin") {
                 Picker("Motor", selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
@@ -427,11 +466,11 @@ private struct ShortcutRecorder: View {
         Button {
             isRecording ? stop() : start()
         } label: {
-            Text(isRecording ? "Tuşlara bas…" : keyBindingDisplay(binding: binding))
+            Text(isRecording ? String(localized: "Tuşlara bas…") : keyBindingDisplay(binding: binding))
                 .monospaced()
                 .frame(minWidth: 110)
         }
-        .accessibilityLabel(isRecording ? "Kısayol kaydediliyor" : "Kısayol: \(keyBindingDisplay(binding: binding)). Değiştir")
+        .accessibilityLabel(isRecording ? String(localized: "Kısayol kaydediliyor") : String(localized: "Kısayol: \(keyBindingDisplay(binding: binding)). Değiştir"))
         .onDisappear { stop() }
     }
 
