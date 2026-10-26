@@ -82,4 +82,15 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         )
         #expect(viewState.latestOthersSentence == "Günaydın.")
     }
+
+    // "Sadece Türkçe": çevrilen bölüm Türkçe, henüz çevrilmeyen (ve kesinleşmeyen) bölüm orijinal ve soluk.
+    @Test func turkishOnlyShowsUntranslatedOriginals() {
+        let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
+        let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, second])
+        #expect(turkishOnlyParts(block: blocks[0], translations: [first.id: "Günaydın."]) == [
+            DisplayPart(text: "Günaydın.", isTranslated: true, isFinal: true),
+            DisplayPart(text: "Aloitetaan.", isTranslated: false, isFinal: true),
+        ])
+    }
 }

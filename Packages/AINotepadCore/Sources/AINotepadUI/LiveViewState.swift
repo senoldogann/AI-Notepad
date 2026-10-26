@@ -87,3 +87,21 @@ public func blockTurkishText(block: SpeakerBlock, translations: [SegmentID: Stri
     let parts: [String] = block.segments.compactMap { (segment: LiveSegment) -> String? in translations[segment.id] }
     return parts.isEmpty ? nil : parts.joined(separator: " ")
 }
+
+/// "Sadece Türkçe" görünümünde bir bloğun parçası.
+public struct DisplayPart: Sendable, Equatable {
+    public let text: String
+    public let isTranslated: Bool
+    public let isFinal: Bool
+}
+
+/// "Sadece Türkçe": çevirisi olan bölüm Türkçe, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;
+/// böylece canlı konuşma çeviri gelene kadar da görünür. Saf fonksiyondur.
+public func turkishOnlyParts(block: SpeakerBlock, translations: [SegmentID: String]) -> [DisplayPart] {
+    block.segments
+        .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
+        .map { (segment: LiveSegment) -> DisplayPart in
+            translations[segment.id].map { (turkish: String) -> DisplayPart in DisplayPart(text: turkish, isTranslated: true, isFinal: true) }
+                ?? DisplayPart(text: segment.text, isTranslated: false, isFinal: segment.isFinal)
+        }
+}

@@ -47,6 +47,14 @@ final class AppModel {
     @ObservationIgnored private var translationTail: Task<Void, Never>?
     /// Anahtar yoksa ya da reddedildiyse bu kayıtta çeviri durur (her cümlede aynı hata çıkmasın).
     @ObservationIgnored private var translationDisabled: Bool = false
+    /// Her kayıtta artar; önceki kaydın geç gelen çevirisi/kartı yeni kayda yazılmaz (bölüm numaraları her kayıtta 0'dan başlar).
+    @ObservationIgnored private var recordingGeneration: Int = 0
+    /// Kayıt başında bir kez okunan Anthropic anahtarı (her cümlede Keychain okunmasın).
+    @ObservationIgnored private var anthropicKey: String?
+    /// Süren "Ne kaçırdım?"/soru isteği; yenisi, kapatma ya da yeni kayıt eskisini iptal eder.
+    @ObservationIgnored private var assistantTask: Task<Void, Never>?
+    /// Kartı yazmaya yetkili son istek.
+    @ObservationIgnored private var assistantRequestID: Int = 0
 
     @ObservationIgnored private var engine: WhisperKitEngine?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
@@ -67,61 +75,86 @@ final class AppModel {
 
     /// Son 3 dakikanın Türkçe özeti (Claude Opus).
     func askWhatIMissed() {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
+        let segments: [LiveSegment] = suppressEchoes(transcript: transcript)
         let nowSec: Double = transcript.map(\.endSec).max() ?? 0
-        guard let request = missedSummaryRequest(blocks: blocks, nowSec: nowSec, windowSec: 180) else {
+        guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: 180) else {
+            cancelAssistant()
             assistantCard = .summary(MissedSummary(topic: "Son 3 dakikada konuşma yok.", decisions: [], askedOfYou: []))
             return
         }
-        assistantCard = .loading(title: "Ne kaçırdım?")
-        Task {
-            do {
-                let text: String = try await sendClaude(apiKey: try readSecret(service: keychainService, account: .anthropic), request: request)
-                assistantCard = .summary(try parseMissedSummary(text: text))
-            } catch {
-                assistantCard = .failed(message: llmUserMessage(error: error))
-            }
+        runAssistant(request: request, title: "Ne kaçırdım?") { (text: String) throws -> AssistantCard in
+            .summary(try parseMissedSummary(text: text))
         }
     }
 
     /// Toplantı hakkında Türkçe soru (Claude Opus).
     func ask(question: String) {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
-        let request: ClaudeRequest = questionRequest(blocks: blocks, question: question)
-        assistantCard = .loading(title: "Cevap hazırlanıyor")
-        Task {
-            do {
-                let text: String = try await sendClaude(apiKey: try readSecret(service: keychainService, account: .anthropic), request: request)
-                assistantCard = .answer(question: question, text: text)
-            } catch {
-                assistantCard = .failed(message: llmUserMessage(error: error))
-            }
+        let request: ClaudeRequest = questionRequest(segments: suppressEchoes(transcript: transcript), question: question)
+        runAssistant(request: request, title: "Cevap hazırlanıyor") { (text: String) throws -> AssistantCard in
+            .answer(question: question, text: text)
         }
+    }
+
+    /// Kartı kapatır ve süren isteği iptal eder.
+    func closeAssistantCard() {
+        cancelAssistant()
+        assistantCard = nil
+    }
+
+    /// Önceki isteği iptal edip yenisini çalıştırır; sonucu yalnızca hâlâ en son istekse karta yazar.
+    private func runAssistant(request: ClaudeRequest, title: String, makeCard: @escaping @MainActor (String) throws -> AssistantCard) {
+        cancelAssistant()
+        let requestID: Int = assistantRequestID
+        assistantCard = .loading(title: title)
+        assistantTask = Task { [weak self] in
+            let card: AssistantCard
+            do {
+                let key: String = try readSecret(service: keychainService, account: .anthropic)
+                card = try makeCard(try await sendClaude(apiKey: key, request: request))
+            } catch {
+                card = .failed(message: llmUserMessage(error: error))
+            }
+            guard let self, requestID == self.assistantRequestID, !Task.isCancelled else {
+                return
+            }
+            self.assistantCard = card
+        }
+    }
+
+    private func cancelAssistant() {
+        assistantRequestID += 1
+        assistantTask?.cancel()
+        assistantTask = nil
     }
 
     /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp Türkçeye çevirir (Claude Haiku).
     private func enqueueTranslation(segment: LiveSegment) {
-        guard !translationDisabled else {
+        guard !translationDisabled, let key = anthropicKey else {
             return
         }
         let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
+        let generation: Int = recordingGeneration
         let previous: Task<Void, Never>? = translationTail
         translationTail = Task { [weak self] in
             await previous?.value
-            await self?.translate(segment: segment, context: context)
+            await self?.translate(segment: segment, context: context, key: key, generation: generation)
         }
     }
 
-    private func translate(segment: LiveSegment, context: [String]) async {
-        guard !translationDisabled else {
+    private func translate(segment: LiveSegment, context: [String], key: String, generation: Int) async {
+        guard !translationDisabled, generation == recordingGeneration else {
             return
         }
         do {
-            let key: String = try readSecret(service: keychainService, account: .anthropic)
-            translations[segment.id] = try await sendClaude(apiKey: key, request: translationRequest(sentence: segment.text, context: context))
+            let turkish: String = try await sendClaude(apiKey: key, request: translationRequest(sentence: segment.text, context: context))
+            // Bu arada yeni kayıt başladıysa sonuç başka bir toplantının aynı numaralı bölümüne yazılmaz.
+            guard generation == recordingGeneration else {
+                return
+            }
+            translations[segment.id] = turkish
         } catch {
-            if case KeychainError.notFound = error {
-                translationDisabled = true
+            guard generation == recordingGeneration else {
+                return
             }
             if case LLMError.http(let status, _) = error, status == 401 || status == 403 {
                 translationDisabled = true
@@ -192,11 +225,22 @@ final class AppModel {
         defer { isStarting = false }
         transcript = []
         translations = [:]
-        assistantCard = nil
+        recordingGeneration += 1
+        translationTail?.cancel()
+        translationTail = nil
+        closeAssistantCard()
         translationDisabled = false
         lockedLanguage = nil
         errorMessages = []
         isStopping = false
+        // Çeviri anahtarı kayıt başında bir kez okunur; yoksa canlı metin yine akar, tek hata gösterilir.
+        do {
+            anthropicKey = try readSecret(service: keychainService, account: .anthropic)
+        } catch {
+            anthropicKey = nil
+            translationDisabled = true
+            errorMessages = appendUnique(messages: errorMessages, message: "Çeviri kapalı: " + llmUserMessage(error: error))
+        }
 
         // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz.
         let cloudKeys: (deepgram: String, elevenLabs: String)?

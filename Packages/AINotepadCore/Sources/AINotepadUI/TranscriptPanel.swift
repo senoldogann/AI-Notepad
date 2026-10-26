@@ -90,6 +90,7 @@ public struct TranscriptPanel: View {
                         BlockView(
                             block: block,
                             turkish: blockTurkishText(block: block, translations: state.translations),
+                            translations: state.translations,
                             displayMode: state.displayMode
                         )
                         .id(block.id)
@@ -97,9 +98,14 @@ public struct TranscriptPanel: View {
                 }
                 .padding(DesignTokens.Spacing.l)
             }
-            // Blok içinde metin ya da çeviri büyüdüğünde de en alta kaydır.
+            // Blok içinde metin büyüdüğünde ya da çeviri geldiğinde en alta kaydır.
             .onChange(of: state.blocks) { (_: [SpeakerBlock], blocks: [SpeakerBlock]) in
                 if let last = blocks.last {
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: state.translations.count) { (_: Int, _: Int) in
+                if let last = state.blocks.last {
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
@@ -179,6 +185,7 @@ struct StatusLabel: View {
 struct BlockView: View {
     let block: SpeakerBlock
     let turkish: String?
+    let translations: [SegmentID: String]
     let displayMode: DisplayMode
 
     var body: some View {
@@ -193,7 +200,13 @@ struct BlockView: View {
                     .font(DesignTokens.labelFont)
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
-                if displayMode == .bilingual || turkish == nil {
+                if displayMode == .turkishOnly && turkish != nil {
+                    turkishOnlyText
+                        .font(DesignTokens.bodyFont)
+                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
                     flowingText
                         .font(turkish == nil ? DesignTokens.bodyFont : .system(size: 13))
                         .opacity(turkish == nil ? 1 : 0.6)
@@ -201,7 +214,7 @@ struct BlockView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let turkish {
+                if displayMode == .bilingual, let turkish {
                     Text(turkish)
                         .font(DesignTokens.bodyFont)
                         .lineSpacing(DesignTokens.bodyLineSpacing)
@@ -220,6 +233,17 @@ struct BlockView: View {
                 copyToPasteboard(text: plainText(blocks: [block]))
             }
         }
+    }
+
+    /// "Sadece Türkçe": çevrilen bölümler Türkçe, henüz çevrilmeyenler orijinal ve soluk.
+    private var turkishOnlyText: Text {
+        turkishOnlyParts(block: block, translations: translations)
+            .enumerated()
+            .reduce(Text("")) { (combined: Text, item: (offset: Int, element: DisplayPart)) -> Text in
+                let piece: Text = Text((item.offset == 0 ? "" : " ") + item.element.text)
+                let styled: Text = item.element.isTranslated ? piece : piece.foregroundColor(Color.primary.opacity(DesignTokens.partialOpacity))
+                return Text("\(combined)\(styled)")
+            }
     }
 
     /// Bölümleri tek paragrafta birleştirir; kesinleşmemiş metin soluk.

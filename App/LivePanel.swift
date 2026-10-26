@@ -103,7 +103,7 @@ private struct PanelHost: View {
                 onStop: { model.stopRecording() },
                 onMissed: { model.askWhatIMissed() },
                 onAsk: { (question: String) -> Void in model.ask(question: question) },
-                onCloseCard: { model.assistantCard = nil }
+                onCloseCard: { model.closeAssistantCard() }
             )
         )
     }

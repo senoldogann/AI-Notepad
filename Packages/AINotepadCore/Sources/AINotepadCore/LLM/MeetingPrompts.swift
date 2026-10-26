@@ -17,9 +17,15 @@ public struct MissedSummary: Sendable, Equatable {
 /// Soru-cevapta gönderilen en uzun transkript (maliyet ve bağlam sınırı).
 let questionTranscriptLimitSec: Double = 7200
 
-/// Blokları LLM'e verilecek satırlara çevirir: `[mm:ss] Etiket: metin`. Saf fonksiyondur.
-public func transcriptLines(blocks: [SpeakerBlock]) -> String {
-    plainText(blocks: blocks).replacingOccurrences(of: "\n\n", with: "\n")
+/// Bölümleri LLM'e verilecek satırlara çevirir: bölüm başına `[mm:ss] Etiket: metin` (zaman damgaları
+/// cevaplarda doğru anı gösterebilsin). Metinsiz ve hatalı bölümler atlanır. Saf fonksiyondur.
+public func transcriptLines(segments: [LiveSegment]) -> String {
+    segments
+        .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
+        .map { (segment: LiveSegment) -> String in
+            "[\(timestamp(seconds: segment.startSec))] \(speakerLabel(speaker: segment.id.speaker, person: segment.person)): \(segment.text)"
+        }
+        .joined(separator: "\n")
 }
 
 /// Tek cümlelik canlı çeviri isteği; önceki cümleler yalnızca bağlam. Saf fonksiyondur.
@@ -34,14 +40,16 @@ public func translationRequest(sentence: String, context: [String]) -> ClaudeReq
         userText: "Önceki cümleler:\n\(contextText)\n\nÇevrilecek cümle:\n\(sentence)",
         maxTokens: 1024,
         effort: "low",
-        jsonSchema: nil
+        jsonSchema: nil,
+        timeoutSec: 20
     )
 }
 
-/// Son `windowSec` saniyenin özeti için istek; pencerede metin yoksa nil (istek atılmaz). Saf fonksiyondur.
-public func missedSummaryRequest(blocks: [SpeakerBlock], nowSec: Double, windowSec: Double) -> ClaudeRequest? {
-    let recent: String = transcriptLines(blocks: blocks.filter { (block: SpeakerBlock) -> Bool in
-        block.segments.contains { (segment: LiveSegment) -> Bool in segment.endSec >= nowSec - windowSec }
+/// Son `windowSec` saniyenin özeti için istek; pencere bölüm bazında seçilir (aynı konuşmacının uzun bloğu
+/// tüm toplantıyı içeri almasın). Pencerede metin yoksa nil (istek atılmaz). Saf fonksiyondur.
+public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, windowSec: Double) -> ClaudeRequest? {
+    let recent: String = transcriptLines(segments: segments.filter { (segment: LiveSegment) -> Bool in
+        segment.endSec >= nowSec - windowSec
     })
     guard !recent.isEmpty else {
         return nil
@@ -60,7 +68,8 @@ public func missedSummaryRequest(blocks: [SpeakerBlock], nowSec: Double, windowS
         {"type":"object","properties":{"konu":{"type":"string"},"kararlar":{"type":"array","items":{"type":"string"}},\
         "sendenIstenenler":{"type":"array","items":{"type":"string"}}},"required":["konu","kararlar","sendenIstenenler"],\
         "additionalProperties":false}
-        """
+        """,
+        timeoutSec: 120
     )
 }
 
@@ -72,11 +81,11 @@ public func parseMissedSummary(text: String) throws -> MissedSummary {
     return MissedSummary(topic: raw.konu, decisions: raw.kararlar, askedOfYou: raw.sendenIstenenler)
 }
 
-/// Toplantı hakkında Türkçe soru; transkriptin son 2 saati gönderilir. Saf fonksiyondur.
-public func questionRequest(blocks: [SpeakerBlock], question: String) -> ClaudeRequest {
-    let lastEnd: Double = blocks.last?.segments.last?.endSec ?? 0
-    let transcript: String = transcriptLines(blocks: blocks.filter { (block: SpeakerBlock) -> Bool in
-        block.segments.contains { (segment: LiveSegment) -> Bool in segment.endSec >= lastEnd - questionTranscriptLimitSec }
+/// Toplantı hakkında Türkçe soru; transkriptin son 2 saati (bölüm bazında) gönderilir. Saf fonksiyondur.
+public func questionRequest(segments: [LiveSegment], question: String) -> ClaudeRequest {
+    let lastEnd: Double = segments.map(\.endSec).max() ?? 0
+    let transcript: String = transcriptLines(segments: segments.filter { (segment: LiveSegment) -> Bool in
+        segment.endSec >= lastEnd - questionTranscriptLimitSec
     })
     return ClaudeRequest(
         model: .opus,
@@ -88,7 +97,8 @@ public func questionRequest(blocks: [SpeakerBlock], question: String) -> ClaudeR
         userText: "Transkript:\n\(transcript.isEmpty ? "(henüz konuşma yok)" : transcript)\n\nSoru: \(question)",
         maxTokens: 16000,
         effort: "medium",
-        jsonSchema: nil
+        jsonSchema: nil,
+        timeoutSec: 120
     )
 }
 

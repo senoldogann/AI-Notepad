@@ -8,7 +8,7 @@ func jsonObject(_ data: Data) throws -> [String: Any] {
 }
 
 func request(model: ClaudeModel, schema: String?) -> ClaudeRequest {
-    ClaudeRequest(model: model, system: "sistem", userText: "metin", maxTokens: 1024, effort: model == .haiku ? "low" : "medium", jsonSchema: schema)
+    ClaudeRequest(model: model, system: "sistem", userText: "metin", maxTokens: 1024, effort: model == .haiku ? "low" : "medium", jsonSchema: schema, timeoutSec: 20)
 }
 
 @Suite struct ClaudeClientTests {
@@ -56,6 +56,18 @@ func request(model: ClaudeModel, schema: String?) -> ClaudeRequest {
         #expect(try parseClaudeResponse(data: data) == "Merhaba dünya")
     }
 
+    // Yalnızca 429/5xx yeniden denenir; 200 içindeki reddetme/bozuk yanıt ve diğer 4xx kesin sonuçtur.
+    @Test func classifyRetriesOnlyTransientFailures() {
+        let ok: Data = Data(#"{"stop_reason":"end_turn","content":[{"type":"text","text":"Merhaba"}]}"#.utf8)
+        let refusal: Data = Data(#"{"stop_reason":"refusal","stop_details":{"category":"cyber"},"content":[]}"#.utf8)
+        #expect(classifyClaudeResponse(status: 200, data: ok) == .success("Merhaba"))
+        #expect(classifyClaudeResponse(status: 200, data: refusal) == .final(.refusal(category: "cyber")))
+        #expect(classifyClaudeResponse(status: 200, data: Data("{".utf8)) == .final(.malformed(body: "{")))
+        #expect(classifyClaudeResponse(status: 429, data: Data("x".utf8)) == .retryable(.http(status: 429, body: "x")))
+        #expect(classifyClaudeResponse(status: 503, data: Data("x".utf8)) == .retryable(.http(status: 503, body: "x")))
+        #expect(classifyClaudeResponse(status: 401, data: Data("x".utf8)) == .final(.http(status: 401, body: "x")))
+    }
+
     @Test func refusalIsError() {
         let data: Data = Data(#"{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},"content":[]}"#.utf8)
         #expect(throws: LLMError.refusal(category: "cyber")) {
@@ -69,7 +81,7 @@ extension CloudTests {
     @Test func haikuAnswers() async throws {
         let text: String = try await sendClaude(
             apiKey: try cloudKey(account: .anthropic),
-            request: ClaudeRequest(model: .haiku, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, effort: "low", jsonSchema: nil)
+            request: ClaudeRequest(model: .haiku, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, effort: "low", jsonSchema: nil, timeoutSec: 20)
         )
         #expect(text.lowercased().contains("ankara"), "metin: \(text)")
     }

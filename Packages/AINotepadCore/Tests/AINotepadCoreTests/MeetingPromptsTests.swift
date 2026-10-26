@@ -7,26 +7,27 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
 }
 
 @Suite struct MeetingPromptsTests {
-    @Test func transcriptLinesUseTimestampAndLabel() {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+    @Test func transcriptLinesOnePerSegment() {
+        let segments: [LiveSegment] = [
             block(.others, 0, 5, "Hyvää huomenta.", person: 1),
+            block(.others, 1, 8, "Aloitetaan.", person: 1),
             block(.me, 0, 62, "Kiitos.", person: nil),
-        ])
-        #expect(transcriptLines(blocks: blocks) == "[00:05] Konuşmacı 1: Hyvää huomenta.\n[01:02] Sen: Kiitos.")
+        ]
+        #expect(transcriptLines(segments: segments) == "[00:05] Konuşmacı 1: Hyvää huomenta.\n[00:08] Konuşmacı 1: Aloitetaan.\n[01:02] Sen: Kiitos.")
     }
 
     @Test func emptyWindowNeedsNoRequest() {
-        #expect(missedSummaryRequest(blocks: [], nowSec: 300, windowSec: 180) == nil)
-        let old: [SpeakerBlock] = groupBySpeaker(transcript: [block(.others, 0, 10, "Vanha.", person: nil)])
-        #expect(missedSummaryRequest(blocks: old, nowSec: 300, windowSec: 180) == nil)
+        #expect(missedSummaryRequest(segments: [], nowSec: 300, windowSec: 180) == nil)
+        #expect(missedSummaryRequest(segments: [block(.others, 0, 10, "Vanha.", person: nil)], nowSec: 300, windowSec: 180) == nil)
     }
 
-    @Test func windowKeepsLastThreeMinutes() throws {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+    // Aynı konuşmacının ardışık bölümleri tek blokta birleşir; pencere bloğa değil bölüme göre seçilmeli.
+    @Test func windowFiltersSegmentsNotBlocks() throws {
+        let segments: [LiveSegment] = [
             block(.others, 0, 10, "Vanha asia.", person: 1),
-            block(.me, 0, 200, "Uusi asia.", person: nil),
-        ])
-        let request: ClaudeRequest = try #require(missedSummaryRequest(blocks: blocks, nowSec: 300, windowSec: 180))
+            block(.others, 1, 200, "Uusi asia.", person: 1),
+        ]
+        let request: ClaudeRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180))
         #expect(request.model == .opus)
         #expect(request.userText.contains("Uusi asia."))
         #expect(!request.userText.contains("Vanha asia."))
@@ -39,11 +40,11 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
     }
 
     @Test func questionTranscriptCapped() {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+        let segments: [LiveSegment] = [
             block(.others, 0, 0, "Hyvin vanha.", person: 1),
-            block(.me, 0, 7300, "Tuore.", person: nil),
-        ])
-        let request: ClaudeRequest = questionRequest(blocks: blocks, question: "Ne dendi?")
+            block(.others, 1, 7300, "Tuore.", person: 1),
+        ]
+        let request: ClaudeRequest = questionRequest(segments: segments, question: "Ne dendi?")
         #expect(request.userText.contains("Tuore."))
         #expect(!request.userText.contains("Hyvin vanha."))
         #expect(request.userText.contains("Ne dendi?"))
@@ -52,6 +53,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
     @Test func translationPromptHasContext() {
         let request: ClaudeRequest = translationRequest(sentence: "Kuka tekee diat?", context: ["Esitys on perjantaina."])
         #expect(request.model == .haiku)
+        #expect(request.timeoutSec == 20)
         #expect(request.userText.contains("Esitys on perjantaina."))
         #expect(request.userText.contains("Kuka tekee diat?"))
     }
@@ -68,12 +70,12 @@ extension CloudTests {
     }
 
     @Test func missedSummaryFromDialog() async throws {
-        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [
+        let segments: [LiveSegment] = [
             block(.others, 0, 0, "Hyvää huomenta, aloitetaan palaveri.", person: 1),
             block(.others, 1, 3, "Kiitos. Minulla on raportti valmiina.", person: 2),
             block(.others, 2, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?", person: 1),
-        ])
-        let request: ClaudeRequest = try #require(missedSummaryRequest(blocks: blocks, nowSec: 12, windowSec: 180))
+        ]
+        let request: ClaudeRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
         let summary: MissedSummary = try parseMissedSummary(text: try await sendClaude(apiKey: try cloudKey(account: .anthropic), request: request))
         #expect(!summary.topic.isEmpty)
     }

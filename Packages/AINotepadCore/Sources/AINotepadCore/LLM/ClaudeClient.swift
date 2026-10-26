@@ -19,14 +19,17 @@ public struct ClaudeRequest: Sendable, Equatable {
     public let effort: String
     /// Yapılandırılmış çıktı için JSON şeması (metin); yoksa serbest metin.
     public let jsonSchema: String?
+    /// Deneme başına zaman aşımı; canlı çeviride kısa tutulur ki kuyruk tıkanmasın.
+    public let timeoutSec: Double
 
-    public init(model: ClaudeModel, system: String, userText: String, maxTokens: Int, effort: String, jsonSchema: String?) {
+    public init(model: ClaudeModel, system: String, userText: String, maxTokens: Int, effort: String, jsonSchema: String?, timeoutSec: Double) {
         self.model = model
         self.system = system
         self.userText = userText
         self.maxTokens = maxTokens
         self.effort = effort
         self.jsonSchema = jsonSchema
+        self.timeoutSec = timeoutSec
     }
 }
 
@@ -100,49 +103,72 @@ public func parseClaudeResponse(data: Data) throws -> String {
     return text
 }
 
+/// HTTP yanıtının sonucu: başarı, yeniden denenebilir hata (429/5xx) ya da kesin hata.
+public enum ClaudeOutcome: Sendable, Equatable {
+    case success(String)
+    case retryable(LLMError)
+    case final(LLMError)
+}
+
+/// Durum koduna ve gövdeye göre sonucu belirler. 200 içindeki reddetme/bozuk/boş yanıt kesin hatadır
+/// (yeniden denemek aynı sonucu verir, maliyeti katlar ve canlı çeviriyi tıkar). Saf fonksiyondur.
+public func classifyClaudeResponse(status: Int, data: Data) -> ClaudeOutcome {
+    let body: String = String(decoding: data, as: UTF8.self)
+    switch status {
+    case 200..<300:
+        do {
+            return .success(try parseClaudeResponse(data: data))
+        } catch let error as LLMError {
+            return .final(error)
+        } catch {
+            return .final(.malformed(body: body))
+        }
+    case 429, 500...:
+        return .retryable(.http(status: status, body: body))
+    default:
+        return .final(.http(status: status, body: body))
+    }
+}
+
 private let claudeLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Claude")
 
-/// İsteği gönderir: 429/5xx/ağ hatası 3 deneme (üstel bekleme, uyarı logu), 4xx denenmez.
+/// İsteği gönderir: 429/5xx/ağ hatası 3 deneme (üstel bekleme, uyarı logu); diğer her sonuç kesindir.
 public func sendClaude(apiKey: String, request: ClaudeRequest) async throws -> String {
     // Sabit, geçerli adres.
     var urlRequest: URLRequest = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
     urlRequest.httpMethod = "POST"
-    urlRequest.timeoutInterval = 120
+    urlRequest.timeoutInterval = request.timeoutSec
     urlRequest.httpBody = try claudeRequestBody(request: request)
     for (field, value) in claudeHeaders(apiKey: apiKey, model: request.model) {
         urlRequest.setValue(value, forHTTPHeaderField: field)
     }
 
-    var text: String?
-    var rejection: LLMError?
+    var outcome: ClaudeOutcome?
     try await retryWithBackoff(
         attempts: 3,
         delaySec: 1,
         isolation: nil,
         operation: {
             let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: urlRequest)
-            let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
-            switch status {
-            case 200..<300:
-                text = try parseClaudeResponse(data: data)
-            case 429, 500...:
-                throw LLMError.http(status: status, body: String(decoding: data, as: UTF8.self))
-            default:
-                // Yeniden denemenin anlamı yok; denemeyi bitir, aşağıda fırlat.
-                rejection = .http(status: status, body: String(decoding: data, as: UTF8.self))
+            let result: ClaudeOutcome = classifyClaudeResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, data: data)
+            if case .retryable(let error) = result {
+                throw error
             }
+            // Başarı ya da kesin hata: denemeyi bitir, aşağıda ele al.
+            outcome = result
         },
         onFailure: { (attempt: Int, error: any Error) -> Void in
             claudeLogger.warning("Claude isteği başarısız, deneme \(attempt, privacy: .public), model: \(request.model.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     )
-    if let rejection {
-        throw rejection
-    }
-    guard let text else {
+    switch outcome {
+    case .success(let text):
+        return text
+    case .final(let error), .retryable(let error):
+        throw error
+    case nil:
         throw LLMError.empty
     }
-    return text
 }
 
 // Claude JSON alan adları snake_case olduğu için ara tipler aynı adları kullanır.
