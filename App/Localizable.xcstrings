@@ -678,6 +678,16 @@
         }
       }
     },
+    "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage the interface language, recognition engine, appearance, AI models, keys and shortcuts."
+          }
+        }
+      }
+    },
     "Arka planda devam et": {
       "localizations": {
         "en": {
@@ -1012,16 +1022,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen from here"
-          }
-        }
-      }
-    },
-    "Bölüm": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Section"
           }
         }
       }
@@ -3900,6 +3900,16 @@
         }
       }
     },
+    "Varsayılan görünüm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default appearance"
+          }
+        }
+      }
+    },
     "Vazgeç": {
       "localizations": {
         "en": {
@@ -4100,16 +4110,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "a valid base URL (e.g. http://localhost:11434/v1)"
-          }
-        }
-      }
-    },
-    "http://localhost:11434/v1": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "http://localhost:11434/v1"
           }
         }
       }

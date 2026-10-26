@@ -38,48 +38,94 @@ private enum SettingsSection: CaseIterable {
     }
 }
 
-/// Ana penceredeki Ayarlar (ayrı ayar penceresi yok): genel, görünüm, LLM sağlayıcısı, anahtarlar ve kısayollar.
+/// Ana penceredeki Ayarlar (ElevenLabs düzeni): büyük başlık, altı çizili sekmeler; her ayar ince çizgiyle ayrılmış bir
+/// satır (solda başlık ve açıklama, sağda denetim).
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
-    private var sectionPicker: some View {
-        Picker("Bölüm", selection: $section) {
-            ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
-                Text(item.title).tag(item)
-            }
-        }
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            // Dar panelde sekmeler sığmazsa açılır seçici olur.
-            ViewThatFits(in: .horizontal) {
-                PillPicker(selection: $section, options: SettingsSection.allCases.map { ($0, $0.title) })
-                    .fixedSize()
-                sectionPicker.pickerStyle(.menu).fixedSize()
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, DesignTokens.Spacing.l)
-            .padding(.top, DesignTokens.Spacing.m)
-            Group {
-                switch section {
-                case .general: GeneralSettings(model: model)
-                case .appearance: AppearanceSettings()
-                case .llm: LLMSettings(model: model)
-                case .keys: KeySettings(model: model)
-                case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Ayarlar")
+                    .appFont(size: 30, weight: .regular)
+                    .tracking(-0.5)
+                Text("Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.")
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .padding(.top, 4)
+                SettingsTabs(selection: $section)
+                    .padding(.top, 20)
+                Group {
+                    switch section {
+                    case .general: GeneralSettings(model: model)
+                    case .appearance: AppearanceSettings()
+                    case .llm: LLMSettings(model: model)
+                    case .keys: KeySettings(model: model)
+                    case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+                    }
                 }
+                .id(section)
+                .transition(.opacity)
+                .padding(.top, 8)
             }
-            // Cam yüzey görünsün.
-            .scrollContentBackground(.hidden)
+            .animation(.smooth(duration: 0.2), value: section)
+            .frame(maxWidth: 880, alignment: .leading)
+            .padding(.horizontal, 40)
+            .padding(.vertical, 28)
+            .frame(maxWidth: .infinity)
         }
     }
 }
 
-/// Motor, ad, görünüm, "Ne kaçırdım?" süresi ve ses saklama süresi.
+/// Altı çizili sekmeler: seçili sekme ince çerçeveli kutu, altında çizginin üstünde koyu çizgi; geçiş kayarak.
+private struct SettingsTabs: View {
+    @Binding var selection: SettingsSection
+    @Namespace private var marker
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
+                    let isSelected: Bool = item == selection
+                    Button {
+                        selection = item
+                    } label: {
+                        Text(item.title)
+                            .appFont(size: 14, weight: isSelected ? .medium : .regular)
+                            .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background {
+                                if isSelected {
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(Theme.card)
+                                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.line))
+                                        .matchedGeometryEffect(id: "box", in: marker)
+                                }
+                            }
+                    }
+                    .buttonStyle(.hoverPlain)
+                    .overlay(alignment: .bottom) {
+                        if isSelected {
+                            Rectangle()
+                                .fill(Theme.ink)
+                                .frame(height: 2)
+                                .offset(y: 9)
+                                .matchedGeometryEffect(id: "line", in: marker)
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+            Rectangle().fill(Theme.line).frame(height: 1)
+        }
+        .animation(.smooth(duration: 0.25), value: selection)
+    }
+}
+
+/// Motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
     @AppStorage(SettingsKey.userName) private var userName: String = ""
@@ -89,24 +135,20 @@ private struct GeneralSettings: View {
     @State private var relaunchError: String?
 
     var body: some View {
-        Form {
-            Section("Arayüz dili") {
-                Picker("Dil", selection: $interfaceLanguage) {
-                    Text("Sistem").tag(InterfaceLanguage.system)
-                    Text(verbatim: "Türkçe").tag(InterfaceLanguage.turkish)
-                    Text(verbatim: "English").tag(InterfaceLanguage.english)
-                }
-                .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
-                    storeInterfaceLanguage(language: language)
-                }
+        // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
+        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(title: Text("Arayüz dili")) {
+                Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
                 if interfaceLanguage != launchInterfaceLanguage {
-                    // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
-                    let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
-                    HStack {
-                        Text("Yeniden başlatınca uygulanır.")
-                            .appFont(size: 11, weight: .regular)
-                            .foregroundStyle(.secondary)
-                        Spacer()
+                    Text("Yeniden başlatınca uygulanır.").foregroundStyle(Theme.ink)
+                }
+                if let relaunchError {
+                    Text(relaunchError).foregroundStyle(.red)
+                }
+            } control: {
+                HStack(spacing: 8) {
+                    if interfaceLanguage != launchInterfaceLanguage {
                         Button("Şimdi yeniden başlat") {
                             do {
                                 try relaunchApplication()
@@ -117,58 +159,65 @@ private struct GeneralSettings: View {
                         .disabled(isBusy)
                         .hoverHint(isBusy ? "Kayıt ve işleme bitince yeniden başlatılabilir" : "Uygulamayı yeni dille yeniden açar", alignment: .trailing, edge: .bottom)
                     }
-                    if let relaunchError {
-                        Text(relaunchError).appFont(size: 11, weight: .regular).foregroundStyle(.red)
-                    }
+                    SettingsMenu(selection: $interfaceLanguage, options: [
+                        (InterfaceLanguage.system, Text("Sistem")),
+                        (InterfaceLanguage.turkish, Text(verbatim: "Türkçe")),
+                        (InterfaceLanguage.english, Text(verbatim: "English")),
+                    ])
                 }
-                Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
             }
-            Section("Canlı metin") {
-                Picker("Motor", selection: Binding<LiveEngine>(
+            .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
+                storeInterfaceLanguage(language: language)
+            }
+            SettingsRow(title: Text("Canlı metin")) {
+                Text(model.liveEngine == .deepgram
+                    ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
+                    : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+            } control: {
+                SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
                     set: { (engine: LiveEngine) -> Void in
                         Task { await model.selectEngine(engine: engine) }
                     }
-                )) {
-                    Text("Deepgram (bulut, ~1 sn)").tag(LiveEngine.deepgram)
-                    Text("Mac'te (WhisperKit, internetsiz)").tag(LiveEngine.whisperKit)
-                }
+                ), options: [
+                    (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
+                    (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
+                ])
                 .disabled(model.isRecording)
-                Text(model.liveEngine == .deepgram
-                    ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
-                    : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
             }
-            Section("Sen") {
-                TextField("Adın", text: $userName)
+            SettingsRow(title: Text("Adın")) {
                 Text("Toplantı notunda sana düşen görevleri ayırmak için kullanılır.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
+            } control: {
+                TextField("Adın", text: $userName)
+                    .settingsField(width: 200)
             }
-            Section("Canlı çeviri") {
+            SettingsRow(title: Text("Kayıt sırasında Türkçeye çevir")) {
+                Text(model.displayMode.needsLiveTranslation
+                    ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
+                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
+            } control: {
                 Toggle("Kayıt sırasında Türkçeye çevir", isOn: Binding<Bool>(
                     get: { model.displayMode.needsLiveTranslation },
                     set: { (enabled: Bool) -> Void in model.selectDisplayMode(mode: enabled ? .bilingual : .originalOnly) }
                 ))
-                if model.displayMode.needsLiveTranslation {
-                    Picker("Gösterim", selection: Binding<DisplayMode>(
+                .settingsToggle()
+            }
+            if model.displayMode.needsLiveTranslation {
+                SettingsRow(title: Text("Gösterim")) {
+                    EmptyView()
+                } control: {
+                    SettingsMenu(selection: Binding<DisplayMode>(
                         get: { model.displayMode },
                         set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
-                    )) {
-                        Text("İki dil (orijinal + Türkçe)").tag(DisplayMode.bilingual)
-                        Text("Sadece Türkçe").tag(DisplayMode.turkishOnly)
-                    }
+                    ), options: [
+                        (DisplayMode.bilingual, Text("İki dil (orijinal + Türkçe)")),
+                        (DisplayMode.turkishOnly, Text("Sadece Türkçe")),
+                    ])
                 }
-                Text(model.displayMode.needsLiveTranslation
-                    ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
-                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
             }
-            Section("Mikrofon") {
+            SettingsRow(title: Text("Kendi sesimi de kaydet (mikrofon)")) {
+                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
+            } control: {
                 Toggle("Kendi sesimi de kaydet (mikrofon)", isOn: Binding<Bool>(
                     get: { !model.isMicMuted },
                     set: { (enabled: Bool) -> Void in
@@ -177,35 +226,29 @@ private struct GeneralSettings: View {
                         }
                     }
                 ))
-                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
+                .settingsToggle()
             }
-            Section("Asistan") {
-                Stepper(value: $missedMinutes, in: SettingsRange.missedWindowMinutes) {
-                    Text("\"Ne kaçırdım?\" son \(missedMinutes) dakikayı özetler")
-                }
+            SettingsRow(title: Text("\"Ne kaçırdım?\" son \(missedMinutes) dakikayı özetler")) {
+                EmptyView()
+            } control: {
+                Stepper("\"Ne kaçırdım?\" son \(missedMinutes) dakikayı özetler", value: $missedMinutes, in: SettingsRange.missedWindowMinutes)
+                    .labelsHidden()
             }
-            Section("Ses kayıtları") {
-                Picker("Sesleri sakla", selection: $retentionDays) {
-                    ForEach([7, 14, 30, 60, 90, 180, 365], id: \.self) { (days: Int) in
-                        Text("\(days) gün").tag(days)
-                    }
-                }
-                .onChange(of: retentionDays) { (_: Int, _: Int) in
-                    model.applyRetention()
-                }
+            SettingsRow(title: Text("Sesleri sakla")) {
                 Text("Süre dolunca ses dosyaları silinir; metin ve not kalır.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
+            } control: {
+                SettingsMenu(selection: $retentionDays, options: [7, 14, 30, 60, 90, 180, 365].map { (days: Int) -> (Int, Text) in
+                    (days, Text("\(days) gün"))
+                })
+            }
+            .onChange(of: retentionDays) { (_: Int, _: Int) in
+                model.applyRetention()
             }
         }
-        .formStyle(.grouped)
     }
 }
 
-/// Görünüm: tema, vurgu rengi, panel arka planı, yazı tipi, metin boyutu, satır aralığı, alt boşluk, ada.
-/// Değişiklikler panelde anında görünür.
+/// Görünüm: tema, vurgu rengi, yazı tipi, metin boyutu, satır aralığı, alt boşluk, ada. Değişiklikler anında görünür.
 private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.light.rawValue
     @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
@@ -217,59 +260,75 @@ private struct AppearanceSettings: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        Form {
-            Section("Renkler") {
-                LabeledContent("Tema") {
-                    PillPicker(selection: $theme, options: [
-                        (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
-                    ])
-                    .fixedSize()
-                }
-                Picker("Vurgu rengi", selection: $accent) {
-                    ForEach(PanelAccent.allCases, id: \.self) { (item: PanelAccent) in
-                        Label(accentName(accent: item), systemImage: "circle.fill")
-                            .foregroundStyle(item.color)
-                            .tag(item.rawValue)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(title: Text("Tema")) {
+                EmptyView()
+            } control: {
+                PillPicker(selection: $theme, options: [
+                    (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
+                ])
+                .fixedSize()
             }
-            Section("Metin") {
-                Picker("Yazı tipi", selection: $fontDesign) {
-                    Text("Inter (varsayılan)").tag(PanelFontDesign.inter.rawValue)
-                    Text("Sistem (SF Pro)").tag(PanelFontDesign.system.rawValue)
-                    Text("Yuvarlak (SF Rounded)").tag(PanelFontDesign.rounded.rawValue)
-                    Text("Tırnaklı (New York)").tag(PanelFontDesign.serif.rawValue)
-                    Text("Eş aralıklı (SF Mono)").tag(PanelFontDesign.monospaced.rawValue)
-                }
-                LabeledContent("Metin boyutu: \(Int(textSize)) pt") {
-                    Slider(value: $textSize, in: SettingsRange.textSize, step: 1)
-                }
-                LabeledContent("Satır aralığı: \(Int(lineSpacing))") {
-                    Slider(value: $lineSpacing, in: SettingsRange.lineSpacing, step: 1)
-                }
-                LabeledContent("Alt boşluk: \(Int(bottomSpacing)) pt") {
-                    Slider(value: $bottomSpacing, in: SettingsRange.bottomSpacing, step: 4)
-                }
-                // Önizleme seçilen yazı tipi ve boyutla.
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Hyvää huomenta kaikille, aloitetaan palaveri.")
-                        .font(appearance.secondaryFont)
-                        .opacity(0.6)
-                    Text("Herkese günaydın, toplantıya başlayalım.")
-                        .font(appearance.bodyFont)
-                }
-                .lineSpacing(appearance.lineSpacing)
+            SettingsRow(title: Text("Vurgu rengi")) {
+                EmptyView()
+            } control: {
+                SettingsMenu(selection: $accent, options: PanelAccent.allCases.map { (item: PanelAccent) -> (String, Text) in
+                    (item.rawValue, Text(Image(systemName: "circle.fill")).foregroundColor(item.color) + Text(verbatim: "  ") + Text(accentName(accent: item)))
+                })
             }
-            Section("Ada") {
-                Toggle("Kayıt sırasında çentikte adayı göster", isOn: $islandEnabled)
+            SettingsRow(title: Text("Yazı tipi")) {
+                EmptyView()
+            } control: {
+                SettingsMenu(selection: $fontDesign, options: [
+                    (PanelFontDesign.inter.rawValue, Text("Inter (varsayılan)")),
+                    (PanelFontDesign.system.rawValue, Text("Sistem (SF Pro)")),
+                    (PanelFontDesign.rounded.rawValue, Text("Yuvarlak (SF Rounded)")),
+                    (PanelFontDesign.serif.rawValue, Text("Tırnaklı (New York)")),
+                    (PanelFontDesign.monospaced.rawValue, Text("Eş aralıklı (SF Mono)")),
+                ])
             }
-            Section {
+            SettingsRow(title: Text("Metin boyutu: \(Int(textSize)) pt")) {
+                EmptyView()
+            } control: {
+                Slider(value: $textSize, in: SettingsRange.textSize, step: 1).frame(width: 240)
+            }
+            SettingsRow(title: Text("Satır aralığı: \(Int(lineSpacing))")) {
+                EmptyView()
+            } control: {
+                Slider(value: $lineSpacing, in: SettingsRange.lineSpacing, step: 1).frame(width: 240)
+            }
+            SettingsRow(title: Text("Alt boşluk: \(Int(bottomSpacing)) pt")) {
+                EmptyView()
+            } control: {
+                Slider(value: $bottomSpacing, in: SettingsRange.bottomSpacing, step: 4).frame(width: 240)
+            }
+            // Önizleme seçilen yazı tipi ve boyutla.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hyvää huomenta kaikille, aloitetaan palaveri.")
+                    .font(appearance.secondaryFont)
+                    .opacity(0.6)
+                Text("Herkese günaydın, toplantıya başlayalım.")
+                    .font(appearance.bodyFont)
+            }
+            .lineSpacing(appearance.lineSpacing)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardSurface(cornerRadius: 12)
+            .padding(.vertical, 16)
+            SettingsDivider()
+            SettingsRow(title: Text("Kayıt sırasında çentikte adayı göster")) {
+                EmptyView()
+            } control: {
+                Toggle("Kayıt sırasında çentikte adayı göster", isOn: $islandEnabled).settingsToggle()
+            }
+            SettingsRow(title: Text("Varsayılan görünüm")) {
+                EmptyView()
+            } control: {
                 Button("Görünümü varsayılana döndür") {
                     resetAppearanceSettings(defaults: UserDefaults.standard)
                 }
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -300,73 +359,89 @@ private struct LLMSettings: View {
     @State private var testResult: ConnectionTest = .idle
 
     var body: some View {
-        Form {
-            Section("Sağlayıcı") {
-                Picker("LLM", selection: $provider) {
-                    Text("Anthropic (Claude)").tag(LLMProviderKind.anthropic.rawValue)
-                    Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)").tag(LLMProviderKind.openAICompatible.rawValue)
-                }
-                if provider == LLMProviderKind.anthropic.rawValue {
-                    SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
-                } else {
-                    TextField("Temel adres", text: $baseURL, prompt: Text("http://localhost:11434/v1"))
-                    SecretField(title: "Anahtar (Ollama'da gerekmez)", account: .openai, onChange: model.settingsChanged)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(title: Text("Sağlayıcı")) {
+                EmptyView()
+            } control: {
+                SettingsMenu(selection: $provider, options: [
+                    (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
+                    (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
+                ])
             }
             if provider == LLMProviderKind.anthropic.rawValue {
-                Section {
-                    ClaudeModelPicker(selection: $claudeFastModel)
-                    ClaudeEffortPicker(selection: $claudeFastEffort, levels: LLMEffort.allCases)
-                } header: {
-                    Text("Canlı çeviri")
-                } footer: {
+                SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
+                SettingsGroupHeader(title: "Canlı çeviri")
+                SettingsRow(title: Text("Model")) {
                     Text("Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te high ve altında düşünme kapatılır; Opus, Fable ve xhigh/max'ta düşünme açık kalır, çeviriler gecikip birikebilir.")
+                } control: {
+                    SettingsMenu(selection: $claudeFastModel, options: claudeModelOptions())
                 }
-                Section {
-                    ClaudeModelPicker(selection: $claudeSmartModel)
-                    ClaudeEffortPicker(selection: $claudeSmartEffort, levels: smartEfforts)
-                } header: {
-                    Text("\"Ne kaçırdım?\", soru ve toplantı notu")
-                } footer: {
+                SettingsRow(title: Text("Effort")) {
+                    EmptyView()
+                } control: {
+                    SettingsMenu(selection: $claudeFastEffort, options: claudeEffortOptions(levels: LLMEffort.allCases))
+                }
+                SettingsGroupHeader(title: "\"Ne kaçırdım?\", soru ve toplantı notu")
+                SettingsRow(title: Text("Model")) {
                     Text("Haiku ve yüksek effort önerilir: uzun toplantının notu parça parça yazılır, büyük model gerekmez.")
+                } control: {
+                    SettingsMenu(selection: $claudeSmartModel, options: claudeModelOptions())
+                }
+                SettingsRow(title: Text("Effort")) {
+                    EmptyView()
+                } control: {
+                    SettingsMenu(selection: $claudeSmartEffort, options: claudeEffortOptions(levels: smartEfforts))
                 }
             } else {
-                Section {
-                    TextField("Model", text: $fastModel, prompt: Text("ör. gpt-5-mini, qwen3:8b"))
-                    OpenAIEffortPicker(selection: $openAIFastEffort)
-                } header: {
-                    Text("Canlı çeviri")
+                SettingsRow(title: Text("Temel adres")) {
+                    EmptyView()
+                } control: {
+                    TextField("Temel adres", text: $baseURL, prompt: Text(verbatim: "http://localhost:11434/v1"))
+                        .settingsField(width: 260)
                 }
-                Section {
-                    TextField("Model", text: $smartModel, prompt: Text("ör. gpt-5, gpt-oss:120b"))
-                    OpenAIEffortPicker(selection: $openAISmartEffort)
-                } header: {
-                    Text("\"Ne kaçırdım?\", soru ve toplantı notu")
-                } footer: {
+                SecretField(title: "Anahtar (Ollama'da gerekmez)", account: .openai, onChange: model.settingsChanged)
+                SettingsGroupHeader(title: "Canlı çeviri")
+                SettingsRow(title: Text("Model")) {
+                    EmptyView()
+                } control: {
+                    TextField("Model", text: $fastModel, prompt: Text("ör. gpt-5-mini, qwen3:8b")).settingsField(width: 260)
+                }
+                SettingsRow(title: Text("Effort")) {
+                    EmptyView()
+                } control: {
+                    SettingsMenu(selection: $openAIFastEffort, options: openAIEffortOptions())
+                }
+                SettingsGroupHeader(title: "\"Ne kaçırdım?\", soru ve toplantı notu")
+                SettingsRow(title: Text("Model")) {
+                    EmptyView()
+                } control: {
+                    TextField("Model", text: $smartModel, prompt: Text("ör. gpt-5, gpt-oss:120b")).settingsField(width: 260)
+                }
+                SettingsRow(title: Text("Effort")) {
                     Text("Effort `reasoning_effort` olarak gönderilir; desteklemeyen sunucularda \"Gönderme\"yi seç.")
+                } control: {
+                    SettingsMenu(selection: $openAISmartEffort, options: openAIEffortOptions())
                 }
             }
-            Section {
-                HStack {
-                    Button("Bağlantıyı dene") {
-                        testResult = .running
-                        Task { testResult = await testConnection() }
-                    }
-                    .disabled(testResult == .running)
-                    switch testResult {
-                    case .idle:
-                        EmptyView()
-                    case .running:
-                        ProgressView().controlSize(.small)
-                    case .succeeded(let reply):
-                        Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.green).lineLimit(1)
-                    case .failed(let message):
-                        Text(message).foregroundStyle(.red).appFont(size: 11, weight: .regular)
-                    }
+            SettingsRow(title: Text("Bağlantıyı dene")) {
+                switch testResult {
+                case .idle:
+                    EmptyView()
+                case .running:
+                    ProgressView().controlSize(.small)
+                case .succeeded(let reply):
+                    Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.green).lineLimit(1)
+                case .failed(let message):
+                    Text(message).foregroundStyle(.red)
                 }
+            } control: {
+                Button("Bağlantıyı dene") {
+                    testResult = .running
+                    Task { testResult = await testConnection() }
+                }
+                .disabled(testResult == .running)
             }
         }
-        .formStyle(.grouped)
         // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
         .task(id: [provider, baseURL, fastModel, smartModel, openAIFastEffort, openAISmartEffort, claudeFastModel, claudeSmartModel, claudeFastEffort, claudeSmartEffort]) {
             do {
@@ -381,33 +456,19 @@ private struct LLMSettings: View {
     }
 }
 
-/// Claude modeli seçimi (ad, kısa nitelik).
-private struct ClaudeModelPicker: View {
-    @Binding var selection: String
-
-    var body: some View {
-        Picker("Model", selection: $selection) {
-            Text("Claude Haiku 5.5 — en hızlı, en ucuz").tag(ClaudeModel.haiku.rawValue)
-            Text("Claude Sonnet 5.5 — dengeli").tag(ClaudeModel.sonnet.rawValue)
-            Text("Claude Opus 5.5 — güçlü").tag(ClaudeModel.opus.rawValue)
-            Text("Claude Fable 5.1 — en yetenekli, en pahalı").tag(ClaudeModel.fable.rawValue)
-        }
-    }
+/// Claude modelleri (ad, kısa nitelik). Saf fonksiyondur.
+private func claudeModelOptions() -> [(String, Text)] {
+    [
+        (ClaudeModel.haiku.rawValue, Text("Claude Haiku 5.5 — en hızlı, en ucuz")),
+        (ClaudeModel.sonnet.rawValue, Text("Claude Sonnet 5.5 — dengeli")),
+        (ClaudeModel.opus.rawValue, Text("Claude Opus 5.5 — güçlü")),
+        (ClaudeModel.fable.rawValue, Text("Claude Fable 5.1 — en yetenekli, en pahalı")),
+    ]
 }
 
-/// Claude effort seçimi: düşükten en yükseğe.
-private struct ClaudeEffortPicker: View {
-    @Binding var selection: String
-    /// Sunulan seviyeler: not/özet için en çok `high` (bkz. `smartEfforts`).
-    let levels: [LLMEffort]
-
-    var body: some View {
-        Picker("Effort", selection: $selection) {
-            ForEach(levels, id: \.self) { (level: LLMEffort) in
-                Text(effortTitle(level: level)).tag(level.rawValue)
-            }
-        }
-    }
+/// Claude effort seviyeleri, düşükten en yükseğe (not/özet için en çok `high`, bkz. `smartEfforts`). Saf fonksiyondur.
+private func claudeEffortOptions(levels: [LLMEffort]) -> [(String, Text)] {
+    levels.map { (level: LLMEffort) -> (String, Text) in (level.rawValue, Text(effortTitle(level: level))) }
 }
 
 /// Effort seviyesinin arayüz adı.
@@ -422,17 +483,14 @@ private func effortTitle(level: LLMEffort) -> LocalizedStringKey {
 }
 
 /// OpenAI uyumlu effort (`reasoning_effort`): gönderme ya da low/medium/high (sunucuların kabul ettiği değerler).
-private struct OpenAIEffortPicker: View {
-    @Binding var selection: String
-
-    var body: some View {
-        Picker("Effort", selection: $selection) {
-            Text("Gönderme").tag("")
-            Text("Düşük").tag(LLMEffort.low.rawValue)
-            Text("Orta").tag(LLMEffort.medium.rawValue)
-            Text("Yüksek").tag(LLMEffort.high.rawValue)
-        }
-    }
+/// Saf fonksiyondur.
+private func openAIEffortOptions() -> [(String, Text)] {
+    [
+        ("", Text("Gönderme")),
+        (LLMEffort.low.rawValue, Text("Düşük")),
+        (LLMEffort.medium.rawValue, Text("Orta")),
+        (LLMEffort.high.rawValue, Text("Yüksek")),
+    ]
 }
 
 private enum ConnectionTest: Equatable {
@@ -472,18 +530,15 @@ private struct KeySettings: View {
     let model: AppModel
 
     var body: some View {
-        Form {
-            Section("Bulut konuşma tanıma") {
-                SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
-                SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
-            }
-            Section {
-                Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
+            SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
+            Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 16)
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -492,28 +547,24 @@ private struct ShortcutSettings: View {
     let shortcuts: ShortcutController
 
     var body: some View {
-        Form {
-            Section("Global kısayollar") {
-                ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
-                    VStack(alignment: .leading, spacing: 4) {
-                        LabeledContent(action.title) {
-                            ShortcutRecorder(binding: shortcuts.currentBinding(action: action)) { (binding: KeyBinding) -> Void in
-                                shortcuts.change(action: action, binding: binding)
-                            }
-                        }
-                        if let error = shortcuts.errors[action] {
-                            Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
+                SettingsRow(title: Text(action.title)) {
+                    if let error = shortcuts.errors[action] {
+                        Text(error).foregroundStyle(.red)
+                    }
+                } control: {
+                    ShortcutRecorder(binding: shortcuts.currentBinding(action: action)) { (binding: KeyBinding) -> Void in
+                        shortcuts.change(action: action, binding: binding)
                     }
                 }
             }
-            Section {
-                Text("Kısayola tıklayıp yeni tuşlara bas; vazgeçmek için Esc. ⌃, ⌥ ya da ⌘ ile birlikte bir harf ya da rakam seç.")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.secondary)
-            }
+            Text("Kısayola tıklayıp yeni tuşlara bas; vazgeçmek için Esc. ⌃, ⌥ ya da ⌘ ile birlikte bir harf ya da rakam seç.")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 16)
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -569,4 +620,113 @@ func carbonModifiers(flags: NSEvent.ModifierFlags) -> UInt32 {
     if flags.contains(.shift) { modifiers |= CarbonModifier.shift }
     if flags.contains(.command) { modifiers |= CarbonModifier.command }
     return modifiers
+}
+
+// MARK: Ayar satırı bileşenleri
+
+/// Ayar satırı (ElevenLabs): solda başlık ve soluk açıklama, sağda denetim; altında ince çizgi.
+struct SettingsRow<Detail: View, Control: View>: View {
+    let title: Text
+    let detail: Detail
+    let control: Control
+
+    init(title: Text, @ViewBuilder detail: () -> Detail, @ViewBuilder control: () -> Control) {
+        self.title = title
+        self.detail = detail()
+        self.control = control()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 24) {
+                VStack(alignment: .leading, spacing: 3) {
+                    title
+                        .appFont(size: 15, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                    VStack(alignment: .leading, spacing: 3) {
+                        detail
+                    }
+                    .appFont(size: 13, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                control
+            }
+            .padding(.vertical, 16)
+            SettingsDivider()
+        }
+    }
+}
+
+/// Satırlar arasındaki ince çizgi.
+struct SettingsDivider: View {
+    var body: some View {
+        Rectangle().fill(Theme.line).frame(height: 1)
+    }
+}
+
+/// Satır grubunun başlığı (ör. LLM'de "Canlı çeviri").
+struct SettingsGroupHeader: View {
+    let title: LocalizedStringKey
+
+    var body: some View {
+        Text(title)
+            .appFont(size: 12, weight: .semibold)
+            .tracking(0.4)
+            .textCase(.uppercase)
+            .foregroundStyle(Theme.muted)
+            .padding(.top, 32)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Açılır seçim: beyaz hap düğme (seçili değer ve ok); menüde seçili değer işaretli.
+struct SettingsMenu<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(Value, Text)]
+
+    var body: some View {
+        Menu {
+            Picker(selection: $selection) {
+                ForEach(Array(options.enumerated()), id: \.offset) { (item: (offset: Int, element: (Value, Text))) in
+                    item.element.1.tag(item.element.0)
+                }
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 8) {
+                options.first { $0.0 == selection }?.1 ?? Text(verbatim: "–")
+                Image(systemName: "chevron.up.chevron.down")
+                    .appFont(size: 10, weight: .semibold)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.pill)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+}
+
+extension View {
+    /// Ayar yazı alanı: düz alan, beyaz zemin, ince çerçeve.
+    func settingsField(width: CGFloat) -> some View {
+        textFieldStyle(.plain)
+            .appFont(size: 14, weight: .regular)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(width: width)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+    }
+
+    /// Ayar anahtarı: etiketsiz, vurgu renginde.
+    func settingsToggle() -> some View {
+        toggleStyle(.switch).labelsHidden()
+    }
 }
