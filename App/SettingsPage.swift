@@ -132,6 +132,12 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
+    @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
+    @AppStorage(SettingsKey.calendarEnabled) private var calendarEnabled: Bool = false
+    @AppStorage(SettingsKey.meetingReminders) private var meetingReminders: Bool = true
+    @AppStorage(SettingsKey.micSuggestions) private var micSuggestions: Bool = true
+    @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
+    @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
@@ -192,6 +198,65 @@ private struct GeneralSettings: View {
                 TextField("Adın", text: $userName)
                     .settingsField(width: 200)
             }
+            SettingsRow(title: Text("Takvimi kullan")) {
+                Text("Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.")
+                if let error = model.calendarError {
+                    Text(error).foregroundStyle(.red)
+                }
+            } control: {
+                Toggle("Takvimi kullan", isOn: Binding<Bool>(
+                    get: { calendarEnabled },
+                    set: { (enabled: Bool) -> Void in
+                        if enabled {
+                            Task { await model.enableCalendar() }
+                        } else {
+                            model.disableCalendar()
+                        }
+                    }
+                ))
+                .settingsToggle()
+            }
+            if calendarEnabled {
+                SettingsRow(title: Text("Toplantıdan 1 dk önce hatırlat")) {
+                    Text("Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.")
+                } control: {
+                    Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
+                        .settingsToggle()
+                        .onChange(of: meetingReminders) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                }
+                SettingsRow(title: Text("Görüşme başlayınca öner")) {
+                    Text("Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.")
+                } control: {
+                    Toggle("Görüşme başlayınca öner", isOn: $micSuggestions)
+                        .settingsToggle()
+                        .onChange(of: micSuggestions) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                }
+            }
+            SettingsRow(title: Text("Not şablonu")) {
+                Text("Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).")
+            } control: {
+                SettingsMenu(selection: $noteTemplate, options: NoteTemplateKind.allCases.map { (kind: NoteTemplateKind) -> (String, Text) in
+                    (kind.rawValue, Text(templateTitle(kind: kind)))
+                })
+            }
+            if noteTemplate == NoteTemplateKind.custom.rawValue {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Kendi şablonun: notta neyin öne çıkmasını istediğini yaz")
+                        .appFont(size: 13, weight: .medium)
+                    TextEditor(text: $customTemplate)
+                        .appFont(size: 13, weight: .regular)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .frame(height: 90)
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+                    Text("Örnek: \"Riskleri ayrı bir paragrafta say, her kararın gerekçesini yaz.\"")
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 12)
+                SettingsDivider()
+            }
             SettingsRow(title: Text("Kayıt sırasında Türkçeye çevir")) {
                 Text(model.displayMode.needsLiveTranslation
                     ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
@@ -217,7 +282,7 @@ private struct GeneralSettings: View {
                 }
             }
             SettingsRow(title: Text("Kendi sesimi de kaydet (mikrofon)")) {
-                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
+                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur. Yüz yüze modunda mikrofon her zaman açıktır (odadaki herkesi kaydeder).")
             } control: {
                 Toggle("Kendi sesimi de kaydet (mikrofon)", isOn: Binding<Bool>(
                     get: { !model.isMicMuted },
@@ -228,6 +293,11 @@ private struct GeneralSettings: View {
                     }
                 ))
                 .settingsToggle()
+            }
+            SettingsRow(title: Text("Kayıt başlarken haber vermeyi hatırlat")) {
+                Text("Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak Fince/İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.")
+            } control: {
+                Toggle("Kayıt başlarken haber vermeyi hatırlat", isOn: $consentReminder).settingsToggle()
             }
             SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
                 Text("Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.")
@@ -382,6 +452,7 @@ private struct LLMSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            LocalLLMSetup(model: model)
             SettingsRow(title: Text("Sağlayıcı")) {
                 EmptyView()
             } control: {
@@ -463,6 +534,7 @@ private struct LLMSettings: View {
                 }
                 .disabled(testResult == .running)
             }
+            MCPSettings()
         }
         // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
         .task(id: [provider, baseURL, fastModel, smartModel, openAIFastEffort, openAISmartEffort, claudeFastModel, claudeSmartModel, claudeFastEffort, claudeSmartEffort]) {
@@ -751,5 +823,121 @@ extension View {
     /// Ayar anahtarı: etiketsiz, vurgu renginde.
     func settingsToggle() -> some View {
         toggleStyle(.switch).labelsHidden()
+    }
+}
+
+/// Yerel MCP sunucusu: Claude Desktop, ChatGPT ya da başka MCP istemcisinin toplantı arşivini sorgulaması için
+/// yapılandırma (uygulama `--mcp` ile pencere açmadan çalışır; veri Mac'ten çıkmaz, istemci yalnızca okur).
+private struct MCPSettings: View {
+    @State private var copied: Bool = false
+
+    var body: some View {
+        let path: String = Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
+        let config: String = """
+        {
+          "mcpServers": {
+            "ai-notepad": {
+              "command": "\(path)",
+              "args": ["--mcp"]
+            }
+          }
+        }
+        """
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Yapay zekâ uygulamalarına bağla (MCP)")
+            SettingsRow(title: Text("Claude Desktop, ChatGPT ve diğerleri")) {
+                Text("Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez.")
+            } control: {
+                Button(copied ? "Kopyalandı" : "Yapılandırmayı kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(config, forType: .string)
+                    copied = true
+                }
+            }
+            Text(config)
+                .appFont(size: 12, weight: .regular)
+                .monospaced()
+                .textSelection(.enabled)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.vertical, 12)
+        }
+    }
+}
+
+/// Anahtarsız kullanım: Mac'teki Ollama algılanır, yüklü modellerden önerilen seçilir ve tek tıkla LLM sağlayıcısı
+/// yapılır (OpenAI uyumlu, `localhost:11434`). Bulut modelleri işaretlenir (metin Ollama'ya gider). Ollama yoksa kurulum
+/// adımları gösterilir.
+struct LocalLLMSetup: View {
+    let model: AppModel
+    @State private var state: DetectState = .idle
+    @State private var choice: String = ""
+
+    private enum DetectState: Equatable {
+        case idle
+        case detecting
+        case found([String])
+        case missing(String)
+        case applied(String)
+    }
+
+    var body: some View {
+        SettingsRow(title: Text("Mac'te, anahtarsız (Ollama)")) {
+            switch state {
+            case .idle, .detecting:
+                Text("Yerel model (ör. gpt-oss:20b, qwen3) ile not ve çeviri: anahtar gerekmez, toplantı metni Mac'ten çıkmaz. Konuşma tanıma için Genel › Canlı metin'de \"Mac'te (WhisperKit)\" seç.")
+            case .found(let names):
+                Text("\(names.count) model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.")
+            case .missing(let message):
+                Text("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b").foregroundStyle(.orange)
+            case .applied(let name):
+                Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+        } control: {
+            HStack(spacing: 8) {
+                if case .found(let names) = state {
+                    SettingsMenu(selection: $choice, options: names.map { (name: String) -> (String, Text) in
+                        (name, isOllamaCloudModel(name: name) ? Text(verbatim: "\(name) ☁︎") : Text(verbatim: name))
+                    })
+                    Button("Kullan") { apply(name: choice) }
+                        .buttonStyle(.pillPrimary)
+                        .disabled(choice.isEmpty)
+                } else {
+                    Button(state == .detecting ? "Aranıyor…" : "Algıla", systemImage: "magnifyingglass") { detect() }
+                        .disabled(state == .detecting)
+                }
+            }
+        }
+    }
+
+    private func detect() {
+        state = .detecting
+        Task {
+            do {
+                let names: [String] = try await ollamaModels(baseURL: URL(string: "http://localhost:11434/v1")!).filter(isChatModel)
+                guard let recommended = recommendedOllamaModel(names: names) else {
+                    state = .missing(String(localized: "sohbet modeli yüklü değil"))
+                    return
+                }
+                choice = recommended
+                state = .found(names)
+            } catch {
+                state = .missing(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Sağlayıcıyı Ollama'ya çevirir: iki model sınıfı da seçilen model, effort gönderilmez (her sunucu desteklemez).
+    private func apply(name: String) {
+        let defaults: UserDefaults = .standard
+        defaults.set(LLMProviderKind.openAICompatible.rawValue, forKey: SettingsKey.llmProvider)
+        defaults.set("http://localhost:11434/v1", forKey: SettingsKey.llmBaseURL)
+        defaults.set(name, forKey: SettingsKey.llmFastModel)
+        defaults.set(name, forKey: SettingsKey.llmSmartModel)
+        defaults.set("", forKey: SettingsKey.llmFastEffort)
+        defaults.set("", forKey: SettingsKey.llmSmartEffort)
+        model.settingsChanged()
+        state = .applied(name)
     }
 }

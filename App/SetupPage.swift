@@ -280,7 +280,8 @@ private struct KeysStep: View {
                 SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
             }
             SecretField(title: "Anthropic (Claude)", account: .anthropic, onChange: model.settingsChanged)
-            Text("Çeviri, özet ve not için Claude kullanılır. OpenAI, Ollama ya da OpenCode Go'yu Ayarlar › LLM'den seçebilirsin.")
+            LocalLLMSetup(model: model)
+            Text("Çeviri, özet ve not için Claude kullanılır; anahtarsız istersen Mac'teki Ollama'yı seç. OpenAI ve OpenCode Go Ayarlar › LLM'de.")
                 .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.secondary)
         }

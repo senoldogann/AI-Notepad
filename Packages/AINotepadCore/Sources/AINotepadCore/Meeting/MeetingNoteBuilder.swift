@@ -22,8 +22,9 @@ public func storedLines(segments: [StoredSegment], speakerNames: [Int: String]) 
 /// Not istemlerinin ortak kuralları (tek istek ve parça parça): dil, görev sahipliği, madde başına tek iş. Ölçümde model
 /// bunlar yazılmadan görevleri Fince bırakıyor, kullanıcıyı bazen "Sen" bazen adıyla yazıyor ve farklı konuların
 /// işlerini tek maddede topluyordu. Saf fonksiyondur.
-func noteRules(user: String) -> String {
-    """
+func noteRules(user: String, template: NoteTemplate) -> String {
+    let focus: String = templateInstructions(template: template)
+    return """
     Kurallar:
     - Çıktının tamamı Türkçe: özet, kararlar, görev açıklamaları ve tarihler Türkçe cümlelerdir, içinde Fince/İngilizce
       kelime bırakma (ör. "Vaiheen 3 yhteenvedon gönderilmesi" değil "3. aşamanın özetini göndermek"; "5. marraskuuta" değil
@@ -33,6 +34,7 @@ func noteRules(user: String) -> String {
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
       Birinin "yaparım" diye üstlendiği iş de görevdir.
     - Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.
+    \(focus)
     """
 }
 
@@ -49,7 +51,7 @@ public func normalizedTask(task: NoteTask, userName: String) -> NoteTask {
 }
 
 /// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
-public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String) -> LLMRequest? {
+public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate) -> LLMRequest? {
     let transcript: String = storedLines(segments: segments, speakerNames: speakerNames)
     guard !transcript.isEmpty else {
         return nil
@@ -61,23 +63,26 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
         Fince ya da İngilizce bir toplantının transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
         transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman)
         ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz.
-        \(noteRules(user: user))
+        \(noteRules(user: user, template: template))
         \(transcriptIsDataNote)
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>",
         maxTokens: 16000,
-        jsonSchema: """
-        {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
-        "kararlar":{"type":"array","items":{"type":"string"}},\
-        "gorevler":{"type":"array","items":{"type":"object","properties":{"sahip":{"type":"string"},"aciklama":{"type":"string"},\
-        "tarih":{"type":"string"},"benimMi":{"type":"boolean"}},"required":["sahip","aciklama","tarih","benimMi"],"additionalProperties":false}},\
-        "sozluk":{"type":"array","items":{"type":"object","properties":{"terim":{"type":"string"},"anlam":{"type":"string"}},\
-        "required":["terim","anlam"],"additionalProperties":false}}},\
-        "required":["baslik","ozet","kararlar","gorevler","sozluk"],"additionalProperties":false}
-        """,
+        jsonSchema: meetingNoteSchema,
         timeoutSec: 300
     )
 }
+
+/// Toplantı notunun JSON şeması (Türkçe alan adları); paylaşım sürümü de aynısını kullanır.
+let meetingNoteSchema: String = """
+{"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
+"kararlar":{"type":"array","items":{"type":"string"}},\
+"gorevler":{"type":"array","items":{"type":"object","properties":{"sahip":{"type":"string"},"aciklama":{"type":"string"},\
+"tarih":{"type":"string"},"benimMi":{"type":"boolean"}},"required":["sahip","aciklama","tarih","benimMi"],"additionalProperties":false}},\
+"sozluk":{"type":"array","items":{"type":"object","properties":{"terim":{"type":"string"},"anlam":{"type":"string"}},\
+"required":["terim","anlam"],"additionalProperties":false}}},\
+"required":["baslik","ozet","kararlar","gorevler","sozluk"],"additionalProperties":false}
+"""
 
 /// Not yanıtını ayrıştırır; boş tarih "yok" demektir. Özeti boş not `LLMError.empty`dir.
 public func parseMeetingNote(text: String) throws -> MeetingNote {

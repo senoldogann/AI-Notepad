@@ -2,6 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import AppKit
 import SwiftUI
+import UserNotifications
 
 /// Ana pencerenin sahne kimliği.
 let mainWindowID: String = "main"
@@ -16,6 +17,8 @@ extension Notification.Name {
 enum MainSection: Hashable {
     case home
     case meetings
+    case ask
+    case people
     case tasks
     case settings
     case setup
@@ -56,6 +59,8 @@ func launchSection(arguments: [String]) -> MainSection? {
     case "ana": return .home
     case "toplantilar": return .meetings
     case "gorevler": return .tasks
+    case "sor": return .ask
+    case "kisiler": return .people
     case "ayarlar": return .settings
     case "kurulum": return .setup
     default: return nil
@@ -71,7 +76,27 @@ func openMainWindow(router: MainWindowRouter, section: MainSection) {
 
 /// Dock simgesine tıklanınca ana pencere açılır: ada penceresi hep açık olduğu için sistem "görünür pencere var" sayıp
 /// kendiliğinden açmazdı.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Bildirimdeki "Dinlemeye başla" (ya da bildirime tıklama) kaydı başlatır; uygulama açılışında bağlanır.
+    @MainActor static var onStartFromNotification: (@MainActor () -> Void)?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard response.notification.request.content.categoryIdentifier == MeetingNotificationID.category,
+              response.actionIdentifier != UNNotificationDismissActionIdentifier else {
+            return
+        }
+        await MainActor.run { AppDelegate.onStartFromNotification?() }
+    }
+
+    // Uygulama öndeyken de toplantı bildirimi görünsün.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return true
@@ -170,6 +195,10 @@ struct MainWindowView: View {
             HomePage(model: model, router: router, shortcuts: shortcuts, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
         case .meetings:
             MeetingsSplit(model: model, router: router, player: player)
+        case .ask:
+            AskPage(model: model, router: router)
+        case .people:
+            PeoplePage(model: model, router: router)
         case .tasks:
             TasksPage(model: model, router: router)
         case .settings:
@@ -191,13 +220,16 @@ private struct Sidebar: View {
     let router: MainWindowRouter
 
     var body: some View {
-        let myTaskCount: Int = model.meetings.prefix(10).map { ($0.note?.tasks ?? []).filter(\.isMine).count }.reduce(0, +)
+        // Yalnızca açık (tamamlanmamış) görevler sayılır.
+        let myTaskCount: Int = myTasks(meetings: Array(model.meetings.prefix(10))).filter { !isTaskDone(record: $0.record, task: $0.task) }.count
         VStack(alignment: .leading, spacing: 2) {
             // Trafik ışıklarına yer.
             Color.clear.frame(height: 40)
             item(title: "Ana sayfa", symbol: "house", section: .home, badge: nil)
             item(title: "Toplantılar", symbol: "list.bullet.rectangle", section: .meetings, badge: nil)
+            item(title: "Sor", symbol: "sparkle.magnifyingglass", section: .ask, badge: nil)
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
+            item(title: "Kişiler", symbol: "person.2", section: .people, badge: nil)
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
             if !model.meetings.isEmpty {
                 Text("Son toplantılar")
@@ -317,6 +349,8 @@ private struct TopBar: View {
         switch router.section {
         case .home: "Ana sayfa"
         case .meetings: "Toplantılar"
+        case .ask: "Toplantılarıma sor"
+        case .people: "Kişiler"
         case .tasks: "Görevlerim"
         case .settings: "Ayarlar"
         case .setup: "Kurulum"
@@ -333,9 +367,8 @@ private struct SetupScreen: View {
         GeometryReader { (geometry: GeometryProxy) in
             ScrollView {
                 VStack(spacing: DesignTokens.Spacing.l) {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                        .resizable()
-                        .frame(width: 88, height: 88)
+                    // Simgeyle aynı işaret (macOS'un simge önbelleği eski simgeyi gösterebiliyordu).
+                    AppMark(size: 72, barsRaised: true, lineDrawn: true)
                         .floating3D()
                         .tilt3D(maxAngle: 14)
                     SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
@@ -414,6 +447,7 @@ private struct HomePage: View {
                 if !model.setupProblems.isEmpty {
                     problems
                 }
+                UpcomingMeetings(model: model, onStartRecording: onStartRecording)
                 BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
                 RecentMeetingCards(model: model, router: router)
@@ -493,13 +527,23 @@ private struct RecordBar: View {
                 .tilt3D(maxAngle: 18)
             switch model.phase {
             case .idle:
-                Text("Toplantını dinlemeye başla")
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
+                // Sığmazsa yarım kesilmek yerine hiç gösterilmez (seçenek çipleri öncelikli).
+                ViewThatFits(in: .horizontal) {
+                    Text("Toplantını dinlemeye başla")
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Color.clear.frame(width: 0, height: 0)
+                }
+                .layoutPriority(1)
                 Spacer(minLength: 6)
                 languageChip
-                chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
-                    model.toggleMicrophone()
+                chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
+                    .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
+                if !model.isInPerson {
+                    chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
+                        model.toggleMicrophone()
+                    }
                 }
                 chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
                     model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
@@ -625,21 +669,21 @@ private struct BannerCarousel: View {
         let title: LocalizedStringKey
         let primary: LocalizedStringKey
         let secondary: LocalizedStringKey
-        let color: Color
+        let palette: FilmPalette
     }
 
     private var slides: [Slide] {
         [
-            Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", color: appearance.accent.color),
-            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", color: Color(red: 0.18, green: 0.36, blue: 0.88)),
-            Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", color: Color(red: 0.16, green: 0.55, blue: 0.45)),
+            Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", palette: .sunset),
+            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", palette: .coral),
+            Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", palette: .violet),
         ]
     }
 
     var body: some View {
         let slide: Slide = slides[index]
         VStack(spacing: 10) {
-            GradientBanner(accent: slide.color) {
+            GradientBanner(palette: slide.palette, seed: "banner-\(index)") {
                 VStack(spacing: 14) {
                     Text(slide.title)
                         .appFont(size: 24, weight: .regular)
@@ -713,6 +757,7 @@ private struct HomeTasks: View {
 
     var body: some View {
         let items: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: Array(model.meetings.prefix(10)))
+            .filter { !isTaskDone(record: $0.record, task: $0.task) }
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
                 HStack {
@@ -724,7 +769,7 @@ private struct HomeTasks: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { (item: (offset: Int, element: (record: MeetingRecord, task: NoteTask))) in
-                        TaskLine(record: item.element.record, task: item.element.task, accent: appearance.accent.color) {
+                        TaskLine(model: model, record: item.element.record, task: item.element.task) {
                             router.selectedMeetingID = item.element.record.id
                             router.section = .meetings
                         }
@@ -738,39 +783,106 @@ private struct HomeTasks: View {
     }
 }
 
+/// Yaklaşan toplantılar (takvim açıksa, önümüzdeki 12 saat): saat, başlık, katılımcılar; bağlantısı varsa "Katıl",
+/// başlamak üzereyse (10 dk) ya da sürüyorsa "Dinle".
+private struct UpcomingMeetings: View {
+    let model: AppModel
+    let onStartRecording: @MainActor () -> Void
+
+    var body: some View {
+        let now: Date = Date()
+        let items: [CalendarMeeting] = model.upcomingMeetings.filter { $0.end > now && $0.start.timeIntervalSince(now) < 12 * 3600 }
+        if let error = model.calendarError {
+            EmptyStateCard(symbol: "calendar.badge.exclamationmark", title: "Takvim okunamadı", message: LocalizedStringKey(error))
+        } else if !items.isEmpty {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+                Text("Yaklaşan toplantılar").appFont(size: 15, weight: .medium)
+                VStack(spacing: 0) {
+                    ForEach(Array(items.prefix(4).enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
+                        if item.offset > 0 {
+                            Rectangle().fill(Theme.line).frame(height: 1)
+                        }
+                        row(meeting: item.element, now: now)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .cardSurface(cornerRadius: 16)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func row(meeting: CalendarMeeting, now: Date) -> some View {
+        let isSoon: Bool = meeting.start.timeIntervalSince(now) <= 600
+        let time: String = meeting.start.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+            + "–" + meeting.end.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(time).appFont(size: 12, weight: .medium).monospacedDigit().foregroundStyle(isSoon ? Color.orange : Theme.muted)
+                Text(meeting.title).appFont(size: 14, weight: .medium).lineLimit(1)
+                if !meeting.attendees.isEmpty {
+                    Text(meeting.attendees.prefix(4).joined(separator: ", ") + (meeting.attendees.count > 4 ? " +\(meeting.attendees.count - 4)" : ""))
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if let url = meeting.joinURL {
+                Button("Katıl", systemImage: "video") { NSWorkspace.shared.open(url) }
+                    .controlSize(.small)
+                    .hoverHint("Görüşme bağlantısını aç", alignment: .trailing, edge: .bottom)
+            }
+            if isSoon, !model.isRecording {
+                Button("Dinle", systemImage: "record.circle") { onStartRecording() }
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 10)
+    }
+}
+
 /// Toplantılardan kullanıcıya düşen görevler (verilen sırada). Saf fonksiyondur.
-private func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
+func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
     meetings.flatMap { (record: MeetingRecord) -> [(record: MeetingRecord, task: NoteTask)] in
         (record.note?.tasks ?? []).filter(\.isMine).map { (record: record, task: $0) }
     }
 }
 
-/// Görev satırı: daire, iş, tarih ve toplantı adı; tıklayınca toplantı açılır.
+/// Görev satırı: tamamlandı kutusu, iş, tarih ve toplantı adı (tıklayınca toplantı açılır), Anımsatıcılar'a ekleme.
 private struct TaskLine: View {
+    let model: AppModel
     let record: MeetingRecord
     let task: NoteTask
-    let accent: Color
     let onOpen: @MainActor () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "circle")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(task.description).appFont(size: 14, weight: .regular)
-                    Text(([task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · "))
-                        .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(Theme.muted)
+        let isDone: Bool = isTaskDone(record: record, task: task)
+        HStack(alignment: .center, spacing: 8) {
+            TaskCheckbox(isDone: isDone) { model.toggleTask(meetingID: record.id, task: task) }
+                .disabled(model.isLocked(meetingID: record.id))
+            Button(action: onOpen) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(task.description)
+                            .appFont(size: 14, weight: .regular)
+                            .strikethrough(isDone, color: Theme.muted)
+                            .foregroundStyle(isDone ? Theme.muted : Theme.ink)
+                        Text(([task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · "))
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.hoverPlain)
+            ReminderButton(model: model, record: record, task: task)
         }
-        .buttonStyle(.hoverPlain)
+        .padding(.horizontal, 8)
+        .animation(.smooth(duration: 0.2), value: isDone)
     }
 }
 
@@ -851,20 +963,35 @@ private struct MeetingCover: View {
 private struct TasksPage: View {
     let model: AppModel
     let router: MainWindowRouter
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @State private var showsDone: Bool = false
 
     var body: some View {
+        let all: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: model.meetings)
+        let doneCount: Int = all.filter { isTaskDone(record: $0.record, task: $0.task) }.count
         let groups: [(record: MeetingRecord, tasks: [NoteTask])] = model.meetings.compactMap { (record: MeetingRecord) -> (record: MeetingRecord, tasks: [NoteTask])? in
-            let mine: [NoteTask] = (record.note?.tasks ?? []).filter(\.isMine)
+            let mine: [NoteTask] = (record.note?.tasks ?? []).filter { $0.isMine && isTaskDone(record: record, task: $0) == showsDone }
             return mine.isEmpty ? nil : (record: record, tasks: mine)
         }
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Sana düşen görevler")
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.4)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Sana düşen görevler")
+                        .appFont(size: 28, weight: .regular)
+                        .tracking(-0.4)
+                    Spacer(minLength: 0)
+                    PillPicker(selection: $showsDone, options: [
+                        (false, "Açık · \(all.count - doneCount)"), (true, "Tamamlanan · \(doneCount)"),
+                    ])
+                    .fixedSize()
+                }
                 if groups.isEmpty {
-                    EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
+                    if showsDone {
+                        EmptyStateCard(symbol: "checkmark.circle", title: "Tamamlanan görev yok", message: "Bir görevin dairesine tıklayınca buraya taşınır.")
+                    } else if doneCount > 0 {
+                        EmptyStateCard(symbol: "party.popper", title: "Açık görevin kalmadı", message: "Hepsi tamamlandı.")
+                    } else {
+                        EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
+                    }
                 }
                 ForEach(groups, id: \.record.id) { (group: (record: MeetingRecord, tasks: [NoteTask])) in
                     VStack(alignment: .leading, spacing: 6) {
@@ -886,7 +1013,7 @@ private struct TasksPage: View {
                         }
                         .buttonStyle(.hoverPlain)
                         ForEach(Array(group.tasks.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                            TaskLine(record: group.record, task: item.element, accent: appearance.accent.color) {
+                            TaskLine(model: model, record: group.record, task: item.element) {
                                 router.selectedMeetingID = group.record.id
                                 router.section = .meetings
                             }
@@ -894,8 +1021,11 @@ private struct TasksPage: View {
                     }
                     .padding(8)
                     .cardSurface(cornerRadius: 16)
+                    .transition(.opacity)
                 }
             }
+            .animation(.smooth(duration: 0.25), value: showsDone)
+            .animation(.smooth(duration: 0.25), value: doneCount)
             .padding(36)
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)

@@ -26,6 +26,8 @@ targets:
         # Gömülü Inter (App/Fonts; Resources köküne kopyalanır).
         ATSApplicationFontsPath: "."
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
+        NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
+        NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig

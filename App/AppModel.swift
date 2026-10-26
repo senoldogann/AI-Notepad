@@ -32,6 +32,7 @@ private struct ViewStateInputs: Equatable {
     let isPaused: Bool
     let isMicMuted: Bool
     let canToggleMic: Bool
+    let isInPerson: Bool
     let canStart: Bool
     let startedAt: Date?
     let statusText: String
@@ -67,6 +68,8 @@ final class AppModel {
     var isPaused: Bool = false
     /// "Sen" kapalı: hoparlörle dinlerken yankı olmasın. Ayar olarak saklanır.
     var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
+    /// Yüz yüze toplantı modu (bkz. `SettingsKey.inPersonMode`); kayıt başında okunur.
+    var isInPerson: Bool = UserDefaults.standard.bool(forKey: SettingsKey.inPersonMode)
     /// Bu kayıtta mikrofon açıldı mı: mikrofon kapalıyken başlayan kayıt yalnızca bilgisayardan gelen sesi alır, mikrofonu
     /// hiç açmaz (menü çubuğunda mikrofon göstergesi yanmaz, Deepgram'a sessizlik gönderilip ücretlendirilmez).
     var micOpenedForRecording: Bool = false
@@ -81,6 +84,21 @@ final class AppModel {
     var registeredVoices: [RegisteredVoice] = []
     /// Kayıtlı sesler okunamadı ya da yazılamadı (Ayarlar'da gösterilir).
     var voiceRegistryError: String?
+    /// Kayıt başında panelde "katılımcılara haber ver" hatırlatması gösteriliyor.
+    var consentReminderVisible: Bool = false
+    /// Takvim ve Anımsatıcılar.
+    @ObservationIgnored let eventKit: EventKitConnector = EventKitConnector()
+    @ObservationIgnored private let notifier: MeetingNotifier = MeetingNotifier()
+    @ObservationIgnored private let micMonitor: MicrophoneActivityMonitor = MicrophoneActivityMonitor()
+    @ObservationIgnored private var calendarTask: Task<Void, Never>?
+    @ObservationIgnored private var calendarChangesTask: Task<Void, Never>?
+    @ObservationIgnored private var lastMicSuggestion: Date = .distantPast
+    /// Önümüzdeki 24 saatin toplantıları (takvim açıksa).
+    var upcomingMeetings: [CalendarMeeting] = []
+    /// Takvim ya da bildirim hatası (Ayarlar ve Ana sayfada gösterilir).
+    var calendarError: String?
+    /// Bu kaydın bağlandığı takvim toplantısı.
+    @ObservationIgnored private var linkedMeeting: CalendarMeeting?
     var transcript: [LiveSegment] = []
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
@@ -166,7 +184,7 @@ final class AppModel {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
             assistantCard: assistantCard, phase: phase,
-            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, canStart: isReadyToRecord && !isStarting,
+            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
@@ -176,7 +194,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, isInPerson: inputs.isInPerson, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -485,6 +503,10 @@ final class AppModel {
             cloudKeys = nil
         }
 
+        // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
+        linkedMeeting = UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
+            ? currentMeeting(meetings: upcomingMeetings, now: Date())
+            : nil
         let directory: URL
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: Date())
@@ -499,6 +521,26 @@ final class AppModel {
         let pauseGate: AudioGate = AudioGate(isOpen: true)
         let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
+        let othersAudio: AsyncStream<[Float]>
+        recordingInPerson = isInPerson
+        if isInPerson, linkedMeeting?.joinURL != nil {
+            // Çevrimiçi görüşmede yüz yüze modu karşı tarafı kaydetmez: açıkça uyarılır.
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Yüz yüze modu açık: çevrimiçi görüşmenin karşı tarafı kaydedilmiyor. Ana sayfadaki \"Yüz yüze\"yi kapatıp kaydı yeniden başlat."))
+        }
+        if isInPerson {
+            // Yüz yüze: odadaki herkes mikrofondan gelir; "Diğerleri" akışı olarak konuşmacılara ayrılır (kullanıcı da
+            // onlardan biri). Sistem sesi dinlenmez.
+            meAudio = finishedStream()
+            micOpenedForRecording = false
+            do {
+                let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+                othersAudio = gatedStream(audio: aligned, gate: pauseGate)
+                startedSpeakers.insert(.others)
+            } catch {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                othersAudio = finishedStream()
+            }
+        } else {
         if isMicMuted {
             // Yalnızca karşı taraf: mikrofon hiç açılmaz.
             meAudio = finishedStream()
@@ -515,7 +557,6 @@ final class AppModel {
                 micOpenedForRecording = false
             }
         }
-        let othersAudio: AsyncStream<[Float]>
         do {
             let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await systemAudio.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
             othersAudio = gatedStream(audio: aligned, gate: pauseGate)
@@ -523,6 +564,7 @@ final class AppModel {
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             othersAudio = finishedStream()
+        }
         }
         guard !startedSpeakers.isEmpty else {
             return
@@ -541,7 +583,7 @@ final class AppModel {
                     diarizationWindowSec: 120,
                     minDiarizationAudioSec: 5,
                     languageConfidence: 0.8,
-                    keyterms: recognitionKeyterms,
+                    keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30),
                     voiceEmbedder: voiceEmbedderIfEnabled()
                 ),
                 meAudio: meAudio,
@@ -569,6 +611,8 @@ final class AppModel {
             return
         }
         isRecording = true
+        recordingTemplate = defaultNoteTemplate()
+        consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
         finishingCardDismissed = false
         recordingStartedAt = startedAt
@@ -611,6 +655,7 @@ final class AppModel {
             return
         }
         isFinishing = true
+        consentReminderVisible = false
         microphone.stop()
         systemAudio.stop()
     }
@@ -712,8 +757,8 @@ final class AppModel {
 
     /// Canlı transkript ve çevirilerden toplantı kaydı.
     private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
-        MeetingRecord(
-            id: directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
+        let base: MeetingRecord = MeetingRecord(
+            id: directory.lastPathComponent, title: linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
@@ -721,6 +766,9 @@ final class AppModel {
             engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
+        // Not, kayıt başladığında seçili şablonla yazılır.
+        .with(template: recordingTemplate)
+        return linkedMeeting.map { base.with(attendees: $0.attendees) } ?? base
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
@@ -791,6 +839,12 @@ final class AppModel {
         }
     }
 
+    /// Bu kayıt yüz yüze başladı (mod kayıt sırasında değişmez).
+    @ObservationIgnored private var recordingInPerson: Bool = false
+
+    /// Bu kaydın not şablonu: kayıt başlarken Ayarlar'daki varsayılan.
+    @ObservationIgnored private var recordingTemplate: NoteTemplate = .general
+
     /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
     /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
     private var recognitionKeyterms: [String] {
@@ -847,6 +901,50 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
+        rewriteNote(record: record)
+    }
+
+    /// Notu başka bir şablonla yeniden yazar (şablon toplantıda saklanır).
+    func regenerateNote(meetingID: String, template: NoteTemplate) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        rewriteNote(record: record.with(template: template))
+    }
+
+    /// Notu paylaşım diline çevirir ve saklar; hata varsa kullanıcı metni döner.
+    func generateSharedNote(meetingID: String, language: ShareLanguage) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
+            return nil
+        }
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        do {
+            let provider: LLMProvider = try await resolveLLMProvider()
+            let shared: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: note, language: language, userName: userName)) { (text: String) throws -> MeetingNote in
+                try parseSharedNote(text: text, original: note)
+            }
+            // Çeviri sürerken not yeniden yazıldıysa eski notun çevirisi saklanmaz.
+            guard let current = meetings.first(where: { $0.id == meetingID }), current.note == note, !isLocked(meetingID: meetingID) else {
+                return nil
+            }
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: current.with(sharedNotes: (current.sharedNotes ?? [:]).merging([language.rawValue: shared]) { $1 }), directory: directory)
+            }
+            return nil
+        } catch is CancellationError {
+            // Görünüm kapandı ya da dil değişti: hata değil.
+            return nil
+        } catch let error as URLError where error.code == .cancelled {
+            return nil
+        } catch {
+            Self.logger.error("Paylaşım notu yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return userFacingMessage(error: error)
+        }
+    }
+
+    /// Notu verilen kayıtla (adlar, şablon) yeniden yazıp kaydeder.
+    private func rewriteNote(record: MeetingRecord) {
+        let meetingID: String = record.id
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             processingMeetingIDs.insert(meetingID)
@@ -881,6 +979,173 @@ final class AppModel {
         if !trimmed.isEmpty, UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition), let voice = record.voiceprints?[person] {
             storeVoices(voices: registering(voices: registeredVoices, name: trimmed, voiceprint: voice, now: Date()))
         }
+    }
+
+    /// Yüz yüze modunu değiştirir (kayıt yokken).
+    func toggleInPerson() {
+        guard !isRecording else {
+            return
+        }
+        isInPerson.toggle()
+        UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
+    }
+
+    // MARK: Takvim
+
+    /// Takvim açıksa toplantıları 5 dk'da bir ve takvim değişince yeniler, hatırlatmaları kurar; görüşme önerisi açıksa
+    /// mikrofonu izler. Ayar değişince yeniden çağrılır.
+    func startCalendarServices() {
+        calendarTask?.cancel()
+        calendarChangesTask?.cancel()
+        micMonitor.stop()
+        guard UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled) else {
+            // Hata burada silinmez: izin reddedilince ayar kapanır ve neden görünür kalmalı.
+            upcomingMeetings = []
+            // Kapatılınca kurulu hatırlatmalar kaldırılır.
+            Task {
+                do {
+                    try await notifier.scheduleReminders(meetings: [])
+                } catch {
+                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .public)")
+                }
+            }
+            return
+        }
+        let changes: NotificationCenter.Notifications = eventKit.changes
+        calendarTask = Task { [weak self] in
+            await self?.refreshCalendar()
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(300))
+                } catch {
+                    return
+                }
+                await self?.refreshCalendar()
+            }
+        }
+        calendarChangesTask = Task { [weak self] in
+            for await _ in changes {
+                await self?.refreshCalendar()
+            }
+        }
+        if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) {
+            micMonitor.start { [weak self] in self?.microphoneStartedElsewhere() }
+        }
+    }
+
+    /// Takvimi kapatır (kullanıcı); önceki hata da kalkar.
+    func disableCalendar() {
+        UserDefaults.standard.set(false, forKey: SettingsKey.calendarEnabled)
+        calendarError = nil
+        startCalendarServices()
+    }
+
+    /// Takvimi açar: takvim ve bildirim izni ister, servisleri başlatır. İzin yoksa ayar kapalı kalır, hata gösterilir.
+    func enableCalendar() async {
+        do {
+            try await eventKit.requestCalendarAccess()
+            try await notifier.requestAuthorization()
+            UserDefaults.standard.set(true, forKey: SettingsKey.calendarEnabled)
+            calendarError = nil
+        } catch {
+            UserDefaults.standard.set(false, forKey: SettingsKey.calendarEnabled)
+            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+        }
+        startCalendarServices()
+    }
+
+    /// Önümüzdeki 24 saatin toplantılarını okur ve 3 saat içindekiler için hatırlatma kurar.
+    private func refreshCalendar() async {
+        do {
+            upcomingMeetings = try eventKit.meetings(from: Date(), hours: 24)
+            let remind: [CalendarMeeting] = UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders)
+                // Son bir dakikaya girmiş toplantı yeniden kurulmaz (hatırlatması zaten gösterildi; çift bildirim olmasın).
+                ? meetingsToRemind(meetings: upcomingMeetings, now: Date().addingTimeInterval(60), horizonSec: 3 * 3600)
+                : []
+            try await notifier.scheduleReminders(meetings: remind)
+            calendarError = nil
+        } catch {
+            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .public)")
+            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+        }
+    }
+
+    /// Başka bir uygulama mikrofonu açtı: kayıt yoksa (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
+    private func microphoneStartedElsewhere() {
+        guard !isRecording, !isStarting, Date().timeIntervalSince(lastMicSuggestion) > 600 else {
+            return
+        }
+        lastMicSuggestion = Date()
+        Task {
+            do {
+                try await notifier.suggestRecording()
+            } catch {
+                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    // MARK: Toplantılarıma sor
+
+    /// Arşive sorulan sorular ve cevapları (bu oturumda; yeniden açılınca boş).
+    var archiveExchanges: [ArchiveExchange] = []
+
+    /// Tüm toplantılara soru sorar; cevap gelince listede güncellenir.
+    func askArchive(question: String) {
+        let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        let exchange: ArchiveExchange = ArchiveExchange(id: UUID(), question: trimmed, state: .loading)
+        archiveExchanges.append(exchange)
+        let records: [MeetingRecord] = meetings
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        Task { [weak self] in
+            let state: ArchiveExchange.State
+            do {
+                let provider: LLMProvider = try await resolveLLMProvider()
+                state = .answered(try await AINotepadCore.askArchive(question: trimmed, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date()))
+            } catch {
+                Self.logger.error("Arşiv sorusu cevaplanamadı, hata: \(String(describing: error), privacy: .private)")
+                state = .failed(userFacingMessage(error: error))
+            }
+            guard let self, let index = self.archiveExchanges.firstIndex(where: { $0.id == exchange.id }) else {
+                return
+            }
+            self.archiveExchanges[index] = ArchiveExchange(id: exchange.id, question: trimmed, state: state)
+        }
+    }
+
+    // MARK: Görevler
+
+    /// Görevin tamamlandı işaretini değiştirir (kilitli toplantıda değil: işleme bitince kayıt bütünüyle yazılır).
+    func toggleTask(meetingID: String, task: NoteTask) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: togglingTask(record: record, task: task), directory: directory)
+        }
+    }
+
+    /// Görevi Apple Anımsatıcılar'a ekler; hata varsa kullanıcı metni döner.
+    func addToReminders(meetingID: String, task: NoteTask) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return nil
+        }
+        do {
+            try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, calendar: Calendar.current))
+        } catch {
+            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return eventKitMessage(error: error)
+        }
+        // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir.
+        if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: markingReminded(record: current, task: task), directory: directory)
+            }
+        }
+        return nil
     }
 
     // MARK: Sesinden tanıma
@@ -935,7 +1200,7 @@ final class AppModel {
         }
         let segments: [StoredSegment] = meetingSegments(record: record)
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
-        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName) else {
+        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName, attendees: record.attendees ?? []) else {
             return
         }
         let persons: Set<Int> = Set(segments.compactMap(\.person))
@@ -1072,6 +1337,7 @@ final class AppModel {
     func performStartupMaintenance() {
         reloadMeetings()
         loadVoices()
+        startCalendarServices()
         for record in staleStatusesToInterrupt(records: meetings) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                 saveRecord(record: record, directory: directory)
@@ -1181,4 +1447,17 @@ private func finishedStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     continuation.finish()
     return stream
+}
+
+/// Arşive sorulan bir soru ve durumu.
+struct ArchiveExchange: Identifiable, Equatable {
+    enum State: Equatable {
+        case loading
+        case answered(ArchiveAnswer)
+        case failed(String)
+    }
+
+    let id: UUID
+    let question: String
+    let state: State
 }

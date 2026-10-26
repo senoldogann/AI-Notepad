@@ -34,7 +34,7 @@ import Testing
         let merged: SpeakerReview = review.afterMerge(from: 3, into: 1)
         #expect(merged.names == [SpeakerNameSuggestion(person: 1, name: "Aino", reason: "a")])
         #expect(merged.merges == [SpeakerMergeSuggestion(from: 4, into: 1, reason: "c")])
-        #expect(speakerReviewRequest(segments: [stored("me-0", .me, nil, 0, "Moi.")], speakerNames: [:], userName: "Doğan") == nil)
+        #expect(speakerReviewRequest(segments: [stored("me-0", .me, nil, 0, "Moi.")], speakerNames: [:], userName: "Doğan", attendees: []) == nil)
     }
 }
 
@@ -59,7 +59,8 @@ import Testing
 
 extension CloudTests {
 @Suite struct SpeakerReviewCloudTests {
-    // Gerçek model: hitap edilip cevap veren kişiye ad, aynı kişinin ikiye bölünmüş cümlesine birleştirme önerir.
+    // Gerçek model: hitap edilip cevap veren kişiye ad (takvimdeki tam adıyla olabilir), aynı kişinin ikiye bölünmüş
+    // cümlesine birleştirme önerir.
     @Test func reviewSuggestsNameAndMerge() async throws {
         let segments: [StoredSegment] = [
             stored("final-0", .others, 1, 0, "Hyvää huomenta kaikille, minä olen Aino ja vedän tämän palaverin."),
@@ -68,11 +69,12 @@ extension CloudTests {
             stored("final-2", .others, 3, 12, "kuten sanoin, minä Mikko vastaan myös budjettiosiosta."),
             stored("final-3", .others, 1, 18, "Kiitos Mikko. Sitten seuraava aihe."),
         ]
-        let request: LLMRequest = try #require(speakerReviewRequest(segments: segments, speakerNames: [:], userName: "Doğan"))
+        let request: LLMRequest = try #require(speakerReviewRequest(segments: segments, speakerNames: [:], userName: "Doğan", attendees: ["Aino Virtanen", "Mikko Korhonen"]))
         let review: SpeakerReview = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> SpeakerReview in
             try parseSpeakerReview(text: text, persons: [1, 2, 3], speakerNames: [:])
         }
-        #expect(review.names.contains { $0.person == 1 && $0.name == "Aino" }, "adlar: \(review.names)")
+        // Takvimdeki katılımcı verildiği için tam ad ("Aino Virtanen") da doğrudur.
+        #expect(review.names.contains { $0.person == 1 && $0.name.hasPrefix("Aino") }, "adlar: \(review.names)")
         #expect(review.merges.contains { Set([$0.from, $0.into]) == [2, 3] }, "birleştirmeler: \(review.merges)")
     }
 }

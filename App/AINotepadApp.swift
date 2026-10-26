@@ -5,8 +5,26 @@ import SwiftUI
 
 private let appLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "App")
 
-/// Uygulamanın giriş noktası: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
+/// Giriş noktası: `--mcp` ile pencere açmadan yerel MCP sunucusu (stdio; Claude Desktop, ChatGPT gibi istemciler
+/// toplantı arşivini sorgular), yoksa uygulama.
 @main
+enum AppEntry {
+    static func main() {
+        guard CommandLine.arguments.contains("--mcp") else {
+            AINotepadApp.main()
+            return
+        }
+        do {
+            let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectory: try AppPaths.sessionsDirectory(), version: version)
+        } catch {
+            FileHandle.standardError.write(Data("AI-Notepad MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
+            exit(1)
+        }
+    }
+}
+
+/// Uygulama: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
 struct AINotepadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate: AppDelegate
     @State private var model: AppModel
@@ -42,6 +60,12 @@ struct AINotepadApp: App {
         _shortcuts = State(initialValue: shortcuts)
         // Kayıt ya da işleme sürerken çıkış (⌘Q, Dock, menü) sorulur; toplantı yarıda kalmasın.
         QuitGuard.shared.isBusy = { model.phase != .idle || !model.processingMeetingIDs.isEmpty }
+        AppDelegate.onStartFromNotification = {
+            guard !model.isRecording else {
+                return
+            }
+            Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
+        }
         QuitGuard.shared.onBlocked = {
             router.quitWarning = true
             openMainWindow(router: router, section: .home)
@@ -61,6 +85,14 @@ struct AINotepadApp: App {
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
+                }
+                // "--riza": kayıt başlatmadan rıza hatırlatmasını gösterir (görsel kontrol için).
+                if CommandLine.arguments.contains("--riza") {
+                    model.consentReminderVisible = true
+                }
+                // "--soru <metin>": Sor bölümünde soruyu sorar (görsel kontrol için).
+                if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
+                    model.askArchive(question: CommandLine.arguments[index + 1])
                 }
                 let section: MainSection? = launchSection(arguments: CommandLine.arguments)
                 let page: PanelPage? = launchPage(arguments: CommandLine.arguments)

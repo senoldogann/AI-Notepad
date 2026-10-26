@@ -1,0 +1,234 @@
+import Foundation
+
+/// JSON değeri (MCP isteklerindeki serbest biçimli alanlar için tipli karşılık).
+public indirect enum JSONValue: Sendable, Equatable, Codable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case array([JSONValue])
+    case object([String: JSONValue])
+    case null
+
+    public init(from decoder: any Decoder) throws {
+        let container: any SingleValueDecodingContainer = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: JSONValue].self))
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container: any SingleValueEncodingContainer = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+}
+
+/// JSON-RPC isteği (MCP, stdio: satır başına bir ileti). Bildirimlerde `id` yoktur.
+struct MCPRequest: Decodable {
+    let id: JSONValue?
+    let method: String?
+    let params: [String: JSONValue]?
+}
+
+/// Desteklenen MCP protokol sürümleri (en yenisi önce).
+let mcpProtocolVersions: [String] = ["2025-06-18", "2025-03-26", "2024-11-05"]
+
+/// MCP aracı: ad, açıklama ve giriş şeması.
+struct MCPTool {
+    let name: String
+    let description: String
+    let schema: JSONValue
+}
+
+/// Sunucunun araçları: toplantıları listele, ara, getir; açık görevlerim.
+let mcpTools: [MCPTool] = [
+    MCPTool(
+        name: "list_meetings",
+        description: "AI-Notepad'deki toplantıları yeniden eskiye listeler: kimlik, tarih, başlık, süre, not durumu. Lists the user's recorded meetings (newest first).",
+        schema: .object(["type": .string("object"), "properties": .object(["limit": .object(["type": .string("integer"), "description": .string("En fazla kaç toplantı (varsayılan 20)")])])])
+    ),
+    MCPTool(
+        name: "search_meetings",
+        description: "Notlarda ve Fince/İngilizce transkriptlerde sözcük araması; eşleşen parçaları toplantı ve zamanıyla döndürür. Search notes and transcripts; use Finnish/English/Turkish keywords.",
+        schema: .object([
+            "type": .string("object"),
+            "properties": .object(["query": .object(["type": .string("string"), "description": .string("Aranacak sözcükler (Fince, İngilizce ya da Türkçe)")])]),
+            "required": .array([.string("query")]),
+        ])
+    ),
+    MCPTool(
+        name: "get_meeting",
+        description: "Bir toplantının Türkçe notunu (özet, kararlar, görevler, sözlük) ve istenirse transkriptini Markdown olarak döndürür. Returns a meeting's note and optionally its transcript.",
+        schema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "id": .object(["type": .string("string"), "description": .string("list_meetings'teki kimlik")]),
+                "include_transcript": .object(["type": .string("boolean"), "description": .string("Transkript de eklensin mi")]),
+            ]),
+            "required": .array([.string("id")]),
+        ])
+    ),
+    MCPTool(
+        name: "list_my_tasks",
+        description: "Toplantı notlarında kullanıcıya düşen ve henüz tamamlanmamış görevler. The user's open tasks from meeting notes.",
+        schema: .object(["type": .string("object"), "properties": .object([:])])
+    ),
+]
+
+/// Bir MCP iletisini yanıtlar; bildirimlere (id'siz) yanıt verilmez (nil). Toplantılar her çağrıda diskten okunur
+/// (uygulama açıkken eklenen toplantılar da görünür). Saf değildir: `loadRecords` diski okur.
+public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], version: String) -> String? {
+    let request: MCPRequest
+    do {
+        request = try JSONDecoder().decode(MCPRequest.self, from: Data(line.utf8))
+    } catch {
+        return mcpError(id: .null, code: -32700, message: "Parse error: \(error)")
+    }
+    guard let id = request.id else {
+        // Bildirim (ör. notifications/initialized): yanıt yok.
+        return nil
+    }
+    guard let method = request.method else {
+        return mcpError(id: id, code: -32600, message: "Invalid Request: method is required")
+    }
+    switch method {
+    case "initialize":
+        // İstemcinin sürümü destekleniyorsa o, değilse desteklenen en yenisi.
+        let requested: String = if case .string(let value) = request.params?["protocolVersion"], mcpProtocolVersions.contains(value) { value } else { mcpProtocolVersions[0] }
+        return mcpResult(id: id, result: .object([
+            "protocolVersion": .string(requested),
+            "capabilities": .object(["tools": .object([:])]),
+            "serverInfo": .object(["name": .string("ai-notepad"), "version": .string(version)]),
+            "instructions": .string("AI-Notepad toplantı arşivi (Fince/İngilizce toplantılar, Türkçe notlar). Önce list_meetings ya da search_meetings, sonra get_meeting kullan."),
+        ]))
+    case "ping":
+        return mcpResult(id: id, result: .object([:]))
+    case "tools/list":
+        return mcpResult(id: id, result: .object(["tools": .array(mcpTools.map { (tool: MCPTool) -> JSONValue in
+            .object(["name": .string(tool.name), "description": .string(tool.description), "inputSchema": tool.schema])
+        })]))
+    case "tools/call":
+        guard case .string(let name) = request.params?["name"] else {
+            return mcpError(id: id, code: -32602, message: "Invalid params: name is required")
+        }
+        let arguments: [String: JSONValue] = if case .object(let value) = request.params?["arguments"] { value } else { [:] }
+        let output: (text: String, isError: Bool) = callMCPTool(name: name, arguments: arguments, records: loadRecords())
+        return mcpResult(id: id, result: .object([
+            "content": .array([.object(["type": .string("text"), "text": .string(output.text)])]),
+            "isError": .bool(output.isError),
+        ]))
+    default:
+        return mcpError(id: id, code: -32601, message: "Method not found: \(method)")
+    }
+}
+
+/// Aracı çalıştırır; bilinmeyen araç ve eksik alan hata metni döner (MCP'de `isError`). Saf fonksiyondur.
+func callMCPTool(name: String, arguments: [String: JSONValue], records: [MeetingRecord]) -> (text: String, isError: Bool) {
+    let sorted: [MeetingRecord] = records.sorted { $0.startedAt > $1.startedAt }
+    let formatter: DateFormatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH:mm"
+    switch name {
+    case "list_meetings":
+        // Aşırı büyük ya da kesirli değer çökertmesin: 1...1000 aralığına sıkıştırılır.
+        let limit: Int = if case .number(let value) = arguments["limit"], value.isFinite { Int(min(max(value, 1), 1000)) } else { 20 }
+        let lines: [String] = sorted.prefix(limit).map { (record: MeetingRecord) -> String in
+            let minutes: String = meetingDurationMinutes(record: record).map { "\($0) min" } ?? "—"
+            return "- id: \(record.id) | \(formatter.string(from: record.startedAt)) | \(record.note?.title ?? record.title) | \(minutes) | \(record.note == nil ? "no note" : "note")"
+        }
+        return (lines.isEmpty ? "No meetings." : lines.joined(separator: "\n"), false)
+    case "search_meetings":
+        guard case .string(let query) = arguments["query"], !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return ("query is required", true)
+        }
+        let passages: [ArchivePassage] = relevantPassages(passages: archivePassages(records: sorted), terms: [query], maxChars: 12_000)
+        guard !searchTokens(text: query).isEmpty, !passages.isEmpty, passages.contains(where: { passage in
+            searchTokens(text: query).contains { token in searchTokens(text: passage.text).contains { $0.hasPrefix(String(token.prefix(5))) } }
+        }) else {
+            return ("No matches for: \(query)", false)
+        }
+        let blocks: [String] = passages.map { (passage: ArchivePassage) -> String in
+            let source: String = passage.kind == .note ? "note" : "transcript at \(timestamp(seconds: passage.startSec))"
+            return "## \(passage.meetingTitle) (id: \(passage.meetingID), \(formatter.string(from: passage.meetingDate)), \(source))\n\(passage.text)"
+        }
+        return (blocks.joined(separator: "\n\n"), false)
+    case "get_meeting":
+        guard case .string(let id) = arguments["id"] else {
+            return ("id is required", true)
+        }
+        guard let record = sorted.first(where: { $0.id == id }) else {
+            return ("No meeting with id \(id). Use list_meetings.", true)
+        }
+        let withTranscript: Bool = if case .bool(let value) = arguments["include_transcript"] { value } else { false }
+        if withTranscript {
+            return (meetingMarkdown(record: record), false)
+        }
+        guard let note = record.note else {
+            return ("Meeting \(id) has no note yet; ask with include_transcript=true for the transcript.", false)
+        }
+        return (shareText(record: record, note: note, language: nil), false)
+    case "list_my_tasks":
+        let lines: [String] = sorted.flatMap { (record: MeetingRecord) -> [String] in
+            (record.note?.tasks ?? [])
+                .filter { $0.isMine && !isTaskDone(record: record, task: $0) }
+                .map { "- \($0.description)\($0.dueDate.map { " (due: \($0))" } ?? "") — \(record.note?.title ?? record.title), \(formatter.string(from: record.startedAt))" }
+        }
+        return (lines.isEmpty ? "No open tasks." : lines.joined(separator: "\n"), false)
+    default:
+        return ("Unknown tool: \(name)", true)
+    }
+}
+
+private func mcpResult(id: JSONValue, result: JSONValue) -> String {
+    encodedJSON(value: .object(["jsonrpc": .string("2.0"), "id": id, "result": result]))
+}
+
+private func mcpError(id: JSONValue, code: Int, message: String) -> String {
+    encodedJSON(value: .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(Double(code)), "message": .string(message)])]))
+}
+
+/// Tek satır JSON (stdio aktarımında satır sonu ileti ayırıcıdır).
+private func encodedJSON(value: JSONValue) -> String {
+    let encoder: JSONEncoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    // Değerler yukarıda kurulur; kodlama hata vermez.
+    return String(decoding: (try? encoder.encode(value)) ?? Data("{}".utf8), as: UTF8.self)
+}
+
+/// stdio üzerinden MCP sunucusu: girişten satır satır okur, her yanıtı tek satır olarak yazar; giriş kapanınca biter.
+public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirectory: URL, version: String) {
+    var buffer: Data = Data()
+    while true {
+        let chunk: Data = input.availableData
+        guard !chunk.isEmpty else {
+            return
+        }
+        buffer.append(chunk)
+        while let newline = buffer.firstIndex(of: 0x0A) {
+            let line: String = String(decoding: buffer[buffer.startIndex..<newline], as: UTF8.self)
+            buffer.removeSubrange(buffer.startIndex...newline)
+            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
+                continue
+            }
+            if let response = handleMCPMessage(line: line, loadRecords: { loadMeetings(sessionsDirectory: sessionsDirectory).meetings }, version: version) {
+                output.write(Data((response + "\n").utf8))
+            }
+        }
+    }
+}

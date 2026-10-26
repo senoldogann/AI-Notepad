@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Vurgu renginden türeyen, yavaşça akan örgü gradyanlı ve ince kumlu dokulu banner (ana sayfanın başı). İçerik
-/// ortada; "Hareketi azalt" açıksa gradyan durgun.
+/// Ana sayfanın banner'ı: yavaşça akan film gradyanı (ElevenLabs kapakları gibi), içerik ortada, beyaz yazı.
 public struct GradientBanner<Content: View>: View {
-    let accent: Color
+    let palette: FilmPalette
+    let seed: String
     let content: Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
-    public init(accent: Color, @ViewBuilder content: () -> Content) {
-        self.accent = accent
+    public init(palette: FilmPalette, seed: String, @ViewBuilder content: () -> Content) {
+        self.palette = palette
+        self.seed = seed
         self.content = content()
     }
 
@@ -18,63 +18,10 @@ public struct GradientBanner<Content: View>: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 34)
             .padding(.horizontal, DesignTokens.Spacing.xl)
-            .background {
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { (context: TimelineViewDefaultContext) in
-                    MeshGradient(
-                        width: 3, height: 3,
-                        points: meshPoints(time: reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate),
-                        colors: meshColors(accent: accent)
-                    )
-                }
-                .overlay { GrainOverlay() }
-            }
+            .background { LivingFilmGradient(seed: seed, palette: palette) }
             .clipShape(shape)
             .overlay(shape.strokeBorder(Color.white.opacity(0.10)))
             .environment(\.colorScheme, .dark)
-    }
-}
-
-/// Örgü noktaları: köşeler sabit, iç noktalar yavaşça dolaşır (akış hissi). Saf fonksiyondur.
-func meshPoints(time: Double) -> [SIMD2<Float>] {
-    let drift: (Double, Double) -> Float = { (speed: Double, phase: Double) -> Float in Float(sin(time * speed + phase) * 0.12) }
-    return [
-        SIMD2(0, 0), SIMD2(0.5 + drift(0.31, 0), 0), SIMD2(1, 0),
-        SIMD2(0, 0.5 + drift(0.27, 1)), SIMD2(0.5 + drift(0.23, 2), 0.5 + drift(0.19, 3)), SIMD2(1, 0.5 + drift(0.29, 4)),
-        SIMD2(0, 1), SIMD2(0.5 + drift(0.21, 5), 1), SIMD2(1, 1),
-    ]
-}
-
-/// Vurgu renginden koyu-parlak bir palet: kenarlar gece karanlığı, ortada vurgu ve açık tonu. Saf fonksiyondur.
-func meshColors(accent: Color) -> [Color] {
-    let night: Color = Color(red: 0.04, green: 0.05, blue: 0.10)
-    let deep: Color = accent.mix(with: night, by: 0.65)
-    let glow: Color = accent.mix(with: .white, by: 0.35)
-    return [
-        night, deep, accent,
-        deep, glow, deep,
-        accent, deep, night,
-    ]
-}
-
-/// İnce kumlu doku: sabit tohumlu sözde rastgele noktalar (her çizimde aynı desen; titreşmez).
-struct GrainOverlay: View {
-    var body: some View {
-        Canvas { (context: inout GraphicsContext, size: CGSize) in
-            var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-            let count: Int = Int(size.width * size.height / 90)
-            for _ in 0..<count {
-                seed = seed &* 6364136223846793005 &+ 1442695040888963407
-                let x: CGFloat = CGFloat(seed >> 40) / CGFloat(1 << 24) * size.width
-                seed = seed &* 6364136223846793005 &+ 1442695040888963407
-                let y: CGFloat = CGFloat(seed >> 40) / CGFloat(1 << 24) * size.height
-                let light: Bool = seed & 1 == 0
-                context.fill(
-                    Path(CGRect(x: x, y: y, width: 1, height: 1)),
-                    with: .color(light ? Color.white.opacity(0.10) : Color.black.opacity(0.18))
-                )
-            }
-        }
-        .allowsHitTesting(false)
     }
 }
 

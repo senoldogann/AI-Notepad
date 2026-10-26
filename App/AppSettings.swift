@@ -2,6 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import AppKit
 import Foundation
+import SwiftUI
 import os
 
 private let settingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Settings")
@@ -48,6 +49,17 @@ enum SettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// "Sen" (mikrofon) kapalı mı.
     static let micMuted: String = "micMuted"
+    /// Kayıt başlarken katılımcılara haber verme hatırlatması.
+    static let consentReminder: String = "consentReminder"
+    /// Yeni toplantıların not şablonu (`NoteTemplateKind`) ve kendi şablonunun yönergesi.
+    static let noteTemplate: String = "noteTemplate"
+    static let customTemplate: String = "customTemplate"
+    /// Takvim: yaklaşan toplantılar, 1 dk önce hatırlatma, görüşme başlayınca öneri.
+    static let calendarEnabled: String = "calendar.enabled"
+    static let meetingReminders: String = "calendar.reminders"
+    static let micSuggestions: String = "calendar.micSuggestions"
+    /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
+    static let inPersonMode: String = "inPersonMode"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
@@ -184,6 +196,13 @@ func registerDefaultSettings() {
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
         SettingsKey.voiceRecognition: true,
+        SettingsKey.consentReminder: true,
+        SettingsKey.calendarEnabled: false,
+        SettingsKey.inPersonMode: false,
+        SettingsKey.meetingReminders: true,
+        SettingsKey.micSuggestions: true,
+        SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
+        SettingsKey.customTemplate: "",
         SettingsKey.theme: AppTheme.light.rawValue,
         SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
         SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,
@@ -274,4 +293,24 @@ func requiredEffort(key: String) throws -> LLMEffort {
 /// Kayıtlı effort; boş değer "gönderme" demektir (nil).
 func storedEffort(key: String) -> LLMEffort? {
     LLMEffort(rawValue: UserDefaults.standard.string(forKey: key) ?? "")
+}
+
+/// Ayarlardaki varsayılan not şablonu (yeni toplantılar bununla yazılır).
+func defaultNoteTemplate() -> NoteTemplate {
+    NoteTemplate(
+        kind: NoteTemplateKind(rawValue: UserDefaults.standard.string(forKey: SettingsKey.noteTemplate) ?? "") ?? .general,
+        customInstructions: UserDefaults.standard.string(forKey: SettingsKey.customTemplate) ?? ""
+    )
+}
+
+/// Şablonun arayüz adı.
+func templateTitle(kind: NoteTemplateKind) -> LocalizedStringKey {
+    switch kind {
+    case .general: "Genel"
+    case .oneOnOne: "Birebir görüşme"
+    case .client: "Müşteri görüşmesi"
+    case .lecture: "Ders / eğitim"
+    case .interview: "İş mülakatı"
+    case .custom: "Kendi şablonum"
+    }
 }

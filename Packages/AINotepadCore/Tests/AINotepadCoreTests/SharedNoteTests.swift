@@ -1,0 +1,86 @@
+import Foundation
+import Testing
+@testable import AINotepadCore
+
+private let sampleNote: MeetingNote = MeetingNote(
+    title: "Bütçe toplantısı",
+    summary: "Aino gelecek yılın bütçesini sundu; pazarlama payı %10 artacak. Mikko raporun Cuma'ya hazır olacağını söyledi.",
+    decisions: ["Pazarlama bütçesi %10 artırılacak."],
+    tasks: [
+        NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: "Perşembe", isMine: true),
+        NoteTask(owner: "Mikko", description: "Raporu göndermek", dueDate: "Cuma", isMine: false),
+    ],
+    glossary: [GlossaryEntry(term: "talousarvio", meaning: "bütçe")]
+)
+
+private func sampleRecord() -> MeetingRecord {
+    MeetingRecord(
+        id: "1", title: "Toplantı", startedAt: Date(timeIntervalSince1970: 1_800_000_000), endedAt: nil, language: .finnish,
+        status: .done, failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:],
+        note: sampleNote, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+    )
+}
+
+@Suite struct NoteTemplateTests {
+    // Şablon yönergesi not istemine girer; genel şablonda ek yönerge yok; yeni not eski paylaşım sürümlerini siler.
+    @Test func templateGoesIntoPromptAndNoteResetsShares() throws {
+        let segments: [StoredSegment] = [stored("final-0", .others, 1, 0, "Budjetti on 10 000 euroa.")]
+        let client: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: "")))
+        #expect(client.system.contains("müşteri görüşmesi"))
+        let custom: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .custom, customInstructions: "Riskleri ayrı say.")))
+        #expect(custom.system.contains("Riskleri ayrı say."))
+        let general: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: .general))
+        #expect(!general.system.contains("Toplantı türü"))
+        let shared: MeetingRecord = sampleRecord().with(sharedNotes: ["fi": sampleNote])
+        #expect(shared.with(note: sampleNote).sharedNotes == nil)
+    }
+
+    // Paylaşım metni notun dilindeki başlıklarla; Türkçede sözlük var, paylaşım dillerinde yok.
+    @Test func shareTextUsesLanguageHeadings() {
+        let finnish: String = shareText(record: sampleRecord(), note: sampleNote, language: .finnish)
+        #expect(finnish.contains("## Yhteenveto") && finnish.contains("## Tehtävät") && !finnish.contains("talousarvio"))
+        #expect(shareText(record: sampleRecord(), note: sampleNote, language: nil).contains("talousarvio"))
+        // Çeviride görev sayısı değişirse kullanılmaz.
+        #expect(throws: LLMError.self) {
+            try parseSharedNote(text: #"{"baslik":"T","ozet":"S","kararlar":["a"],"gorevler":[],"sozluk":[]}"#, original: sampleNote)
+        }
+    }
+}
+
+extension CloudTests {
+@Suite struct SharedNoteCloudTests {
+    // Gerçek model: not Fince ve İngilizceye çevrilir; görev sayısı ve sahipliği korunur, kullanıcı adıyla yazılır.
+    @Test(arguments: ShareLanguage.allCases)
+    func noteTranslatesForSharing(language: ShareLanguage) async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let note: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: sampleNote, language: language, userName: "Senol")) { (text: String) throws -> MeetingNote in
+            try parseSharedNote(text: text, original: sampleNote)
+        }
+        #expect(note.tasks.map(\.isMine) == [true, false])
+        #expect(note.tasks.first?.owner == "Senol")
+        #expect(note.glossary.isEmpty)
+        let text: String = (note.summary + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
+        switch language {
+        case .finnish:
+            #expect(text.contains("aino") && ["markkinointi", "budjet", "rapor"].contains { text.contains($0) }, "\(text)")
+        case .english:
+            #expect(text.contains("aino") && ["marketing", "budget", "report"].contains { text.contains($0) }, "\(text)")
+        }
+        #expect(!text.contains("bütçe") && !text.contains("rapor göndermek"), "çevrilmemiş: \(text)")
+    }
+
+    // Gerçek model: müşteri şablonu özette ihtiyaç/bütçe/sonraki adımları öne çıkarır.
+    @Test func clientTemplateHighlightsBudgetAndNextSteps() async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let segments: [StoredSegment] = [
+            stored("final-0", .others, 1, 0, "Tarvitsemme uuden asiakasportaalin ensi kevääksi, budjettimme on noin 40 000 euroa."),
+            stored("me-0", .me, nil, 6, "Selvä. Lähetän teille tarjouksen ensi viikon tiistaina."),
+            stored("final-1", .others, 1, 11, "Hyvä. Kilpailijanne Acme tarjosi jo, mutta heidän aikataulunsa oli liian hidas."),
+        ]
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino"], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), llm: provider))
+        let summary: String = note.summary.lowercased()
+        #expect(summary.contains("40") && summary.contains("acme"), "\(note.summary)")
+        #expect(note.tasks.contains { $0.isMine }, "\(note.tasks)")
+    }
+}
+}

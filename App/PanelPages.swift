@@ -46,6 +46,11 @@ struct PanelHost: View {
     private var content: some View {
         switch router.page {
         case .live:
+            VStack(spacing: 0) {
+                if model.consentReminderVisible {
+                    ConsentBanner { withAnimation(.smooth(duration: 0.25)) { model.consentReminderVisible = false } }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             TranscriptPanel(
                 state: model.viewState,
                 actions: PanelActions(
@@ -65,6 +70,8 @@ struct PanelHost: View {
                     onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) }
                 )
             )
+            }
+            .animation(.smooth(duration: 0.25), value: model.consentReminderVisible)
         case .meeting(let id):
             PanelPageView(model: model, router: router, title: "Toplantı", back: .live, onHide: onHide) {
                 if let record = model.meetings.first(where: { $0.id == id }) {
@@ -316,5 +323,43 @@ private struct ProcessingOverlay: View {
             .appFont(size: 34, weight: .medium)
             .foregroundStyle(appearance.accent.color)
             .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
+    }
+}
+
+/// Katılımcılara kayıttan haber verme metni (Fince ve İngilizce; toplantı sohbetine yapıştırılır).
+let consentNoticeText: String = "Hei! Tallennan tämän palaverin, jotta voin tehdä siitä muistiinpanot.\nHi! I'm recording this meeting so I can take notes."
+
+/// Kayıt başında panelin üstünde: katılımcılara haber verme hatırlatması ve kopyalanabilir bildirim. Kapatılınca o
+/// kayıt boyunca görünmez; Ayarlar'dan tamamen kapatılabilir.
+private struct ConsentBanner: View {
+    let onDismiss: @MainActor () -> Void
+    @State private var copied: Bool = false
+
+    var body: some View {
+        HStack(spacing: DesignTokens.Spacing.s) {
+            Image(systemName: "person.wave.2")
+                .foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
+            Text("Kayıt yapıyorsun: katılımcılara haber ver.")
+                .appFont(size: 12, weight: .medium)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: DesignTokens.Spacing.s)
+            Button(copied ? "Kopyalandı" : "Bildirimi kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(consentNoticeText, forType: .string)
+                copied = true
+            }
+            .controlSize(.small)
+            .hoverHint("Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır", alignment: .trailing, edge: .bottom)
+            Button("Kapat", systemImage: "xmark", action: onDismiss)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.hoverPlain)
+                .foregroundStyle(Theme.muted)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.m)
+        .padding(.vertical, 8)
+        .background(Theme.soft)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }
