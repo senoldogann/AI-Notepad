@@ -1037,6 +1037,37 @@ final class AppModel {
         }
     }
 
+    // MARK: Toplantılarıma sor
+
+    /// Arşive sorulan sorular ve cevapları (bu oturumda; yeniden açılınca boş).
+    var archiveExchanges: [ArchiveExchange] = []
+
+    /// Tüm toplantılara soru sorar; cevap gelince listede güncellenir.
+    func askArchive(question: String) {
+        let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        let exchange: ArchiveExchange = ArchiveExchange(id: UUID(), question: trimmed, state: .loading)
+        archiveExchanges.append(exchange)
+        let records: [MeetingRecord] = meetings
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        Task { [weak self] in
+            let state: ArchiveExchange.State
+            do {
+                let provider: LLMProvider = try await resolveLLMProvider()
+                state = .answered(try await AINotepadCore.askArchive(question: trimmed, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date()))
+            } catch {
+                Self.logger.error("Arşiv sorusu cevaplanamadı, hata: \(String(describing: error), privacy: .private)")
+                state = .failed(userFacingMessage(error: error))
+            }
+            guard let self, let index = self.archiveExchanges.firstIndex(where: { $0.id == exchange.id }) else {
+                return
+            }
+            self.archiveExchanges[index] = ArchiveExchange(id: exchange.id, question: trimmed, state: state)
+        }
+    }
+
     // MARK: Görevler
 
     /// Görevin tamamlandı işaretini değiştirir (kilitli toplantıda değil: işleme bitince kayıt bütünüyle yazılır).
@@ -1368,4 +1399,17 @@ private func finishedStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     continuation.finish()
     return stream
+}
+
+/// Arşive sorulan bir soru ve durumu.
+struct ArchiveExchange: Identifiable, Equatable {
+    enum State: Equatable {
+        case loading
+        case answered(ArchiveAnswer)
+        case failed(String)
+    }
+
+    let id: UUID
+    let question: String
+    let state: State
 }

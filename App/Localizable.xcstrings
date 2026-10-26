@@ -919,6 +919,16 @@
         }
       }
     },
+    "Bana hangi görevler verildi?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which tasks were given to me?"
+          }
+        }
+      }
+    },
     "Bağlantıyı dene": {
       "localizations": {
         "en": {
@@ -1282,6 +1292,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen from here"
+          }
+        }
+      }
+    },
+    "Bütçe hakkında neler konuşuldu?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What was said about the budget?"
           }
         }
       }
@@ -3942,12 +3962,32 @@
         }
       }
     },
+    "Son toplantılarda alınan kararlar neler?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What was decided in recent meetings?"
+          }
+        }
+      }
+    },
     "Son toplantıyı aç": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Open latest meeting"
+          }
+        }
+      }
+    },
+    "Sor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask"
           }
         }
       }
@@ -4357,6 +4397,16 @@
         }
       }
     },
+    "Toplantılar taranıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching meetings…"
+          }
+        }
+      }
+    },
     "Toplantılarda ara": {
       "localizations": {
         "en": {
@@ -4383,6 +4433,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Understand meetings, miss nothing"
+          }
+        }
+      }
+    },
+    "Toplantılarıma sor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask my meetings"
+          }
+        }
+      }
+    },
+    "Toplantılarına sor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask your meetings"
           }
         }
       }
@@ -4493,6 +4563,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Press keys…"
+          }
+        }
+      }
+    },
+    "Tüm notların ve Fince/İngilizce transkriptlerin arasında arar; Türkçe cevap verir ve hangi toplantıda geçtiğini gösterir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searches all your notes and Finnish/English transcripts, answers in Turkish and shows which meeting it came from."
           }
         }
       }
@@ -5151,6 +5231,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apply suggestion"
+          }
+        }
+      }
+    },
+    "Örn. Aino ile proje takvimi hakkında ne konuştuk?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E.g. What did we discuss with Aino about the project schedule?"
           }
         }
       }

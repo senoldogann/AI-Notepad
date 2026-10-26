@@ -17,6 +17,7 @@ extension Notification.Name {
 enum MainSection: Hashable {
     case home
     case meetings
+    case ask
     case tasks
     case settings
     case setup
@@ -57,6 +58,7 @@ func launchSection(arguments: [String]) -> MainSection? {
     case "ana": return .home
     case "toplantilar": return .meetings
     case "gorevler": return .tasks
+    case "sor": return .ask
     case "ayarlar": return .settings
     case "kurulum": return .setup
     default: return nil
@@ -191,6 +193,8 @@ struct MainWindowView: View {
             HomePage(model: model, router: router, shortcuts: shortcuts, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
         case .meetings:
             MeetingsSplit(model: model, router: router, player: player)
+        case .ask:
+            AskPage(model: model, router: router)
         case .tasks:
             TasksPage(model: model, router: router)
         case .settings:
@@ -219,6 +223,7 @@ private struct Sidebar: View {
             Color.clear.frame(height: 40)
             item(title: "Ana sayfa", symbol: "house", section: .home, badge: nil)
             item(title: "Toplantılar", symbol: "list.bullet.rectangle", section: .meetings, badge: nil)
+            item(title: "Sor", symbol: "sparkle.magnifyingglass", section: .ask, badge: nil)
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
             if !model.meetings.isEmpty {
@@ -339,6 +344,7 @@ private struct TopBar: View {
         switch router.section {
         case .home: "Ana sayfa"
         case .meetings: "Toplantılar"
+        case .ask: "Toplantılarıma sor"
         case .tasks: "Görevlerim"
         case .settings: "Ayarlar"
         case .setup: "Kurulum"
