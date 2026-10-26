@@ -68,6 +68,43 @@ private let elevenLabsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotep
 /// Sesi (16 kHz mono) ElevenLabs Scribe v2'ye konuşmacı ayırma açık gönderir.
 /// 3 deneme yapılır; 4xx yanıtlar (ör. geçersiz anahtar) yeniden denenmez.
 public func diarizeWithElevenLabs(apiKey: String, samples: [Float], languageMode: LanguageMode) async throws -> DiarizationResult {
+    try await postToElevenLabs(
+        apiKey: apiKey,
+        audio: wavData(samples: samples, sampleRate: 16000),
+        fileName: "audio.wav",
+        mimeType: "audio/wav",
+        languageMode: languageMode,
+        timeoutSec: 60
+    )
+}
+
+/// Kaydın tamamını (ör. `others.m4a`) tek istekle gönderir; uzun toplantı için zaman aşımı uzun tutulur.
+public func diarizeFile(apiKey: String, fileURL: URL, mimeType: String, languageMode: LanguageMode, timeoutSec: Double) async throws -> DiarizationResult {
+    let audio: Data
+    do {
+        audio = try Data(contentsOf: fileURL)
+    } catch {
+        throw AudioCaptureError.recorderFailed(path: fileURL.path, reason: "okunamadı: \(error)")
+    }
+    return try await postToElevenLabs(
+        apiKey: apiKey,
+        audio: audio,
+        fileName: fileURL.lastPathComponent,
+        mimeType: mimeType,
+        languageMode: languageMode,
+        timeoutSec: timeoutSec
+    )
+}
+
+/// ElevenLabs Scribe v2 isteği: 3 deneme, 4xx denenmez.
+private func postToElevenLabs(
+    apiKey: String,
+    audio: Data,
+    fileName: String,
+    mimeType: String,
+    languageMode: LanguageMode,
+    timeoutSec: Double
+) async throws -> DiarizationResult {
     let boundary: String = "AINotepad-\(UUID().uuidString)"
     var fields: [(name: String, value: String)] = [("model_id", "scribe_v2"), ("diarize", "true")]
     if let code = elevenLabsLanguageCode(languageMode: languageMode) {
@@ -76,10 +113,10 @@ public func diarizeWithElevenLabs(apiKey: String, samples: [Float], languageMode
     // Sabit, geçerli adres.
     var request: URLRequest = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!)
     request.httpMethod = "POST"
-    request.timeoutInterval = 60
+    request.timeoutInterval = timeoutSec
     request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-    request.httpBody = multipartBody(boundary: boundary, fields: fields, wav: wavData(samples: samples, sampleRate: 16000))
+    request.httpBody = multipartBody(boundary: boundary, fields: fields, file: audio, fileName: fileName, mimeType: mimeType)
 
     var result: DiarizationResult?
     var rejection: CloudSTTError?
@@ -101,7 +138,7 @@ public func diarizeWithElevenLabs(apiKey: String, samples: [Float], languageMode
             }
         },
         onFailure: { (attempt: Int, error: any Error) -> Void in
-            elevenLabsLogger.warning("ElevenLabs isteği başarısız, deneme \(attempt, privacy: .public), örnek: \(samples.count, privacy: .public): \(String(describing: error), privacy: .public)")
+            elevenLabsLogger.warning("ElevenLabs isteği başarısız, deneme \(attempt, privacy: .public), bayt: \(audio.count, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     )
     if let rejection {
@@ -114,13 +151,13 @@ public func diarizeWithElevenLabs(apiKey: String, samples: [Float], languageMode
 }
 
 /// `multipart/form-data` gövdesi: metin alanları + `file` alanında WAV.
-private func multipartBody(boundary: String, fields: [(name: String, value: String)], wav: Data) -> Data {
+private func multipartBody(boundary: String, fields: [(name: String, value: String)], file: Data, fileName: String, mimeType: String) -> Data {
     var body: Data = Data()
     for field in fields {
         body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n\(field.value)\r\n".utf8))
     }
-    body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n".utf8))
-    body.append(wav)
+    body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\nContent-Type: \(mimeType)\r\n\r\n".utf8))
+    body.append(file)
     body.append(Data("\r\n--\(boundary)--\r\n".utf8))
     return body
 }
