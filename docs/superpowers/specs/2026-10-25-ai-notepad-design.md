@@ -246,8 +246,10 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - **Panel başlığı:** durum, dil çipi (kayıtta dokununca dil değişir), kayıt denetimleri — kayıt yokken "Başlat";
   kayıtta Duraklat/Devam, Mikrofon aç/kapat, Bitir — ve Kopyala, Toplantılar, Ayarlar, Gizle.
 - **Duraklat:** iki akış sessizlikle değiştirilir (kayıt sürer, metin üretilmez, zaman çizgisi bozulmaz); durum
-  "Duraklatıldı". **Mikrofonu kapat** ("yalnızca dinliyorum"): "Sen" sessizliğe çevrilir; hoparlörle dinlerken
-  yankıyı kökten önler; tercih saklanır (Ayarlar › Genel › Mikrofon).
+  "Duraklatıldı". **Yalnızca karşı taraf** (Ayarlar › Genel › "Kendi sesimi de kaydet" kapalı ya da kayıt yokken paneldeki
+  mikrofon düğmesi): kayıt mikrofonu hiç açmaz — izin, mikrofon göstergesi ve Deepgram'a sessizlik maliyeti yok, hoparlör
+  yankısı oluşmaz; bu kayıtta mikrofon açılamaz (düğme kapalı). Mikrofonla başlayan kayıtta düğme "Sen"i sessizliğe
+  çevirir (susturma); tercih saklanır.
 - `MenuBarExtra`: kaydı başlat/bitir, duraklat/devam ("Bitiriliyor…" sırasında kapalı), ada + panel, kırmızı kurulum
   sorunları, dil (kayıtta "Dili değiştir"), ekran görüntüsünde gizle, Toplantılar, Ayarlar, Kurulum (panel
   sayfalarını açar), Çık.

@@ -39,6 +39,9 @@ public struct LiveViewState: Equatable, Sendable {
     public let isPaused: Bool
     /// "Sen" (mikrofon) kapalı: hoparlörle dinlerken yankı olmasın.
     public let isMicMuted: Bool
+    /// Mikrofon düğmesi kullanılabilir: kayıt yokken her zaman; kayıtta yalnızca mikrofon kayıt başında açıldıysa
+    /// (mikrofonsuz başlayan kayıtta mikrofon hiç açılmaz).
+    public let canToggleMic: Bool
     /// Kayıt başlatılabilir (model hazır, önceki kayıt bitti).
     public let canStart: Bool
     public let startedAt: Date?
@@ -121,6 +124,7 @@ public func makeLiveViewState(
     newPersonNumber: Int,
     isPaused: Bool,
     isMicMuted: Bool,
+    canToggleMic: Bool,
     canStart: Bool,
     startedAt: Date?,
     statusText: String,
@@ -135,6 +139,7 @@ public func makeLiveViewState(
         phase: phase,
         isPaused: isPaused,
         isMicMuted: isMicMuted,
+        canToggleMic: canToggleMic,
         canStart: canStart,
         startedAt: startedAt,
         statusText: statusText,

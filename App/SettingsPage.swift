@@ -154,7 +154,7 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section("Mikrofon") {
-                Toggle("Mikrofonu kaydet (Sen)", isOn: Binding<Bool>(
+                Toggle("Kendi sesimi de kaydet (mikrofon)", isOn: Binding<Bool>(
                     get: { !model.isMicMuted },
                     set: { (enabled: Bool) -> Void in
                         if enabled == model.isMicMuted {
@@ -162,7 +162,7 @@ private struct GeneralSettings: View {
                         }
                     }
                 ))
-                Text("Konuşmayıp yalnızca dinlediğin toplantılarda kapat: hoparlörden gelen ses \"Sen\" olarak yazılmaz. Panelden kayıt sırasında da değiştirilebilir.")
+                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

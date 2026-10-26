@@ -31,6 +31,7 @@ private struct ViewStateInputs: Equatable {
     let newPersonNumber: Int
     let isPaused: Bool
     let isMicMuted: Bool
+    let canToggleMic: Bool
     let canStart: Bool
     let startedAt: Date?
     let statusText: String
@@ -66,6 +67,9 @@ final class AppModel {
     var isPaused: Bool = false
     /// "Sen" kapalı: hoparlörle dinlerken yankı olmasın. Ayar olarak saklanır.
     var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
+    /// Bu kayıtta mikrofon açıldı mı: mikrofon kapalıyken başlayan kayıt yalnızca bilgisayardan gelen sesi alır, mikrofonu
+    /// hiç açmaz (menü çubuğunda mikrofon göstergesi yanmaz, Deepgram'a sessizlik gönderilip ücretlendirilmez).
+    var micOpenedForRecording: Bool = false
     /// Son biten kaydın toplantısı: panel bitince bu toplantının sayfasını açar.
     var lastFinishedMeetingID: String?
     /// Yerel konuşmacı ayırma modeli hazır değil (menüde uyarı; canlı kayıt engellenmez).
@@ -154,7 +158,7 @@ final class AppModel {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
             assistantCard: assistantCard, phase: phase,
-            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
+            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
@@ -164,7 +168,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -487,13 +491,21 @@ final class AppModel {
         let pauseGate: AudioGate = AudioGate(isOpen: true)
         let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
-        do {
-            let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
-            meAudio = gatedStream(audio: gatedStream(audio: aligned, gate: micGate), gate: pauseGate)
-            startedSpeakers.insert(.me)
-        } catch {
-            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        if isMicMuted {
+            // Yalnızca karşı taraf: mikrofon hiç açılmaz.
             meAudio = finishedStream()
+            micOpenedForRecording = false
+        } else {
+            do {
+                let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+                meAudio = gatedStream(audio: gatedStream(audio: aligned, gate: micGate), gate: pauseGate)
+                startedSpeakers.insert(.me)
+                micOpenedForRecording = true
+            } catch {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                meAudio = finishedStream()
+                micOpenedForRecording = false
+            }
         }
         let othersAudio: AsyncStream<[Float]>
         do {
@@ -603,6 +615,10 @@ final class AppModel {
 
     /// "Sen"i (mikrofon) kapatır/açar; tercih saklanır. Hoparlörle dinlerken yankıyı kökten önler.
     func toggleMicrophone() {
+        // Mikrofonsuz başlayan kayıtta mikrofon açılamaz (akış kayıt başında kurulur); düğme de kapalıdır.
+        guard !isRecording || micOpenedForRecording else {
+            return
+        }
         isMicMuted.toggle()
         UserDefaults.standard.set(isMicMuted, forKey: SettingsKey.micMuted)
         session?.micGate.set(isOpen: !isMicMuted)

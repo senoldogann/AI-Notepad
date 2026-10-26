@@ -767,6 +767,16 @@
         }
       }
     },
+    "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording only captures audio from the computer"
+          }
+        }
+      }
+    },
     "Bu toplantının notu yok.": {
       "localizations": {
         "en": {
@@ -1540,6 +1550,16 @@
         }
       }
     },
+    "Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When off, only the audio coming from the computer (the other side) is recorded: the microphone is never opened and speaker echo isn't written as \"You\". You can also choose with the microphone button in the panel before recording; in a recording started with the microphone, the button only mutes it."
+          }
+        }
+      }
+    },
     "Kapat": {
       "localizations": {
         "en": {
@@ -1762,6 +1782,26 @@
         }
       }
     },
+    "Kendi sesimi de kaydet (mikrofon)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also record my voice (microphone)"
+          }
+        }
+      }
+    },
+    "Kendi sesin de kaydedilecek (tıkla: yalnızca karşı taraf)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your voice will be recorded too (click: other side only)"
+          }
+        }
+      }
+    },
     "Klasöre erişilemedi: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -1903,16 +1943,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fix speaker"
-          }
-        }
-      }
-    },
-    "Konuşmayıp yalnızca dinlediğin toplantılarda kapat: hoparlörden gelen ses \"Sen\" olarak yazılmaz. Panelden kayıt sırasında da değiştirilebilir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turn off for meetings where you only listen: sound from your speakers won't be written as \"You\". You can also change this from the panel while recording."
           }
         }
       }
@@ -2178,16 +2208,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn off microphone (I'm only listening)"
-          }
-        }
-      }
-    },
-    "Mikrofonu kaydet (Sen)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Record microphone (You)"
           }
         }
       }
@@ -3267,6 +3287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Capture started. If a permission dialog appeared and you chose \"Allow\", you're ready."
+          }
+        }
+      }
+    },
+    "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the other side will be recorded (click: include your voice)"
           }
         }
       }

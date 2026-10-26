@@ -152,7 +152,7 @@ struct MeetingDetailPage: View {
         ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
-                    header
+                    header.zIndex(1)
                     statusLines
                     PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
                         .frame(maxWidth: 260)
@@ -241,7 +241,8 @@ struct MeetingDetailPage: View {
             Text(meetingMetaLine(record: record))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            actions
+            // İpuçları düğmelerin altındaki satırların üstünde çizilsin (birbirine girmesin).
+            actions.zIndex(1)
             exportLine
         }
     }

@@ -69,7 +69,8 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 
 ## Geri bildirim sonrası (aşama 6b)
 - [ ] Hoparlörle Fince video, sen konuşmuyorsun: "Sen" satırı çıkmıyor (canlıda ve Toplantılar'da); kendi konuşman görünüyor.
-- [ ] Panelde mikrofon düğmesi (ya da Ayarlar › Genel › Mikrofon) kapalıyken "Sen" hiç yazılmıyor; tercih yeniden açılışta korunuyor.
+- [ ] Kayıttan önce paneldeki mikrofon düğmesi (ya da Ayarlar › Genel › "Kendi sesimi de kaydet") kapalıyken kayıt başlayınca menü çubuğunda mikrofon göstergesi yanmıyor, "Sen" hiç yazılmıyor, karşı taraf yazılıyor; kayıtta mikrofon düğmesi kapalı. Tercih yeniden açılışta korunuyor.
+- [ ] Toplantı sayfasında düğmelerin üstüne gelince tek ipucu görünüyor, alttaki satırla üst üste binmiyor ve birkaç saniyede kayboluyor.
 - [ ] Toplantı sayfasında transkript paragraflı: aynı konuşmacının cümleleri tek paragraf, satır satır bölünmüyor.
 - [ ] Ayarlar › Genel › "Kayıt sırasında Türkçeye çevir" kapalı (varsayılan): Türkçe yok, ada orijinali gösteriyor; toplantı sonunda Türkçe not yine hazır. Açınca "İki dil / Sadece Türkçe" seçilebiliyor ve sonraki cümleler çevriliyor.
 - [ ] Uzun toplantı (≥ 1 saat): not parça parça yazılıyor; her konudaki görevler ayrı maddeler olarak notta, sonradan ertelenen görevin son tarihi doğru.
