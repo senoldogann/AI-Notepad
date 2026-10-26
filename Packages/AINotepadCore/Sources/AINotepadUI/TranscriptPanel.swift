@@ -66,6 +66,8 @@ public struct PanelActions {
 public struct TranscriptPanel: View {
     let state: LiveViewState
     let actions: PanelActions
+    /// Kayıt sırasında canlı ses çubukları.
+    let levels: AudioLevels
     @State private var question: String = ""
     /// Kullanıcı transkriptin en altında mı (canlı metni izliyor mu).
     @State private var isFollowing: Bool = true
@@ -75,9 +77,10 @@ public struct TranscriptPanel: View {
     @State private var hasUnseenText: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
-    public init(state: LiveViewState, actions: PanelActions) {
+    public init(state: LiveViewState, actions: PanelActions, levels: AudioLevels) {
         self.state = state
         self.actions = actions
+        self.levels = levels
     }
 
     public var body: some View {
@@ -119,6 +122,10 @@ public struct TranscriptPanel: View {
                 // Kayıtta yalnızca nokta + süre (kısa); boşta "Hazır · Deepgram" gibi daha uzun.
                 .frame(minWidth: state.isRecording ? 60 : 96, alignment: .leading)
                 .layoutPriority(-1)
+            if state.isRecording && !state.isPaused {
+                LevelMeter(levels: levels)
+                    .transition(.opacity)
+            }
             Spacer(minLength: DesignTokens.Spacing.s)
             // Genişlik daraldıkça önce gezinme düğmeleri, sonra dil çipi "⋯" menüsüne toplanır; kayıt denetimleri
             // ve gizle her zaman görünür.

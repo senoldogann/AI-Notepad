@@ -53,3 +53,44 @@ extension CloudTests {
     }
 }
 }
+
+@Suite struct AudioLevelTests {
+    // Sessizlik 0, tam ölçek sinüs ~1, konuşma düzeyi arada; ölçülü akış parçaları değiştirmeden geçirir.
+    @Test func levelsAndMeteredStream() async {
+        #expect(audioLevel(samples: [Float](repeating: 0, count: 1600)) == 0)
+        let loud: [Float] = (0..<1600).map { Float(sin(Double($0) * 0.1)) }
+        #expect(audioLevel(samples: loud) > 0.9)
+        let speech: [Float] = loud.map { $0 * 0.05 }
+        #expect((0.3...0.8).contains(audioLevel(samples: speech)))
+        let (input, sink): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+        let collected: LevelBox = LevelBox()
+        let metered: AsyncStream<[Float]> = meteredStream(audio: input, onLevel: { collected.append($0) })
+        sink.yield(loud)
+        sink.yield(speech)
+        sink.finish()
+        var chunks: [[Float]] = []
+        for await chunk in metered {
+            chunks.append(chunk)
+        }
+        #expect(chunks == [loud, speech])
+        #expect(collected.values.count == 2)
+    }
+}
+
+/// Seviye geri çağrılarını toplar (testte eşzamanlı erişim için kilitli).
+private final class LevelBox: @unchecked Sendable {
+    private let lock: NSLock = NSLock()
+    private var stored: [Float] = []
+
+    func append(_ value: Float) {
+        lock.lock()
+        stored.append(value)
+        lock.unlock()
+    }
+
+    var values: [Float] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+}

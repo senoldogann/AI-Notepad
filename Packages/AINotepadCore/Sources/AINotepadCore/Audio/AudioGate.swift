@@ -33,3 +33,31 @@ public func gatedStream(audio: AsyncStream<[Float]>, gate: AudioGate) -> AsyncSt
     }
     return gated
 }
+
+/// Parçanın ses seviyesi 0...1 (RMS, -60 dB sessizlik, 0 dB tam): panelde ses çubukları için. Saf fonksiyondur.
+public func audioLevel(samples: [Float]) -> Float {
+    guard !samples.isEmpty else {
+        return 0
+    }
+    let rms: Float = (samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)).squareRoot()
+    guard rms > 0 else {
+        return 0
+    }
+    return min(1, max(0, (20 * log10(rms) + 60) / 60))
+}
+
+/// Akışı değiştirmeden geçirir, her parçanın seviyesini `onLevel`'a verir.
+public func meteredStream(audio: AsyncStream<[Float]>, onLevel: @escaping @Sendable (Float) -> Void) -> AsyncStream<[Float]> {
+    let (metered, sink): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+    let task: Task<Void, Never> = Task {
+        for await chunk in audio {
+            onLevel(audioLevel(samples: chunk))
+            sink.yield(chunk)
+        }
+        sink.finish()
+    }
+    sink.onTermination = { (_: AsyncStream<[Float]>.Continuation.Termination) -> Void in
+        task.cancel()
+    }
+    return metered
+}

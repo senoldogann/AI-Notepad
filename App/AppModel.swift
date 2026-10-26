@@ -572,6 +572,14 @@ final class AppModel {
             return
         }
 
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın parçaları aynı çubuklara düşer.
+        audioLevels.reset()
+        let levels: AudioLevels = audioLevels
+        let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
+            Task { @MainActor in levels.push(level: level) }
+        }
+        let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
+        let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
         let handle: LiveSessionHandle
         if let cloudKeys {
             handle = runCloudLiveSession(
@@ -588,8 +596,8 @@ final class AppModel {
                     keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30),
                     voiceEmbedder: voiceEmbedderIfEnabled()
                 ),
-                meAudio: meAudio,
-                othersAudio: othersAudio
+                meAudio: meteredMe,
+                othersAudio: meteredOthers
             )
         } else if let engine {
             handle = runLiveSession(
@@ -602,8 +610,8 @@ final class AppModel {
                     languageLockAfterSec: 30
                 ),
                 engine: engine,
-                meAudio: meAudio,
-                othersAudio: othersAudio
+                meAudio: meteredMe,
+                othersAudio: meteredOthers
             )
         } else {
             // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
@@ -659,6 +667,7 @@ final class AppModel {
         }
         isFinishing = true
         consentReminderVisible = false
+        audioLevels.reset()
         microphone.stop()
         systemAudio.stop()
     }
@@ -1036,6 +1045,9 @@ final class AppModel {
     }
 
     // MARK: İşaretler
+
+    /// Kayıt sırasında canlı ses seviyesi (panelde çubuklar).
+    @ObservationIgnored let audioLevels: AudioLevels = AudioLevels(count: 14)
 
     /// Bu kayıtta işaretlenen anlar.
     @ObservationIgnored private var liveHighlights: [Highlight] = []

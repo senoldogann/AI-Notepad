@@ -455,6 +455,19 @@ struct MeetingDetailPage: View {
                 .textSelection(.enabled)
                 .padding(.top, 8)
             FlowLayout(spacing: 6, lineSpacing: 6) {
+                // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
+                let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+                if !speakers.isEmpty {
+                    HStack(spacing: -7) {
+                        ForEach(Array(speakers.prefix(4).enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                            SpeakerAvatar(text: avatarText(key: item.element.key, speakerNames: record.speakerNames), color: speakerColor(key: item.element.key), size: 24)
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5))
+                                .zIndex(Double(4 - item.offset))
+                        }
+                    }
+                    .padding(.trailing, 4)
+                    .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
+                }
                 ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
                     Text(chip)
                         .appFont(size: 12, weight: .medium)
@@ -808,7 +821,7 @@ private struct SummaryTab: View {
                 .fixedSize(horizontal: false, vertical: true)
             let marked: [TranscriptParagraph] = paragraphs.filter { isHighlighted(paragraph: $0, highlights: record.highlights ?? []) }
             if !marked.isEmpty {
-                section(title: "İŞARETLEDİĞİN ANLAR") {
+                section(title: "İŞARETLEDİĞİN ANLAR", symbol: "bookmark") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(marked) { (paragraph: TranscriptParagraph) in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -839,7 +852,7 @@ private struct SummaryTab: View {
                 }
             }
             if let outline = note.outline, !outline.isEmpty {
-                section(title: "KONU AKIŞI") {
+                section(title: "KONU AKIŞI", symbol: "list.bullet.indent") {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(outline.enumerated()), id: \.offset) { (item: (offset: Int, element: OutlineItem)) in
                             OutlineRow(item: item.element, isLast: item.offset == outline.count - 1, canPlay: canPlay) {
@@ -850,7 +863,7 @@ private struct SummaryTab: View {
                 }
             }
             if !note.decisions.isEmpty {
-                section(title: "KARARLAR") {
+                section(title: "KARARLAR", symbol: "checkmark.seal") {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(note.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
                             VStack(alignment: .leading, spacing: 0) {
@@ -873,7 +886,7 @@ private struct SummaryTab: View {
                 }
             }
             if !others.isEmpty {
-                section(title: "DİĞER GÖREVLER") {
+                section(title: "DİĞER GÖREVLER", symbol: "checklist") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
                             TaskCard(model: model, record: record, task: item.element)
@@ -952,12 +965,15 @@ private struct SummaryTab: View {
     }
 
     /// Bölüm: kart olmadan küçük büyük harfli başlık ve içerik (belge düzeni).
-    private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+    private func section(title: LocalizedStringKey, symbol: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
+            Label {
+                Text(title).tracking(DesignTokens.labelTracking)
+            } icon: {
+                Image(systemName: symbol)
+            }
+            .appFont(size: 11, weight: .semibold)
+            .foregroundStyle(Theme.muted)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
