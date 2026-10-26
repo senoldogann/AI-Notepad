@@ -8,38 +8,55 @@ private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 
 // MARK: Liste
 
-/// Panelin Toplantılar sayfası: arama ve yeniden eskiye liste.
+/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama ve yeniden eskiye liste.
 struct MeetingsListPage: View {
     let model: AppModel
+    /// Açık toplantı (satırı vurgulanır).
+    let selectedID: String?
     let onOpen: @MainActor (String) -> Void
+    /// Toplu silmeden sonra (açık toplantı silindiyse sayfa kapanır).
+    let onDeleted: @MainActor (Set<String>) -> Void
     @State private var query: String = ""
+    /// "Seç" modu: satırlara tıklamak toplantıyı açmaz, işaretler.
+    @State private var isSelecting: Bool = false
+    @State private var checked: Set<String> = []
+    @State private var isConfirmingDelete: Bool = false
+    @State private var deleteErrors: [String] = []
 
     var body: some View {
         let visible: [MeetingRecord] = filterMeetings(records: model.meetings, query: query)
         VStack(spacing: 0) {
-            TextField("Toplantılarda ara", text: $query)
-                .textFieldStyle(.plain)
-                .font(DesignTokens.statusFont)
-                .padding(.horizontal, DesignTokens.Spacing.m)
-                .padding(.vertical, 6)
-                .background(.quaternary, in: Capsule())
-                .padding(DesignTokens.Spacing.m)
+            HStack(spacing: DesignTokens.Spacing.s) {
+                TextField("Toplantılarda ara", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(DesignTokens.statusFont)
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .padding(.vertical, 6)
+                    .background(.quaternary, in: Capsule())
+                if !model.meetings.isEmpty {
+                    Button(isSelecting ? "Bitti" : "Seç") { setSelecting(!isSelecting) }
+                        .controlSize(.small)
+                        .hoverHint("Birden çok toplantıyı seçip sil", alignment: .trailing, edge: .bottom)
+                }
+            }
+            .padding(DesignTokens.Spacing.m)
             if model.meetings.isEmpty {
                 ContentUnavailableView("Henüz toplantı yok", systemImage: "waveform", description: Text("Kaydı başlatınca toplantılar burada görünür."))
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(visible) { (record: MeetingRecord) in
-                            Button {
-                                onOpen(record.id)
-                            } label: {
-                                MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
-                            }
-                            .buttonStyle(.plain)
+                            row(record: record)
+                                .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
                         }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.s)
+                    .animation(.snappy(duration: 0.3), value: visible.map(\.id))
                 }
+            }
+            if isSelecting {
+                selectionBar(visible: visible)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if !model.meetingLoadFailures.isEmpty {
                 Text("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))")
@@ -48,9 +65,109 @@ struct MeetingsListPage: View {
                     .padding(DesignTokens.Spacing.m)
             }
         }
+        .animation(.smooth(duration: 0.25), value: isSelecting)
+        .animation(.smooth(duration: 0.25), value: isConfirmingDelete)
         .onAppear {
             model.reloadMeetings()
             model.applyRetention()
+        }
+    }
+
+    /// Satır: seç modunda işaret kutusu ve tıklayınca işaretleme (kayıttaki/işlenen toplantı seçilemez); değilse açma.
+    @ViewBuilder
+    private func row(record: MeetingRecord) -> some View {
+        let isProcessing: Bool = model.processingMeetingIDs.contains(record.id)
+        if isSelecting {
+            let isChecked: Bool = checked.contains(record.id)
+            Button {
+                toggle(id: record.id)
+            } label: {
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(isChecked ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                        .contentTransition(.symbolEffect(.replace))
+                        .padding(.leading, DesignTokens.Spacing.s)
+                    MeetingRow(record: record, isProcessing: isProcessing, isSelected: isChecked)
+                }
+            }
+            .buttonStyle(.hoverPlain)
+            .disabled(model.isLocked(meetingID: record.id))
+        } else {
+            Button {
+                onOpen(record.id)
+            } label: {
+                MeetingRow(record: record, isProcessing: isProcessing, isSelected: record.id == selectedID)
+            }
+            .buttonStyle(.hoverPlain)
+        }
+    }
+
+    /// Seç modunun alt çubuğu: tümünü seç, sayı, sil; silmede satır içi onay.
+    private func selectionBar(visible: [MeetingRecord]) -> some View {
+        let selectable: Set<String> = Set(visible.map(\.id).filter { !model.isLocked(meetingID: $0) })
+        return VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+            ForEach(deleteErrors, id: \.self) { (error: String) in
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+            if isConfirmingDelete {
+                Text("\(checked.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    Button("Sil", role: .destructive) { deleteChecked() }
+                    Button("Vazgeç") { isConfirmingDelete = false }
+                }
+            } else {
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    Button(checked.isSuperset(of: selectable) && !selectable.isEmpty ? "Seçimi kaldır" : "Tümünü seç") {
+                        checked = checked.isSuperset(of: selectable) ? [] : selectable
+                    }
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(.tint)
+                    Spacer(minLength: 0)
+                    Text("\(checked.count) seçili")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                    Button("Sil", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
+                        .disabled(checked.isEmpty)
+                }
+            }
+        }
+        .controlSize(.small)
+        .padding(DesignTokens.Spacing.m)
+        .background(.bar)
+    }
+
+    private func setSelecting(_ selecting: Bool) {
+        isSelecting = selecting
+        checked = []
+        isConfirmingDelete = false
+        deleteErrors = []
+    }
+
+    private func toggle(id: String) {
+        withAnimation(.snappy(duration: 0.2)) {
+            if checked.contains(id) {
+                checked.remove(id)
+            } else {
+                checked.insert(id)
+            }
+        }
+    }
+
+    private func deleteChecked() {
+        let ids: Set<String> = checked
+        withAnimation(.snappy(duration: 0.3)) {
+            deleteErrors = model.deleteMeetings(meetingIDs: ids)
+            let remaining: Set<String> = Set(model.meetings.map(\.id))
+            onDeleted(ids.subtracting(remaining))
+            checked = ids.intersection(remaining)
+            isConfirmingDelete = false
+            if deleteErrors.isEmpty {
+                isSelecting = false
+            }
         }
     }
 }
@@ -59,6 +176,8 @@ struct MeetingsListPage: View {
 struct MeetingRow: View {
     let record: MeetingRecord
     let isProcessing: Bool
+    let isSelected: Bool
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.s) {
@@ -89,6 +208,10 @@ struct MeetingRow: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.m)
         .padding(.vertical, DesignTokens.Spacing.s)
+        .background(
+            appearance.accent.color.opacity(isSelected ? 0.18 : 0),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .contentShape(Rectangle())
     }
 }
@@ -126,6 +249,8 @@ private enum ExportStatus: Equatable {
     case saved(URL)
     case copied
     case failed(String)
+    /// "Toplantıyı sil"e basıldı: satır içi onay bekleniyor (ayrı uyarı penceresi yok).
+    case confirmDelete
 }
 
 /// Seçili toplantının sayfası: önce sana düşen görevler, sonra özet, kararlar, diğer görevler, sözlük,
@@ -134,6 +259,8 @@ struct MeetingDetailPage: View {
     let model: AppModel
     let player: MeetingAudioPlayer
     let record: MeetingRecord
+    /// Toplantı silinince (sayfa artık gösterilemez) çağrılır.
+    let onDeleted: @MainActor () -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
 
@@ -156,6 +283,7 @@ struct MeetingDetailPage: View {
                     statusLines
                     PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
                         .frame(maxWidth: 260)
+                    Group {
                     switch tab {
                     case .summary:
                         if let note = record.note {
@@ -171,11 +299,20 @@ struct MeetingDetailPage: View {
                         )
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
+                            canPlay: !playableAudio.isEmpty,
                             onPlay: { (startSec: Double) -> Void in play(from: startSec) }
                         )
                     }
+                    }
+                    // Sekme değişince içerik yumuşakça geçer.
+                    .id(tab)
+                    .transition(.opacity)
                 }
+                .animation(.smooth(duration: 0.25), value: tab)
+                .animation(.smooth(duration: 0.3), value: model.speakerReviews[record.id])
                 .padding(DesignTokens.Spacing.l)
+                // Geniş ana pencerede satırlar okunur uzunlukta kalsın (panelde etkisiz).
+                .frame(maxWidth: 820, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -188,7 +325,12 @@ struct MeetingDetailPage: View {
             // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
             tab = record.note == nil ? .transcript : .summary
         }
-        .onDisappear { player.stop() }
+        // Yalnızca bu toplantı çalıyorsa durur (aynı çalar başka bir sayfada başka toplantıyı çalıyor olabilir).
+        .onDisappear {
+            if player.meetingID == record.id {
+                player.stop()
+            }
+        }
         // Saklama süresi sesi bu sayfa açıkken silebilir.
         .onChange(of: record.audioDeleted) { (_: Bool, deleted: Bool) in
             if deleted {
@@ -244,7 +386,9 @@ struct MeetingDetailPage: View {
             // İpuçları düğmelerin altındaki satırların üstünde çizilsin (birbirine girmesin).
             actions.zIndex(1)
             exportLine
+                .transition(.move(edge: .top).combined(with: .opacity))
         }
+        .animation(.smooth(duration: 0.25), value: export)
     }
 
     /// Dışa aktarma ve yönetim; kilitliyken değiştirenler kapalı.
@@ -281,11 +425,17 @@ struct MeetingDetailPage: View {
                 }
                 .disabled(isLocked || record.audioDeleted)
                 .hoverHint("Son geçişi ve notu yeniden yap", alignment: .leading, edge: .bottom)
-                Button("Sesi sil", systemImage: "trash", role: .destructive) {
+                Button("Sesi sil", systemImage: "speaker.slash", role: .destructive) {
                     player.stop()
                     model.deleteAudio(meetingID: record.id)
                 }
                 .disabled(isLocked || record.audioDeleted)
+                .hoverHint("Yalnızca ses dosyalarını sil; metin ve not kalır", alignment: .leading, edge: .bottom)
+                Button("Toplantıyı sil", systemImage: "trash", role: .destructive) {
+                    export = .confirmDelete
+                }
+                .disabled(isLocked)
+                .hoverHint("Metin, not ve sesle birlikte Çöp Sepeti'ne taşı", alignment: .leading, edge: .bottom)
         }
         .controlSize(.small)
     }
@@ -309,6 +459,7 @@ struct MeetingDetailPage: View {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
                 .buttonStyle(.link)
+                        .pointerStyle(.link)
             }
             .font(.caption)
         case .copied:
@@ -319,6 +470,22 @@ struct MeetingDetailPage: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.red)
+        case .confirmDelete:
+            HStack(spacing: DesignTokens.Spacing.s) {
+                Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")
+                    .foregroundStyle(.red)
+                Button("Sil", role: .destructive) {
+                    player.stop()
+                    if let error = model.deleteMeeting(meetingID: record.id) {
+                        export = .failed(error)
+                    } else {
+                        onDeleted()
+                    }
+                }
+                Button("Vazgeç") { export = .none }
+            }
+            .font(.caption)
+            .controlSize(.small)
         }
     }
 
@@ -497,7 +664,7 @@ private struct SpeakerNamesSection: View {
                                 Image(systemName: "arrow.triangle.merge")
                             }
                             .menuStyle(.button)
-                            .buttonStyle(.plain)
+                            .buttonStyle(.hoverPlain)
                             .menuIndicator(.hidden)
                             .fixedSize()
                             .foregroundStyle(.secondary)
@@ -530,7 +697,7 @@ private struct SpeakerReviewCard: View {
                 Spacer(minLength: 0)
                 Button("Kapat", systemImage: "xmark") { model.closeSpeakerReview(meetingID: record.id) }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .foregroundStyle(.secondary)
                     .hoverHint("Önerileri kapat", alignment: .trailing, edge: .bottom)
             }
@@ -621,7 +788,7 @@ private struct SpeakerReviewCard: View {
             Spacer(minLength: 0)
             Button("Uygula", systemImage: "checkmark", action: onAccept)
                 .labelStyle(.iconOnly)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminentAction)
                 .controlSize(.small)
                 .disabled(isLocked)
                 .hoverHint("Öneriyi uygula", alignment: .trailing, edge: .bottom)
@@ -646,7 +813,7 @@ private struct SpeakerReviewCard: View {
         }
         if let seconds = timestampSeconds(text: passage.time), !record.audioDeleted {
             Button { onPlay(seconds) } label: { row }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("Bu andan dinle", alignment: .leading, edge: .bottom)
         } else {
             row
@@ -675,6 +842,24 @@ private struct SpeakerNameField: View {
     }
 }
 
+/// Ses varsa paragraf tıklanabilir (el imleci, hover, "Buradan dinle"); yoksa düz metin (tıklanabilir görünmesin).
+private struct PlayableParagraph: ViewModifier {
+    let canPlay: Bool
+    let onTap: @MainActor () -> Void
+
+    func body(content: Content) -> some View {
+        if canPlay {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { onTap() }
+                .hoverHighlight(cornerRadius: 8)
+                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+        } else {
+            content
+        }
+    }
+}
+
 /// Paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, yankı süzülmüş); altında Türkçesi.
 /// Çalarken şarkı sözü gibi akar: çalan paragrafta söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecek
 /// kelimeler soluk; çalan paragraf ortaya kaydırılır. Paragrafa tıklayınca oradan çalar.
@@ -683,6 +868,8 @@ private struct TranscriptSection: View {
     let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
     let proxy: ScrollViewProxy
+    /// Ses var (silinmemiş, kayıtta değil): paragrafa tıklayınca oradan çalar.
+    let canPlay: Bool
     let onPlay: @MainActor (Double) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
@@ -718,9 +905,7 @@ private struct TranscriptSection: View {
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(isActive ? appearance.accent.color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-                .contentShape(Rectangle())
-                .onTapGesture { onPlay(paragraph.startSec) }
-                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+                .modifier(PlayableParagraph(canPlay: canPlay) { onPlay(paragraph.startSec) })
                 .id(paragraph.id)
             }
         }
@@ -794,7 +979,7 @@ private struct NowPlayingBar: View {
                         .padding(.vertical, 3)
                         .background(.quaternary, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverCapsule)
                 .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)
                 Button {
                     player.stop()
@@ -803,7 +988,7 @@ private struct NowPlayingBar: View {
                         .font(.system(size: 11, weight: .semibold))
                         .frame(width: 22, height: 22)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Çalmayı kapat", alignment: .trailing, edge: .top)
             }
@@ -830,7 +1015,7 @@ private struct NowPlayingBar: View {
                 } label: {
                     Image(systemName: "gobackward.10").font(.system(size: 17, weight: .medium))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn geri", alignment: .center, edge: .top)
                 Button {
                     player.togglePause()
@@ -841,14 +1026,14 @@ private struct NowPlayingBar: View {
                         .frame(width: 42, height: 42)
                         .background(appearance.accent.color, in: Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverCapsule)
                 .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
                 Button {
                     player.skip(by: 10)
                 } label: {
                     Image(systemName: "goforward.10").font(.system(size: 17, weight: .medium))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn ileri", alignment: .center, edge: .top)
             }
         }

@@ -26,6 +26,34 @@ enum MainSection: Hashable {
 final class MainWindowRouter {
     var section: MainSection = .home
     var selectedMeetingID: String?
+    /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
+    var quitWarning: Bool = false
+}
+
+/// Çıkış koruması: kayıt ya da işleme sürerken uygulama hemen kapanmaz (toplantı "yarıda kaldı" olurdu); ana pencere
+/// sorar. Uygulama açılışında bağlanır.
+@MainActor
+final class QuitGuard {
+    static let shared: QuitGuard = QuitGuard()
+    var isBusy: (@MainActor () -> Bool)?
+    var onBlocked: (@MainActor () -> Void)?
+    /// "Yine de çık" seçildi: bir sonraki çıkış sorulmaz.
+    var allowQuit: Bool = false
+}
+
+/// `--bolum ana|toplantilar|ayarlar|kurulum` başlatma argümanından ana pencere bölümü (görsel kontrol ve geliştirme
+/// için); yoksa nil. Saf fonksiyondur.
+func launchSection(arguments: [String]) -> MainSection? {
+    guard let index = arguments.firstIndex(of: "--bolum"), arguments.indices.contains(index + 1) else {
+        return nil
+    }
+    switch arguments[index + 1] {
+    case "ana": return .home
+    case "toplantilar": return .meetings
+    case "ayarlar": return .settings
+    case "kurulum": return .setup
+    default: return nil
+    }
 }
 
 /// Ana pencereyi verilen bölümde açar ve uygulamayı öne getirir.
@@ -41,6 +69,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let quitGuard: QuitGuard = .shared
+        guard !quitGuard.allowQuit, let isBusy = quitGuard.isBusy, isBusy() else {
+            return .terminateNow
+        }
+        quitGuard.onBlocked?()
+        return .terminateCancel
     }
 }
 
@@ -69,6 +106,26 @@ struct MainWindowView: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
+        ZStack {
+            // Kurulum odaklı, tam pencere: kenar çubuğu yok, kart ortada.
+            if router.section == .setup {
+                SetupScreen(model: model, router: router, shortcuts: shortcuts)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                split
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        .frame(minWidth: 820, minHeight: 560)
+        // Liquid Glass: pencere zemini yarı saydam malzeme; masaüstü arkadan hafifçe görünür, metin okunaklı kalır.
+        .containerBackground(.thinMaterial, for: .window)
+        // Başlık şeridi ayrı opak bant olmasın; cam zemin pencerenin tepesine kadar sürsün.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .modifier(AppearanceEnvironment())
+    }
+
+    private var split: some View {
         NavigationSplitView {
             List(selection: Binding<MainSection?>(
                 get: { router.section },
@@ -88,10 +145,12 @@ struct MainWindowView: View {
                 SidebarStatus(model: model)
             }
         } detail: {
+            // Bölüm değişince içerik yumuşakça geçer.
             detail
+                .id(router.section)
+                .transition(.opacity)
+                .animation(.smooth(duration: 0.25), value: router.section)
         }
-        .frame(minWidth: 820, minHeight: 560)
-        .modifier(AppearanceEnvironment())
     }
 
     @ViewBuilder
@@ -102,11 +161,39 @@ struct MainWindowView: View {
         case .meetings:
             MeetingsSplit(model: model, router: router, player: player)
         case .settings:
+            // Geniş pencerede form satırları ekran boyu uzamasın.
             SettingsPage(model: model, shortcuts: shortcuts)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
         case .setup:
-            SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
+            EmptyView()
+        }
+    }
+}
+
+/// Kurulum ekranı: kenar çubuğu yok; simge ve cam kart pencerenin ortasında. Kaydırma alanı, uzun ve satır kaydıran
+/// "Hoş geldin" metinlerinin pencereyi ekran boyuna büyütüp içeriği boş bırakmasını önler; kart yüksekliği sabit
+/// (adımlar arasında düğmeler yerinde kalır, formlar kendi içinde kayar).
+private struct SetupScreen: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let shortcuts: ShortcutController
+
+    var body: some View {
+        GeometryReader { (geometry: GeometryProxy) in
+            ScrollView {
+                VStack(spacing: DesignTokens.Spacing.l) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                    SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
+                        .frame(width: min(660, max(geometry.size.width - 64, 360)), height: 540)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
+                .padding(.vertical, DesignTokens.Spacing.xl)
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            }
         }
     }
 }
@@ -142,6 +229,9 @@ private struct HomePage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                if router.quitWarning {
+                    QuitWarning(model: model, router: router)
+                }
                 hero
                 if !model.setupProblems.isEmpty {
                     problems
@@ -152,6 +242,9 @@ private struct HomePage: View {
             .padding(32)
             .frame(maxWidth: 860, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .animation(.smooth(duration: 0.3), value: router.quitWarning)
+            .animation(.smooth(duration: 0.3), value: model.phase)
+            .animation(.smooth(duration: 0.3), value: model.setupProblems)
         }
     }
 
@@ -189,7 +282,7 @@ private struct HomePage: View {
                     Spacer(minLength: 0)
                     Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
                     Button("Bitir", systemImage: "stop.fill") { model.stopRecording() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminentAction)
                 }
             case .finishing:
                 HStack(spacing: DesignTokens.Spacing.m) {
@@ -204,7 +297,7 @@ private struct HomePage: View {
                             .font(.system(size: 15, weight: .semibold))
                             .padding(.horizontal, DesignTokens.Spacing.s)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminentAction)
                     .controlSize(.extraLarge)
                     .disabled(!model.isReadyToRecord || model.isStarting)
                     VStack(alignment: .leading, spacing: 2) {
@@ -219,7 +312,7 @@ private struct HomePage: View {
         }
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private var problems: some View {
@@ -234,7 +327,50 @@ private struct HomePage: View {
         }
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular.tint(Color.orange.opacity(0.18)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+/// Kayıt ya da işleme sürerken çıkış istendiğinde sayfanın içindeki soru (ayrı uyarı penceresi yok). İş biterse
+/// kendiliğinden kapanır.
+private struct QuitWarning: View {
+    let model: AppModel
+    let router: MainWindowRouter
+
+    var body: some View {
+        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+            Label(
+                model.phase == .idle
+                    ? "Toplantı işleniyor. Şimdi çıkarsan not hazırlanmaz; açılınca \"Tekrar işle\" gerekir."
+                    : "Kayıt sürüyor. Şimdi çıkarsan toplantı yarıda kalır.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.headline)
+            .foregroundStyle(.orange)
+            HStack(spacing: DesignTokens.Spacing.s) {
+                if model.phase == .recording {
+                    Button("Kaydı bitir", systemImage: "stop.fill") {
+                        model.stopRecording()
+                        router.quitWarning = false
+                    }
+                    .buttonStyle(.glassProminentAction)
+                }
+                Button("Yine de çık", role: .destructive) {
+                    QuitGuard.shared.allowQuit = true
+                    NSApplication.shared.terminate(nil)
+                }
+                Button("Vazgeç") { router.quitWarning = false }
+            }
+        }
+        .padding(DesignTokens.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular.tint(Color.orange.opacity(0.18)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onChange(of: isBusy) { (_: Bool, busy: Bool) in
+            if !busy {
+                router.quitWarning = false
+            }
+        }
     }
 }
 
@@ -303,12 +439,12 @@ private struct HomeTasks: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                 }
             }
             .padding(DesignTokens.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .glassEffect(.regular.tint(appearance.accent.color.opacity(0.16)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
@@ -329,6 +465,7 @@ private struct HomeRecentMeetings: View {
                 if model.meetings.count > 5 {
                     Button("Tümü") { router.section = .meetings }
                         .buttonStyle(.link)
+                        .pointerStyle(.link)
                 }
             }
             if model.meetings.isEmpty {
@@ -340,9 +477,9 @@ private struct HomeRecentMeetings: View {
                         router.selectedMeetingID = record.id
                         router.section = .meetings
                     } label: {
-                        MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
+                        MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id), isSelected: false)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                 }
             }
         }
@@ -357,18 +494,30 @@ private struct MeetingsSplit: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            MeetingsListPage(model: model) { (id: String) -> Void in router.selectedMeetingID = id }
-                .frame(width: 300)
+            MeetingsListPage(
+                model: model, selectedID: router.selectedMeetingID,
+                onOpen: { (id: String) -> Void in router.selectedMeetingID = id },
+                onDeleted: { (ids: Set<String>) -> Void in
+                    if let open = router.selectedMeetingID, ids.contains(open) {
+                        router.selectedMeetingID = nil
+                    }
+                }
+            )
+            .frame(width: 300)
             Divider()
-            if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
-                MeetingDetailPage(model: model, player: player, record: record)
-                    // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
-                    .id(record.id)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text", description: Text("Notu, görevleri ve transkripti burada görürsün."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
+                    MeetingDetailPage(model: model, player: player, record: record) { router.selectedMeetingID = nil }
+                        // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
+                        .id(record.id)
+                        .transition(.opacity)
+                } else {
+                    ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text", description: Text("Notu, görevleri ve transkripti burada görürsün."))
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.smooth(duration: 0.25), value: router.selectedMeetingID)
         }
     }
 }

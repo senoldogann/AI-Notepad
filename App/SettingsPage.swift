@@ -23,7 +23,7 @@ private enum SettingsSection: CaseIterable {
     }
 }
 
-/// Panelin Ayarlar sayfası (ayrı pencere değil): genel, LLM sağlayıcısı, bulut anahtarları ve kısayollar.
+/// Ana penceredeki Ayarlar (ayrı ayar penceresi yok): genel, görünüm, LLM sağlayıcısı, anahtarlar ve kısayollar.
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController

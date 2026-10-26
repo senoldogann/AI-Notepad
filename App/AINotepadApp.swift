@@ -12,7 +12,7 @@ struct AINotepadApp: App {
     @State private var island: IslandController
     @State private var shortcuts: ShortcutController
     @State private var router: MainWindowRouter
-    @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
+    @State private var player: MeetingAudioPlayer
 
     init() {
         registerDefaultSettings()
@@ -21,7 +21,12 @@ struct AINotepadApp: App {
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode)
         _model = State(initialValue: model)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
-        let panel: LivePanelController = LivePanelController(model: model, hideFromCapture: hideFromCapture)
+        let router: MainWindowRouter = MainWindowRouter()
+        _router = State(initialValue: router)
+        // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
+        let player: MeetingAudioPlayer = MeetingAudioPlayer()
+        _player = State(initialValue: player)
+        let panel: LivePanelController = LivePanelController(model: model, hideFromCapture: hideFromCapture, mainRouter: router, player: player)
         _panel = State(initialValue: panel)
         let island: IslandController = IslandController(model: model, onTap: { panel.toggle() })
         _island = State(initialValue: island)
@@ -30,9 +35,13 @@ struct AINotepadApp: App {
             .toggleWindows: { toggleWindows(panel: panel, island: island) },
         ])
         _shortcuts = State(initialValue: shortcuts)
-        let router: MainWindowRouter = MainWindowRouter()
-        _router = State(initialValue: router)
-        panel.attach(shortcuts: shortcuts) {
+        // Kayıt ya da işleme sürerken çıkış (⌘Q, Dock, menü) sorulur; toplantı yarıda kalmasın.
+        QuitGuard.shared.isBusy = { model.phase != .idle || !model.processingMeetingIDs.isEmpty }
+        QuitGuard.shared.onBlocked = {
+            router.quitWarning = true
+            openMainWindow(router: router, section: .home)
+        }
+        panel.attach {
             Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
         }
         // Pencereler ve kısayollar uygulama açıldıktan sonra kurulur.
@@ -46,7 +55,15 @@ struct AINotepadApp: App {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
                 }
-                if let page = launchPage(arguments: CommandLine.arguments) {
+                let section: MainSection? = launchSection(arguments: CommandLine.arguments)
+                let page: PanelPage? = launchPage(arguments: CommandLine.arguments)
+                if let section {
+                    router.section = section
+                }
+                // "--bolum toplantilar --toplanti <id>": toplantı ana pencerede açılır; yalnızca "--toplanti" panelde.
+                if section == .meetings, case .meeting(let id) = page {
+                    router.selectedMeetingID = id
+                } else if let page {
                     panel.show(page: page)
                 }
             }
@@ -190,7 +207,8 @@ private struct MenuContent: View {
             }
 
         Button("Ana pencere", systemImage: "macwindow") {
-            openMainWindow(router: router, section: .home)
+            // Açık bölüm korunur (okunan toplantı kaybolmasın); Dock simgesiyle aynı.
+            NotificationCenter.default.post(name: .openMainWindow, object: nil)
         }
         Button("Toplantılar", systemImage: "list.bullet.rectangle") {
             openMainWindow(router: router, section: .meetings)

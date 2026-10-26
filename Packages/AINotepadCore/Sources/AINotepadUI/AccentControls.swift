@@ -29,7 +29,7 @@ public struct PillPicker<Value: Hashable>: View {
                         .foregroundStyle(isSelected ? Color.white : Color.primary)
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverCapsule)
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }

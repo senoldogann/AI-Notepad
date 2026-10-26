@@ -14,6 +14,16 @@
         }
       }
     },
+    "\"Başlat\"a bas; konuşmalar burada canlı yazıya dökülür, bitince toplantının notu hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press \"Start\": the conversation is transcribed here live, and the meeting note is prepared when it ends."
+          }
+        }
+      }
+    },
     "\"Ne kaçırdım?\" ile son dakikaların Türkçe özeti; toplantı hakkında Türkçe soru.": {
       "localizations": {
         "en": {
@@ -344,6 +354,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld days"
+          }
+        }
+      }
+    },
+    "%lld seçili": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selected"
+          }
+        }
+      }
+    },
+    "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move %lld meetings (text, note and audio) to the Trash?"
           }
         }
       }
@@ -712,6 +742,16 @@
         }
       }
     },
+    "Birden çok toplantıyı seçip sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select several meetings to delete"
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -759,6 +799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finishing… completing the remaining text and speakers."
+          }
+        }
+      }
+    },
+    "Bitti": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         }
       }
@@ -1107,6 +1157,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen"
+          }
+        }
+      }
+    },
+    "Dinleniyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening…"
           }
         }
       }
@@ -1661,6 +1721,16 @@
         }
       }
     },
+    "Kaydı Ana sayfadaki \"Kaydı başlat\" düğmesiyle, kısayolla ya da menüden başlat. Kayıt sırasında cam panel canlı metni gösterir; toplantı bitince toplantının sayfası açılır: görevlerin en üstte.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording with \"Start recording\" on Home, the shortcut or the menu. While recording, the glass panel shows the live text; when the meeting ends its page opens with your tasks at the top."
+          }
+        }
+      }
+    },
     "Kaydı başlat": {
       "localizations": {
         "en": {
@@ -1708,16 +1778,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop recording"
-          }
-        }
-      }
-    },
-    "Kaydı paneldeki \"Başlat\" düğmesiyle ya da menüden başlat. Toplantı bitince panel toplantının sayfasını açar: görevlerin en üstte.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start recording with the \"Start\" button in the panel or from the menu. When the meeting ends, the panel opens its page with your tasks at the top."
           }
         }
       }
@@ -1772,6 +1832,16 @@
         }
       }
     },
+    "Kayıt sürüyor. Şimdi çıkarsan toplantı yarıda kalır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording is in progress. If you quit now the meeting will be cut off."
+          }
+        }
+      }
+    },
     "Kayıt sırasında Türkçeye çevir": {
       "localizations": {
         "en": {
@@ -1812,6 +1882,16 @@
         }
       }
     },
+    "Kayıt yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not recording"
+          }
+        }
+      }
+    },
     "Kayıtlı": {
       "localizations": {
         "en": {
@@ -1848,6 +1928,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording"
+          }
+        }
+      }
+    },
+    "Kayıttaki ya da işlenen toplantı silinemez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A meeting that is recording or being processed can't be deleted."
           }
         }
       }
@@ -1909,6 +1999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Position"
+          }
+        }
+      }
+    },
+    "Konuşma başlayınca metin burada akar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text appears here as soon as someone speaks."
           }
         }
       }
@@ -2264,6 +2364,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text size: %lld pt"
+          }
+        }
+      }
+    },
+    "Metin, not ve sesle birlikte Çöp Sepeti'ne taşı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to the Trash with its text, note and audio"
           }
         }
       }
@@ -2936,6 +3046,36 @@
         }
       }
     },
+    "Seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        }
+      }
+    },
+    "Seçimi kaldır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect all"
+          }
+        }
+      }
+    },
+    "Sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
     "Sistem": {
       "localizations": {
         "en": {
@@ -3155,6 +3295,16 @@
         }
       }
     },
+    "Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move the meeting (text, note and audio) to the Trash?"
+          }
+        }
+      }
+    },
     "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.": {
       "localizations": {
         "en": {
@@ -3218,6 +3368,16 @@
         }
       }
     },
+    "Toplantı işleniyor. Şimdi çıkarsan not hazırlanmaz; açılınca \"Tekrar işle\" gerekir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A meeting is being processed. If you quit now the note won't be prepared; you'll need \"Reprocess\" next time."
+          }
+        }
+      }
+    },
     "Toplantı işleniyor…": {
       "localizations": {
         "en": {
@@ -3268,6 +3428,16 @@
         }
       }
     },
+    "Toplantı silinemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't delete the meeting: %@"
+          }
+        }
+      }
+    },
     "Toplantıdaki diğer kişiler (Teams, Zoom). macOS izni ilk denemede sorar.": {
       "localizations": {
         "en": {
@@ -3304,6 +3474,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Understand meetings, miss nothing"
+          }
+        }
+      }
+    },
+    "Toplantıyı sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete meeting"
           }
         }
       }
@@ -3400,6 +3580,16 @@
         }
       }
     },
+    "Tümünü seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
+          }
+        }
+      }
+    },
     "Tırnaklı (New York)": {
       "localizations": {
         "en": {
@@ -3441,6 +3631,16 @@
         }
       }
     },
+    "Vazgeç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
     "Vurgu rengi": {
       "localizations": {
         "en": {
@@ -3467,6 +3667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only the other side will be recorded (click: include your voice)"
+          }
+        }
+      }
+    },
+    "Yalnızca ses dosyalarını sil; metin ve not kalır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete only the audio files; the text and note stay"
           }
         }
       }
@@ -3560,6 +3770,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Green"
+          }
+        }
+      }
+    },
+    "Yine de çık": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit anyway"
           }
         }
       }

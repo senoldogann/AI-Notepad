@@ -61,21 +61,24 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     return panel
 }
 
-/// Uygulamanın tek penceresi olan paneli bir kez oluşturur; sayfa açar, gösterir, gizler, ekran görüntüsü
-/// ayarını uygular.
+/// Kayıt sırasındaki cam paneli bir kez oluşturur; sayfa açar, gösterir, gizler, ekran görüntüsü ayarını uygular.
+/// Ses çalar ve ana pencerenin yönlendiricisi uygulamayla ortaktır (aynı anda iki toplantı çalmasın; panelden
+/// Toplantılar/Ayarlar ana pencerede açılsın).
 @MainActor
 final class LivePanelController {
     private let model: AppModel
     private let router: PanelRouter = PanelRouter()
-    private let player: MeetingAudioPlayer = MeetingAudioPlayer()
+    private let mainRouter: MainWindowRouter
+    private let player: MeetingAudioPlayer
     private var panel: NSPanel?
     private var hideFromCapture: Bool
-    private var shortcuts: ShortcutController?
     private var onStart: (@MainActor () -> Void)?
 
-    init(model: AppModel, hideFromCapture: Bool) {
+    init(model: AppModel, hideFromCapture: Bool, mainRouter: MainWindowRouter, player: MeetingAudioPlayer) {
         self.model = model
         self.hideFromCapture = hideFromCapture
+        self.mainRouter = mainRouter
+        self.player = player
         // Ekran değişince (monitör çıkarıldı, çözünürlük değişti) panel görünür alanın içine çekilir.
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -99,9 +102,8 @@ final class LivePanelController {
         }
     }
 
-    /// Kısayollar ve kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.
-    func attach(shortcuts: ShortcutController, onStart: @escaping @MainActor () -> Void) {
-        self.shortcuts = shortcuts
+    /// Kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.
+    func attach(onStart: @escaping @MainActor () -> Void) {
         self.onStart = onStart
         observeFinishedMeetings()
     }
@@ -117,7 +119,10 @@ final class LivePanelController {
                     return
                 }
                 if let id = self.model.lastFinishedMeetingID {
-                    self.show(page: .meeting(id: id))
+                    // Ana pencerede de seçilir; panel klavye odağını almaz (kullanıcı başka yerde yazıyor olabilir).
+                    self.mainRouter.selectedMeetingID = id
+                    self.router.page = .meeting(id: id)
+                    self.show()
                 }
                 self.observeFinishedMeetings()
             }
@@ -130,16 +135,31 @@ final class LivePanelController {
 
     /// Paneli gösterir (açık sayfa değişmez).
     func show() {
-        guard let shortcuts, let onStart else {
-            preconditionFailure("Panel, attach(shortcuts:onStart:) çağrılmadan gösterildi")
+        guard let onStart else {
+            preconditionFailure("Panel, attach(onStart:) çağrılmadan gösterildi")
         }
+        let mainRouter: MainWindowRouter = mainRouter
         let target: NSPanel = panel ?? makeLivePanel(rootView: PanelHost(
-            model: model, router: router, shortcuts: shortcuts, player: player, onStart: onStart,
-            onHide: { [weak self] in self?.hide() }
+            model: model, router: router, player: player, onStart: onStart,
+            onHide: { [weak self] in self?.hide() },
+            onOpenMainWindow: { (section: MainSection) -> Void in openMainWindow(router: mainRouter, section: section) }
         ))
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
+        // Süren bir gizleme varsa iptal edilir (yarıda kalan solma paneli sonradan kapatmasın).
+        hideGeneration += 1
+        let appearing: Bool = !target.isVisible || target.alphaValue < 1
+        if !target.isVisible {
+            target.alphaValue = 0
+        }
         target.orderFrontRegardless()
+        if appearing {
+            // Belirerek açılır.
+            NSAnimationContext.runAnimationGroup { (context: NSAnimationContext) -> Void in
+                context.duration = 0.18
+                target.animator().alphaValue = 1
+            }
+        }
         // Gölge içerik çizildikten sonra (yuvarlak köşelerle) yeniden hesaplanır.
         DispatchQueue.main.async {
             target.invalidateShadow()
@@ -153,9 +173,33 @@ final class LivePanelController {
         panel?.makeKey()
     }
 
+    /// Paneli gizler; panelde açık toplantı çalıyorsa durur (görünmeyen sayfadan ses gelmesin).
     func hide() {
-        panel?.orderOut(nil)
+        if case .meeting(let id) = router.page, player.meetingID == id {
+            player.stop()
+        }
+        guard let panel, panel.isVisible else {
+            return
+        }
+        // Solarak kapanır; bu arada yeniden gösterilirse kapatma yapılmaz.
+        hideGeneration += 1
+        let generation: Int = hideGeneration
+        NSAnimationContext.runAnimationGroup({ (context: NSAnimationContext) -> Void in
+            context.duration = 0.15
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.hideGeneration == generation else {
+                    return
+                }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        })
     }
+
+    /// Her gösterme/gizlemede artar: eski bir solma animasyonunun bitişi yeni durumu bozmasın.
+    private var hideGeneration: Int = 0
 
     func toggle() {
         if isVisible {

@@ -955,6 +955,36 @@ final class AppModel {
     }
 
     /// Ses dosyalarını siler; metin ve not kalır.
+    /// Toplantıyı (metin, not ve ses) Çöp Sepeti'ne taşır ve listeden çıkarır; kayıttaki ya da işlenen toplantı silinmez.
+    /// Hata, işlemin yapıldığı sayfada gösterilmek üzere döner.
+    func deleteMeeting(meetingID: String) -> String? {
+        guard meetings.contains(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return String(localized: "Kayıttaki ya da işlenen toplantı silinemez.")
+        }
+        do {
+            try trashMeetingDirectory(directory: try sessionDirectory(id: meetingID))
+        } catch {
+            Self.logger.error("Toplantı silinemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return String(localized: "Toplantı silinemedi: \(userFacingMessage(error: error))")
+        }
+        closeSpeakerReview(meetingID: meetingID)
+        meetings.removeAll { $0.id == meetingID }
+        if lastFinishedMeetingID == meetingID {
+            lastFinishedMeetingID = nil
+        }
+        return nil
+    }
+
+    /// Seçilen toplantıları Çöp Sepeti'ne taşır; silinemeyenlerin hataları (tekilleştirilmiş) döner, silinenler listeden
+    /// çıkar.
+    func deleteMeetings(meetingIDs: Set<String>) -> [String] {
+        meetingIDs.sorted().reduce(into: [String]()) { (errors: inout [String], id: String) -> Void in
+            if let error = deleteMeeting(meetingID: id), !errors.contains(error) {
+                errors.append(error)
+            }
+        }
+    }
+
     func deleteAudio(meetingID: String) {
         // Kayıttaki toplantının sesi silinirse kayıt yazılmaya devam ederken dosyalar kaybolur.
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
