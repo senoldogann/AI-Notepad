@@ -3,13 +3,16 @@ import AINotepadUI
 import os
 import SwiftUI
 
-/// Menü çubuğunda çalışan uygulamanın giriş noktası.
+/// Uygulamanın giriş noktası: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
 @main
 struct AINotepadApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate: AppDelegate
     @State private var model: AppModel
     @State private var panel: LivePanelController
     @State private var island: IslandController
     @State private var shortcuts: ShortcutController
+    @State private var router: MainWindowRouter
+    @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
 
     init() {
         registerDefaultSettings()
@@ -27,6 +30,8 @@ struct AINotepadApp: App {
             .toggleWindows: { toggleWindows(panel: panel, island: island) },
         ])
         _shortcuts = State(initialValue: shortcuts)
+        let router: MainWindowRouter = MainWindowRouter()
+        _router = State(initialValue: router)
         panel.attach(shortcuts: shortcuts) {
             Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
         }
@@ -36,10 +41,10 @@ struct AINotepadApp: App {
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
-                // İlk açılışta kurulum bir kez panelde gösterilir; kapatılsa da tekrar açılmaz (menüde "Kurulum…").
+                // İlk açılışta ana pencere kurulumda açılır; sonra Ana sayfada (kenar çubuğunda "Kurulum" hep var).
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
-                    panel.show(page: .setup)
+                    router.section = .setup
                 }
                 if let page = launchPage(arguments: CommandLine.arguments) {
                     panel.show(page: page)
@@ -58,9 +63,30 @@ struct AINotepadApp: App {
     }
 
     var body: some Scene {
-        // Tek pencere paneldir: Ayarlar, Toplantılar ve Kurulum panelin sayfalarıdır (ayrı pencere yok).
-        MenuBarExtra("AI-Notepad", systemImage: menuSymbol) {
-            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts)
+        // Açılışta ana pencere; kapatılınca uygulama menü çubuğunda sürer, Dock simgesi ya da menü yeniden açar.
+        Window("AI-Notepad", id: mainWindowID) {
+            MainWindowView(
+                model: model, router: router, shortcuts: shortcuts, player: player,
+                onStartRecording: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
+                onShowPanel: {
+                    panel.show(page: .live)
+                    island.show()
+                }
+            )
+        }
+        .defaultSize(width: 1040, height: 720)
+        .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Ayarlar…") { openMainWindow(router: router, section: .settings) }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
+            CommandGroup(replacing: .newItem) {}
+        }
+        MenuBarExtra {
+            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router)
+        } label: {
+            MenuBarLabel(symbol: menuSymbol)
         }
     }
 
@@ -106,6 +132,7 @@ private struct MenuContent: View {
     let panel: LivePanelController
     let island: IslandController
     let shortcuts: ShortcutController
+    let router: MainWindowRouter
     @AppStorage(SettingsKey.hideFromScreenCapture) private var hideFromCapture: Bool = true
 
     var body: some View {
@@ -162,22 +189,21 @@ private struct MenuContent: View {
                 island.setHideFromCapture(hidden: newValue)
             }
 
+        Button("Ana pencere", systemImage: "macwindow") {
+            openMainWindow(router: router, section: .home)
+        }
         Button("Toplantılar", systemImage: "list.bullet.rectangle") {
-            panel.show(page: .meetings)
-            island.show()
+            openMainWindow(router: router, section: .meetings)
         }
         if !model.processingMeetingIDs.isEmpty {
             Text("Toplantı işleniyor…")
         }
 
         Button("Ayarlar", systemImage: "gearshape") {
-            panel.show(page: .settings)
-            island.show()
+            openMainWindow(router: router, section: .settings)
         }
-        .keyboardShortcut(",", modifiers: .command)
         Button("Kurulum", systemImage: "wand.and.stars") {
-            panel.show(page: .setup)
-            island.show()
+            openMainWindow(router: router, section: .setup)
         }
 
         if model.liveEngine == .whisperKit {

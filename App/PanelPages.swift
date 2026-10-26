@@ -23,14 +23,6 @@ final class PanelRouter {
 /// Modeli gözleyip sayfayı seçen kabuk; tüm sayfalara aynı cam yüzeyi verir.
 struct PanelHost: View {
     let model: AppModel
-    // Görünüm ayarları: değişince panel hemen güncellenir.
-    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
-    @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
-    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
-    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
-    @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
-    @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
-    @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     /// "Arka planda devam et" ile kapatılan ilerleme kartları.
     @State private var dismissedProgress: Set<String> = []
     @State private var dismissedFinishing: Bool = false
@@ -67,13 +59,7 @@ struct PanelHost: View {
             }
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
-            // Ayar değerleri (AppStorage) okunarak görünüm kurulur; değişince yeniden çizilir.
-            .environment(\.panelAppearance, appearance)
-            // Sistem denetimleri (seçiciler, anahtarlar, kaydırıcılar, ilerleme, bağlantılar) da vurgu rengini kullanır.
-            .tint(appearance.accent.color)
-            // Seçilen yazı tipi tasarımı yazı tipini ayrıca belirtmeyen tüm metinlere de uygulanır.
-            .fontDesign(appearance.fontDesign.design)
-            .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
+            .modifier(AppearanceEnvironment())
     }
 
     /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
@@ -87,16 +73,6 @@ struct PanelHost: View {
         }
         let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
         return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
-    }
-
-    private var appearance: PanelAppearance {
-        let standard: PanelAppearance = .standard
-        return PanelAppearance(
-            fontDesign: PanelFontDesign(rawValue: fontDesign) ?? standard.fontDesign,
-            textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
-            accent: PanelAccent(rawValue: accent) ?? standard.accent,
-            background: PanelBackground(rawValue: background) ?? standard.background
-        )
     }
 
     @ViewBuilder
@@ -230,6 +206,34 @@ func launchPage(arguments: [String]) -> PanelPage? {
     case "ayarlar": return .settings
     case "kurulum": return .setup
     default: return nil
+    }
+}
+
+/// Ayarlar › Görünüm değerlerini (AppStorage) okuyup görünüme uygular: panel görünümü ortamı, vurgu rengi (sistem
+/// denetimleri de kullanır), yazı tipi tasarımı (yazı tipini ayrıca belirtmeyen metinler de) ve pencere teması. Panel ve
+/// ana pencere aynı ayarları kullanır; değişince ikisi de hemen güncellenir.
+struct AppearanceEnvironment: ViewModifier {
+    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
+    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
+    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
+    @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
+    @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
+    @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
+
+    func body(content: Content) -> some View {
+        let standard: PanelAppearance = .standard
+        let appearance: PanelAppearance = PanelAppearance(
+            fontDesign: PanelFontDesign(rawValue: fontDesign) ?? standard.fontDesign,
+            textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
+            accent: PanelAccent(rawValue: accent) ?? standard.accent,
+            background: PanelBackground(rawValue: background) ?? standard.background
+        )
+        content
+            .environment(\.panelAppearance, appearance)
+            .tint(appearance.accent.color)
+            .fontDesign(appearance.fontDesign.design)
+            .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
     }
 }
 

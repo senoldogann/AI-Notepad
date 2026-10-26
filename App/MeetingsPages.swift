@@ -56,7 +56,7 @@ struct MeetingsListPage: View {
 }
 
 /// Liste satırı: başlık, tarih, durum ve varsa senin görev sayın.
-private struct MeetingRow: View {
+struct MeetingRow: View {
     let record: MeetingRecord
     let isProcessing: Bool
 

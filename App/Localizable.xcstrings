@@ -458,6 +458,26 @@
         }
       }
     },
+    "Ana pencere": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main window"
+          }
+        }
+      }
+    },
+    "Ana sayfa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        }
+      }
+    },
     "Anahtar (Ollama'da gerekmez)": {
       "localizations": {
         "en": {
@@ -579,6 +599,16 @@
         }
       }
     },
+    "Ayarlar…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
+          }
+        }
+      }
+    },
     "Açık": {
       "localizations": {
         "en": {
@@ -672,6 +702,16 @@
         }
       }
     },
+    "Bir toplantı seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a meeting"
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -709,6 +749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finishing…"
+          }
+        }
+      }
+    },
+    "Bitiriliyor… kalan metin ve konuşmacılar tamamlanıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing… completing the remaining text and speakers."
           }
         }
       }
@@ -1460,6 +1510,16 @@
         }
       }
     },
+    "Henüz toplantı yok. Kaydı başlatınca toplantıların ve notların burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meetings yet. When you start recording, your meetings and notes appear here."
+          }
+        }
+      }
+    },
     "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
       "localizations": {
         "en": {
@@ -1702,6 +1762,16 @@
         }
       }
     },
+    "Kayıt sürüyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording"
+          }
+        }
+      }
+    },
     "Kayıt sırasında Türkçeye çevir": {
       "localizations": {
         "en": {
@@ -1778,6 +1848,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording"
+          }
+        }
+      }
+    },
+    "Kayıttan önce tamamlanmalı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete before recording"
+          }
+        }
+      }
+    },
+    "Kendi sesimi de kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also record my voice"
           }
         }
       }
@@ -1987,6 +2077,16 @@
         }
       }
     },
+    "Kurulumu aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open setup"
+          }
+        }
+      }
+    },
     "Kısayol kaydedilemedi: %@": {
       "localizations": {
         "en": {
@@ -2013,6 +2113,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shortcut not working: %@"
+          }
+        }
+      }
+    },
+    "Kısayol: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcut: %@"
           }
         }
       }
@@ -2397,6 +2507,16 @@
         }
       }
     },
+    "Notu, görevleri ve transkripti burada görürsün.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You'll see the note, tasks and transcript here."
+          }
+        }
+      }
+    },
     "Opak": {
       "localizations": {
         "en": {
@@ -2497,6 +2617,16 @@
         }
       }
     },
+    "Paneli göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show panel"
+          }
+        }
+      }
+    },
     "Paneli göster / gizle": {
       "extractionState": "stale",
       "localizations": {
@@ -2559,12 +2689,32 @@
         }
       }
     },
+    "SANA DÜŞEN GÖREVLER": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR TASKS"
+          }
+        }
+      }
+    },
     "SENİN GÖREVLERİN": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "YOUR TASKS"
+          }
+        }
+      }
+    },
+    "SON TOPLANTILAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECENT MEETINGS"
           }
         }
       }
@@ -3158,6 +3308,16 @@
         }
       }
     },
+    "Toplantıyı yazıya döker, Türkçeye çevirir; sonunda sana düşenleri çıkarır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes your meeting, translates it to Turkish, and tells you what's on you afterwards."
+          }
+        }
+      }
+    },
     "Transkript": {
       "localizations": {
         "en": {
@@ -3204,6 +3364,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Press keys…"
+          }
+        }
+      }
+    },
+    "Tümü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
           }
         }
       }

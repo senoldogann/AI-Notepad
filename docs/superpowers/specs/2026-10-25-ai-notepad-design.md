@@ -240,9 +240,17 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   açılır seçici olur; alt sayfa başlıklarında geri ve "Kayıtta" yalnızca simge olur; hazırlanma kartı kısa panelde
   simge ve açıklamasını bırakır; uzun asistan cevabı kartın içinde kaydırılır. Panel küçük ekranda ekrana sığacak
   boyutta açılır, ekran değişince görünür alanın içine çekilir (`clampedPanelFrame`).
-- **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
-  panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
-  ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
+- **Ana pencere (Dock):** uygulama açılınca standart bir macOS penceresi açılır (Dock simgesi, trafik ışıkları):
+  kenar çubuğunda Ana sayfa (kaydı başlat ve seçenekleri — kendi sesi, canlı çeviri, dil —, eksik ayarlar, sana düşen
+  görevler, son toplantılar), Toplantılar (solda liste, sağda toplantı sayfası), Ayarlar, Kurulum. İlk açılışta Kurulum'da
+  açılır. Pencere kapatılınca uygulama menü çubuğunda sürer; Dock simgesi, menü ve ⌘, pencereyi yeniden açar.
+- **Kayıt sırasında cam panel:** kayıt başlayınca yüzen cam panel ve ada açılır; Ayarlar, Toplantılar, toplantı
+  ayrıntısı ve Kurulum panelde de sayfa olarak vardır (açılır kayıt penceresi ya da uyarı penceresi yok); alt
+  sayfalarda geri düğmesi ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
+- **Simge:** gece mavisi zemin, şampanya altını konuşma balonu; içinde ses dalgası yazı satırlarına dönüşür
+  (`scripts/render-app-icon.swift` üretir; macOS köşe maskesini kendisi uygular).
+- **Dağıtım:** Developer ID imzası, hardened runtime (mikrofon yetkisi `App/AINotepad.entitlements`), Apple noter
+  onayı ve DMG: `scripts/release.sh`; GitHub Releases'te yayınlanır. Lisans Apache 2.0.
 - **Panel başlığı:** durum, dil çipi (kayıtta dokununca dil değişir), kayıt denetimleri — kayıt yokken "Başlat";
   kayıtta Duraklat/Devam, Mikrofon aç/kapat, Bitir — ve Kopyala, Toplantılar, Ayarlar, Gizle.
 - **Duraklat:** iki akış sessizlikle değiştirilir (kayıt sürer, metin üretilmez, zaman çizgisi bozulmaz); durum
