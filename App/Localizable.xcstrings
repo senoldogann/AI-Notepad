@@ -54,6 +54,16 @@
         }
       }
     },
+    "\"Notu yenile\" ile not yeniden yazılabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use \"Refresh note\" to write it again."
+          }
+        }
+      }
+    },
     "\"Sen\" kaydı yazıya dökülemedi: %@ Canlı metin eksik olabilir; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
       "extractionState": "stale",
       "localizations": {
@@ -457,6 +467,36 @@
         }
       }
     },
+    "1 karar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 decision"
+          }
+        }
+      }
+    },
+    "1 konuşmacı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 speaker"
+          }
+        }
+      }
+    },
+    "1 terim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 term"
+          }
+        }
+      }
+    },
     "10 sn geri": {
       "localizations": {
         "en": {
@@ -820,6 +860,16 @@
         }
       }
     },
+    "Başlıkta, notta ya da metinde başka bir kelimeyle ara.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try another word from the title, note or transcript."
+          }
+        }
+      }
+    },
     "Baştan dinle; çalan kelime renklenir": {
       "localizations": {
         "en": {
@@ -887,6 +937,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "When done, the meeting page opens with your tasks at the top."
+          }
+        }
+      }
+    },
+    "Bitince özet, kararlar ve görevler burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The summary, decisions and tasks appear here when it's done."
           }
         }
       }
@@ -1006,22 +1066,32 @@
         }
       }
     },
-    "Bu toplantıda sana düşen görev yok.": {
+    "Bu toplantıda sana düşen görev yok": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No tasks for you in this meeting."
+            "value": "No tasks for you in this meeting"
           }
         }
       }
     },
-    "Bu toplantının notu yok.": {
+    "Bu toplantının metni yok": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This meeting has no note."
+            "value": "This meeting has no transcript"
+          }
+        }
+      }
+    },
+    "Bu toplantının notu yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no note"
           }
         }
       }
@@ -1506,6 +1576,16 @@
         }
       }
     },
+    "Eşleşen toplantı yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching meetings"
+          }
+        }
+      }
+    },
     "Fince": {
       "localizations": {
         "en": {
@@ -1719,12 +1799,12 @@
         }
       }
     },
-    "Henüz sana düşen görev yok. Toplantı notlarında senin adına yazılan işler burada toplanır.": {
+    "Henüz sana düşen görev yok": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No tasks for you yet. Work assigned to you in meeting notes is collected here."
+            "value": "No tasks for you yet"
           }
         }
       }
@@ -1745,16 +1825,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "No meetings yet"
-          }
-        }
-      }
-    },
-    "Henüz toplantı yok. Kaydı başlatınca toplantıların ve notların burada görünür.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No meetings yet. When you start recording, your meetings and notes appear here."
           }
         }
       }
@@ -1950,6 +2020,16 @@
         }
       }
     },
+    "Kaydı başlatınca toplantıların ve notların burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your meetings and notes appear here once you start recording."
+          }
+        }
+      }
+    },
     "Kaydı bitir": {
       "localizations": {
         "en": {
@@ -2057,6 +2137,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Translate to Turkish while recording"
+          }
+        }
+      }
+    },
+    "Kayıt sırasında konuşma algılanmadı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No speech was detected during the recording."
           }
         }
       }
@@ -3503,6 +3593,46 @@
         }
       }
     },
+    "Sözlük açık": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glossary expanded"
+          }
+        }
+      }
+    },
+    "Sözlük kapalı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glossary collapsed"
+          }
+        }
+      }
+    },
+    "Sözlüğü aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand glossary"
+          }
+        }
+      }
+    },
+    "Sözlüğü kapat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse glossary"
+          }
+        }
+      }
+    },
     "Süre dolunca ses dosyaları silinir; metin ve not kalır.": {
       "localizations": {
         "en": {
@@ -3693,6 +3823,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Meeting notes and live translation are always in Turkish."
+          }
+        }
+      }
+    },
+    "Toplantı notlarında senin adına yazılan işler burada toplanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work assigned to you in meeting notes is collected here."
           }
         }
       }
