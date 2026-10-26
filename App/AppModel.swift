@@ -852,7 +852,12 @@ final class AppModel {
     /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
     /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
     private var recognitionKeyterms: [String] {
-        meetingKeyterms(records: Array(meetings.prefix(20)), userName: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", limit: 30)
+        // Kullanıcının sözlüğü öne; sınırda (30) önce toplantılardan gelenler düşer.
+        keytermsWithAttendees(
+            attendees: customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? ""),
+            keyterms: meetingKeyterms(records: Array(meetings.prefix(20)), userName: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", limit: 30),
+            limit: 30
+        )
     }
 
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.

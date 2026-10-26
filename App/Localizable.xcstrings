@@ -2883,6 +2883,16 @@
         }
       }
     },
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (en fazla 30 kullanılır). Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names, company and product names and abbreviations that speech recognition should spell correctly; one per line (up to 30 are used). Speaker names you give and glossary terms from meetings are added automatically."
+          }
+        }
+      }
+    },
     "Konuşmacı %lld": {
       "localizations": {
         "en": {
@@ -4420,6 +4430,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Done · %lld"
+          }
+        }
+      }
+    },
+    "Tanıma sözlüğü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognition vocabulary"
           }
         }
       }
