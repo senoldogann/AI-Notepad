@@ -12,8 +12,9 @@ public enum DesignTokens {
 
     public static let panelRadius: CGFloat = 22
     public static let chipRadius: CGFloat = 10
-    /// Kesinleşmemiş metnin opaklığı.
-    public static let partialOpacity: Double = 0.55
+    /// Kesinleşmemiş metnin opaklığı: konuşulurken gelen metin okunur olsun (çok soluk metin "henüz gelmedi" gibi
+    /// görünüyordu), kesinleşince tam koyulaşır.
+    public static let partialOpacity: Double = 0.72
     /// "Sen" vurgu rengi.
     public static let meColor: Color = Color(hex: 0x3B5BDB)
     /// Kişi renkleri; 7. kişiden itibaren başa döner.

@@ -137,8 +137,14 @@ final class AppModel {
     /// Toplantı → konuşmacı incelemesi kartı.
     var speakerReviews: [String: SpeakerReviewState] = [:]
 
-    /// Çeviriler sırayla yapılır: her iş bir öncekini bekler.
-    @ObservationIgnored private var translationTail: Task<Void, Never>?
+    /// Sırası gelmemiş çeviriler (gelme sırasıyla).
+    @ObservationIgnored private var translationQueue: [TranslationJob] = []
+    /// Süren çeviriler: en fazla `maxParallelTranslations` aynı anda. Tek tek sırayla yapılınca hızlı konuşmada her
+    /// cümle bir öncekini beklediği için Türkçe giderek geride kalıyordu; sonuçlar bölüm kimliğiyle yazıldığı için
+    /// sıra bozulmaz.
+    @ObservationIgnored private var translationsInFlight: [UUID: Task<Void, Never>] = [:]
+    /// Son gecikme uyarısı (log seli olmasın).
+    @ObservationIgnored private var lastLagWarning: Date = .distantPast
     /// Anahtar reddedildiyse bu kayıtta çeviri durur (her cümlede aynı hata çıkmasın); anahtar değişince açılır.
     @ObservationIgnored private var translationDisabled: Bool = false
     /// Her kayıtta artar; önceki kaydın geç gelen çevirisi/kartı yeni kayda yazılmaz (bölüm numaraları her kayıtta 0'dan başlar).
@@ -325,11 +331,25 @@ final class AppModel {
             return
         }
         let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
-        let generation: Int = recordingGeneration
-        let previous: Task<Void, Never>? = translationTail
-        translationTail = Task { [weak self] in
-            await previous?.value
-            await self?.translate(segment: segment, context: context, provider: provider, generation: generation)
+        translationQueue.append(TranslationJob(segment: segment, context: context, provider: provider, generation: recordingGeneration))
+        startQueuedTranslations()
+    }
+
+    /// Süren çevirilerden biri; yoksa nil.
+    private func anyTranslationInFlight() -> Task<Void, Never>? {
+        translationsInFlight.values.first
+    }
+
+    /// Boş yer oldukça sıradaki çevirileri başlatır; biten her çeviri sıradakini başlatır.
+    private func startQueuedTranslations() {
+        while translationsInFlight.count < maxParallelTranslations, !translationQueue.isEmpty {
+            let job: TranslationJob = translationQueue.removeFirst()
+            let id: UUID = UUID()
+            translationsInFlight[id] = Task { [weak self] in
+                await self?.translate(segment: job.segment, context: job.context, provider: job.provider, generation: job.generation)
+                self?.translationsInFlight[id] = nil
+                self?.startQueuedTranslations()
+            }
         }
     }
 
@@ -478,8 +498,9 @@ final class AppModel {
         translations = [:]
         failedTranslations = []
         recordingGeneration += 1
-        translationTail?.cancel()
-        translationTail = nil
+        translationQueue = []
+        translationsInFlight.values.forEach { $0.cancel() }
+        translationsInFlight = [:]
         closeAssistantCard()
         translationDisabled = false
         lockedLanguage = nil
@@ -716,6 +737,7 @@ final class AppModel {
             if segment.id.speaker == .others, segment.isFinal, !segment.text.isEmpty {
                 enqueueTranslation(segment: segment)
             }
+            logLiveLagIfHigh(segment: segment)
         case .languageLocked(let language):
             lockedLanguage = language
         case .captureEnded(let speaker):
@@ -734,6 +756,20 @@ final class AppModel {
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }
+    }
+
+    /// Canlı metin konuşmanın 2 sn'den fazla gerisindeyse (yarım dakikada en fazla bir kez) uyarı loglanır: gecikme
+    /// şikâyetinde nerede biriktiği görülsün. Doldurulan boşluklar (geç gelmeleri doğaldır) sayılmaz.
+    private func logLiveLagIfHigh(segment: LiveSegment) {
+        guard let startedAt = recordingStartedAt, !segment.text.isEmpty, segment.id.index < 1_000_000 else {
+            return
+        }
+        let lag: Double = Date().timeIntervalSince(startedAt) - segment.endSec
+        guard lag > 2, Date().timeIntervalSince(lastLagWarning) > 30 else {
+            return
+        }
+        lastLagWarning = Date()
+        Self.logger.warning("Canlı metin gecikiyor, gecikme: \(lag, privacy: .public), kesin: \(segment.isFinal, privacy: .public), konuşmacı: \(segment.id.speaker.rawValue, privacy: .public)")
     }
 
     /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı kaydedilip işlenir.
@@ -759,16 +795,17 @@ final class AppModel {
 
     /// Kuyruktaki çevirileri en fazla `timeoutSec` bekler; süre dolarsa kalan çeviriler durdurulur (kaydedilmez, loglanır).
     private func waitForPendingTranslations(timeoutSec: Double) async {
-        guard let tail = translationTail else {
-            return
-        }
-        let completed: Bool = await finishesWithin(seconds: timeoutSec) {
-            await tail.value
+        let completed: Bool = await finishesWithin(seconds: timeoutSec) { [weak self] in
+            // Biten çeviri sıradakini başlatır: kuyruk ve süren işler bitene dek beklenir.
+            while let next = await self?.anyTranslationInFlight() {
+                await next.value
+            }
         }
         if !completed {
-            // Sıradaki işler başlarken bunu görüp çıkar; süren istek iptal edilir.
+            // Sıradaki işler başlamaz; süren istekler iptal edilir.
             translationDisabled = true
-            tail.cancel()
+            translationQueue = []
+            translationsInFlight.values.forEach { $0.cancel() }
             Self.logger.warning("Kayıt sonunda bekleyen çeviriler süre içinde bitmedi, süre: \(timeoutSec, privacy: .public)")
         }
     }
@@ -1786,6 +1823,17 @@ struct ArchiveExchange: Identifiable, Equatable {
     /// Cevabı yazan model.
     var modelName: String?
 }
+
+/// Sırası bekleyen canlı çeviri.
+private struct TranslationJob {
+    let segment: LiveSegment
+    let context: [String]
+    let provider: LLMProvider
+    let generation: Int
+}
+
+/// Aynı anda en fazla bu kadar canlı çeviri isteği.
+private let maxParallelTranslations: Int = 4
 
 /// İçe aktarma hatasının kullanıcı metni. Saf fonksiyondur.
 func mediaImportMessage(error: any Error) -> String {

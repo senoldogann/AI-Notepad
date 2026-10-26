@@ -51,8 +51,8 @@ public func karaokeText(words: [StoredWord], activeIndex: Int?, accent: Color) -
         var word: AttributedString = AttributedString((item.offset == 0 ? "" : " ") + item.element.text)
         switch activeIndex {
         case .some(let index) where item.offset == index:
+            // Yalnızca renk: kalınlaştırmak kelimeyi genişletip satırları her kelimede yeniden kırıyor, metin titriyordu.
             word.foregroundColor = accent
-            word.inlinePresentationIntent = .stronglyEmphasized
         case .some(let index) where item.offset < index:
             word.foregroundColor = Color.primary
         default:

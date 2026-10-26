@@ -17,7 +17,7 @@ func meetingAudioURL(directory: URL, speaker: Speaker) -> URL? {
 let playbackRates: [Float] = [1, 1.25, 1.5, 2, 0.75]
 
 /// Toplantı oynatıcısı: "Sen" ve "Diğerleri" kayıtlarını aynı zaman çizgisinde birlikte çalar (kayıtlar başlangıca
-/// hizalı), duraklatır, sarar, hız değiştirir. Konum saniyede 10 kez güncellenir (kelime vurgusu için).
+/// hizalı), duraklatır, sarar, hız değiştirir. Konum saniyede ~30 kez güncellenir (kelime vurgusu akıcı geçsin).
 @MainActor
 @Observable
 final class MeetingAudioPlayer {
@@ -123,14 +123,14 @@ final class MeetingAudioPlayer {
         startTicker()
     }
 
-    /// Konumu çalarken saniyede 10 kez günceller; tüm kayıtlar bitince durur.
+    /// Konumu çalarken saniyede ~30 kez günceller; tüm kayıtlar bitince durur.
     private func startTicker() {
         ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
                 // Önce beklenir: kayıtlar 50 ms sonra başlar (`play(atTime:)`); hemen bakılırsa "çalmıyor" görünür.
                 do {
-                    try await Task.sleep(for: .milliseconds(100))
+                    try await Task.sleep(for: .milliseconds(33))
                 } catch {
                     return
                 }
