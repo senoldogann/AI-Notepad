@@ -146,6 +146,8 @@ private actor CloudSessionState {
     private var stopRequested: Bool = false
     /// Anahtar reddedildiyse (401/403) sonraki pencereler gönderilmez.
     private var diarizationDisabled: Bool = false
+    /// Doldurulan boşlukların sayısı.
+    private var gapCount: Int = 0
 
     init(windowSamples: Int) {
         self.windowSamples = windowSamples
@@ -165,6 +167,12 @@ private actor CloudSessionState {
     func window() -> (samples: [Float], startSec: Double) {
         let start: Int = max(0, buffer.count - windowSamples)
         return (Array(buffer[start...]), Double(bufferStartSample + start) / Double(cloudSampleRate))
+    }
+
+    /// Doldurulan boşluğun bölüm numarası.
+    func nextGapIndex() -> Int {
+        gapCount += 1
+        return gapIndexBase + gapCount
     }
 
     func addOthersFinal(segment: LiveSegment) {
@@ -364,11 +372,36 @@ private func runDiarizationWindow(
 
     let mapping: SpeakerMapping = applyWindow(mapping: await state.currentMapping(), windowWords: result.words, windowStartSec: window.startSec)
     await state.setMapping(mapping: mapping)
-    let assignments: [SegmentID: Int] = assignPersons(segments: await state.finals(), words: mapping.words)
+    let finals: [LiveSegment] = await state.finals()
+    let assignments: [SegmentID: Int] = assignPersons(segments: finals, words: mapping.words)
     if !assignments.isEmpty {
         events.yield(.speakersAssigned(assignments))
     }
+    // Deepgram'ın boş kesinleştirdiği konuşma pencerenin kelimeleriyle doldurulur (kişisiyle birlikte).
+    let absoluteWords: [DiarizedWord] = result.words.map { (word: DiarizedWord) -> DiarizedWord in
+        DiarizedWord(text: word.text, startSec: word.startSec + window.startSec, endSec: word.endSec + window.startSec, speaker: word.speaker)
+    }
+    let gaps: [TranscriptGap] = transcriptGaps(
+        words: absoluteWords, persons: mapping.words.map(\.person), finals: finals,
+        coveredUntilSec: finals.map(\.endSec).max() ?? 0, minWords: gapMinWords
+    )
+    for gap in gaps {
+        let segment: LiveSegment = LiveSegment(
+            id: SegmentID(speaker: .others, index: await state.nextGapIndex()),
+            startSec: gap.startSec, endSec: gap.endSec, text: gap.text, isFinal: true, failureMessage: nil, person: gap.person
+        )
+        await state.addOthersFinal(segment: segment)
+        events.yield(.segment(segment))
+    }
+    if !gaps.isEmpty {
+        cloudLogger.info("Canlı transkriptteki boşluklar dolduruldu, adet: \(gaps.count, privacy: .public)")
+    }
 }
+
+/// Boşluk sayılması için gereken en az kelime (tek tük dolgu sözcükleri boşluk değildir).
+private let gapMinWords: Int = 3
+/// Doldurulan bölümlerin numaraları Deepgram'ınkilerle çakışmasın diye buradan başlar.
+private let gapIndexBase: Int = 1_000_000
 
 /// Dil olasılığı eşiği geçiyorsa ve Fince/İngilizce ise dili döndürür. Saf fonksiyondur.
 func confidentLanguage(result: DiarizationResult, minimumProbability: Double) -> MeetingLanguage? {

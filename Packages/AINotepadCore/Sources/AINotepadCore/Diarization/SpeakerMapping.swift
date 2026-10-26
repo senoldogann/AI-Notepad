@@ -115,3 +115,51 @@ private struct LabelPerson: Hashable {
 private func intersection(startA: Double, endA: Double, startB: Double, endB: Double) -> Double {
     max(0, min(endA, endB) - max(startA, startB))
 }
+
+/// Canlı transkriptteki bir boşluğu dolduran konuşma: ayırma penceresinin (ElevenLabs) kelimeleri.
+public struct TranscriptGap: Sendable, Equatable {
+    public let startSec: Double
+    public let endSec: Double
+    public let text: String
+    /// Kelimelerin çoğunun kişisi.
+    public let person: Int
+}
+
+/// Deepgram arada bir konuşulan birkaç saniyeyi boş metinle kesinleştirir (hızlı konuşmada ve aynı ses yeniden
+/// gönderilince olmayan, rastgele bir durum). Ayırma penceresinin kelimelerinden hiçbir canlı kesin bölümün
+/// kapsamadığı ardışık `minWords`+ kelimelik gruplar bu boşluklardır. Yalnızca `coveredUntilSec`'e (Deepgram'ın
+/// kesinleştirdiği son ana) kadar bakılır: sonrası henüz kesinleşmemiş olabilir. `words` ve `persons` aynı sırada,
+/// zamanlar mutlak. Saf fonksiyondur.
+public func transcriptGaps(words: [DiarizedWord], persons: [Int], finals: [LiveSegment], coveredUntilSec: Double, minWords: Int) -> [TranscriptGap] {
+    let tolerance: Double = 0.3
+    let uncovered: [(word: DiarizedWord, person: Int)] = zip(words, persons)
+        .filter { (item: (DiarizedWord, Int)) -> Bool in
+            let middle: Double = (item.0.startSec + item.0.endSec) / 2
+            return item.0.endSec <= coveredUntilSec && !finals.contains { (segment: LiveSegment) -> Bool in
+                middle >= segment.startSec - tolerance && middle <= segment.endSec + tolerance
+            }
+        }
+        .map { (word: $0.0, person: $0.1) }
+    let groups: [[(word: DiarizedWord, person: Int)]] = uncovered.reduce(into: [[(word: DiarizedWord, person: Int)]]()) { (groups: inout [[(word: DiarizedWord, person: Int)]], item: (word: DiarizedWord, person: Int)) -> Void in
+        // Grup, araya kapsanmış kelime girmeden ve uzun duraklama olmadan süren kelimelerdir.
+        if let last = groups.last?.last, item.word.startSec - last.word.endSec < 1, !finals.contains(where: { $0.startSec >= last.word.endSec && $0.endSec <= item.word.startSec }) {
+            groups[groups.count - 1].append(item)
+        } else {
+            groups.append([item])
+        }
+    }
+    return groups
+        .filter { $0.count >= minWords }
+        .compactMap { (group: [(word: DiarizedWord, person: Int)]) -> TranscriptGap? in
+            guard let first = group.first, let last = group.last else {
+                return nil
+            }
+            let counts: [Int: Int] = group.reduce(into: [Int: Int]()) { $0[$1.person, default: 0] += 1 }
+            // Eşitlikte küçük numara: sonuç belirli olsun.
+            let person: Int = counts.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key ?? first.person
+            return TranscriptGap(
+                startSec: first.word.startSec, endSec: last.word.endSec,
+                text: group.map(\.word.text).joined(separator: " "), person: person
+            )
+        }
+}

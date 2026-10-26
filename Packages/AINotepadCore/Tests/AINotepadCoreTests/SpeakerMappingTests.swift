@@ -91,3 +91,27 @@ func othersSegment(index: Int, start: Double, end: Double) -> LiveSegment {
         #expect(assignPersons(segments: [me], words: [AttributedWord(startSec: 0, endSec: 10, person: 1)]).isEmpty)
     }
 }
+
+@Suite struct TranscriptGapTests {
+    // Deepgram'ın boş bıraktığı 3+ kelimelik konuşma boşluk olur; kapsananlar, tek tük kelimeler ve henüz
+    // kesinleşmemiş son kısım boşluk sayılmaz.
+    @Test func uncoveredRunsBecomeGaps() {
+        let spoken: [DiarizedWord] = [
+            DiarizedWord(text: "ottaa", startSec: 10, endSec: 10.5, speaker: "a"),
+            DiarizedWord(text: "julkisen", startSec: 13.2, endSec: 13.6, speaker: "a"),
+            DiarizedWord(text: "talouden", startSec: 13.6, endSec: 14.2, speaker: "a"),
+            DiarizedWord(text: "varoista,", startSec: 14.3, endSec: 14.9, speaker: "b"),
+            DiarizedWord(text: "niin", startSec: 15.0, endSec: 15.3, speaker: "a"),
+            DiarizedWord(text: "öö", startSec: 20.0, endSec: 20.3, speaker: "a"),
+            DiarizedWord(text: "ei", startSec: 22, endSec: 22.3, speaker: "a"),
+            DiarizedWord(text: "kesken", startSec: 40, endSec: 40.5, speaker: "a"),
+            DiarizedWord(text: "olevaa", startSec: 40.5, endSec: 41, speaker: "a"),
+            DiarizedWord(text: "puhetta", startSec: 41, endSec: 41.5, speaker: "a"),
+        ]
+        let finals: [LiveSegment] = [othersSegment(index: 0, start: 9, end: 13), othersSegment(index: 2, start: 21.8, end: 25)]
+        let gaps: [TranscriptGap] = transcriptGaps(
+            words: spoken, persons: [1, 1, 1, 2, 1, 1, 1, 1, 1, 1], finals: finals, coveredUntilSec: 25, minWords: 3
+        )
+        #expect(gaps == [TranscriptGap(startSec: 13.2, endSec: 15.3, text: "julkisen talouden varoista, niin", person: 1)])
+    }
+}
