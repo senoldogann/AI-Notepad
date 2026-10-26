@@ -7,6 +7,7 @@ struct AINotepadApp: App {
     @State private var model: AppModel
     @State private var panel: LivePanelController
     @State private var island: IslandController
+    @State private var hotKeys: HotKeyCenter
 
     init() {
         UserDefaults.standard.register(defaults: [liveEngineKey: LiveEngine.deepgram.rawValue])
@@ -20,10 +21,13 @@ struct AINotepadApp: App {
         _panel = State(initialValue: panel)
         let island: IslandController = IslandController(model: model, onTap: { panel.toggle() })
         _island = State(initialValue: island)
-        // Pencereler uygulama açıldıktan sonra kurulur.
+        let hotKeys: HotKeyCenter = HotKeyCenter()
+        _hotKeys = State(initialValue: hotKeys)
+        // Pencereler ve kısayollar uygulama açıldıktan sonra kurulur.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 island.install(hideFromCapture: hideFromCapture)
+                registerShortcuts(hotKeys: hotKeys, model: model, panel: panel, island: island)
             }
         }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir.
@@ -42,6 +46,33 @@ struct AINotepadApp: App {
     }
 }
 
+/// ⌃⌥R kayıt başlat/durdur, ⌃⌥Space ada + paneli göster/gizle. Hata menüde gösterilir.
+@MainActor
+private func registerShortcuts(hotKeys: HotKeyCenter, model: AppModel, panel: LivePanelController, island: IslandController) {
+    do {
+        try hotKeys.register(keyCode: Shortcut.record, modifiers: Shortcut.modifiers) {
+            Task {
+                await model.toggleRecording()
+                if model.isRecording {
+                    panel.show()
+                }
+            }
+        }
+        try hotKeys.register(keyCode: Shortcut.toggleWindows, modifiers: Shortcut.modifiers) {
+            // Ada penceresi kayıt yokken saydam olarak hep açıktır; karar panelin durumuna göre verilir.
+            if panel.isVisible {
+                panel.hide()
+                island.hide()
+            } else {
+                panel.show()
+                island.show()
+            }
+        }
+    } catch {
+        model.shortcutError = "Kısayol kaydedilemedi (\(error)). Başka bir uygulama ⌃⌥R ya da ⌃⌥Space kullanıyor olabilir."
+    }
+}
+
 /// Menü çubuğu menüsü.
 private struct MenuContent: View {
     @Bindable var model: AppModel
@@ -55,6 +86,7 @@ private struct MenuContent: View {
             Button("Kaydı durdur", systemImage: "stop.circle") {
                 model.stopRecording()
             }
+            .keyboardShortcut("r", modifiers: [.control, .option])
         } else {
             Button("Kaydı başlat", systemImage: "record.circle") {
                 Task {
@@ -63,10 +95,16 @@ private struct MenuContent: View {
                 }
             }
             .disabled(!model.isReadyToRecord || model.isStarting)
+            .keyboardShortcut("r", modifiers: [.control, .option])
         }
 
         Button("Paneli göster / gizle", systemImage: "rectangle.on.rectangle") {
             panel.toggle()
+        }
+        .keyboardShortcut(.space, modifiers: [.control, .option])
+
+        if let shortcutError = model.shortcutError {
+            Text(shortcutError)
         }
 
         Divider()

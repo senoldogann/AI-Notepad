@@ -35,6 +35,8 @@ final class AppModel {
     var transcript: [LiveSegment] = []
     var errorMessages: [String] = []
     var recordingStartedAt: Date?
+    /// Global kısayol kaydedilemediyse menüde gösterilen hata.
+    var shortcutError: String?
 
     @ObservationIgnored private var engine: WhisperKitEngine?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
@@ -199,6 +201,15 @@ final class AppModel {
                 self?.handle(event: event)
             }
             self?.sessionEnded()
+        }
+    }
+
+    /// Kayıttaysa durdurur, değilse başlatır (kısayol için).
+    func toggleRecording() async {
+        if isRecording {
+            stopRecording()
+        } else {
+            await startRecording()
         }
     }
 

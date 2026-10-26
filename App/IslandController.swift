@@ -66,6 +66,14 @@ final class IslandController {
         window?.sharingType = sharingType(hideFromCapture: hidden)
     }
 
+    func show() {
+        window?.orderFrontRegardless()
+    }
+
+    func hide() {
+        window?.orderOut(nil)
+    }
+
     private func relayout() {
         guard let window else {
             return
