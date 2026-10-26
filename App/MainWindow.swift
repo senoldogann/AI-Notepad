@@ -367,9 +367,8 @@ private struct SetupScreen: View {
         GeometryReader { (geometry: GeometryProxy) in
             ScrollView {
                 VStack(spacing: DesignTokens.Spacing.l) {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                        .resizable()
-                        .frame(width: 88, height: 88)
+                    // Simgeyle aynı işaret (macOS'un simge önbelleği eski simgeyi gösterebiliyordu).
+                    AppMark(size: 72, barsRaised: true, lineDrawn: true)
                         .floating3D()
                         .tilt3D(maxAngle: 14)
                     SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
