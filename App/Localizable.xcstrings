@@ -2771,6 +2771,26 @@
         }
       }
     },
+    "Klasör adı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder name"
+          }
+        }
+      }
+    },
+    "Klasörden çıkar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from folder"
+          }
+        }
+      }
+    },
     "Klasöre erişilemedi: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -2778,6 +2798,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't access folder: %@."
+          }
+        }
+      }
+    },
+    "Klasöre taşı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to folder"
+          }
+        }
+      }
+    },
+    "Klasörler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folders"
+          }
+        }
+      }
+    },
+    "Klasörü sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete folder"
           }
         }
       }
@@ -4827,6 +4877,16 @@
         }
       }
     },
+    "Tüm toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All meetings"
+          }
+        }
+      }
+    },
     "Tümü": {
       "localizations": {
         "en": {
@@ -5147,6 +5207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't transcribe: %@"
+          }
+        }
+      }
+    },
+    "Yeni klasör": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New folder"
           }
         }
       }
@@ -5581,6 +5651,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "SUMMARY"
+          }
+        }
+      }
+    },
+    "Önce kenar çubuğunda \"+\" ile klasör oluştur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First create a folder with \"+\" in the sidebar"
           }
         }
       }

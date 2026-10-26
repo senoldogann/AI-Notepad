@@ -15,6 +15,9 @@ struct MeetingsListPage: View {
     let selectedID: String?
     /// Üst çubuktaki arama.
     let query: String
+    /// Kenar çubuğunda seçilen klasör; nil hepsi.
+    let folder: String?
+    let onClearFolder: @MainActor () -> Void
     let onOpen: @MainActor (String) -> Void
     /// Toplu silmeden sonra (açık toplantı silindiyse sayfa kapanır).
     let onDeleted: @MainActor (Set<String>) -> Void
@@ -25,10 +28,27 @@ struct MeetingsListPage: View {
     @State private var deleteErrors: [String] = []
 
     var body: some View {
-        let visible: [MeetingRecord] = filterMeetings(records: model.meetings, query: query)
+        let visible: [MeetingRecord] = filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query)
         VStack(spacing: 0) {
             HStack(spacing: DesignTokens.Spacing.s) {
-                Text(query.isEmpty ? String(localized: "\(model.meetings.count) toplantı") : String(localized: "\(visible.count) sonuç"))
+                if let folder {
+                    Button {
+                        onClearFolder()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.fill")
+                            Text(folder).lineLimit(1)
+                            Image(systemName: "xmark").appFont(size: 9, weight: .bold)
+                        }
+                        .appFont(size: 12, weight: .medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Theme.soft, in: Capsule())
+                    }
+                    .buttonStyle(.hoverCapsule)
+                    .hoverHint("Tüm toplantılar", alignment: .leading, edge: .bottom)
+                }
+                Text(query.isEmpty ? String(localized: "\(visible.count) toplantı") : String(localized: "\(visible.count) sonuç"))
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
                 Spacer(minLength: 0)
@@ -148,6 +168,17 @@ struct MeetingsListPage: View {
                         .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
+                    Menu {
+                        ForEach(model.folders) { (item: FolderSummary) in
+                            Button(item.name, systemImage: "folder") { model.moveMeetings(ids: checked, to: item.name) }
+                        }
+                        Divider()
+                        Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: checked, to: nil) }
+                    } label: {
+                        Label("Klasöre taşı", systemImage: "folder")
+                    }
+                    .fixedSize()
+                    .disabled(checked.isEmpty)
                     Button("Sil", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
                         .disabled(checked.isEmpty)
                 }
@@ -557,6 +588,27 @@ struct MeetingDetailPage: View {
     /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
     @ViewBuilder
     private var manageItems: some View {
+        Menu("Klasöre taşı") {
+            ForEach(model.folders) { (item: FolderSummary) in
+                Button {
+                    model.moveMeetings(ids: [record.id], to: item.name)
+                } label: {
+                    if record.folder?.caseInsensitiveCompare(item.name) == .orderedSame {
+                        Label(item.name, systemImage: "checkmark")
+                    } else {
+                        Text(item.name)
+                    }
+                }
+            }
+            if model.folders.isEmpty {
+                Text("Önce kenar çubuğunda \"+\" ile klasör oluştur")
+            }
+            if record.folder != nil {
+                Divider()
+                Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: [record.id], to: nil) }
+            }
+        }
+        .disabled(isLocked)
         Menu("Şablonla yeniden yaz") {
             ForEach(NoteTemplateKind.allCases, id: \.self) { (kind: NoteTemplateKind) in
                 Button {

@@ -159,6 +159,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var completedTasks: [String]?
     /// Anımsatıcılar'a eklenen görevlerin kimlikleri.
     public private(set) var remindedTasks: [String]?
+    /// Toplantının klasörü (proje, ekip, ders…); klasörsüzde nil.
+    public private(set) var folder: String?
     /// İşaretlenen anlar (kayıt sırasında ya da sonradan).
     public private(set) var highlights: [Highlight]?
     /// Takvimdeki katılımcıların adları (kayıt bir etkinliğe bağlandıysa).
@@ -254,6 +256,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(liveSegments newSegments: [StoredSegment]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.liveSegments = newSegments
+        return copy
+    }
+
+    /// Klasörü değişmiş kopya (nil klasörden çıkarır).
+    public func with(folder newFolder: String?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.folder = newFolder
         return copy
     }
 

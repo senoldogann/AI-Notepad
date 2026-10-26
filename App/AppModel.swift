@@ -994,6 +994,42 @@ final class AppModel {
         UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
     }
 
+    // MARK: Klasörler
+
+    /// Oluşturulan klasörler (toplantısız olanlar dahil).
+    var savedFolders: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.folders) ?? []
+
+    /// Klasörler ve toplantı sayıları.
+    var folders: [FolderSummary] {
+        meetingFolders(records: meetings, saved: savedFolders)
+    }
+
+    /// Yeni klasör oluşturur (aynı ad varsa bir şey yapmaz).
+    func createFolder(name: String) {
+        let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !folders.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            return
+        }
+        savedFolders.append(trimmed)
+        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+    }
+
+    /// Klasörü siler: toplantılar silinmez, klasörsüz kalır.
+    func deleteFolder(name: String) {
+        savedFolders.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        moveMeetings(ids: Set(meetingsInFolder(records: meetings, folder: name).map(\.id)), to: nil)
+    }
+
+    /// Toplantıları klasöre taşır (nil: klasörden çıkarır); kilitli (kayıtta/işlemede) olanlar atlanır.
+    func moveMeetings(ids: Set<String>, to folder: String?) {
+        for record in meetings where ids.contains(record.id) && !isLocked(meetingID: record.id) {
+            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                saveRecord(record: record.with(folder: folder), directory: directory)
+            }
+        }
+    }
+
     // MARK: İşaretler
 
     /// Bu kayıtta işaretlenen anlar.
