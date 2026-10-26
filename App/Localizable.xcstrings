@@ -417,6 +417,16 @@
         }
       }
     },
+    "%lld model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Found %lld models. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+          }
+        }
+      }
+    },
     "%lld seçili": {
       "localizations": {
         "en": {
@@ -647,6 +657,16 @@
         }
       }
     },
+    "Algıla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detect"
+          }
+        }
+      }
+    },
     "Alt boşluk: %lld pt": {
       "localizations": {
         "en": {
@@ -794,6 +814,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reminders has no list: create one in the Reminders app."
+          }
+        }
+      }
+    },
+    "Aranıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching…"
           }
         }
       }
@@ -2906,6 +2936,26 @@
         }
       }
     },
+    "Kullan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use"
+          }
+        }
+      }
+    },
+    "Kullanılıyor: %@. Bağlantıyı denemek için LLM sekmesi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using %@. Test the connection in the LLM tab."
+          }
+        }
+      }
+    },
     "Kurulum": {
       "localizations": {
         "en": {
@@ -3033,6 +3083,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "On Mac (WhisperKit, offline)"
+          }
+        }
+      }
+    },
+    "Mac'te, anahtarsız (Ollama)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On this Mac, no keys (Ollama)"
           }
         }
       }
@@ -3392,6 +3452,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You'll see the note, tasks and transcript here."
+          }
+        }
+      }
+    },
+    "Ollama bulunamadı (%@). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama not found (%@). Install it from ollama.com, then run in Terminal: ollama pull gpt-oss:20b"
           }
         }
       }
@@ -5063,6 +5133,16 @@
         }
       }
     },
+    "Yerel model (ör. gpt-oss:20b, qwen3) ile not ve çeviri: anahtar gerekmez, toplantı metni Mac'ten çıkmaz. Konuşma tanıma için Genel › Canlı metin'de \"Mac'te (WhisperKit)\" seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes and translation with a local model (e.g. gpt-oss:20b, qwen3): no keys needed, the meeting text never leaves your Mac. For speech recognition choose \"On this Mac (WhisperKit)\" in General › Live transcript."
+          }
+        }
+      }
+    },
     "Yeşil": {
       "localizations": {
         "en": {
@@ -5194,6 +5274,16 @@
         }
       }
     },
+    "sohbet modeli yüklü değil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no chat model installed"
+          }
+        }
+      }
+    },
     "süre": {
       "localizations": {
         "en": {
@@ -5311,6 +5401,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude is used for translation, summaries and notes. You can choose OpenAI, Ollama or OpenCode Go in Settings › LLM."
+          }
+        }
+      }
+    },
+    "Çeviri, özet ve not için Claude kullanılır; anahtarsız istersen Mac'teki Ollama'yı seç. OpenAI ve OpenCode Go Ayarlar › LLM'de.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude is used for translation, summaries and notes; for no keys, choose Ollama on your Mac. OpenAI and OpenCode Go are in Settings › LLM."
           }
         }
       }

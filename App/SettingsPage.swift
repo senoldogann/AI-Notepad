@@ -453,6 +453,7 @@ private struct LLMSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            LocalLLMSetup(model: model)
             SettingsRow(title: Text("Sağlayıcı")) {
                 EmptyView()
             } control: {
@@ -863,5 +864,81 @@ private struct MCPSettings: View {
                 .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .padding(.vertical, 12)
         }
+    }
+}
+
+/// Anahtarsız kullanım: Mac'teki Ollama algılanır, yüklü modellerden önerilen seçilir ve tek tıkla LLM sağlayıcısı
+/// yapılır (OpenAI uyumlu, `localhost:11434`). Bulut modelleri işaretlenir (metin Ollama'ya gider). Ollama yoksa kurulum
+/// adımları gösterilir.
+struct LocalLLMSetup: View {
+    let model: AppModel
+    @State private var state: DetectState = .idle
+    @State private var choice: String = ""
+
+    private enum DetectState: Equatable {
+        case idle
+        case detecting
+        case found([String])
+        case missing(String)
+        case applied(String)
+    }
+
+    var body: some View {
+        SettingsRow(title: Text("Mac'te, anahtarsız (Ollama)")) {
+            switch state {
+            case .idle, .detecting:
+                Text("Yerel model (ör. gpt-oss:20b, qwen3) ile not ve çeviri: anahtar gerekmez, toplantı metni Mac'ten çıkmaz. Konuşma tanıma için Genel › Canlı metin'de \"Mac'te (WhisperKit)\" seç.")
+            case .found(let names):
+                Text("\(names.count) model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.")
+            case .missing(let message):
+                Text("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b").foregroundStyle(.orange)
+            case .applied(let name):
+                Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+        } control: {
+            HStack(spacing: 8) {
+                if case .found(let names) = state {
+                    SettingsMenu(selection: $choice, options: names.map { (name: String) -> (String, Text) in
+                        (name, isOllamaCloudModel(name: name) ? Text(verbatim: "\(name) ☁︎") : Text(verbatim: name))
+                    })
+                    Button("Kullan") { apply(name: choice) }
+                        .buttonStyle(.pillPrimary)
+                        .disabled(choice.isEmpty)
+                } else {
+                    Button(state == .detecting ? "Aranıyor…" : "Algıla", systemImage: "magnifyingglass") { detect() }
+                        .disabled(state == .detecting)
+                }
+            }
+        }
+    }
+
+    private func detect() {
+        state = .detecting
+        Task {
+            do {
+                let names: [String] = try await ollamaModels(baseURL: URL(string: "http://localhost:11434/v1")!).filter(isChatModel)
+                guard let recommended = recommendedOllamaModel(names: names) else {
+                    state = .missing(String(localized: "sohbet modeli yüklü değil"))
+                    return
+                }
+                choice = recommended
+                state = .found(names)
+            } catch {
+                state = .missing(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Sağlayıcıyı Ollama'ya çevirir: iki model sınıfı da seçilen model, effort gönderilmez (her sunucu desteklemez).
+    private func apply(name: String) {
+        let defaults: UserDefaults = .standard
+        defaults.set(LLMProviderKind.openAICompatible.rawValue, forKey: SettingsKey.llmProvider)
+        defaults.set("http://localhost:11434/v1", forKey: SettingsKey.llmBaseURL)
+        defaults.set(name, forKey: SettingsKey.llmFastModel)
+        defaults.set(name, forKey: SettingsKey.llmSmartModel)
+        defaults.set("", forKey: SettingsKey.llmFastEffort)
+        defaults.set("", forKey: SettingsKey.llmSmartEffort)
+        model.settingsChanged()
+        state = .applied(name)
     }
 }
