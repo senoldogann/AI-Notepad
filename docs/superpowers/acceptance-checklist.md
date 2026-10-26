@@ -71,7 +71,8 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Hoparlörle Fince video, sen konuşmuyorsun: "Sen" satırı çıkmıyor (canlıda ve Toplantılar'da); kendi konuşman görünüyor.
 - [ ] Panelde mikrofon düğmesi (ya da Ayarlar › Genel › Mikrofon) kapalıyken "Sen" hiç yazılmıyor; tercih yeniden açılışta korunuyor.
 - [ ] Toplantı sayfasında transkript paragraflı: aynı konuşmacının cümleleri tek paragraf, satır satır bölünmüyor.
-- [ ] Görünüm "Sadece orijinal": Türkçe yok, ada orijinali gösteriyor; toplantı sonunda Türkçe not yine hazır.
+- [ ] Ayarlar › Genel › "Kayıt sırasında Türkçeye çevir" kapalı (varsayılan): Türkçe yok, ada orijinali gösteriyor; toplantı sonunda Türkçe not yine hazır. Açınca "İki dil / Sadece Türkçe" seçilebiliyor ve sonraki cümleler çevriliyor.
+- [ ] Uzun toplantı (≥ 1 saat): not parça parça yazılıyor; her konudaki görevler ayrı maddeler olarak notta, sonradan ertelenen görevin son tarihi doğru.
 - [ ] Panelden Başlat → Duraklat ("Duraklatıldı", metin durur) → Devam → Bitir; menüden de Duraklat/Devam.
 - [ ] Bitir'e basınca panel "Bitiriliyor…", ardından kendiliğinden toplantı sayfasına geçiyor; en üstte "Senin görevlerin".
 - [ ] PDF düğmesi: İndirilenler'de temiz PDF (görevler, özet, kararlar, sözlük, transkript; sayfa numaraları); "Finder'da göster" çalışıyor; PDF'ten kopyalanan metin doğru.

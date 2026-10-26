@@ -75,7 +75,10 @@ extension CloudTests {
             speakerNames: [1: "Aino"],
             userName: "Doğan"
         ))
-        let note: MeetingNote = try parseMeetingNote(text: try await sendLLM(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request))
+        // Uygulamayla aynı yol: arada bir gelen boş yanıt yeniden istenir.
+        let note: MeetingNote = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MeetingNote in
+            try parseMeetingNote(text: text)
+        }
         #expect(!note.title.isEmpty)
         #expect(note.tasks.contains { $0.isMine }, "görevler: \(note.tasks)")
     }

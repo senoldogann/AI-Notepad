@@ -7,9 +7,9 @@ func jsonObject(_ data: Data) throws -> [String: Any] {
     try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 }
 
-/// Varsayılan ayar: çeviri Haiku 5.5 (low), özet ve not Opus 5.5 (medium).
+/// Varsayılan ayar: çeviri Haiku 5.5 (low), özet ve not Haiku 5.5 (medium).
 func defaultAnthropicConfig(apiKey: String) -> AnthropicConfig {
-    AnthropicConfig(apiKey: apiKey, fastModel: .haiku, smartModel: .opus, fastEffort: .low, smartEffort: .medium)
+    AnthropicConfig(apiKey: apiKey, fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .medium)
 }
 
 /// Claude akışı (SSE): verilen olay yükleri `data:` satırları olarak.

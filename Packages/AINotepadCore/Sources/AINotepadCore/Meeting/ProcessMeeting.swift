@@ -173,15 +173,16 @@ private func joinedNotice(_ first: String?, _ second: String) -> String {
 /// sonra notta da adlar görünsün diye kullanılır.
 public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: String) async -> MeetingRecord {
     // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
-    guard let request = meetingNoteRequest(segments: meetingSegments(record: record), speakerNames: record.speakerNames, userName: userName) else {
+    let segments: [StoredSegment] = meetingSegments(record: record)
+    guard segments.contains(where: { !$0.text.isEmpty }) else {
         return record.with(status: .done, failureMessage: nil)
     }
     guard let llm else {
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
-        let note: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
-            try parseMeetingNote(text: text)
+        guard let note = try await writeMeetingNote(segments: segments, speakerNames: record.speakerNames, userName: userName, llm: llm) else {
+            return record.with(status: .done, failureMessage: nil)
         }
         return record.with(note: note).with(status: .done, failureMessage: nil)
     } catch {

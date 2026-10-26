@@ -868,16 +868,6 @@
         }
       }
     },
-    "Canlı çeviri yapılmaz; toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No live translation; the Turkish meeting note (tasks, decisions, summary) is still prepared when the meeting ends."
-          }
-        }
-      }
-    },
     "Cevap hazırlanıyor": {
       "localizations": {
         "en": {
@@ -934,16 +924,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude model (%@)"
-          }
-        }
-      }
-    },
-    "Daha yüksek effort daha dikkatli ama daha yavaş ve pahalı sonuç verir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Higher effort gives more careful but slower and more expensive results."
           }
         }
       }
@@ -1368,6 +1348,16 @@
         }
       }
     },
+    "Haiku ve medium/high effort önerilir: uzun toplantı notu parça parça yazılır, büyük model gerekmez. max effort yavaştır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haiku with medium/high effort is recommended: long meeting notes are written part by part, so a bigger model isn't needed. max effort is slow."
+          }
+        }
+      }
+    },
     "Hata": {
       "localizations": {
         "en": {
@@ -1456,6 +1446,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No meetings yet"
+          }
+        }
+      }
+    },
+    "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each sentence is translated while recording (one LLM call each). After the meeting a Turkish note (tasks, decisions, summary) is prepared."
           }
         }
       }
@@ -1682,12 +1682,32 @@
         }
       }
     },
+    "Kayıt sırasında Türkçeye çevir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate to Turkish while recording"
+          }
+        }
+      }
+    },
     "Kayıt sırasında çentikte adayı göster": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show the island in the notch while recording"
+          }
+        }
+      }
+    },
+    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is translated while recording; only the original text is shown. A Turkish note (tasks, decisions, summary) is still prepared after the meeting."
           }
         }
       }
@@ -2539,16 +2559,6 @@
         }
       }
     },
-    "Sadece orijinal (Fince/İngilizce)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Original only (Finnish/English)"
-          }
-        }
-      }
-    },
     "Sana düşen görev sayısı": {
       "localizations": {
         "en": {
@@ -2975,16 +2985,6 @@
         }
       }
     },
-    "Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When the meeting ends, a Turkish note (tasks, decisions, summary) is prepared."
-          }
-        }
-      }
-    },
     "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.": {
       "localizations": {
         "en": {
@@ -3206,16 +3206,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy all"
-          }
-        }
-      }
-    },
-    "Türkçe çeviri": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turkish translation"
           }
         }
       }

@@ -35,6 +35,63 @@ func longMeetingSegments(rounds: Int) -> [StoredSegment] {
     }
 }
 
+/// Gerçek konuşma yoğunluğunda (dakikada ~1.700 karakter) toplantı: her 4 dakikalık turda `longMeetingSegments`'in
+/// görev ve kararlarının arasına görev ya da karar içermeyen ayrıntılı tartışma girer. Tur başına beklenen: 3 görev
+/// (2'si kullanıcının), 1 karar. Saf fonksiyondur.
+func realisticMeetingSegments(rounds: Int) -> [StoredSegment] {
+    let roundSec: Double = 240
+    let fillers: [(Int, Int) -> String] = [
+        { "Asiakkaan kanssa käytiin läpi vaiheen \($0) vaatimuksia, ja heillä oli kysymyksiä integraatiosta numero \($1) sekä sen rajapinnoista." },
+        { "Teknisesti vaiheessa \($0) on vielä \($1) avointa tikettiä, mutta suurin osa niistä on pieniä käyttöliittymän korjauksia ja tekstimuutoksia." },
+        { "Testiympäristössä vaiheen \($0) suorituskyky parani noin \($1) prosenttia, kun tietokantakyselyt optimoitiin viime viikolla." },
+        { "Käyttäjähaastatteluissa nousi esiin, että vaiheen \($0) näkymä \($1) on joillekin vaikea löytää, mutta se ei ole kriittinen asia." },
+        { "Vaiheen \($0) dokumentaatiossa on nyt \($1) sivua, ja rakenne noudattaa samaa mallia kuin aiemmissa vaiheissa." },
+        { "Integraatiotesteissä vaiheen \($0) osalta ajettiin \($1) skenaariota, ja ne menivät pääosin läpi ilman suurempia ongelmia." },
+        { "Asiakkaan yhteyshenkilö mainitsi, että vaiheen \($0) raportointi on ollut selkeää ja kuukausikatsaus numero \($1) oli hyödyllinen." },
+        { "Infrapuolella vaiheen \($0) palvelimet ovat olleet vakaita, käyttöaste on ollut noin \($1) prosenttia ruuhka-aikoina." },
+        { "Vaiheen \($0) käännöksissä on vielä \($1) kohtaa tarkistamatta, mutta käännöstoimisto on jo työn alla eikä se vaadi meiltä toimia." },
+    ]
+    return longMeetingSegments(rounds: rounds).enumerated().flatMap { (item: (offset: Int, element: StoredSegment)) -> [StoredSegment] in
+        let topic: Int = item.offset / 9 + 1
+        let lineInRound: Int = item.offset % 9
+        let slot: Double = roundSec / 9
+        let key: StoredSegment = item.element
+        // Her ana satırın ardından 5 tartışma satırı (aynı tur ve zaman diliminde).
+        let filler: [StoredSegment] = (0..<5).map { (index: Int) -> StoredSegment in
+            let at: Double = key.startSec + slot * Double(index + 1) / 6
+            let text: String = fillers[(lineInRound * 5 + index) % fillers.count](topic, (topic * 7 + index * 3) % 40 + 2)
+            return StoredSegment(key: "\(key.key)-f\(index)", speaker: .others, person: (index % 2) + 1, startSec: at, endSec: at + slot / 7, text: text, words: nil)
+        }
+        return [key] + filler
+    }
+}
+
+/// Fikstürdeki işlerin notta bulunma durumu.
+struct TaskCoverage {
+    let covered: Int
+    /// "doküman 3" gibi bulunamayan iş ve aşama.
+    let missing: [String]
+}
+
+/// Her aşamanın üç işini (özet gönderme, doküman kontrolü, risk listesi) Türkçe görev açıklamalarında arar; "1, 2 ve 3.
+/// aşama" gibi toplu madde her aşamayı kapsar. Saf fonksiyondur.
+func taskCoverage(tasks: [NoteTask], phases: Int) -> TaskCoverage {
+    let kinds: [(String, [String])] = [("özet", ["özet"]), ("doküman", ["dokü", "belge"]), ("risk", ["risk"])]
+    let numbers: [(NoteTask, Set<Int>)] = tasks.map { (task: NoteTask) -> (NoteTask, Set<Int>) in
+        let found: [Int] = task.description.split { !$0.isNumber }.compactMap { Int($0) }
+        return (task, Set(found))
+    }
+    let missing: [String] = (1...phases).flatMap { (phase: Int) -> [String] in
+        kinds.compactMap { (kind: (String, [String])) -> String? in
+            let present: Bool = numbers.contains { (item: (NoteTask, Set<Int>)) -> Bool in
+                item.1.contains(phase) && kind.1.contains { item.0.description.lowercased().contains($0) }
+            }
+            return present ? nil : "\(kind.0) \(phase)"
+        }
+    }
+    return TaskCoverage(covered: phases * kinds.count - missing.count, missing: missing)
+}
+
 /// Canlı bölümler (asistan istekleri canlı transkripti kullanır).
 func liveSegments(stored: [StoredSegment]) -> [LiveSegment] {
     stored.enumerated().map { (item: (offset: Int, element: StoredSegment)) -> LiveSegment in
@@ -98,6 +155,23 @@ struct LLMScenarioTests {
         #expect(review.names.contains { $0.person == 2 && $0.name == "Mikko" }, "adlar: \(review.names)")
     }
 
+    // Gerçek yoğunlukta uzun toplantı: tek istekte model 2 saatte 90 görevin yalnızca 33'ünü yazıyordu; parça parça (her
+    // parça öncekileri bağlam olarak görür) her aşamanın üç işi (kullanıcının özet gönderme ve doküman kontrolü, Mikko'nun
+    // risk listesi) notta Türkçe ve doğru sahiple bulunmalı.
+    @Test(arguments: [30, 60])
+    func realisticLongMeetingKeepsEveryTask(rounds: Int) async throws {
+        let segments: [StoredSegment] = realisticMeetingSegments(rounds: rounds)
+        let provider: LLMProvider = try anthropic(model: .haiku, effort: .medium)
+        let started: ContinuousClock.Instant = .now
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", llm: provider))
+        let coverage: TaskCoverage = taskCoverage(tasks: note.tasks, phases: rounds)
+        print("SENARYO gerçek yoğunluk \(rounds * 4) dk, \(segments.map(\.text.count).reduce(0, +)) karakter: \(ContinuousClock.now - started), görev \(note.tasks.count), kapsanan iş \(coverage.covered)/\(rounds * 3), eksik: \(coverage.missing.prefix(12))")
+        #expect(Double(coverage.covered) >= Double(rounds * 3) * 0.9, "eksik: \(coverage.missing)")
+        // Kullanıcının işleri "benim" işaretli ve sahibi adıyla.
+        #expect(note.tasks.filter(\.isMine).allSatisfy { $0.owner == "Doğan" }, "sahipler: \(Set(note.tasks.filter(\.isMine).map(\.owner)))")
+        #expect(!note.summary.isEmpty)
+    }
+
     // OpenAI uyumlu yol: akıl yürütme effort'u seçiliyken 1 saatlik toplantının notu kesilmeden ve ayrıştırılabilir gelmeli.
     @Test(.enabled(if: ollamaModel != nil))
     func oneHourNoteOnOpenAICompatibleWithEffort() async throws {
@@ -127,4 +201,43 @@ struct LLMScenarioTests {
         #expect(elapsed < .seconds(60), "çeviri \(elapsed) sürdü")
     }
 }
+}
+
+@Suite struct ChunkedNoteTests {
+    // Parçalar sınırı aşmaz (tek dev bölüm hariç), hiçbir bölüm atlanmaz, sıra korunur.
+    @Test func chunksKeepEverySegmentInOrder() {
+        let segments: [StoredSegment] = realisticMeetingSegments(rounds: 10)
+        let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: 20_000)
+        #expect(chunks.count > 1)
+        #expect(chunks.flatMap { $0 } == segments)
+        #expect(chunks.allSatisfy { $0.count == 1 || $0.map(\.text.count).reduce(0, +) <= 20_000 })
+    }
+
+    // Transkriptte "Sen" kullanıcıdır: "Sen" ya da kullanıcının adıyla yazılmış görev adıyla ve "benim" olur.
+    @Test func userTasksGetNameAndMine() {
+        #expect(normalizedTask(task: NoteTask(owner: "Sen", description: "Rapor", dueDate: nil, isMine: false), userName: "Doğan")
+            == NoteTask(owner: "Doğan", description: "Rapor", dueDate: nil, isMine: true))
+        #expect(normalizedTask(task: NoteTask(owner: "doğan", description: "Rapor", dueDate: nil, isMine: false), userName: "Doğan").isMine)
+        #expect(normalizedTask(task: NoteTask(owner: "Mikko", description: "Risk", dueDate: nil, isMine: false), userName: "Doğan").owner == "Mikko")
+    }
+
+    // Değişiklik numarası bağlamdaki listeye göre uygulanır; iptal düşer; yeniler sona; sözlükte terim bir kez.
+    @Test func applyChunkUpdatesCancelsAndAppends() {
+        let state: ChunkedNoteState = ChunkedNoteState(
+            partSummaries: ["[00:00–10:00] Giriş."], decisions: ["A"],
+            tasks: [NoteTask(owner: "Sen", description: "Rapor", dueDate: "Cuma", isMine: true), NoteTask(owner: "Aino", description: "Slayt", dueDate: nil, isMine: false)],
+            glossary: [GlossaryEntry(term: "raportti", meaning: "rapor")]
+        )
+        let chunk: NoteChunk = NoteChunk(
+            summary: "Erteleme.", decisions: ["B"],
+            newTasks: [NoteTask(owner: "Mikko", description: "Bütçe", dueDate: nil, isMine: false)],
+            changedTasks: [TaskChange(number: 1, description: "Rapor", dueDate: "Pazartesi", isCancelled: false), TaskChange(number: 2, description: "", dueDate: nil, isCancelled: true), TaskChange(number: 9, description: "yok", dueDate: nil, isCancelled: true)],
+            glossary: [GlossaryEntry(term: "Raportti", meaning: "rapor"), GlossaryEntry(term: "budjetti", meaning: "bütçe")]
+        )
+        let next: ChunkedNoteState = applyNoteChunk(state: state, chunk: chunk, startSec: 600, endSec: 1200)
+        #expect(next.tasks == [NoteTask(owner: "Sen", description: "Rapor", dueDate: "Pazartesi", isMine: true), NoteTask(owner: "Mikko", description: "Bütçe", dueDate: nil, isMine: false)])
+        #expect(next.decisions == ["A", "B"])
+        #expect(next.glossary.map(\.term) == ["raportti", "budjetti"])
+        #expect(next.partSummaries.last == "[10:00–20:00] Erteleme.")
+    }
 }

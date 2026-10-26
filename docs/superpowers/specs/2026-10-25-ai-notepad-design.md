@@ -45,7 +45,7 @@ Sonuç: canlı metin için Deepgram, konuşmacı ayırma için ElevenLabs toplu 
 **Kapsamda (v1):**
 - Menü çubuğu ikonu + global kısayolla elle kayıt başlatma/durdurma
 - Mikrofon ("Sen") ve sistem sesi ("Diğerleri") ayrı akışlar olarak yakalama
-- Canlı transkript + Türkçe çeviri; görünüm: "İki dil" veya "Sadece Türkçe"
+- Canlı transkript; canlı Türkçe çeviri isteğe bağlı (varsayılan kapalı), açıkken görünüm "İki dil" veya "Sadece Türkçe"
 - Otomatik dil algılama ve elle dil seçimi
 - "Ne kaçırdım?" butonu (son N dk özeti, varsayılan 3) ve Türkçe soru kutusu
 - Toplantı sonrası: ikinci geçiş transkripsiyon, konuşmacı ayrıştırma, yapılandırılmış not
@@ -158,8 +158,13 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
    Kelimeler konuşmacı değişiminde ya da 1,5 sn'den uzun boşlukta kesin bölümlere ayrılır ("Konuşmacı N").
    "Sen" için canlı bölümler kullanılır. Son geçiş yapılamazsa (anahtar yok, `others` sesi yok) toplantıda
    uyarı (`notice`) görünür ve not canlı transkriptten üretilir.
-3. Not: seçili LLM'in akıllı modeli (Claude Opus), yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
-   sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi görev sahipliği için verilir.
+3. Not: seçili LLM'in akıllı modeli (varsayılan Claude Haiku 5.5), yapılandırılmış çıktı `{baslik, ozet, kararlar[],
+   gorevler[{sahip, aciklama, tarih?, benimMi}], sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi
+   görev sahipliği için verilir. Transkript 20.000 karakteri (~12 dk konuşma) aşarsa not parça parça yazılır: parçalar
+   konuşmacı değişiminden kesilir ve sırayla işlenir; her parça önceki parçaların özetlerini ve o ana kadarki numaralı
+   görevleri bağlam olarak görür, yalnızca yeni görev/karar/terimleri ve önceki görevlerdeki değişiklikleri (numarayla;
+   erteleme, iptal) yazar. Görev, karar ve sözlük kodla birleştirilir; son istek yalnızca başlık ve genel özeti yazar.
+   Neden: tek istekte uzun toplantıda model görevleri "her aşama için…" diye toplayıp çoğunu yazmıyordu (ölçüm).
 4. Canlı transkript silinmez; son geçiş ayrı saklanır. Son geçiş başarısızsa (kota, ağ) not yine canlı metinden
    yazılır ve uyarı kalır; dönüştürme ya da not başarısızsa toplantı `failed` olur, hata saklanır; ses dosyaları
    kaldığı için "Tekrar işle" mümkündür. Yeni son geçiş konuşmacıları baştan numaraladığı için verilmiş adlar silinir.
@@ -325,17 +330,19 @@ mesajı, `max_completion_tokens`, şema varsa katı `response_format: json_schem
 diğerleri akıllı modelle (ikisi Ayarlar'dan).
 
 **Model ve effort seçimi (Ayarlar › LLM):** Claude'da "Canlı çeviri" ve "Ne kaçırdım?, soru ve not" için ayrı model
-(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Opus/medium. Modellerin
+(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Haiku/medium (senaryo testlerinde not için büyük modellerle aynı
+eksiksizlik). Modellerin
 parametre kuralları (her biri gerçek API'de doğrulandı): hızlı sınıfta düşünme Haiku 5.5'te `disabled`, Sonnet 5.5'te
 `between_tools` ile kapatılır (yalnızca effort ≤ high; üstünde 400); Opus 5.5 ve Fable 5.1'de kapatılamaz (alan
 gönderilmez). Sunucu tarafı yedek (`fallbacks: "default"`) Haiku 5.5 dışındaki modellerde. OpenAI uyumlu sağlayıcıda
 effort isteğe bağlı `reasoning_effort` (low/medium/high ya da gönderme).
 
 **Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
-saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort: medium`, `fallbacks: "default"` +
-`anthropic-beta: server-side-fallback-2026-07-01`). Her yanıtta `stop_reason == "refusal"` önce denetlenir.
+saatte birkaç sent); "Ne kaçırdım?", soru-cevap ve not varsayılan olarak da `claude-haiku-5-5` (`effort: medium`); seçilen model Haiku dışında
+ise `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01`. Her yanıtta `stop_reason == "refusal"` önce denetlenir.
 
-**Canlı çeviri:** yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
+**Canlı çeviri:** isteğe bağlı (Ayarlar › Genel › "Kayıt sırasında Türkçeye çevir", varsayılan kapalı); kapalıyken
+kayıt sırasında hiç LLM çağrısı yapılmaz. Açıkken yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
 bağlam olarak. Panel her bloğun altında Türkçesini gösterir; görünüm ayarı "İki dil" (orijinal soluk + Türkçe),
 "Sadece Türkçe" ya da "Sadece orijinal" (Fince/İngilizce; bu görünümde canlı çeviri yapılmaz — maliyet; toplantı
 sonu Türkçe not yine üretilir; görünüm değişince sonraki cümleler çevrilir). Adanın son cümlesi varsa Türkçesidir. Çeviri hatası panelde tek satır (tekilleştirilmiş).

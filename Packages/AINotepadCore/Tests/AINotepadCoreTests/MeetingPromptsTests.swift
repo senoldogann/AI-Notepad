@@ -83,7 +83,10 @@ extension CloudTests {
             block(.others, 2, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?", person: 1),
         ]
         let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
-        let summary: MissedSummary = try parseMissedSummary(text: try await sendLLM(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request))
+        // Uygulamayla aynı yol: arada bir gelen boş yanıt yeniden istenir.
+        let summary: MissedSummary = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MissedSummary in
+            try parseMissedSummary(text: text)
+        }
         #expect(!summary.topic.isEmpty)
     }
 }

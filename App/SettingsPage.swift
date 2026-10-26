@@ -133,18 +133,23 @@ private struct GeneralSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("Türkçe çeviri") {
-                Picker("Gösterim", selection: Binding<DisplayMode>(
-                    get: { model.displayMode },
-                    set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
-                )) {
-                    Text("İki dil (orijinal + Türkçe)").tag(DisplayMode.bilingual)
-                    Text("Sadece Türkçe").tag(DisplayMode.turkishOnly)
-                    Text("Sadece orijinal (Fince/İngilizce)").tag(DisplayMode.originalOnly)
+            Section("Canlı çeviri") {
+                Toggle("Kayıt sırasında Türkçeye çevir", isOn: Binding<Bool>(
+                    get: { model.displayMode.needsLiveTranslation },
+                    set: { (enabled: Bool) -> Void in model.selectDisplayMode(mode: enabled ? .bilingual : .originalOnly) }
+                ))
+                if model.displayMode.needsLiveTranslation {
+                    Picker("Gösterim", selection: Binding<DisplayMode>(
+                        get: { model.displayMode },
+                        set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
+                    )) {
+                        Text("İki dil (orijinal + Türkçe)").tag(DisplayMode.bilingual)
+                        Text("Sadece Türkçe").tag(DisplayMode.turkishOnly)
+                    }
                 }
-                Text(model.displayMode == .originalOnly
-                    ? "Canlı çeviri yapılmaz; toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır."
-                    : "Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.")
+                Text(model.displayMode.needsLiveTranslation
+                    ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
+                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -313,7 +318,7 @@ private struct LLMSettings: View {
                 } header: {
                     Text("\"Ne kaçırdım?\", soru ve toplantı notu")
                 } footer: {
-                    Text("Daha yüksek effort daha dikkatli ama daha yavaş ve pahalı sonuç verir.")
+                    Text("Haiku ve medium/high effort önerilir: uzun toplantı notu parça parça yazılır, büyük model gerekmez. max effort yavaştır.")
                 }
             } else {
                 Section {

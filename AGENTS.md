@@ -20,6 +20,11 @@ swift test --package-path Packages/AINotepadCore                              # 
 AINOTEPAD_MODEL_TESTS=1 swift test --package-path Packages/AINotepadCore      # + gerçek WhisperKit modeli (~630 MB indirir)
 AINOTEPAD_CLOUD_TESTS=1 AINOTEPAD_SCENARIO_TESTS=1 swift test --package-path Packages/AINotepadCore --filter LLMScenarioTests  # pahalı: uzun toplantı × her model × max effort
 scripts/make-test-fixtures.sh                                                 # test seslerini yeniden üretir
+scripts/install-app.sh                                                        # Release'i /Applications'a kurar (izinler kalıcı)
 ```
+
+`xcodebuild -exportLocalizations` `-derivedDataPath` kabul etmez ve `~/Library/Developer/Xcode/DerivedData`'ya ad-hoc
+imzalı bir AINotepad.app bırakır; Spotlight onu bulur, açılınca izinler her seferinde yeniden sorulur. Çalıştırdıysan
+o kopyayı sil.
 
 Kod değiştiren her işten önce iki test komutunu da çalıştır.

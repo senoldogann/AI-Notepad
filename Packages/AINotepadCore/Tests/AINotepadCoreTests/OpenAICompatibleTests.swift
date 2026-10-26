@@ -86,7 +86,10 @@ struct OllamaTests {
             LiveSegment(id: SegmentID(speaker: .others, index: 1), startSec: 5, endSec: 9, text: "Doğan, voisitko tehdä diat?", isFinal: true, failureMessage: nil, person: 1),
         ]
         let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 10, windowSec: 180))
-        let summary: MissedSummary = try parseMissedSummary(text: try await sendLLM(provider: .openAICompatible(try config()), request: request))
+        // Uygulamayla aynı yol: şemaya uymayan yanıt (yerel modeller arada bir alan atlar) yeniden istenir.
+        let summary: MissedSummary = try await requestStructured(provider: .openAICompatible(try config()), request: request) { (text: String) throws -> MissedSummary in
+            try parseMissedSummary(text: text)
+        }
         #expect(!summary.topic.isEmpty)
     }
 }

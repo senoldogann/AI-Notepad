@@ -50,10 +50,9 @@ extension CloudTests {
             stored("final-3", .others, 1, 18, "Kiitos Mikko. Sitten seuraava aihe."),
         ]
         let request: LLMRequest = try #require(speakerReviewRequest(segments: segments, speakerNames: [:], userName: "Doğan"))
-        let review: SpeakerReview = try parseSpeakerReview(
-            text: try await sendLLM(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request),
-            persons: [1, 2, 3], speakerNames: [:]
-        )
+        let review: SpeakerReview = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> SpeakerReview in
+            try parseSpeakerReview(text: text, persons: [1, 2, 3], speakerNames: [:])
+        }
         #expect(review.names.contains { $0.person == 1 && $0.name == "Aino" }, "adlar: \(review.names)")
         #expect(review.merges.contains { Set([$0.from, $0.into]) == [2, 3] }, "birleştirmeler: \(review.merges)")
     }
