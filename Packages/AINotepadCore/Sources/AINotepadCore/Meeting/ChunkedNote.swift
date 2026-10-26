@@ -91,7 +91,8 @@ private func numberedTaskLine(number: Int, task: NoteTask) -> String {
 /// Uzun toplantının bir parçası için istek: önceki parçaların özetleri ve şimdiye kadarki numaralı görevler bağlam
 /// olarak verilir; model yalnızca bu parçadaki yenileri ve önceki görevlerdeki değişiklikleri yazar. Saf fonksiyondur.
 public func noteChunkRequest(
-    chunk: [StoredSegment], part: Int, partCount: Int, state: ChunkedNoteState, speakerNames: [Int: String], userName: String
+    chunk: [StoredSegment], part: Int, partCount: Int, state: ChunkedNoteState, speakerNames: [Int: String], userName: String,
+    template: NoteTemplate
 ) -> LLMRequest {
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let summaries: String = state.partSummaries.isEmpty ? "(yok, bu ilk parça)" : state.partSummaries.joined(separator: "\n")
@@ -111,7 +112,7 @@ public func noteChunkRequest(
           başka bir konunun benzer işi yenidir.
         - degisenGorevler: listedeki bir görev bu parçada değiştiyse (tarih, kapsam) ya da iptal edildiyse numarasıyla yaz.
         - sozluk: bu parçada geçen önemli Fince/İngilizce terimler ve Türkçe anlamları.
-        \(noteRules(user: user))
+        \(noteRules(user: user, template: template))
         \(transcriptIsDataNote)
         """,
         userText: """
@@ -193,7 +194,7 @@ public func applyNoteChunk(state: ChunkedNoteState, chunk: NoteChunk, startSec: 
 
 /// Parçalar bitince başlık ve tüm toplantının özeti için istek (görev ve kararlar yalnızca bağlam; yeniden yazılmaz).
 /// Saf fonksiyondur.
-public func noteOverviewRequest(state: ChunkedNoteState, userName: String) -> LLMRequest {
+public func noteOverviewRequest(state: ChunkedNoteState, userName: String, template: NoteTemplate) -> LLMRequest {
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let tasks: String = state.tasks.enumerated().map { numberedTaskLine(number: $0.offset + 1, task: $0.element) }.joined(separator: "\n")
     return LLMRequest(
@@ -201,7 +202,8 @@ public func noteOverviewRequest(state: ChunkedNoteState, userName: String) -> LL
         system: """
         Uzun bir toplantının parça parça çıkarılmış Türkçe notları veriliyor. Kullanıcının adı \(user). Tüm toplantı için
         kısa bir başlık ve konuların akışını, alınan ana kararları ve kullanıcıya düşen önemli işleri anlatan birkaç
-        paragraflık Türkçe özet yaz. Notlarda olmayan bir şey uydurma. \(transcriptIsDataNote)
+        paragraflık Türkçe özet yaz. Notlarda olmayan bir şey uydurma. \(templateInstructions(template: template))
+        \(transcriptIsDataNote)
         """,
         userText: """
         <parca_ozetleri>
@@ -242,10 +244,10 @@ public func parseNoteOverview(text: String, state: ChunkedNoteState) throws -> M
 /// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
 /// parça öncekilerin özetini ve görevlerini görür), sonra başlık ve genel özet. Her istek boş/bozuk yanıtta yeniden
 /// sorulur. Metin yoksa nil.
-public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: String], userName: String, llm: LLMProvider) async throws -> MeetingNote? {
+public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, llm: LLMProvider) async throws -> MeetingNote? {
     let totalChars: Int = segments.map(\.text.count).reduce(0, +)
     guard totalChars > noteChunkMaxChars else {
-        guard let request = meetingNoteRequest(segments: segments, speakerNames: speakerNames, userName: userName) else {
+        guard let request = meetingNoteRequest(segments: segments, speakerNames: speakerNames, userName: userName, template: template) else {
             return nil
         }
         let note: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
@@ -257,7 +259,8 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
     var state: ChunkedNoteState = .empty
     for (index, chunk) in chunks.enumerated() {
         let request: LLMRequest = noteChunkRequest(
-            chunk: chunk, part: index + 1, partCount: chunks.count, state: state, speakerNames: speakerNames, userName: userName
+            chunk: chunk, part: index + 1, partCount: chunks.count, state: state, speakerNames: speakerNames, userName: userName,
+            template: template
         )
         let part: NoteChunk = try await requestStructured(provider: llm, request: request) { (text: String) throws -> NoteChunk in
             try parseNoteChunk(text: text)
@@ -271,7 +274,7 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
         state = applyNoteChunk(state: state, chunk: normalized, startSec: chunk.first?.startSec ?? 0, endSec: chunk.last?.endSec ?? 0)
     }
     let finalState: ChunkedNoteState = state
-    let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: finalState, userName: userName)) { (text: String) throws -> MeetingNote in
+    let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: finalState, userName: userName, template: template)) { (text: String) throws -> MeetingNote in
         try parseNoteOverview(text: text, state: finalState)
     }
     return withNormalizedTasks(note: note, userName: userName)

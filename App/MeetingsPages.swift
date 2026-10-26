@@ -267,6 +267,8 @@ struct MeetingDetailPage: View {
     let onDeleted: @MainActor () -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
+    /// Özetin gösterildiği dil: nil Türkçe not, değilse paylaşım sürümü.
+    @State private var noteLanguage: ShareLanguage?
 
     private var isProcessing: Bool {
         model.processingMeetingIDs.contains(record.id)
@@ -294,7 +296,16 @@ struct MeetingDetailPage: View {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            SummaryTab(model: model, note: note, record: record, paragraphs: paragraphs)
+                            PillPicker(selection: $noteLanguage, options: [
+                                (nil, "Türkçe"), (ShareLanguage.finnish, "Suomi"), (ShareLanguage.english, "English"),
+                            ])
+                            .fixedSize()
+                            .hoverHint("İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü", alignment: .leading, edge: .bottom)
+                            if let language = noteLanguage {
+                                SharedNoteSection(model: model, record: record, note: note, language: language)
+                            } else {
+                                SummaryTab(model: model, note: note, record: record, paragraphs: paragraphs)
+                            }
                         } else {
                             if isProcessing {
                                 EmptyStateCard(symbol: "hourglass", title: "Not hazırlanıyor…", message: "Bitince özet, kararlar ve görevler burada görünür.")
@@ -331,6 +342,10 @@ struct MeetingDetailPage: View {
         .onAppear {
             // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
             tab = record.note == nil ? .transcript : .summary
+            // "--not-dili fi|en": özeti paylaşım dilinde açar (görsel kontrol için).
+            if let index = CommandLine.arguments.firstIndex(of: "--not-dili"), CommandLine.arguments.indices.contains(index + 1) {
+                noteLanguage = ShareLanguage(rawValue: CommandLine.arguments[index + 1])
+            }
         }
     }
 
@@ -441,6 +456,14 @@ struct MeetingDetailPage: View {
                     .disabled(isLocked)
                     .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
                 Spacer(minLength: DesignTokens.Spacing.s)
+                if let text = displayedShareText {
+                    ShareLink(item: text, subject: Text(record.note?.title ?? record.title)) {
+                        Label("Paylaş", systemImage: "square.and.arrow.up")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.coverGlass)
+                    .hoverHint("Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde", alignment: .trailing, edge: .bottom)
+                }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.coverGlass)
@@ -512,6 +535,20 @@ struct MeetingDetailPage: View {
     /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
     @ViewBuilder
     private var manageItems: some View {
+        Menu("Şablonla yeniden yaz") {
+            ForEach(NoteTemplateKind.allCases, id: \.self) { (kind: NoteTemplateKind) in
+                Button {
+                    model.regenerateNote(meetingID: record.id, template: NoteTemplate(kind: kind, customInstructions: UserDefaults.standard.string(forKey: SettingsKey.customTemplate) ?? ""))
+                } label: {
+                    if (record.template?.kind ?? .general) == kind {
+                        Label(templateTitle(kind: kind), systemImage: "checkmark")
+                    } else {
+                        Text(templateTitle(kind: kind))
+                    }
+                }
+            }
+        }
+        .disabled(isLocked)
         Button("Tekrar işle", systemImage: "arrow.clockwise") { model.reprocess(meetingID: record.id) }
             .disabled(isLocked || record.audioDeleted)
         Divider()
@@ -522,6 +559,17 @@ struct MeetingDetailPage: View {
         .disabled(isLocked || record.audioDeleted)
         Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
             .disabled(isLocked)
+    }
+
+    /// Paylaşılacak metin: seçili dildeki not (paylaşım sürümü henüz yoksa Türkçe); not yoksa nil.
+    private var displayedShareText: String? {
+        guard let note = record.note else {
+            return nil
+        }
+        if let language = noteLanguage, let shared = record.sharedNotes?[language.rawValue] {
+            return shareText(record: record, note: shared, language: language)
+        }
+        return shareText(record: record, note: note, language: nil)
     }
 
     private func copyMarkdown() {
@@ -895,6 +943,107 @@ private struct GlossarySection: View {
             .font(appearance.font(size: appearance.textSize, weight: .regular))
             .foregroundStyle(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Notun paylaşım dilindeki sürümü: yoksa hazırlanır (ilerleme, hata ve yeniden dene); varsa özet, kararlar ve
+/// sahipli görevler; üstte kopyala ve paylaş.
+private struct SharedNoteSection: View {
+    let model: AppModel
+    let record: MeetingRecord
+    let note: MeetingNote
+    let language: ShareLanguage
+    @State private var error: String?
+    @State private var attempt: Int = 0
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        Group {
+            if let shared = record.sharedNotes?[language.rawValue] {
+                content(shared: shared)
+            } else if let error {
+                VStack(alignment: .leading, spacing: 8) {
+                    EmptyStateCard(symbol: "exclamationmark.triangle", title: "Çeviri yapılamadı", message: LocalizedStringKey(error))
+                    Button("Yeniden dene", systemImage: "arrow.clockwise") {
+                        self.error = nil
+                        attempt += 1
+                    }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text(language == .finnish ? "Suomenkielinen versio valmistuu…" : "Preparing the English version…")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .task(id: "\(language.rawValue)-\(attempt)-\(record.sharedNotes?[language.rawValue] == nil)") {
+            guard record.sharedNotes?[language.rawValue] == nil, error == nil else {
+                return
+            }
+            error = await model.generateSharedNote(meetingID: record.id, language: language)
+        }
+    }
+
+    private func content(shared: MeetingNote) -> some View {
+        let text: String = shareText(record: record, note: shared, language: language)
+        let headings: (summary: String, decisions: String, tasks: String) = language == .finnish
+            ? ("YHTEENVETO", "PÄÄTÖKSET", "TEHTÄVÄT")
+            : ("SUMMARY", "DECISIONS", "ACTION ITEMS")
+        return VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 8) {
+                Text(shared.title)
+                    .appFont(size: 20, weight: .medium)
+                    .textSelection(.enabled)
+                Spacer(minLength: 8)
+                Button("Kopyala", systemImage: "doc.on.doc") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+                ShareLink(item: text, subject: Text(shared.title)) {
+                    Label("Paylaş", systemImage: "square.and.arrow.up")
+                }
+            }
+            sharedSection(title: headings.summary) {
+                Text(shared.summary)
+                    .font(appearance.font(size: appearance.textSize + 2, weight: .regular))
+                    .lineSpacing(appearance.lineSpacing + 2)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !shared.decisions.isEmpty {
+                sharedSection(title: headings.decisions) {
+                    ForEach(Array(shared.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+                        Text("\(item.offset + 1). \(item.element)").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            if !shared.tasks.isEmpty {
+                sharedSection(title: headings.tasks) {
+                    ForEach(Array(shared.tasks.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
+                        let owner: Text = Text(item.element.owner).fontWeight(.semibold)
+                        let due: Text = Text(item.element.dueDate.map { " (\($0))" } ?? "").foregroundStyle(Theme.muted)
+                        Text("\(owner) — \(item.element.description)\(due)").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .font(appearance.bodyFont)
+        .padding(20)
+        .frame(maxWidth: 760, alignment: .leading)
+        .cardSurface(cornerRadius: 16)
+    }
+
+    private func sharedSection(title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: title)
+                .appFont(size: 11, weight: .semibold)
+                .tracking(DesignTokens.labelTracking)
+                .foregroundStyle(Theme.muted)
+            content()
+        }
     }
 }
 

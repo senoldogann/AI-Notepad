@@ -11,14 +11,15 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
         let request: LLMRequest = try #require(meetingNoteRequest(
             segments: [stored("final-0", .others, 1, 5, "Voisitko tehdä diat?"), stored("me-0", .me, nil, 9, "Teen ne.")],
             speakerNames: [1: "Aino"],
-            userName: "Doğan"
+            userName: "Doğan",
+            template: .general
         ))
         #expect(request.tier == .smart)
         #expect(request.jsonSchema?.contains("gorevler") == true)
         #expect(request.userText.contains("[00:05] Aino: Voisitko tehdä diat?"))
         #expect(request.userText.contains("[00:09] Sen: Teen ne."))
         #expect(request.system.contains("Doğan"))
-        #expect(meetingNoteRequest(segments: [], speakerNames: [:], userName: "Doğan") == nil)
+        #expect(meetingNoteRequest(segments: [], speakerNames: [:], userName: "Doğan", template: .general) == nil)
     }
 
     @Test func parseMeetingNoteJSON() throws {
@@ -73,7 +74,8 @@ extension CloudTests {
                 stored("me-0", .me, nil, 10, "Kyllä, teen diat torstaihin mennessä."),
             ],
             speakerNames: [1: "Aino"],
-            userName: "Doğan"
+            userName: "Doğan",
+            template: .general
         ))
         // Uygulamayla aynı yol: arada bir gelen boş yanıt yeniden istenir.
         let note: MeetingNote = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MeetingNote in

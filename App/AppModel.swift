@@ -573,6 +573,7 @@ final class AppModel {
             return
         }
         isRecording = true
+        recordingTemplate = defaultNoteTemplate()
         consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
         finishingCardDismissed = false
@@ -727,6 +728,8 @@ final class AppModel {
             engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
+        // Not, kayıt başladığında seçili şablonla yazılır.
+        .with(template: recordingTemplate)
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
@@ -797,6 +800,9 @@ final class AppModel {
         }
     }
 
+    /// Bu kaydın not şablonu: kayıt başlarken Ayarlar'daki varsayılan.
+    @ObservationIgnored private var recordingTemplate: NoteTemplate = .general
+
     /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
     /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
     private var recognitionKeyterms: [String] {
@@ -853,6 +859,45 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
+        rewriteNote(record: record)
+    }
+
+    /// Notu başka bir şablonla yeniden yazar (şablon toplantıda saklanır).
+    func regenerateNote(meetingID: String, template: NoteTemplate) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        rewriteNote(record: record.with(template: template))
+    }
+
+    /// Notu paylaşım diline çevirir ve saklar; hata varsa kullanıcı metni döner.
+    func generateSharedNote(meetingID: String, language: ShareLanguage) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
+            return nil
+        }
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        do {
+            let provider: LLMProvider = try await resolveLLMProvider()
+            let shared: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: note, language: language, userName: userName)) { (text: String) throws -> MeetingNote in
+                try parseSharedNote(text: text, original: note)
+            }
+            // Çeviri sürerken not yeniden yazıldıysa eski notun çevirisi saklanmaz.
+            guard let current = meetings.first(where: { $0.id == meetingID }), current.note == note, !isLocked(meetingID: meetingID) else {
+                return nil
+            }
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: current.with(sharedNotes: (current.sharedNotes ?? [:]).merging([language.rawValue: shared]) { $1 }), directory: directory)
+            }
+            return nil
+        } catch {
+            Self.logger.error("Paylaşım notu yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return userFacingMessage(error: error)
+        }
+    }
+
+    /// Notu verilen kayıtla (adlar, şablon) yeniden yazıp kaydeder.
+    private func rewriteNote(record: MeetingRecord) {
+        let meetingID: String = record.id
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             processingMeetingIDs.insert(meetingID)

@@ -133,6 +133,8 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
     @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
+    @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
+    @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
@@ -192,6 +194,31 @@ private struct GeneralSettings: View {
             } control: {
                 TextField("Adın", text: $userName)
                     .settingsField(width: 200)
+            }
+            SettingsRow(title: Text("Not şablonu")) {
+                Text("Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).")
+            } control: {
+                SettingsMenu(selection: $noteTemplate, options: NoteTemplateKind.allCases.map { (kind: NoteTemplateKind) -> (String, Text) in
+                    (kind.rawValue, Text(templateTitle(kind: kind)))
+                })
+            }
+            if noteTemplate == NoteTemplateKind.custom.rawValue {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Kendi şablonun: notta neyin öne çıkmasını istediğini yaz")
+                        .appFont(size: 13, weight: .medium)
+                    TextEditor(text: $customTemplate)
+                        .appFont(size: 13, weight: .regular)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .frame(height: 90)
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+                    Text("Örnek: \"Riskleri ayrı bir paragrafta say, her kararın gerekçesini yaz.\"")
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 12)
+                SettingsDivider()
             }
             SettingsRow(title: Text("Kayıt sırasında Türkçeye çevir")) {
                 Text(model.displayMode.needsLiveTranslation

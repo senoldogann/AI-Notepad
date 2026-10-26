@@ -137,6 +137,10 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var completedTasks: [String]?
     /// Anımsatıcılar'a eklenen görevlerin kimlikleri.
     public private(set) var remindedTasks: [String]?
+    /// Notun şablonu; eski toplantılarda ve genel şablonda nil.
+    public private(set) var template: NoteTemplate?
+    /// Notun paylaşım dillerindeki sürümleri (dil kodu → not); not yeniden yazılınca silinir.
+    public private(set) var sharedNotes: [String: MeetingNote]?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -227,10 +231,25 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
-    /// Notu değişmiş kopya; başlık nottan gelir.
+    /// Şablonu değişmiş kopya.
+    public func with(template newTemplate: NoteTemplate) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.template = newTemplate
+        return copy
+    }
+
+    /// Paylaşım sürümleri değişmiş kopya.
+    public func with(sharedNotes newShared: [String: MeetingNote]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.sharedNotes = newShared
+        return copy
+    }
+
+    /// Notu değişmiş kopya; başlık nottan gelir, eski paylaşım sürümleri (artık farklı not) silinir.
     public func with(note newNote: MeetingNote) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.note = newNote
+        copy.sharedNotes = nil
         copy.title = newNote.title
         return copy
     }

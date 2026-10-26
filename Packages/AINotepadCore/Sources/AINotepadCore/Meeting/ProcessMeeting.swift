@@ -235,7 +235,7 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
-        guard let note = try await writeMeetingNote(segments: segments, speakerNames: record.speakerNames, userName: userName, llm: llm) else {
+        guard let note = try await writeMeetingNote(segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general, llm: llm) else {
             return record.with(status: .done, failureMessage: nil)
         }
         return record.with(note: note).with(status: .done, failureMessage: nil)

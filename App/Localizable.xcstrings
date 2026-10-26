@@ -1021,6 +1021,16 @@
         }
       }
     },
+    "Birebir görüşme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-on-one"
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -1408,6 +1418,16 @@
         }
       }
     },
+    "Ders / eğitim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture / training"
+          }
+        }
+      }
+    },
     "Devam ettir": {
       "localizations": {
         "en": {
@@ -1656,6 +1676,16 @@
         }
       }
     },
+    "English": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "English"
+          }
+        }
+      }
+    },
     "Eş aralıklı (SF Mono)": {
       "localizations": {
         "en": {
@@ -1752,6 +1782,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Don't send"
+          }
+        }
+      }
+    },
+    "Görevler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks"
           }
         }
       }
@@ -2411,6 +2451,26 @@
         }
       }
     },
+    "Kendi şablonum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My own template"
+          }
+        }
+      }
+    },
+    "Kendi şablonun: notta neyin öne çıkmasını istediğini yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your template: describe what the note should emphasise"
+          }
+        }
+      }
+    },
     "Kim ne zaman konuştu": {
       "localizations": {
         "en": {
@@ -2983,6 +3043,16 @@
         }
       }
     },
+    "Müşteri görüşmesi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client meeting"
+          }
+        }
+      }
+    },
     "NE KAÇIRDIM?": {
       "extractionState": "stale",
       "localizations": {
@@ -3066,12 +3136,32 @@
         }
       }
     },
+    "Not şablonu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note template"
+          }
+        }
+      }
+    },
     "Notu adlarla yeniden yaz": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Rewrite the note with names"
+          }
+        }
+      }
+    },
+    "Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the note (Mail, Messages, Notes…) in the selected language"
           }
         }
       }
@@ -3234,6 +3324,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shows or hides the panel"
+          }
+        }
+      }
+    },
+    "Paylaş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share"
           }
         }
       }
@@ -3728,6 +3828,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open latest meeting"
+          }
+        }
+      }
+    },
+    "Suomi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suomi"
           }
         }
       }
@@ -4289,6 +4399,16 @@
         }
       }
     },
+    "Türkçe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turkish"
+          }
+        }
+      }
+    },
     "Tırnaklı (New York)": {
       "localizations": {
         "en": {
@@ -4523,6 +4643,16 @@
         }
       }
     },
+    "Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes for new meetings are written for this type; you can rewrite a meeting's note with another template later (⋯ menu)."
+          }
+        }
+      }
+    },
     "Yeniden başlatılamadı: %@": {
       "localizations": {
         "en": {
@@ -4539,6 +4669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies after a restart."
+          }
+        }
+      }
+    },
+    "Yeniden dene": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
           }
         }
       }
@@ -4735,6 +4875,16 @@
         }
       }
     },
+    "Çeviri yapılamadı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't translate"
+          }
+        }
+      }
+    },
     "Çeviri, özet ve not için Claude kullanılır. OpenAI, Ollama ya da OpenCode Go'yu Ayarlar › LLM'den seçebilirsin.": {
       "localizations": {
         "en": {
@@ -4821,6 +4971,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apply suggestion"
+          }
+        }
+      }
+    },
+    "Örnek: \"Riskleri ayrı bir paragrafta say, her kararın gerekçesini yaz.\"": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Example: \"List risks in a separate paragraph and give the reason for each decision.\""
           }
         }
       }
@@ -4998,12 +5158,42 @@
         }
       }
     },
+    "İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Finnish or English version of the note to send to colleagues"
+          }
+        }
+      }
+    },
+    "İş mülakatı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job interview"
+          }
+        }
+      }
+    },
     "İşleniyor": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Processing"
+          }
+        }
+      }
+    },
+    "Şablonla yeniden yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewrite with template"
           }
         }
       }
