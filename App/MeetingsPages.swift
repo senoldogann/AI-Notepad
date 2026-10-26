@@ -294,7 +294,7 @@ struct MeetingDetailPage: View {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            SummaryTab(note: note, record: record, paragraphs: paragraphs)
+                            SummaryTab(model: model, note: note, record: record, paragraphs: paragraphs)
                         } else {
                             if isProcessing {
                                 EmptyStateCard(symbol: "hourglass", title: "Not hazırlanıyor…", message: "Bitince özet, kararlar ve görevler burada görünür.")
@@ -627,6 +627,7 @@ struct MeetingDetailPage: View {
 /// Özet sekmesi bir belge gibi okunur: sana düşen görevler, büyük yazılı özet, numaralı kararlar, diğer görevler ve
 /// sözlük; geniş pencerede sağda "Bir bakışta" ve konuşma payları, darda (panel) konuşma payları en altta.
 private struct SummaryTab: View {
+    let model: AppModel
     let note: MeetingNote
     let record: MeetingRecord
     let paragraphs: [TranscriptParagraph]
@@ -667,7 +668,7 @@ private struct SummaryTab: View {
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(appearance.accent.color)
                     ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                        TaskCard(task: item.element, speakerNames: record.speakerNames)
+                        TaskCard(model: model, record: record, task: item.element)
                     }
                 }
                 .padding(14)
@@ -707,7 +708,7 @@ private struct SummaryTab: View {
                 section(title: "DİĞER GÖREVLER") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                            TaskCard(task: item.element, speakerNames: record.speakerNames)
+                            TaskCard(model: model, record: record, task: item.element)
                         }
                     }
                 }
@@ -904,15 +905,21 @@ private func decisionNumber(index: Int) -> String {
 
 /// Görev kartı: sahibinin harf rozeti, sahibi ve iş, varsa tarih çipi.
 private struct TaskCard: View {
+    let model: AppModel
+    let record: MeetingRecord
     let task: NoteTask
-    let speakerNames: [Int: String]
 
     var body: some View {
+        let isDone: Bool = isTaskDone(record: record, task: task)
         HStack(alignment: .top, spacing: 12) {
-            SpeakerAvatar(text: ownerInitial(owner: task.owner), color: ownerColor(task: task, speakerNames: speakerNames), size: 26)
+            TaskCheckbox(isDone: isDone) { model.toggleTask(meetingID: record.id, task: task) }
+                .disabled(model.isLocked(meetingID: record.id))
+            SpeakerAvatar(text: ownerInitial(owner: task.owner), color: ownerColor(task: task, speakerNames: record.speakerNames), size: 26)
             VStack(alignment: .leading, spacing: 6) {
                 let owner: Text = Text(task.owner).fontWeight(.semibold)
                 Text("\(owner) — \(task.description)")
+                    .strikethrough(isDone, color: Theme.muted)
+                    .foregroundStyle(isDone ? Theme.muted : Theme.ink)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if let due = task.dueDate {
@@ -925,10 +932,73 @@ private struct TaskCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            ReminderButton(model: model, record: record, task: task)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .cardSurface(cornerRadius: 14)
+        .animation(.smooth(duration: 0.2), value: isDone)
+    }
+}
+
+/// Görevin tamamlandı kutusu: boş daire / dolu onay; el imleci, basınca küçülür.
+struct TaskCheckbox: View {
+    let isDone: Bool
+    let onToggle: @MainActor () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(isDone ? Color.green : Theme.muted)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.hoverPlain)
+        .hoverHint(isDone ? "Yapılmadı olarak işaretle" : "Yapıldı olarak işaretle", alignment: .leading, edge: .bottom)
+        .accessibilityLabel(isDone ? Text("Yapıldı") : Text("Yapılmadı"))
+    }
+}
+
+/// Görevi Apple Anımsatıcılar'a ekleyen zil düğmesi; eklendiyse dolu zil (yeniden eklenmez), hata altında görünür.
+struct ReminderButton: View {
+    let model: AppModel
+    let record: MeetingRecord
+    let task: NoteTask
+    @State private var isAdding: Bool = false
+    @State private var error: String?
+
+    var body: some View {
+        let reminded: Bool = isTaskReminded(record: record, task: task)
+        VStack(alignment: .trailing, spacing: 4) {
+            Button {
+                isAdding = true
+                Task {
+                    error = await model.addToReminders(meetingID: record.id, task: task)
+                    isAdding = false
+                }
+            } label: {
+                Group {
+                    if isAdding {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: reminded ? "bell.badge.fill" : "bell")
+                            .foregroundStyle(reminded ? Color.orange : Theme.muted)
+                    }
+                }
+                .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.hoverPlain)
+            .disabled(reminded || isAdding)
+            .hoverHint(reminded ? "Anımsatıcılar'da" : "Anımsatıcılar'a ekle", alignment: .trailing, edge: .bottom)
+            if let error {
+                Text(error)
+                    .appFont(size: 11, weight: .regular)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: 220, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

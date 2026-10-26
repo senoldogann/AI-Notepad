@@ -83,6 +83,8 @@ final class AppModel {
     var voiceRegistryError: String?
     /// Kayıt başında panelde "katılımcılara haber ver" hatırlatması gösteriliyor.
     var consentReminderVisible: Bool = false
+    /// Takvim ve Anımsatıcılar.
+    @ObservationIgnored let eventKit: EventKitConnector = EventKitConnector()
     var transcript: [LiveSegment] = []
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
@@ -885,6 +887,38 @@ final class AppModel {
         if !trimmed.isEmpty, UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition), let voice = record.voiceprints?[person] {
             storeVoices(voices: registering(voices: registeredVoices, name: trimmed, voiceprint: voice, now: Date()))
         }
+    }
+
+    // MARK: Görevler
+
+    /// Görevin tamamlandı işaretini değiştirir (kilitli toplantıda değil: işleme bitince kayıt bütünüyle yazılır).
+    func toggleTask(meetingID: String, task: NoteTask) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: togglingTask(record: record, task: task), directory: directory)
+        }
+    }
+
+    /// Görevi Apple Anımsatıcılar'a ekler; hata varsa kullanıcı metni döner.
+    func addToReminders(meetingID: String, task: NoteTask) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return nil
+        }
+        do {
+            try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, calendar: Calendar.current))
+        } catch {
+            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return eventKitMessage(error: error)
+        }
+        // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir.
+        if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: markingReminded(record: current, task: task), directory: directory)
+            }
+        }
+        return nil
     }
 
     // MARK: Sesinden tanıma

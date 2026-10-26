@@ -22,5 +22,9 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler.</string>
 </dict>
 </plist>

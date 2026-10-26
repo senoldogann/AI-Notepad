@@ -191,7 +191,8 @@ private struct Sidebar: View {
     let router: MainWindowRouter
 
     var body: some View {
-        let myTaskCount: Int = model.meetings.prefix(10).map { ($0.note?.tasks ?? []).filter(\.isMine).count }.reduce(0, +)
+        // Yalnızca açık (tamamlanmamış) görevler sayılır.
+        let myTaskCount: Int = myTasks(meetings: Array(model.meetings.prefix(10))).filter { !isTaskDone(record: $0.record, task: $0.task) }.count
         VStack(alignment: .leading, spacing: 2) {
             // Trafik ışıklarına yer.
             Color.clear.frame(height: 40)
@@ -713,6 +714,7 @@ private struct HomeTasks: View {
 
     var body: some View {
         let items: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: Array(model.meetings.prefix(10)))
+            .filter { !isTaskDone(record: $0.record, task: $0.task) }
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
                 HStack {
@@ -724,7 +726,7 @@ private struct HomeTasks: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { (item: (offset: Int, element: (record: MeetingRecord, task: NoteTask))) in
-                        TaskLine(record: item.element.record, task: item.element.task, accent: appearance.accent.color) {
+                        TaskLine(model: model, record: item.element.record, task: item.element.task) {
                             router.selectedMeetingID = item.element.record.id
                             router.section = .meetings
                         }
@@ -739,38 +741,45 @@ private struct HomeTasks: View {
 }
 
 /// Toplantılardan kullanıcıya düşen görevler (verilen sırada). Saf fonksiyondur.
-private func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
+func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
     meetings.flatMap { (record: MeetingRecord) -> [(record: MeetingRecord, task: NoteTask)] in
         (record.note?.tasks ?? []).filter(\.isMine).map { (record: record, task: $0) }
     }
 }
 
-/// Görev satırı: daire, iş, tarih ve toplantı adı; tıklayınca toplantı açılır.
+/// Görev satırı: tamamlandı kutusu, iş, tarih ve toplantı adı (tıklayınca toplantı açılır), Anımsatıcılar'a ekleme.
 private struct TaskLine: View {
+    let model: AppModel
     let record: MeetingRecord
     let task: NoteTask
-    let accent: Color
     let onOpen: @MainActor () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "circle")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(task.description).appFont(size: 14, weight: .regular)
-                    Text(([task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · "))
-                        .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(Theme.muted)
+        let isDone: Bool = isTaskDone(record: record, task: task)
+        HStack(alignment: .center, spacing: 8) {
+            TaskCheckbox(isDone: isDone) { model.toggleTask(meetingID: record.id, task: task) }
+                .disabled(model.isLocked(meetingID: record.id))
+            Button(action: onOpen) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(task.description)
+                            .appFont(size: 14, weight: .regular)
+                            .strikethrough(isDone, color: Theme.muted)
+                            .foregroundStyle(isDone ? Theme.muted : Theme.ink)
+                        Text(([task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · "))
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.hoverPlain)
+            ReminderButton(model: model, record: record, task: task)
         }
-        .buttonStyle(.hoverPlain)
+        .padding(.horizontal, 8)
+        .animation(.smooth(duration: 0.2), value: isDone)
     }
 }
 
@@ -851,20 +860,35 @@ private struct MeetingCover: View {
 private struct TasksPage: View {
     let model: AppModel
     let router: MainWindowRouter
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @State private var showsDone: Bool = false
 
     var body: some View {
+        let all: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: model.meetings)
+        let doneCount: Int = all.filter { isTaskDone(record: $0.record, task: $0.task) }.count
         let groups: [(record: MeetingRecord, tasks: [NoteTask])] = model.meetings.compactMap { (record: MeetingRecord) -> (record: MeetingRecord, tasks: [NoteTask])? in
-            let mine: [NoteTask] = (record.note?.tasks ?? []).filter(\.isMine)
+            let mine: [NoteTask] = (record.note?.tasks ?? []).filter { $0.isMine && isTaskDone(record: record, task: $0) == showsDone }
             return mine.isEmpty ? nil : (record: record, tasks: mine)
         }
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Sana düşen görevler")
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.4)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Sana düşen görevler")
+                        .appFont(size: 28, weight: .regular)
+                        .tracking(-0.4)
+                    Spacer(minLength: 0)
+                    PillPicker(selection: $showsDone, options: [
+                        (false, "Açık · \(all.count - doneCount)"), (true, "Tamamlanan · \(doneCount)"),
+                    ])
+                    .fixedSize()
+                }
                 if groups.isEmpty {
-                    EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
+                    if showsDone {
+                        EmptyStateCard(symbol: "checkmark.circle", title: "Tamamlanan görev yok", message: "Bir görevin dairesine tıklayınca buraya taşınır.")
+                    } else if doneCount > 0 {
+                        EmptyStateCard(symbol: "party.popper", title: "Açık görevin kalmadı", message: "Hepsi tamamlandı.")
+                    } else {
+                        EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
+                    }
                 }
                 ForEach(groups, id: \.record.id) { (group: (record: MeetingRecord, tasks: [NoteTask])) in
                     VStack(alignment: .leading, spacing: 6) {
@@ -886,7 +910,7 @@ private struct TasksPage: View {
                         }
                         .buttonStyle(.hoverPlain)
                         ForEach(Array(group.tasks.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                            TaskLine(record: group.record, task: item.element, accent: appearance.accent.color) {
+                            TaskLine(model: model, record: group.record, task: item.element) {
                                 router.selectedMeetingID = group.record.id
                                 router.section = .meetings
                             }
@@ -894,8 +918,11 @@ private struct TasksPage: View {
                     }
                     .padding(8)
                     .cardSurface(cornerRadius: 16)
+                    .transition(.opacity)
                 }
             }
+            .animation(.smooth(duration: 0.25), value: showsDone)
+            .animation(.smooth(duration: 0.25), value: doneCount)
             .padding(36)
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)

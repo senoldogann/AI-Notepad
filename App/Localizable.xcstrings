@@ -728,6 +728,56 @@
         }
       }
     },
+    "Anımsatıcı kaydedilemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the reminder: %@"
+          }
+        }
+      }
+    },
+    "Anımsatıcılar'a ekle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to Reminders"
+          }
+        }
+      }
+    },
+    "Anımsatıcılar'a erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Anımsatıcılar'dan AI-Notepad'e izin ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No access to Reminders: allow AI-Notepad in System Settings › Privacy & Security › Reminders."
+          }
+        }
+      }
+    },
+    "Anımsatıcılar'da": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Reminders"
+          }
+        }
+      }
+    },
+    "Anımsatıcılar'da liste yok: Anımsatıcılar uygulamasında bir liste oluştur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders has no list: create one in the Reminders app."
+          }
+        }
+      }
+    },
     "Arayüz dili": {
       "localizations": {
         "en": {
@@ -814,6 +864,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Light"
+          }
+        }
+      }
+    },
+    "Açık görevin kalmadı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No open tasks left"
+          }
+        }
+      }
+    },
+    "Açık · %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open · %lld"
           }
         }
       }
@@ -917,6 +987,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Bir görevin dairesine tıklayınca buraya taşınır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click a task's circle to move it here."
           }
         }
       }
@@ -1845,6 +1925,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No meetings yet"
+          }
+        }
+      }
+    },
+    "Hepsi tamamlandı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All done."
           }
         }
       }
@@ -3228,6 +3318,16 @@
         }
       }
     },
+    "Sahibi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner: %@"
+          }
+        }
+      }
+    },
     "Sana düşen görev sayısı": {
       "localizations": {
         "en": {
@@ -3714,12 +3814,52 @@
         }
       }
     },
+    "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e izin ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No access to Calendar: allow AI-Notepad in System Settings › Privacy & Security › Calendars."
+          }
+        }
+      }
+    },
+    "Tamamlanan görev yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No completed tasks"
+          }
+        }
+      }
+    },
+    "Tamamlanan · %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done · %lld"
+          }
+        }
+      }
+    },
     "Tanınan sesler": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Known voices"
+          }
+        }
+      }
+    },
+    "Tarih: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Due: %@"
           }
         }
       }
@@ -3913,6 +4053,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't delete the meeting: %@"
+          }
+        }
+      }
+    },
+    "Toplantı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting: %@"
           }
         }
       }
@@ -4266,6 +4416,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Record only the other side — the microphone never opens, no echo"
+          }
+        }
+      }
+    },
+    "Yapıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "Yapıldı olarak işaretle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as done"
+          }
+        }
+      }
+    },
+    "Yapılmadı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not done"
+          }
+        }
+      }
+    },
+    "Yapılmadı olarak işaretle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as not done"
           }
         }
       }

@@ -133,6 +133,10 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var meNeedsFinalPass: Bool?
     /// Son geçiş kişilerinin ses izleri (sesinden tanıma); eski toplantılarda ve izi çıkarılamayanlarda nil.
     public private(set) var voiceprints: [Int: Voiceprint]?
+    /// Tamamlanan görevlerin kimlikleri (bkz. `taskKey`); eski toplantılarda nil.
+    public private(set) var completedTasks: [String]?
+    /// Anımsatıcılar'a eklenen görevlerin kimlikleri.
+    public private(set) var remindedTasks: [String]?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -156,6 +160,20 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.engine = engine
         self.notice = notice
         self.meNeedsFinalPass = meNeedsFinalPass
+    }
+
+    /// Tamamlanan görevleri değişmiş kopya.
+    public func with(completedTasks newCompleted: [String]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.completedTasks = newCompleted
+        return copy
+    }
+
+    /// Anımsatıcılar'a eklenen görevleri değişmiş kopya.
+    public func with(remindedTasks newReminded: [String]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.remindedTasks = newReminded
+        return copy
     }
 
     /// Ses izleri değişmiş kopya.
