@@ -48,6 +48,8 @@ enum SettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// "Sen" (mikrofon) kapalı mı.
     static let micMuted: String = "micMuted"
+    /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
+    static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.
     static let theme: String = "appearance.theme"
     static let accent: String = "appearance.accent"
@@ -179,6 +181,7 @@ func registerDefaultSettings() {
         SettingsKey.claudeSmartEffort: LLMEffort.high.rawValue,
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
+        SettingsKey.voiceRecognition: true,
         SettingsKey.theme: AppTheme.light.rawValue,
         SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
         SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,

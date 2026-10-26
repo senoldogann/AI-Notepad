@@ -131,6 +131,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
+    @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
@@ -227,6 +228,27 @@ private struct GeneralSettings: View {
                     }
                 ))
                 .settingsToggle()
+            }
+            SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
+                Text("Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.")
+                if let error = model.voiceRegistryError {
+                    Text(error).foregroundStyle(.red)
+                }
+            } control: {
+                Toggle("Konuşmacıları sesinden tanı", isOn: $voiceRecognition).settingsToggle()
+            }
+            if voiceRecognition, !model.registeredVoices.isEmpty {
+                SettingsGroupHeader(title: "Tanınan sesler")
+                ForEach(model.registeredVoices, id: \.name) { (voice: RegisteredVoice) in
+                    SettingsRow(title: Text(voice.name)) {
+                        Text("\(max(1, Int((voice.voiceprint.seconds / 60).rounded()))) dk konuşmadan · \(voice.updatedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale())))")
+                    } control: {
+                        Button("Unut", role: .destructive) { model.forgetVoice(name: voice.name) }
+                            .hoverHint("Bu kişi bundan sonra sesinden tanınmaz", alignment: .trailing, edge: .bottom)
+                    }
+                }
+                SettingsDivider().opacity(0)
+                    .padding(.bottom, 16)
             }
             SettingsRow(title: Text("\"Ne kaçırdım?\" son \(missedMinutes) dakikayı özetler")) {
                 EmptyView()

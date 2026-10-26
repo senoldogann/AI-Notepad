@@ -88,6 +88,8 @@ public func processMeeting(
     llm: LLMProvider?,
     languageMode: LanguageMode,
     userName: String,
+    voiceEmbedder: (any VoiceEmbedder)?,
+    registry: [RegisteredVoice],
     onStep: @escaping @MainActor @Sendable (ProcessingStep) async -> Void
 ) async -> MeetingRecord {
     var current: MeetingRecord = record.with(status: .processing, failureMessage: nil).with(notice: nil)
@@ -111,9 +113,48 @@ public func processMeeting(
         }
     }
 
+    if let voiceEmbedder {
+        current = await recognizeVoices(record: current, directory: directory, embedder: voiceEmbedder, registry: registry)
+    }
+
     await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
 }
+
+/// Sesinden tanıma: kişilerin ses izleri "Diğerleri" kaydından çıkarılır, adı olmayan kişilere kayıtlı seslerden emin
+/// olunan adlar verilir ve hangi adların sesinden verildiği uyarıda yazılır. İz çıkarılamazsa (ör. model indirilemedi)
+/// toplantı adsız kalır, uyarı eklenir; not engellenmez.
+private func recognizeVoices(record: MeetingRecord, directory: URL, embedder: any VoiceEmbedder, registry: [RegisteredVoice]) async -> MeetingRecord {
+    let othersAudio: URL = directory.appending(path: "others.m4a")
+    let segments: [StoredSegment] = meetingSegments(record: record)
+    guard FileManager.default.fileExists(atPath: othersAudio.path), segments.contains(where: { $0.person != nil }) else {
+        return record
+    }
+    do {
+        let voiceprints: [Int: Voiceprint] = try await meetingVoiceprints(
+            samples: try loadMonoSamples(url: othersAudio), segments: segments, embedder: embedder, windowSec: voiceWindowSec
+        )
+        let recognized: [Int: String] = recognizedNames(voiceprints: voiceprints, registry: registry)
+            .filter { (entry: (key: Int, value: String)) -> Bool in
+                // Kullanıcının verdiği ad ezilmez; aynı ad iki kişide olmaz.
+                record.speakerNames[entry.key] == nil && !record.speakerNames.values.contains(entry.value)
+            }
+        let names: [Int: String] = record.speakerNames.merging(recognized) { (given: String, _: String) -> String in given }
+        processLogger.info("Ses izleri çıkarıldı, kişi: \(voiceprints.count, privacy: .public), tanınan: \(recognized.count, privacy: .public)")
+        let updated: MeetingRecord = record.with(voiceprints: voiceprints).with(speakerNames: names)
+        guard !recognized.isEmpty else {
+            return updated
+        }
+        let list: String = recognized.sorted { $0.key < $1.key }.map(\.value).joined(separator: ", ")
+        return updated.with(notice: joinedNotice(record.notice, String(localized: "Sesinden tanındı: \(list).")))
+    } catch {
+        processLogger.error("Ses izleri çıkarılamadı, hata: \(String(describing: error), privacy: .private)")
+        return record.with(notice: joinedNotice(record.notice, String(localized: "Konuşmacılar sesinden tanınamadı: \(userFacingMessage(error: error))")))
+    }
+}
+
+/// Ses izi için kaydın bölündüğü parça (SpeakerKit'in en iyi çalıştığı uzunluk; 37 dk'lık kayıt ~20 sn).
+private let voiceWindowSec: Double = 120
 
 /// Kayıttaki `.caf` dosyalarını (`me`, `others`) aynı anda `.m4a`'ya dönüştürür ve `.caf`'ları siler; ilk hata fırlatılır.
 private func convertRecordings(directory: URL) async throws {

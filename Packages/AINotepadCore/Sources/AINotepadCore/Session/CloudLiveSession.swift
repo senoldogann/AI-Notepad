@@ -20,6 +20,8 @@ public struct CloudSessionConfig: Sendable {
     public let languageConfidence: Double
     /// Deepgram'a verilen adlar ve terimler (bkz. `meetingKeyterms`).
     public let keyterms: [String]
+    /// Ses izi (geri dönen konuşmacıyı tanımak için); kapalıysa nil.
+    public let voiceEmbedder: (any VoiceEmbedder)?
 
     public init(
         languageMode: LanguageMode,
@@ -31,7 +33,8 @@ public struct CloudSessionConfig: Sendable {
         diarizationWindowSec: Double,
         minDiarizationAudioSec: Double,
         languageConfidence: Double,
-        keyterms: [String]
+        keyterms: [String],
+        voiceEmbedder: (any VoiceEmbedder)?
     ) {
         self.languageMode = languageMode
         self.recordingDirectory = recordingDirectory
@@ -43,6 +46,7 @@ public struct CloudSessionConfig: Sendable {
         self.minDiarizationAudioSec = minDiarizationAudioSec
         self.languageConfidence = languageConfidence
         self.keyterms = keyterms
+        self.voiceEmbedder = voiceEmbedder
     }
 }
 
@@ -347,10 +351,15 @@ private func runDiarizationWindow(
     }
     let locked: MeetingLanguage? = await state.locked()
     let requestMode: LanguageMode = locked.map { (language: MeetingLanguage) -> LanguageMode in .fixed(language) } ?? config.languageMode
+    // Ses izleri ElevenLabs isteğiyle aynı anda, aynı ses üzerinde (Mac'te) çıkarılır.
+    let voiceTask: Task<[VoiceCluster], any Error>? = config.voiceEmbedder.map { (embedder: any VoiceEmbedder) -> Task<[VoiceCluster], any Error> in
+        Task { try await embedder.clusters(samples: window.samples) }
+    }
     let result: DiarizationResult
     do {
         result = try await diarizeWithElevenLabs(apiKey: config.elevenLabsKey, samples: window.samples, languageMode: requestMode)
     } catch {
+        voiceTask?.cancel()
         cloudLogger.error("Konuşmacı ayırma penceresi başarısız: \(String(describing: error), privacy: .private)")
         events.yield(.diarizationFailed(message: userFacingMessage(error: error)))
         if case CloudSTTError.http(_, let status, _) = error, status == 401 || status == 403 {
@@ -370,7 +379,10 @@ private func runDiarizationWindow(
         }
     }
 
-    let mapping: SpeakerMapping = applyWindow(mapping: await state.currentMapping(), windowWords: result.words, windowStartSec: window.startSec)
+    let labelVoices: [String: Voiceprint] = await windowLabelVoices(task: voiceTask, words: result.words)
+    let mapping: SpeakerMapping = applyWindow(
+        mapping: await state.currentMapping(), windowWords: result.words, windowStartSec: window.startSec, labelVoices: labelVoices
+    )
     await state.setMapping(mapping: mapping)
     let finals: [LiveSegment] = await state.finals()
     let assignments: [SegmentID: Int] = assignPersons(segments: finals, words: mapping.words)
@@ -395,6 +407,24 @@ private func runDiarizationWindow(
     }
     if !gaps.isEmpty {
         cloudLogger.info("Canlı transkriptteki boşluklar dolduruldu, adet: \(gaps.count, privacy: .public)")
+    }
+}
+
+/// Penceredeki ElevenLabs etiketlerinin ses izleri. Ses izi çıkarılamazsa (model indirilemedi gibi) pencere yalnızca
+/// zaman örtüşmesiyle eşlenir: hata loglanır, konuşmacı ayırma sürer.
+private func windowLabelVoices(task: Task<[VoiceCluster], any Error>?, words: [DiarizedWord]) async -> [String: Voiceprint] {
+    guard let task else {
+        return [:]
+    }
+    do {
+        let clusters: [VoiceCluster] = try await task.value
+        return labelVoiceprints(
+            spans: words.map { LabeledSpan(label: $0.speaker, startSec: $0.startSec, endSec: $0.endSec) },
+            clusters: clusters
+        )
+    } catch {
+        cloudLogger.error("Ses izi çıkarılamadı, pencere yalnızca zamanla eşlendi, hata: \(String(describing: error), privacy: .public)")
+        return [:]
     }
 }
 

@@ -131,6 +131,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     /// "Sen"in canlı metin akışı kayıt sırasında koptu (ör. ağ gitti): canlı metin eksik, son geçiş "Sen" kaydını da
     /// yazıya döker. Eski toplantılarda nil.
     public private(set) var meNeedsFinalPass: Bool?
+    /// Son geçiş kişilerinin ses izleri (sesinden tanıma); eski toplantılarda ve izi çıkarılamayanlarda nil.
+    public private(set) var voiceprints: [Int: Voiceprint]?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -154,6 +156,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.engine = engine
         self.notice = notice
         self.meNeedsFinalPass = meNeedsFinalPass
+    }
+
+    /// Ses izleri değişmiş kopya.
+    public func with(voiceprints newVoiceprints: [Int: Voiceprint]?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.voiceprints = newVoiceprints
+        return copy
     }
 
     /// Konuşmacı adları değişmiş kopya.

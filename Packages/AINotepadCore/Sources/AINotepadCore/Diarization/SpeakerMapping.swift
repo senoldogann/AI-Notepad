@@ -14,26 +14,31 @@ public struct AttributedWord: Sendable, Equatable {
     }
 }
 
-/// Pencereler arası konuşmacı eşleme durumu: son pencerenin atanmış kelimeleri ve sıradaki numara.
+/// Pencereler arası konuşmacı eşleme durumu: son pencerenin atanmış kelimeleri, sıradaki numara ve kişilerin ses izleri.
 public struct SpeakerMapping: Sendable, Equatable {
     public let words: [AttributedWord]
     public let nextPerson: Int
+    /// Kişi → toplantı boyunca biriken ses izi (bkz. `Voiceprint`).
+    public let voices: [Int: Voiceprint]
 
-    public init(words: [AttributedWord], nextPerson: Int) {
+    public init(words: [AttributedWord], nextPerson: Int, voices: [Int: Voiceprint]) {
         self.words = words
         self.nextPerson = nextPerson
+        self.voices = voices
     }
 
-    public static let initial: SpeakerMapping = SpeakerMapping(words: [], nextPerson: 1)
+    public static let initial: SpeakerMapping = SpeakerMapping(words: [], nextPerson: 1, voices: [:])
 }
 
 /// Yeni bir ayırma penceresinin pencere içi etiketlerini kalıcı kişi numaralarına eşler. Saf fonksiyondur.
 ///
-/// Her (yeni etiket, önceki kişi) çifti için örtüşme, kelimelerin zaman kesişimlerinin toplamıdır.
-/// Çiftler örtüşmeye göre büyükten küçüğe açgözlü eşlenir; her etiket ve kişi en fazla bir kez kullanılır.
-/// Eşlenmeyen etiketler, pencerede ilk görünme sırasıyla `nextPerson`'dan numara alır.
-/// Pencerede kelime yoksa eşleme olduğu gibi döner.
-public func applyWindow(mapping: SpeakerMapping, windowWords: [DiarizedWord], windowStartSec: Double) -> SpeakerMapping {
+/// 1. Zaman örtüşmesi: her (yeni etiket, önceki kişi) çifti için kelimelerin zaman kesişimlerinin toplamı; çiftler
+///    büyükten küçüğe açgözlü eşlenir, her etiket ve kişi en fazla bir kez kullanılır.
+/// 2. Ses izi: örtüşmeyle eşlenemeyen etiketin izi (`labelVoices`), bu pencerede kullanılmamış kişilerin izlerinden
+///    biriyle emin olunacak kadar yakınsa o kişiye verilir: bir süre konuşmayıp geri dönen kişi eski numarasını alır.
+/// 3. Kalan etiketler pencerede ilk görünme sırasıyla `nextPerson`'dan numara alır.
+/// Eşlenen etiketlerin yeterince uzun izleri kişinin izine eklenir. Pencerede kelime yoksa eşleme olduğu gibi döner.
+public func applyWindow(mapping: SpeakerMapping, windowWords: [DiarizedWord], windowStartSec: Double, labelVoices: [String: Voiceprint]) -> SpeakerMapping {
     guard !windowWords.isEmpty else {
         return mapping
     }
@@ -45,9 +50,18 @@ public func applyWindow(mapping: SpeakerMapping, windowWords: [DiarizedWord], wi
             labels.append(word.speaker)
         }
     }
-    let matched: [String: Int] = greedyMatches(overlaps: overlapDurations(newWords: absolute, previous: mapping.words))
+    let byOverlap: [String: Int] = greedyMatches(overlaps: overlapDurations(newWords: absolute, previous: mapping.words))
+    let byVoice: [String: Int] = labelsInOrder.reduce(into: byOverlap) { (matched: inout [String: Int], label: String) -> Void in
+        guard matched[label] == nil, let voice = labelVoices[label], voice.seconds >= VoiceMatching.minDecisionSeconds else {
+            return
+        }
+        let free: [Int: Voiceprint] = mapping.voices.filter { !matched.values.contains($0.key) }
+        if let person = confidentMatch(voice: voice, candidates: free) {
+            matched[label] = person
+        }
+    }
     let numbered: (persons: [String: Int], nextPerson: Int) = labelsInOrder.reduce(
-        into: (persons: matched, nextPerson: mapping.nextPerson)
+        into: (persons: byVoice, nextPerson: mapping.nextPerson)
     ) { (state: inout (persons: [String: Int], nextPerson: Int), label: String) -> Void in
         if state.persons[label] == nil {
             state.persons[label] = state.nextPerson
@@ -58,7 +72,13 @@ public func applyWindow(mapping: SpeakerMapping, windowWords: [DiarizedWord], wi
         // Her etiket yukarıda numara aldı.
         AttributedWord(startSec: word.startSec, endSec: word.endSec, person: numbered.persons[word.speaker]!)
     }
-    return SpeakerMapping(words: attributed, nextPerson: numbered.nextPerson)
+    let voices: [Int: Voiceprint] = labelVoices.reduce(into: mapping.voices) { (voices: inout [Int: Voiceprint], entry: (key: String, value: Voiceprint)) -> Void in
+        guard entry.value.seconds >= VoiceMatching.minUpdateSeconds, let person = numbered.persons[entry.key] else {
+            return
+        }
+        voices[person] = voices[person].map { mergedVoiceprint($0, entry.value) } ?? entry.value
+    }
+    return SpeakerMapping(words: attributed, nextPerson: numbered.nextPerson, voices: voices)
 }
 
 /// Her "Diğerleri" bölümüne, aralığında en uzun konuşan kişiyi atar. "Sen" bölümleri ve kelimesiz
