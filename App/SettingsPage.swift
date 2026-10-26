@@ -673,7 +673,8 @@ struct SettingsRow<Detail: View, Control: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                control
+                // Denetim sığdığı genişlikte kalır; dar pencerede açıklama satırları kısalır (düğme yazıları ezilmesin).
+                control.fixedSize(horizontal: true, vertical: false)
             }
             .padding(.vertical, 16)
             SettingsDivider()
