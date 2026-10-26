@@ -534,6 +534,7 @@ private struct LLMSettings: View {
                 }
                 .disabled(testResult == .running)
             }
+            MCPSettings()
         }
         // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
         .task(id: [provider, baseURL, fastModel, smartModel, openAIFastEffort, openAISmartEffort, claudeFastModel, claudeSmartModel, claudeFastEffort, claudeSmartEffort]) {
@@ -822,5 +823,45 @@ extension View {
     /// Ayar anahtarı: etiketsiz, vurgu renginde.
     func settingsToggle() -> some View {
         toggleStyle(.switch).labelsHidden()
+    }
+}
+
+/// Yerel MCP sunucusu: Claude Desktop, ChatGPT ya da başka MCP istemcisinin toplantı arşivini sorgulaması için
+/// yapılandırma (uygulama `--mcp` ile pencere açmadan çalışır; veri Mac'ten çıkmaz, istemci yalnızca okur).
+private struct MCPSettings: View {
+    @State private var copied: Bool = false
+
+    var body: some View {
+        let path: String = Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
+        let config: String = """
+        {
+          "mcpServers": {
+            "ai-notepad": {
+              "command": "\(path)",
+              "args": ["--mcp"]
+            }
+          }
+        }
+        """
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Yapay zekâ uygulamalarına bağla (MCP)")
+            SettingsRow(title: Text("Claude Desktop, ChatGPT ve diğerleri")) {
+                Text("Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez.")
+            } control: {
+                Button(copied ? "Kopyalandı" : "Yapılandırmayı kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(config, forType: .string)
+                    copied = true
+                }
+            }
+            Text(config)
+                .appFont(size: 12, weight: .regular)
+                .monospaced()
+                .textSelection(.enabled)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.vertical, 12)
+        }
     }
 }

@@ -5,8 +5,26 @@ import SwiftUI
 
 private let appLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "App")
 
-/// Uygulamanın giriş noktası: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
+/// Giriş noktası: `--mcp` ile pencere açmadan yerel MCP sunucusu (stdio; Claude Desktop, ChatGPT gibi istemciler
+/// toplantı arşivini sorgular), yoksa uygulama.
 @main
+enum AppEntry {
+    static func main() {
+        guard CommandLine.arguments.contains("--mcp") else {
+            AINotepadApp.main()
+            return
+        }
+        do {
+            let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectory: try AppPaths.sessionsDirectory(), version: version)
+        } catch {
+            FileHandle.standardError.write(Data("AI-Notepad MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
+            exit(1)
+        }
+    }
+}
+
+/// Uygulama: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
 struct AINotepadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate: AppDelegate
     @State private var model: AppModel

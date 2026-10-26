@@ -1286,6 +1286,16 @@
         }
       }
     },
+    "Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add this configuration to the client's MCP settings (Claude Desktop: Settings › Developer › Edit Config). The client can list and search your meetings and read notes and transcripts; it only reads and changes nothing."
+          }
+        }
+      }
+    },
     "Bugün hangi toplantıyı dinleyelim?": {
       "localizations": {
         "en": {
@@ -1403,6 +1413,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing answer"
+          }
+        }
+      }
+    },
+    "Claude Desktop, ChatGPT ve diğerleri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Desktop, ChatGPT and others"
           }
         }
       }
@@ -4876,6 +4896,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Record only the other side — the microphone never opens, no echo"
+          }
+        }
+      }
+    },
+    "Yapay zekâ uygulamalarına bağla (MCP)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect AI apps (MCP)"
+          }
+        }
+      }
+    },
+    "Yapılandırmayı kopyala": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy configuration"
           }
         }
       }
