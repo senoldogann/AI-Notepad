@@ -60,6 +60,9 @@ public func deepgramListenURL(language: MeetingLanguage, keyterms: [String]) -> 
         URLQueryItem(name: "channels", value: "1"),
         URLQueryItem(name: "interim_results", value: "true"),
         URLQueryItem(name: "smart_format", value: "true"),
+        // Biçimlendirme için (sayı, tarih) metni 3 sn'ye kadar bekletmesin: canlı metin konuşmayla başa baş gelsin.
+        // Son geçiş metni zaten yeniden yazar.
+        URLQueryItem(name: "no_delay", value: "true"),
     // Adlar ve terimler (keyterm prompting, nova-3): her terim ayrı parametre.
     ] + keyterms.map { URLQueryItem(name: "keyterm", value: $0) }
     // Sabit bileşenlerden üretildiği için her zaman geçerlidir.

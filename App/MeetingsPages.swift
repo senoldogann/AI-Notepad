@@ -417,6 +417,11 @@ struct MeetingDetailPage: View {
             if let index = CommandLine.arguments.firstIndex(of: "--not-dili"), CommandLine.arguments.indices.contains(index + 1) {
                 noteLanguage = ShareLanguage(rawValue: CommandLine.arguments[index + 1])
             }
+            // "--cal <saniye>": transkripti açıp oradan çalar (kelime vurgusunun akışını görsel kontrol için).
+            if let index = CommandLine.arguments.firstIndex(of: "--cal"), CommandLine.arguments.indices.contains(index + 1),
+               let startSec = Double(CommandLine.arguments[index + 1]) {
+                play(from: startSec)
+            }
         }
     }
 
@@ -1449,13 +1454,8 @@ private struct SpeakerTimeline: View {
                     }
                     .frame(height: 8)
                     .clipShape(Capsule())
-                    if player.meetingID == meetingID {
-                        Capsule()
-                            .fill(Color.white)
-                            .frame(width: 3, height: 14)
-                            .shadow(color: .black.opacity(0.35), radius: 2)
-                            .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)
-                    }
+                    // Konumu yalnızca bu küçük görünüm okur: konuşmacı şeritleri her güncellemede yeniden çizilmez.
+                    Playhead(player: player, meetingID: meetingID, width: width, totalSec: totalSec)
                 }
                 .frame(width: width, height: 14)
                 .contentShape(Rectangle())
@@ -1797,10 +1797,12 @@ private struct TranscriptSection: View {
     let onToggleHighlight: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
+    /// Çalan paragraf: konum her güncellendiğinde değil, yalnızca paragraf değişince yazılır (tüm transkript saniyede
+    /// onlarca kez yeniden çizilmesin; kelime vurgusu yalnızca çalan paragrafın içinde güncellenir).
+    @State private var activeID: String?
+
     var body: some View {
-        let isActivePlayer: Bool = player.meetingID == record.id
         let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
-        let time: Double = player.currentTime
         LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
                 Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
@@ -1811,7 +1813,7 @@ private struct TranscriptSection: View {
                 // Aynı konuşmacı sürüyorsa rozet ve ad tekrar edilmez (sohbet gibi).
                 let continues: Bool = item.offset > 0
                     && SpeakerKey(speaker: paragraphs[item.offset - 1].speaker, person: paragraphs[item.offset - 1].person) == key
-                let isActive: Bool = isActivePlayer && time >= paragraph.startSec && time < paragraph.endSec + 0.4
+                let isActive: Bool = activeID == paragraph.id
                 HStack(alignment: .top, spacing: 12) {
                     if continues {
                         Color.clear.frame(width: 32, height: 1)
@@ -1840,10 +1842,16 @@ private struct TranscriptSection: View {
                             .disabled(!canEdit)
                             .hoverHint(marked ? "İşareti kaldır" : "Önemli olarak işaretle (notta öne çıkar)", alignment: .leading, edge: .bottom)
                         }
-                        paragraphText(paragraph: paragraph, isActive: isActive, time: time)
-                            .font(appearance.bodyFont)
-                            .lineSpacing(appearance.lineSpacing)
-                            .fixedSize(horizontal: false, vertical: true)
+                        Group {
+                            if isActive, !paragraph.words.isEmpty {
+                                KaraokeParagraph(words: paragraph.words, player: player, accent: appearance.accent.color)
+                            } else {
+                                Text(paragraph.text)
+                            }
+                        }
+                        .font(appearance.bodyFont)
+                        .lineSpacing(appearance.lineSpacing)
+                        .fixedSize(horizontal: false, vertical: true)
                         if let turkish = paragraph.turkish {
                             Text(turkish)
                                 .font(appearance.secondaryFont)
@@ -1862,32 +1870,69 @@ private struct TranscriptSection: View {
                 .padding(.vertical, continues ? 6 : 12)
                 .padding(.horizontal, 10)
                 .background(isActive ? appearance.accent.color.opacity(0.09) : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .animation(.easeOut(duration: 0.25), value: isActive)
                 .modifier(PlayableTurn(canPlay: canPlay) { onPlay(paragraph.startSec) })
                 .id(paragraph.id)
             }
         }
-        // Çalan paragraf değişince ortaya kaydır (şarkı sözü gibi).
-        .onChange(of: activeParagraphID(time: time, isActivePlayer: isActivePlayer)) { (_: String?, id: String?) in
-            if let id, player.isPlaying {
-                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(id, anchor: .center) }
+        .background {
+            PlaybackFollower(player: player, meetingID: record.id, paragraphs: paragraphs) { (id: String?) -> Void in
+                activeID = id
+                // Çalan paragraf değişince ortaya kaydır (şarkı sözü gibi).
+                if let id, player.isPlaying {
+                    withAnimation(.easeInOut(duration: 0.45)) { proxy.scrollTo(id, anchor: .center) }
+                }
             }
         }
     }
+}
 
-    /// Çalan paragraf: anın içinde kaldığı ilk paragraf ("Diğerleri" önce; aynı anda konuşulduysa).
-    private func activeParagraphID(time: Double, isActivePlayer: Bool) -> String? {
-        guard isActivePlayer else {
-            return nil
+/// Konuşmacı şeridinde çalma konumunu gösteren çizgi.
+private struct Playhead: View {
+    let player: MeetingAudioPlayer
+    let meetingID: String
+    let width: CGFloat
+    let totalSec: Double
+
+    var body: some View {
+        if player.meetingID == meetingID {
+            Capsule()
+                .fill(Color.white)
+                .frame(width: 3, height: 14)
+                .shadow(color: .black.opacity(0.35), radius: 2)
+                .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)
         }
-        return paragraphs.first { time >= $0.startSec && time < $0.endSec + 0.4 }?.id
     }
+}
 
-    /// Çalan paragrafta kelime kelime renk: söylenenler parlak, o anki vurgu renginde, gelecekler soluk.
-    private func paragraphText(paragraph: TranscriptParagraph, isActive: Bool, time: Double) -> Text {
-        guard isActive, !paragraph.words.isEmpty else {
-            return Text(paragraph.text)
-        }
-        return Text(karaokeText(words: paragraph.words, activeIndex: activeWordIndex(words: paragraph.words, timeSec: time), accent: appearance.accent.color))
+/// Oynatıcının konumunu izleyen görünmez görünüm: konum her güncellendiğinde yalnızca bu küçük görünüm yeniden
+/// hesaplanır; çalan paragraf değişince `onChange` çağrılır.
+private struct PlaybackFollower: View {
+    let player: MeetingAudioPlayer
+    let meetingID: String
+    let paragraphs: [TranscriptParagraph]
+    let onChange: @MainActor (String?) -> Void
+
+    var body: some View {
+        let active: String? = player.meetingID == meetingID ? activeParagraphID(paragraphs: paragraphs, timeSec: player.currentTime) : nil
+        Color.clear
+            .onChange(of: active, initial: true) { (_: String?, id: String?) in onChange(id) }
+    }
+}
+
+/// Çalan paragraf: anın içinde kaldığı ilk paragraf ("Diğerleri" önce; aynı anda konuşulduysa). Saf fonksiyondur.
+private func activeParagraphID(paragraphs: [TranscriptParagraph], timeSec: Double) -> String? {
+    paragraphs.first { timeSec >= $0.startSec && timeSec < $0.endSec + 0.4 }?.id
+}
+
+/// Çalan paragrafın kelime kelime vurgusu: yalnızca bu görünüm konumu okur (saniyede ~30 güncelleme).
+private struct KaraokeParagraph: View {
+    let words: [StoredWord]
+    let player: MeetingAudioPlayer
+    let accent: Color
+
+    var body: some View {
+        Text(karaokeText(words: words, activeIndex: activeWordIndex(words: words, timeSec: player.currentTime), accent: accent))
     }
 }
 

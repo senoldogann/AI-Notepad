@@ -133,16 +133,18 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
 }
 
 @Suite struct KaraokeTests {
-    // Söylenen kelimeler tam renk, o anki kelime vurgulu, gelecekler soluk; metin kelimelerle aynı.
+    // Söylenen kelimeler tam renk, o anki kelime vurgu renginde (kalın değil: satırlar kırılıp titremesin), gelecekler
+    // soluk; metin kelimelerle aynı.
     @Test func activeWordIsEmphasized() {
         let words: [StoredWord] = [
             StoredWord(text: "Hei", startSec: 0, endSec: 1), StoredWord(text: "kaikki", startSec: 1, endSec: 2), StoredWord(text: "taas", startSec: 2, endSec: 3),
         ]
         let text: AttributedString = karaokeText(words: words, activeIndex: 1, accent: .blue)
         #expect(String(text.characters) == "Hei kaikki taas")
-        let emphasized: [String] = text.runs.compactMap { (run: AttributedString.Runs.Run) -> String? in
-            run.inlinePresentationIntent == .stronglyEmphasized ? String(text[run.range].characters) : nil
+        let accented: [String] = text.runs.compactMap { (run: AttributedString.Runs.Run) -> String? in
+            run.foregroundColor == .blue ? String(text[run.range].characters) : nil
         }
-        #expect(emphasized == [" kaikki"])
+        #expect(accented == [" kaikki"])
+        #expect(text.runs.allSatisfy { $0.inlinePresentationIntent == nil })
     }
 }
