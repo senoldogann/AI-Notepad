@@ -22,6 +22,8 @@ public struct PanelActions {
     public let onReassignBlock: @MainActor ([SegmentID], Int) -> Void
     /// Bir konuşmacının tümünü (geçmiş ve gelecek) diğeriyle birleştir.
     public let onMergePerson: @MainActor (Int, Int) -> Void
+    /// Şu anı önemli olarak işaretle.
+    public let onBookmark: @MainActor () -> Void
 
     public init(
         onHide: @escaping @MainActor () -> Void,
@@ -37,7 +39,8 @@ public struct PanelActions {
         onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void,
         onReassignBlock: @escaping @MainActor ([SegmentID], Int) -> Void,
-        onMergePerson: @escaping @MainActor (Int, Int) -> Void
+        onMergePerson: @escaping @MainActor (Int, Int) -> Void,
+        onBookmark: @escaping @MainActor () -> Void
     ) {
         self.onHide = onHide
         self.onStart = onStart
@@ -53,6 +56,7 @@ public struct PanelActions {
         self.onSetLanguage = onSetLanguage
         self.onReassignBlock = onReassignBlock
         self.onMergePerson = onMergePerson
+        self.onBookmark = onBookmark
     }
 }
 
@@ -214,6 +218,7 @@ public struct TranscriptPanel: View {
                 IconButton(symbol: "mic.slash", help: "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor", action: actions.onToggleMic)
                     .disabled(true)
             }
+            IconButton(symbol: "bookmark", help: "Bu anı işaretle (notta öne çıkar)", action: actions.onBookmark)
             IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
         case .finishing:
             EmptyView()

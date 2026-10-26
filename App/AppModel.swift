@@ -613,6 +613,7 @@ final class AppModel {
             return
         }
         isRecording = true
+        liveHighlights = []
         recordingTemplate = defaultNoteTemplate()
         consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
@@ -768,8 +769,9 @@ final class AppModel {
             engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
-        // Not, kayıt başladığında seçili şablonla yazılır.
+        // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
         .with(template: recordingTemplate)
+        .with(highlights: liveHighlights)
         return linkedMeeting.map { base.with(attendees: $0.attendees) } ?? base
     }
 
@@ -990,6 +992,32 @@ final class AppModel {
         }
         isInPerson.toggle()
         UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
+    }
+
+    // MARK: İşaretler
+
+    /// Bu kayıtta işaretlenen anlar.
+    @ObservationIgnored private var liveHighlights: [Highlight] = []
+    /// Son işaret (panelde kısa onay için).
+    var lastBookmarkAt: Date?
+
+    /// Kayıtta şu anı işaretler (notta öne çıkar).
+    func bookmarkNow() {
+        guard isRecording, let startedAt = recordingStartedAt else {
+            return
+        }
+        liveHighlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt)))
+        lastBookmarkAt = Date()
+    }
+
+    /// Kaydedilmiş toplantıda bir paragrafın işaretini açar/kapatır.
+    func toggleHighlight(meetingID: String, paragraph: TranscriptParagraph) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: record.with(highlights: togglingHighlight(highlights: record.highlights ?? [], paragraph: paragraph)), directory: directory)
+        }
     }
 
     // MARK: Dosya içe aktarma

@@ -1254,6 +1254,16 @@
         }
       }
     },
+    "Bu anı işaretle (notta öne çıkar)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmark this moment (highlighted in the note)"
+          }
+        }
+      }
+    },
     "Bu bölüm yazıya dökülemedi.": {
       "extractionState": "stale",
       "localizations": {
@@ -2279,6 +2289,16 @@
         }
       }
     },
+    "KONU AKIŞI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TOPIC FLOW"
+          }
+        }
+      }
+    },
     "Kalan metin ve konuşmacılar tamamlanıyor.": {
       "localizations": {
         "en": {
@@ -2758,6 +2778,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't access folder: %@."
+          }
+        }
+      }
+    },
+    "Konu akışı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Topic flow"
           }
         }
       }
@@ -5555,6 +5585,16 @@
         }
       }
     },
+    "Önemli olarak işaretle (notta öne çıkar)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as important (highlighted in the note)"
+          }
+        }
+      }
+    },
     "Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.": {
       "localizations": {
         "en": {
@@ -5798,6 +5838,16 @@
         }
       }
     },
+    "İŞARETLEDİĞİN ANLAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR BOOKMARKS"
+          }
+        }
+      }
+    },
     "İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü": {
       "localizations": {
         "en": {
@@ -5814,6 +5864,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job interview"
+          }
+        }
+      }
+    },
+    "İşareti kaldır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove bookmark"
           }
         }
       }

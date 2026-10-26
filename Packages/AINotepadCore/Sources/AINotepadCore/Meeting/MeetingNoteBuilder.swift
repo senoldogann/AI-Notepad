@@ -34,6 +34,8 @@ func noteRules(user: String, template: NoteTemplate) -> String {
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
       Birinin "yaparım" diye üstlendiği iş de görevdir.
     - Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.
+    - "★" ile başlayan satırları kullanıcı toplantıda önemli diye işaretledi: özette mutlaka yer ver, karar ya da görev
+      içeriyorsa atlama.
     \(focus)
     """
 }
@@ -62,7 +64,9 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
         system: """
         Fince ya da İngilizce bir toplantının transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
         transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman)
-        ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz.
+        ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz. akis alanına konuların sırasını yaz:
+        her bölümün başladığı [mm:ss] zamanı (transkriptteki gibi), kısa başlığı ve tek cümlelik özeti (kısa toplantıda
+        2–4, uzunda 5–12 bölüm).
         \(noteRules(user: user, template: template))
         \(transcriptIsDataNote)
         """,
@@ -75,6 +79,19 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
 
 /// Toplantı notunun JSON şeması (Türkçe alan adları); paylaşım sürümü de aynısını kullanır.
 let meetingNoteSchema: String = """
+{"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
+"kararlar":{"type":"array","items":{"type":"string"}},\
+"gorevler":{"type":"array","items":{"type":"object","properties":{"sahip":{"type":"string"},"aciklama":{"type":"string"},\
+"tarih":{"type":"string"},"benimMi":{"type":"boolean"}},"required":["sahip","aciklama","tarih","benimMi"],"additionalProperties":false}},\
+"sozluk":{"type":"array","items":{"type":"object","properties":{"terim":{"type":"string"},"anlam":{"type":"string"}},\
+"required":["terim","anlam"],"additionalProperties":false}},\
+"akis":{"type":"array","items":{"type":"object","properties":{"zaman":{"type":"string"},"baslik":{"type":"string"},"ozet":{"type":"string"}},\
+"required":["zaman","baslik","ozet"],"additionalProperties":false}}},\
+"required":["baslik","ozet","kararlar","gorevler","sozluk","akis"],"additionalProperties":false}
+"""
+
+/// Paylaşım sürümünün şeması: not şemasının konu akışsız hali (akış çevrilmez).
+let sharedNoteSchema: String = """
 {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
 "kararlar":{"type":"array","items":{"type":"string"}},\
 "gorevler":{"type":"array","items":{"type":"object","properties":{"sahip":{"type":"string"},"aciklama":{"type":"string"},\
@@ -97,7 +114,7 @@ public func parseMeetingNote(text: String) throws -> MeetingNote {
     guard !raw.ozet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw LLMError.empty
     }
-    return MeetingNote(
+    let note: MeetingNote = MeetingNote(
         title: raw.baslik,
         summary: raw.ozet,
         decisions: raw.kararlar,
@@ -106,6 +123,7 @@ public func parseMeetingNote(text: String) throws -> MeetingNote {
         },
         glossary: raw.sozluk.map { (entry: RawGlossary) -> GlossaryEntry in GlossaryEntry(term: entry.terim, meaning: entry.anlam) }
     )
+    return raw.akis.map { note.with(outline: outlineItems(raw: $0)) } ?? note
 }
 
 /// Toplantıyı Markdown'a çevirir (Notion, Apple Notes, Obsidian'a yapıştırılabilir). Saf fonksiyondur.
@@ -119,6 +137,9 @@ public func meetingMarkdown(record: MeetingRecord) -> String {
             lines += ["## " + String(localized: "Senin görevlerin"), ""] + mine.map(taskLine) + [""]
         }
         lines += ["## " + String(localized: "Özet"), "", note.summary, ""]
+        if let outline = note.outline, !outline.isEmpty {
+            lines += ["## " + String(localized: "Konu akışı"), ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] **\($0.title)** — \($0.summary)" } + [""]
+        }
         if !note.decisions.isEmpty {
             lines += ["## " + String(localized: "Kararlar"), ""] + note.decisions.map { "- \($0)" } + [""]
         }
@@ -153,6 +174,22 @@ private struct RawMeetingNote: Decodable {
     let kararlar: [String]
     let gorevler: [RawTask]
     let sozluk: [RawGlossary]
+    /// Paylaşım sürümünde yok.
+    let akis: [RawOutline]?
+}
+
+struct RawOutline: Decodable {
+    let zaman: String
+    let baslik: String
+    let ozet: String
+}
+
+/// Konu akışı satırları; zamanı okunamayan satır atılır, sıra zamana göre. Saf fonksiyondur.
+func outlineItems(raw: [RawOutline]) -> [OutlineItem] {
+    raw.compactMap { (item: RawOutline) -> OutlineItem? in
+        timestampSeconds(text: item.zaman).map { OutlineItem(startSec: $0, title: item.baslik, summary: item.ozet) }
+    }
+    .sorted { $0.startSec < $1.startSec }
 }
 
 private struct RawTask: Decodable {

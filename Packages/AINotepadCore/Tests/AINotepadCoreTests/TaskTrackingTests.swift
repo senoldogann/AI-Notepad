@@ -64,3 +64,36 @@ import Testing
         #expect(draft.notes.contains("Bütçe") && draft.notes.contains("Aino"))
     }
 }
+
+@Suite struct HighlightTests {
+    // İşaret, düğmeye basılmadan önceki sözü (20 sn) ve hemen sonrasını kapsar; paragrafta açılıp kapanır.
+    @Test func highlightsMarkNearbySegmentsAndToggle() {
+        let segments: [StoredSegment] = [stored("final-0", .others, 1, 0, "Alku"), stored("final-1", .others, 1, 40, "Tärkeä päätös"), stored("final-2", .others, 1, 100, "Loppu")]
+        let marked: [StoredSegment] = markingHighlights(segments: segments, highlights: [Highlight(startSec: 55)])
+        #expect(marked.map(\.text) == ["Alku", "★ Tärkeä päätös", "Loppu"])
+        let paragraph: TranscriptParagraph = TranscriptParagraph(id: "p", speaker: .others, person: 1, startSec: 40, endSec: 42, text: "Tärkeä päätös", turkish: nil, words: [])
+        let on: [Highlight] = togglingHighlight(highlights: [], paragraph: paragraph)
+        #expect(isHighlighted(paragraph: paragraph, highlights: on))
+        #expect(togglingHighlight(highlights: on, paragraph: paragraph).isEmpty)
+    }
+}
+
+extension CloudTests {
+@Suite struct HighlightCloudTests {
+    // Gerçek model: kullanıcının işaretlediği küçük ayrıntı (kahve makinesi) özette yer alır.
+    @Test func bookmarkedDetailReachesSummary() async throws {
+        let segments: [StoredSegment] = [
+            stored("final-0", .others, 1, 0, "Huomenta. Käydään läpi ensi vuoden budjetti, se kasvaa kymmenen prosenttia."),
+            stored("final-1", .others, 2, 8, "Markkinointi saa suurimman osan lisäyksestä, ja rekrytoimme kaksi uutta myyjää."),
+            stored("final-2", .others, 1, 16, "Ai niin, kahvikone vaihdetaan ensi kuussa uuteen."),
+            stored("final-3", .others, 2, 22, "Selvä. Sitten seuraava palaveri on perjantaina."),
+        ]
+        let note: MeetingNote = try #require(try await writeMeetingNote(
+            segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20)]), speakerNames: [:], userName: "Senol",
+            template: .general, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        ))
+        let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()
+        #expect(text.contains("kahve"), "\(text)")
+    }
+}
+}

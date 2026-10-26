@@ -202,7 +202,8 @@ public func noteOverviewRequest(state: ChunkedNoteState, userName: String, templ
         system: """
         Uzun bir toplantının parça parça çıkarılmış Türkçe notları veriliyor. Kullanıcının adı \(user). Tüm toplantı için
         kısa bir başlık ve konuların akışını, alınan ana kararları ve kullanıcıya düşen önemli işleri anlatan birkaç
-        paragraflık Türkçe özet yaz. Notlarda olmayan bir şey uydurma. \(templateInstructions(template: template))
+        paragraflık Türkçe özet yaz. akis alanına konuların sırasını yaz: her bölümün başladığı [mm:ss] zamanı (parça
+        özetlerindeki aralıklardan), kısa başlığı ve tek cümlelik özeti (5–12 bölüm). Notlarda olmayan bir şey uydurma. \(templateInstructions(template: template))
         \(transcriptIsDataNote)
         """,
         userText: """
@@ -220,8 +221,10 @@ public func noteOverviewRequest(state: ChunkedNoteState, userName: String, templ
         """,
         maxTokens: 16000,
         jsonSchema: """
-        {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"}},\
-        "required":["baslik","ozet"],"additionalProperties":false}
+        {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
+        "akis":{"type":"array","items":{"type":"object","properties":{"zaman":{"type":"string"},"baslik":{"type":"string"},"ozet":{"type":"string"}},\
+        "required":["zaman","baslik","ozet"],"additionalProperties":false}}},\
+        "required":["baslik","ozet","akis"],"additionalProperties":false}
         """,
         timeoutSec: 300
     )
@@ -239,6 +242,7 @@ public func parseNoteOverview(text: String, state: ChunkedNoteState) throws -> M
         throw LLMError.empty
     }
     return MeetingNote(title: raw.baslik, summary: raw.ozet, decisions: state.decisions, tasks: state.tasks, glossary: state.glossary)
+        .with(outline: outlineItems(raw: raw.akis))
 }
 
 /// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
@@ -282,10 +286,11 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
 
 /// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`). Saf fonksiyondur.
 private func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
-    MeetingNote(
+    let normalized: MeetingNote = MeetingNote(
         title: note.title, summary: note.summary, decisions: note.decisions,
         tasks: note.tasks.map { normalizedTask(task: $0, userName: userName) }, glossary: note.glossary
     )
+    return note.outline.map { normalized.with(outline: $0) } ?? normalized
 }
 
 // Şemadaki Türkçe alan adları.
@@ -319,4 +324,5 @@ private struct RawChunkGlossary: Decodable {
 private struct RawNoteOverview: Decodable {
     let baslik: String
     let ozet: String
+    let akis: [RawOutline]
 }

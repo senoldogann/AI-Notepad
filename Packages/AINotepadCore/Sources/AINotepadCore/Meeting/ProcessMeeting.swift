@@ -227,7 +227,8 @@ private func joinedNotice(_ first: String?, _ second: String) -> String {
 /// sonra notta da adlar görünsün diye kullanılır.
 public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: String) async -> MeetingRecord {
     // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
-    let segments: [StoredSegment] = meetingSegments(record: record)
+    // İşaretli anlar istemde "★" ile öne çıkar.
+    let segments: [StoredSegment] = markingHighlights(segments: meetingSegments(record: record), highlights: record.highlights ?? [])
     guard segments.contains(where: { !$0.text.isEmpty }) else {
         return record.with(status: .done, failureMessage: nil)
     }

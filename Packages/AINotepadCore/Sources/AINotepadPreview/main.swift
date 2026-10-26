@@ -68,7 +68,7 @@ let seconds: Double = Double(CommandLine.arguments.dropFirst().first ?? "") ?? 6
 let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
-    let actions: PanelActions = PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in })
+    let actions: PanelActions = PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in }, onBookmark: {})
     let panel: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions).panelSurface(), frame: NSRect(x: 120, y: 100, width: 400, height: 720))
     // Dar panel: başlık düğmeleri "⋯" menüsüne toplanmalı, "Ne kaçırdım?" simgeye dönmeli.
     let narrow: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions).panelSurface(), frame: NSRect(x: 560, y: 100, width: 340, height: 560))
