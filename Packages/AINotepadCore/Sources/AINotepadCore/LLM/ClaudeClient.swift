@@ -1,26 +1,56 @@
 import Foundation
 
-/// Kullanılan Claude modelleri; ham değer API kimliğidir.
-public enum ClaudeModel: String, Sendable {
-    /// Canlı cümle çevirisi: hızlı ve çok ucuz.
+/// Seçilebilen Claude modelleri; ham değer API kimliğidir.
+public enum ClaudeModel: String, Sendable, CaseIterable, Codable {
+    /// Hızlı ve çok ucuz: canlı çeviri için varsayılan.
     case haiku = "claude-haiku-5-5"
-    /// "Ne kaçırdım?", soru-cevap ve not.
+    case sonnet = "claude-sonnet-5-5"
+    /// "Ne kaçırdım?", soru-cevap ve not için varsayılan.
     case opus = "claude-opus-5-5"
+    /// En yetenekli (ve en pahalı).
+    case fable = "claude-fable-5-1"
 }
 
-/// Model sınıfının Claude karşılığı. Saf fonksiyondur.
-public func claudeModel(tier: LLMTier) -> ClaudeModel {
+/// Model sınıfının seçili Claude modeli. Saf fonksiyondur.
+public func claudeModel(config: AnthropicConfig, tier: LLMTier) -> ClaudeModel {
     switch tier {
-    case .fast: .haiku
-    case .smart: .opus
+    case .fast: config.fastModel
+    case .smart: config.smartModel
     }
 }
 
-/// İstek gövdesi. Haiku: düşünme kapalı (hız için). Opus: düşünme gönderilmez (her zaman açık) ve reddetmede
-/// sunucu tarafı yedek model (`fallbacks: "default"`). Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
-public func claudeRequestBody(request: LLMRequest) throws -> Data {
-    let model: ClaudeModel = claudeModel(tier: request.tier)
-    var outputConfig: [String: Any] = ["effort": request.effort]
+/// Model sınıfının seçili effort seviyesi. Saf fonksiyondur.
+public func claudeEffort(config: AnthropicConfig, tier: LLMTier) -> LLMEffort {
+    switch tier {
+    case .fast: config.fastEffort
+    case .smart: config.smartEffort
+    }
+}
+
+/// Hızlı sınıfta (canlı çeviri) düşünmeyi kapatan alan; model kapatmayı desteklemiyorsa ya da effort `xhigh`/`max`
+/// ise (kapatma 400 döndürür) nil — düşünme açık kalır. Akıllı sınıfta düşünme her zaman uyarlamalıdır. Saf fonksiyondur.
+/// Haiku 5.5: `disabled`; Sonnet 5.5: `between_tools` (`disabled` 400); Opus 5.5 ve Fable 5.1: kapatılamaz.
+public func claudeThinking(model: ClaudeModel, tier: LLMTier, effort: LLMEffort) -> [String: String]? {
+    guard tier == .fast, [LLMEffort.low, .medium, .high].contains(effort) else {
+        return nil
+    }
+    switch model {
+    case .haiku: return ["type": "disabled"]
+    case .sonnet: return ["type": "between_tools"]
+    case .opus, .fable: return nil
+    }
+}
+
+/// Reddetmede sunucu tarafı yedek model (`fallbacks: "default"`) kullanılabilir mi; Haiku 5.5'te liste 400 döndürür.
+/// Saf fonksiyondur.
+public func claudeSupportsServerFallback(model: ClaudeModel) -> Bool {
+    model != .haiku
+}
+
+/// İstek gövdesi: seçili model ve effort, hızlı sınıfta mümkünse düşünme kapalı, destekleyen modelde sunucu tarafı
+/// yedek model. Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
+public func claudeRequestBody(request: LLMRequest, model: ClaudeModel, effort: LLMEffort) throws -> Data {
+    var outputConfig: [String: Any] = ["effort": effort.rawValue]
     if let schemaText = request.jsonSchema {
         outputConfig["format"] = ["type": "json_schema", "schema": try parsedSchema(text: schemaText)]
     }
@@ -31,10 +61,10 @@ public func claudeRequestBody(request: LLMRequest) throws -> Data {
         "messages": [["role": "user", "content": request.userText]],
         "output_config": outputConfig,
     ]
-    switch model {
-    case .haiku:
-        body["thinking"] = ["type": "disabled"]
-    case .opus:
+    if let thinking = claudeThinking(model: model, tier: request.tier, effort: effort) {
+        body["thinking"] = thinking
+    }
+    if claudeSupportsServerFallback(model: model) {
         body["fallbacks"] = "default"
     }
     return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
@@ -55,7 +85,7 @@ public func claudeHeaders(apiKey: String, model: ClaudeModel) -> [String: String
         "anthropic-version": "2026-10-21",
         "content-type": "application/json",
     ]
-    if model == .opus {
+    if claudeSupportsServerFallback(model: model) {
         headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
     }
     return headers
@@ -106,14 +136,14 @@ public func classifyClaudeResponse(status: Int, data: Data, model: String, reque
 }
 
 /// Anthropic Messages API çağrısını hazırlar.
-func prepareClaudeCall(apiKey: String, request: LLMRequest) throws -> PreparedLLMCall {
-    let model: ClaudeModel = claudeModel(tier: request.tier)
+func prepareClaudeCall(config: AnthropicConfig, request: LLMRequest) throws -> PreparedLLMCall {
+    let model: ClaudeModel = claudeModel(config: config, tier: request.tier)
     // Sabit, geçerli adres.
     var urlRequest: URLRequest = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
     urlRequest.httpMethod = "POST"
     urlRequest.timeoutInterval = request.timeoutSec
-    urlRequest.httpBody = try claudeRequestBody(request: request)
-    for (field, value) in claudeHeaders(apiKey: apiKey, model: model) {
+    urlRequest.httpBody = try claudeRequestBody(request: request, model: model, effort: claudeEffort(config: config, tier: request.tier))
+    for (field, value) in claudeHeaders(apiKey: config.apiKey, model: model) {
         urlRequest.setValue(value, forHTTPHeaderField: field)
     }
     return PreparedLLMCall(urlRequest: urlRequest, model: model.rawValue, requestIDHeader: "request-id") { (status: Int, data: Data, requestID: String?) -> LLMOutcome in

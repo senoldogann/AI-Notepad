@@ -21,7 +21,7 @@ extension CloudTests {
             record: recording,
             directory: directory,
             finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
-            llm: .anthropic(apiKey: try cloudKey(account: .anthropic)),
+            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             languageMode: .automatic,
             userName: "Doğan"
         )

@@ -44,7 +44,6 @@ public func translationRequest(sentence: String, context: [String]) -> LLMReques
         """,
         userText: "<baglam>\n\(contextText)\n</baglam>\n\n<cumle>\n\(sentence)\n</cumle>",
         maxTokens: 1024,
-        effort: "low",
         jsonSchema: nil,
         timeoutSec: 20
     )
@@ -69,7 +68,6 @@ public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, window
         """,
         userText: "Son \(Int(windowSec / 60)) dakikanın transkripti:\n<transkript>\n\(recent)\n</transkript>",
         maxTokens: 16000,
-        effort: "medium",
         jsonSchema: """
         {"type":"object","properties":{"konu":{"type":"string"},"kararlar":{"type":"array","items":{"type":"string"}},\
         "sendenIstenenler":{"type":"array","items":{"type":"string"}}},"required":["konu","kararlar","sendenIstenenler"],\
@@ -110,7 +108,6 @@ public func questionRequest(segments: [LiveSegment], question: String) -> LLMReq
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>\n\nSoru: \(question)",
         maxTokens: 16000,
-        effort: "medium",
         jsonSchema: nil,
         timeoutSec: 120
     )

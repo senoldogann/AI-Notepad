@@ -36,7 +36,6 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>",
         maxTokens: 16000,
-        effort: "medium",
         jsonSchema: """
         {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
         "kararlar":{"type":"array","items":{"type":"string"}},\

@@ -3,20 +3,21 @@ import Testing
 @testable import AINotepadCore
 
 private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
-    baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, fastModel: "hizli", smartModel: "akilli"
+    baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, fastModel: "hizli", smartModel: "akilli", fastEffort: nil, smartEffort: nil
 )
 
 @Suite struct OpenAICompatibleTests {
     @Test func bodyHasSystemUserAndStrictSchema() throws {
         let request: LLMRequest = LLMRequest(
-            tier: .smart, system: "sistem", userText: "metin", maxTokens: 512, effort: "medium",
+            tier: .smart, system: "sistem", userText: "metin", maxTokens: 512,
             jsonSchema: #"{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":false}"#, timeoutSec: 30
         )
-        let body: [String: Any] = try jsonObject(openAIRequestBody(request: request, model: openAIModel(config: sampleConfig, tier: request.tier)))
+        let body: [String: Any] = try jsonObject(openAIRequestBody(request: request, model: openAIModel(config: sampleConfig, tier: request.tier), effort: .high))
         #expect(body["model"] as? String == "akilli")
         #expect(body["max_completion_tokens"] as? Int == 512)
         #expect(body["temperature"] == nil)
         #expect(body["effort"] == nil)
+        #expect(body["reasoning_effort"] as? String == "high")
         let messages: [[String: Any]] = try #require(body["messages"] as? [[String: Any]])
         #expect(messages.map { $0["role"] as? String } == ["system", "user"])
         #expect((messages[0]["content"] as? String)?.contains("JSON şemasına") == true)
@@ -43,7 +44,7 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
     }
 
     @Test func missingModelIsNotConfigured() async {
-        let config: OpenAICompatibleConfig = OpenAICompatibleConfig(baseURL: sampleConfig.baseURL, apiKey: nil, fastModel: "", smartModel: "akilli")
+        let config: OpenAICompatibleConfig = OpenAICompatibleConfig(baseURL: sampleConfig.baseURL, apiKey: nil, fastModel: "", smartModel: "akilli", fastEffort: nil, smartEffort: nil)
         await #expect(throws: LLMError.notConfigured(detail: "çeviri modeli")) {
             _ = try await sendLLM(provider: .openAICompatible(config), request: translationRequest(sentence: "Hei", context: []))
         }
@@ -57,13 +58,13 @@ let ollamaModel: String? = ProcessInfo.processInfo.environment["AINOTEPAD_OLLAMA
 struct OllamaTests {
     private func config() throws -> OpenAICompatibleConfig {
         let model: String = try #require(ollamaModel)
-        return OpenAICompatibleConfig(baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, fastModel: model, smartModel: model)
+        return OpenAICompatibleConfig(baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, fastModel: model, smartModel: model, fastEffort: nil, smartEffort: nil)
     }
 
     @Test func translatesFinnishSentence() async throws {
         let text: String = try await sendLLM(
             provider: .openAICompatible(try config()),
-            request: LLMRequest(tier: .fast, system: "Cümleyi Türkçeye çevir; yalnızca çeviriyi yaz.", userText: "Hyvää huomenta kaikille.", maxTokens: 4000, effort: "low", jsonSchema: nil, timeoutSec: 120)
+            request: LLMRequest(tier: .fast, system: "Cümleyi Türkçeye çevir; yalnızca çeviriyi yaz.", userText: "Hyvää huomenta kaikille.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120)
         )
         #expect(!text.isEmpty)
     }
@@ -81,10 +82,10 @@ struct OllamaTests {
 
 @Suite struct LLMSettingsTests {
     @Test func validatesBaseURLAndModels() throws {
-        let config: OpenAICompatibleConfig = try openAICompatibleConfig(baseURLText: " http://localhost:11434/v1 ", apiKey: "", fastModel: "a", smartModel: "b")
+        let config: OpenAICompatibleConfig = try openAICompatibleConfig(baseURLText: " http://localhost:11434/v1 ", apiKey: "", fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil)
         #expect(config.baseURL.absoluteString == "http://localhost:11434/v1")
         #expect(config.apiKey == nil)
-        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "localhost", apiKey: nil, fastModel: "a", smartModel: "b") }
-        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "https://api.openai.com/v1", apiKey: "k", fastModel: "", smartModel: "b") }
+        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "localhost", apiKey: nil, fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil) }
+        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "https://api.openai.com/v1", apiKey: "k", fastModel: "", smartModel: "b", fastEffort: nil, smartEffort: nil) }
     }
 }

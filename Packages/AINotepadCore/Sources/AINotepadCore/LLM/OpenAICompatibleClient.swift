@@ -16,7 +16,7 @@ public func openAIChatURL(baseURL: URL) -> URL {
 /// Chat Completions gövdesi: sistem + kullanıcı mesajı, `max_completion_tokens`, şema varsa katı
 /// `response_format: json_schema`. Bazı uyumlu sunucular (ör. Ollama'daki modeller) `response_format`'ı
 /// uygulamadığı için şema sistem mesajında da verilir. Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
-public func openAIRequestBody(request: LLMRequest, model: String) throws -> Data {
+public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEffort?) throws -> Data {
     let system: String = request.jsonSchema.map { (schema: String) -> String in
         "\(request.system)\n\nYanıtı yalnızca bu JSON şemasına uyan tek bir JSON nesnesi olarak yaz; Markdown, kod bloğu ya da başka metin ekleme:\n\(schema)"
     } ?? request.system
@@ -29,6 +29,9 @@ public func openAIRequestBody(request: LLMRequest, model: String) throws -> Data
             ["role": "user", "content": request.userText],
         ],
     ]
+    if let effort {
+        body["reasoning_effort"] = effort.rawValue
+    }
     if let schemaText = request.jsonSchema {
         body["response_format"] = [
             "type": "json_schema",
@@ -99,7 +102,8 @@ func prepareOpenAICall(config: OpenAICompatibleConfig, request: LLMRequest) thro
     var urlRequest: URLRequest = URLRequest(url: openAIChatURL(baseURL: config.baseURL))
     urlRequest.httpMethod = "POST"
     urlRequest.timeoutInterval = request.timeoutSec
-    urlRequest.httpBody = try openAIRequestBody(request: request, model: model)
+    let effort: LLMEffort? = request.tier == .fast ? config.fastEffort : config.smartEffort
+    urlRequest.httpBody = try openAIRequestBody(request: request, model: model, effort: effort)
     for (field, value) in openAIHeaders(apiKey: config.apiKey) {
         urlRequest.setValue(value, forHTTPHeaderField: field)
     }

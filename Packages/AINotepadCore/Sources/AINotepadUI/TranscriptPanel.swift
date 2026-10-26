@@ -55,6 +55,11 @@ public struct TranscriptPanel: View {
     let state: LiveViewState
     let actions: PanelActions
     @State private var question: String = ""
+    /// Kullanıcı transkriptin en altında mı (canlı metni izliyor mu).
+    @State private var isFollowing: Bool = true
+    /// Kullanıcı yukarıdayken yeni metin geldi.
+    @State private var hasUnseenText: Bool = false
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     public init(state: LiveViewState, actions: PanelActions) {
         self.state = state
@@ -66,6 +71,8 @@ public struct TranscriptPanel: View {
             header
                 .padding(.horizontal, DesignTokens.Spacing.l)
                 .padding(.vertical, DesignTokens.Spacing.m)
+                // İpuçları başlığın altına taşar: transkriptin üstünde çizilsin.
+                .zIndex(1)
             Divider().opacity(0.35)
             transcript
             if let card = state.assistantCard {
@@ -109,12 +116,12 @@ public struct TranscriptPanel: View {
                     .font(DesignTokens.statusFont)
                     .padding(.horizontal, DesignTokens.Spacing.s)
                     .padding(.vertical, 3)
-                    .background(DesignTokens.meColor, in: Capsule())
+                    .background(appearance.accent.color, in: Capsule())
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
             .disabled(!state.canStart)
-            .help("Kaydı başlat")
+            .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
         case .recording:
             IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
             IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
@@ -142,13 +149,15 @@ public struct TranscriptPanel: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Toplantı dilini değiştir")
+            .hoverHint("Toplantı dilini değiştir", alignment: .center, edge: .bottom)
             .accessibilityLabel("Toplantı dili: \(state.languageText). Değiştir")
         } else {
             chip
         }
     }
 
+    /// Transkript: konuşma akarken en alttaysa en yeni metni izler; kullanıcı yukarı kaydırdıysa yerinde kalır ve
+    /// "Yeni metin" düğmesi çıkar. En altta ayarlanabilir boşluk vardır (son satır kenara yapışmasın).
     private var transcript: some View {
         ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
@@ -164,21 +173,58 @@ public struct TranscriptPanel: View {
                         )
                         .id(block.id)
                     }
+                    Color.clear
+                        .frame(height: appearance.bottomSpacing)
+                        .id(transcriptBottomID)
                 }
-                .padding(DesignTokens.Spacing.l)
+                .padding(.horizontal, DesignTokens.Spacing.l)
+                .padding(.top, DesignTokens.Spacing.l)
             }
-            // Blok içinde metin büyüdüğünde ya da çeviri geldiğinde en alta kaydır.
-            .onChange(of: state.blocks) { (_: [SpeakerBlock], blocks: [SpeakerBlock]) in
-                if let last = blocks.last {
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+            .defaultScrollAnchor(.bottom)
+            .onScrollGeometryChange(for: Bool.self) { (geometry: ScrollGeometry) -> Bool in
+                // Alta 60 pt'den yakınsa kullanıcı canlı metni izliyor sayılır.
+                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 60
+            } action: { (_: Bool, atBottom: Bool) in
+                isFollowing = atBottom
+                if atBottom {
+                    hasUnseenText = false
                 }
             }
-            .onChange(of: state.translations.count) { (_: Int, _: Int) in
-                if let last = state.blocks.last {
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+            .onChange(of: transcriptVersion) { (_: TranscriptVersion, _: TranscriptVersion) in
+                if isFollowing {
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(transcriptBottomID, anchor: .bottom) }
+                } else {
+                    hasUnseenText = true
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if hasUnseenText {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(transcriptBottomID, anchor: .bottom) }
+                        hasUnseenText = false
+                    } label: {
+                        Label("Yeni metin", systemImage: "arrow.down")
+                            .font(DesignTokens.statusFont)
+                            .padding(.horizontal, DesignTokens.Spacing.m)
+                            .padding(.vertical, 5)
+                            .background(appearance.accent.color, in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, DesignTokens.Spacing.s)
+                    .transition(.opacity)
                 }
             }
         }
+    }
+
+    /// Kaydırmayı tetikleyen değişiklik: yeni/büyüyen metin ya da gelen çeviri.
+    private var transcriptVersion: TranscriptVersion {
+        TranscriptVersion(
+            blockCount: state.blocks.count,
+            lastText: state.blocks.last?.segments.map(\.text).joined() ?? "",
+            translationCount: state.translations.count
+        )
     }
 
     /// "Ne kaçırdım?" düğmesi ve Türkçe soru alanı.
@@ -189,11 +235,12 @@ public struct TranscriptPanel: View {
                     .font(DesignTokens.statusFont)
                     .padding(.horizontal, DesignTokens.Spacing.m)
                     .padding(.vertical, 6)
-                    .background(DesignTokens.meColor, in: Capsule())
+                    .background(appearance.accent.color, in: Capsule())
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
             .disabled(state.blocks.isEmpty)
+            .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
             .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
             TextField("Toplantı hakkında sor…", text: $question)
                 .textFieldStyle(.plain)
@@ -229,13 +276,15 @@ public struct TranscriptPanel: View {
     }
 }
 
-public extension View {
-    /// Panelin Liquid Glass yüzeyi: yuvarlak köşeler, dolgular köşelerden taşmaz. Tüm sayfalar aynı yüzeyi kullanır.
-    func panelSurface() -> some View {
-        clipShape(.rect(cornerRadius: DesignTokens.panelRadius))
-            .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.panelRadius))
-    }
+/// Kaydırmayı tetikleyen transkript özeti.
+struct TranscriptVersion: Equatable {
+    let blockCount: Int
+    let lastText: String
+    let translationCount: Int
 }
+
+/// Transkriptin en altındaki işaret.
+private let transcriptBottomID: String = "transkript-sonu"
 
 /// Toplantı dili seçenekleri (panel ve ada menüsü).
 struct LanguageMenuItems: View {
@@ -292,6 +341,7 @@ struct BlockView: View {
     let failedTranslations: [SegmentID]
     let displayMode: DisplayMode
     let onRetryTranslations: @MainActor ([SegmentID]) -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s) {
@@ -307,23 +357,23 @@ struct BlockView: View {
                     .foregroundStyle(.secondary)
                 if displayMode == .turkishOnly && turkish != nil {
                     turkishOnlyText
-                        .font(DesignTokens.bodyFont)
-                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .font(appearance.bodyFont)
+                        .lineSpacing(appearance.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     let showsTurkish: Bool = displayMode == .bilingual && turkish != nil
                     flowingText
-                        .font(showsTurkish ? .system(size: 13) : DesignTokens.bodyFont)
+                        .font(showsTurkish ? appearance.secondaryFont : appearance.bodyFont)
                         .opacity(showsTurkish ? 0.6 : 1)
-                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .lineSpacing(appearance.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if displayMode == .bilingual, let turkish {
                     Text(turkish)
-                        .font(DesignTokens.bodyFont)
-                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .font(appearance.bodyFont)
+                        .lineSpacing(appearance.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -381,6 +431,7 @@ struct BlockView: View {
 struct AssistantCardView: View {
     let card: AssistantCard
     let onClose: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
@@ -393,7 +444,7 @@ struct AssistantCardView: View {
                 IconButton(symbol: "xmark", help: "Kapat", action: onClose)
             }
             content
-                .font(.system(size: 13))
+                .font(appearance.secondaryFont)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -425,7 +476,7 @@ struct AssistantCardView: View {
                     ForEach(Array(summary.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
                 if !summary.askedOfYou.isEmpty {
-                    Text("Senden istenenler").font(DesignTokens.labelFont).foregroundStyle(DesignTokens.meColor)
+                    Text("Senden istenenler").font(DesignTokens.labelFont).foregroundStyle(appearance.accent.color)
                     ForEach(Array(summary.askedOfYou.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
             }
@@ -455,7 +506,7 @@ struct IconButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .help(help)
+        .hoverHint(help, alignment: .trailing, edge: .bottom)
         .accessibilityLabel(help)
     }
 }

@@ -318,6 +318,7 @@ struct MeetingDetailPage: View {
 /// Not: önce sana düşen görevler (vurgulu kart), sonra özet, kararlar, diğer görevler, sözlük.
 private struct NoteSections: View {
     let note: MeetingNote
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
@@ -332,14 +333,14 @@ private struct NoteSections: View {
                     Text("SENİN GÖREVLERİN")
                         .font(DesignTokens.labelFont)
                         .tracking(DesignTokens.labelTracking)
-                        .foregroundStyle(DesignTokens.meColor)
+                        .foregroundStyle(appearance.accent.color)
                     ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
                         TaskRow(task: item.element)
                     }
                 }
                 .padding(DesignTokens.Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(DesignTokens.meColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                .background(appearance.accent.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
             section(title: "ÖZET") {
                 Text(note.summary).textSelection(.enabled)
@@ -447,6 +448,7 @@ private struct TranscriptSection: View {
     let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
     let audioURLs: [Speaker: URL]
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
@@ -479,10 +481,14 @@ private struct TranscriptSection: View {
                     }
                     .font(.system(size: 11))
                     Text(paragraph.text)
+                        .font(appearance.bodyFont)
+                        .lineSpacing(appearance.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     if let turkish = paragraph.turkish {
                         Text(turkish)
+                            .font(appearance.secondaryFont)
+                            .lineSpacing(appearance.lineSpacing)
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)

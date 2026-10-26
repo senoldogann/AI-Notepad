@@ -15,19 +15,16 @@ public struct LLMRequest: Sendable, Equatable {
     public let system: String
     public let userText: String
     public let maxTokens: Int
-    /// Claude `output_config.effort`: "low" | "medium" | "high" | "xhigh" | "max". OpenAI uyumlu sağlayıcıya gönderilmez.
-    public let effort: String
     /// Yapılandırılmış çıktı için JSON şeması (metin); yoksa serbest metin.
     public let jsonSchema: String?
     /// Deneme başına zaman aşımı; canlı çeviride kısa tutulur ki kuyruk tıkanmasın.
     public let timeoutSec: Double
 
-    public init(tier: LLMTier, system: String, userText: String, maxTokens: Int, effort: String, jsonSchema: String?, timeoutSec: Double) {
+    public init(tier: LLMTier, system: String, userText: String, maxTokens: Int, jsonSchema: String?, timeoutSec: Double) {
         self.tier = tier
         self.system = system
         self.userText = userText
         self.maxTokens = maxTokens
-        self.effort = effort
         self.jsonSchema = jsonSchema
         self.timeoutSec = timeoutSec
     }
@@ -49,6 +46,32 @@ public enum LLMError: Error, Equatable {
     case notConfigured(detail: String)
 }
 
+/// Modelin ne kadar düşüneceği / çaba seviyesi (Claude `output_config.effort`, OpenAI `reasoning_effort`).
+public enum LLMEffort: String, Sendable, CaseIterable, Codable {
+    case low
+    case medium
+    case high
+    case xhigh
+    case max
+}
+
+/// Anthropic ayarı: model sınıfı başına model ve effort (Ayarlar'dan seçilir).
+public struct AnthropicConfig: Sendable, Equatable {
+    public let apiKey: String
+    public let fastModel: ClaudeModel
+    public let smartModel: ClaudeModel
+    public let fastEffort: LLMEffort
+    public let smartEffort: LLMEffort
+
+    public init(apiKey: String, fastModel: ClaudeModel, smartModel: ClaudeModel, fastEffort: LLMEffort, smartEffort: LLMEffort) {
+        self.apiKey = apiKey
+        self.fastModel = fastModel
+        self.smartModel = smartModel
+        self.fastEffort = fastEffort
+        self.smartEffort = smartEffort
+    }
+}
+
 /// OpenAI uyumlu sağlayıcı (OpenAI, Ollama, OpenCode Go…) ayarı.
 public struct OpenAICompatibleConfig: Sendable, Equatable {
     /// `/chat/completions`'ın bulunduğu temel adres, ör. `https://api.openai.com/v1`, `http://localhost:11434/v1`.
@@ -57,18 +80,23 @@ public struct OpenAICompatibleConfig: Sendable, Equatable {
     public let apiKey: String?
     public let fastModel: String
     public let smartModel: String
+    /// `reasoning_effort`; nil ise gönderilmez (her sunucu desteklemez).
+    public let fastEffort: LLMEffort?
+    public let smartEffort: LLMEffort?
 
-    public init(baseURL: URL, apiKey: String?, fastModel: String, smartModel: String) {
+    public init(baseURL: URL, apiKey: String?, fastModel: String, smartModel: String, fastEffort: LLMEffort?, smartEffort: LLMEffort?) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.fastModel = fastModel
         self.smartModel = smartModel
+        self.fastEffort = fastEffort
+        self.smartEffort = smartEffort
     }
 }
 
 /// İsteğin gideceği sağlayıcı ve kimlik bilgisi.
 public enum LLMProvider: Sendable, Equatable {
-    case anthropic(apiKey: String)
+    case anthropic(AnthropicConfig)
     case openAICompatible(OpenAICompatibleConfig)
 }
 
@@ -112,7 +140,7 @@ struct PreparedLLMCall: Sendable {
 /// diğer her sonuç kesindir.
 public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> String {
     let call: PreparedLLMCall = switch provider {
-    case .anthropic(let apiKey): try prepareClaudeCall(apiKey: apiKey, request: request)
+    case .anthropic(let config): try prepareClaudeCall(config: config, request: request)
     case .openAICompatible(let config): try prepareOpenAICall(config: config, request: request)
     }
     var lastError: any Error = LLMError.empty

@@ -27,6 +27,9 @@ final class IslandController {
     private var window: NSPanel?
     private var layoutState: IslandLayoutState?
     private var screenObserver: (any NSObjectProtocol)?
+    private var settingsObserver: (any NSObjectProtocol)?
+    /// Son uygulanan ada ayarı (her UserDefaults değişikliğinde yeniden göstermemek için).
+    private var isEnabled: Bool = UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled)
 
     init(model: AppModel, onTap: @escaping @MainActor () -> Void) {
         self.model = model
@@ -47,6 +50,20 @@ final class IslandController {
         }
         relayout()
         observeRecording()
+        // Ayarlar'da ada açılıp kapatılınca hemen uygulanır.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                guard let self, UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled) != self.isEnabled else {
+                    return
+                }
+                self.isEnabled.toggle()
+                self.show()
+            }
+        }
     }
 
     private func makeWindow(layout: IslandLayout) -> NSPanel {
@@ -62,7 +79,6 @@ final class IslandController {
         panel.isReleasedWhenClosed = false
         panel.sharingType = sharingType(hideFromCapture: UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture))
         panel.contentView = NSHostingView(rootView: IslandHost(model: model, layoutState: state, onTap: onTap))
-        panel.orderFrontRegardless()
         layoutState = state
         return panel
     }
@@ -88,7 +104,12 @@ final class IslandController {
         window?.sharingType = sharingType(hideFromCapture: hidden)
     }
 
+    /// Adayı gösterir; Ayarlar'da kapatıldıysa gizli kalır.
     func show() {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled) else {
+            window?.orderOut(nil)
+            return
+        }
         window?.orderFrontRegardless()
     }
 
@@ -120,11 +141,12 @@ final class IslandController {
         guard let window, let layoutState else {
             window = makeWindow(layout: layout)
             applyRecordingState()
+            show()
             return
         }
         window.setFrame(layout.frame, display: true)
         layoutState.layout = layout
-        window.orderFrontRegardless()
+        show()
     }
 }
 

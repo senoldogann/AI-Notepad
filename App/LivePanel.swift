@@ -37,7 +37,18 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.minSize = NSSize(width: 340, height: 300)
-    panel.contentView = NSHostingView(rootView: rootView)
+    // İçerik panelin köşe yarıçapıyla maskelenir: köşeler tamamen saydam kalır, pencere gölgesi ve kenar çizgisi
+    // dikdörtgen değil yuvarlak çıkar.
+    let container: NSView = NSView(frame: NSRect(origin: .zero, size: size))
+    container.wantsLayer = true
+    container.layer?.cornerRadius = DesignTokens.panelRadius
+    container.layer?.cornerCurve = .continuous
+    container.layer?.masksToBounds = true
+    let hosting: NSHostingView = NSHostingView(rootView: rootView)
+    hosting.frame = container.bounds
+    hosting.autoresizingMask = [.width, .height]
+    container.addSubview(hosting)
+    panel.contentView = container
     if let screen = NSScreen.screens.first {
         let visible: NSRect = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: visible.maxX - size.width - 16, y: visible.maxY - size.height - 16))
@@ -100,10 +111,13 @@ final class LivePanelController {
             model: model, router: router, shortcuts: shortcuts, player: player, onStart: onStart,
             onHide: { [weak self] in self?.hide() }
         ))
-        target.invalidateShadow()
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
         target.orderFrontRegardless()
+        // Gölge içerik çizildikten sonra (yuvarlak köşelerle) yeniden hesaplanır.
+        DispatchQueue.main.async {
+            target.invalidateShadow()
+        }
     }
 
     /// Paneli belirtilen sayfada gösterir; yazı alanları için anahtar pencere yapar.

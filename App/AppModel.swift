@@ -335,13 +335,8 @@ final class AppModel {
             }
         }
         if kind == .openAICompatible {
-            let defaults: UserDefaults = UserDefaults.standard
             do {
-                _ = try openAICompatibleConfig(
-                    baseURLText: defaults.string(forKey: SettingsKey.llmBaseURL) ?? "", apiKey: nil,
-                    fastModel: defaults.string(forKey: SettingsKey.llmFastModel) ?? "",
-                    smartModel: defaults.string(forKey: SettingsKey.llmSmartModel) ?? ""
-                )
+                _ = try storedOpenAIConfig(apiKey: nil)
             } catch {
                 problems.append(userFacingMessage(error: error))
             }

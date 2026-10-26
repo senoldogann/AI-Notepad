@@ -7,6 +7,7 @@ import SwiftUI
 /// Ayarlar bölümleri.
 private enum SettingsSection: String, CaseIterable {
     case general = "Genel"
+    case appearance = "Görünüm"
     case llm = "LLM"
     case keys = "Anahtarlar"
     case shortcuts = "Kısayollar"
@@ -32,6 +33,7 @@ struct SettingsPage: View {
             Group {
                 switch section {
                 case .general: GeneralSettings(model: model)
+                case .appearance: AppearanceSettings()
                 case .llm: LLMSettings(model: model)
                 case .keys: KeySettings(model: model)
                 case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
@@ -126,6 +128,91 @@ private struct GeneralSettings: View {
     }
 }
 
+/// Görünüm: tema, vurgu rengi, panel arka planı, yazı tipi, metin boyutu, satır aralığı, alt boşluk, ada.
+/// Değişiklikler panelde anında görünür.
+private struct AppearanceSettings: View {
+    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
+    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
+    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
+    @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
+    @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
+    @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
+    @AppStorage(SettingsKey.islandEnabled) private var islandEnabled: Bool = true
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        Form {
+            Section("Renkler") {
+                Picker("Tema", selection: $theme) {
+                    Text("Sistem").tag(AppTheme.system.rawValue)
+                    Text("Açık").tag(AppTheme.light.rawValue)
+                    Text("Koyu").tag(AppTheme.dark.rawValue)
+                }
+                .pickerStyle(.segmented)
+                Picker("Vurgu rengi", selection: $accent) {
+                    ForEach(PanelAccent.allCases, id: \.self) { (item: PanelAccent) in
+                        Label(accentName(accent: item), systemImage: "circle.fill")
+                            .foregroundStyle(item.color)
+                            .tag(item.rawValue)
+                    }
+                }
+                Picker("Panel arka planı", selection: $background) {
+                    Text("Cam").tag(PanelBackground.glass.rawValue)
+                    Text("Koyu cam (hareketli arka planda okunaklı)").tag(PanelBackground.tintedGlass.rawValue)
+                    Text("Opak").tag(PanelBackground.solid.rawValue)
+                }
+            }
+            Section("Metin") {
+                Picker("Yazı tipi", selection: $fontDesign) {
+                    Text("Sistem (SF Pro)").tag(PanelFontDesign.system.rawValue)
+                    Text("Yuvarlak (SF Rounded)").tag(PanelFontDesign.rounded.rawValue)
+                    Text("Tırnaklı (New York)").tag(PanelFontDesign.serif.rawValue)
+                    Text("Eş aralıklı (SF Mono)").tag(PanelFontDesign.monospaced.rawValue)
+                }
+                LabeledContent("Metin boyutu: \(Int(textSize)) pt") {
+                    Slider(value: $textSize, in: SettingsRange.textSize, step: 1)
+                }
+                LabeledContent("Satır aralığı: \(Int(lineSpacing))") {
+                    Slider(value: $lineSpacing, in: SettingsRange.lineSpacing, step: 1)
+                }
+                LabeledContent("Alt boşluk: \(Int(bottomSpacing)) pt") {
+                    Slider(value: $bottomSpacing, in: SettingsRange.bottomSpacing, step: 4)
+                }
+                // Önizleme seçilen yazı tipi ve boyutla.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Hyvää huomenta kaikille, aloitetaan palaveri.")
+                        .font(appearance.secondaryFont)
+                        .opacity(0.6)
+                    Text("Herkese günaydın, toplantıya başlayalım.")
+                        .font(appearance.bodyFont)
+                }
+                .lineSpacing(appearance.lineSpacing)
+            }
+            Section("Ada") {
+                Toggle("Kayıt sırasında çentikte adayı göster", isOn: $islandEnabled)
+            }
+            Section {
+                Button("Görünümü varsayılana döndür") {
+                    resetAppearanceSettings(defaults: UserDefaults.standard)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Vurgu renginin adı.
+private func accentName(accent: PanelAccent) -> String {
+    switch accent {
+    case .blue: String(localized: "Mavi")
+    case .green: String(localized: "Yeşil")
+    case .purple: String(localized: "Mor")
+    case .orange: String(localized: "Turuncu")
+    case .pink: String(localized: "Pembe")
+    }
+}
+
 /// LLM sağlayıcısı: Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
 private struct LLMSettings: View {
     let model: AppModel
@@ -133,6 +220,12 @@ private struct LLMSettings: View {
     @AppStorage(SettingsKey.llmBaseURL) private var baseURL: String = ""
     @AppStorage(SettingsKey.llmFastModel) private var fastModel: String = ""
     @AppStorage(SettingsKey.llmSmartModel) private var smartModel: String = ""
+    @AppStorage(SettingsKey.llmFastEffort) private var openAIFastEffort: String = ""
+    @AppStorage(SettingsKey.llmSmartEffort) private var openAISmartEffort: String = ""
+    @AppStorage(SettingsKey.claudeFastModel) private var claudeFastModel: String = ClaudeModel.haiku.rawValue
+    @AppStorage(SettingsKey.claudeSmartModel) private var claudeSmartModel: String = ClaudeModel.opus.rawValue
+    @AppStorage(SettingsKey.claudeFastEffort) private var claudeFastEffort: String = LLMEffort.low.rawValue
+    @AppStorage(SettingsKey.claudeSmartEffort) private var claudeSmartEffort: String = LLMEffort.medium.rawValue
     @State private var testResult: ConnectionTest = .idle
 
     var body: some View {
@@ -143,15 +236,43 @@ private struct LLMSettings: View {
                     Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)").tag(LLMProviderKind.openAICompatible.rawValue)
                 }
                 if provider == LLMProviderKind.anthropic.rawValue {
-                    Text("Çeviri: Claude Haiku 5.5 · Özet, soru ve not: Claude Opus 5.5")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
                 } else {
                     TextField("Temel adres", text: $baseURL, prompt: Text("http://localhost:11434/v1"))
-                    TextField("Çeviri modeli (hızlı)", text: $fastModel, prompt: Text("ör. gpt-5-mini, qwen3:8b"))
-                    TextField("Özet ve not modeli", text: $smartModel, prompt: Text("ör. gpt-5, gpt-oss:120b"))
                     SecretField(title: "Anahtar (Ollama'da gerekmez)", account: .openai, onChange: model.settingsChanged)
+                }
+            }
+            if provider == LLMProviderKind.anthropic.rawValue {
+                Section {
+                    ClaudeModelPicker(selection: $claudeFastModel)
+                    EffortPicker(selection: $claudeFastEffort, allowsNone: false)
+                } header: {
+                    Text("Canlı çeviri")
+                } footer: {
+                    Text("Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te düşünme bu görevde kapatılır.")
+                }
+                Section {
+                    ClaudeModelPicker(selection: $claudeSmartModel)
+                    EffortPicker(selection: $claudeSmartEffort, allowsNone: false)
+                } header: {
+                    Text("\"Ne kaçırdım?\", soru ve toplantı notu")
+                } footer: {
+                    Text("Daha yüksek effort daha dikkatli ama daha yavaş ve pahalı sonuç verir.")
+                }
+            } else {
+                Section {
+                    TextField("Model", text: $fastModel, prompt: Text("ör. gpt-5-mini, qwen3:8b"))
+                    EffortPicker(selection: $openAIFastEffort, allowsNone: true)
+                } header: {
+                    Text("Canlı çeviri")
+                }
+                Section {
+                    TextField("Model", text: $smartModel, prompt: Text("ör. gpt-5, gpt-oss:120b"))
+                    EffortPicker(selection: $openAISmartEffort, allowsNone: true)
+                } header: {
+                    Text("\"Ne kaçırdım?\", soru ve toplantı notu")
+                } footer: {
+                    Text("Effort `reasoning_effort` olarak gönderilir; desteklemeyen sunucularda \"Gönderme\"yi seç.")
                 }
             }
             Section {
@@ -176,7 +297,7 @@ private struct LLMSettings: View {
         }
         .formStyle(.grouped)
         // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
-        .task(id: [provider, baseURL, fastModel, smartModel]) {
+        .task(id: [provider, baseURL, fastModel, smartModel, openAIFastEffort, openAISmartEffort, claudeFastModel, claudeSmartModel, claudeFastEffort, claudeSmartEffort]) {
             do {
                 try await Task.sleep(for: .milliseconds(600))
             } catch {
@@ -185,6 +306,41 @@ private struct LLMSettings: View {
             }
             testResult = .idle
             model.settingsChanged()
+        }
+    }
+}
+
+/// Claude modeli seçimi (ad, kısa nitelik).
+private struct ClaudeModelPicker: View {
+    @Binding var selection: String
+
+    var body: some View {
+        Picker("Model", selection: $selection) {
+            Text("Claude Haiku 5.5 — en hızlı, en ucuz").tag(ClaudeModel.haiku.rawValue)
+            Text("Claude Sonnet 5.5 — dengeli").tag(ClaudeModel.sonnet.rawValue)
+            Text("Claude Opus 5.5 — güçlü").tag(ClaudeModel.opus.rawValue)
+            Text("Claude Fable 5.1 — en yetenekli, en pahalı").tag(ClaudeModel.fable.rawValue)
+        }
+    }
+}
+
+/// Effort seçimi; OpenAI uyumlu sağlayıcıda "Gönderme" (boş) ve yalnızca low/medium/high.
+private struct EffortPicker: View {
+    @Binding var selection: String
+    let allowsNone: Bool
+
+    var body: some View {
+        Picker("Effort", selection: $selection) {
+            if allowsNone {
+                Text("Gönderme").tag("")
+            }
+            Text("Düşük").tag(LLMEffort.low.rawValue)
+            Text("Orta").tag(LLMEffort.medium.rawValue)
+            Text("Yüksek").tag(LLMEffort.high.rawValue)
+            if !allowsNone {
+                Text("Çok yüksek").tag(LLMEffort.xhigh.rawValue)
+                Text("En yüksek").tag(LLMEffort.max.rawValue)
+            }
         }
     }
 }

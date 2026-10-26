@@ -70,7 +70,7 @@ extension CloudTests {
 @Suite struct MeetingPromptsCloudTests {
     @Test func translatesFinnishToTurkish() async throws {
         let text: String = try await sendLLM(
-            provider: .anthropic(apiKey: try cloudKey(account: .anthropic)),
+            provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             request: translationRequest(sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [])
         )
         #expect(text.lowercased().contains("rapor"), "metin: \(text)")
@@ -83,7 +83,7 @@ extension CloudTests {
             block(.others, 2, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?", person: 1),
         ]
         let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
-        let summary: MissedSummary = try parseMissedSummary(text: try await sendLLM(provider: .anthropic(apiKey: try cloudKey(account: .anthropic)), request: request))
+        let summary: MissedSummary = try parseMissedSummary(text: try await sendLLM(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request))
         #expect(!summary.topic.isEmpty)
     }
 }

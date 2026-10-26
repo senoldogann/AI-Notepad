@@ -34,17 +34,52 @@ enum SettingsKey {
     static let llmBaseURL: String = "llmBaseURL"
     static let llmFastModel: String = "llmFastModel"
     static let llmSmartModel: String = "llmSmartModel"
+    /// OpenAI uyumlu `reasoning_effort` (boş: gönderilmez).
+    static let llmFastEffort: String = "llmFastEffort"
+    static let llmSmartEffort: String = "llmSmartEffort"
+    /// Claude: model sınıfı başına model ve effort.
+    static let claudeFastModel: String = "claudeFastModel"
+    static let claudeSmartModel: String = "claudeSmartModel"
+    static let claudeFastEffort: String = "claudeFastEffort"
+    static let claudeSmartEffort: String = "claudeSmartEffort"
     static let recordShortcut: String = "shortcut.record"
     static let windowsShortcut: String = "shortcut.windows"
     static let onboardingCompleted: String = "onboardingCompleted"
     /// "Sen" (mikrofon) kapalı mı.
     static let micMuted: String = "micMuted"
+    /// Görünüm.
+    static let theme: String = "appearance.theme"
+    static let accent: String = "appearance.accent"
+    static let panelBackground: String = "appearance.background"
+    static let fontDesign: String = "appearance.fontDesign"
+    static let textSize: String = "appearance.textSize"
+    static let lineSpacing: String = "appearance.lineSpacing"
+    static let bottomSpacing: String = "appearance.bottomSpacing"
+    static let islandEnabled: String = "appearance.islandEnabled"
+}
+
+/// Panelin açık/koyu görünümü.
+enum AppTheme: String, CaseIterable {
+    case system
+    case light
+    case dark
 }
 
 /// Ayar aralıkları.
 enum SettingsRange {
     static let missedWindowMinutes: ClosedRange<Int> = 1...10
     static let audioRetentionDays: ClosedRange<Int> = 7...365
+    static let textSize: ClosedRange<Double> = 11...24
+    static let lineSpacing: ClosedRange<Double> = 0...12
+    static let bottomSpacing: ClosedRange<Double> = 0...160
+}
+
+/// Görünüm ayarlarını varsayılana döndürür.
+func resetAppearanceSettings(defaults: UserDefaults) {
+    for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.panelBackground, SettingsKey.fontDesign, SettingsKey.textSize,
+                SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled] {
+        defaults.removeObject(forKey: key)
+    }
 }
 
 /// Varsayılanları bir kez kaydeder (uygulama açılışında).
@@ -59,8 +94,22 @@ func registerDefaultSettings() {
         SettingsKey.llmBaseURL: "http://localhost:11434/v1",
         SettingsKey.llmFastModel: "",
         SettingsKey.llmSmartModel: "",
+        SettingsKey.llmFastEffort: "",
+        SettingsKey.llmSmartEffort: "",
+        SettingsKey.claudeFastModel: ClaudeModel.haiku.rawValue,
+        SettingsKey.claudeSmartModel: ClaudeModel.opus.rawValue,
+        SettingsKey.claudeFastEffort: LLMEffort.low.rawValue,
+        SettingsKey.claudeSmartEffort: LLMEffort.medium.rawValue,
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
+        SettingsKey.theme: AppTheme.system.rawValue,
+        SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
+        SettingsKey.panelBackground: PanelAppearance.standard.background.rawValue,
+        SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,
+        SettingsKey.textSize: PanelAppearance.standard.textSize,
+        SettingsKey.lineSpacing: PanelAppearance.standard.lineSpacing,
+        SettingsKey.bottomSpacing: PanelAppearance.standard.bottomSpacing,
+        SettingsKey.islandEnabled: true,
     ])
 }
 
@@ -98,14 +147,37 @@ func storeKeyBinding(key: String, binding: KeyBinding) throws {
 func resolveLLMProvider() async throws -> LLMProvider {
     switch selectedLLMProviderKind() {
     case .anthropic:
-        return .anthropic(apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic))
-    case .openAICompatible:
-        let defaults: UserDefaults = UserDefaults.standard
-        return .openAICompatible(try openAICompatibleConfig(
-            baseURLText: defaults.string(forKey: SettingsKey.llmBaseURL) ?? "",
-            apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai),
-            fastModel: defaults.string(forKey: SettingsKey.llmFastModel) ?? "",
-            smartModel: defaults.string(forKey: SettingsKey.llmSmartModel) ?? ""
+        return .anthropic(AnthropicConfig(
+            apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),
+            fastModel: storedClaudeModel(key: SettingsKey.claudeFastModel, fallback: .haiku),
+            smartModel: storedClaudeModel(key: SettingsKey.claudeSmartModel, fallback: .opus),
+            fastEffort: storedEffort(key: SettingsKey.claudeFastEffort) ?? .low,
+            smartEffort: storedEffort(key: SettingsKey.claudeSmartEffort) ?? .medium
         ))
+    case .openAICompatible:
+        return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
     }
+}
+
+/// Kayıtlı OpenAI uyumlu ayar; adres ya da model eksikse `LLMError.notConfigured`.
+func storedOpenAIConfig(apiKey: String?) throws -> OpenAICompatibleConfig {
+    let defaults: UserDefaults = UserDefaults.standard
+    return try openAICompatibleConfig(
+        baseURLText: defaults.string(forKey: SettingsKey.llmBaseURL) ?? "",
+        apiKey: apiKey,
+        fastModel: defaults.string(forKey: SettingsKey.llmFastModel) ?? "",
+        smartModel: defaults.string(forKey: SettingsKey.llmSmartModel) ?? "",
+        fastEffort: storedEffort(key: SettingsKey.llmFastEffort),
+        smartEffort: storedEffort(key: SettingsKey.llmSmartEffort)
+    )
+}
+
+/// Kayıtlı Claude modeli; tanınmayan değerde (eski sürüm) varsayılan.
+func storedClaudeModel(key: String, fallback: ClaudeModel) -> ClaudeModel {
+    ClaudeModel(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? fallback
+}
+
+/// Kayıtlı effort; boş değer "gönderme" demektir (nil).
+func storedEffort(key: String) -> LLMEffort? {
+    LLMEffort(rawValue: UserDefaults.standard.string(forKey: key) ?? "")
 }

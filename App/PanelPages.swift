@@ -1,5 +1,6 @@
 import AINotepadCore
 import AINotepadUI
+import AppKit
 import Observation
 import SwiftUI
 
@@ -22,6 +23,14 @@ final class PanelRouter {
 /// Modeli gözleyip sayfayı seçen kabuk; tüm sayfalara aynı cam yüzeyi verir.
 struct PanelHost: View {
     let model: AppModel
+    // Görünüm ayarları: değişince panel hemen güncellenir.
+    @AppStorage(SettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(SettingsKey.accent) private var accent: String = PanelAppearance.standard.accent.rawValue
+    @AppStorage(SettingsKey.panelBackground) private var background: String = PanelAppearance.standard.background.rawValue
+    @AppStorage(SettingsKey.fontDesign) private var fontDesign: String = PanelAppearance.standard.fontDesign.rawValue
+    @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
+    @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
+    @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     let router: PanelRouter
     let shortcuts: ShortcutController
     let player: MeetingAudioPlayer
@@ -32,6 +41,19 @@ struct PanelHost: View {
         content
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
+            // Ayar değerleri (AppStorage) okunarak görünüm kurulur; değişince yeniden çizilir.
+            .environment(\.panelAppearance, appearance)
+            .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
+    }
+
+    private var appearance: PanelAppearance {
+        let standard: PanelAppearance = .standard
+        return PanelAppearance(
+            fontDesign: PanelFontDesign(rawValue: fontDesign) ?? standard.fontDesign,
+            textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
+            accent: PanelAccent(rawValue: accent) ?? standard.accent,
+            background: PanelBackground(rawValue: background) ?? standard.background
+        )
     }
 
     @ViewBuilder
@@ -101,7 +123,7 @@ private struct PanelPageView<Content: View>: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Geri")
+                .hoverHint("Geri", alignment: .leading, edge: .bottom)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
@@ -116,7 +138,7 @@ private struct PanelPageView<Content: View>: View {
                             .foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
-                    .help("Canlı metne dön")
+                    .hoverHint("Canlı metne dön", alignment: .trailing, edge: .bottom)
                 }
                 Button(action: onHide) {
                     Image(systemName: "minus")
@@ -126,11 +148,13 @@ private struct PanelPageView<Content: View>: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Paneli gizle")
+                .hoverHint("Paneli gizle", alignment: .trailing, edge: .bottom)
                 .accessibilityLabel("Paneli gizle")
             }
             .padding(.horizontal, DesignTokens.Spacing.l)
             .padding(.vertical, DesignTokens.Spacing.m)
+            // İpuçları başlığın altına taşar: içeriğin üstünde çizilsin.
+            .zIndex(1)
             Divider().opacity(0.35)
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -150,5 +174,25 @@ func launchPage(arguments: [String]) -> PanelPage? {
     case "ayarlar": return .settings
     case "kurulum": return .setup
     default: return nil
+    }
+}
+
+/// Panel penceresinin açık/koyu görünümünü ayarlar (cam malzemesi pencere görünümüne göre çizilir).
+private struct WindowAppearance: NSViewRepresentable {
+    let theme: AppTheme
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // Pencere görünüm ağacına eklendikten sonra atanır.
+        DispatchQueue.main.async {
+            view.window?.appearance = switch theme {
+            case .system: nil
+            case .light: NSAppearance(named: .aqua)
+            case .dark: NSAppearance(named: .darkAqua)
+            }
+        }
     }
 }

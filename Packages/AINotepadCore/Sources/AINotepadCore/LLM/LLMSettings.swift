@@ -8,7 +8,9 @@ public enum LLMProviderKind: String, Sendable, CaseIterable {
 
 /// Kullanıcının OpenAI uyumlu sağlayıcı ayarlarından yapılandırma üretir; adres ya da model eksik/geçersizse
 /// `notConfigured`. Saf fonksiyondur.
-public func openAICompatibleConfig(baseURLText: String, apiKey: String?, fastModel: String, smartModel: String) throws -> OpenAICompatibleConfig {
+public func openAICompatibleConfig(
+    baseURLText: String, apiKey: String?, fastModel: String, smartModel: String, fastEffort: LLMEffort?, smartEffort: LLMEffort?
+) throws -> OpenAICompatibleConfig {
     let trimmed: String = baseURLText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let url = URL(string: trimmed), let scheme = url.scheme, ["http", "https"].contains(scheme), url.host() != nil else {
         throw LLMError.notConfigured(detail: "geçerli bir temel adres (ör. http://localhost:11434/v1)")
@@ -18,5 +20,8 @@ public func openAICompatibleConfig(baseURLText: String, apiKey: String?, fastMod
     guard !fast.isEmpty, !smart.isEmpty else {
         throw LLMError.notConfigured(detail: "çeviri ve özet modeli adları")
     }
-    return OpenAICompatibleConfig(baseURL: url, apiKey: apiKey.flatMap { $0.isEmpty ? nil : $0 }, fastModel: fast, smartModel: smart)
+    return OpenAICompatibleConfig(
+        baseURL: url, apiKey: apiKey.flatMap { $0.isEmpty ? nil : $0 }, fastModel: fast, smartModel: smart,
+        fastEffort: fastEffort, smartEffort: smartEffort
+    )
 }
