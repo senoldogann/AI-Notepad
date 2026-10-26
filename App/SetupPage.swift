@@ -36,7 +36,7 @@ struct SetupPage: View {
             HStack(spacing: 6) {
                 ForEach(OnboardingStep.allCases, id: \.self) { (item: OnboardingStep) in
                     Capsule()
-                        .fill(item.rawValue <= step.rawValue ? DesignTokens.meColor : Color.secondary.opacity(0.25))
+                        .fill(item.rawValue <= step.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.25)))
                         .frame(width: item == step ? 22 : 8, height: 6)
                 }
             }
@@ -101,7 +101,7 @@ private struct FeatureRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.m) {
             Image(systemName: symbol)
-                .foregroundStyle(DesignTokens.meColor)
+                .foregroundStyle(.tint)
                 .frame(width: 22)
             Text(text).fixedSize(horizontal: false, vertical: true)
         }
@@ -211,7 +211,7 @@ private struct PermissionRow<Action: View>: View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.m) {
             Image(systemName: symbol)
                 .font(.system(size: 18))
-                .foregroundStyle(DesignTokens.meColor)
+                .foregroundStyle(.tint)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)

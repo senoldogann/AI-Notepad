@@ -80,7 +80,7 @@ private struct MeetingRow: View {
             if mine > 0 {
                 Label("\(mine)", systemImage: "star.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DesignTokens.meColor)
+                    .foregroundStyle(.tint)
                     .help("Sana düşen görev sayısı")
             }
             Image(systemName: "chevron.right")

@@ -69,6 +69,8 @@ struct PanelHost: View {
             .panelSurface()
             // Ayar değerleri (AppStorage) okunarak görünüm kurulur; değişince yeniden çizilir.
             .environment(\.panelAppearance, appearance)
+            // Sistem denetimleri (seçiciler, anahtarlar, kaydırıcılar, ilerleme, bağlantılar) da vurgu rengini kullanır.
+            .tint(appearance.accent.color)
             .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
     }
 
