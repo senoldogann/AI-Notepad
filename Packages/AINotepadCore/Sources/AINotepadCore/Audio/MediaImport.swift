@@ -52,13 +52,17 @@ public func importMediaAudio(source: URL, destination: URL) async throws -> Doub
     let format: AVAudioFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
     var frames: Int = 0
     while let sample = output.copyNextSampleBuffer() {
+        // Uzun dosyada iptal edilebilsin (ör. uygulama kapanırken).
+        try Task.checkCancellation()
         guard let block = CMSampleBufferGetDataBuffer(sample) else {
+            throw MediaImportError.readFailed(path: source.path, reason: "ses parçasında veri yok (\(frames) örnekten sonra)")
+        }
+        let count: Int = CMBlockBufferGetDataLength(block) / MemoryLayout<Float>.size
+        guard count > 0 else {
             continue
         }
-        let length: Int = CMBlockBufferGetDataLength(block)
-        let count: Int = length / MemoryLayout<Float>.size
-        guard count > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)), let channel = buffer.floatChannelData?[0] else {
-            continue
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)), let channel = buffer.floatChannelData?[0] else {
+            throw MediaImportError.readFailed(path: source.path, reason: "ses arabelleği ayrılamadı (\(count) örnek)")
         }
         let status: OSStatus = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count * MemoryLayout<Float>.size, destination: channel)
         guard status == kCMBlockBufferNoErr else {

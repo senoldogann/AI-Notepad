@@ -70,13 +70,20 @@ public func meetingsToRemind(meetings: [CalendarMeeting], now: Date, horizonSec:
 /// Tanıma terimleri: toplantı katılımcılarının adları öne, sonra diğer terimler; tekrarsız, en fazla `limit`. Saf
 /// fonksiyondur.
 public func keytermsWithAttendees(attendees: [String], keyterms: [String], limit: Int) -> [String] {
-    (attendees + keyterms).reduce(into: [String]()) { (result: inout [String], term: String) -> Void in
+    (attendees + keyterms).compactMap(sanitizedKeyterm).reduce(into: [String]()) { (result: inout [String], term: String) -> Void in
         if !result.contains(where: { $0.caseInsensitiveCompare(term) == .orderedSame }) {
             result.append(term)
         }
     }
     .prefix(limit)
     .map { $0 }
+}
+
+/// Kullanıcının tanıma sözlüğü: satır ya da virgülle ayrılmış; servis kurallarına uymayanlar (2–40 karakter, en fazla
+/// 5 sözcük) atılır. Saf fonksiyondur.
+public func customVocabulary(text: String) -> [String] {
+    text.split(whereSeparator: { $0 == "\n" || $0 == "," })
+        .compactMap { sanitizedKeyterm(String($0)) }
 }
 
 /// Toplantı öncesi brifing sorusu (arşive sorulur): aynı kişilerle ya da konuda önceki görüşmeler, kararlar ve açık

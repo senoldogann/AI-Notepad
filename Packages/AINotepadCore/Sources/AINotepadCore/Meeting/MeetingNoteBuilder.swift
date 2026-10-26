@@ -34,7 +34,7 @@ func noteRules(user: String, template: NoteTemplate) -> String {
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
       Birinin "yaparım" diye üstlendiği iş de görevdir.
     - Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.
-    - "★" ile başlayan satırları kullanıcı toplantıda önemli diye işaretledi: özette mutlaka yer ver, karar ya da görev
+    - Metni "★" ile başlayan satırları kullanıcı toplantıda önemli diye işaretledi: özette mutlaka yer ver, karar ya da görev
       içeriyorsa atlama.
     \(focus)
     """
@@ -77,7 +77,7 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
     )
 }
 
-/// Toplantı notunun JSON şeması (Türkçe alan adları); paylaşım sürümü de aynısını kullanır.
+/// Toplantı notunun JSON şeması (Türkçe alan adları); paylaşım sürümü akışsız `sharedNoteSchema`'yı kullanır.
 let meetingNoteSchema: String = """
 {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
 "kararlar":{"type":"array","items":{"type":"string"}},\

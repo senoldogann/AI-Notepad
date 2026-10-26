@@ -66,15 +66,20 @@ import Testing
 }
 
 @Suite struct HighlightTests {
-    // İşaret, düğmeye basılmadan önceki sözü (20 sn) ve hemen sonrasını kapsar; paragrafta açılıp kapanır.
+    // Kayıttaki işaret basılmadan önceki sözü (20 sn) kapsar; paragraf işareti yalnızca o paragrafa düşer, komşusuna
+    // taşmaz ve kapatınca komşunun işaretini silmez.
     @Test func highlightsMarkNearbySegmentsAndToggle() {
         let segments: [StoredSegment] = [stored("final-0", .others, 1, 0, "Alku"), stored("final-1", .others, 1, 40, "Tärkeä päätös"), stored("final-2", .others, 1, 100, "Loppu")]
-        let marked: [StoredSegment] = markingHighlights(segments: segments, highlights: [Highlight(startSec: 55)])
+        let marked: [StoredSegment] = markingHighlights(segments: segments, highlights: [Highlight(startSec: 55, endSec: nil)])
         #expect(marked.map(\.text) == ["Alku", "★ Tärkeä päätös", "Loppu"])
-        let paragraph: TranscriptParagraph = TranscriptParagraph(id: "p", speaker: .others, person: 1, startSec: 40, endSec: 42, text: "Tärkeä päätös", turkish: nil, words: [])
-        let on: [Highlight] = togglingHighlight(highlights: [], paragraph: paragraph)
-        #expect(isHighlighted(paragraph: paragraph, highlights: on))
-        #expect(togglingHighlight(highlights: on, paragraph: paragraph).isEmpty)
+        let first: TranscriptParagraph = TranscriptParagraph(id: "a", speaker: .others, person: 1, startSec: 30, endSec: 38, text: "Ensin", turkish: nil, words: [])
+        let second: TranscriptParagraph = TranscriptParagraph(id: "b", speaker: .others, person: 2, startSec: 40, endSec: 42, text: "Tärkeä päätös", turkish: nil, words: [])
+        let paragraphs: [TranscriptParagraph] = [first, second]
+        let on: [Highlight] = togglingHighlight(highlights: [], paragraphs: paragraphs, paragraph: second)
+        #expect(highlightedParagraphIDs(paragraphs: paragraphs, highlights: on) == ["b"])
+        let both: [Highlight] = togglingHighlight(highlights: on, paragraphs: paragraphs, paragraph: first)
+        #expect(togglingHighlight(highlights: both, paragraphs: paragraphs, paragraph: first) == on)
+        #expect(markingHighlights(segments: [stored("x", .others, 1, 30, "Ensin"), stored("y", .others, 2, 40, "Päätös")], highlights: on).map(\.text) == ["Ensin", "★ Päätös"])
     }
 }
 
@@ -89,7 +94,7 @@ extension CloudTests {
             stored("final-3", .others, 2, 22, "Selvä. Sitten seuraava palaveri on perjantaina."),
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
-            segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20)]), speakerNames: [:], userName: "Senol",
+            segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20, endSec: nil)]), speakerNames: [:], userName: "Senol",
             template: .general, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()

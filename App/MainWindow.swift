@@ -393,7 +393,7 @@ private struct QuitWarning: View {
     let router: MainWindowRouter
 
     var body: some View {
-        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        let isBusy: Bool = model.isBusy
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             Label(
                 model.phase == .idle
@@ -1160,6 +1160,8 @@ private struct SidebarFolders: View {
                         }
                         model.deleteFolder(name: folder.name)
                     }
+                    // İşlenen toplantı klasörden çıkarılamaz; silinse klasör yeniden belirirdi.
+                    .disabled(!model.canDeleteFolder(name: folder.name))
                 }
             }
             if isAdding {

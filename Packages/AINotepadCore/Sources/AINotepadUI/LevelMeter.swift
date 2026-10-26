@@ -1,27 +1,54 @@
 import Observation
 import SwiftUI
 
-/// Kayıt sırasında ses seviyesinin son değerleri (panelde canlı ses çubukları). Kayıt akışlarından beslenir.
+/// Kayıt sırasında ses seviyesinin son değerleri (panelde canlı ses çubukları). İki kayıt akışından ("Sen" ve
+/// "Diğerleri") beslenir: bir çubuk, `interval` boyunca gelen seviyelerin en yükseğidir (akışlar sırayla düşüp
+/// çubukları tarak gibi titretmesin).
 @MainActor
 @Observable
 public final class AudioLevels {
-    /// En yeniden eskiye değil, soldan sağa zaman sırasıyla son `count` seviye (0...1).
+    /// Soldan sağa zaman sırasıyla son `count` seviye (0...1).
     public private(set) var values: [Float]
     private let count: Int
+    private let interval: TimeInterval
+    @ObservationIgnored private var pending: Float = 0
+    @ObservationIgnored private var lastPush: Date = .distantPast
+    /// Kayıt sürüyor: durduktan sonra akışlardan geç gelen seviyeler çubuklara yazılmaz.
+    @ObservationIgnored private var isActive: Bool = false
 
-    public init(count: Int) {
+    public init(count: Int, interval: TimeInterval) {
         self.count = count
+        self.interval = interval
         self.values = [Float](repeating: 0, count: count)
     }
 
-    /// Yeni seviye ekler, en eskisi düşer.
-    public func push(level: Float) {
-        values = Array((values + [level]).suffix(count))
+    /// Bir akıştan gelen seviye; süre dolunca en yükseği yeni çubuk olur, en eskisi düşer.
+    public func record(level: Float, at now: Date) {
+        guard isActive else {
+            return
+        }
+        pending = max(pending, level)
+        guard now.timeIntervalSince(lastPush) >= interval else {
+            return
+        }
+        values = Array((values + [pending]).suffix(count))
+        pending = 0
+        lastPush = now
     }
 
-    /// Kayıt bitti: çubuklar sıfırlanır.
-    public func reset() {
+    /// Kayıt başladı: çubuklar sıfırdan dolar.
+    public func start() {
         values = [Float](repeating: 0, count: count)
+        pending = 0
+        lastPush = .distantPast
+        isActive = true
+    }
+
+    /// Kayıt bitti: çubuklar sıfırlanır, geç gelen seviyeler yok sayılır.
+    public func stop() {
+        values = [Float](repeating: 0, count: count)
+        pending = 0
+        isActive = false
     }
 }
 

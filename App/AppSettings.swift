@@ -319,9 +319,3 @@ func templateTitle(kind: NoteTemplateKind) -> LocalizedStringKey {
     }
 }
 
-/// Kullanıcının tanıma sözlüğü: satır ya da virgülle ayrılmış, boşlar atılmış. Saf fonksiyondur.
-func customVocabulary(text: String) -> [String] {
-    text.split(whereSeparator: { $0 == "\n" || $0 == "," })
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-}

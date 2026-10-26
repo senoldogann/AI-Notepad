@@ -2903,12 +2903,12 @@
         }
       }
     },
-    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (en fazla 30 kullanılır). Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.": {
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Names, company and product names and abbreviations that speech recognition should spell correctly; one per line (up to 30 are used). Speaker names you give and glossary terms from meetings are added automatically."
+            "value": "Names, company and product names and abbreviations that speech recognition should spell correctly; one per line (2–40 characters, at most 5 words; up to 30 are used). Applies to the cloud engine (Deepgram, ElevenLabs). Speaker names you give and glossary terms from meetings are added automatically."
           }
         }
       }
@@ -4051,6 +4051,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio capture is already running."
+          }
+        }
+      }
+    },
+    "Ses yazıya dökülemedi: son geçiş metin üretmedi. \"Tekrar işle\" ile yeniden deneyebilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't transcribe the audio: the final pass produced no text. You can try again with \"Reprocess\"."
           }
         }
       }

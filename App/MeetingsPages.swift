@@ -819,7 +819,8 @@ private struct SummaryTab: View {
                 .lineSpacing(appearance.lineSpacing + 3)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            let marked: [TranscriptParagraph] = paragraphs.filter { isHighlighted(paragraph: $0, highlights: record.highlights ?? []) }
+            let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
+            let marked: [TranscriptParagraph] = paragraphs.filter { markedIDs.contains($0.id) }
             if !marked.isEmpty {
                 section(title: "İŞARETLEDİĞİN ANLAR", symbol: "bookmark") {
                     VStack(alignment: .leading, spacing: 8) {
@@ -1777,7 +1778,7 @@ private struct TranscriptSection: View {
 
     var body: some View {
         let isActivePlayer: Bool = player.meetingID == record.id
-        let highlights: [Highlight] = record.highlights ?? []
+        let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
         let time: Double = player.currentTime
         LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
@@ -1806,7 +1807,7 @@ private struct TranscriptSection: View {
                                 .appFont(size: 12, weight: .regular)
                                 .monospacedDigit()
                                 .foregroundStyle(Theme.muted)
-                            let marked: Bool = isHighlighted(paragraph: paragraph, highlights: highlights)
+                            let marked: Bool = markedIDs.contains(paragraph.id)
                             Button {
                                 onToggleHighlight(paragraph)
                             } label: {

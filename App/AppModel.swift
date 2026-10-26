@@ -572,11 +572,12 @@ final class AppModel {
             return
         }
 
-        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın parçaları aynı çubuklara düşer.
-        audioLevels.reset()
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer.
+        audioLevels.start()
         let levels: AudioLevels = audioLevels
         let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
-            Task { @MainActor in levels.push(level: level) }
+            let now: Date = Date()
+            Task { @MainActor in levels.record(level: level, at: now) }
         }
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
@@ -667,7 +668,7 @@ final class AppModel {
         }
         isFinishing = true
         consentReminderVisible = false
-        audioLevels.reset()
+        audioLevels.stop()
         microphone.stop()
         systemAudio.stop()
     }
@@ -861,10 +862,11 @@ final class AppModel {
     /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
     /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
     private var recognitionKeyterms: [String] {
-        // Kullanıcının sözlüğü öne; sınırda (30) önce toplantılardan gelenler düşer.
-        keytermsWithAttendees(
-            attendees: customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? ""),
-            keyterms: meetingKeyterms(records: Array(meetings.prefix(20)), userName: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", limit: 30),
+        // Kullanıcının adı ve sözlüğü öne; sınırda (30) önce toplantılardan gelenler düşer.
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        return keytermsWithAttendees(
+            attendees: [userName] + customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? ""),
+            keyterms: meetingKeyterms(records: Array(meetings.prefix(20)), userName: userName, limit: 30),
             limit: 30
         )
     }
@@ -1035,6 +1037,12 @@ final class AppModel {
         moveMeetings(ids: Set(meetingsInFolder(records: meetings, folder: name).map(\.id)), to: nil)
     }
 
+    /// Klasör silinebilir mi: içindeki toplantılardan biri kayıtta ya da işlemedeyse hayır (o toplantı klasörden
+    /// çıkarılamaz, klasör yeniden belirirdi).
+    func canDeleteFolder(name: String) -> Bool {
+        !meetingsInFolder(records: meetings, folder: name).contains { isLocked(meetingID: $0.id) }
+    }
+
     /// Toplantıları klasöre taşır (nil: klasörden çıkarır); kilitli (kayıtta/işlemede) olanlar atlanır.
     func moveMeetings(ids: Set<String>, to folder: String?) {
         for record in meetings where ids.contains(record.id) && !isLocked(meetingID: record.id) {
@@ -1047,7 +1055,7 @@ final class AppModel {
     // MARK: İşaretler
 
     /// Kayıt sırasında canlı ses seviyesi (panelde çubuklar).
-    @ObservationIgnored let audioLevels: AudioLevels = AudioLevels(count: 14)
+    @ObservationIgnored let audioLevels: AudioLevels = AudioLevels(count: 14, interval: 0.1)
 
     /// Bu kayıtta işaretlenen anlar.
     @ObservationIgnored private var liveHighlights: [Highlight] = []
@@ -1059,7 +1067,7 @@ final class AppModel {
         guard isRecording, let startedAt = recordingStartedAt else {
             return
         }
-        liveHighlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt)))
+        liveHighlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt), endSec: nil))
         lastBookmarkAt = Date()
     }
 
@@ -1069,7 +1077,8 @@ final class AppModel {
             return
         }
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-            saveRecord(record: record.with(highlights: togglingHighlight(highlights: record.highlights ?? [], paragraph: paragraph)), directory: directory)
+            let highlights: [Highlight] = togglingHighlight(highlights: record.highlights ?? [], paragraphs: transcriptParagraphs(record: record), paragraph: paragraph)
+            saveRecord(record: record.with(highlights: highlights), directory: directory)
         }
     }
 
@@ -1077,6 +1086,8 @@ final class AppModel {
 
     /// İçe aktarılmakta olan dosya sayısı (dönüştürme sürerken).
     var importingCount: Int = 0
+    /// Kayıt, işleme ya da içe aktarma sürüyor mu (çıkış ve dil değişikliği bunu bekler).
+    var isBusy: Bool { phase != .idle || !processingMeetingIDs.isEmpty || importingCount > 0 }
     /// Son içe aktarma hatası (Toplantılar listesinde gösterilir).
     var importError: String?
 
@@ -1084,30 +1095,43 @@ final class AppModel {
     /// (konuşmacılar, sesinden tanıma) ve not. Motor ve şablon şu anki ayarlardır.
     func importMedia(urls: [URL]) {
         importError = nil
-        for (index, url) in urls.enumerated() {
-            importingCount += 1
-            Task {
-                defer { importingCount -= 1 }
-                // Aynı saniyede birden çok dosya: klasör adları çakışmasın.
-                let startedAt: Date = Date().addingTimeInterval(Double(index))
+        importingCount += urls.count
+        // Dosyalar sırayla dönüştürülür: çok dosya bırakılınca açık kayıt ve diğer işler yavaşlamasın.
+        Task {
+            for url in urls {
+                await importOne(url: url)
+                importingCount -= 1
+            }
+        }
+    }
+
+    /// Tek dosyayı içe aktarır; başarısızsa yarım klasör silinir ve hata listede gösterilir.
+    private func importOne(url: URL) async {
+        var created: URL?
+        do {
+            let session: (url: URL, startedAt: Date) = try AppPaths.newExclusiveSessionDirectory(startedAt: Date())
+            created = session.url
+            let accessed: Bool = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessed {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            let duration: Double = try await importMediaAudio(source: url, destination: session.url.appending(path: "others.m4a"))
+            let record: MeetingRecord = importedMeetingRecord(
+                id: session.url.lastPathComponent, source: url, startedAt: session.startedAt, durationSec: duration,
+                engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
+            )
+            Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
+            process(record: record, directory: session.url)
+        } catch {
+            Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
+            importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
+            if let created {
                 do {
-                    let directory: URL = try AppPaths.newSessionDirectory(startedAt: startedAt)
-                    let accessed: Bool = url.startAccessingSecurityScopedResource()
-                    defer {
-                        if accessed {
-                            url.stopAccessingSecurityScopedResource()
-                        }
-                    }
-                    let duration: Double = try await importMediaAudio(source: url, destination: directory.appending(path: "others.m4a"))
-                    let record: MeetingRecord = importedMeetingRecord(
-                        id: directory.lastPathComponent, source: url, startedAt: startedAt, durationSec: duration,
-                        engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
-                    )
-                    Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
-                    process(record: record, directory: directory)
+                    try FileManager.default.removeItem(at: created)
                 } catch {
-                    Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
-                    importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
+                    Self.logger.error("Yarım içe aktarma klasörü silinemedi, hata: \(String(describing: error), privacy: .private)")
                 }
             }
         }

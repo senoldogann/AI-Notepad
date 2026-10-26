@@ -117,6 +117,11 @@ public func processMeeting(
         current = await recognizeVoices(record: current, directory: directory, embedder: voiceEmbedder, registry: registry)
     }
 
+    // Canlı metni olmayan toplantı (içe aktarılan dosya) son geçiş metin üretmediyse "bitti" görünmesin.
+    if current.liveSegments.isEmpty, !meetingSegments(record: current).contains(where: { !$0.text.isEmpty }) {
+        return current.with(status: .failed, failureMessage: String(localized: "Ses yazıya dökülemedi: son geçiş metin üretmedi. \"Tekrar işle\" ile yeniden deneyebilirsin."))
+    }
+
     await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
 }

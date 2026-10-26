@@ -241,8 +241,9 @@ public func parseNoteOverview(text: String, state: ChunkedNoteState) throws -> M
     guard !raw.ozet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw LLMError.empty
     }
-    return MeetingNote(title: raw.baslik, summary: raw.ozet, decisions: state.decisions, tasks: state.tasks, glossary: state.glossary)
-        .with(outline: outlineItems(raw: raw.akis))
+    let note: MeetingNote = MeetingNote(title: raw.baslik, summary: raw.ozet, decisions: state.decisions, tasks: state.tasks, glossary: state.glossary)
+    // Şemayı uygulamayan sunucular (ör. Ollama) akis'i atlayabilir; o zaman not akışsız yazılır.
+    return raw.akis.map { note.with(outline: outlineItems(raw: $0)) } ?? note
 }
 
 /// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
@@ -324,5 +325,5 @@ private struct RawChunkGlossary: Decodable {
 private struct RawNoteOverview: Decodable {
     let baslik: String
     let ozet: String
-    let akis: [RawOutline]
+    let akis: [RawOutline]?
 }

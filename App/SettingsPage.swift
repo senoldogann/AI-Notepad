@@ -144,7 +144,7 @@ private struct GeneralSettings: View {
 
     var body: some View {
         // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
-        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        let isBusy: Bool = model.isBusy
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Arayüz dili")) {
                 Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
@@ -201,7 +201,7 @@ private struct GeneralSettings: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Tanıma sözlüğü").appFont(size: 15, weight: .medium)
-                Text("Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (en fazla 30 kullanılır). Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.")
+                Text("Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.")
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
