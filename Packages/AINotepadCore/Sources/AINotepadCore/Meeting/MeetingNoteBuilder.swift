@@ -78,31 +78,38 @@ public func meetingMarkdown(record: MeetingRecord) -> String {
     formatter.timeStyle = .short
     var lines: [String] = ["# \(record.note?.title ?? record.title)", "", "_\(formatter.string(from: record.startedAt))_", ""]
     if let note = record.note {
+        // Toplantıdan çıkınca ilk bakılacak şey: kime ne düştüğü. Sonra özet ve kararlar.
+        let mine: [NoteTask] = note.tasks.filter(\.isMine)
+        let others: [NoteTask] = note.tasks.filter { !$0.isMine }
+        if !mine.isEmpty {
+            lines += ["## Senin görevlerin", ""] + mine.map(taskLine) + [""]
+        }
         lines += ["## Özet", "", note.summary, ""]
         if !note.decisions.isEmpty {
             lines += ["## Kararlar", ""] + note.decisions.map { "- \($0)" } + [""]
         }
-        if !note.tasks.isEmpty {
-            lines += ["## Görevler", ""] + note.tasks.map { (task: NoteTask) -> String in
-                let due: String = task.dueDate.map { " (\($0))" } ?? ""
-                return "- [ ] **\(task.owner)** — \(task.description)\(due)\(task.isMine ? " ⭐" : "")"
-            } + [""]
+        if !others.isEmpty {
+            lines += ["## Diğer görevler", ""] + others.map(taskLine) + [""]
         }
         if !note.glossary.isEmpty {
             lines += ["## Sözlük", ""] + note.glossary.map { "- **\($0.term)** — \($0.meaning)" } + [""]
         }
     }
-    let segments: [StoredSegment] = record.finalSegments.isEmpty
-        ? record.liveSegments
-        : record.finalSegments + record.liveSegments.filter { $0.speaker == .me }
     lines += ["## Transkript", ""]
-    for segment in segments.sorted(by: { $0.startSec < $1.startSec }) where !segment.text.isEmpty {
-        lines.append("**[\(timestamp(seconds: segment.startSec))] \(storedLabel(segment: segment, speakerNames: record.speakerNames)):** \(segment.text)")
-        if let turkish = record.translations[segment.key] {
-            lines.append("  _\(turkish)_")
+    for paragraph in transcriptParagraphs(record: record) {
+        lines += ["**[\(timestamp(seconds: paragraph.startSec))] \(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames)):** \(paragraph.text)"]
+        if let turkish = paragraph.turkish {
+            lines += ["", "_\(turkish)_"]
         }
+        lines.append("")
     }
     return lines.joined(separator: "\n")
+}
+
+/// Markdown görev satırı (yapılacaklar kutusu).
+private func taskLine(task: NoteTask) -> String {
+    let due: String = task.dueDate.map { " (\($0))" } ?? ""
+    return "- [ ] **\(task.owner)** — \(task.description)\(due)"
 }
 
 // Şemadaki Türkçe alan adları.

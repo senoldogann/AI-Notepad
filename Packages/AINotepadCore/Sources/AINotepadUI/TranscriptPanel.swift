@@ -5,7 +5,12 @@ import SwiftUI
 /// Panelin kullanıcı eylemleri.
 public struct PanelActions {
     public let onHide: @MainActor () -> Void
+    public let onStart: @MainActor () -> Void
+    public let onTogglePause: @MainActor () -> Void
+    public let onToggleMic: @MainActor () -> Void
     public let onStop: @MainActor () -> Void
+    public let onOpenMeetings: @MainActor () -> Void
+    public let onOpenSettings: @MainActor () -> Void
     public let onMissed: @MainActor () -> Void
     public let onAsk: @MainActor (String) -> Void
     public let onCloseCard: @MainActor () -> Void
@@ -16,7 +21,12 @@ public struct PanelActions {
 
     public init(
         onHide: @escaping @MainActor () -> Void,
+        onStart: @escaping @MainActor () -> Void,
+        onTogglePause: @escaping @MainActor () -> Void,
+        onToggleMic: @escaping @MainActor () -> Void,
         onStop: @escaping @MainActor () -> Void,
+        onOpenMeetings: @escaping @MainActor () -> Void,
+        onOpenSettings: @escaping @MainActor () -> Void,
         onMissed: @escaping @MainActor () -> Void,
         onAsk: @escaping @MainActor (String) -> Void,
         onCloseCard: @escaping @MainActor () -> Void,
@@ -24,7 +34,12 @@ public struct PanelActions {
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void
     ) {
         self.onHide = onHide
+        self.onStart = onStart
+        self.onTogglePause = onTogglePause
+        self.onToggleMic = onToggleMic
         self.onStop = onStop
+        self.onOpenMeetings = onOpenMeetings
+        self.onOpenSettings = onOpenSettings
         self.onMissed = onMissed
         self.onAsk = onAsk
         self.onCloseCard = onCloseCard
@@ -33,8 +48,9 @@ public struct PanelActions {
     }
 }
 
-/// Canlı transkriptin Liquid Glass paneli: üst satırda durum ve eylemler, gövdede konuşmacı blokları (Türkçesiyle),
-/// altta asistan kartı, "Ne kaçırdım?" ve soru alanı, son hatalar. Yalnızca `LiveViewState` ile beslenir.
+/// Panelin canlı sayfası: üst satırda durum, kayıt denetimleri (başlat, duraklat/devam, mikrofon, bitir) ve
+/// gezinme; gövdede konuşmacı blokları (Türkçesiyle), altta asistan kartı, "Ne kaçırdım?" ve soru alanı, son hatalar.
+/// Yalnızca `LiveViewState` ile beslenir; cam yüzey `panelSurface()` ile dışarıdan verilir.
 public struct TranscriptPanel: View {
     let state: LiveViewState
     let actions: PanelActions
@@ -65,9 +81,6 @@ public struct TranscriptPanel: View {
             }
         }
         .frame(minWidth: 300, minHeight: 240)
-        // Hata bandı gibi dolgular yuvarlak köşelerin dışına taşmasın.
-        .clipShape(.rect(cornerRadius: DesignTokens.panelRadius))
-        .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.panelRadius))
     }
 
     private var header: some View {
@@ -75,14 +88,39 @@ public struct TranscriptPanel: View {
             StatusLabel(state: state)
             Spacer(minLength: DesignTokens.Spacing.s)
             languageChip
-            if state.isRecording {
-                IconButton(symbol: "stop.circle", help: "Kaydı durdur", action: actions.onStop)
-            }
+            recordingControls
             IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala") {
                 copyToPasteboard(text: plainText(blocks: state.blocks))
             }
             .disabled(state.blocks.isEmpty)
+            IconButton(symbol: "list.bullet.rectangle", help: "Toplantılar", action: actions.onOpenMeetings)
+            IconButton(symbol: "gearshape", help: "Ayarlar", action: actions.onOpenSettings)
             IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
+        }
+    }
+
+    /// Kayıt yokken "Başlat"; kayıtta duraklat/devam, mikrofon ve "Bitir"; bitirilirken hiçbiri.
+    @ViewBuilder
+    private var recordingControls: some View {
+        switch state.phase {
+        case .idle:
+            Button(action: actions.onStart) {
+                Label("Başlat", systemImage: "record.circle")
+                    .font(DesignTokens.statusFont)
+                    .padding(.horizontal, DesignTokens.Spacing.s)
+                    .padding(.vertical, 3)
+                    .background(DesignTokens.meColor, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .disabled(!state.canStart)
+            .help("Kaydı başlat")
+        case .recording:
+            IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
+            IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
+            IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
+        case .finishing:
+            EmptyView()
         }
     }
 
@@ -191,6 +229,14 @@ public struct TranscriptPanel: View {
     }
 }
 
+public extension View {
+    /// Panelin Liquid Glass yüzeyi: yuvarlak köşeler, dolgular köşelerden taşmaz. Tüm sayfalar aynı yüzeyi kullanır.
+    func panelSurface() -> some View {
+        clipShape(.rect(cornerRadius: DesignTokens.panelRadius))
+            .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.panelRadius))
+    }
+}
+
 /// Toplantı dili seçenekleri (panel ve ada menüsü).
 struct LanguageMenuItems: View {
     let onSetLanguage: @MainActor (MeetingLanguage) -> Void
@@ -213,6 +259,10 @@ struct StatusLabel: View {
                     .font(DesignTokens.statusFont)
             }
             .accessibilityElement(children: .combine)
+        } else if state.isRecording, state.isPaused {
+            Label("Duraklatıldı", systemImage: "pause.circle.fill")
+                .font(DesignTokens.statusFont)
+                .foregroundStyle(.orange)
         } else if state.isRecording, let startedAt = state.startedAt {
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 7, height: 7)
@@ -262,9 +312,10 @@ struct BlockView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
+                    let showsTurkish: Bool = displayMode == .bilingual && turkish != nil
                     flowingText
-                        .font(turkish == nil ? DesignTokens.bodyFont : .system(size: 13))
-                        .opacity(turkish == nil ? 1 : 0.6)
+                        .font(showsTurkish ? .system(size: 13) : DesignTokens.bodyFont)
+                        .opacity(showsTurkish ? 0.6 : 1)
                         .lineSpacing(DesignTokens.bodyLineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -281,7 +332,7 @@ struct BlockView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.red)
                 }
-                if !failedTranslations.isEmpty {
+                if !failedTranslations.isEmpty, displayMode.needsLiveTranslation {
                     Button {
                         onRetryTranslations(failedTranslations)
                     } label: {

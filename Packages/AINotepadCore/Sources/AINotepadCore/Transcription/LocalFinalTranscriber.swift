@@ -51,6 +51,16 @@ private func distance(point: Double, turn: SpeakerTurn) -> Double {
     point < turn.startSec ? turn.startSec - point : (point > turn.endSec ? point - turn.endSec : 0)
 }
 
+/// Konuşmacı ayırma modelini (Pyannote, ~40 MB) önceden indirir: ilk yerel toplantının son geçişi internetsiz
+/// de çalışsın. Model zaten varsa ağ kullanılmaz.
+public func prepareLocalDiarization(modelsDirectory: URL) async throws {
+    do {
+        _ = try await SpeakerKit(PyannoteConfig(downloadBase: modelsDirectory.path, download: true, load: false, verbose: false, logLevel: .error))
+    } catch {
+        throw TranscriptionError.diarizationFailed(reason: String(describing: error))
+    }
+}
+
 private let localPassLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "LocalFinalPass")
 
 /// İnternetsiz son geçiş: kaydın tamamı WhisperKit (canlıdaki model) ile kelime zamanlı yazıya dökülür,
@@ -75,9 +85,20 @@ public struct LocalFinalTranscriber: FinalTranscriber {
         let engine: WhisperKitEngine = try await WhisperKitEngine.load(modelName: modelName, modelsDirectory: modelsDirectory)
         let language: MeetingLanguage = try await meetingLanguage(languageMode: languageMode, samples: samples, engine: engine)
         let words: [TimedWord] = try await engine.transcribeWords(samples: samples, language: language)
-        let turns: [SpeakerTurn] = try await diarize(samples: samples)
+        // Konuşmacı ayırma başarısızsa (ör. model indirilemedi) yazıya dökülen metin atılmaz: tek konuşmacı olarak
+        // saklanır ve toplantıda açık uyarı gösterilir.
+        let turns: [SpeakerTurn]
+        let notice: String?
+        do {
+            turns = try await diarize(samples: samples)
+            notice = nil
+        } catch {
+            localPassLogger.error("Yerel konuşmacı ayırma başarısız, hata: \(String(describing: error), privacy: .public)")
+            turns = []
+            notice = "Konuşmacılar ayrılamadı (\(userFacingMessage(error: error))); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene."
+        }
         localPassLogger.info("Yerel son geçiş bitti, kelime: \(words.count, privacy: .public), dönem: \(turns.count, privacy: .public)")
-        return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language)
+        return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language, notice: notice)
     }
 
     /// Sabit dil ya da otomatikte konuşmanın ortasından alınan 30 sn'lik örnekle algılanan dil (Fince/İngilizce

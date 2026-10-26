@@ -10,7 +10,6 @@ struct AINotepadApp: App {
     @State private var panel: LivePanelController
     @State private var island: IslandController
     @State private var shortcuts: ShortcutController
-    @State private var onboarding: OnboardingController
 
     init() {
         registerDefaultSettings()
@@ -28,15 +27,23 @@ struct AINotepadApp: App {
             .toggleWindows: { toggleWindows(panel: panel, island: island) },
         ])
         _shortcuts = State(initialValue: shortcuts)
-        let onboarding: OnboardingController = OnboardingController(model: model, shortcuts: shortcuts)
-        _onboarding = State(initialValue: onboarding)
+        panel.attach(shortcuts: shortcuts) {
+            Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
+        }
         // Pencereler ve kısayollar uygulama açıldıktan sonra kurulur.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
-                onboarding.showIfNeeded()
+                // İlk açılışta kurulum bir kez panelde gösterilir; kapatılsa da tekrar açılmaz (menüde "Kurulum…").
+                if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
+                    UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
+                    panel.show(page: .setup)
+                }
+                if let page = launchPage(arguments: CommandLine.arguments) {
+                    panel.show(page: page)
+                }
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
@@ -51,14 +58,9 @@ struct AINotepadApp: App {
     }
 
     var body: some Scene {
+        // Tek pencere paneldir: Ayarlar, Toplantılar ve Kurulum panelin sayfalarıdır (ayrı pencere yok).
         MenuBarExtra("AI-Notepad", systemImage: menuSymbol) {
-            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, onboarding: onboarding)
-        }
-        Settings {
-            SettingsView(model: model, shortcuts: shortcuts)
-        }
-        Window("Toplantılar", id: "meetings") {
-            MeetingsWindow(model: model)
+            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts)
         }
     }
 
@@ -103,18 +105,18 @@ private struct MenuContent: View {
     let panel: LivePanelController
     let island: IslandController
     let shortcuts: ShortcutController
-    let onboarding: OnboardingController
     @AppStorage(SettingsKey.hideFromScreenCapture) private var hideFromCapture: Bool = true
-    @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         switch model.phase {
         case .recording:
-            Button("Kaydı durdur", systemImage: "stop.circle") {
+            Button("Kaydı bitir", systemImage: "stop.circle") {
                 model.stopRecording()
             }
             .menuShortcut(binding: shortcuts.currentBinding(action: .record))
+            Button(model.isPaused ? "Devam ettir" : "Duraklat", systemImage: model.isPaused ? "play.circle" : "pause.circle") {
+                model.togglePause()
+            }
         case .finishing:
             Button("Bitiriliyor…", systemImage: "hourglass") {}
                 .disabled(true)
@@ -159,22 +161,22 @@ private struct MenuContent: View {
                 island.setHideFromCapture(hidden: newValue)
             }
 
-        Button("Toplantılar…", systemImage: "list.bullet.rectangle") {
-            NSApplication.shared.activate()
-            openWindow(id: "meetings")
+        Button("Toplantılar", systemImage: "list.bullet.rectangle") {
+            panel.show(page: .meetings)
+            island.show()
         }
         if !model.processingMeetingIDs.isEmpty {
             Text("Toplantı işleniyor…")
         }
 
-        Button("Ayarlar…", systemImage: "gearshape") {
-            // Menü çubuğu uygulaması: pencere öne gelsin diye önce uygulama etkinleştirilir.
-            NSApplication.shared.activate()
-            openSettings()
+        Button("Ayarlar", systemImage: "gearshape") {
+            panel.show(page: .settings)
+            island.show()
         }
         .keyboardShortcut(",", modifiers: .command)
-        Button("Kurulum…", systemImage: "wand.and.stars") {
-            onboarding.show()
+        Button("Kurulum", systemImage: "wand.and.stars") {
+            panel.show(page: .setup)
+            island.show()
         }
 
         if model.liveEngine == .whisperKit {

@@ -39,6 +39,9 @@ func sampleState() -> LiveViewState {
             askedOfYou: ["Sunum slaytlarını hazırlaman isteniyor."]
         )),
         phase: .recording,
+        isPaused: false,
+        isMicMuted: false,
+        canStart: true,
         startedAt: Date(timeIntervalSinceNow: -754),
         statusText: "Hazır · Deepgram",
         languageText: "🇫🇮 Fince",
@@ -64,7 +67,7 @@ let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
     let panel: Int = showWindow(
-        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStop: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in })),
+        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in })).panelSurface(),
         frame: NSRect(x: 120, y: 100, width: 400, height: 720)
     )
     print("panel \(panel)")

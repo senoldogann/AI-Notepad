@@ -9,7 +9,7 @@ func seg(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pers
 }
 
 func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> LiveViewState {
-    makeLiveViewState(transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil, phase: isRecording ? .recording : .idle, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
+    makeLiveViewState(transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil, phase: isRecording ? .recording : .idle, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
 }
 
 @Suite struct PresentationTests {
@@ -78,7 +78,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         let others: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
         let viewState: LiveViewState = makeLiveViewState(
             transcript: [others], translations: [others.id: "Günaydın."], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .recording, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .recording, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(viewState.latestOthersSentence == "Günaydın.")
     }
@@ -89,7 +89,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
         let viewState: LiveViewState = makeLiveViewState(
             transcript: [first, second], translations: [first.id: "Günaydın."], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .recording, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .recording, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(viewState.latestOthersParts == [
             DisplayPart(text: "Günaydın.", isTranslated: true, isFinal: true),
@@ -112,7 +112,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
     @Test func islandVisibleWhileFinishing() {
         let finishing: LiveViewState = makeLiveViewState(
             transcript: [], translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
-            phase: .finishing, startedAt: nil, statusText: "", languageText: "", errors: []
+            phase: .finishing, isPaused: false, isMicMuted: false, canStart: true, startedAt: nil, statusText: "", languageText: "", errors: []
         )
         #expect(finishing.isIslandVisible)
         #expect(!finishing.isRecording)
@@ -127,5 +127,16 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
             DisplayPart(text: "Günaydın.", isTranslated: true, isFinal: true),
             DisplayPart(text: "Aloitetaan.", isTranslated: false, isFinal: true),
         ])
+    }
+
+    // "Sadece orijinal": adada orijinal metin parlak, yalnızca kesinleşmemiş kısım soluk; çeviri gerekmez.
+    @Test func originalOnlyIslandShowsOriginalBright() {
+        let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first])
+        let parts: [DisplayPart] = islandParts(block: blocks[0], translations: [first.id: "Günaydın."], displayMode: .originalOnly)
+        #expect(parts.map(\.text) == ["Hyvää huomenta."])
+        #expect(!isDimmedIslandPart(part: parts[0], displayMode: .originalOnly))
+        #expect(isDimmedIslandPart(part: DisplayPart(text: "x", isTranslated: false, isFinal: true), displayMode: .bilingual))
+        #expect(!DisplayMode.originalOnly.needsLiveTranslation)
     }
 }

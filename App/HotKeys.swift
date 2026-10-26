@@ -79,12 +79,13 @@ final class HotKeyCenter {
         if isTakenBySystem(keyCode: binding.keyCode, modifiers: binding.modifiers, systemShortcuts: try systemShortcuts()) {
             throw HotKeyError.conflictsWithSystemShortcut(keyCode: binding.keyCode, modifiers: binding.modifiers)
         }
-        try installHandlerIfNeeded()
         let previous: Registration? = registrations[action]
-        // Aynı kısayol yeniden kaydedilecekse önce bırakılır (aksi halde özel kayıt kendisiyle çakışır).
+        // Zaten bu kısayolla kayıtlı: yalnızca eylem güncellenir (bırakıp yeniden kaydetmek kaybetme riski taşır).
         if let previous, previous.binding == binding {
-            unregister(registration: previous)
+            registrations[action] = Registration(id: previous.id, binding: binding, reference: previous.reference, action: perform)
+            return
         }
+        try installHandlerIfNeeded()
         let id: UInt32 = nextID
         nextID += 1
         var reference: EventHotKeyRef?
@@ -100,7 +101,7 @@ final class HotKeyCenter {
         guard status == noErr, let reference else {
             throw HotKeyError.registrationFailed(keyCode: binding.keyCode, status: status)
         }
-        if let previous, previous.binding != binding {
+        if let previous {
             unregister(registration: previous)
         }
         registrations[action] = Registration(id: id, binding: binding, reference: reference, action: perform)
@@ -233,7 +234,7 @@ final class ShortcutController {
     private let hotKeys: HotKeyCenter
     private let model: AppModel
     private let actions: [ShortcutAction: @MainActor () -> Void]
-    /// Eylem başına son hata (Ayarlar'da gösterilir).
+    /// Eylem başına son değiştirme hatası (Ayarlar'da gösterilir; eski kısayol çalışmaya devam ediyor olabilir).
     var errors: [ShortcutAction: String] = [:]
 
     init(hotKeys: HotKeyCenter, model: AppModel, actions: [ShortcutAction: @MainActor () -> Void]) {
@@ -261,6 +262,10 @@ final class ShortcutController {
 
     /// Yeni kısayolu dener; başarılıysa kaydeder. Başarısızsa eski kısayol çalışmaya devam eder.
     func change(action: ShortcutAction, binding: KeyBinding) {
+        guard binding != hotKeys.binding(action: action) else {
+            errors[action] = nil
+            return
+        }
         apply(action: action, binding: binding)
         guard errors[action] == nil else {
             return
@@ -287,9 +292,12 @@ final class ShortcutController {
         publish()
     }
 
-    /// Menüdeki kırmızı satır.
+    /// Menüdeki kırmızı satır: yalnızca gerçekten çalışan kısayolu olmayan eylemler (değiştirme hatasında eski
+    /// kısayol çalışıyorsa menü uyarmaz; hata Ayarlar'da görünür).
     private func publish() {
-        let messages: [String] = ShortcutAction.allCases.compactMap { errors[$0] }
+        let messages: [String] = ShortcutAction.allCases
+            .filter { hotKeys.binding(action: $0) == nil }
+            .compactMap { errors[$0] }
         model.shortcutError = messages.isEmpty ? nil : "Kısayol çalışmıyor: " + messages.joined(separator: " ")
     }
 }

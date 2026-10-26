@@ -38,4 +38,21 @@ func timed(_ speaker: Speaker, _ index: Int, _ start: Double, _ end: Double, _ t
         let echo: LiveSegment = timed(.me, 0, 1, 6, "ja selvitämme mitä ilmastonmuutosta")
         #expect(suppressEchoes(transcript: [first, second, echo]) == [first, second])
     }
+
+    // Gerçek toplantıdan: iki tanıyıcı bileşik kelimeyi ve eki farklı böldü; kelime karşılaştırması kaçırıyordu.
+    @Test func hidesEchoWithDifferentWordSplits() {
+        let first: LiveSegment = timed(.others, 0, 0, 3, "Täältä lehdistötilaisuuteen. Me ollaan tänään")
+        let second: LiveSegment = timed(.others, 1, 3, 7, "aiheena perussuomalaisten säästöt tulevalle hallituskaudelle.")
+        let echoOne: LiveSegment = timed(.me, 0, 0.2, 3, "Täältä lehdistä tilaisuuteen Myyhon tänään")
+        let echoTwo: LiveSegment = timed(.me, 1, 6, 7, "kaudelle.")
+        #expect(suppressEchoes(transcript: [first, echoOne, second, echoTwo]) == [first, second])
+    }
+
+    // Saklanan toplantıda da ("Sen" canlı, "Diğerleri" son geçiş) aynı süzme yapılır.
+    @Test func storedSegmentsAreFilteredToo() {
+        let others: StoredSegment = StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään")
+        let echo: StoredSegment = StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään")
+        let mine: StoredSegment = StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 20, endSec: 22, text: "Minulla on kysymys raportista")
+        #expect(suppressStoredEchoes(segments: [others, echo, mine]) == [others, mine])
+    }
 }

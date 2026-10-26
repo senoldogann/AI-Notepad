@@ -122,7 +122,7 @@ public struct IslandView: View {
             .enumerated()
             .reduce(Text("")) { (combined: Text, item: (offset: Int, element: DisplayPart)) -> Text in
                 let piece: Text = Text((item.offset == 0 ? "" : " ") + item.element.text)
-                    .foregroundColor(.white.opacity(item.element.isTranslated ? 0.95 : 0.55))
+                    .foregroundColor(.white.opacity(isDimmedIslandPart(part: item.element, displayMode: state.displayMode) ? 0.55 : 0.95))
                 return Text("\(combined)\(piece)")
             }
     }

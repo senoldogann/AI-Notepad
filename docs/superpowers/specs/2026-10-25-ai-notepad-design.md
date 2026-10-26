@@ -97,6 +97,11 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   değişiminde yakalama yeniden kurulurken oluşan 0,5 sn'den uzun boşluklar sessizlikle doldurulur; böylece "Sen"
   ve "Diğerleri" aynı zaman çizgisinde kalır.
 - Ses thread'indeki tekrarlayan hata logları dakikada bire seyreltilir.
+- **Yankı filtresi:** hoparlörden mikrofona giren ses "Sen" altında tekrar yazılır. Bir "Sen" bölümü, ±3 sn içindeki
+  "Diğerleri" metniyle boşluksuz harf üçlüleri üzerinden karşılaştırılır (en az %60 ortak → yankı). Kelime
+  karşılaştırması gerçek toplantıda kaçırdı: iki tanıyıcı Fince bileşik kelimeyi ve ekleri farklı böldü
+  ("lehdistä tilaisuuteen" ↔ "lehdistötilaisuuteen", "kaudelle" ↔ "hallituskaudelle"). Filtre canlı panelde,
+  Toplantılar sayfasında, notta ve dışa aktarmada aynı şekilde uygulanır; saklanan veri değişmez.
 - STT/LLM'den tamamen bağımsızdır: aşağı akıştaki hiçbir hata kaydı durdurmaz.
 
 **Transcription** — iki canlı motor, ikisi de aynı `LiveSessionEvent` olaylarını üretir:
@@ -180,8 +185,17 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   çeviri yeni anahtarla sürer.
 
 **UI**
-- `MenuBarExtra`: kayıt başlat/durdur ("Bitiriliyor…" sırasında kapalı), ada + panel, kırmızı kurulum sorunları,
-  dil (kayıtta "Dili değiştir"), ekran görüntüsünde gizle, Toplantılar, Ayarlar, Kurulum, Çık.
+- **Tek pencere:** uygulamanın tek penceresi cam paneldir. Ayarlar, Toplantılar, toplantı ayrıntısı ve Kurulum
+  panelin sayfalarıdır (ayrı pencere, açılır kayıt penceresi ya da uyarı penceresi yok); alt sayfalarda geri düğmesi
+  ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
+- **Panel başlığı:** durum, dil çipi (kayıtta dokununca dil değişir), kayıt denetimleri — kayıt yokken "Başlat";
+  kayıtta Duraklat/Devam, Mikrofon aç/kapat, Bitir — ve Kopyala, Toplantılar, Ayarlar, Gizle.
+- **Duraklat:** iki akış sessizlikle değiştirilir (kayıt sürer, metin üretilmez, zaman çizgisi bozulmaz); durum
+  "Duraklatıldı". **Mikrofonu kapat** ("yalnızca dinliyorum"): "Sen" sessizliğe çevrilir; hoparlörle dinlerken
+  yankıyı kökten önler; tercih saklanır (Ayarlar › Genel › Mikrofon).
+- `MenuBarExtra`: kaydı başlat/bitir, duraklat/devam ("Bitiriliyor…" sırasında kapalı), ada + panel, kırmızı kurulum
+  sorunları, dil (kayıtta "Dili değiştir"), ekran görüntüsünde gizle, Toplantılar, Ayarlar, Kurulum (panel
+  sayfalarını açar), Çık.
 - **Bitiriliyor durumu:** durdurmadan oturum bitene kadar (son metin, bekleyen çeviriler en fazla 10 sn, son
   konuşmacı ayırma) menü, panel ve ada "Bitiriliyor…" gösterir; yeni kayıt başlatılamaz.
 - **Ada** (`NSPanel`, çentiğe hizalı, her zaman üstte): kayıt göstergesi + süre, algılanan dil,
@@ -194,11 +208,18 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - "Ekran görüntülerinde ve kayıtlarda gizle" ayarı (varsayılan açık) `sharingType = .none` uygular.
   Ölçüm: macOS 26'da sistem ekran görüntüsü bunu dikkate almadı, panel görüntüde çıktı. Görünmezlik
   garanti edilmez; asıl güvence ada + paneli birlikte gizleyen kısayoldur.
-- **Ana pencere**: toplantı listesi (arama ile), toplantı notu, transkript (zaman damgasına tıklayınca
-  ilgili kayıt — "Sen" için `me`, diğerleri için `others` — o andan 0,3 sn önce çalar; çalan bölüm vurgulanır;
-  altta cam çalma çubuğu), konuşmacıları adlandırma, Markdown dışa aktarma/kopyalama, sesi silme, "Tekrar işle",
-  "Notu yeniden oluştur", son geçiş uyarısı. Ses silinmişse ya da toplantı kayıttaysa çalma düğmesi yok.
-- **Karşılama ekranı** (ilk açılışta bir kez, sonra menüde "Kurulum…"): hoş geldin → izinler (mikrofon durumu +
+- **Toplantılar sayfası:** arama, yeniden eskiye liste (sana düşen görev sayısı yıldızla). **Toplantı sayfası**
+  (kayıt bitince panel kendiliğinden açar; asıl amaç toplantı sonunda ne yapılacağını bilmek): işleniyor durumu,
+  hata/uyarı, **önce "Senin görevlerin" vurgulu kartı**, sonra özet, kararlar, diğer görevler, sözlük, konuşmacı
+  adları ve paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, 60 sn'yi geçince yeni paragraf;
+  yankı süzülmüş; altında Türkçesi). Zaman damgasına tıklayınca ilgili kayıt — "Sen" için `me`, diğerleri için
+  `others` — o andan 0,3 sn önce çalar; çalan paragraf vurgulanır; altta cam çalma çubuğu. Ses silinmişse, toplantı
+  kayıtta ya da işlemedeyse çalma düğmesi yok. Eylemler: PDF, Markdown, Kopyala, Notu yenile, Tekrar işle, Sesi sil.
+- **Dışa aktarma:** PDF ve Markdown doğrudan İndirilenler'e (`<başlık> <yyyy-MM-dd>.pdf`, aynı ad varsa numaralı)
+  kaydedilir, sayfada "kaydedildi · Finder'da göster" satırı çıkar. PDF: A4, Helvetica Neue (sistem yazı tipi PDF'te
+  kopyalanınca harfleri bozuyordu), başlık + tarih/süre/dil, Senin görevlerin, Özet, Kararlar, Diğer görevler,
+  Sözlük, paragraflı transkript (Türkçesi italik), her sayfada "Sayfa N / M".
+- **Kurulum sayfası** (ilk açılışta bir kez panelde; kapatılsa da tekrar açılmaz; menüde "Kurulum"): hoş geldin → izinler (mikrofon durumu +
   izin iste; sistem sesi için 2 sn deneme yakalamasıyla macOS izin penceresi, macOS bu iznin durumunu
   sorgulatmadığı için açık metin; reddedildiyse Sistem Ayarları kısayolu) → ad + motor → anahtarlar → kısayollar.
 - Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir (değişince eskisi bırakılır;
@@ -254,8 +275,9 @@ saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort
 `anthropic-beta: server-side-fallback-2026-07-01`). Her yanıtta `stop_reason == "refusal"` önce denetlenir.
 
 **Canlı çeviri:** yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
-bağlam olarak. Panel her bloğun altında Türkçesini gösterir; görünüm ayarı "İki dil" (orijinal soluk + Türkçe)
-ya da "Sadece Türkçe". Adanın son cümlesi varsa Türkçesidir. Çeviri hatası panelde tek satır (tekilleştirilmiş).
+bağlam olarak. Panel her bloğun altında Türkçesini gösterir; görünüm ayarı "İki dil" (orijinal soluk + Türkçe),
+"Sadece Türkçe" ya da "Sadece orijinal" (Fince/İngilizce; bu görünümde canlı çeviri yapılmaz — maliyet; toplantı
+sonu Türkçe not yine üretilir; görünüm değişince sonraki cümleler çevrilir). Adanın son cümlesi varsa Türkçesidir. Çeviri hatası panelde tek satır (tekilleştirilmiş).
 
 **"Ne kaçırdım?":** son 3 dk transkripti (`[mm:ss] Etiket: metin`) → yapılandırılmış çıktı
 (`output_config.format` JSON şeması) `{konu: String, kararlar: [String], sendenIstenenler: [String]}`;

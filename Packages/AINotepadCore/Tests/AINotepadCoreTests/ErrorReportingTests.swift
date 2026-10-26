@@ -76,3 +76,36 @@ import Testing
         #expect(abs((chunks.first?.count ?? 0) - 30400) < 1600)
     }
 }
+
+@Suite struct AudioGateTests {
+    // Kapalı kapı sesi aynı uzunlukta sessizliğe çevirir; açılınca ses geri gelir.
+    @Test func closedGateSilencesWithoutChangingLength() async {
+        let gate: AudioGate = AudioGate(isOpen: false)
+        let (source, input): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+        var output: [[Float]] = []
+        let stream: AsyncStream<[Float]> = gatedStream(audio: source, gate: gate)
+        input.yield([0.5, 0.5])
+        var iterator: AsyncStream<[Float]>.Iterator = stream.makeAsyncIterator()
+        output.append(await iterator.next() ?? [])
+        gate.set(isOpen: true)
+        input.yield([0.5, 0.5, 0.5])
+        input.finish()
+        output.append(await iterator.next() ?? [])
+        #expect(output == [[0, 0], [0.5, 0.5, 0.5]])
+    }
+}
+
+@Suite struct TimeoutTests {
+    // İptale yanıt vermeyen bekleme de süre dolunca bırakılır.
+    @Test func stopsWaitingAfterTimeout() async {
+        let slow: Task<Void, Never> = Task {
+            do { try await Task.sleep(for: .seconds(5)) } catch {}
+        }
+        let started: ContinuousClock.Instant = .now
+        let finished: Bool = await finishesWithin(seconds: 0.2) { await slow.value }
+        #expect(!finished)
+        #expect(ContinuousClock.now - started < .seconds(2))
+        #expect(await finishesWithin(seconds: 2) {})
+        slow.cancel()
+    }
+}

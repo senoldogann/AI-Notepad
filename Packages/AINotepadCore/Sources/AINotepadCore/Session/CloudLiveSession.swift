@@ -92,12 +92,22 @@ public func runCloudLiveSession(
         sink.finish()
     }
     return LiveSessionHandle(events: events) { (language: MeetingLanguage) async -> Void in
-        // Önce kilit: süren ayırma penceresi otomatik algılamayla dili geri değiştirmesin.
+        // Önce kilit: süren ayırma penceresi otomatik algılamayla dili geri değiştirmesin. Etiket hemen güncellenir;
+        // akışlar yeniden bağlanırken (ağ yoksa uzun sürebilir) beklenmez.
         await state.lock(language: language)
-        for stream in streams {
-            await stream.switchLanguage(to: language)
-        }
         sink.yield(.languageLocked(language))
+        await switchStreams(streams: streams, state: state)
+    }
+}
+
+/// İki akışı kilitli dile geçirir. Dil her akıştan hemen önce yeniden okunur ("son seçim kazanır"): otomatik
+/// geçiş sürerken kullanıcı dil seçerse akışlar farklı dillerde kalmaz.
+private func switchStreams(streams: [DeepgramStream], state: CloudSessionState) async {
+    for stream in streams {
+        guard let language = await state.locked() else {
+            return
+        }
+        await stream.switchLanguage(to: language)
     }
 }
 
@@ -172,6 +182,15 @@ private actor CloudSessionState {
 
     func lock(language: MeetingLanguage) {
         lockedLanguage = language
+    }
+
+    /// Dil henüz kilitli değilse kilitler; kullanıcının seçimi araya girmişse dokunmaz (tek adımda, yarışsız).
+    func lockIfUnlocked(language: MeetingLanguage) -> Bool {
+        guard lockedLanguage == nil else {
+            return false
+        }
+        lockedLanguage = language
+        return true
     }
 
     func requestStop() {
@@ -320,14 +339,12 @@ private func runDiarizationWindow(
 
     // Oturum bitiyorsa (son pencere) dil değiştirmek yeni, sahipsiz bağlantı açar. Kilit istek sürerken
     // (kullanıcı dili seçince) konmuş olabilir: yeniden okunur.
-    if case .automatic = config.languageMode, await state.locked() == nil, !(await state.isStopping()),
-       let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence) {
-        await state.lock(language: detected)
+    if case .automatic = config.languageMode, !(await state.isStopping()),
+       let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence),
+       await state.lockIfUnlocked(language: detected) {
         events.yield(.languageLocked(detected))
         if detected != initialLanguage(languageMode: config.languageMode) {
-            for stream in streams {
-                await stream.switchLanguage(to: detected)
-            }
+            await switchStreams(streams: streams, state: state)
         }
     }
 

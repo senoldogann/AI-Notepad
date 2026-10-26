@@ -77,3 +77,13 @@
 - Model testi: fi-dialog üzerinde ≥2 kişi, "raport".
 
 ### Task 12: Kabul listesi, belge güncelleme, inceleme
+
+### Task 13: Kullanıcı geri bildirimi (aşama 6b)
+- Yankı: harf üçlüsü karşılaştırması; canlı, Toplantılar, not ve dışa aktarmada aynı süzme. Panelde mikrofonu kapat.
+- Toplantı transkripti paragraflı (aynı konuşmacı, en fazla 60 sn).
+- Görünüm: "Sadece orijinal" (canlı çeviri yok).
+- Toplantı sonu: panel toplantı sayfasını açar, "Senin görevlerin" en üstte; Markdown/PDF'te de görevler önce.
+- PDF (A4, Helvetica Neue, sayfa numaralı) ve Markdown doğrudan İndirilenler'e; açılır pencere yok.
+- Tek pencere: Ayarlar, Toplantılar, Kurulum panel sayfaları; panelden Başlat/Duraklat/Devam/Mikrofon/Bitir.
+- İnceleme bulguları: zaman aşımlı çeviri beklemesi, Deepgram kapanış süresi, dil kilidi yarışları, SpeakerKit önceden
+  indirme ve ayırma başarısızsa uyarıyla tek konuşmacı, kısayol yeniden kaydı, ses silinince çalar durur.

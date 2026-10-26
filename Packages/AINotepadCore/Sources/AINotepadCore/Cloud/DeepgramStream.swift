@@ -183,6 +183,11 @@ private actor DeepgramConnection {
             }
             throw CloudSTTError.connectionFailed(service: "deepgram", reason: String(describing: error))
         }
+        // Kapanış süresi bağlanma sürerken dolduysa yeni bağlantı kullanılmaz (açık kalıp ses almasın).
+        guard !closeDeadlinePassed else {
+            task.cancel(with: .goingAway, reason: nil)
+            throw CloudSTTError.connectionFailed(service: "deepgram", reason: "kapanış süresi doldu")
+        }
         socket = task
         connectedURL = request.url
         connectionStartSample = acknowledgedSample + unacknowledged.count
@@ -383,7 +388,7 @@ private actor DeepgramConnection {
                 break
             }
         }
-        if let socket, isConnected, !hasFailed {
+        if let socket, isConnected, !hasFailed, !closeDeadlinePassed {
             while !pending.isEmpty {
                 let chunk: [Float] = pending
                 pending = []

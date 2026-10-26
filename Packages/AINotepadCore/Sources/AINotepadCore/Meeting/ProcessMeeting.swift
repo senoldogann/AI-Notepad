@@ -4,14 +4,17 @@ import os
 
 private let processLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "ProcessMeeting")
 
-/// Son geçiş sonucu: konuşmacılı "Diğerleri" bölümleri ve (algılandıysa) dil.
+/// Son geçiş sonucu: konuşmacılı "Diğerleri" bölümleri, (algılandıysa) dil ve kullanıcının bilmesi gereken
+/// kısıt (ör. konuşmacılar ayrılamadı).
 public struct FinalPassResult: Sendable, Equatable {
     public let segments: [StoredSegment]
     public let language: MeetingLanguage?
+    public let notice: String?
 
-    public init(segments: [StoredSegment], language: MeetingLanguage?) {
+    public init(segments: [StoredSegment], language: MeetingLanguage?, notice: String?) {
         self.segments = segments
         self.language = language
+        self.notice = notice
     }
 }
 
@@ -41,7 +44,8 @@ public struct ElevenLabsFinalTranscriber: FinalTranscriber {
         )
         return FinalPassResult(
             segments: finalSegments(words: result.words, gapSec: 1.5),
-            language: result.languageCode.flatMap { meetingLanguage(elevenLabsCode: $0) }
+            language: result.languageCode.flatMap { meetingLanguage(elevenLabsCode: $0) },
+            notice: nil
         )
     }
 }
@@ -102,6 +106,7 @@ public func processMeeting(
                     alignTranslations(final: result.segments, live: current.liveSegments, translations: current.translations)
                 ) { (existing: String, _: String) -> String in existing })
                 .with(finalSegments: result.segments, language: current.language ?? result.language)
+                .with(notice: result.notice)
         } catch {
             return failed(record: current, step: "Son geçiş başarısız", error: error)
         }
@@ -113,11 +118,8 @@ public func processMeeting(
 /// Yalnızca notu (yeniden) üretir: saklı bölümler ve güncel konuşmacı adlarıyla. Ses gerekmez; ad verdikten
 /// sonra notta da adlar görünsün diye kullanılır.
 public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: String) async -> MeetingRecord {
-    // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler kullanılır.
-    let noteSegments: [StoredSegment] = record.finalSegments.isEmpty
-        ? record.liveSegments
-        : record.finalSegments + record.liveSegments.filter { $0.speaker == .me }
-    guard let request = meetingNoteRequest(segments: noteSegments, speakerNames: record.speakerNames, userName: userName) else {
+    // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
+    guard let request = meetingNoteRequest(segments: meetingSegments(record: record), speakerNames: record.speakerNames, userName: userName) else {
         return record.with(status: .done, failureMessage: nil)
     }
     guard let llm else {

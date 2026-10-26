@@ -2,51 +2,72 @@ import Foundation
 
 /// Yankı sayılmak için "Sen" bölümünün çevresine bakılan süre.
 let echoWindowSec: Double = 3
-/// "Sen" kelimelerinin en az bu oranı çevredeki "Diğerleri" metninde geçiyorsa bölüm yankıdır.
+/// "Sen" metninin harf üçlülerinin en az bu oranı çevredeki "Diğerleri" metninde geçiyorsa bölüm yankıdır.
 let echoSimilarity: Double = 0.6
+
+/// Yankı karşılaştırmasında bir bölüm: konuşmacı, zaman ve metin.
+private struct EchoCandidate {
+    let isMe: Bool
+    let startSec: Double
+    let endSec: Double
+    let text: String
+}
 
 /// Hoparlörden çıkıp mikrofona giren sesi ("Diğerleri"nin "Sen" altında tekrarı) gizler. Saf fonksiyondur.
 ///
-/// Bir "Sen" bölümü, ±`echoWindowSec` içinde kesişen "Diğerleri" bölümlerinin (geçici dahil) kelimeleriyle
-/// karşılaştırılır; kelimelerinin en az `echoSimilarity` oranı eşleşirse gösterilmez. Fince ekler için bir
-/// kelime diğerinin başıysa (en az 4 harf) eşleşmiş sayılır. Metni boş "Sen" bölümleri (hata satırları) kalır.
+/// Bir "Sen" bölümü, ±`echoWindowSec` içinde kesişen "Diğerleri" bölümleriyle (geçici dahil) karşılaştırılır.
+/// İki tanıyıcı aynı sesi farklı yazabildiği için (Fince bileşik kelimeler: "lehdistä tilaisuuteen" ↔
+/// "lehdistötilaisuuteen", ekler: "kaudelle" ↔ "hallituskaudelle") karşılaştırma kelime değil, boşluksuz harf
+/// üçlüleri üzerindendir. Metni boş "Sen" bölümleri (hata satırları) kalır.
 public func suppressEchoes(transcript: [LiveSegment]) -> [LiveSegment] {
-    let others: [LiveSegment] = transcript.filter { (segment: LiveSegment) -> Bool in segment.id.speaker == .others }
-    return transcript.filter { (segment: LiveSegment) -> Bool in
-        segment.id.speaker == .others || !isEcho(segment: segment, others: others)
+    let candidates: [EchoCandidate] = transcript.map { (segment: LiveSegment) -> EchoCandidate in
+        EchoCandidate(isMe: segment.id.speaker == .me, startSec: segment.startSec, endSec: segment.endSec, text: segment.text)
     }
+    let echoes: Set<Int> = echoIndices(candidates: candidates)
+    return transcript.enumerated().filter { !echoes.contains($0.offset) }.map(\.element)
 }
 
-private func isEcho(segment: LiveSegment, others: [LiveSegment]) -> Bool {
-    let mine: [String] = words(text: segment.text)
-    guard !mine.isEmpty else {
+/// Saklanan bölümlerde (canlı "Sen" + son geçiş "Diğerleri") yankıyı gizler: Toplantılar, not ve dışa aktarma
+/// canlı panelle aynı metni görür. Saf fonksiyondur.
+public func suppressStoredEchoes(segments: [StoredSegment]) -> [StoredSegment] {
+    let candidates: [EchoCandidate] = segments.map { (segment: StoredSegment) -> EchoCandidate in
+        EchoCandidate(isMe: segment.speaker == .me, startSec: segment.startSec, endSec: segment.endSec, text: segment.text)
+    }
+    let echoes: Set<Int> = echoIndices(candidates: candidates)
+    return segments.enumerated().filter { !echoes.contains($0.offset) }.map(\.element)
+}
+
+/// Yankı olan "Sen" bölümlerinin sıra numaraları.
+private func echoIndices(candidates: [EchoCandidate]) -> Set<Int> {
+    let others: [EchoCandidate] = candidates.filter { !$0.isMe }
+    return Set(candidates.enumerated().compactMap { (item: (offset: Int, element: EchoCandidate)) -> Int? in
+        item.element.isMe && isEcho(mine: item.element, others: others) ? item.offset : nil
+    })
+}
+
+private func isEcho(mine: EchoCandidate, others: [EchoCandidate]) -> Bool {
+    let mineGrams: Set<String> = trigrams(text: mine.text)
+    guard !mineGrams.isEmpty else {
         return false
     }
-    let nearby: [String] = others
-        .filter { (other: LiveSegment) -> Bool in
-            other.startSec <= segment.endSec + echoWindowSec && other.endSec >= segment.startSec - echoWindowSec
+    let nearbyGrams: Set<String> = others
+        .filter { (other: EchoCandidate) -> Bool in
+            other.startSec <= mine.endSec + echoWindowSec && other.endSec >= mine.startSec - echoWindowSec
         }
-        .flatMap { (other: LiveSegment) -> [String] in words(text: other.text) }
-    guard !nearby.isEmpty else {
+        .reduce(into: Set<String>()) { (grams: inout Set<String>, other: EchoCandidate) -> Void in
+            grams.formUnion(trigrams(text: other.text))
+        }
+    guard !nearbyGrams.isEmpty else {
         return false
     }
-    let matched: Int = mine.filter { (word: String) -> Bool in
-        nearby.contains { (candidate: String) -> Bool in sameWord(left: word, right: candidate) }
-    }.count
-    return Double(matched) / Double(mine.count) >= echoSimilarity
+    return Double(mineGrams.intersection(nearbyGrams).count) / Double(mineGrams.count) >= echoSimilarity
 }
 
-/// Küçük harfli, noktalamasız kelimeler.
-private func words(text: String) -> [String] {
-    text.lowercased()
-        .split { (character: Character) -> Bool in !character.isLetter && !character.isNumber }
-        .map(String.init)
-}
-
-private func sameWord(left: String, right: String) -> Bool {
-    if left == right {
-        return true
+/// Metnin küçük harfli, noktalamasız ve boşluksuz harf üçlüleri. Üç harften kısa metinde metnin kendisi.
+func trigrams(text: String) -> Set<String> {
+    let letters: [Character] = Array(text.lowercased().filter { $0.isLetter || $0.isNumber })
+    guard letters.count >= 3 else {
+        return letters.isEmpty ? [] : [String(letters)]
     }
-    let (shorter, longer): (String, String) = left.count <= right.count ? (left, right) : (right, left)
-    return shorter.count >= 4 && longer.hasPrefix(shorter)
+    return Set((0...(letters.count - 3)).map { String(letters[$0..<($0 + 3)]) })
 }

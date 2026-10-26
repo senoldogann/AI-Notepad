@@ -48,7 +48,9 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
         let markdown: String = meetingMarkdown(record: record)
         #expect(markdown.hasPrefix("# Proje toplantısı"))
         #expect(markdown.contains("**[00:05] Aino:** Hyvää huomenta."))
-        #expect(markdown.contains("- [ ] **Sen** — Slaytlar ⭐"))
+        #expect(markdown.contains("## Senin görevlerin\n\n- [ ] **Sen** — Slaytlar"))
+        // Görevler özetten önce: toplantıdan sonra ilk bakılacak şey.
+        #expect(markdown.range(of: "Senin görevlerin")!.lowerBound < markdown.range(of: "## Özet")!.lowerBound)
         #expect(!markdown.contains("Konuşmacı 1"))
     }
 }
@@ -71,4 +73,31 @@ extension CloudTests {
         #expect(note.tasks.contains { $0.isMine }, "görevler: \(note.tasks)")
     }
 }
+}
+
+@Suite struct TranscriptParagraphTests {
+    // Aynı konuşmacının art arda bölümleri tek paragraf; yankı ("Sen") araya girip bölmez; 60 sn'yi geçen yeni paragraf.
+    @Test func paragraphsMergeSameSpeakerAndDropEchoes() {
+        let record: MeetingRecord = MeetingRecord(
+            id: "x", title: "T", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
+            liveSegments: [
+                StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0.2, endSec: 3, text: "Täältä lehdistä tilaisuuteen Myyhon tänään"),
+                StoredSegment(key: "me-1", speaker: .me, person: nil, startSec: 90, endSec: 92, text: "Minulla on kysymys raportista"),
+            ],
+            finalSegments: [
+                StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 3, text: "Täältä lehdistötilaisuuteen. Me ollaan tänään"),
+                StoredSegment(key: "final-1", speaker: .others, person: 1, startSec: 3, endSec: 7, text: "aiheena säästöt."),
+                StoredSegment(key: "final-2", speaker: .others, person: 1, startSec: 65, endSec: 70, text: "Seuraava dia."),
+                StoredSegment(key: "final-3", speaker: .others, person: 2, startSec: 80, endSec: 85, text: "Kiitos."),
+            ],
+            translations: ["final-0": "Basın toplantısından.", "final-1": "Konu tasarruflar."],
+            speakerNames: [2: "Riikka"], note: nil, audioDeleted: false, engine: .cloud, notice: nil
+        )
+        let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
+        #expect(paragraphs.map(\.id) == ["final-0", "final-2", "final-3", "me-1"])
+        #expect(paragraphs[0].text == "Täältä lehdistötilaisuuteen. Me ollaan tänään aiheena säästöt.")
+        #expect(paragraphs[0].turkish == "Basın toplantısından. Konu tasarruflar.")
+        #expect(paragraphs[0].endSec == 7)
+        #expect(paragraphLabel(paragraph: paragraphs[2], speakerNames: record.speakerNames) == "Riikka")
+    }
 }

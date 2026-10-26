@@ -4,27 +4,42 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// Ayarlar: genel, LLM sağlayıcısı, bulut anahtarları ve kısayollar.
-struct SettingsView: View {
+/// Ayarlar bölümleri.
+private enum SettingsSection: String, CaseIterable {
+    case general = "Genel"
+    case llm = "LLM"
+    case keys = "Anahtarlar"
+    case shortcuts = "Kısayollar"
+}
+
+/// Panelin Ayarlar sayfası (ayrı pencere değil): genel, LLM sağlayıcısı, bulut anahtarları ve kısayollar.
+struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
+    @State private var section: SettingsSection = .general
 
     var body: some View {
-        TabView {
-            Tab("Genel", systemImage: "gearshape") {
-                GeneralSettings(model: model)
+        VStack(spacing: 0) {
+            Picker("Bölüm", selection: $section) {
+                ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
+                    Text(item.rawValue).tag(item)
+                }
             }
-            Tab("LLM", systemImage: "sparkles") {
-                LLMSettings(model: model)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, DesignTokens.Spacing.l)
+            .padding(.top, DesignTokens.Spacing.m)
+            Group {
+                switch section {
+                case .general: GeneralSettings(model: model)
+                case .llm: LLMSettings(model: model)
+                case .keys: KeySettings(model: model)
+                case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+                }
             }
-            Tab("Anahtarlar", systemImage: "key") {
-                KeySettings(model: model)
-            }
-            Tab("Kısayollar", systemImage: "command") {
-                ShortcutSettings(shortcuts: shortcuts)
-            }
+            // Cam yüzey görünsün.
+            .scrollContentBackground(.hidden)
         }
-        .frame(width: 520)
     }
 }
 
@@ -67,7 +82,26 @@ private struct GeneralSettings: View {
                 )) {
                     Text("İki dil (orijinal + Türkçe)").tag(DisplayMode.bilingual)
                     Text("Sadece Türkçe").tag(DisplayMode.turkishOnly)
+                    Text("Sadece orijinal (Fince/İngilizce)").tag(DisplayMode.originalOnly)
                 }
+                Text(model.displayMode == .originalOnly
+                    ? "Canlı çeviri yapılmaz; toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır."
+                    : "Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Mikrofon") {
+                Toggle("Mikrofonu kaydet (Sen)", isOn: Binding<Bool>(
+                    get: { !model.isMicMuted },
+                    set: { (enabled: Bool) -> Void in
+                        if enabled == model.isMicMuted {
+                            model.toggleMicrophone()
+                        }
+                    }
+                ))
+                Text("Konuşmayıp yalnızca dinlediğin toplantılarda kapat: hoparlörden gelen ses \"Sen\" olarak yazılmaz. Panelden kayıt sırasında da değiştirilebilir.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Asistan") {
                 Stepper(value: $missedMinutes, in: SettingsRange.missedWindowMinutes) {
@@ -141,15 +175,17 @@ private struct LLMSettings: View {
             }
         }
         .formStyle(.grouped)
-        .onChange(of: provider) { (_: String, _: String) in settingsEdited() }
-        .onChange(of: baseURL) { (_: String, _: String) in settingsEdited() }
-        .onChange(of: fastModel) { (_: String, _: String) in settingsEdited() }
-        .onChange(of: smartModel) { (_: String, _: String) in settingsEdited() }
-    }
-
-    private func settingsEdited() {
-        testResult = .idle
-        model.settingsChanged()
+        // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
+        .task(id: [provider, baseURL, fastModel, smartModel]) {
+            do {
+                try await Task.sleep(for: .milliseconds(600))
+            } catch {
+                // Yeni bir değişiklik geldi; bu bekleme iptal edildi.
+                return
+            }
+            testResult = .idle
+            model.settingsChanged()
+        }
     }
 }
 

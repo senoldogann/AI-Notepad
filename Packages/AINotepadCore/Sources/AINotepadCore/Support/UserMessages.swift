@@ -18,6 +18,8 @@ public func userFacingMessage(error: any Error) -> String {
         return "Konuşma tanıma modeli (\(model)) yüklenemedi. İnternet bağlantını ve disk alanını kontrol edip uygulamayı yeniden aç."
     case TranscriptionError.transcriptionFailed:
         return "Bu bölüm yazıya dökülemedi."
+    case TranscriptionError.diarizationFailed:
+        return "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)"
     case let urlError as URLError:
         return "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene."
     default:

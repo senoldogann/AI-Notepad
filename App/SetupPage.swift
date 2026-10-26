@@ -4,51 +4,6 @@ import AppKit
 import AVFoundation
 import SwiftUI
 
-/// Karşılama penceresini açar; ilk açılışta bir kez, sonra menüdeki "Kurulum…" ile.
-@MainActor
-final class OnboardingController {
-    private let model: AppModel
-    private let shortcuts: ShortcutController
-    private var window: NSWindow?
-
-    init(model: AppModel, shortcuts: ShortcutController) {
-        self.model = model
-        self.shortcuts = shortcuts
-    }
-
-    /// İlk açılışsa karşılamayı gösterir.
-    func showIfNeeded() {
-        if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
-            show()
-        }
-    }
-
-    func show() {
-        let target: NSWindow = window ?? makeWindow()
-        window = target
-        NSApplication.shared.activate()
-        target.center()
-        target.makeKeyAndOrderFront(nil)
-    }
-
-    private func makeWindow() -> NSWindow {
-        let window: NSWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
-            styleMask: [.titled, .closable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "AI-Notepad'e hoş geldin"
-        window.titlebarAppearsTransparent = true
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: OnboardingView(model: model, shortcuts: shortcuts) { [weak self] in
-            UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
-            self?.window?.close()
-        })
-        return window
-    }
-}
-
 /// Karşılama adımları.
 private enum OnboardingStep: Int, CaseIterable {
     case welcome
@@ -68,8 +23,9 @@ private enum OnboardingStep: Int, CaseIterable {
     }
 }
 
-/// Karşılama: izinler, ad, motor, anahtarlar; her adım atlanabilir, ayarlar sonra Ayarlar'dan değişir.
-private struct OnboardingView: View {
+/// Panelin Kurulum sayfası (ilk açılışta bir kez, sonra menüde "Kurulum…"): izinler, ad, motor, anahtarlar;
+/// her adım atlanabilir, ayarlar sonra Ayarlar sayfasından değişir.
+struct SetupPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
     let onFinish: @MainActor () -> Void
@@ -87,7 +43,7 @@ private struct OnboardingView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Adım \(step.rawValue + 1) / \(OnboardingStep.allCases.count)")
             Text(step.title)
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
             Group {
                 switch step {
                 case .welcome: WelcomeStep()
@@ -107,15 +63,16 @@ private struct OnboardingView: View {
                     Button("Başla") { onFinish() }
                         .keyboardShortcut(.defaultAction)
                 } else {
+                    Button("Atla") { onFinish() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
                     Button("İleri") { move(by: 1) }
                         .keyboardShortcut(.defaultAction)
                 }
             }
             .controlSize(.large)
         }
-        .padding(32)
-        .padding(.top, 12)
-        .frame(width: 560, height: 520)
+        .padding(DesignTokens.Spacing.xl)
         .animation(.easeInOut(duration: 0.2), value: step)
     }
 
@@ -198,13 +155,18 @@ private struct PermissionsStep: View {
                 Text("İzni reddettiysen:")
                     .foregroundStyle(.secondary)
                 Button("Sistem Ayarları › Gizlilik ve Güvenlik") {
-                    openPrivacySettings(anchor: microphone == .denied ? "Privacy_Microphone" : "Privacy_AudioCapture")
+                    // Sistem sesi kaydı izni macOS'ta "Ekran ve Sistem Sesi Kaydı" bölümündedir.
+                    openPrivacySettings(anchor: microphone == .denied ? "Privacy_Microphone" : "Privacy_ScreenCapture")
                 }
                 .buttonStyle(.link)
             }
             .font(.callout)
         }
         .onAppear { microphone = model.microphonePermission }
+        // Kullanıcı izni Sistem Ayarları'nda değiştirip geri dönünce durum yenilenir.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { (_: Notification) in
+            microphone = model.microphonePermission
+        }
     }
 
     private var microphoneText: String {
@@ -292,6 +254,7 @@ private struct ProfileStep: View {
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .scrollDisabled(true)
     }
 }
@@ -312,6 +275,7 @@ private struct KeysStep: View {
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }
 

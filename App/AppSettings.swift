@@ -37,6 +37,8 @@ enum SettingsKey {
     static let recordShortcut: String = "shortcut.record"
     static let windowsShortcut: String = "shortcut.windows"
     static let onboardingCompleted: String = "onboardingCompleted"
+    /// "Sen" (mikrofon) kapalı mı.
+    static let micMuted: String = "micMuted"
 }
 
 /// Ayar aralıkları.
@@ -58,6 +60,7 @@ func registerDefaultSettings() {
         SettingsKey.llmFastModel: "",
         SettingsKey.llmSmartModel: "",
         SettingsKey.onboardingCompleted: false,
+        SettingsKey.micMuted: false,
     ])
 }
 

@@ -9,7 +9,7 @@ func sharingType(hideFromCapture: Bool) -> NSWindow.SharingType {
     hideFromCapture ? .none : .readOnly
 }
 
-/// Kenarlıksız panel normalde anahtar pencere olamaz; soru alanına yazılabilmesi ve metin seçimi için olabilir.
+/// Kenarlıksız panel normalde anahtar pencere olamaz; soru alanına, ayarlara yazılabilmesi ve metin seçimi için olabilir.
 final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool {
         true
@@ -17,10 +17,10 @@ final class KeyablePanel: NSPanel {
 }
 
 /// Kenarlıksız, saydam, arka planından taşınabilen, uygulamayı öne getirmeyen yüzen panel.
-/// Cam görünüm içerikteki `TranscriptPanel`'den gelir.
+/// Cam görünüm içerikteki `panelSurface()`'ten gelir.
 @MainActor
 func makeLivePanel(rootView: some View) -> NSPanel {
-    let size: NSSize = NSSize(width: 400, height: 640)
+    let size: NSSize = NSSize(width: 420, height: 660)
     let panel: NSPanel = KeyablePanel(
         contentRect: NSRect(origin: .zero, size: size),
         styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -36,7 +36,7 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    panel.minSize = NSSize(width: 300, height: 240)
+    panel.minSize = NSSize(width: 340, height: 300)
     panel.contentView = NSHostingView(rootView: rootView)
     if let screen = NSScreen.screens.first {
         let visible: NSRect = screen.visibleFrame
@@ -45,28 +45,53 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     return panel
 }
 
-/// Paneli bir kez oluşturur; gösterir, gizler, ekran görüntüsü ayarını uygular.
+/// Uygulamanın tek penceresi olan paneli bir kez oluşturur; sayfa açar, gösterir, gizler, ekran görüntüsü
+/// ayarını uygular.
 @MainActor
 final class LivePanelController {
     private let model: AppModel
+    private let router: PanelRouter = PanelRouter()
+    private let player: MeetingAudioPlayer = MeetingAudioPlayer()
     private var panel: NSPanel?
     private var hideFromCapture: Bool
+    private var shortcuts: ShortcutController?
+    private var onStart: (@MainActor () -> Void)?
 
     init(model: AppModel, hideFromCapture: Bool) {
         self.model = model
         self.hideFromCapture = hideFromCapture
     }
 
+    /// Kısayollar ve kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.
+    func attach(shortcuts: ShortcutController, onStart: @escaping @MainActor () -> Void) {
+        self.shortcuts = shortcuts
+        self.onStart = onStart
+    }
+
     var isVisible: Bool {
         panel?.isVisible ?? false
     }
 
+    /// Paneli gösterir (açık sayfa değişmez).
     func show() {
-        let target: NSPanel = panel ?? makeLivePanel(rootView: PanelHost(model: model, onHide: { [weak self] in self?.hide() }))
+        guard let shortcuts, let onStart else {
+            preconditionFailure("Panel, attach(shortcuts:onStart:) çağrılmadan gösterildi")
+        }
+        let target: NSPanel = panel ?? makeLivePanel(rootView: PanelHost(
+            model: model, router: router, shortcuts: shortcuts, player: player, onStart: onStart,
+            onHide: { [weak self] in self?.hide() }
+        ))
         target.invalidateShadow()
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
         target.orderFrontRegardless()
+    }
+
+    /// Paneli belirtilen sayfada gösterir; yazı alanları için anahtar pencere yapar.
+    func show(page: PanelPage) {
+        router.page = page
+        show()
+        panel?.makeKey()
     }
 
     func hide() {
@@ -85,26 +110,5 @@ final class LivePanelController {
     func setHideFromCapture(hidden: Bool) {
         hideFromCapture = hidden
         panel?.sharingType = sharingType(hideFromCapture: hidden)
-    }
-}
-
-/// Modeli gözleyip `TranscriptPanel`'e değer olarak veren ince kabuk.
-private struct PanelHost: View {
-    let model: AppModel
-    let onHide: @MainActor () -> Void
-
-    var body: some View {
-        TranscriptPanel(
-            state: model.viewState,
-            actions: PanelActions(
-                onHide: onHide,
-                onStop: { model.stopRecording() },
-                onMissed: { model.askWhatIMissed() },
-                onAsk: { (question: String) -> Void in model.ask(question: question) },
-                onCloseCard: { model.closeAssistantCard() },
-                onRetryTranslations: { (ids: [SegmentID]) -> Void in model.retryTranslations(ids: ids) },
-                onSetLanguage: { (language: MeetingLanguage) -> Void in model.setLanguage(language: language) }
-            )
-        )
     }
 }

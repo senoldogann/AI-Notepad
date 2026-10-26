@@ -7,6 +7,13 @@ public enum DisplayMode: String, Sendable, CaseIterable {
     case bilingual
     /// Yalnızca Türkçe; çevirisi olmayan metin orijinal haliyle soluk.
     case turkishOnly
+    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu Türkçe not yine üretilir.
+    case originalOnly
+
+    /// Bu görünümde canlı çeviri gerekir mi.
+    public var needsLiveTranslation: Bool {
+        self != .originalOnly
+    }
 }
 
 /// Paneldeki asistan kartı: "Ne kaçırdım?" özeti ya da soru cevabı.
@@ -28,6 +35,12 @@ public enum RecordingPhase: Sendable, Equatable {
 /// Ada ve panelin gösterdiği her şey; uygulama modelinden bağımsız değer tipi.
 public struct LiveViewState: Equatable, Sendable {
     public let phase: RecordingPhase
+    /// Kayıt duraklatıldı: ses sessizlikle değiştiriliyor.
+    public let isPaused: Bool
+    /// "Sen" (mikrofon) kapalı: hoparlörle dinlerken yankı olmasın.
+    public let isMicMuted: Bool
+    /// Kayıt başlatılabilir (model hazır, önceki kayıt bitti).
+    public let canStart: Bool
     public let startedAt: Date?
     /// Kayıt yokken gösterilen durum ("Hazır · Deepgram" gibi).
     public let statusText: String
@@ -68,6 +81,9 @@ public func makeLiveViewState(
     failedTranslations: Set<SegmentID>,
     assistantCard: AssistantCard?,
     phase: RecordingPhase,
+    isPaused: Bool,
+    isMicMuted: Bool,
+    canStart: Bool,
     startedAt: Date?,
     statusText: String,
     languageText: String,
@@ -79,10 +95,13 @@ public func makeLiveViewState(
     let latest: [DisplayPart] = blocks
         .last { (block: SpeakerBlock) -> Bool in block.speaker == .others }
         .map { (block: SpeakerBlock) -> [DisplayPart] in
-            truncatePartsFromStart(parts: turkishOnlyParts(block: block, translations: translations), maxCharacters: islandSentenceLimit)
+            truncatePartsFromStart(parts: islandParts(block: block, translations: translations, displayMode: displayMode), maxCharacters: islandSentenceLimit)
         } ?? []
     return LiveViewState(
         phase: phase,
+        isPaused: isPaused,
+        isMicMuted: isMicMuted,
+        canStart: canStart,
         startedAt: startedAt,
         statusText: statusText,
         languageText: languageText,
@@ -142,6 +161,24 @@ public struct DisplayPart: Sendable, Equatable {
         self.isTranslated = isTranslated
         self.isFinal = isFinal
     }
+}
+
+/// Adadaki parçalar: "Sadece orijinal"de orijinal metin, diğer görünümlerde Türkçesi gelenler Türkçe. Saf fonksiyondur.
+public func islandParts(block: SpeakerBlock, translations: [SegmentID: String], displayMode: DisplayMode) -> [DisplayPart] {
+    switch displayMode {
+    case .originalOnly:
+        block.segments
+            .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
+            .map { (segment: LiveSegment) -> DisplayPart in DisplayPart(text: segment.text, isTranslated: false, isFinal: segment.isFinal) }
+    case .bilingual, .turkishOnly:
+        turkishOnlyParts(block: block, translations: translations)
+    }
+}
+
+/// Adada parça soluk mu: kesinleşmemiş metin her zaman; çeviri bekleyen orijinal yalnızca çeviri gösteren görünümlerde.
+/// Saf fonksiyondur.
+public func isDimmedIslandPart(part: DisplayPart, displayMode: DisplayMode) -> Bool {
+    !part.isFinal || (displayMode.needsLiveTranslation && !part.isTranslated)
 }
 
 /// "Sadece Türkçe": çevirisi olan bölüm Türkçe, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;

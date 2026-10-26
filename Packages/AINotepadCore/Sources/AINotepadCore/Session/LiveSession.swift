@@ -88,6 +88,11 @@ actor LanguageRequest {
         defer { pending = nil }
         return pending
     }
+
+    /// Kullanıcı dil seçti ama işçi henüz uygulamadı: otomatik kilit bu arada konmamalı.
+    func hasPending() -> Bool {
+        pending != nil
+    }
 }
 
 private let sessionLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "LiveSession")
@@ -248,8 +253,10 @@ private func runTranscriptionWorker(
     for await job in jobs {
         if let requested = await languageRequest.take() {
             state = WorkerState(votes: state.votes, locked: requested, finalized: state.finalized)
+            // Arada otomatik kilit yayınlanmış olabilir: son olay kullanıcının seçimi olsun.
+            events.yield(.languageLocked(requested))
         }
-        state = await processJob(job: job, state: state, engine: engine, config: config, events: events)
+        state = await processJob(job: job, state: state, engine: engine, config: config, languageRequest: languageRequest, events: events)
         await tracker.jobFinished()
     }
 }
@@ -267,6 +274,7 @@ private func processJob(
     state: WorkerState,
     engine: any TranscriptionEngine,
     config: LiveSessionConfig,
+    languageRequest: LanguageRequest,
     events: AsyncStream<LiveSessionEvent>.Continuation
 ) async -> WorkerState {
     // Kesinleşmiş bölümün geç kalan geçici işi eski metni geri getirmesin.
@@ -294,7 +302,7 @@ private func processJob(
         let text: String = try await engine.transcribe(samples: job.samples, language: language)
         events.yield(.segment(LiveSegment(id: job.id, startSec: job.startSec, endSec: job.endSec, text: text, isFinal: job.isFinal, failureMessage: nil, person: nil)))
 
-        guard state.locked == nil, job.isFinal,
+        guard state.locked == nil, job.isFinal, !(await languageRequest.hasPending()),
               let lockedNow = lockedLanguage(votes: votes, elapsedSec: job.endSec, lockAfterSec: config.languageLockAfterSec)
         else {
             return WorkerState(votes: votes, locked: state.locked, finalized: finalized)

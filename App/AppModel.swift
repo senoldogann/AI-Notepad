@@ -20,6 +20,9 @@ private struct ViewStateInputs: Equatable {
     let displayMode: DisplayMode
     let assistantCard: AssistantCard?
     let phase: RecordingPhase
+    let isPaused: Bool
+    let isMicMuted: Bool
+    let canStart: Bool
     let startedAt: Date?
     let statusText: String
     let languageText: String
@@ -32,6 +35,9 @@ private struct RecordingSession {
     let startedAt: Date
     let engine: LiveEngine
     let handle: LiveSessionHandle
+    /// Duraklatınca iki akış, mikrofon kapatılınca "Sen" sessizliğe çevrilir.
+    let pauseGate: AudioGate
+    let micGate: AudioGate
 }
 
 /// Uygulamanın arayüz durumu ve kayıt yaşam döngüsü.
@@ -47,6 +53,12 @@ final class AppModel {
     var isStarting: Bool = false
     /// Durduruldu; kalan metin, çeviriler ve son konuşmacı ayırma bitiyor.
     var isFinishing: Bool = false
+    /// Kayıt duraklatıldı (ses sessizlikle değiştiriliyor).
+    var isPaused: Bool = false
+    /// "Sen" kapalı: hoparlörle dinlerken yankı olmasın. Ayar olarak saklanır.
+    var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
+    /// Son biten kaydın toplantısı: panel bitince bu toplantının sayfasını açar.
+    var lastFinishedMeetingID: String?
     /// Bir sonraki kaydın dil modu (kayıt sırasında dil `setLanguage` ile değişir).
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
@@ -118,7 +130,8 @@ final class AppModel {
     var viewState: LiveViewState {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: transcript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
-            assistantCard: assistantCard, phase: phase, startedAt: recordingStartedAt, statusText: statusText,
+            assistantCard: assistantCard, phase: phase, isPaused: isPaused, isMicMuted: isMicMuted, canStart: isReadyToRecord && !isStarting,
+            startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
         if let cache = viewStateCache, cache.inputs == inputs {
@@ -127,7 +140,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -214,7 +227,8 @@ final class AppModel {
 
     /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp Türkçeye çevirir (hızlı model).
     private func enqueueTranslation(segment: LiveSegment) {
-        guard !translationDisabled, let provider = llmProvider else {
+        // "Sadece orijinal" görünümünde canlı çeviri yapılmaz (maliyet); toplantı sonu Türkçe not yine üretilir.
+        guard displayMode.needsLiveTranslation, !translationDisabled, let provider = llmProvider else {
             return
         }
         let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
@@ -341,7 +355,10 @@ final class AppModel {
     func loadModel() async {
         modelStatus = .loading
         do {
-            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: AppPaths.modelsDirectory())
+            let modelsDirectory: URL = try AppPaths.modelsDirectory()
+            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory)
+            // Konuşmacı ayırma modeli de şimdi indirilir: ilk yerel toplantının son geçişi internetsiz çalışsın.
+            try await prepareLocalDiarization(modelsDirectory: modelsDirectory)
             modelStatus = .ready
         } catch {
             Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .public)")
@@ -370,6 +387,7 @@ final class AppModel {
         lockedLanguage = nil
         errorMessages = []
         startedSpeakers = []
+        isPaused = false
         // Çeviri sağlayıcısı kayıt başında bir kez çözülür; yoksa canlı metin yine akar, tek hata gösterilir.
         if !(await refreshLLMProvider()) {
             llmProvider = nil
@@ -404,9 +422,12 @@ final class AppModel {
         // İki akış aynı zaman çizgisine hizalanır: geç başlayan akış ve yeniden kurma boşlukları sessizlikle dolar.
         let origin: ContinuousClock.Instant = .now
         let startedAt: Date = Date()
+        let pauseGate: AudioGate = AudioGate(isOpen: true)
+        let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
         do {
-            meAudio = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+            let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+            meAudio = gatedStream(audio: gatedStream(audio: aligned, gate: micGate), gate: pauseGate)
             startedSpeakers.insert(.me)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -414,7 +435,8 @@ final class AppModel {
         }
         let othersAudio: AsyncStream<[Float]>
         do {
-            othersAudio = clockAlignedStream(audio: try await systemAudio.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+            let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await systemAudio.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+            othersAudio = gatedStream(audio: aligned, gate: pauseGate)
             startedSpeakers.insert(.others)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -464,7 +486,7 @@ final class AppModel {
         }
         isRecording = true
         recordingStartedAt = startedAt
-        session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle)
+        session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
         startCheckpoints(directory: directory, startedAt: startedAt)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
@@ -504,6 +526,23 @@ final class AppModel {
         isFinishing = true
         microphone.stop()
         systemAudio.stop()
+    }
+
+    /// Kaydı duraklatır ya da sürdürür. Duraklatılınca ses sessizlikle değiştirilir: kayıt sürer, metin üretilmez,
+    /// zaman çizgisi bozulmaz.
+    func togglePause() {
+        guard isRecording, !isFinishing, let session else {
+            return
+        }
+        isPaused.toggle()
+        session.pauseGate.set(isOpen: !isPaused)
+    }
+
+    /// "Sen"i (mikrofon) kapatır/açar; tercih saklanır. Hoparlörle dinlerken yankıyı kökten önler.
+    func toggleMicrophone() {
+        isMicMuted.toggle()
+        UserDefaults.standard.set(isMicMuted, forKey: SettingsKey.micMuted)
+        session?.micGate.set(isOpen: !isMicMuted)
     }
 
     /// Kayıt sırasında toplantı dilini değiştirir; o andan sonraki metin yeni dille yazılır.
@@ -551,6 +590,7 @@ final class AppModel {
         checkpointTask?.cancel()
         checkpointTask = nil
         Self.logger.info("Kayıt bitti")
+        isPaused = false
         guard let finished = session else {
             return
         }
@@ -558,31 +598,21 @@ final class AppModel {
         activeMeetingID = nil
         let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
         process(record: record, directory: finished.directory)
+        lastFinishedMeetingID = record.id
     }
 
-    /// Kuyruktaki çevirileri bekler; süre dolarsa kalanlar kaydedilmeden geçilir (loglanır).
+    /// Kuyruktaki çevirileri en fazla `timeoutSec` bekler; süre dolarsa kalan çeviriler durdurulur (kaydedilmez, loglanır).
     private func waitForPendingTranslations(timeoutSec: Double) async {
         guard let tail = translationTail else {
             return
         }
-        let completed: Bool = await withTaskGroup(of: Bool.self) { (group: inout TaskGroup<Bool>) -> Bool in
-            group.addTask {
-                await tail.value
-                return true
-            }
-            group.addTask {
-                do {
-                    try await Task.sleep(for: .seconds(timeoutSec))
-                } catch {
-                    // Çeviriler önce bitti, zamanlayıcı iptal edildi.
-                }
-                return false
-            }
-            let first: Bool = await group.next() ?? false
-            group.cancelAll()
-            return first
+        let completed: Bool = await finishesWithin(seconds: timeoutSec) {
+            await tail.value
         }
         if !completed {
+            // Sıradaki işler başlarken bunu görüp çıkar; süren istek iptal edilir.
+            translationDisabled = true
+            tail.cancel()
             Self.logger.warning("Kayıt sonunda bekleyen çeviriler süre içinde bitmedi, süre: \(timeoutSec, privacy: .public)")
         }
     }
