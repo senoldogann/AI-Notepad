@@ -91,6 +91,10 @@ struct MainWindowView: View {
             detail
         }
         .frame(minWidth: 820, minHeight: 560)
+        // Liquid Glass: pencere zemini yarı saydam malzeme; masaüstü arkadan hafifçe görünür, metin okunaklı kalır.
+        .containerBackground(.thinMaterial, for: .window)
+        // Başlık şeridi ayrı opak bant olmasın; cam zemin pencerenin tepesine kadar sürsün.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(AppearanceEnvironment())
     }
 
@@ -189,7 +193,7 @@ private struct HomePage: View {
                     Spacer(minLength: 0)
                     Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
                     Button("Bitir", systemImage: "stop.fill") { model.stopRecording() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminentAction)
                 }
             case .finishing:
                 HStack(spacing: DesignTokens.Spacing.m) {
@@ -204,7 +208,7 @@ private struct HomePage: View {
                             .font(.system(size: 15, weight: .semibold))
                             .padding(.horizontal, DesignTokens.Spacing.s)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminentAction)
                     .controlSize(.extraLarge)
                     .disabled(!model.isReadyToRecord || model.isStarting)
                     VStack(alignment: .leading, spacing: 2) {
@@ -219,7 +223,7 @@ private struct HomePage: View {
         }
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private var problems: some View {
@@ -234,7 +238,7 @@ private struct HomePage: View {
         }
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular.tint(Color.orange.opacity(0.18)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -303,12 +307,12 @@ private struct HomeTasks: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                 }
             }
             .padding(DesignTokens.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .glassEffect(.regular.tint(appearance.accent.color.opacity(0.16)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
@@ -329,6 +333,7 @@ private struct HomeRecentMeetings: View {
                 if model.meetings.count > 5 {
                     Button("Tümü") { router.section = .meetings }
                         .buttonStyle(.link)
+                        .pointerStyle(.link)
                 }
             }
             if model.meetings.isEmpty {
@@ -342,7 +347,7 @@ private struct HomeRecentMeetings: View {
                     } label: {
                         MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                 }
             }
         }

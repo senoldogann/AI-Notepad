@@ -165,7 +165,7 @@ public struct TranscriptPanel: View {
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .menuIndicator(.hidden)
         .fixedSize()
         .foregroundStyle(.secondary)
@@ -191,7 +191,7 @@ public struct TranscriptPanel: View {
                     .background(appearance.accent.color, in: Capsule())
                     .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .disabled(!state.canStart)
             .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
         case .recording:
@@ -226,7 +226,7 @@ public struct TranscriptPanel: View {
                 chip
             }
             .menuStyle(.button)
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverPlain)
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHint("Toplantı dilini değiştir", alignment: .center, edge: .bottom)
@@ -294,7 +294,7 @@ public struct TranscriptPanel: View {
                             .background(appearance.accent.color, in: Capsule())
                             .foregroundStyle(.white)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .padding(.bottom, DesignTokens.Spacing.s)
                     .transition(.opacity)
                 }
@@ -336,7 +336,7 @@ public struct TranscriptPanel: View {
             .background(appearance.accent.color, in: Capsule())
             .foregroundStyle(.white)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .disabled(state.blocks.isEmpty)
         .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
         .accessibilityLabel("Ne kaçırdım?")
@@ -470,7 +470,7 @@ struct BlockView: View {
                         }
                     }
                     .menuStyle(.button)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .menuIndicator(.hidden)
                     .fixedSize()
                     .hoverHint("Konuşmacıyı düzelt", alignment: .leading, edge: .bottom)
@@ -511,7 +511,7 @@ struct BlockView: View {
                         Label("Çeviri alınamadı · Tekrar dene", systemImage: "arrow.clockwise")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .foregroundStyle(.orange)
                 }
             }
@@ -673,7 +673,7 @@ struct IconButton: View {
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverPlain)
         .foregroundStyle(.secondary)
         .hoverHint(help, alignment: .trailing, edge: .bottom)
         .accessibilityLabel(help)

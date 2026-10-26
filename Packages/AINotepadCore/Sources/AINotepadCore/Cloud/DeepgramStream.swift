@@ -374,7 +374,7 @@ private actor DeepgramConnection {
         let deadline: Task<Void, Never> = Task {
             do {
                 try await Task.sleep(for: .seconds(closeDeadlineSec))
-                await self.expireCloseDeadline()
+                self.expireCloseDeadline()
             } catch {
                 // Kapanış süre dolmadan bitti; zamanlayıcı iptal edildi.
             }

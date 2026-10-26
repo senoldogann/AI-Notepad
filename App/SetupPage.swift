@@ -64,7 +64,7 @@ struct SetupPage: View {
                         .keyboardShortcut(.defaultAction)
                 } else {
                     Button("Atla") { onFinish() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.hoverPlain)
                         .foregroundStyle(.secondary)
                     Button("İleri") { move(by: 1) }
                         .keyboardShortcut(.defaultAction)
@@ -159,6 +159,7 @@ private struct PermissionsStep: View {
                     openPrivacySettings(anchor: microphone == .denied ? "Privacy_Microphone" : "Privacy_ScreenCapture")
                 }
                 .buttonStyle(.link)
+                        .pointerStyle(.link)
             }
             .font(.callout)
         }

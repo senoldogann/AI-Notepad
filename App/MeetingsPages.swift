@@ -35,7 +35,7 @@ struct MeetingsListPage: View {
                             } label: {
                                 MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.hoverPlain)
                         }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.s)
@@ -309,6 +309,7 @@ struct MeetingDetailPage: View {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
                 .buttonStyle(.link)
+                        .pointerStyle(.link)
             }
             .font(.caption)
         case .copied:
@@ -497,7 +498,7 @@ private struct SpeakerNamesSection: View {
                                 Image(systemName: "arrow.triangle.merge")
                             }
                             .menuStyle(.button)
-                            .buttonStyle(.plain)
+                            .buttonStyle(.hoverPlain)
                             .menuIndicator(.hidden)
                             .fixedSize()
                             .foregroundStyle(.secondary)
@@ -530,7 +531,7 @@ private struct SpeakerReviewCard: View {
                 Spacer(minLength: 0)
                 Button("Kapat", systemImage: "xmark") { model.closeSpeakerReview(meetingID: record.id) }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .foregroundStyle(.secondary)
                     .hoverHint("Önerileri kapat", alignment: .trailing, edge: .bottom)
             }
@@ -621,7 +622,7 @@ private struct SpeakerReviewCard: View {
             Spacer(minLength: 0)
             Button("Uygula", systemImage: "checkmark", action: onAccept)
                 .labelStyle(.iconOnly)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminentAction)
                 .controlSize(.small)
                 .disabled(isLocked)
                 .hoverHint("Öneriyi uygula", alignment: .trailing, edge: .bottom)
@@ -646,7 +647,7 @@ private struct SpeakerReviewCard: View {
         }
         if let seconds = timestampSeconds(text: passage.time), !record.audioDeleted {
             Button { onPlay(seconds) } label: { row }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("Bu andan dinle", alignment: .leading, edge: .bottom)
         } else {
             row
@@ -720,6 +721,7 @@ private struct TranscriptSection: View {
                 .background(isActive ? appearance.accent.color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
                 .onTapGesture { onPlay(paragraph.startSec) }
+                .hoverHighlight(cornerRadius: 8)
                 .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
                 .id(paragraph.id)
             }
@@ -794,7 +796,7 @@ private struct NowPlayingBar: View {
                         .padding(.vertical, 3)
                         .background(.quaternary, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)
                 Button {
                     player.stop()
@@ -803,7 +805,7 @@ private struct NowPlayingBar: View {
                         .font(.system(size: 11, weight: .semibold))
                         .frame(width: 22, height: 22)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Çalmayı kapat", alignment: .trailing, edge: .top)
             }
@@ -830,7 +832,7 @@ private struct NowPlayingBar: View {
                 } label: {
                     Image(systemName: "gobackward.10").font(.system(size: 17, weight: .medium))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn geri", alignment: .center, edge: .top)
                 Button {
                     player.togglePause()
@@ -841,14 +843,14 @@ private struct NowPlayingBar: View {
                         .frame(width: 42, height: 42)
                         .background(appearance.accent.color, in: Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
                 Button {
                     player.skip(by: 10)
                 } label: {
                     Image(systemName: "goforward.10").font(.system(size: 17, weight: .medium))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn ileri", alignment: .center, edge: .top)
             }
         }

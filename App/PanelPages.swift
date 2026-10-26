@@ -145,7 +145,7 @@ private struct PanelPageView<Content: View>: View {
                     }
                     .font(DesignTokens.statusFont)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Geri", alignment: .leading, edge: .bottom)
                 Spacer(minLength: DesignTokens.Spacing.s)
@@ -166,7 +166,7 @@ private struct PanelPageView<Content: View>: View {
                         .font(DesignTokens.statusFont)
                         .foregroundStyle(.red)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverPlain)
                     .hoverHint("Canlı metne dön", alignment: .trailing, edge: .bottom)
                 }
                 Button(action: onHide) {
@@ -175,7 +175,7 @@ private struct PanelPageView<Content: View>: View {
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Paneli gizle", alignment: .trailing, edge: .bottom)
                 .accessibilityLabel("Paneli gizle")
@@ -233,6 +233,8 @@ struct AppearanceEnvironment: ViewModifier {
             .environment(\.panelAppearance, appearance)
             .tint(appearance.accent.color)
             .fontDesign(appearance.fontDesign.design)
+            // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
+            .buttonStyle(.glassAction)
             .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
     }
 }
@@ -327,7 +329,7 @@ private struct ProcessingOverlay: View {
                     .multilineTextAlignment(.center)
             }
             Button("Arka planda devam et", action: onDismiss)
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverPlain)
                 .font(.callout)
                 .foregroundStyle(appearance.accent.color)
         }
