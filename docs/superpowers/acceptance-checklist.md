@@ -97,5 +97,9 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] "Dinle": iki taraf birlikte duyuluyor; alttaki kartta konuşmacı, konum, ±10 sn, hız çalışıyor; transkriptte söylenen kelime renkleniyor ve çalan paragraf ortaya kayıyor; paragrafa tıklayınca oradan çalıyor.
 - [ ] Toplantı sayfasında konuşmacı satırındaki birleştir simgesiyle iki konuşmacı birleşiyor; ad taşınıyor.
 
+## Hazırlanma kartı
+- [ ] Bitir'e bas: panel bulanıklaşıyor, ortada animasyonlu kart; adımlar sırayla ✓ oluyor; bitince kart kayboluyor ve toplantı sayfası (görevler üstte) açık.
+- [ ] "Arka planda devam et": kart kapanıyor, panel kullanılabiliyor; aynı kayıt için tekrar açılmıyor; sonraki kayıtta yine çıkıyor.
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

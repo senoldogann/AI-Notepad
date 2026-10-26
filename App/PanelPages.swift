@@ -31,6 +31,9 @@ struct PanelHost: View {
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
+    /// "Arka planda devam et" ile kapatılan ilerleme kartları.
+    @State private var dismissedProgress: Set<String> = []
+    @State private var dismissedFinishing: Bool = false
     let router: PanelRouter
     let shortcuts: ShortcutController
     let player: MeetingAudioPlayer
@@ -38,12 +41,49 @@ struct PanelHost: View {
     let onHide: @MainActor () -> Void
 
     var body: some View {
+        let progress: ProcessingProgress? = processingProgress
         content
+            // Toplantı hazırlanırken arka plan bulanıklaşır; ortadaki kart tamamlanana kadar kalır.
+            .blur(radius: progress == nil ? 0 : 8)
+            .allowsHitTesting(progress == nil)
+            .overlay {
+                if let progress {
+                    ProcessingOverlay(progress: progress) {
+                        if let id = progress.meetingID {
+                            dismissedProgress.insert(id)
+                        } else {
+                            dismissedFinishing = true
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: progress)
+            .onChange(of: model.phase) { (_: RecordingPhase, phase: RecordingPhase) in
+                // Yeni bir bitirme için kart yeniden gösterilir.
+                if phase == .recording {
+                    dismissedFinishing = false
+                }
+            }
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
             // Ayar değerleri (AppStorage) okunarak görünüm kurulur; değişince yeniden çizilir.
             .environment(\.panelAppearance, appearance)
             .background(WindowAppearance(theme: AppTheme(rawValue: theme) ?? .system))
+    }
+
+    /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
+    private var processingProgress: ProcessingProgress? {
+        if model.phase == .finishing {
+            return dismissedFinishing ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: model.liveEngine == .whisperKit)
+        }
+        // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
+        guard !dismissedFinishing, let id = model.lastFinishedMeetingID, model.processingMeetingIDs.contains(id), !dismissedProgress.contains(id) else {
+            return nil
+        }
+        let step: ProcessingStep = model.processingSteps[id] ?? .convertingAudio
+        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
+        return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
     }
 
     private var appearance: PanelAppearance {
@@ -199,5 +239,75 @@ private struct WindowAppearance: NSViewRepresentable {
             case .dark: NSAppearance(named: .darkAqua)
             }
         }
+    }
+}
+
+/// İlerleme kartının durumu: hangi toplantı (bitirilirken henüz yok), kaçıncı adım, yerel motor mu.
+struct ProcessingProgress: Equatable {
+    let meetingID: String?
+    /// 0: kayıt bitiriliyor, 1: ses, 2: son geçiş, 3: not.
+    let stepIndex: Int
+    let isLocal: Bool
+}
+
+/// Toplantı hazırlanırken panelin ortasındaki kart: animasyonlu simge, adımlar (biten ✓, süren gösterge, bekleyen
+/// soluk), ilerleme çubuğu ve "Arka planda devam et".
+private struct ProcessingOverlay: View {
+    let progress: ProcessingProgress
+    let onDismiss: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    private var steps: [LocalizedStringKey] {
+        [
+            "Kayıt bitiriliyor",
+            "Ses kaydı hazırlanıyor",
+            progress.isLocal ? "Konuşmacılar Mac'te ayrılıyor" : "Kaydın tamamı işleniyor",
+            "Not hazırlanıyor",
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: DesignTokens.Spacing.l) {
+            Image(systemName: "waveform")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(appearance.accent.color)
+                .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
+            Text("Toplantı hazırlanıyor")
+                .font(.system(size: 16, weight: .semibold))
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { (item: (offset: Int, element: LocalizedStringKey)) in
+                    HStack(spacing: DesignTokens.Spacing.s) {
+                        Group {
+                            if item.offset < progress.stepIndex {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            } else if item.offset == progress.stepIndex {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "circle").foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(width: 18, height: 18)
+                        Text(item.element)
+                            .font(.system(size: 13, weight: item.offset == progress.stepIndex ? .semibold : .regular))
+                            .foregroundStyle(item.offset > progress.stepIndex ? .secondary : .primary)
+                    }
+                }
+            }
+            ProgressView(value: Double(progress.stepIndex) + 0.5, total: Double(steps.count))
+                .tint(appearance.accent.color)
+            Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Arka planda devam et", action: onDismiss)
+                .buttonStyle(.plain)
+                .font(.callout)
+                .foregroundStyle(appearance.accent.color)
+        }
+        .padding(DesignTokens.Spacing.xl)
+        .frame(maxWidth: 300)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+        .accessibilityElement(children: .combine)
     }
 }

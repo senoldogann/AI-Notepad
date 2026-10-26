@@ -229,6 +229,10 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   sayfalarını açar), Çık.
 - **Bitiriliyor durumu:** durdurmadan oturum bitene kadar (son metin, bekleyen çeviriler en fazla 10 sn, son
   konuşmacı ayırma) menü, panel ve ada "Bitiriliyor…" gösterir; yeni kayıt başlatılamaz.
+- **Hazırlanma kartı:** Bitir'den toplantı işlenene kadar panelin içeriği bulanıklaşır, ortada animasyonlu kart durur:
+  adımlar (kayıt bitiriliyor → ses kaydı hazırlanıyor → kaydın tamamı işleniyor / yerelde konuşmacılar Mac'te
+  ayrılıyor → not hazırlanıyor; biten ✓, süren gösterge, bekleyen soluk), ilerleme çubuğu, "Arka planda devam et".
+  Adımlar işleme sürecinden gelir (`processMeeting(onStep:)`). Bitince kart kaybolur, toplantı sayfası görünür.
 - **Ada** (`NSPanel`, çentiğe hizalı, her zaman üstte): kayıt göstergesi + süre, algılanan dil,
   son "Diğerleri" cümlesinin Türkçesi. Hata durumunda kırmızıya döner. Çentiksiz ekranda
   (harici monitör) üst ortada hap biçiminde görünür.

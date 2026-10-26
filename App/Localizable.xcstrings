@@ -475,6 +475,16 @@
         }
       }
     },
+    "Arka planda devam et": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue in background"
+          }
+        }
+      }
+    },
     "Asistan": {
       "localizations": {
         "en": {
@@ -588,6 +598,16 @@
         }
       }
     },
+    "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When done, the meeting page opens with your tasks at the top."
+          }
+        }
+      }
+    },
     "Bitir": {
       "extractionState": "stale",
       "localizations": {
@@ -653,6 +673,7 @@
       }
     },
     "Bu bölümü ata": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1498,6 +1519,16 @@
         }
       }
     },
+    "Kaydın tamamı işleniyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Processing the full recording"
+          }
+        }
+      }
+    },
     "Kaydın tamamı işleniyor ve not hazırlanıyor…": {
       "localizations": {
         "en": {
@@ -1524,6 +1555,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You can restart once the recording ends"
+          }
+        }
+      }
+    },
+    "Kayıt bitiriliyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing the recording"
           }
         }
       }
@@ -1691,6 +1732,16 @@
         }
       }
     },
+    "Konuşmacılar Mac'te ayrılıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separating speakers on this Mac"
+          }
+        }
+      }
+    },
     "Konuşmacılar Mac'te ayrılıyor ve not hazırlanıyor…": {
       "localizations": {
         "en": {
@@ -1713,6 +1764,7 @@
       }
     },
     "Konuşmacıyı düzelt": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2110,6 +2162,16 @@
         }
       }
     },
+    "Not hazırlanıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the note"
+          }
+        }
+      }
+    },
     "Not hazırlanıyor…": {
       "localizations": {
         "en": {
@@ -2480,6 +2542,16 @@
         }
       }
     },
+    "Ses kaydı hazırlanıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the audio"
+          }
+        }
+      }
+    },
     "Ses kayıtları": {
       "localizations": {
         "en": {
@@ -2803,6 +2875,16 @@
         }
       }
     },
+    "Toplantı hazırlanıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing your meeting"
+          }
+        }
+      }
+    },
     "Toplantı işleniyor…": {
       "localizations": {
         "en": {
@@ -2934,6 +3016,7 @@
       }
     },
     "Tümünü birleştir: %@ →": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3068,6 +3151,7 @@
       }
     },
     "Yeni konuşmacı": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {

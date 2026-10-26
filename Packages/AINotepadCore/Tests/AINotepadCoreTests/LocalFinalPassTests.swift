@@ -38,7 +38,8 @@ extension ModelTests {
         let result: MeetingRecord = await processMeeting(
             record: recording, directory: directory,
             finalPass: .run(LocalFinalTranscriber(modelsDirectory: try AppPaths.modelsDirectory(), modelName: liveWhisperModel)),
-            llm: nil, languageMode: .automatic, userName: "Doğan"
+            llm: nil, languageMode: .automatic, userName: "Doğan",
+            onStep: { (_: ProcessingStep) async -> Void in }
         )
         let text: String = result.finalSegments.map(\.text).joined(separator: " ").lowercased()
         #expect(text.contains("raport"), "metin: \(text), hata: \(result.failureMessage ?? "")")

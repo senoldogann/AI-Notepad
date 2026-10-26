@@ -23,6 +23,16 @@ public protocol FinalTranscriber: Sendable {
     func transcribeFinal(audioURL: URL, languageMode: LanguageMode) async throws -> FinalPassResult
 }
 
+/// Toplantı sonrası işlemenin adımı (arayüzde ilerleme olarak gösterilir).
+public enum ProcessingStep: Int, Sendable, Equatable, CaseIterable {
+    /// `.caf` → `.m4a`.
+    case convertingAudio
+    /// Kaydın tamamından son geçiş (konuşmacılar).
+    case finalPass
+    /// Türkçe not.
+    case writingNote
+}
+
 /// Son geçiş yapılacak mı: hangi servisle ya da neden atlandığı (toplantıda uyarı olarak görünür).
 public enum FinalPassPlan: Sendable {
     case run(any FinalTranscriber)
@@ -74,9 +84,11 @@ public func processMeeting(
     finalPass: FinalPassPlan,
     llm: LLMProvider?,
     languageMode: LanguageMode,
-    userName: String
+    userName: String,
+    onStep: @escaping @MainActor @Sendable (ProcessingStep) async -> Void
 ) async -> MeetingRecord {
     var current: MeetingRecord = record.with(status: .processing, failureMessage: nil).with(notice: nil)
+    await onStep(.convertingAudio)
 
     for name in ["me", "others"] {
         let caf: URL = directory.appending(path: "\(name).caf")
@@ -92,6 +104,7 @@ public func processMeeting(
     }
 
     let othersAudio: URL = directory.appending(path: "others.m4a")
+    await onStep(.finalPass)
     switch finalPass {
     case .skip(let reason):
         current = current.with(notice: String(localized: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı."))
@@ -112,6 +125,7 @@ public func processMeeting(
         }
     }
 
+    await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
 }
 

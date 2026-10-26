@@ -2,6 +2,12 @@ import Foundation
 import Testing
 @testable import AINotepadCore
 
+/// İşleme adımlarını sırayla toplar.
+@MainActor
+final class StepLog {
+    var steps: [ProcessingStep] = []
+}
+
 extension CloudTests {
 @Suite struct ProcessMeetingTests {
     @Test func processesRecordedMeetingIntoNote() async throws {
@@ -17,15 +23,19 @@ extension CloudTests {
             failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil
         )
 
+        let log: StepLog = await StepLog()
         let result: MeetingRecord = await processMeeting(
             record: recording,
             directory: directory,
             finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             languageMode: .automatic,
-            userName: "Doğan"
+            userName: "Doğan",
+            onStep: { (step: ProcessingStep) async -> Void in log.steps.append(step) }
         )
 
+        // Arayüz ilerlemesi adımları sırayla alır.
+        #expect(await log.steps == [.convertingAudio, .finalPass, .writingNote])
         #expect(result.status == .done, "hata: \(result.failureMessage ?? "")")
         #expect(!result.finalSegments.isEmpty)
         #expect(result.note != nil)
@@ -46,7 +56,8 @@ extension CloudTests {
         )
         let result: MeetingRecord = await processMeeting(
             record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
-            llm: nil, languageMode: .automatic, userName: "Doğan"
+            llm: nil, languageMode: .automatic, userName: "Doğan",
+            onStep: { (_: ProcessingStep) async -> Void in }
         )
         #expect(result.status == .failed)
         #expect(!result.finalSegments.isEmpty)

@@ -85,6 +85,8 @@ final class AppModel {
     var meetingLoadFailures: [MeetingLoadFailure] = []
     /// İşlenmekte olan toplantıların kimlikleri.
     var processingMeetingIDs: Set<String> = []
+    /// İşlenen toplantının şu anki adımı (panelde ilerleme kartı).
+    var processingSteps: [String: ProcessingStep] = [:]
     /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
     var activeMeetingID: String?
 
@@ -708,9 +710,12 @@ final class AppModel {
             let llm: LLMProvider? = await optionalLLMProvider()
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName
-            )
+            ) { [weak self] (step: ProcessingStep) async -> Void in
+                self?.processingSteps[record.id] = step
+            }
             saveRecord(record: result, directory: directory)
             processingMeetingIDs.remove(record.id)
+            processingSteps[record.id] = nil
         }
     }
 
