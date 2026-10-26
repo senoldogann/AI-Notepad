@@ -5,6 +5,7 @@ import Security
 public enum SecretAccount: String, Sendable {
     case deepgram
     case elevenlabs
+    case anthropic
 }
 
 /// Uygulamanın Keychain servis adı.
