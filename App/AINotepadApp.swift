@@ -31,6 +31,7 @@ struct AINotepadApp: App {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 island.install(hideFromCapture: hideFromCapture)
+                model.performStartupMaintenance()
                 registerShortcuts(hotKeys: hotKeys, model: model, panel: panel, island: island)
             }
         }
@@ -46,6 +47,9 @@ struct AINotepadApp: App {
         }
         Settings {
             SettingsView(model: model)
+        }
+        Window("Toplantılar", id: "meetings") {
+            MeetingsWindow(model: model)
         }
     }
 }
@@ -107,6 +111,7 @@ private struct MenuContent: View {
     let island: IslandController
     @AppStorage(hideFromScreenCaptureKey) private var hideFromCapture: Bool = true
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         if model.isRecording {
@@ -145,6 +150,14 @@ private struct MenuContent: View {
                 panel.setHideFromCapture(hidden: newValue)
                 island.setHideFromCapture(hidden: newValue)
             }
+
+        Button("Toplantılar…", systemImage: "list.bullet.rectangle") {
+            NSApplication.shared.activate()
+            openWindow(id: "meetings")
+        }
+        if !model.processingMeetingIDs.isEmpty {
+            Text("Toplantı işleniyor…")
+        }
 
         Button("Ayarlar…", systemImage: "gearshape") {
             // Menü çubuğu uygulaması: pencere öne gelsin diye önce uygulama etkinleştirilir.

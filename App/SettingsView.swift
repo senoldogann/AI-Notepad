@@ -22,6 +22,12 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Sen") {
+                UserNameField()
+                Text("Toplantı notunda sana düşen görevleri ayırmak için kullanılır.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Türkçe çeviri") {
                 Picker("Görünüm", selection: Binding<DisplayMode>(
                     get: { model.displayMode },
@@ -100,5 +106,14 @@ private func save(account: SecretAccount, value: String) -> SecretStatus {
         return .saved
     } catch {
         return .failed("Kaydedilemedi: \(error)")
+    }
+}
+
+/// Kullanıcının adı (UserDefaults).
+private struct UserNameField: View {
+    @AppStorage(userNameKey) private var userName: String = ""
+
+    var body: some View {
+        TextField("Adın", text: $userName)
     }
 }

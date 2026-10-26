@@ -83,3 +83,21 @@ public func audioToDelete(records: [MeetingRecord], now: Date, retentionDays: In
         }
         .map(\.id)
 }
+
+/// Başlık, not ve transkriptte büyük/küçük harf duyarsız arama; boş sorgu hepsini döndürür. Saf fonksiyondur.
+public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingRecord] {
+    let needle: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !needle.isEmpty else {
+        return records
+    }
+    return records.filter { (record: MeetingRecord) -> Bool in
+        let haystack: [String] = [record.title, record.note?.summary ?? ""]
+            + (record.note?.decisions ?? [])
+            + (record.liveSegments + record.finalSegments).map(\.text)
+            + Array(record.translations.values)
+        // Yerel ayardan bağımsız: Türkçe yerel ayarda "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
+        return haystack.contains { (text: String) -> Bool in
+            text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
+        }
+    }
+}

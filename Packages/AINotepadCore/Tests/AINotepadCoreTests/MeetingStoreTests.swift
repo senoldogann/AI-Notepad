@@ -68,3 +68,19 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(storedSegments(transcript: transcript) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei")])
     }
 }
+
+@Suite struct MeetingSearchTests {
+    @Test func searchMatchesTitleNoteAndTranscriptCaseInsensitive() {
+        let plain: MeetingRecord = record(id: "a", startedAt: Date(), status: .done, audioDeleted: false)
+        let noted: MeetingRecord = MeetingRecord(
+            id: "b", title: "Proje", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "Raportti valmis")],
+            translations: [:], speakerNames: [:],
+            note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false
+        )
+        #expect(filterMeetings(records: [plain, noted], query: "").map(\.id) == ["a", "b"])
+        #expect(filterMeetings(records: [plain, noted], query: "bütçe").map(\.id) == ["b"])
+        #expect(filterMeetings(records: [plain, noted], query: "RAPORTTI").map(\.id) == ["b"])
+        #expect(filterMeetings(records: [plain, noted], query: "hei").map(\.id) == ["a"])
+    }
+}

@@ -42,5 +42,15 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Yanlış Anthropic anahtarı: tek bir "anahtar geçersiz" hatası, canlı metin akmaya devam eder.
 - [ ] Anthropic panelinde 10 dk'lık çeviri maliyeti (Haiku: birkaç sent bekleniyor).
 
+## Toplantı sonrası (aşama 5)
+- [ ] Ayarlar'da "Adın" gir; kayıt bitince menüde "Toplantı işleniyor…", ~1 dk içinde biter.
+- [ ] Menü → Toplantılar…: toplantı başlıkla listede; not (özet, kararlar, görevler — senin görevlerin mavi yıldızlı, sözlük).
+- [ ] Transkript son geçişle (ElevenLabs) ve "Konuşmacı N" etiketleriyle; "Konuşmacı 1" → "Aino" yazıp Enter: transkript ve Markdown'da Aino.
+- [ ] Arama: Fince bir kelime ve Türkçe nottaki bir kelime ile bulunuyor.
+- [ ] Markdown kopyala → Notes'a yapıştır; Markdown kaydet → .md dosyası.
+- [ ] Anthropic anahtarı yokken kayıt: toplantı "Hata" (not yok) ama transkript var; anahtarı ekle → "Tekrar işle" → not oluşur.
+- [ ] Kayıt sırasında uygulamayı zorla kapat (Etkinlik Monitörü) → yeniden aç: toplantı "Yarıda kaldı"; "Tekrar işle" çalışır.
+- [ ] "Sesi sil": m4a dosyaları gider, metin/not kalır. 30 günden eski toplantının sesi açılışta silinir.
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).
