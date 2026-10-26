@@ -49,6 +49,13 @@ public struct OpenSegment: Sendable, Equatable {
     public let samples: [Float]
     /// Bölümün sonundaki kesintisiz sessizliğin örnek sayısı.
     public let trailingSilenceSamples: Int
+    /// Başa eklenen ön-kayıt (konuşmadan önceki sessiz çerçeve) örnek sayısı.
+    public let leadingSilenceSamples: Int
+
+    /// Konuşma sayılan örnekler: ön-kayıt ve sondaki sessizlik hariç.
+    public var speechSampleCount: Int {
+        samples.count - leadingSilenceSamples - trailingSilenceSamples
+    }
 }
 
 /// Kapanmış ve yazıya dökülmeye hazır bölüm.
@@ -67,8 +74,11 @@ public struct SegmenterState: Sendable, Equatable {
     public let open: OpenSegment?
     /// Tam çerçeveye tamamlanmamış artık örnekler.
     public let carry: [Float]
+    /// Açık bölüm yokken son sessiz çerçeve: konuşma başlayınca bölümün başına eklenir ki ilk hece
+    /// (enerjisi eşiğin altında başlayan sesler) kesilmesin.
+    public let preRoll: [Float]
 
-    public static let initial: SegmenterState = SegmenterState(consumedSamples: 0, nextIndex: 0, open: nil, carry: [])
+    public static let initial: SegmenterState = SegmenterState(consumedSamples: 0, nextIndex: 0, open: nil, carry: [], preRoll: [])
 }
 
 /// Bir bölümleme adımının sonucu.
@@ -88,6 +98,7 @@ public func segmentAudio(state: SegmenterState, newSamples: [Float], config: Seg
     var consumed: Int = state.consumedSamples
     var nextIndex: Int = state.nextIndex
     var open: OpenSegment? = state.open
+    var preRoll: [Float] = state.preRoll
     var closed: [ClosedSegment] = []
 
     for frameNumber in 0..<frameCount {
@@ -98,8 +109,10 @@ public func segmentAudio(state: SegmenterState, newSamples: [Float], config: Seg
             frame: frame,
             frameStartInStream: consumed,
             nextIndex: nextIndex,
+            preRoll: preRoll,
             config: config
         )
+        preRoll = step.preRoll
         open = step.open
         nextIndex = step.nextIndex
         closed += step.closed
@@ -108,7 +121,7 @@ public func segmentAudio(state: SegmenterState, newSamples: [Float], config: Seg
 
     let carry: [Float] = Array(buffer[(frameCount * config.frameSamples)...])
     return SegmenterOutput(
-        state: SegmenterState(consumedSamples: consumed, nextIndex: nextIndex, open: open, carry: carry),
+        state: SegmenterState(consumedSamples: consumed, nextIndex: nextIndex, open: open, carry: carry, preRoll: preRoll),
         closed: closed
     )
 }
@@ -123,7 +136,8 @@ public func flushSegmenter(state: SegmenterState, config: SegmenterConfig) -> Se
             consumedSamples: state.consumedSamples + state.carry.count,
             nextIndex: state.nextIndex,
             open: nil,
-            carry: []
+            carry: [],
+            preRoll: []
         ),
         closed: closed
     )
@@ -134,6 +148,8 @@ private struct FrameStep {
     let open: OpenSegment?
     let nextIndex: Int
     let closed: [ClosedSegment]
+    /// Bir sonraki bölümün ön-kaydı: yalnızca hiçbir bölüme girmemiş sessiz çerçeve.
+    let preRoll: [Float]
 }
 
 /// Bir çerçeveyi açık bölüme uygular.
@@ -142,6 +158,7 @@ private func advance(
     frame: ArraySlice<Float>,
     frameStartInStream: Int,
     nextIndex: Int,
+    preRoll: [Float],
     config: SegmenterConfig
 ) -> FrameStep {
     let isSpeech: Bool = rootMeanSquare(frame: frame) > config.energyThreshold
@@ -149,13 +166,14 @@ private func advance(
     guard let current = open else {
         // Açık bölüm yok: yalnızca konuşma yeni bölüm açar.
         guard isSpeech else {
-            return FrameStep(open: nil, nextIndex: nextIndex, closed: [])
+            return FrameStep(open: nil, nextIndex: nextIndex, closed: [], preRoll: Array(frame))
         }
         let started: OpenSegment = OpenSegment(
             index: nextIndex,
-            startSample: frameStartInStream,
-            samples: Array(frame),
-            trailingSilenceSamples: 0
+            startSample: frameStartInStream - preRoll.count,
+            samples: preRoll + frame,
+            trailingSilenceSamples: 0,
+            leadingSilenceSamples: preRoll.count
         )
         return closeIfTooLong(segment: started, nextIndex: nextIndex + 1, config: config)
     }
@@ -164,13 +182,15 @@ private func advance(
         index: current.index,
         startSample: current.startSample,
         samples: current.samples + frame,
-        trailingSilenceSamples: isSpeech ? 0 : current.trailingSilenceSamples + frame.count
+        trailingSilenceSamples: isSpeech ? 0 : current.trailingSilenceSamples + frame.count,
+        leadingSilenceSamples: current.leadingSilenceSamples
     )
 
     let silenceLimit: Int = Int(config.minSilenceSec * Double(config.sampleRate))
     if grown.trailingSilenceSamples >= silenceLimit {
         let closed: [ClosedSegment] = closeTrimmingSilence(segment: grown, config: config).map { [$0] } ?? []
-        return FrameStep(open: nil, nextIndex: nextIndex, closed: closed)
+        // Bu sessiz çerçeve kırpıldı, bölüme girmedi: bir sonrakinin ön-kaydı olabilir.
+        return FrameStep(open: nil, nextIndex: nextIndex, closed: closed, preRoll: Array(frame))
     }
     return closeIfTooLong(segment: grown, nextIndex: nextIndex, config: config)
 }
@@ -179,20 +199,20 @@ private func advance(
 private func closeIfTooLong(segment: OpenSegment, nextIndex: Int, config: SegmenterConfig) -> FrameStep {
     let maxSamples: Int = Int(config.maxSegmentSec * Double(config.sampleRate))
     guard segment.samples.count >= maxSamples else {
-        return FrameStep(open: segment, nextIndex: nextIndex, closed: [])
+        return FrameStep(open: segment, nextIndex: nextIndex, closed: [], preRoll: [])
     }
     let closed: ClosedSegment = ClosedSegment(index: segment.index, startSample: segment.startSample, samples: segment.samples)
-    return FrameStep(open: nil, nextIndex: nextIndex, closed: [closed])
+    return FrameStep(open: nil, nextIndex: nextIndex, closed: [closed], preRoll: [])
 }
 
 /// Sondaki sessizliği kırparak kapatır; kalan konuşma çok kısaysa nil döner.
 private func closeTrimmingSilence(segment: OpenSegment, config: SegmenterConfig) -> ClosedSegment? {
-    let speechCount: Int = segment.samples.count - segment.trailingSilenceSamples
     let minSpeech: Int = Int(config.minSpeechSec * Double(config.sampleRate))
-    guard speechCount >= minSpeech else {
+    guard segment.speechSampleCount >= minSpeech else {
         return nil
     }
-    return ClosedSegment(index: segment.index, startSample: segment.startSample, samples: Array(segment.samples[0..<speechCount]))
+    let keptCount: Int = segment.samples.count - segment.trailingSilenceSamples
+    return ClosedSegment(index: segment.index, startSample: segment.startSample, samples: Array(segment.samples[0..<keptCount]))
 }
 
 /// Çerçevenin karekök ortalama enerjisi.

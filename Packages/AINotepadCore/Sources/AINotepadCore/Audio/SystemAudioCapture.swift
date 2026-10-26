@@ -110,7 +110,7 @@ public final class SystemAudioCapture {
                 &newProcID,
                 aggregateID,
                 ioQueue,
-                Self.makeIOBlock(format: format, tapBuffers: tapBuffers, resampler: resampler, continuation: continuation)
+                Self.makeIOBlock(format: format, tapBuffers: tapBuffers, resampler: resampler, continuation: continuation, throttle: LogThrottle(intervalSec: 60))
             ),
             operation: "AudioDeviceCreateIOProcIDWithBlock"
         )
@@ -185,6 +185,7 @@ public final class SystemAudioCapture {
             try await retryWithBackoff(
                 attempts: 4,
                 delaySec: 0.25,
+                isolation: #isolation,
                 operation: {
                     guard generation == self.restartGeneration, let continuation = self.continuation else {
                         return
@@ -210,18 +211,26 @@ public final class SystemAudioCapture {
         format: AVAudioFormat,
         tapBuffers: UnsafeMutableAudioBufferListPointer,
         resampler: AudioResampler,
-        continuation: AsyncStream<[Float]>.Continuation
+        continuation: AsyncStream<[Float]>.Continuation,
+        throttle: LogThrottle
     ) -> AudioDeviceIOBlock {
         { (_: UnsafePointer<AudioTimeStamp>, inputData: UnsafePointer<AudioBufferList>, _: UnsafePointer<AudioTimeStamp>, _: UnsafeMutablePointer<AudioBufferList>, _: UnsafePointer<AudioTimeStamp>) -> Void in
             let source: UnsafeMutableAudioBufferListPointer = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputData))
             guard copyTrailingBuffers(source: source, destination: tapBuffers) else {
                 // Beklenen tap akışı yok: sessizce boş "Diğerleri" göstermek yerine akışı bitir.
+                // Akış bittikten sonra da IO bloğu çağrılır: log dakikada bir.
+                guard throttle.allow() else {
+                    continuation.finish()
+                    return
+                }
                 logger.error("Toplu cihaz girişinde tap tamponu yok: \(source.count, privacy: .public) tampon, beklenen \(tapBuffers.count, privacy: .public)")
                 continuation.finish()
                 return
             }
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: tapBuffers.unsafePointer, deallocator: nil) else {
-                logger.error("Sistem sesi tamponu oluşturulamadı")
+                if throttle.allow() {
+                    logger.error("Sistem sesi tamponu oluşturulamadı")
+                }
                 continuation.finish()
                 return
             }
@@ -231,7 +240,9 @@ public final class SystemAudioCapture {
                     continuation.yield(samples)
                 }
             } catch {
-                logger.error("Sistem sesi dönüştürülemedi: \(String(describing: error), privacy: .public)")
+                if throttle.allow() {
+                    logger.error("Sistem sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .public)")
+                }
                 continuation.finish()
             }
         }

@@ -83,4 +83,26 @@ func runSegmenter(samples: [Float], chunkSize: Int) -> [ClosedSegment] {
         #expect(flushed.closed.first?.samples.count == 32000)
         #expect(flushed.state.open == nil)
     }
+
+    // Konuşmadan önceki sessiz çerçeve bölümün başına eklenir (ilk hece kesilmesin); bölümün sınırı bir çerçeve öne alınır.
+    @Test func preRollKeepsFrameBeforeSpeech() {
+        let output: SegmenterOutput = segmentAudio(
+            state: .initial,
+            newSamples: silence(seconds: 0.5) + tone(seconds: 1.0) + silence(seconds: 1.0),
+            config: .live
+        )
+        #expect(output.closed.count == 1)
+        #expect(output.closed.first?.startSample == 6400)
+        #expect(output.closed.first?.samples.count == 17600)
+    }
+
+    // Ön-kayıt kısa sesleri konuşma saymaz: 0.1 sn ses + ön-kayıt yine atılır.
+    @Test func preRollDoesNotCountAsSpeech() {
+        let output: SegmenterOutput = segmentAudio(
+            state: .initial,
+            newSamples: silence(seconds: 0.5) + tone(seconds: 0.2) + silence(seconds: 1.0),
+            config: .live
+        )
+        #expect(output.closed.isEmpty)
+    }
 }

@@ -1,6 +1,8 @@
 name: AINotepad
 options:
   bundleIdPrefix: com.senoldogan
+  # Kaynak metinler Türkçe; İngilizce çeviriler App/Localizable.xcstrings'te.
+  developmentLanguage: tr
   deploymentTarget:
     macOS: "26.0"
 packages:
@@ -13,6 +15,9 @@ targets:
     sources: [App]
     dependencies:
       - package: AINotepadCore
+        product: AINotepadCore
+      - package: AINotepadCore
+        product: AINotepadUI
     info:
       path: App/Info.plist
       properties:
@@ -28,6 +33,9 @@ targets:
         PRODUCT_NAME: AINotepad
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
+        # Yerelleştirilebilir metinler derlemede çıkarılır ve String Catalog'a eşlenir.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad

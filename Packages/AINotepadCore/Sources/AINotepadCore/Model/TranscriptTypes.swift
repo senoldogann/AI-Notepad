@@ -38,13 +38,16 @@ public struct LiveSegment: Sendable, Equatable, Identifiable {
     public let isFinal: Bool
     /// Yazıya dökme başarısız olduysa kullanıcıya gösterilecek açıklama.
     public let failureMessage: String?
+    /// Konuşmacı ayırmanın atadığı "Konuşmacı N" numarası; atanmadıysa nil.
+    public let person: Int?
 
-    public init(id: SegmentID, startSec: Double, endSec: Double, text: String, isFinal: Bool, failureMessage: String?) {
+    public init(id: SegmentID, startSec: Double, endSec: Double, text: String, isFinal: Bool, failureMessage: String?, person: Int?) {
         self.id = id
         self.startSec = startSec
         self.endSec = endSec
         self.text = text
         self.isFinal = isFinal
         self.failureMessage = failureMessage
+        self.person = person
     }
 }

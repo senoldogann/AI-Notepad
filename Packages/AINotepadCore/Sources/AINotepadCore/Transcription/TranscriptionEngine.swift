@@ -12,4 +12,6 @@ public protocol TranscriptionEngine: Sendable {
 public enum TranscriptionError: Error, Equatable {
     case modelLoadFailed(model: String, reason: String)
     case transcriptionFailed(sampleCount: Int, language: String, reason: String)
+    /// Yerel konuşmacı ayırma (SpeakerKit) başarısız oldu.
+    case diarizationFailed(reason: String)
 }

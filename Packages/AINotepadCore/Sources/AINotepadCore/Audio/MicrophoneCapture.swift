@@ -63,13 +63,13 @@ public final class MicrophoneCapture {
         let input: AVAudioInputNode = engine.inputNode
         let format: AVAudioFormat = input.outputFormat(forBus: 0)
         let resampler: AudioResampler = try AudioResampler(inputFormat: format)
-        input.installTap(onBus: 0, bufferSize: 4096, format: format, block: Self.makeTapBlock(resampler: resampler, continuation: continuation))
+        input.installTap(onBus: 0, bufferSize: 4096, format: format, block: Self.makeTapBlock(resampler: resampler, continuation: continuation, throttle: LogThrottle(intervalSec: 60)))
         engine.prepare()
         do {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
-            throw AudioCaptureError.coreAudio(operation: "AVAudioEngine.start", status: Int32((error as NSError).code))
+            throw AudioCaptureError.microphoneStartFailed(code: Int32((error as NSError).code))
         }
     }
 
@@ -90,6 +90,7 @@ public final class MicrophoneCapture {
             try await retryWithBackoff(
                 attempts: 4,
                 delaySec: 0.25,
+                isolation: #isolation,
                 operation: {
                     guard generation == self.restartGeneration, let continuation = self.continuation else {
                         return
@@ -114,7 +115,8 @@ public final class MicrophoneCapture {
     /// Ses thread'inde çalışan tap bloğu. Ana aktöre bağlı olmaması için `nonisolated` üretilir.
     private nonisolated static func makeTapBlock(
         resampler: AudioResampler,
-        continuation: AsyncStream<[Float]>.Continuation
+        continuation: AsyncStream<[Float]>.Continuation,
+        throttle: LogThrottle
     ) -> AVAudioNodeTapBlock {
         { (buffer: AVAudioPCMBuffer, _: AVAudioTime) -> Void in
             do {
@@ -123,7 +125,10 @@ public final class MicrophoneCapture {
                     continuation.yield(samples)
                 }
             } catch {
-                logger.error("Mikrofon sesi dönüştürülemedi: \(String(describing: error), privacy: .public)")
+                // Her tamponda tekrarlanır: dakikada bir loglanır.
+                if throttle.allow() {
+                    logger.error("Mikrofon sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .public)")
+                }
             }
         }
     }
