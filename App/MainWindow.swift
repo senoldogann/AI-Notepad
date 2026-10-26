@@ -18,6 +18,7 @@ enum MainSection: Hashable {
     case home
     case meetings
     case ask
+    case people
     case tasks
     case settings
     case setup
@@ -59,6 +60,7 @@ func launchSection(arguments: [String]) -> MainSection? {
     case "toplantilar": return .meetings
     case "gorevler": return .tasks
     case "sor": return .ask
+    case "kisiler": return .people
     case "ayarlar": return .settings
     case "kurulum": return .setup
     default: return nil
@@ -195,6 +197,8 @@ struct MainWindowView: View {
             MeetingsSplit(model: model, router: router, player: player)
         case .ask:
             AskPage(model: model, router: router)
+        case .people:
+            PeoplePage(model: model, router: router)
         case .tasks:
             TasksPage(model: model, router: router)
         case .settings:
@@ -225,6 +229,7 @@ private struct Sidebar: View {
             item(title: "Toplantılar", symbol: "list.bullet.rectangle", section: .meetings, badge: nil)
             item(title: "Sor", symbol: "sparkle.magnifyingglass", section: .ask, badge: nil)
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
+            item(title: "Kişiler", symbol: "person.2", section: .people, badge: nil)
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
             if !model.meetings.isEmpty {
                 Text("Son toplantılar")
@@ -345,6 +350,7 @@ private struct TopBar: View {
         case .home: "Ana sayfa"
         case .meetings: "Toplantılar"
         case .ask: "Toplantılarıma sor"
+        case .people: "Kişiler"
         case .tasks: "Görevlerim"
         case .settings: "Ayarlar"
         case .setup: "Kurulum"

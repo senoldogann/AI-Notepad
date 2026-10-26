@@ -1081,6 +1081,16 @@
         }
       }
     },
+    "Bir toplantının Transkript sekmesinde konuşmacıya ad verince kişi burada görünür; sesi hatırlanır ve sonraki toplantılarda adıyla tanınır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name a speaker in a meeting's Transcript tab and they appear here; their voice is remembered and recognised by name in later meetings."
+          }
+        }
+      }
+    },
     "Birden çok toplantıyı seçip sil": {
       "localizations": {
         "en": {
@@ -1876,6 +1886,16 @@
         }
       }
     },
+    "GÖREVLERİ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TASKS"
+          }
+        }
+      }
+    },
     "Gönderme": {
       "localizations": {
         "en": {
@@ -2034,6 +2054,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You're all set"
+          }
+        }
+      }
+    },
+    "Henüz adı verilmiş konuşmacı yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No named speakers yet"
           }
         }
       }
@@ -2617,6 +2647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Who spoke when · click to play from there"
+          }
+        }
+      }
+    },
+    "Kişiler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People"
           }
         }
       }
@@ -3765,6 +3805,16 @@
         }
       }
     },
+    "Sesi henüz kayıtlı değil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice not saved yet"
+          }
+        }
+      }
+    },
     "Sesi sil": {
       "localizations": {
         "en": {
@@ -3781,6 +3831,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recognised by voice: %@."
+          }
+        }
+      }
+    },
+    "Sesinden tanınıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognised by voice"
           }
         }
       }
@@ -4069,6 +4129,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio files are deleted after this period; the transcript and note remain."
+          }
+        }
+      }
+    },
+    "TOPLANTILARI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MEETINGS"
           }
         }
       }
@@ -5004,12 +5074,32 @@
         }
       }
     },
+    "görev": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tasks"
+          }
+        }
+      }
+    },
     "karar": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "decisions"
+          }
+        }
+      }
+    },
+    "konuşma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "talk time"
           }
         }
       }
@@ -5050,6 +5140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "duration"
+          }
+        }
+      }
+    },
+    "toplantı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "meetings"
           }
         }
       }
