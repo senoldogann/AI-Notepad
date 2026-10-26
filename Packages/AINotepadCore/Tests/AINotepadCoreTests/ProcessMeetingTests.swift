@@ -14,14 +14,14 @@ extension CloudTests {
         me.close()
         let recording: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: nil, status: .processing,
-            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false
+            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil
         )
 
         let result: MeetingRecord = await processMeeting(
             record: recording,
             directory: directory,
-            elevenLabsKey: try cloudKey(account: .elevenlabs),
-            anthropicKey: try cloudKey(account: .anthropic),
+            finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            llm: .anthropic(apiKey: try cloudKey(account: .anthropic)),
             languageMode: .automatic,
             userName: "Doğan"
         )
@@ -42,15 +42,15 @@ extension CloudTests {
         others.close()
         let recording: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: nil, status: .processing,
-            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false
+            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil
         )
         let result: MeetingRecord = await processMeeting(
-            record: recording, directory: directory, elevenLabsKey: try cloudKey(account: .elevenlabs),
-            anthropicKey: nil, languageMode: .automatic, userName: "Doğan"
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            llm: nil, languageMode: .automatic, userName: "Doğan"
         )
         #expect(result.status == .failed)
         #expect(!result.finalSegments.isEmpty)
-        #expect(result.failureMessage?.contains("Anthropic") == true)
+        #expect(result.failureMessage?.contains("LLM") == true)
     }
 }
 }

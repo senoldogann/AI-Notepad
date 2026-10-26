@@ -34,22 +34,23 @@ public struct LiveSessionConfig: Sendable {
 /// Canlı oturumu çalıştırır: iki ses akışını kaydeder, bölümler, yazıya döker ve olay yayınlar.
 ///
 /// İki giriş akışı bitince (yakalama durdurulunca) kalan bölümler işlenir ve olay akışı biter.
-/// Motor çağrıları tek bir seri işçiden yapılır.
+/// Motor çağrıları tek bir seri işçiden yapılır. Kullanıcı dili değiştirirse sonraki işler yeni dille yapılır.
 public func runLiveSession(
     config: LiveSessionConfig,
     engine: any TranscriptionEngine,
     meAudio: AsyncStream<[Float]>,
     othersAudio: AsyncStream<[Float]>
-) -> AsyncStream<LiveSessionEvent> {
+) -> LiveSessionHandle {
     let (events, eventSink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
         AsyncStream.makeStream(of: LiveSessionEvent.self)
     let (jobs, jobSink): (AsyncStream<TranscriptionJob>, AsyncStream<TranscriptionJob>.Continuation) =
         AsyncStream.makeStream(of: TranscriptionJob.self)
     let tracker: OpenSegmentTracker = OpenSegmentTracker()
+    let languageRequest: LanguageRequest = LanguageRequest()
 
     Task {
         let worker: Task<Void, Never> = Task {
-            await runTranscriptionWorker(jobs: jobs, engine: engine, config: config, tracker: tracker, events: eventSink)
+            await runTranscriptionWorker(jobs: jobs, engine: engine, config: config, tracker: tracker, languageRequest: languageRequest, events: eventSink)
         }
         let ticker: Task<Void, Never> = Task {
             await runPartialTicker(config: config, tracker: tracker, jobs: jobSink)
@@ -68,7 +69,25 @@ public func runLiveSession(
         await worker.value
         eventSink.finish()
     }
-    return events
+    return LiveSessionHandle(events: events) { (language: MeetingLanguage) async -> Void in
+        await languageRequest.request(language: language)
+        eventSink.yield(.languageLocked(language))
+    }
+}
+
+/// Kullanıcının kayıt sırasında seçtiği dil; işçi bir sonraki işte alır.
+actor LanguageRequest {
+    private var pending: MeetingLanguage?
+
+    func request(language: MeetingLanguage) {
+        pending = language
+    }
+
+    /// Bekleyen isteği döndürür ve temizler.
+    func take() -> MeetingLanguage? {
+        defer { pending = nil }
+        return pending
+    }
 }
 
 private let sessionLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "LiveSession")
@@ -106,7 +125,7 @@ actor OpenSegmentTracker {
             return nil
         }
         for speaker in [Speaker.others, Speaker.me] {
-            if let segment = openSegments[speaker], segment.samples.count - segment.trailingSilenceSamples >= minSpeechSamples {
+            if let segment = openSegments[speaker], segment.speechSampleCount >= minSpeechSamples {
                 pendingJobs += 1
                 return (speaker, segment)
             }
@@ -129,7 +148,7 @@ private func runCapture(
     do {
         recorder = try CafRecorder(fileURL: fileURL)
     } catch {
-        events.yield(.recordingFailed(speaker: speaker, message: String(describing: error)))
+        events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
     }
 
     var state: SegmenterState = .initial
@@ -139,7 +158,7 @@ private func runCapture(
                 try activeRecorder.append(samples: chunk)
             } catch {
                 // Kayıt bozuldu: bir kez bildir, yazıya dökmeye kayıtsız devam et.
-                events.yield(.recordingFailed(speaker: speaker, message: String(describing: error)))
+                events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
                 activeRecorder.close()
                 recorder = nil
             }
@@ -222,10 +241,14 @@ private func runTranscriptionWorker(
     engine: any TranscriptionEngine,
     config: LiveSessionConfig,
     tracker: OpenSegmentTracker,
+    languageRequest: LanguageRequest,
     events: AsyncStream<LiveSessionEvent>.Continuation
 ) async {
     var state: WorkerState = WorkerState(votes: .empty, locked: fixedLanguage(mode: config.languageMode), finalized: [])
     for await job in jobs {
+        if let requested = await languageRequest.take() {
+            state = WorkerState(votes: state.votes, locked: requested, finalized: state.finalized)
+        }
         state = await processJob(job: job, state: state, engine: engine, config: config, events: events)
         await tracker.jobFinished()
     }
@@ -279,7 +302,7 @@ private func processJob(
         events.yield(.languageLocked(lockedNow))
         return WorkerState(votes: votes, locked: lockedNow, finalized: finalized)
     } catch {
-        sessionLogger.error("Bölüm yazıya dökülemedi: \(String(describing: error), privacy: .public)")
+        sessionLogger.error("Bölüm yazıya dökülemedi: \(String(describing: error), privacy: .private)")
         if job.isFinal {
             events.yield(.segment(LiveSegment(
                 id: job.id,
@@ -287,7 +310,7 @@ private func processJob(
                 endSec: job.endSec,
                 text: "",
                 isFinal: true,
-                failureMessage: String(describing: error),
+                failureMessage: userFacingMessage(error: error),
                 person: nil
             )))
         }

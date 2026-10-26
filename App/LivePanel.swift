@@ -1,9 +1,7 @@
+import AINotepadCore
 import AINotepadUI
 import AppKit
 import SwiftUI
-
-/// Ekran görüntüsü/kayıt ayarının UserDefaults anahtarı.
-let hideFromScreenCaptureKey: String = "hideFromScreenCapture"
 
 /// Panelin ve adanın ekran görüntülerinde ve kayıtlarda görünürlüğü.
 /// `.none` gizlemeye çalışır; macOS 15+ ScreenCaptureKit tabanlı yakalamalar bunu her zaman dikkate almaz.
@@ -103,7 +101,9 @@ private struct PanelHost: View {
                 onStop: { model.stopRecording() },
                 onMissed: { model.askWhatIMissed() },
                 onAsk: { (question: String) -> Void in model.ask(question: question) },
-                onCloseCard: { model.closeAssistantCard() }
+                onCloseCard: { model.closeAssistantCard() },
+                onRetryTranslations: { (ids: [SegmentID]) -> Void in model.retryTranslations(ids: ids) },
+                onSetLanguage: { (language: MeetingLanguage) -> Void in model.setLanguage(language: language) }
             )
         )
     }

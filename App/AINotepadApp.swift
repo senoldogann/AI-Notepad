@@ -9,30 +9,34 @@ struct AINotepadApp: App {
     @State private var model: AppModel
     @State private var panel: LivePanelController
     @State private var island: IslandController
-    @State private var hotKeys: HotKeyCenter
+    @State private var shortcuts: ShortcutController
+    @State private var onboarding: OnboardingController
 
     init() {
-        UserDefaults.standard.register(defaults: [liveEngineKey: LiveEngine.deepgram.rawValue])
-        let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: liveEngineKey) ?? "") ?? .deepgram
-        UserDefaults.standard.register(defaults: [displayModeKey: DisplayMode.bilingual.rawValue])
-        let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: displayModeKey) ?? "") ?? .bilingual
+        registerDefaultSettings()
+        let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
+        let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: SettingsKey.displayMode) ?? "") ?? .bilingual
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode)
         _model = State(initialValue: model)
-        // Varsayılan: gizli. Kullanıcı menüden değiştirince UserDefaults'a yazılır.
-        UserDefaults.standard.register(defaults: [hideFromScreenCaptureKey: true])
-        let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: hideFromScreenCaptureKey)
+        let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
         let panel: LivePanelController = LivePanelController(model: model, hideFromCapture: hideFromCapture)
         _panel = State(initialValue: panel)
         let island: IslandController = IslandController(model: model, onTap: { panel.toggle() })
         _island = State(initialValue: island)
-        let hotKeys: HotKeyCenter = HotKeyCenter()
-        _hotKeys = State(initialValue: hotKeys)
+        let shortcuts: ShortcutController = ShortcutController(hotKeys: HotKeyCenter(), model: model, actions: [
+            .record: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
+            .toggleWindows: { toggleWindows(panel: panel, island: island) },
+        ])
+        _shortcuts = State(initialValue: shortcuts)
+        let onboarding: OnboardingController = OnboardingController(model: model, shortcuts: shortcuts)
+        _onboarding = State(initialValue: onboarding)
         // Pencereler ve kısayollar uygulama açıldıktan sonra kurulur.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                island.install(hideFromCapture: hideFromCapture)
+                island.install()
                 model.performStartupMaintenance()
-                registerShortcuts(hotKeys: hotKeys, model: model, panel: panel, island: island)
+                shortcuts.registerAll()
+                onboarding.showIfNeeded()
             }
         }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir.
@@ -42,21 +46,27 @@ struct AINotepadApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("AI-Notepad", systemImage: model.isRecording ? "record.circle" : "waveform") {
-            MenuContent(model: model, panel: panel, island: island)
+        MenuBarExtra("AI-Notepad", systemImage: menuSymbol) {
+            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, onboarding: onboarding)
         }
         Settings {
-            SettingsView(model: model)
+            SettingsView(model: model, shortcuts: shortcuts)
         }
         Window("Toplantılar", id: "meetings") {
             MeetingsWindow(model: model)
         }
     }
+
+    private var menuSymbol: String {
+        switch model.phase {
+        case .recording: "record.circle"
+        case .finishing: "hourglass"
+        case .idle: "waveform"
+        }
+    }
 }
 
-private let shortcutLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Shortcuts")
-
-/// Kaydı başlatır (paneli ve gizlenmiş adayı da gösterir) ya da durdurur. Menü ve ⌃⌥R aynı yolu kullanır.
+/// Kaydı başlatır (paneli ve gizlenmiş adayı da gösterir) ya da durdurur. Menü ve kısayol aynı yolu kullanır.
 @MainActor
 func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: IslandController) async {
     if model.isRecording {
@@ -82,68 +92,61 @@ func toggleWindows(panel: LivePanelController, island: IslandController) {
     }
 }
 
-/// ⌃⌥R kayıt başlat/durdur, ⌃⌥P ada + paneli göster/gizle. Her kısayolun hatası ayrı ve adıyla menüde gösterilir.
-@MainActor
-private func registerShortcuts(hotKeys: HotKeyCenter, model: AppModel, panel: LivePanelController, island: IslandController) {
-    let shortcuts: [(name: String, keyCode: UInt32, action: @MainActor () -> Void)] = [
-        ("⌃⌥R", Shortcut.record, { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } }),
-        ("⌃⌥P", Shortcut.toggleWindows, { toggleWindows(panel: panel, island: island) }),
-    ]
-    var failures: [String] = []
-    for shortcut in shortcuts {
-        do {
-            try hotKeys.register(keyCode: shortcut.keyCode, modifiers: Shortcut.modifiers, action: shortcut.action)
-        } catch HotKeyError.conflictsWithSystemShortcut {
-            shortcutLogger.error("Kısayol sistem kısayoluyla çakışıyor: \(shortcut.name, privacy: .public)")
-            failures.append("\(shortcut.name) bir macOS sistem kısayolu")
-        } catch {
-            shortcutLogger.error("Kısayol kaydedilemedi: \(shortcut.name, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            failures.append("\(shortcut.name) başka bir uygulamada kullanılıyor")
-        }
-    }
-    model.shortcutError = failures.isEmpty ? nil : "Kısayol çalışmıyor: " + failures.joined(separator: ", ")
-}
-
 /// Menü çubuğu menüsü.
 private struct MenuContent: View {
     @Bindable var model: AppModel
     let panel: LivePanelController
     let island: IslandController
-    @AppStorage(hideFromScreenCaptureKey) private var hideFromCapture: Bool = true
+    let shortcuts: ShortcutController
+    let onboarding: OnboardingController
+    @AppStorage(SettingsKey.hideFromScreenCapture) private var hideFromCapture: Bool = true
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if model.isRecording {
+        switch model.phase {
+        case .recording:
             Button("Kaydı durdur", systemImage: "stop.circle") {
                 model.stopRecording()
             }
-            .keyboardShortcut("r", modifiers: [.control, .option])
-        } else {
+            .menuShortcut(binding: shortcuts.currentBinding(action: .record))
+        case .finishing:
+            Button("Bitiriliyor…", systemImage: "hourglass") {}
+                .disabled(true)
+        case .idle:
             Button("Kaydı başlat", systemImage: "record.circle") {
                 Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
             }
             .disabled(!model.isReadyToRecord || model.isStarting)
-            .keyboardShortcut("r", modifiers: [.control, .option])
+            .menuShortcut(binding: shortcuts.currentBinding(action: .record))
         }
 
         Button("Ada ve paneli göster / gizle", systemImage: "rectangle.on.rectangle") {
             toggleWindows(panel: panel, island: island)
         }
-        .keyboardShortcut("p", modifiers: [.control, .option])
+        .menuShortcut(binding: shortcuts.currentBinding(action: .toggleWindows))
 
-        if let shortcutError = model.shortcutError {
-            Text(shortcutError)
+        // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar ve kısayol hataları.
+        ForEach(Array((model.setupProblems + [model.shortcutError].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+            Text(item.element).foregroundStyle(.red)
         }
 
         Divider()
 
-        Picker("Dil", systemImage: "globe", selection: $model.languageMode) {
-            Text("Otomatik").tag(LanguageMode.automatic)
-            Text("Fince").tag(LanguageMode.fixed(.finnish))
-            Text("İngilizce").tag(LanguageMode.fixed(.english))
+        if model.isRecording {
+            // Kayıt sırasında: otomatik algılama yanılırsa dil buradan değişir (o andan itibaren uygulanır).
+            Menu("Dili değiştir", systemImage: "globe") {
+                Button("🇫🇮 Fince") { model.setLanguage(language: .finnish) }
+                Button("🇬🇧 İngilizce") { model.setLanguage(language: .english) }
+            }
+            .disabled(model.isFinishing)
+        } else {
+            Picker("Dil", systemImage: "globe", selection: $model.languageMode) {
+                Text("Otomatik").tag(LanguageMode.automatic)
+                Text("Fince").tag(LanguageMode.fixed(.finnish))
+                Text("İngilizce").tag(LanguageMode.fixed(.english))
+            }
         }
-        .disabled(model.isRecording)
 
         Toggle("Ekran görüntülerinde gizle", systemImage: "eye.slash", isOn: $hideFromCapture)
             .onChange(of: hideFromCapture) { (_: Bool, newValue: Bool) in
@@ -164,6 +167,10 @@ private struct MenuContent: View {
             NSApplication.shared.activate()
             openSettings()
         }
+        .keyboardShortcut(",", modifiers: .command)
+        Button("Kurulum…", systemImage: "wand.and.stars") {
+            onboarding.show()
+        }
 
         if model.liveEngine == .whisperKit {
             switch model.modelStatus {
@@ -174,7 +181,7 @@ private struct MenuContent: View {
                 EmptyView()
             case .failed(let message):
                 Divider()
-                Text(message)
+                Text(message).foregroundStyle(.red)
                 Button("Modeli yeniden yükle", systemImage: "arrow.clockwise") {
                     Task { await model.loadModel() }
                 }
@@ -185,5 +192,28 @@ private struct MenuContent: View {
         Button("Çık", systemImage: "power") {
             NSApplication.shared.terminate(nil)
         }
+        .keyboardShortcut("q", modifiers: .command)
     }
+}
+
+private extension View {
+    /// Global kısayolu menüde ipucu olarak gösterir; harf/rakam olmayan tuşlarda ipucu yok.
+    @ViewBuilder
+    func menuShortcut(binding: KeyBinding) -> some View {
+        if let character = keyEquivalentCharacter(binding: binding) {
+            keyboardShortcut(KeyEquivalent(character), modifiers: eventModifiers(binding: binding))
+        } else {
+            self
+        }
+    }
+}
+
+/// Carbon maskesinden SwiftUI değiştiricileri. Saf fonksiyondur.
+private func eventModifiers(binding: KeyBinding) -> EventModifiers {
+    var modifiers: EventModifiers = []
+    if binding.modifiers & CarbonModifier.control != 0 { modifiers.insert(.control) }
+    if binding.modifiers & CarbonModifier.option != 0 { modifiers.insert(.option) }
+    if binding.modifiers & CarbonModifier.shift != 0 { modifiers.insert(.shift) }
+    if binding.modifiers & CarbonModifier.command != 0 { modifiers.insert(.command) }
+    return modifiers
 }

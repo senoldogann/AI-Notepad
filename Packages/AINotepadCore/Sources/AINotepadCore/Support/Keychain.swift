@@ -2,10 +2,12 @@ import Foundation
 import Security
 
 /// API anahtarlarının Keychain'deki hesap adları.
-public enum SecretAccount: String, Sendable {
+public enum SecretAccount: String, Sendable, CaseIterable {
     case deepgram
     case elevenlabs
     case anthropic
+    /// OpenAI uyumlu LLM sağlayıcısının anahtarı (OpenAI, OpenCode Go…); Ollama'da gerekmez.
+    case openai
 }
 
 /// Uygulamanın Keychain servis adı.
@@ -31,6 +33,23 @@ public func readSecret(service: String, account: SecretAccount) throws -> String
         throw KeychainError.unexpectedStatus(operation: "SecItemCopyMatching", status: status)
     }
     return String(decoding: data, as: UTF8.self)
+}
+
+/// Okumayı arka planda yapar: Keychain izin penceresi açıkken (ör. `security` aracıyla eklenmiş anahtar)
+/// arayüz donmasın.
+public func readSecretInBackground(service: String, account: SecretAccount) async throws -> String {
+    try await Task.detached(priority: .userInitiated) {
+        try readSecret(service: service, account: account)
+    }.value
+}
+
+/// Kayıtlı değilse nil; diğer Keychain hataları fırlatılır (yok sayılmaz).
+public func optionalSecretInBackground(service: String, account: SecretAccount) async throws -> String? {
+    do {
+        return try await readSecretInBackground(service: service, account: account)
+    } catch KeychainError.notFound {
+        return nil
+    }
 }
 
 /// Anahtarı kaydeder; varsa üzerine yazar.

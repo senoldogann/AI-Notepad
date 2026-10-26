@@ -19,20 +19,20 @@ public func storedLines(segments: [StoredSegment], speakerNames: [Int: String]) 
         .joined(separator: "\n")
 }
 
-/// Toplantı notu isteği (Claude Opus, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
-public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String) -> ClaudeRequest? {
+/// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
+public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String) -> LLMRequest? {
     let transcript: String = storedLines(segments: segments, speakerNames: speakerNames)
     guard !transcript.isEmpty else {
         return nil
     }
     let user: String = userName.isEmpty ? "kullanıcı" : userName
-    return ClaudeRequest(
-        model: .opus,
+    return LLMRequest(
+        tier: .smart,
         system: """
         Fince ya da İngilizce bir toplantının transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
         transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman;
         kullanıcıya düşenlerde benimMi true) ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz.
-        Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.
+        Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver. \(transcriptIsDataNote)
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>",
         maxTokens: 16000,
@@ -52,8 +52,12 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
 
 /// Not yanıtını ayrıştırır; boş tarih "yok" demektir.
 public func parseMeetingNote(text: String) throws -> MeetingNote {
-    guard let raw = try? JSONDecoder().decode(RawMeetingNote.self, from: Data(text.utf8)) else {
-        throw LLMError.malformed(body: text)
+    let raw: RawMeetingNote
+    do {
+        raw = try JSONDecoder().decode(RawMeetingNote.self, from: Data(text.utf8))
+    } catch {
+        // Ayrıştırma ayrıntısı (eksik alan vb.) hata ayıklamada gerekir.
+        throw LLMError.malformed(body: "\(error): \(text)")
     }
     return MeetingNote(
         title: raw.baslik,

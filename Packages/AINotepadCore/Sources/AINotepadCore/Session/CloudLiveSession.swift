@@ -47,32 +47,35 @@ public struct CloudSessionConfig: Sendable {
 /// dil sonucu İngilizce ise iki akış İngilizceye geçer.
 ///
 /// İki giriş akışı bitince Deepgram akışları boşalır, son bir ayırma penceresi çalışır ve olay akışı biter.
+/// Kullanıcı kayıt sırasında dili değiştirirse iki akış o andan itibaren yeni dile geçer ve dil kilitlenir.
 public func runCloudLiveSession(
     config: CloudSessionConfig,
     meAudio: AsyncStream<[Float]>,
     othersAudio: AsyncStream<[Float]>
-) -> AsyncStream<LiveSessionEvent> {
+) -> LiveSessionHandle {
     let (events, sink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
         AsyncStream.makeStream(of: LiveSessionEvent.self)
     let state: CloudSessionState = CloudSessionState(windowSamples: Int(config.diarizationWindowSec * Double(cloudSampleRate)))
+    let startLanguage: MeetingLanguage = initialLanguage(languageMode: config.languageMode)
+    let (meForward, meInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+    let (othersForward, othersInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+    let meStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: meForward)
+    let othersStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: othersForward)
+    let streams: [DeepgramStream] = [meStream, othersStream]
 
     Task {
-        let startLanguage: MeetingLanguage = initialLanguage(languageMode: config.languageMode)
-        let (meForward, meInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
-        let (othersForward, othersInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
-        let meStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: meForward)
-        let othersStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: othersForward)
-        let streams: [DeepgramStream] = [meStream, othersStream]
-
         let diarizer: Task<Void, Never> = Task {
             await runDiarizationSchedule(config: config, state: state, streams: streams, events: sink)
         }
         await withTaskGroup(of: Void.self) { (group: inout TaskGroup<Void>) -> Void in
             group.addTask {
-                await pumpAudio(speaker: .me, audio: meAudio, config: config, forward: meInput, state: nil, events: sink)
+                await pumpAudio(speaker: .me, audio: meAudio, config: config, forward: meInput, events: sink) { (_: [Float]) async -> Void in }
             }
             group.addTask {
-                await pumpAudio(speaker: .others, audio: othersAudio, config: config, forward: othersInput, state: state, events: sink)
+                // "Diğerleri" sesi ayrıca konuşmacı ayırma tamponuna gider.
+                await pumpAudio(speaker: .others, audio: othersAudio, config: config, forward: othersInput, events: sink) { (chunk: [Float]) async -> Void in
+                    await state.appendOthers(samples: chunk)
+                }
             }
             group.addTask {
                 await consumeTranscripts(speaker: .me, stream: meStream, state: state, events: sink)
@@ -88,7 +91,14 @@ public func runCloudLiveSession(
         await runDiarizationWindow(config: config, state: state, streams: streams, events: sink)
         sink.finish()
     }
-    return events
+    return LiveSessionHandle(events: events) { (language: MeetingLanguage) async -> Void in
+        // Önce kilit: süren ayırma penceresi otomatik algılamayla dili geri değiştirmesin.
+        await state.lock(language: language)
+        for stream in streams {
+            await stream.switchLanguage(to: language)
+        }
+        sink.yield(.languageLocked(language))
+    }
 }
 
 private let cloudSampleRate: Int = 16000
@@ -143,6 +153,11 @@ private actor CloudSessionState {
         othersFinals
     }
 
+    /// Ayırma penceresinden önce biten bölümler bir daha kelime alamaz: liste uzun toplantıda büyümesin.
+    func dropFinals(endingBefore startSec: Double) {
+        othersFinals.removeAll { (segment: LiveSegment) -> Bool in segment.endSec < startSec }
+    }
+
     func currentMapping() -> SpeakerMapping {
         mapping
     }
@@ -176,21 +191,21 @@ private actor CloudSessionState {
     }
 }
 
-/// Konuşmacı sesini kaydeder ve Deepgram'a iletir; "Diğerleri" sesi ayrıca ayırma tamponuna gider.
+/// Konuşmacı sesini kaydeder, Deepgram'a iletir ve her parçayı `onChunk`'a verir.
 private func pumpAudio(
     speaker: Speaker,
     audio: AsyncStream<[Float]>,
     config: CloudSessionConfig,
     forward: AsyncStream<[Float]>.Continuation,
-    state: CloudSessionState?,
-    events: AsyncStream<LiveSessionEvent>.Continuation
+    events: AsyncStream<LiveSessionEvent>.Continuation,
+    onChunk: @Sendable ([Float]) async -> Void
 ) async {
     let fileURL: URL = config.recordingDirectory.appending(path: "\(speaker.rawValue).caf")
     var recorder: CafRecorder?
     do {
         recorder = try CafRecorder(fileURL: fileURL)
     } catch {
-        events.yield(.recordingFailed(speaker: speaker, message: String(describing: error)))
+        events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
     }
     for await chunk in audio {
         if let activeRecorder = recorder {
@@ -198,13 +213,13 @@ private func pumpAudio(
                 try activeRecorder.append(samples: chunk)
             } catch {
                 // Kayıt bozuldu: bir kez bildir, yazıya dökmeye kayıtsız devam et.
-                events.yield(.recordingFailed(speaker: speaker, message: String(describing: error)))
+                events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
                 activeRecorder.close()
                 recorder = nil
             }
         }
         forward.yield(chunk)
-        await state?.appendOthers(samples: chunk)
+        await onChunk(chunk)
     }
     forward.finish()
     recorder?.close()
@@ -284,6 +299,7 @@ private func runDiarizationWindow(
         return
     }
     let window: (samples: [Float], startSec: Double) = await state.window()
+    await state.dropFinals(endingBefore: window.startSec)
     guard Double(window.samples.count) >= config.minDiarizationAudioSec * Double(cloudSampleRate) else {
         return
     }
@@ -293,17 +309,18 @@ private func runDiarizationWindow(
     do {
         result = try await diarizeWithElevenLabs(apiKey: config.elevenLabsKey, samples: window.samples, languageMode: requestMode)
     } catch {
-        cloudLogger.error("Konuşmacı ayırma penceresi başarısız: \(String(describing: error), privacy: .public)")
-        events.yield(.diarizationFailed(message: elevenLabsFailureMessage(error: error)))
+        cloudLogger.error("Konuşmacı ayırma penceresi başarısız: \(String(describing: error), privacy: .private)")
+        events.yield(.diarizationFailed(message: userFacingMessage(error: error)))
         if case CloudSTTError.http(_, let status, _) = error, status == 401 || status == 403 {
-            // Anahtar reddedildi: her dakika aynı hatayı üretmek yerine ayırma durur.
+            // Anahtar reddedildi ya da kota doldu: her dakika aynı hatayı üretmek yerine ayırma durur.
             await state.disableDiarization()
         }
         return
     }
 
-    // Oturum bitiyorsa (son pencere) dil değiştirmek yeni, sahipsiz bağlantı açar.
-    if case .automatic = config.languageMode, locked == nil, !(await state.isStopping()),
+    // Oturum bitiyorsa (son pencere) dil değiştirmek yeni, sahipsiz bağlantı açar. Kilit istek sürerken
+    // (kullanıcı dili seçince) konmuş olabilir: yeniden okunur.
+    if case .automatic = config.languageMode, await state.locked() == nil, !(await state.isStopping()),
        let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence) {
         await state.lock(language: detected)
         events.yield(.languageLocked(detected))
@@ -330,14 +347,3 @@ func confidentLanguage(result: DiarizationResult, minimumProbability: Double) ->
     return meetingLanguage(elevenLabsCode: code)
 }
 
-/// Kullanıcıya gösterilecek Türkçe hata metni (anahtar içermez).
-private func elevenLabsFailureMessage(error: any Error) -> String {
-    switch error {
-    case CloudSTTError.http(_, let status, _) where status == 401 || status == 403:
-        return "ElevenLabs anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
-    case CloudSTTError.http(_, let status, _):
-        return "ElevenLabs isteği başarısız (HTTP \(status))."
-    default:
-        return String(describing: error)
-    }
-}

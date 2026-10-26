@@ -7,8 +7,8 @@ func jsonObject(_ data: Data) throws -> [String: Any] {
     try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 }
 
-func request(model: ClaudeModel, schema: String?) -> ClaudeRequest {
-    ClaudeRequest(model: model, system: "sistem", userText: "metin", maxTokens: 1024, effort: model == .haiku ? "low" : "medium", jsonSchema: schema, timeoutSec: 20)
+func request(model: ClaudeModel, schema: String?) -> LLMRequest {
+    LLMRequest(tier: model == .haiku ? .fast : .smart, system: "sistem", userText: "metin", maxTokens: 1024, effort: model == .haiku ? "low" : "medium", jsonSchema: schema, timeoutSec: 20)
 }
 
 @Suite struct ClaudeClientTests {
@@ -53,25 +53,25 @@ func request(model: ClaudeModel, schema: String?) -> ClaudeRequest {
 
     @Test func parseJoinsTextSkipsThinking() throws {
         let data: Data = Data(#"{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":""},{"type":"text","text":"Merhaba"},{"type":"text","text":" dünya"}]}"#.utf8)
-        #expect(try parseClaudeResponse(data: data) == "Merhaba dünya")
+        #expect(try parseClaudeResponse(data: data, model: "m") == "Merhaba dünya")
     }
 
-    // Yalnızca 429/5xx yeniden denenir; 200 içindeki reddetme/bozuk yanıt ve diğer 4xx kesin sonuçtur.
+    // Yalnızca 408/429/5xx yeniden denenir; 200 içindeki reddetme/bozuk yanıt ve diğer 4xx kesin sonuçtur.
     @Test func classifyRetriesOnlyTransientFailures() {
         let ok: Data = Data(#"{"stop_reason":"end_turn","content":[{"type":"text","text":"Merhaba"}]}"#.utf8)
         let refusal: Data = Data(#"{"stop_reason":"refusal","stop_details":{"category":"cyber"},"content":[]}"#.utf8)
-        #expect(classifyClaudeResponse(status: 200, data: ok) == .success("Merhaba"))
-        #expect(classifyClaudeResponse(status: 200, data: refusal) == .final(.refusal(category: "cyber")))
-        #expect(classifyClaudeResponse(status: 200, data: Data("{".utf8)) == .final(.malformed(body: "{")))
-        #expect(classifyClaudeResponse(status: 429, data: Data("x".utf8)) == .retryable(.http(status: 429, body: "x")))
-        #expect(classifyClaudeResponse(status: 503, data: Data("x".utf8)) == .retryable(.http(status: 503, body: "x")))
-        #expect(classifyClaudeResponse(status: 401, data: Data("x".utf8)) == .final(.http(status: 401, body: "x")))
+        #expect(classifyClaudeResponse(status: 200, data: ok, model: "m", requestID: nil) == .success("Merhaba"))
+        #expect(classifyClaudeResponse(status: 200, data: refusal, model: "m", requestID: nil) == .final(.refusal(category: "cyber")))
+        #expect(classifyClaudeResponse(status: 200, data: Data("{".utf8), model: "m", requestID: nil) == .final(.malformed(body: "{")))
+        #expect(classifyClaudeResponse(status: 429, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 429, body: "x", model: "m", requestID: "r")))
+        #expect(classifyClaudeResponse(status: 503, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 503, body: "x", model: "m", requestID: "r")))
+        #expect(classifyClaudeResponse(status: 401, data: Data("x".utf8), model: "m", requestID: "r") == .final(.http(status: 401, body: "x", model: "m", requestID: "r")))
     }
 
     @Test func refusalIsError() {
         let data: Data = Data(#"{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},"content":[]}"#.utf8)
         #expect(throws: LLMError.refusal(category: "cyber")) {
-            try parseClaudeResponse(data: data)
+            try parseClaudeResponse(data: data, model: "m")
         }
     }
 }
@@ -79,19 +79,21 @@ func request(model: ClaudeModel, schema: String?) -> ClaudeRequest {
 extension CloudTests {
 @Suite struct ClaudeCloudTests {
     @Test func haikuAnswers() async throws {
-        let text: String = try await sendClaude(
-            apiKey: try cloudKey(account: .anthropic),
-            request: ClaudeRequest(model: .haiku, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, effort: "low", jsonSchema: nil, timeoutSec: 20)
+        let text: String = try await sendLLM(
+            provider: .anthropic(apiKey: try cloudKey(account: .anthropic)),
+            request: LLMRequest(tier: .fast, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, effort: "low", jsonSchema: nil, timeoutSec: 20)
         )
         #expect(text.lowercased().contains("ankara"), "metin: \(text)")
     }
 
     @Test func invalidKeyThrows401() async {
         do {
-            _ = try await sendClaude(apiKey: "gecersiz", request: request(model: .haiku, schema: nil))
+            _ = try await sendLLM(provider: .anthropic(apiKey: "gecersiz"), request: request(model: .haiku, schema: nil))
             Issue.record("hata bekleniyordu")
-        } catch LLMError.http(let status, _) {
+        } catch LLMError.http(let status, _, let model, let requestID) {
             #expect(status == 401)
+            #expect(model == "claude-haiku-5-5")
+            #expect(requestID != nil)
         } catch {
             Issue.record("beklenmeyen: \(error)")
         }

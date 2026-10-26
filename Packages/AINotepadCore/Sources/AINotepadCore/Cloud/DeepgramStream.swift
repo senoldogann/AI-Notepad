@@ -113,6 +113,8 @@ private actor DeepgramConnection {
     private var isReconnecting: Bool = false
     private var isFlushing: Bool = false
     private var isClosing: Bool = false
+    /// Kapanış süresi doldu: yeniden bağlanma denemeleri bırakılır.
+    private var closeDeadlinePassed: Bool = false
     private var hasFailed: Bool = false
 
     init(apiKey: String, url: URL, events: AsyncStream<StreamingEvent>.Continuation) {
@@ -196,7 +198,8 @@ private actor DeepgramConnection {
         let delays: [Double] = reconnectDelays(budgetSec: reconnectBudgetSec, initialSec: 0.25, capSec: 5)
         var lastError: any Error = CloudSTTError.connectionFailed(service: "deepgram", reason: "deneme yapılmadı")
         for (attempt, delay) in delays.enumerated() {
-            guard !isClosing else {
+            // Kapanışta da süre dolana kadar denenir ki kuyruktaki son ses gönderilebilsin.
+            guard !closeDeadlinePassed else {
                 throw lastError
             }
             do {
@@ -206,7 +209,7 @@ private actor DeepgramConnection {
                 throw CloudSTTError.http(service: service, status: status, body: body)
             } catch {
                 lastError = error
-                deepgramLogger.warning("Deepgram'a bağlanılamadı, deneme \(attempt + 1, privacy: .public): \(String(describing: error), privacy: .public)")
+                deepgramLogger.warning("Deepgram'a bağlanılamadı, deneme \(attempt + 1, privacy: .public): \(String(describing: error), privacy: .private)")
             }
             try await Task.sleep(for: .seconds(delay))
         }
@@ -218,7 +221,7 @@ private actor DeepgramConnection {
         guard isConnected, !isReconnecting, !isClosing, !hasFailed else {
             return
         }
-        deepgramLogger.warning("Deepgram bağlantısı koptu: \(String(describing: error), privacy: .public)")
+        deepgramLogger.warning("Deepgram bağlantısı koptu: \(String(describing: error), privacy: .private)")
         await reconnect()
     }
 
@@ -249,6 +252,11 @@ private actor DeepgramConnection {
             await flush()
         } catch {
             isReconnecting = false
+            guard !isClosing else {
+                // Kapanış süresi içinde bağlanılamadı: ses dosyada duruyor, son geçiş kapsar; kullanıcıya hata gösterilmez.
+                deepgramLogger.warning("Kapanışta yeniden bağlanılamadı, son ses gönderilmedi, örnek: \(self.pending.count, privacy: .public)")
+                return
+            }
             fail(error: error)
         }
     }
@@ -361,9 +369,18 @@ private actor DeepgramConnection {
         let deadline: Task<Void, Never> = Task {
             do {
                 try await Task.sleep(for: .seconds(closeDeadlineSec))
-                self.cancelSocket()
+                await self.expireCloseDeadline()
             } catch {
                 // Kapanış süre dolmadan bitti; zamanlayıcı iptal edildi.
+            }
+        }
+        // Süren yeniden bağlanma ya da gönderim bitsin: kuyruktaki son ses sırasıyla gönderilsin.
+        while isReconnecting || isFlushing, !closeDeadlinePassed {
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                // Bu görev iptal edilmez; iptal gelirse beklemeden kapanılır.
+                break
             }
         }
         if let socket, isConnected, !hasFailed {
@@ -373,7 +390,7 @@ private actor DeepgramConnection {
                 do {
                     try await socket.send(.data(linear16Data(samples: chunk)))
                 } catch {
-                    deepgramLogger.error("Kapanışta ses gönderilemedi: \(String(describing: error), privacy: .public)")
+                    deepgramLogger.error("Kapanışta ses gönderilemedi: \(String(describing: error), privacy: .private)")
                     break
                 }
             }
@@ -381,7 +398,7 @@ private actor DeepgramConnection {
                 try await socket.send(.string(#"{"type":"CloseStream"}"#))
                 await receiver?.value
             } catch {
-                deepgramLogger.error("CloseStream gönderilemedi: \(String(describing: error), privacy: .public)")
+                deepgramLogger.error("CloseStream gönderilemedi: \(String(describing: error), privacy: .private)")
             }
         }
         deadline.cancel()
@@ -392,7 +409,9 @@ private actor DeepgramConnection {
         events.finish()
     }
 
-    private func cancelSocket() {
+    /// Kapanış süresi doldu: süren gönderme/alma kesilir, yeniden bağlanma bırakılır.
+    private func expireCloseDeadline() {
+        closeDeadlinePassed = true
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
@@ -406,7 +425,7 @@ private actor DeepgramConnection {
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         session.finishTasksAndInvalidate()
-        deepgramLogger.error("Deepgram akışı durdu: \(String(describing: error), privacy: .public)")
+        deepgramLogger.error("Deepgram akışı durdu: \(String(describing: error), privacy: .private)")
         events.yield(.failed(message: deepgramFailureMessage(error: error)))
         events.finish()
     }
@@ -415,13 +434,9 @@ private actor DeepgramConnection {
 /// Kullanıcıya gösterilecek Türkçe hata metni (anahtar içermez).
 private func deepgramFailureMessage(error: any Error) -> String {
     switch error {
-    case CloudSTTError.http(_, let status, _) where status == 401 || status == 403:
-        return "Deepgram anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
-    case CloudSTTError.http(_, let status, _):
-        return "Deepgram bağlantısı reddedildi (HTTP \(status))."
     case CloudSTTError.connectionFailed:
         return "Deepgram'a \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor."
     default:
-        return "Deepgram akışı durdu: \(String(describing: error))"
+        return userFacingMessage(error: error)
     }
 }

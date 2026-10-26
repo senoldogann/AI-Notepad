@@ -9,19 +9,27 @@ public struct PanelActions {
     public let onMissed: @MainActor () -> Void
     public let onAsk: @MainActor (String) -> Void
     public let onCloseCard: @MainActor () -> Void
+    /// Çevirisi başarısız bölümleri yeniden çevir.
+    public let onRetryTranslations: @MainActor ([SegmentID]) -> Void
+    /// Kayıt sırasında toplantı dilini değiştir.
+    public let onSetLanguage: @MainActor (MeetingLanguage) -> Void
 
     public init(
         onHide: @escaping @MainActor () -> Void,
         onStop: @escaping @MainActor () -> Void,
         onMissed: @escaping @MainActor () -> Void,
         onAsk: @escaping @MainActor (String) -> Void,
-        onCloseCard: @escaping @MainActor () -> Void
+        onCloseCard: @escaping @MainActor () -> Void,
+        onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
+        onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void
     ) {
         self.onHide = onHide
         self.onStop = onStop
         self.onMissed = onMissed
         self.onAsk = onAsk
         self.onCloseCard = onCloseCard
+        self.onRetryTranslations = onRetryTranslations
+        self.onSetLanguage = onSetLanguage
     }
 }
 
@@ -66,11 +74,7 @@ public struct TranscriptPanel: View {
         HStack(spacing: DesignTokens.Spacing.s) {
             StatusLabel(state: state)
             Spacer(minLength: DesignTokens.Spacing.s)
-            Text(state.languageText)
-                .font(DesignTokens.statusFont)
-                .padding(.horizontal, DesignTokens.Spacing.s)
-                .padding(.vertical, 3)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
+            languageChip
             if state.isRecording {
                 IconButton(symbol: "stop.circle", help: "Kaydı durdur", action: actions.onStop)
             }
@@ -79,6 +83,31 @@ public struct TranscriptPanel: View {
             }
             .disabled(state.blocks.isEmpty)
             IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
+        }
+    }
+
+    /// Dil etiketi; kayıt sırasında dokununca dil değiştirilebilir (otomatik algılama yanılırsa).
+    @ViewBuilder
+    private var languageChip: some View {
+        let chip: some View = Text(state.languageText)
+            .font(DesignTokens.statusFont)
+            .padding(.horizontal, DesignTokens.Spacing.s)
+            .padding(.vertical, 3)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
+        if state.isRecording {
+            Menu {
+                LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
+            } label: {
+                chip
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Toplantı dilini değiştir")
+            .accessibilityLabel("Toplantı dili: \(state.languageText). Değiştir")
+        } else {
+            chip
         }
     }
 
@@ -91,7 +120,9 @@ public struct TranscriptPanel: View {
                             block: block,
                             turkish: blockTurkishText(block: block, translations: state.translations),
                             translations: state.translations,
-                            displayMode: state.displayMode
+                            failedTranslations: failedTranslationIDs(block: block, failed: state.failedTranslations),
+                            displayMode: state.displayMode,
+                            onRetryTranslations: actions.onRetryTranslations
                         )
                         .id(block.id)
                     }
@@ -125,6 +156,7 @@ public struct TranscriptPanel: View {
             }
             .buttonStyle(.plain)
             .disabled(state.blocks.isEmpty)
+            .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
             TextField("Toplantı hakkında sor…", text: $question)
                 .textFieldStyle(.plain)
                 .font(DesignTokens.statusFont)
@@ -144,7 +176,8 @@ public struct TranscriptPanel: View {
 
     private var errorBand: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-            ForEach(state.errors, id: \.self) { (message: String) in
+            ForEach(Array(state.errors.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+                let message: String = item.element
                 Text(message)
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
@@ -158,12 +191,29 @@ public struct TranscriptPanel: View {
     }
 }
 
-/// Kayıt sırasında kırmızı nokta + süre, değilse durum metni.
+/// Toplantı dili seçenekleri (panel ve ada menüsü).
+struct LanguageMenuItems: View {
+    let onSetLanguage: @MainActor (MeetingLanguage) -> Void
+
+    var body: some View {
+        Button("🇫🇮 Fince") { onSetLanguage(.finnish) }
+        Button("🇬🇧 İngilizce") { onSetLanguage(.english) }
+    }
+}
+
+/// Kayıt sırasında kırmızı nokta + süre, bitirilirken "Bitiriliyor…", değilse durum metni.
 struct StatusLabel: View {
     let state: LiveViewState
 
     var body: some View {
-        if state.isRecording, let startedAt = state.startedAt {
+        if state.phase == .finishing {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Bitiriliyor…")
+                    .font(DesignTokens.statusFont)
+            }
+            .accessibilityElement(children: .combine)
+        } else if state.isRecording, let startedAt = state.startedAt {
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 7, height: 7)
                 TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
@@ -172,6 +222,8 @@ struct StatusLabel: View {
                         .monospacedDigit()
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Kayıtta")
         } else {
             Text(state.statusText)
                 .font(DesignTokens.statusFont)
@@ -186,7 +238,10 @@ struct BlockView: View {
     let block: SpeakerBlock
     let turkish: String?
     let translations: [SegmentID: String]
+    /// Bu bloğun çevirisi başarısız bölümleri.
+    let failedTranslations: [SegmentID]
     let displayMode: DisplayMode
+    let onRetryTranslations: @MainActor ([SegmentID]) -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s) {
@@ -226,8 +281,20 @@ struct BlockView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.red)
                 }
+                if !failedTranslations.isEmpty {
+                    Button {
+                        onRetryTranslations(failedTranslations)
+                    } label: {
+                        Label("Çeviri alınamadı · Tekrar dene", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.orange)
+                }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(speakerLabel(speaker: block.speaker, person: block.person))
         .contextMenu {
             Button("Kopyala") {
                 copyToPasteboard(text: plainText(blocks: [block]))
@@ -301,13 +368,14 @@ struct AssistantCardView: View {
         case .summary(let summary):
             VStack(alignment: .leading, spacing: 6) {
                 Text(summary.topic)
+                // Aynı metin iki kez gelebilir: kimlik sıradan.
                 if !summary.decisions.isEmpty {
                     Text("Kararlar").font(DesignTokens.labelFont).foregroundStyle(.secondary)
-                    ForEach(summary.decisions, id: \.self) { (item: String) in Text("• " + item) }
+                    ForEach(Array(summary.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
                 if !summary.askedOfYou.isEmpty {
                     Text("Senden istenenler").font(DesignTokens.labelFont).foregroundStyle(DesignTokens.meColor)
-                    ForEach(summary.askedOfYou, id: \.self) { (item: String) in Text("• " + item) }
+                    ForEach(Array(summary.askedOfYou.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
             }
         case .answer(let question, let text):

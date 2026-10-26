@@ -84,7 +84,7 @@ public func diarizeFile(apiKey: String, fileURL: URL, mimeType: String, language
     do {
         audio = try Data(contentsOf: fileURL)
     } catch {
-        throw AudioCaptureError.recorderFailed(path: fileURL.path, reason: "okunamadı: \(error)")
+        throw StorageError.readFailed(path: fileURL.path, reason: error.localizedDescription)
     }
     return try await postToElevenLabs(
         apiKey: apiKey,
@@ -138,7 +138,7 @@ private func postToElevenLabs(
             }
         },
         onFailure: { (attempt: Int, error: any Error) -> Void in
-            elevenLabsLogger.warning("ElevenLabs isteği başarısız, deneme \(attempt, privacy: .public), bayt: \(audio.count, privacy: .public): \(String(describing: error), privacy: .public)")
+            elevenLabsLogger.warning("ElevenLabs isteği başarısız, deneme: \(attempt, privacy: .public), bayt: \(audio.count, privacy: .public), hata: \(String(describing: error), privacy: .private)")
         }
     )
     if let rejection {

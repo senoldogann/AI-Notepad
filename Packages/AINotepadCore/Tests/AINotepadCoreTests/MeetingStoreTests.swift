@@ -7,7 +7,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         id: id, title: "Palaveri", startedAt: startedAt, endedAt: nil, language: .finnish, status: status,
         failureMessage: nil,
         liveSegments: [StoredSegment(key: "others-0", speaker: .others, person: 1, startSec: 0, endSec: 2, text: "Hei")],
-        finalSegments: [], translations: ["others-0": "Merhaba"], speakerNames: [1: "Aino"], note: nil, audioDeleted: audioDeleted
+        finalSegments: [], translations: ["others-0": "Merhaba"], speakerNames: [1: "Aino"], note: nil, audioDeleted: audioDeleted, engine: .cloud, notice: nil
     )
 }
 
@@ -76,11 +76,23 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             id: "b", title: "Proje", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
             liveSegments: [], finalSegments: [StoredSegment(key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 1, text: "Raportti valmis")],
             translations: [:], speakerNames: [:],
-            note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false
+            note: MeetingNote(title: "Proje", summary: "Bütçe konuşuldu", decisions: [], tasks: [], glossary: []), audioDeleted: false, engine: .cloud, notice: nil
         )
         #expect(filterMeetings(records: [plain, noted], query: "").map(\.id) == ["a", "b"])
         #expect(filterMeetings(records: [plain, noted], query: "bütçe").map(\.id) == ["b"])
         #expect(filterMeetings(records: [plain, noted], query: "RAPORTTI").map(\.id) == ["b"])
         #expect(filterMeetings(records: [plain, noted], query: "hei").map(\.id) == ["a"])
+    }
+}
+
+@Suite struct MeetingListTests {
+    @Test func upsertReplacesAndKeepsNewestFirst() {
+        let old: MeetingRecord = record(id: "20261020-090000", startedAt: Date(), status: .done, audioDeleted: false)
+        let new: MeetingRecord = record(id: "20261026-090000", startedAt: Date(), status: .recording, audioDeleted: false)
+        let list: [MeetingRecord] = upsertMeeting(records: [old], record: new)
+        #expect(list.map(\.id) == ["20261026-090000", "20261020-090000"])
+        let updated: [MeetingRecord] = upsertMeeting(records: list, record: new.with(status: .done, failureMessage: nil))
+        #expect(updated.count == 2)
+        #expect(updated.first?.status == .done)
     }
 }

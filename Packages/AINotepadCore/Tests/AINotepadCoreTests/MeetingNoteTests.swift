@@ -8,12 +8,12 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
 
 @Suite struct MeetingNoteTests {
     @Test func noteRequestHasSchemaAndUserName() throws {
-        let request: ClaudeRequest = try #require(meetingNoteRequest(
+        let request: LLMRequest = try #require(meetingNoteRequest(
             segments: [stored("final-0", .others, 1, 5, "Voisitko tehdä diat?"), stored("me-0", .me, nil, 9, "Teen ne.")],
             speakerNames: [1: "Aino"],
             userName: "Doğan"
         ))
-        #expect(request.model == .opus)
+        #expect(request.tier == .smart)
         #expect(request.jsonSchema?.contains("gorevler") == true)
         #expect(request.userText.contains("[00:05] Aino: Voisitko tehdä diat?"))
         #expect(request.userText.contains("[00:09] Sen: Teen ne."))
@@ -43,7 +43,7 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
             liveSegments: [], finalSegments: [stored("final-0", .others, 1, 5, "Hyvää huomenta.")],
             translations: [:], speakerNames: [1: "Aino"],
             note: MeetingNote(title: "Proje toplantısı", summary: "Kısa.", decisions: [], tasks: [NoteTask(owner: "Sen", description: "Slaytlar", dueDate: nil, isMine: true)], glossary: []),
-            audioDeleted: false
+            audioDeleted: false, engine: .cloud, notice: nil
         )
         let markdown: String = meetingMarkdown(record: record)
         #expect(markdown.hasPrefix("# Proje toplantısı"))
@@ -56,7 +56,7 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
 extension CloudTests {
 @Suite struct MeetingNoteCloudTests {
     @Test func noteFromDialog() async throws {
-        let request: ClaudeRequest = try #require(meetingNoteRequest(
+        let request: LLMRequest = try #require(meetingNoteRequest(
             segments: [
                 stored("final-0", .others, 1, 0, "Hyvää huomenta, aloitetaan palaveri."),
                 stored("final-1", .others, 2, 3, "Kiitos. Minulla on raportti valmiina."),
@@ -66,7 +66,7 @@ extension CloudTests {
             speakerNames: [1: "Aino"],
             userName: "Doğan"
         ))
-        let note: MeetingNote = try parseMeetingNote(text: try await sendClaude(apiKey: try cloudKey(account: .anthropic), request: request))
+        let note: MeetingNote = try parseMeetingNote(text: try await sendLLM(provider: .anthropic(apiKey: try cloudKey(account: .anthropic)), request: request))
         #expect(!note.title.isEmpty)
         #expect(note.tasks.contains { $0.isMine }, "görevler: \(note.tasks)")
     }

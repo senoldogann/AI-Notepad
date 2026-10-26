@@ -72,7 +72,7 @@ extension CloudTests {
             config: config,
             meAudio: pacedStream(samples: silence(seconds: 12)),
             othersAudio: pacedStream(samples: fixture)
-        ))
+        ).events)
 
         let text: String = finalOthersText(events: events)
         #expect(text.contains("raportti") || text.contains("raportin"), "metin: \(text)")
@@ -94,7 +94,7 @@ extension CloudTests {
             config: config,
             meAudio: pacedStream(samples: silence(seconds: Double(others.count) / 16000)),
             othersAudio: pacedStream(samples: others)
-        ))
+        ).events)
 
         #expect(events.contains(.languageLocked(.english)))
         let text: String = finalOthersText(events: events)
@@ -110,7 +110,7 @@ extension CloudTests {
             config: config,
             meAudio: pacedStream(samples: silence(seconds: Double(fixture.count) / 16000)),
             othersAudio: pacedStream(samples: fixture)
-        ))
+        ).events)
         let diarizationFailures: [LiveSessionEvent] = events.filter { (event: LiveSessionEvent) -> Bool in
             if case .diarizationFailed = event { return true }
             return false
@@ -127,7 +127,32 @@ extension CloudTests {
             config: config,
             meAudio: pacedStream(samples: silence(seconds: Double(fixture.count) / 16000)),
             othersAudio: pacedStream(samples: fixture)
-        ))
+        ).events)
+        #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
+    }
+
+    // Kullanıcı kayıt sırasında dili değiştirince iki akış o andan itibaren yeni dille yazar.
+    @Test func userSwitchesLanguageMidMeeting() async throws {
+        let english: [Float] = try loadFixture(name: "en-meeting")
+        let base: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000, minDiarizationAudioSec: 1000, elevenLabsKey: try cloudKey(account: .elevenlabs))
+        let config: CloudSessionConfig = CloudSessionConfig(
+            languageMode: .fixed(.finnish), recordingDirectory: base.recordingDirectory, deepgramKey: base.deepgramKey,
+            elevenLabsKey: base.elevenLabsKey, firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000,
+            diarizationWindowSec: 120, minDiarizationAudioSec: 1000, languageConfidence: 0.8
+        )
+        let handle: LiveSessionHandle = runCloudLiveSession(
+            config: config,
+            meAudio: pacedStream(samples: silence(seconds: Double(english.count) / 16000 + 2)),
+            othersAudio: pacedStream(samples: silence(seconds: 2) + english)
+        )
+        Task {
+            try await Task.sleep(for: .seconds(1))
+            await handle.setLanguage(.english)
+        }
+        let events: [LiveSessionEvent] = await collect(events: handle.events)
+        #expect(events.contains(.languageLocked(.english)))
+        let text: String = finalOthersText(events: events)
+        #expect(text.contains("presentation"), "metin: \(text)")
         #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
     }
 }

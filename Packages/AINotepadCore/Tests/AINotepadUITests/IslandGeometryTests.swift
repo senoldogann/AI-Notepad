@@ -42,4 +42,14 @@ import Testing
         let layout: IslandLayout = islandLayout(screen: screen, wing: 120, expansion: 64, pillHeight: 32, pillWidth: 360, pillGap: 8)
         #expect(layout.frame.midX == CGFloat(1512 + 960))
     }
+
+    // İkincil ekrandaki (başlangıcı 0 olmayan) çentik alanı genel koordinatlara taşınır; birincil ekranda değişmez.
+    @Test func auxiliaryAreaMovesToGlobalCoordinates() {
+        let secondary: CGRect = CGRect(x: -1512, y: 0, width: 1512, height: 982)
+        let local: CGRect = CGRect(x: 0, y: 950, width: 660, height: 32)
+        #expect(globalAuxiliaryArea(area: local, screenFrame: secondary) == CGRect(x: -1512, y: 950, width: 660, height: 32))
+        let primary: CGRect = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        #expect(globalAuxiliaryArea(area: local, screenFrame: primary) == local)
+        #expect(globalAuxiliaryArea(area: .zero, screenFrame: secondary) == .zero)
+    }
 }

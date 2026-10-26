@@ -16,6 +16,7 @@ let package = Package(
             name: "AINotepadCore",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "SpeakerKit", package: "WhisperKit"),
             ]
         ),
         .target(

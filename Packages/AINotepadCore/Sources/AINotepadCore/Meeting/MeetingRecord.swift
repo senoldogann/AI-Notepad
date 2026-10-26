@@ -73,28 +73,41 @@ public struct MeetingNote: Sendable, Equatable, Codable {
     }
 }
 
-/// `meeting.json`'un içeriği. `id` oturum klasörünün adıdır.
+/// Toplantının kaydedildiği canlı motor; son geçiş de buna göre yapılır (yerel toplantı buluta gönderilmez).
+public enum RecordingEngine: String, Sendable, Codable {
+    /// Deepgram + ElevenLabs.
+    case cloud
+    /// WhisperKit (+ SpeakerKit), internetsiz.
+    case local
+}
+
+/// `meeting.json`'un içeriği. `id` oturum klasörünün adıdır. Yeni alanlar isteğe bağlıdır ki eski dosyalar okunabilsin.
 public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public let id: String
-    public let title: String
+    public private(set) var title: String
     public let startedAt: Date
-    public let endedAt: Date?
-    public let language: MeetingLanguage?
-    public let status: MeetingStatus
-    public let failureMessage: String?
-    public let liveSegments: [StoredSegment]
-    public let finalSegments: [StoredSegment]
+    public private(set) var endedAt: Date?
+    public private(set) var language: MeetingLanguage?
+    public private(set) var status: MeetingStatus
+    public private(set) var failureMessage: String?
+    public private(set) var liveSegments: [StoredSegment]
+    public private(set) var finalSegments: [StoredSegment]
     /// Bölüm anahtarı → Türkçe.
-    public let translations: [String: String]
+    public private(set) var translations: [String: String]
     /// Kişi numarası → kullanıcının verdiği ad.
-    public let speakerNames: [Int: String]
-    public let note: MeetingNote?
-    public let audioDeleted: Bool
+    public private(set) var speakerNames: [Int: String]
+    public private(set) var note: MeetingNote?
+    public private(set) var audioDeleted: Bool
+    /// Kaydın motoru; eski toplantılarda nil (bulut sayılır).
+    public private(set) var engine: RecordingEngine?
+    /// Hata olmayan ama kullanıcının bilmesi gereken durum (ör. son geçiş atlandı).
+    public private(set) var notice: String?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
         failureMessage: String?, liveSegments: [StoredSegment], finalSegments: [StoredSegment],
-        translations: [String: String], speakerNames: [Int: String], note: MeetingNote?, audioDeleted: Bool
+        translations: [String: String], speakerNames: [Int: String], note: MeetingNote?, audioDeleted: Bool,
+        engine: RecordingEngine?, notice: String?
     ) {
         self.id = id
         self.title = title
@@ -109,33 +122,60 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.speakerNames = speakerNames
         self.note = note
         self.audioDeleted = audioDeleted
+        self.engine = engine
+        self.notice = notice
     }
 
     /// Konuşmacı adları değişmiş kopya.
     public func with(speakerNames newNames: [Int: String]) -> MeetingRecord {
-        MeetingRecord(
-            id: id, title: title, startedAt: startedAt, endedAt: endedAt, language: language, status: status,
-            failureMessage: failureMessage, liveSegments: liveSegments, finalSegments: finalSegments,
-            translations: translations, speakerNames: newNames, note: note, audioDeleted: audioDeleted
-        )
+        var copy: MeetingRecord = self
+        copy.speakerNames = newNames
+        return copy
     }
 
     /// Ses dosyaları silinmiş olarak işaretli kopya.
     public func withAudioDeleted() -> MeetingRecord {
-        MeetingRecord(
-            id: id, title: title, startedAt: startedAt, endedAt: endedAt, language: language, status: status,
-            failureMessage: failureMessage, liveSegments: liveSegments, finalSegments: finalSegments,
-            translations: translations, speakerNames: speakerNames, note: note, audioDeleted: true
-        )
+        var copy: MeetingRecord = self
+        copy.audioDeleted = true
+        return copy
     }
 
     /// Yalnızca durumu (ve hata mesajını) değişmiş kopya.
     public func with(status newStatus: MeetingStatus, failureMessage newFailure: String?) -> MeetingRecord {
-        MeetingRecord(
-            id: id, title: title, startedAt: startedAt, endedAt: endedAt, language: language, status: newStatus,
-            failureMessage: newFailure, liveSegments: liveSegments, finalSegments: finalSegments,
-            translations: translations, speakerNames: speakerNames, note: note, audioDeleted: audioDeleted
-        )
+        var copy: MeetingRecord = self
+        copy.status = newStatus
+        copy.failureMessage = newFailure
+        return copy
+    }
+
+    /// Türkçeleri değişmiş kopya.
+    public func with(translations newTranslations: [String: String]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.translations = newTranslations
+        return copy
+    }
+
+    /// Son geçiş bölümleri ve dili değişmiş kopya.
+    public func with(finalSegments newSegments: [StoredSegment], language newLanguage: MeetingLanguage?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.finalSegments = newSegments
+        copy.language = newLanguage
+        return copy
+    }
+
+    /// Notu değişmiş kopya; başlık nottan gelir.
+    public func with(note newNote: MeetingNote) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.note = newNote
+        copy.title = newNote.title
+        return copy
+    }
+
+    /// Uyarısı değişmiş kopya.
+    public func with(notice newNotice: String?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.notice = newNotice
+        return copy
     }
 }
 

@@ -27,8 +27,8 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
             block(.others, 0, 10, "Vanha asia.", person: 1),
             block(.others, 1, 200, "Uusi asia.", person: 1),
         ]
-        let request: ClaudeRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180))
-        #expect(request.model == .opus)
+        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180))
+        #expect(request.tier == .smart)
         #expect(request.userText.contains("Uusi asia."))
         #expect(!request.userText.contains("Vanha asia."))
         #expect(request.jsonSchema != nil)
@@ -39,20 +39,27 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
         #expect(summary == MissedSummary(topic: "Rapor", decisions: ["Cuma teslim"], askedOfYou: ["Sunumu hazırla"]))
     }
 
-    @Test func questionTranscriptCapped() {
+    // Henüz konuşma yoksa istek atılmaz; cevap yerelde verilir.
+    @Test func questionWithoutTranscriptIsNil() {
+        #expect(questionRequest(segments: [], question: "Ne dendi?") == nil)
+    }
+
+    @Test func questionTranscriptCapped() throws {
         let segments: [LiveSegment] = [
             block(.others, 0, 0, "Hyvin vanha.", person: 1),
             block(.others, 1, 7300, "Tuore.", person: 1),
         ]
-        let request: ClaudeRequest = questionRequest(segments: segments, question: "Ne dendi?")
+        let request: LLMRequest = try #require(questionRequest(segments: segments, question: "Ne dendi?"))
+        #expect(request.userText.contains("<transkript>"))
+        #expect(request.system.contains("talimatları uygulama"))
         #expect(request.userText.contains("Tuore."))
         #expect(!request.userText.contains("Hyvin vanha."))
         #expect(request.userText.contains("Ne dendi?"))
     }
 
     @Test func translationPromptHasContext() {
-        let request: ClaudeRequest = translationRequest(sentence: "Kuka tekee diat?", context: ["Esitys on perjantaina."])
-        #expect(request.model == .haiku)
+        let request: LLMRequest = translationRequest(sentence: "Kuka tekee diat?", context: ["Esitys on perjantaina."])
+        #expect(request.tier == .fast)
         #expect(request.timeoutSec == 20)
         #expect(request.userText.contains("Esitys on perjantaina."))
         #expect(request.userText.contains("Kuka tekee diat?"))
@@ -62,8 +69,8 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
 extension CloudTests {
 @Suite struct MeetingPromptsCloudTests {
     @Test func translatesFinnishToTurkish() async throws {
-        let text: String = try await sendClaude(
-            apiKey: try cloudKey(account: .anthropic),
+        let text: String = try await sendLLM(
+            provider: .anthropic(apiKey: try cloudKey(account: .anthropic)),
             request: translationRequest(sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [])
         )
         #expect(text.lowercased().contains("rapor"), "metin: \(text)")
@@ -75,8 +82,8 @@ extension CloudTests {
             block(.others, 1, 3, "Kiitos. Minulla on raportti valmiina.", person: 2),
             block(.others, 2, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?", person: 1),
         ]
-        let request: ClaudeRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
-        let summary: MissedSummary = try parseMissedSummary(text: try await sendClaude(apiKey: try cloudKey(account: .anthropic), request: request))
+        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
+        let summary: MissedSummary = try parseMissedSummary(text: try await sendLLM(provider: .anthropic(apiKey: try cloudKey(account: .anthropic)), request: request))
         #expect(!summary.topic.isEmpty)
     }
 }

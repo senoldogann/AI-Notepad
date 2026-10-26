@@ -1,14 +1,18 @@
 import AINotepadCore
 import AINotepadUI
 import AppKit
+import os
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Geçmiş toplantılar: arama, not, konuşmacı adlandırma, transkript, dışa aktarma ve ses yönetimi.
+private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MeetingsWindow")
+
+/// Geçmiş toplantılar: arama, not, konuşmacı adlandırma, transkript (satırdan ses çalma), dışa aktarma ve ses yönetimi.
 struct MeetingsWindow: View {
     let model: AppModel
     @State private var query: String = ""
     @State private var selection: String?
+    @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
 
     var body: some View {
         let visible: [MeetingRecord] = filterMeetings(records: model.meetings, query: query)
@@ -34,7 +38,7 @@ struct MeetingsWindow: View {
             }
         } detail: {
             if let id = selection, let record = visible.first(where: { $0.id == id }) {
-                MeetingDetail(model: model, record: record, isProcessing: model.processingMeetingIDs.contains(id), isLocked: model.isLocked(meetingID: id))
+                MeetingDetail(model: model, player: player, record: record, isProcessing: model.processingMeetingIDs.contains(id), isLocked: model.isLocked(meetingID: id))
                     // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                     .id(record.id)
             } else {
@@ -42,7 +46,11 @@ struct MeetingsWindow: View {
             }
         }
         .frame(minWidth: 760, minHeight: 520)
-        .onAppear { model.reloadMeetings() }
+        .onAppear {
+            model.reloadMeetings()
+            model.applyRetention()
+        }
+        .onDisappear { player.stop() }
     }
 }
 
@@ -91,6 +99,7 @@ private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
 /// Seçili toplantının ayrıntısı.
 private struct MeetingDetail: View {
     let model: AppModel
+    let player: MeetingAudioPlayer
     let record: MeetingRecord
     let isProcessing: Bool
     /// Kayıtta ya da işlemede: değiştiren eylemler kapalı.
@@ -106,14 +115,41 @@ private struct MeetingDetail: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
+                if let notice = record.notice {
+                    Label(notice, systemImage: "info.circle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 if let note = record.note {
                     NoteSection(note: note)
                 }
                 SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
-                TranscriptSection(record: record)
+                TranscriptSection(record: record, player: player, audioURLs: playableAudio)
             }
             .padding(DesignTokens.Spacing.xl)
             .frame(maxWidth: 760, alignment: .leading)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if player.meetingID == record.id {
+                PlayerBar(player: player, speakerName: player.speaker.map { speakerLabel(speaker: $0, person: nil) } ?? "")
+            }
+        }
+        .onDisappear { player.stop() }
+    }
+
+    /// Çalınabilir kayıtlar: ses silinmediyse ve toplantı kayıtta değilse (dosya hâlâ yazılıyor).
+    private var playableAudio: [Speaker: URL] {
+        guard !record.audioDeleted, model.activeMeetingID != record.id else {
+            return [:]
+        }
+        do {
+            let directory: URL = try model.sessionDirectory(id: record.id)
+            return [Speaker.me, Speaker.others].reduce(into: [Speaker: URL]()) { (urls: inout [Speaker: URL], speaker: Speaker) -> Void in
+                urls[speaker] = meetingAudioURL(directory: directory, speaker: speaker)
+            }
+        } catch {
+            meetingsLogger.error("Toplantı klasörü alınamadı, kimlik: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return [:]
         }
     }
 
@@ -151,6 +187,7 @@ private struct MeetingDetail: View {
                 }
                 .disabled(isLocked || record.audioDeleted)
                 Button("Sesi sil", systemImage: "trash", role: .destructive) {
+                    player.stop()
                     model.deleteAudio(meetingID: record.id)
                 }
                 .disabled(isLocked || record.audioDeleted)
@@ -280,9 +317,11 @@ private struct SpeakerNameField: View {
     }
 }
 
-/// Son geçiş (varsa) + "Sen" bölümleri, zamana göre; altında Türkçesi.
+/// Son geçiş (varsa) + "Sen" bölümleri, zamana göre; altında Türkçesi. Zaman damgasına tıklayınca o andan çalar.
 private struct TranscriptSection: View {
     let record: MeetingRecord
+    let player: MeetingAudioPlayer
+    let audioURLs: [Speaker: URL]
 
     var body: some View {
         let segments: [StoredSegment] = (record.finalSegments.isEmpty
@@ -294,10 +333,26 @@ private struct TranscriptSection: View {
                 .font(DesignTokens.labelFont)
                 .tracking(DesignTokens.labelTracking)
                 .foregroundStyle(.secondary)
+            if let error = player.errorMessage {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
             ForEach(segments, id: \.key) { (segment: StoredSegment) in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(timestamp(seconds: segment.startSec)).monospacedDigit().foregroundStyle(.secondary)
+                        if let url = audioURLs[segment.speaker] {
+                            Button {
+                                player.play(url: url, meetingID: record.id, speaker: segment.speaker, startSec: segment.startSec)
+                            } label: {
+                                Label(timestamp(seconds: segment.startSec), systemImage: isPlaying(segment: segment) ? "speaker.wave.2.fill" : "play.fill")
+                                    .monospacedDigit()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(isPlaying(segment: segment) ? DesignTokens.meColor : .secondary)
+                            .help("Bu andan çal")
+                            .accessibilityLabel("\(timestamp(seconds: segment.startSec)) anından çal")
+                        } else {
+                            Text(timestamp(seconds: segment.startSec)).monospacedDigit().foregroundStyle(.secondary)
+                        }
                         Text(storedLabel(segment: segment, speakerNames: record.speakerNames)).fontWeight(.semibold)
                     }
                     .font(.system(size: 11))
@@ -306,7 +361,63 @@ private struct TranscriptSection: View {
                         Text(turkish).foregroundStyle(.secondary).textSelection(.enabled)
                     }
                 }
+                .padding(.leading, isPlaying(segment: segment) ? 8 : 0)
+                .overlay(alignment: .leading) {
+                    if isPlaying(segment: segment) {
+                        Capsule().fill(DesignTokens.meColor).frame(width: 3)
+                    }
+                }
             }
         }
+    }
+}
+
+private extension TranscriptSection {
+    /// Çalan kayıt bu bölümün konuşmacısı ve konum bölümün içinde mi.
+    func isPlaying(segment: StoredSegment) -> Bool {
+        player.meetingID == record.id && player.speaker == segment.speaker
+            && player.currentTime >= segment.startSec && player.currentTime < segment.endSec
+    }
+}
+
+/// Çalma çubuğu: oynat/duraklat, konum, süre, kapat.
+private struct PlayerBar: View {
+    let player: MeetingAudioPlayer
+    let speakerName: String
+
+    var body: some View {
+        HStack(spacing: DesignTokens.Spacing.m) {
+            Button {
+                player.togglePause()
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .frame(width: 20)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
+            Text(speakerName)
+                .font(DesignTokens.labelFont)
+                .foregroundStyle(.secondary)
+            Slider(
+                value: Binding<Double>(get: { player.currentTime }, set: { (value: Double) -> Void in player.seek(to: value) }),
+                in: 0...max(player.duration, 0.1)
+            )
+            .accessibilityLabel("Konum")
+            Text("\(timestamp(seconds: player.currentTime)) / \(timestamp(seconds: player.duration))")
+                .font(.system(size: 11))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Button {
+                player.stop()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Çalmayı kapat")
+        }
+        .padding(.horizontal, DesignTokens.Spacing.l)
+        .padding(.vertical, DesignTokens.Spacing.s)
+        .glassEffect(.regular, in: .capsule)
+        .padding(DesignTokens.Spacing.m)
     }
 }

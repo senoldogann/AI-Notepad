@@ -27,6 +27,15 @@ public struct IslandLayout: Sendable, Equatable {
     public let collapsedHeight: CGFloat
 }
 
+/// Çentik alanlarını genel (tüm ekranlar) koordinatlara çevirir: alan ekranın kendi koordinatlarında verilmişse
+/// (ikincil ekranda çerçevenin dışında kalır) ekran başlangıcı eklenir. Saf fonksiyondur.
+public func globalAuxiliaryArea(area: CGRect, screenFrame: CGRect) -> CGRect {
+    guard !area.isEmpty, !screenFrame.contains(CGPoint(x: area.midX, y: area.midY)) else {
+        return area
+    }
+    return area.offsetBy(dx: screenFrame.minX, dy: screenFrame.minY)
+}
+
 /// Çentikli ekranda çentiğe yapışık ada, çentiksiz ekranda menü çubuğunun altında ortalanmış hap. Saf fonksiyondur.
 public func islandLayout(
     screen: ScreenGeometry,

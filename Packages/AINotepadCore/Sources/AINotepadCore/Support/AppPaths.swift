@@ -4,12 +4,12 @@ import Foundation
 public enum AppPaths {
     /// `~/Library/Application Support/AINotepad`
     public static func applicationSupport() throws -> URL {
-        let base: URL = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+        let base: URL
+        do {
+            base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        } catch {
+            throw StorageError.directoryUnavailable(path: "~/Library/Application Support", reason: error.localizedDescription)
+        }
         return try ensureDirectory(url: base.appending(path: "AINotepad", directoryHint: .isDirectory))
     }
 
@@ -39,7 +39,11 @@ public enum AppPaths {
 
     /// Klasörü (ara klasörlerle birlikte) oluşturur ve aynı URL'yi döndürür.
     private static func ensureDirectory(url: URL) throws -> URL {
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } catch {
+            throw StorageError.directoryUnavailable(path: url.path, reason: error.localizedDescription)
+        }
         return url
     }
 }

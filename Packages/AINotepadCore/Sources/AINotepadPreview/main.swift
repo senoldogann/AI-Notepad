@@ -32,12 +32,13 @@ func sampleState() -> LiveViewState {
         transcript: transcript,
         translations: translations,
         displayMode: .bilingual,
+        failedTranslations: [transcript[1].id],
         assistantCard: .summary(MissedSummary(
             topic: "Gelecek haftaki rapor ve cuma günkü sunum konuşuluyor.",
             decisions: ["Rapor gelecek hafta teslim edilecek."],
             askedOfYou: ["Sunum slaytlarını hazırlaman isteniyor."]
         )),
-        isRecording: true,
+        phase: .recording,
         startedAt: Date(timeIntervalSinceNow: -754),
         statusText: "Hazır · Deepgram",
         languageText: "🇫🇮 Fince",
@@ -63,7 +64,7 @@ let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
     let panel: Int = showWindow(
-        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStop: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {})),
+        view: TranscriptPanel(state: sampleState(), actions: PanelActions(onHide: {}, onStop: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in })),
         frame: NSRect(x: 120, y: 100, width: 400, height: 720)
     )
     print("panel \(panel)")
@@ -78,7 +79,7 @@ MainActor.assumeIsolated {
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}),
+            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")

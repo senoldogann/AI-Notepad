@@ -75,6 +75,37 @@ public actor WhisperKitEngine: TranscriptionEngine {
     }
 }
 
+extension WhisperKitEngine {
+    /// Uzun sesi (ör. kaydın tamamı) ses etkinliğine göre parçalayarak kelime zamanlarıyla yazıya döker.
+    /// Uydurma ifade içeren bölümlerin kelimeleri atılır.
+    func transcribeWords(samples: [Float], language: MeetingLanguage) async throws -> [TimedWord] {
+        let options: DecodingOptions = DecodingOptions(
+            task: .transcribe,
+            language: language.rawValue,
+            detectLanguage: false,
+            skipSpecialTokens: true,
+            wordTimestamps: true,
+            chunkingStrategy: .vad
+        )
+        let results: [TranscriptionResult]
+        do {
+            results = try await whisperKit.transcribe(audioArray: samples, decodeOptions: options)
+        } catch {
+            throw TranscriptionError.transcriptionFailed(sampleCount: samples.count, language: language.rawValue, reason: String(describing: error))
+        }
+        return results
+            .flatMap { (result: TranscriptionResult) -> [TranscriptionSegment] in result.segments }
+            .filter { (segment: TranscriptionSegment) -> Bool in
+                !dropHallucination(text: segment.text.trimmingCharacters(in: .whitespacesAndNewlines)).isEmpty
+            }
+            .flatMap { (segment: TranscriptionSegment) -> [WordTiming] in segment.words ?? [] }
+            .compactMap { (word: WordTiming) -> TimedWord? in
+                let text: String = word.word.trimmingCharacters(in: .whitespacesAndNewlines)
+                return text.isEmpty ? nil : TimedWord(text: text, startSec: Double(word.start), endSec: Double(word.end))
+            }
+    }
+}
+
 /// Bölümlerin metnini birleştirir; bilinen uydurma ifadeleri atar.
 /// Not: WhisperKit `noSpeechProb` değerini hesaplamaz (her zaman 0), bu yüzden ona göre süzülmez.
 func speechText(segments: [TranscriptionSegment]) -> String {

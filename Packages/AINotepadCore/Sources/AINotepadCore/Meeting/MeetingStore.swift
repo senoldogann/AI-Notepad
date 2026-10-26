@@ -35,7 +35,27 @@ private func meetingDecoder() -> JSONDecoder {
 
 /// Toplantıyı klasöründeki `meeting.json`'a atomik yazar.
 public func saveMeeting(record: MeetingRecord, directory: URL) throws {
-    try meetingEncoder().encode(record).write(to: directory.appending(path: meetingFileName), options: .atomic)
+    let file: URL = directory.appending(path: meetingFileName)
+    do {
+        try meetingEncoder().encode(record).write(to: file, options: .atomic)
+    } catch {
+        throw StorageError.writeFailed(path: file.path, reason: error.localizedDescription)
+    }
+}
+
+/// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
+public func deleteAudioFiles(directory: URL) throws {
+    for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
+        let file: URL = directory.appending(path: name)
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            continue
+        }
+        do {
+            try FileManager.default.removeItem(at: file)
+        } catch {
+            throw StorageError.deleteFailed(path: file.path, reason: error.localizedDescription)
+        }
+    }
 }
 
 /// `Sessions` altındaki tüm `meeting.json`'ları okur (yeniden eskiye). `meeting.json`'u olmayan klasörler atlanır.
@@ -100,4 +120,11 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
             text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
         }
     }
+}
+
+/// Kaydedilen toplantıyı bellekteki listeye yerleştirir (varsa değiştirir), yeniden eskiye sıralı. Her kayıttan
+/// sonra diskteki tüm toplantıları yeniden okumamak için. Saf fonksiyondur.
+public func upsertMeeting(records: [MeetingRecord], record: MeetingRecord) -> [MeetingRecord] {
+    (records.filter { $0.id != record.id } + [record])
+        .sorted { (left: MeetingRecord, right: MeetingRecord) -> Bool in left.id > right.id }
 }

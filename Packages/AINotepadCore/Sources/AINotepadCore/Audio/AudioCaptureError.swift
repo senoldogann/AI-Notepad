@@ -3,6 +3,8 @@ import Foundation
 /// Ses yakalama, dönüştürme ve kaydetme hataları.
 public enum AudioCaptureError: Error, Equatable {
     case microphonePermissionDenied
+    /// Mikrofon motoru (`AVAudioEngine`) başlatılamadı.
+    case microphoneStartFailed(code: Int32)
     /// `start()` yakalama zaten çalışırken çağrıldı.
     case alreadyRunning(source: String)
     case systemAudioPermissionDenied
