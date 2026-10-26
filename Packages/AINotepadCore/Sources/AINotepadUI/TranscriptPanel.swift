@@ -92,7 +92,11 @@ public struct TranscriptPanel: View {
 
     private var header: some View {
         HStack(spacing: DesignTokens.Spacing.s) {
+            // Dar panelde durum metni tek satırda kısalır; düğmeler ve dil çipi her zaman tam görünür.
             StatusLabel(state: state)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
             Spacer(minLength: DesignTokens.Spacing.s)
             languageChip
             recordingControls
@@ -136,6 +140,8 @@ public struct TranscriptPanel: View {
     private var languageChip: some View {
         let chip: some View = Text(state.languageText)
             .font(DesignTokens.statusFont)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, DesignTokens.Spacing.s)
             .padding(.vertical, 3)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))

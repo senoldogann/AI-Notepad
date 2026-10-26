@@ -117,7 +117,7 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section("Türkçe çeviri") {
-                Picker("Görünüm", selection: Binding<DisplayMode>(
+                Picker("Gösterim", selection: Binding<DisplayMode>(
                     get: { model.displayMode },
                     set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
                 )) {

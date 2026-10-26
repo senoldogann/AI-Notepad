@@ -846,7 +846,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Language: Automatic"
+            "value": "Auto language"
           }
         }
       }
@@ -1107,6 +1107,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reset appearance to defaults"
+          }
+        }
+      }
+    },
+    "Gösterim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display"
           }
         }
       }
