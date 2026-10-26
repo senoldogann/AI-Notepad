@@ -89,6 +89,8 @@ public struct MeetingNote: Sendable, Equatable, Codable {
     public let decisions: [String]
     public let tasks: [NoteTask]
     public let glossary: [GlossaryEntry]
+    /// Konu akışı: toplantının bölümleri, başladıkları anla (eski notlarda nil).
+    public private(set) var outline: [OutlineItem]?
 
     public init(title: String, summary: String, decisions: [String], tasks: [NoteTask], glossary: [GlossaryEntry]) {
         self.title = title
@@ -96,6 +98,26 @@ public struct MeetingNote: Sendable, Equatable, Codable {
         self.decisions = decisions
         self.tasks = tasks
         self.glossary = glossary
+    }
+
+    /// Konu akışı değişmiş kopya.
+    public func with(outline newOutline: [OutlineItem]) -> MeetingNote {
+        var copy: MeetingNote = self
+        copy.outline = newOutline
+        return copy
+    }
+}
+
+/// Konu akışında bir bölüm: başladığı an (saniye), başlık ve tek cümlelik özet.
+public struct OutlineItem: Sendable, Equatable, Codable {
+    public let startSec: Double
+    public let title: String
+    public let summary: String
+
+    public init(startSec: Double, title: String, summary: String) {
+        self.startSec = startSec
+        self.title = title
+        self.summary = summary
     }
 }
 
@@ -137,6 +159,10 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var completedTasks: [String]?
     /// Anımsatıcılar'a eklenen görevlerin kimlikleri.
     public private(set) var remindedTasks: [String]?
+    /// Toplantının klasörü (proje, ekip, ders…); klasörsüzde nil.
+    public private(set) var folder: String?
+    /// İşaretlenen anlar (kayıt sırasında ya da sonradan).
+    public private(set) var highlights: [Highlight]?
     /// Takvimdeki katılımcıların adları (kayıt bir etkinliğe bağlandıysa).
     public private(set) var attendees: [String]?
     /// Notun şablonu; eski toplantılarda ve genel şablonda nil.
@@ -230,6 +256,20 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(liveSegments newSegments: [StoredSegment]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.liveSegments = newSegments
+        return copy
+    }
+
+    /// Klasörü değişmiş kopya (nil klasörden çıkarır).
+    public func with(folder newFolder: String?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.folder = newFolder
+        return copy
+    }
+
+    /// İşaretleri değişmiş kopya.
+    public func with(highlights newHighlights: [Highlight]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.highlights = newHighlights
         return copy
     }
 

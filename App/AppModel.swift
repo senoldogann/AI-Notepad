@@ -1,7 +1,9 @@
 import AINotepadCore
 import AINotepadUI
 import AVFoundation
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import Observation
 import os
 
@@ -570,6 +572,15 @@ final class AppModel {
             return
         }
 
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer.
+        audioLevels.start()
+        let levels: AudioLevels = audioLevels
+        let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
+            let now: Date = Date()
+            Task { @MainActor in levels.record(level: level, at: now) }
+        }
+        let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
+        let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
         let handle: LiveSessionHandle
         if let cloudKeys {
             handle = runCloudLiveSession(
@@ -586,8 +597,8 @@ final class AppModel {
                     keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30),
                     voiceEmbedder: voiceEmbedderIfEnabled()
                 ),
-                meAudio: meAudio,
-                othersAudio: othersAudio
+                meAudio: meteredMe,
+                othersAudio: meteredOthers
             )
         } else if let engine {
             handle = runLiveSession(
@@ -600,8 +611,8 @@ final class AppModel {
                     languageLockAfterSec: 30
                 ),
                 engine: engine,
-                meAudio: meAudio,
-                othersAudio: othersAudio
+                meAudio: meteredMe,
+                othersAudio: meteredOthers
             )
         } else {
             // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
@@ -611,6 +622,7 @@ final class AppModel {
             return
         }
         isRecording = true
+        liveHighlights = []
         recordingTemplate = defaultNoteTemplate()
         consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
@@ -656,6 +668,7 @@ final class AppModel {
         }
         isFinishing = true
         consentReminderVisible = false
+        audioLevels.stop()
         microphone.stop()
         systemAudio.stop()
     }
@@ -766,8 +779,9 @@ final class AppModel {
             engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
-        // Not, kayıt başladığında seçili şablonla yazılır.
+        // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
         .with(template: recordingTemplate)
+        .with(highlights: liveHighlights)
         return linkedMeeting.map { base.with(attendees: $0.attendees) } ?? base
     }
 
@@ -848,7 +862,13 @@ final class AppModel {
     /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
     /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
     private var recognitionKeyterms: [String] {
-        meetingKeyterms(records: Array(meetings.prefix(20)), userName: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", limit: 30)
+        // Kullanıcının adı ve sözlüğü öne; sınırda (30) önce toplantılardan gelenler düşer.
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        return keytermsWithAttendees(
+            attendees: [userName] + customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? ""),
+            keyterms: meetingKeyterms(records: Array(meetings.prefix(20)), userName: userName, limit: 30),
+            limit: 30
+        )
     }
 
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.
@@ -988,6 +1008,133 @@ final class AppModel {
         }
         isInPerson.toggle()
         UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
+    }
+
+    // MARK: Klasörler
+
+    /// Oluşturulan klasörler (toplantısız olanlar dahil).
+    var savedFolders: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.folders) ?? []
+
+    /// Klasörler ve toplantı sayıları.
+    var folders: [FolderSummary] {
+        meetingFolders(records: meetings, saved: savedFolders)
+    }
+
+    /// Yeni klasör oluşturur (aynı ad varsa bir şey yapmaz).
+    func createFolder(name: String) {
+        let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !folders.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            return
+        }
+        savedFolders.append(trimmed)
+        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+    }
+
+    /// Klasörü siler: toplantılar silinmez, klasörsüz kalır.
+    func deleteFolder(name: String) {
+        savedFolders.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        moveMeetings(ids: Set(meetingsInFolder(records: meetings, folder: name).map(\.id)), to: nil)
+    }
+
+    /// Klasör silinebilir mi: içindeki toplantılardan biri kayıtta ya da işlemedeyse hayır (o toplantı klasörden
+    /// çıkarılamaz, klasör yeniden belirirdi).
+    func canDeleteFolder(name: String) -> Bool {
+        !meetingsInFolder(records: meetings, folder: name).contains { isLocked(meetingID: $0.id) }
+    }
+
+    /// Toplantıları klasöre taşır (nil: klasörden çıkarır); kilitli (kayıtta/işlemede) olanlar atlanır.
+    func moveMeetings(ids: Set<String>, to folder: String?) {
+        for record in meetings where ids.contains(record.id) && !isLocked(meetingID: record.id) {
+            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                saveRecord(record: record.with(folder: folder), directory: directory)
+            }
+        }
+    }
+
+    // MARK: İşaretler
+
+    /// Kayıt sırasında canlı ses seviyesi (panelde çubuklar).
+    @ObservationIgnored let audioLevels: AudioLevels = AudioLevels(count: 14, interval: 0.1)
+
+    /// Bu kayıtta işaretlenen anlar.
+    @ObservationIgnored private var liveHighlights: [Highlight] = []
+    /// Son işaret (panelde kısa onay için).
+    var lastBookmarkAt: Date?
+
+    /// Kayıtta şu anı işaretler (notta öne çıkar).
+    func bookmarkNow() {
+        guard isRecording, let startedAt = recordingStartedAt else {
+            return
+        }
+        liveHighlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt), endSec: nil))
+        lastBookmarkAt = Date()
+    }
+
+    /// Kaydedilmiş toplantıda bir paragrafın işaretini açar/kapatır.
+    func toggleHighlight(meetingID: String, paragraph: TranscriptParagraph) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            let highlights: [Highlight] = togglingHighlight(highlights: record.highlights ?? [], paragraphs: transcriptParagraphs(record: record), paragraph: paragraph)
+            saveRecord(record: record.with(highlights: highlights), directory: directory)
+        }
+    }
+
+    // MARK: Dosya içe aktarma
+
+    /// İçe aktarılmakta olan dosya sayısı (dönüştürme sürerken).
+    var importingCount: Int = 0
+    /// Kayıt, işleme ya da içe aktarma sürüyor mu (çıkış ve dil değişikliği bunu bekler).
+    var isBusy: Bool { phase != .idle || !processingMeetingIDs.isEmpty || importingCount > 0 }
+    /// Son içe aktarma hatası (Toplantılar listesinde gösterilir).
+    var importError: String?
+
+    /// Ses/video dosyalarını toplantı olarak içe aktarır: ses izi `others.m4a` olur, sonra kayıt gibi son geçiş
+    /// (konuşmacılar, sesinden tanıma) ve not. Motor ve şablon şu anki ayarlardır.
+    func importMedia(urls: [URL]) {
+        importError = nil
+        importingCount += urls.count
+        // Dosyalar sırayla dönüştürülür: çok dosya bırakılınca açık kayıt ve diğer işler yavaşlamasın.
+        Task {
+            for url in urls {
+                await importOne(url: url)
+                importingCount -= 1
+            }
+        }
+    }
+
+    /// Tek dosyayı içe aktarır; başarısızsa yarım klasör silinir ve hata listede gösterilir.
+    private func importOne(url: URL) async {
+        var created: URL?
+        do {
+            let session: (url: URL, startedAt: Date) = try AppPaths.newExclusiveSessionDirectory(startedAt: Date())
+            created = session.url
+            let accessed: Bool = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessed {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            let duration: Double = try await importMediaAudio(source: url, destination: session.url.appending(path: "others.m4a"))
+            let record: MeetingRecord = importedMeetingRecord(
+                id: session.url.lastPathComponent, source: url, startedAt: session.startedAt, durationSec: duration,
+                engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
+            )
+            Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
+            process(record: record, directory: session.url)
+        } catch {
+            Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
+            importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
+            if let created {
+                do {
+                    try FileManager.default.removeItem(at: created)
+                } catch {
+                    Self.logger.error("Yarım içe aktarma klasörü silinemedi, hata: \(String(describing: error), privacy: .private)")
+                }
+            }
+        }
     }
 
     // MARK: Takvim
@@ -1460,4 +1607,32 @@ struct ArchiveExchange: Identifiable, Equatable {
     let id: UUID
     let question: String
     let state: State
+}
+
+/// İçe aktarma hatasının kullanıcı metni. Saf fonksiyondur.
+func mediaImportMessage(error: any Error) -> String {
+    switch error {
+    case MediaImportError.noAudioTrack:
+        String(localized: "dosyada ses yok")
+    case MediaImportError.readFailed(_, let reason):
+        String(localized: "okunamadı (\(reason))")
+    case MediaImportError.writeFailed(_, let reason):
+        String(localized: "kaydedilemedi (\(reason))")
+    default:
+        userFacingMessage(error: error)
+    }
+}
+
+/// Ses/video dosyası seçtirir (birden çok); seçilenleri içe aktarır.
+@MainActor
+func chooseMediaToImport(model: AppModel) {
+    let panel: NSOpenPanel = NSOpenPanel()
+    panel.allowsMultipleSelection = true
+    panel.canChooseDirectories = false
+    panel.allowedContentTypes = [.audio, .movie, .audiovisualContent]
+    panel.message = String(localized: "Toplantı kaydı seç (ses ya da video); yazıya dökülür ve notu çıkarılır.")
+    guard panel.runModal() == .OK, !panel.urls.isEmpty else {
+        return
+    }
+    model.importMedia(urls: panel.urls)
 }

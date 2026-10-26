@@ -55,7 +55,8 @@ public func peopleDirectory(records: [MeetingRecord], voices: [RegisteredVoice],
                 rows.first.map { PersonMeeting(meetingID: $0.meetingID, title: $0.title, date: $0.date, seconds: rows.map(\.seconds).reduce(0, +), fraction: rows.map(\.fraction).reduce(0, +)) }
             }
             .sorted { $0.date > $1.date }
-        guard let latest = group.max(by: { $0.meeting.date < $1.meeting.date }) else {
+        // Görünen ad: en yeni toplantıdaki yazılış; aynı toplantıda iki yazılışta sözlük sırasıyla ilki (her açılışta aynı).
+        guard let latest = group.min(by: { $0.meeting.date != $1.meeting.date ? $0.meeting.date > $1.meeting.date : $0.name < $1.name }) else {
             return nil
         }
         let name: String = latest.name

@@ -67,8 +67,10 @@ struct PanelHost: View {
                     onRetryTranslations: { (ids: [SegmentID]) -> Void in model.retryTranslations(ids: ids) },
                     onSetLanguage: { (language: MeetingLanguage) -> Void in model.setLanguage(language: language) },
                     onReassignBlock: { (segments: [SegmentID], person: Int) -> Void in model.reassignBlock(segments: segments, person: person) },
-                    onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) }
-                )
+                    onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) },
+                    onBookmark: { model.bookmarkNow() }
+                ),
+                levels: model.audioLevels
             )
             }
             .animation(.smooth(duration: 0.25), value: model.consentReminderVisible)

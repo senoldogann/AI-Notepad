@@ -27,5 +27,7 @@ import Testing
         #expect(currentMeeting(meetings: meetings, now: base)?.id == "palaveri")
         #expect(currentMeeting(meetings: meetings, now: base.addingTimeInterval(-600)) == nil)
         #expect(meetingsToRemind(meetings: meetings, now: base, horizonSec: 3 * 3600).map(\.id) == ["palaveri", "myöhemmin"])
+        let briefing: String = briefingQuestion(meeting: CalendarMeeting(id: "x", title: "Budjetti", start: base, end: base, attendees: ["Aino", "Mikko"], joinURL: nil))
+        #expect(briefing.contains("Budjetti") && briefing.contains("Aino, Mikko") && briefing.contains("açık"))
     }
 }

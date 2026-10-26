@@ -60,6 +60,10 @@ enum SettingsKey {
     static let micSuggestions: String = "calendar.micSuggestions"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
     static let inPersonMode: String = "inPersonMode"
+    /// Kullanıcının tanıma sözlüğü (satır başına bir ad ya da terim).
+    static let customVocabulary: String = "customVocabulary"
+    /// Kullanıcının oluşturduğu klasörler (boş olanlar da listede kalsın).
+    static let folders: String = "folders"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
@@ -314,3 +318,4 @@ func templateTitle(kind: NoteTemplateKind) -> LocalizedStringKey {
     case .custom: "Kendi şablonum"
     }
 }
+

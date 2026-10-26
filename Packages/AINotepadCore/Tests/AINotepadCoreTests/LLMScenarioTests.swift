@@ -171,6 +171,12 @@ struct LLMScenarioTests {
         // Kullanıcının işleri "benim" işaretli ve sahibi adıyla.
         #expect(note.tasks.filter(\.isMine).allSatisfy { $0.owner == "Doğan" }, "sahipler: \(Set(note.tasks.filter(\.isMine).map(\.owner)))")
         #expect(!note.summary.isEmpty)
+        // Konu akışı: genel özet parça aralıklarından bölümler çıkarır; sıralı ve toplantı süresi içinde.
+        let outline: [OutlineItem] = note.outline ?? []
+        print("SENARYO akış: \(outline.map { "\(timestamp(seconds: $0.startSec)) \($0.title)" })")
+        #expect(outline.count >= 5, "akış: \(outline)")
+        #expect(outline.map(\.startSec) == outline.map(\.startSec).sorted())
+        #expect((outline.last?.startSec ?? 0) <= (segments.last?.endSec ?? 0))
     }
 
     // OpenAI uyumlu yol: akıl yürütme effort'u seçiliyken 1 saatlik toplantının notu kesilmeden ve ayrıştırılabilir gelmeli.

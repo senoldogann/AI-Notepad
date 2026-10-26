@@ -83,6 +83,9 @@ extension CloudTests {
         }
         #expect(!note.title.isEmpty)
         #expect(note.tasks.contains { $0.isMine }, "görevler: \(note.tasks)")
+        // Konu akışı: en az bir bölüm, zamanlar transkript içinde.
+        #expect(!(note.outline ?? []).isEmpty, "akış yok")
+        #expect((note.outline ?? []).allSatisfy { $0.startSec >= 0 && $0.startSec <= 20 }, "\(note.outline ?? [])")
     }
 }
 }

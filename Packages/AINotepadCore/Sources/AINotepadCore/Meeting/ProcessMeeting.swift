@@ -117,6 +117,11 @@ public func processMeeting(
         current = await recognizeVoices(record: current, directory: directory, embedder: voiceEmbedder, registry: registry)
     }
 
+    // Canlı metni olmayan toplantı (içe aktarılan dosya) son geçiş metin üretmediyse "bitti" görünmesin.
+    if current.liveSegments.isEmpty, !meetingSegments(record: current).contains(where: { !$0.text.isEmpty }) {
+        return current.with(status: .failed, failureMessage: String(localized: "Ses yazıya dökülemedi: son geçiş metin üretmedi. \"Tekrar işle\" ile yeniden deneyebilirsin."))
+    }
+
     await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
 }
@@ -227,7 +232,8 @@ private func joinedNotice(_ first: String?, _ second: String) -> String {
 /// sonra notta da adlar görünsün diye kullanılır.
 public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: String) async -> MeetingRecord {
     // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
-    let segments: [StoredSegment] = meetingSegments(record: record)
+    // İşaretli anlar istemde "★" ile öne çıkar.
+    let segments: [StoredSegment] = markingHighlights(segments: meetingSegments(record: record), highlights: record.highlights ?? [])
     guard segments.contains(where: { !$0.text.isEmpty }) else {
         return record.with(status: .done, failureMessage: nil)
     }

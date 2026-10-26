@@ -2,6 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Ana pencerenin sahne kimliği.
@@ -36,6 +37,8 @@ final class MainWindowRouter {
     var quitWarning: Bool = false
     /// Açılış ekranı bu açılışta gösterildi.
     var hasShownSplash: Bool = false
+    /// Toplantılar listesini süzen klasör; nil hepsi.
+    var folderFilter: String?
 }
 
 /// Çıkış koruması: kayıt ya da işleme sürerken uygulama hemen kapanmaz (toplantı "yarıda kaldı" olurdu); ana pencere
@@ -231,6 +234,7 @@ private struct Sidebar: View {
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
             item(title: "Kişiler", symbol: "person.2", section: .people, badge: nil)
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
+            SidebarFolders(model: model, router: router)
             if !model.meetings.isEmpty {
                 Text("Son toplantılar")
                     .appFont(size: 12, weight: .regular)
@@ -264,8 +268,12 @@ private struct Sidebar: View {
     }
 
     private func item(title: LocalizedStringKey, symbol: String, section: MainSection, badge: Int?) -> some View {
-        let isSelected: Bool = router.section == section
+        // Klasör süzgeci açıkken "Toplantılar" değil klasör seçili görünür.
+        let isSelected: Bool = router.section == section && !(section == .meetings && router.folderFilter != nil)
         return Button {
+            if section == .meetings {
+                router.folderFilter = nil
+            }
             router.section = section
         } label: {
             HStack(spacing: 10) {
@@ -385,7 +393,7 @@ private struct QuitWarning: View {
     let router: MainWindowRouter
 
     var body: some View {
-        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        let isBusy: Bool = model.isBusy
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             Label(
                 model.phase == .idle
@@ -447,7 +455,10 @@ private struct HomePage: View {
                 if !model.setupProblems.isEmpty {
                     problems
                 }
-                UpcomingMeetings(model: model, onStartRecording: onStartRecording)
+                UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
+                    model.askArchive(question: briefingQuestion(meeting: meeting))
+                    router.section = .ask
+                }
                 BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
                 RecentMeetingCards(model: model, router: router)
@@ -633,6 +644,10 @@ private struct ToolTiles: View {
             tile(title: "Kaydı başlat", symbol: "waveform", isEnabled: model.phase == .idle && model.isReadyToRecord) { onStartRecording() }
             tile(title: "Canlı panel", symbol: "rectangle.on.rectangle", isEnabled: true) { onShowPanel() }
             tile(title: "Toplantılar", symbol: "list.bullet.rectangle", isEnabled: true) { router.section = .meetings }
+            tile(title: "Dosya içe aktar", symbol: "square.and.arrow.down.on.square", isEnabled: true) {
+                router.section = .meetings
+                chooseMediaToImport(model: model)
+            }
             tile(title: "Görevlerim", symbol: "checkmark.circle", isEnabled: true) { router.section = .tasks }
             tile(title: "Ayarlar", symbol: "gearshape", isEnabled: true) { router.section = .settings }
         }
@@ -788,6 +803,8 @@ private struct HomeTasks: View {
 private struct UpcomingMeetings: View {
     let model: AppModel
     let onStartRecording: @MainActor () -> Void
+    /// Toplantı öncesi brifing (arşive sorulur, Sor sayfasında açılır).
+    let onBriefing: @MainActor (CalendarMeeting) -> Void
 
     var body: some View {
         let now: Date = Date()
@@ -828,6 +845,11 @@ private struct UpcomingMeetings: View {
                 }
             }
             Spacer(minLength: 8)
+            if !model.meetings.isEmpty {
+                Button("Brifing", systemImage: "text.magnifyingglass") { onBriefing(meeting) }
+                    .controlSize(.small)
+                    .hoverHint("Bu kişilerle ve konuda önceki toplantılar, kararlar, açık görevler", alignment: .trailing, edge: .bottom)
+            }
             if let url = meeting.joinURL {
                 Button("Katıl", systemImage: "video") { NSWorkspace.shared.open(url) }
                     .controlSize(.small)
@@ -1042,7 +1064,8 @@ private struct MeetingsSplit: View {
     var body: some View {
         HStack(spacing: 0) {
             MeetingsListPage(
-                model: model, selectedID: router.selectedMeetingID, query: router.searchQuery,
+                model: model, selectedID: router.selectedMeetingID, query: router.searchQuery, folder: router.folderFilter,
+                onClearFolder: { router.folderFilter = nil },
                 onOpen: { (id: String) -> Void in router.selectedMeetingID = id },
                 onDeleted: { (ids: Set<String>) -> Void in
                     if let open = router.selectedMeetingID, ids.contains(open) {
@@ -1051,6 +1074,20 @@ private struct MeetingsSplit: View {
                 }
             )
             .frame(width: 300)
+            // Ses/video dosyası listeye bırakılınca toplantı olarak içe aktarılır.
+            .dropDestination(for: URL.self) { (urls: [URL], _: CGPoint) -> Bool in
+                let media: [URL] = urls.filter { (url: URL) -> Bool in
+                    guard let type = UTType(filenameExtension: url.pathExtension) else {
+                        return false
+                    }
+                    return type.conforms(to: .audio) || type.conforms(to: .audiovisualContent)
+                }
+                guard !media.isEmpty else {
+                    return false
+                }
+                model.importMedia(urls: media)
+                return true
+            }
             .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
             ZStack {
                 if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
@@ -1065,6 +1102,87 @@ private struct MeetingsSplit: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.smooth(duration: 0.25), value: router.selectedMeetingID)
+        }
+    }
+}
+
+/// Kenar çubuğunda klasörler (Otter'daki kanallar gibi): proje, ekip ya da ders başına; tıklayınca Toplantılar o
+/// klasörle süzülür. "+" ile satır içinde yeni klasör; sağ tıkla silinir (toplantılar silinmez).
+private struct SidebarFolders: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    @State private var isAdding: Bool = false
+    @State private var newName: String = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Klasörler").appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
+                Spacer(minLength: 0)
+                Button {
+                    isAdding = true
+                    isFocused = true
+                } label: {
+                    Image(systemName: "plus").appFont(size: 11, weight: .semibold).foregroundStyle(Theme.muted).frame(width: 20, height: 20)
+                }
+                .buttonStyle(.hoverPlain)
+                .hoverHint("Yeni klasör", alignment: .trailing, edge: .bottom)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 18)
+            .padding(.bottom, 4)
+            ForEach(model.folders) { (folder: FolderSummary) in
+                let isSelected: Bool = router.section == .meetings && router.folderFilter?.caseInsensitiveCompare(folder.name) == .orderedSame
+                Button {
+                    router.folderFilter = folder.name
+                    router.selectedMeetingID = nil
+                    router.section = .meetings
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: isSelected ? "folder.fill" : "folder").appFont(size: 13, weight: .regular).frame(width: 18)
+                        Text(folder.name).appFont(size: 13, weight: isSelected ? .medium : .regular).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if folder.count > 0 {
+                            Text("\(folder.count)").appFont(size: 11, weight: .medium).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.hoverPlain)
+                .contextMenu {
+                    Button("Klasörü sil", systemImage: "trash", role: .destructive) {
+                        if router.folderFilter == folder.name {
+                            router.folderFilter = nil
+                        }
+                        model.deleteFolder(name: folder.name)
+                    }
+                    // İşlenen toplantı klasörden çıkarılamaz; silinse klasör yeniden belirirdi.
+                    .disabled(!model.canDeleteFolder(name: folder.name))
+                }
+            }
+            if isAdding {
+                TextField("Klasör adı", text: $newName)
+                    .textFieldStyle(.plain)
+                    .appFont(size: 13, weight: .regular)
+                    .focused($isFocused)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+                    .onSubmit {
+                        model.createFolder(name: newName)
+                        newName = ""
+                        isAdding = false
+                    }
+                    .onExitCommand {
+                        newName = ""
+                        isAdding = false
+                    }
+            }
         }
     }
 }

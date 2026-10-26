@@ -134,6 +134,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
     @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(SettingsKey.calendarEnabled) private var calendarEnabled: Bool = false
+    @AppStorage(SettingsKey.customVocabulary) private var vocabulary: String = ""
     @AppStorage(SettingsKey.meetingReminders) private var meetingReminders: Bool = true
     @AppStorage(SettingsKey.micSuggestions) private var micSuggestions: Bool = true
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
@@ -143,7 +144,7 @@ private struct GeneralSettings: View {
 
     var body: some View {
         // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
-        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        let isBusy: Bool = model.isBusy
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Arayüz dili")) {
                 Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
@@ -198,6 +199,25 @@ private struct GeneralSettings: View {
                 TextField("Adın", text: $userName)
                     .settingsField(width: 200)
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Tanıma sözlüğü").appFont(size: 15, weight: .medium)
+                Text("Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.")
+                    .appFont(size: 13, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextEditor(text: $vocabulary)
+                    .appFont(size: 13, weight: .regular)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(height: 80)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+                Text("\(customVocabulary(text: vocabulary).count) terim")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(.vertical, 16)
+            SettingsDivider()
             SettingsRow(title: Text("Takvimi kullan")) {
                 Text("Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.")
                 if let error = model.calendarError {

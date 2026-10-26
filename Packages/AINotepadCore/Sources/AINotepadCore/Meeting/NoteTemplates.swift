@@ -84,7 +84,7 @@ public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userNa
         </not>
         """,
         maxTokens: 16000,
-        jsonSchema: meetingNoteSchema,
+        jsonSchema: sharedNoteSchema,
         timeoutSec: 300
     )
 }
@@ -113,6 +113,9 @@ public func shareText(record: MeetingRecord, note: MeetingNote, language: ShareL
     }
     let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: language?.rawValue ?? "tr")))
     var lines: [String] = ["# \(note.title)", "", "_\(date)_", "", "## \(headings.summary)", "", note.summary, ""]
+    if language == nil, let outline = note.outline, !outline.isEmpty {
+        lines += ["## " + String(localized: "Konu akışı"), ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] \($0.title) — \($0.summary)" } + [""]
+    }
     if !note.decisions.isEmpty {
         lines += ["## \(headings.decisions)", ""] + note.decisions.map { "- \($0)" } + [""]
     }

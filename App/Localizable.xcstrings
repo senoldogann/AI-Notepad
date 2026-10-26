@@ -192,6 +192,16 @@
         }
       }
     },
+    "%@ içe aktarılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't import %@: %@"
+          }
+        }
+      }
+    },
     "%@ kaydedilemedi.": {
       "localizations": {
         "en": {
@@ -1223,6 +1233,16 @@
         }
       }
     },
+    "Brifing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing"
+          }
+        }
+      }
+    },
     "Bu andan dinle": {
       "localizations": {
         "en": {
@@ -1240,6 +1260,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Play from here"
+          }
+        }
+      }
+    },
+    "Bu anı işaretle (notta öne çıkar)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmark this moment (highlighted in the note)"
           }
         }
       }
@@ -1282,6 +1312,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This person will no longer be recognised by voice"
+          }
+        }
+      }
+    },
+    "Bu kişilerle ve konuda önceki toplantılar, kararlar, açık görevler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier meetings with these people and on this topic, decisions, open tasks"
           }
         }
       }
@@ -1708,6 +1748,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Others"
+          }
+        }
+      }
+    },
+    "Dosya içe aktar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import file"
           }
         }
       }
@@ -2259,6 +2309,16 @@
         }
       }
     },
+    "KONU AKIŞI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TOPIC FLOW"
+          }
+        }
+      }
+    },
     "Kalan metin ve konuşmacılar tamamlanıyor.": {
       "localizations": {
         "en": {
@@ -2396,6 +2456,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your meetings and notes appear here once you start recording."
+          }
+        }
+      }
+    },
+    "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings appear here once you start recording or drag an audio/video file here."
           }
         }
       }
@@ -2721,6 +2791,26 @@
         }
       }
     },
+    "Klasör adı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder name"
+          }
+        }
+      }
+    },
+    "Klasörden çıkar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from folder"
+          }
+        }
+      }
+    },
     "Klasöre erişilemedi: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -2728,6 +2818,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't access folder: %@."
+          }
+        }
+      }
+    },
+    "Klasöre taşı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to folder"
+          }
+        }
+      }
+    },
+    "Klasörler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folders"
+          }
+        }
+      }
+    },
+    "Klasörü sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete folder"
+          }
+        }
+      }
+    },
+    "Konu akışı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Topic flow"
           }
         }
       }
@@ -2769,6 +2899,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The speech recognition model isn't ready."
+          }
+        }
+      }
+    },
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names, company and product names and abbreviations that speech recognition should spell correctly; one per line (2–40 characters, at most 5 words; up to 30 are used). Applies to the cloud engine (Deepgram, ElevenLabs). Speaker names you give and glossary terms from meetings are added automatically."
           }
         }
       }
@@ -3894,6 +4034,16 @@
         }
       }
     },
+    "Ses ya da video dosyasından toplantı (sürükleyip bırakabilirsin)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting from an audio or video file (you can drag and drop)"
+          }
+        }
+      }
+    },
     "Ses yakalama zaten çalışıyor.": {
       "extractionState": "stale",
       "localizations": {
@@ -3901,6 +4051,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio capture is already running."
+          }
+        }
+      }
+    },
+    "Ses yazıya dökülemedi: son geçiş metin üretmedi. \"Tekrar işle\" ile yeniden deneyebilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't transcribe the audio: the final pass produced no text. You can try again with \"Reprocess\"."
           }
         }
       }
@@ -4304,6 +4464,16 @@
         }
       }
     },
+    "Tanıma sözlüğü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognition vocabulary"
+          }
+        }
+      }
+    },
     "Tanınan sesler": {
       "localizations": {
         "en": {
@@ -4473,6 +4643,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save the meeting: %@"
+          }
+        }
+      }
+    },
+    "Toplantı kaydı seç (ses ya da video); yazıya dökülür ve notu çıkarılır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a meeting recording (audio or video); it is transcribed and a note is written."
           }
         }
       }
@@ -4743,6 +4923,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Searches all your notes and Finnish/English transcripts, answers in Turkish and shows which meeting it came from."
+          }
+        }
+      }
+    },
+    "Tüm toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All meetings"
           }
         }
       }
@@ -5071,6 +5261,16 @@
         }
       }
     },
+    "Yeni klasör": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New folder"
+          }
+        }
+      }
+    },
     "Yeni konuşmacı": {
       "extractionState": "stale",
       "localizations": {
@@ -5213,6 +5413,16 @@
         }
       }
     },
+    "dosyada ses yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the file has no audio"
+          }
+        }
+      }
+    },
     "effort (%@)": {
       "localizations": {
         "en": {
@@ -5254,6 +5464,16 @@
         }
       }
     },
+    "kaydedilemedi (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't be saved (%@)"
+          }
+        }
+      }
+    },
     "konuşma": {
       "localizations": {
         "en": {
@@ -5280,6 +5500,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "okunamadı (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't be read (%@)"
           }
         }
       }
@@ -5471,6 +5701,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "SUMMARY"
+          }
+        }
+      }
+    },
+    "Önce kenar çubuğunda \"+\" ile klasör oluştur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First create a folder with \"+\" in the sidebar"
+          }
+        }
+      }
+    },
+    "Önemli olarak işaretle (notta öne çıkar)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as important (highlighted in the note)"
           }
         }
       }
@@ -5708,6 +5958,26 @@
         }
       }
     },
+    "İçe aktar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        }
+      }
+    },
+    "İŞARETLEDİĞİN ANLAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR BOOKMARKS"
+          }
+        }
+      }
+    },
     "İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü": {
       "localizations": {
         "en": {
@@ -5724,6 +5994,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job interview"
+          }
+        }
+      }
+    },
+    "İşareti kaldır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove bookmark"
           }
         }
       }

@@ -22,6 +22,8 @@ public struct PanelActions {
     public let onReassignBlock: @MainActor ([SegmentID], Int) -> Void
     /// Bir konuşmacının tümünü (geçmiş ve gelecek) diğeriyle birleştir.
     public let onMergePerson: @MainActor (Int, Int) -> Void
+    /// Şu anı önemli olarak işaretle.
+    public let onBookmark: @MainActor () -> Void
 
     public init(
         onHide: @escaping @MainActor () -> Void,
@@ -37,7 +39,8 @@ public struct PanelActions {
         onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void,
         onReassignBlock: @escaping @MainActor ([SegmentID], Int) -> Void,
-        onMergePerson: @escaping @MainActor (Int, Int) -> Void
+        onMergePerson: @escaping @MainActor (Int, Int) -> Void,
+        onBookmark: @escaping @MainActor () -> Void
     ) {
         self.onHide = onHide
         self.onStart = onStart
@@ -53,6 +56,7 @@ public struct PanelActions {
         self.onSetLanguage = onSetLanguage
         self.onReassignBlock = onReassignBlock
         self.onMergePerson = onMergePerson
+        self.onBookmark = onBookmark
     }
 }
 
@@ -62,6 +66,8 @@ public struct PanelActions {
 public struct TranscriptPanel: View {
     let state: LiveViewState
     let actions: PanelActions
+    /// Kayıt sırasında canlı ses çubukları.
+    let levels: AudioLevels
     @State private var question: String = ""
     /// Kullanıcı transkriptin en altında mı (canlı metni izliyor mu).
     @State private var isFollowing: Bool = true
@@ -71,9 +77,10 @@ public struct TranscriptPanel: View {
     @State private var hasUnseenText: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
-    public init(state: LiveViewState, actions: PanelActions) {
+    public init(state: LiveViewState, actions: PanelActions, levels: AudioLevels) {
         self.state = state
         self.actions = actions
+        self.levels = levels
     }
 
     public var body: some View {
@@ -115,6 +122,10 @@ public struct TranscriptPanel: View {
                 // Kayıtta yalnızca nokta + süre (kısa); boşta "Hazır · Deepgram" gibi daha uzun.
                 .frame(minWidth: state.isRecording ? 60 : 96, alignment: .leading)
                 .layoutPriority(-1)
+            if state.isRecording && !state.isPaused {
+                LevelMeter(levels: levels)
+                    .transition(.opacity)
+            }
             Spacer(minLength: DesignTokens.Spacing.s)
             // Genişlik daraldıkça önce gezinme düğmeleri, sonra dil çipi "⋯" menüsüne toplanır; kayıt denetimleri
             // ve gizle her zaman görünür.
@@ -214,6 +225,7 @@ public struct TranscriptPanel: View {
                 IconButton(symbol: "mic.slash", help: "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor", action: actions.onToggleMic)
                     .disabled(true)
             }
+            IconButton(symbol: "bookmark", help: "Bu anı işaretle (notta öne çıkar)", action: actions.onBookmark)
             IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
         case .finishing:
             EmptyView()

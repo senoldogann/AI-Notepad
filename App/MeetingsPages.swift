@@ -15,6 +15,9 @@ struct MeetingsListPage: View {
     let selectedID: String?
     /// Üst çubuktaki arama.
     let query: String
+    /// Kenar çubuğunda seçilen klasör; nil hepsi.
+    let folder: String?
+    let onClearFolder: @MainActor () -> Void
     let onOpen: @MainActor (String) -> Void
     /// Toplu silmeden sonra (açık toplantı silindiyse sayfa kapanır).
     let onDeleted: @MainActor (Set<String>) -> Void
@@ -25,13 +28,38 @@ struct MeetingsListPage: View {
     @State private var deleteErrors: [String] = []
 
     var body: some View {
-        let visible: [MeetingRecord] = filterMeetings(records: model.meetings, query: query)
+        let visible: [MeetingRecord] = filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query)
         VStack(spacing: 0) {
             HStack(spacing: DesignTokens.Spacing.s) {
-                Text(query.isEmpty ? String(localized: "\(model.meetings.count) toplantı") : String(localized: "\(visible.count) sonuç"))
+                if let folder {
+                    Button {
+                        onClearFolder()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.fill")
+                            Text(folder).lineLimit(1)
+                            Image(systemName: "xmark").appFont(size: 9, weight: .bold)
+                        }
+                        .appFont(size: 12, weight: .medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Theme.soft, in: Capsule())
+                    }
+                    .buttonStyle(.hoverCapsule)
+                    .hoverHint("Tüm toplantılar", alignment: .leading, edge: .bottom)
+                }
+                Text(query.isEmpty ? String(localized: "\(visible.count) toplantı") : String(localized: "\(visible.count) sonuç"))
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
                 Spacer(minLength: 0)
+                if model.importingCount > 0 {
+                    ProgressView().controlSize(.small)
+                }
+                Button("İçe aktar", systemImage: "square.and.arrow.down.on.square") { chooseMediaToImport(model: model) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.pill)
+                    .controlSize(.small)
+                    .hoverHint("Ses ya da video dosyasından toplantı (sürükleyip bırakabilirsin)", alignment: .trailing, edge: .bottom)
                 if !model.meetings.isEmpty {
                     Button(isSelecting ? "Bitti" : "Seç") { setSelecting(!isSelecting) }
                         .buttonStyle(.pill)
@@ -41,8 +69,15 @@ struct MeetingsListPage: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, DesignTokens.Spacing.s)
+            if let error = model.importError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if model.meetings.isEmpty {
-                EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantılar burada görünür.")
+                EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.")
             } else if visible.isEmpty {
                 EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
             } else {
@@ -133,6 +168,17 @@ struct MeetingsListPage: View {
                         .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
+                    Menu {
+                        ForEach(model.folders) { (item: FolderSummary) in
+                            Button(item.name, systemImage: "folder") { model.moveMeetings(ids: checked, to: item.name) }
+                        }
+                        Divider()
+                        Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: checked, to: nil) }
+                    } label: {
+                        Label("Klasöre taşı", systemImage: "folder")
+                    }
+                    .fixedSize()
+                    .disabled(checked.isEmpty)
                     Button("Sil", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
                         .disabled(checked.isEmpty)
                 }
@@ -306,7 +352,10 @@ struct MeetingDetailPage: View {
                                 SharedNoteSection(model: model, record: record, note: note, language: language)
                                     .id(language)
                             } else {
-                                SummaryTab(model: model, note: note, record: record, paragraphs: paragraphs)
+                                SummaryTab(
+                                    model: model, note: note, record: record, paragraphs: paragraphs, canPlay: !playableAudio.isEmpty,
+                                    onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                                )
                             }
                         } else {
                             if isProcessing {
@@ -323,7 +372,9 @@ struct MeetingDetailPage: View {
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
                             canPlay: !playableAudio.isEmpty,
-                            onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                            onPlay: { (startSec: Double) -> Void in play(from: startSec) },
+                            canEdit: !isLocked,
+                            onToggleHighlight: { (paragraph: TranscriptParagraph) -> Void in model.toggleHighlight(meetingID: record.id, paragraph: paragraph) }
                         )
                         .frame(maxWidth: 820, alignment: .leading)
                     }
@@ -404,6 +455,19 @@ struct MeetingDetailPage: View {
                 .textSelection(.enabled)
                 .padding(.top, 8)
             FlowLayout(spacing: 6, lineSpacing: 6) {
+                // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
+                let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+                if !speakers.isEmpty {
+                    HStack(spacing: -7) {
+                        ForEach(Array(speakers.prefix(4).enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                            SpeakerAvatar(text: avatarText(key: item.element.key, speakerNames: record.speakerNames), color: speakerColor(key: item.element.key), size: 24)
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5))
+                                .zIndex(Double(4 - item.offset))
+                        }
+                    }
+                    .padding(.trailing, 4)
+                    .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
+                }
                 ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
                     Text(chip)
                         .appFont(size: 12, weight: .medium)
@@ -537,6 +601,27 @@ struct MeetingDetailPage: View {
     /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
     @ViewBuilder
     private var manageItems: some View {
+        Menu("Klasöre taşı") {
+            ForEach(model.folders) { (item: FolderSummary) in
+                Button {
+                    model.moveMeetings(ids: [record.id], to: item.name)
+                } label: {
+                    if record.folder?.caseInsensitiveCompare(item.name) == .orderedSame {
+                        Label(item.name, systemImage: "checkmark")
+                    } else {
+                        Text(item.name)
+                    }
+                }
+            }
+            if model.folders.isEmpty {
+                Text("Önce kenar çubuğunda \"+\" ile klasör oluştur")
+            }
+            if record.folder != nil {
+                Divider()
+                Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: [record.id], to: nil) }
+            }
+        }
+        .disabled(isLocked)
         Menu("Şablonla yeniden yaz") {
             ForEach(NoteTemplateKind.allCases, id: \.self) { (kind: NoteTemplateKind) in
                 Button {
@@ -681,6 +766,9 @@ private struct SummaryTab: View {
     let note: MeetingNote
     let record: MeetingRecord
     let paragraphs: [TranscriptParagraph]
+    /// Ses var: konu akışındaki zamana tıklayınca oradan çalar.
+    let canPlay: Bool
+    let onPlay: @MainActor (Double) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -731,8 +819,52 @@ private struct SummaryTab: View {
                 .lineSpacing(appearance.lineSpacing + 3)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+            let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
+            let marked: [TranscriptParagraph] = paragraphs.filter { markedIDs.contains($0.id) }
+            if !marked.isEmpty {
+                section(title: "İŞARETLEDİĞİN ANLAR", symbol: "bookmark") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(marked) { (paragraph: TranscriptParagraph) in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Button {
+                                    onPlay(paragraph.startSec)
+                                } label: {
+                                    Label(timestamp(seconds: paragraph.startSec), systemImage: "bookmark.fill")
+                                        .appFont(size: 12, weight: .medium)
+                                        .monospacedDigit()
+                                        .foregroundStyle(appearance.accent.color)
+                                }
+                                .buttonStyle(.hoverPlain)
+                                .disabled(!canPlay)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames))
+                                        .appFont(size: 12, weight: .semibold)
+                                    Text(paragraph.turkish ?? paragraph.text)
+                                        .font(appearance.secondaryFont)
+                                        .lineLimit(3)
+                                        .foregroundStyle(Theme.ink.opacity(0.85))
+                                }
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(appearance.accent.color.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+            }
+            if let outline = note.outline, !outline.isEmpty {
+                section(title: "KONU AKIŞI", symbol: "list.bullet.indent") {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(outline.enumerated()), id: \.offset) { (item: (offset: Int, element: OutlineItem)) in
+                            OutlineRow(item: item.element, isLast: item.offset == outline.count - 1, canPlay: canPlay) {
+                                onPlay(item.element.startSec)
+                            }
+                        }
+                    }
+                }
+            }
             if !note.decisions.isEmpty {
-                section(title: "KARARLAR") {
+                section(title: "KARARLAR", symbol: "checkmark.seal") {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(note.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
                             VStack(alignment: .leading, spacing: 0) {
@@ -755,7 +887,7 @@ private struct SummaryTab: View {
                 }
             }
             if !others.isEmpty {
-                section(title: "DİĞER GÖREVLER") {
+                section(title: "DİĞER GÖREVLER", symbol: "checklist") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
                             TaskCard(model: model, record: record, task: item.element)
@@ -834,12 +966,15 @@ private struct SummaryTab: View {
     }
 
     /// Bölüm: kart olmadan küçük büyük harfli başlık ve içerik (belge düzeni).
-    private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+    private func section(title: LocalizedStringKey, symbol: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
+            Label {
+                Text(title).tracking(DesignTokens.labelTracking)
+            } icon: {
+                Image(systemName: symbol)
+            }
+            .appFont(size: 11, weight: .semibold)
+            .foregroundStyle(Theme.muted)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1046,6 +1181,51 @@ private struct SharedNoteSection: View {
                 .tracking(DesignTokens.labelTracking)
                 .foregroundStyle(Theme.muted)
             content()
+        }
+    }
+}
+
+/// Konu akışında bir bölüm: solda zaman (ses varsa tıklayınca oradan çalar) ve dikey çizgi, sağda başlık ve özet.
+private struct OutlineRow: View {
+    let item: OutlineItem
+    let isLast: Bool
+    let canPlay: Bool
+    let onPlay: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 4) {
+                Button(action: onPlay) {
+                    HStack(spacing: 4) {
+                        if canPlay {
+                            Image(systemName: "play.fill").appFont(size: 8, weight: .bold)
+                        }
+                        Text(timestamp(seconds: item.startSec)).appFont(size: 12, weight: .medium).monospacedDigit()
+                    }
+                    .foregroundStyle(canPlay ? appearance.accent.color : Theme.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Theme.soft, in: Capsule())
+                }
+                .buttonStyle(.hoverCapsule)
+                .disabled(!canPlay)
+                .hoverHint("Buradan dinle", alignment: .leading, edge: .bottom)
+                if !isLast {
+                    Rectangle().fill(Theme.line).frame(width: 1).frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 64)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title).font(appearance.font(size: appearance.textSize, weight: .semibold))
+                Text(item.summary)
+                    .font(appearance.secondaryFont)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .textSelection(.enabled)
+            .padding(.bottom, isLast ? 0 : 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -1591,10 +1771,14 @@ private struct TranscriptSection: View {
     /// Ses var (silinmemiş, kayıtta değil): paragrafa tıklayınca oradan çalar.
     let canPlay: Bool
     let onPlay: @MainActor (Double) -> Void
+    /// İşaret eklenip kaldırılabilir (kayıtta/işlemede değil).
+    let canEdit: Bool
+    let onToggleHighlight: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         let isActivePlayer: Bool = player.meetingID == record.id
+        let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
         let time: Double = player.currentTime
         LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
@@ -1623,6 +1807,17 @@ private struct TranscriptSection: View {
                                 .appFont(size: 12, weight: .regular)
                                 .monospacedDigit()
                                 .foregroundStyle(Theme.muted)
+                            let marked: Bool = markedIDs.contains(paragraph.id)
+                            Button {
+                                onToggleHighlight(paragraph)
+                            } label: {
+                                Image(systemName: marked ? "bookmark.fill" : "bookmark")
+                                    .appFont(size: 11, weight: .medium)
+                                    .foregroundStyle(marked ? appearance.accent.color : Theme.muted.opacity(0.6))
+                            }
+                            .buttonStyle(.hoverPlain)
+                            .disabled(!canEdit)
+                            .hoverHint(marked ? "İşareti kaldır" : "Önemli olarak işaretle (notta öne çıkar)", alignment: .leading, edge: .bottom)
                         }
                         paragraphText(paragraph: paragraph, isActive: isActive, time: time)
                             .font(appearance.bodyFont)
