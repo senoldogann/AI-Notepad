@@ -65,6 +65,8 @@ public struct TranscriptPanel: View {
     @State private var question: String = ""
     /// Kullanıcı transkriptin en altında mı (canlı metni izliyor mu).
     @State private var isFollowing: Bool = true
+    /// Kullanıcı şu an kaydırıyor (sürükleme, tekerlek, savrulma): izlemeyi yalnızca o bırakır.
+    @State private var isUserScrolling: Bool = false
     /// Kullanıcı yukarıdayken yeni metin geldi.
     @State private var hasUnseenText: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
@@ -291,13 +293,20 @@ public struct TranscriptPanel: View {
                 .padding(.top, DesignTokens.Spacing.l)
             }
             .defaultScrollAnchor(.bottom)
+            .onScrollPhaseChange { (_: ScrollPhase, phase: ScrollPhase) in
+                isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+            }
             .onScrollGeometryChange(for: Bool.self) { (geometry: ScrollGeometry) -> Bool in
                 // Alta 60 pt'den yakınsa kullanıcı canlı metni izliyor sayılır.
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 60
             } action: { (_: Bool, atBottom: Bool) in
-                isFollowing = atBottom
                 if atBottom {
+                    isFollowing = true
                     hasUnseenText = false
+                } else if isUserScrolling {
+                    // Yalnızca kullanıcı yukarı kaydırınca izleme durur. Yeni metin içeriği büyütüp alttan bir anlığına
+                    // uzaklaştırdığında durmaz (önceden uzun toplantıda bir süre sonra otomatik kaydırma kalıyordu).
+                    isFollowing = false
                 }
             }
             .onChange(of: transcriptVersion) { (_: TranscriptVersion, _: TranscriptVersion) in

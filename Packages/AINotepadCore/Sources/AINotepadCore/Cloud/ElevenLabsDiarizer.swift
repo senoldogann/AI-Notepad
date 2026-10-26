@@ -74,12 +74,22 @@ public func diarizeWithElevenLabs(apiKey: String, samples: [Float], languageMode
         fileName: "audio.wav",
         mimeType: "audio/wav",
         languageMode: languageMode,
+        // Canlı pencereler yalnızca konuşmacı etiketi için: ek ücretli alanlar gönderilmez.
+        extraFields: [],
         timeoutSec: 60
     )
 }
 
+/// Son geçişin ek alanları: dolgu sözleri ve yarım başlangıçlar atılır (`no_verbatim`, not ve transkript temiz),
+/// "(gülme)" gibi ses etiketleri yazılmaz, anahtar terimler (adlar, terimler; %20 ek ücret) verilir. Saf fonksiyondur.
+public func finalPassFields(keyterms: [String]) -> [(name: String, value: String)] {
+    [("no_verbatim", "true"), ("tag_audio_events", "false")] + keyterms.map { ("keyterms", $0) }
+}
+
 /// Kaydın tamamını (ör. `others.m4a`) tek istekle gönderir; uzun toplantı için zaman aşımı uzun tutulur.
-public func diarizeFile(apiKey: String, fileURL: URL, mimeType: String, languageMode: LanguageMode, timeoutSec: Double) async throws -> DiarizationResult {
+public func diarizeFile(
+    apiKey: String, fileURL: URL, mimeType: String, languageMode: LanguageMode, keyterms: [String], timeoutSec: Double
+) async throws -> DiarizationResult {
     let audio: Data
     do {
         audio = try Data(contentsOf: fileURL)
@@ -92,6 +102,7 @@ public func diarizeFile(apiKey: String, fileURL: URL, mimeType: String, language
         fileName: fileURL.lastPathComponent,
         mimeType: mimeType,
         languageMode: languageMode,
+        extraFields: finalPassFields(keyterms: keyterms),
         timeoutSec: timeoutSec
     )
 }
@@ -103,10 +114,11 @@ private func postToElevenLabs(
     fileName: String,
     mimeType: String,
     languageMode: LanguageMode,
+    extraFields: [(name: String, value: String)],
     timeoutSec: Double
 ) async throws -> DiarizationResult {
     let boundary: String = "AINotepad-\(UUID().uuidString)"
-    var fields: [(name: String, value: String)] = [("model_id", "scribe_v2"), ("diarize", "true")]
+    var fields: [(name: String, value: String)] = [("model_id", "scribe_v2"), ("diarize", "true")] + extraFields
     if let code = elevenLabsLanguageCode(languageMode: languageMode) {
         fields.append(("language_code", code))
     }

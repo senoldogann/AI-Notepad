@@ -47,7 +47,7 @@ public func parseDeepgramMessage(data: Data) throws -> DeepgramMessage {
 }
 
 /// Canlı dinleme adresi. Her zaman somut dil kullanılır: `multi` ölçümde güvenilmez çıktı.
-public func deepgramListenURL(language: MeetingLanguage) -> URL {
+public func deepgramListenURL(language: MeetingLanguage, keyterms: [String]) -> URL {
     var components: URLComponents = URLComponents()
     components.scheme = "wss"
     components.host = "api.deepgram.com"
@@ -60,7 +60,8 @@ public func deepgramListenURL(language: MeetingLanguage) -> URL {
         URLQueryItem(name: "channels", value: "1"),
         URLQueryItem(name: "interim_results", value: "true"),
         URLQueryItem(name: "smart_format", value: "true"),
-    ]
+    // Adlar ve terimler (keyterm prompting, nova-3): her terim ayrı parametre.
+    ] + keyterms.map { URLQueryItem(name: "keyterm", value: $0) }
     // Sabit bileşenlerden üretildiği için her zaman geçerlidir.
     return components.url!
 }

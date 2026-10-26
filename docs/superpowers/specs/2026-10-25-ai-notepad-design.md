@@ -244,6 +244,11 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   kenar çubuğunda Ana sayfa (kaydı başlat ve seçenekleri — kendi sesi, canlı çeviri, dil —, eksik ayarlar, sana düşen
   görevler, son toplantılar), Toplantılar (solda liste, sağda toplantı sayfası), Ayarlar, Kurulum. İlk açılışta Kurulum'da
   açılır. Pencere kapatılınca uygulama menü çubuğunda sürer; Dock simgesi, menü ve ⌘, pencereyi yeniden açar.
+- **Ana sayfa banner'ı:** vurgu renginden türeyen akan örgü gradyan ve ince kumlu doku; ortada simge, başlık ve
+  beyaz kapsül ana eylem (Kaydı başlat / Bitir). Toplantı hazırlanırken ana pencerede de panelle aynı ilerleme kartı
+  (bulanık arka plan); "Arka planda devam et" ikisinde birden kapatır.
+- **3D ve hareket:** simge süzülür ve fareye göre eğilir, kenar çubuğu simgeleri seçilince zıplar, Kurulum adımları
+  3D dönerek geçer; bölüm/toplantı/sekme geçişleri, silme ve onay satırları yumuşak. "Hareketi azalt" açıksa 3D kapalı.
 - **Kayıt sırasında cam panel:** kayıt başlayınca yüzen cam panel ve ada açılır; Ayarlar, Toplantılar, toplantı
   ayrıntısı ve Kurulum panelde de sayfa olarak vardır (açılır kayıt penceresi ya da uyarı penceresi yok); alt
   sayfalarda geri düğmesi ve kayıt sürüyorsa canlı metne tek dokunuşla dönüş vardır.
@@ -340,8 +345,9 @@ mesajı, `max_completion_tokens`, şema varsa katı `response_format: json_schem
 diğerleri akıllı modelle (ikisi Ayarlar'dan).
 
 **Model ve effort seçimi (Ayarlar › LLM):** Claude'da "Canlı çeviri" ve "Ne kaçırdım?, soru ve not" için ayrı model
-(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (low…max); varsayılan Haiku/low ve Haiku/medium (senaryo testlerinde not için büyük modellerle aynı
-eksiksizlik). Modellerin
+(Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1) ve effort (canlı çeviri low…max; not/özet/soru yalnızca low/medium/high); varsayılan Haiku/low ve Haiku/high. Not için
+xhigh/max sunulmaz: gerçek 37 dakikalık toplantıda Haiku `max`'ta parça başına ~4,5 dk düşünüp 64.000 token sınırında
+kesildi, `high` 27 sn'de eksiksiz yazdı; eski sürümden kalan xhigh/max açılışta bir kez high'a taşınır. Modellerin
 parametre kuralları (her biri gerçek API'de doğrulandı): hızlı sınıfta düşünme Haiku 5.5'te `disabled`, Sonnet 5.5'te
 `between_tools` ile kapatılır (yalnızca effort ≤ high; üstünde 400); Opus 5.5 ve Fable 5.1'de kapatılamaz (alan
 gönderilmez). Sunucu tarafı yedek (`fallbacks: "default"`) Haiku 5.5 dışındaki modellerde. OpenAI uyumlu sağlayıcıda
@@ -350,6 +356,11 @@ effort isteğe bağlı `reasoning_effort` (low/medium/high ya da gönderme).
 **Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
 saatte birkaç sent); "Ne kaçırdım?", soru-cevap ve not varsayılan olarak da `claude-haiku-5-5` (`effort: medium`); seçilen model Haiku dışında
 ise `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01`. Her yanıtta `stop_reason == "refusal"` önce denetlenir.
+
+**Tanıma ayarları:** Deepgram (canlı) ve ElevenLabs (son geçiş) `keyterm(s)` ile adları ve terimleri doğru yazar:
+kullanıcının adı, son toplantılarda verilen konuşmacı adları ve son notların sözlük terimleri (en fazla 30; ElevenLabs'ta
+%20 ek ücret). Son geçiş `no_verbatim` (dolgu sözleri ve yarım başlangıçlar atılır) ve `tag_audio_events=false` ile
+çalışır. Ses dönüştürme iki kayıt için aynı anda yapılır.
 
 **Canlı çeviri:** isteğe bağlı (Ayarlar › Genel › "Kayıt sırasında Türkçeye çevir", varsayılan kapalı); kapalıyken
 kayıt sırasında hiç LLM çağrısı yapılmaz. Açıkken yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm

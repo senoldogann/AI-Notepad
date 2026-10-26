@@ -142,6 +142,22 @@ func resetAppearanceSettings(defaults: UserDefaults) {
     }
 }
 
+/// Not, özet ve soru için sunulan effort seviyeleri. `xhigh`/`max` sunulmaz: gerçek 37 dakikalık toplantıda Haiku 5.5
+/// `max` effort'ta parça başına ~4,5 dk düşünüp 64.000 token sınırında kesildi (not hiç oluşmadı); `high` 27 sn'de
+/// eksiksiz not yazdı.
+let smartEfforts: [LLMEffort] = [.low, .medium, .high]
+
+/// Eski sürümde seçilmiş `xhigh`/`max` not effort'unu bir kez `high`'a taşır (artık sunulmuyor; notu kesiyordu).
+/// Açılışta çağrılır; taşındıysa true.
+func migrateSmartEffort(defaults: UserDefaults) -> Bool {
+    guard let stored = defaults.string(forKey: SettingsKey.claudeSmartEffort),
+          let effort = LLMEffort(rawValue: stored), !smartEfforts.contains(effort) else {
+        return false
+    }
+    defaults.set(LLMEffort.high.rawValue, forKey: SettingsKey.claudeSmartEffort)
+    return true
+}
+
 /// Varsayılanları bir kez kaydeder (uygulama açılışında).
 func registerDefaultSettings() {
     UserDefaults.standard.register(defaults: [
@@ -161,7 +177,7 @@ func registerDefaultSettings() {
         // Not ve özet için de Haiku yeterli (1–4 saatlik senaryo testlerinde büyük modellerle aynı eksiksizlik).
         SettingsKey.claudeSmartModel: ClaudeModel.haiku.rawValue,
         SettingsKey.claudeFastEffort: LLMEffort.low.rawValue,
-        SettingsKey.claudeSmartEffort: LLMEffort.medium.rawValue,
+        SettingsKey.claudeSmartEffort: LLMEffort.high.rawValue,
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
         SettingsKey.theme: AppTheme.system.rawValue,

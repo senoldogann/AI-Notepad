@@ -803,16 +803,6 @@
         }
       }
     },
-    "Bitiriliyor… kalan metin ve konuşmacılar tamamlanıyor.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Finishing… completing the remaining text and speakers."
-          }
-        }
-      }
-    },
     "Bitti": {
       "localizations": {
         "en": {
@@ -1478,12 +1468,12 @@
         }
       }
     },
-    "Haiku ve medium/high effort önerilir: uzun toplantı notu parça parça yazılır, büyük model gerekmez. max effort yavaştır.": {
+    "Haiku ve yüksek effort önerilir: uzun toplantının notu parça parça yazılır, büyük model gerekmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haiku with medium/high effort is recommended: long meeting notes are written part by part, so a bigger model isn't needed. max effort is slow."
+            "value": "Haiku with high effort is recommended: long meeting notes are written part by part, so a bigger model isn't needed."
           }
         }
       }
@@ -1656,6 +1646,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "SPEAKERS"
+          }
+        }
+      }
+    },
+    "Kalan metin ve konuşmacılar tamamlanıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completing the remaining text and speakers."
           }
         }
       }
@@ -3478,6 +3478,16 @@
         }
       }
     },
+    "Toplantını dinle, gerisini bana bırak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen to your meeting, leave the rest to me"
+          }
+        }
+      }
+    },
     "Toplantıyı sil": {
       "localizations": {
         "en": {
@@ -3488,12 +3498,12 @@
         }
       }
     },
-    "Toplantıyı yazıya döker, Türkçeye çevirir; sonunda sana düşenleri çıkarır.": {
+    "Toplantıyı yazıya döker, istersen Türkçeye çevirir; sonunda sana düşen görevleri çıkarır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transcribes your meeting, translates it to Turkish, and tells you what's on you afterwards."
+            "value": "Transcribes your meeting, translates it to Turkish if you like, and pulls out your tasks at the end."
           }
         }
       }

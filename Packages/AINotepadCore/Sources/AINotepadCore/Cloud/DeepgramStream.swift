@@ -59,12 +59,13 @@ public struct DeepgramStream: Sendable {
 /// kopukken gelen ses ve henüz kesinleşmemiş gönderilmiş ses bağlanınca yeniden gönderilir.
 /// Geçersiz anahtar gibi 4xx el sıkışma hataları yeniden denenmez.
 /// Ses akışı bitince `CloseStream` gönderilir, kalan sonuçlar alınır ve olay akışı biter.
-public func startDeepgramStream(apiKey: String, language: MeetingLanguage, audio: AsyncStream<[Float]>) -> DeepgramStream {
+public func startDeepgramStream(apiKey: String, language: MeetingLanguage, keyterms: [String], audio: AsyncStream<[Float]>) -> DeepgramStream {
     let (events, sink): (AsyncStream<StreamingEvent>, AsyncStream<StreamingEvent>.Continuation) =
         AsyncStream.makeStream(of: StreamingEvent.self)
     let connection: DeepgramConnection = DeepgramConnection(
         apiKey: apiKey,
-        url: deepgramListenURL(language: language),
+        url: deepgramListenURL(language: language, keyterms: keyterms),
+        keyterms: keyterms,
         events: sink
     )
     Task {
@@ -117,9 +118,13 @@ private actor DeepgramConnection {
     private var closeDeadlinePassed: Bool = false
     private var hasFailed: Bool = false
 
-    init(apiKey: String, url: URL, events: AsyncStream<StreamingEvent>.Continuation) {
+    /// Adlar ve terimler; dil değişince yeni adrese de eklenir.
+    private let keyterms: [String]
+
+    init(apiKey: String, url: URL, keyterms: [String], events: AsyncStream<StreamingEvent>.Continuation) {
         self.apiKey = apiKey
         self.url = url
+        self.keyterms = keyterms
         self.events = events
     }
 
@@ -146,7 +151,7 @@ private actor DeepgramConnection {
     /// Dili değiştirir. Bağlıysa hemen yeni dille yeniden bağlanır; bağlantı kuruluyorsa
     /// kurulduktan sonra `reconnectIfLanguageChanged` yeni dile geçer.
     func switchLanguage(to language: MeetingLanguage) async {
-        url = deepgramListenURL(language: language)
+        url = deepgramListenURL(language: language, keyterms: keyterms)
         guard isConnected, !isReconnecting, !isClosing else {
             return
         }

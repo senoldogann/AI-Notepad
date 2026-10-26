@@ -27,7 +27,7 @@ extension CloudTests {
         let result: MeetingRecord = await processMeeting(
             record: recording,
             directory: directory,
-            finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: ["Aino", "raportti"])),
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             languageMode: .automatic,
             userName: "Doğan",
@@ -57,7 +57,7 @@ extension CloudTests {
             finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let result: MeetingRecord = await processMeeting(
-            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: "gecersiz")),
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: "gecersiz", keyterms: [])),
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), languageMode: .automatic, userName: "Doğan",
             onStep: { (_: ProcessingStep) async -> Void in }
         )
@@ -79,7 +79,7 @@ extension CloudTests {
             engine: .cloud, notice: nil, meNeedsFinalPass: true
         )
         let result: MeetingRecord = await processMeeting(
-            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: ["Aino", "raportti"])),
             llm: nil, languageMode: .fixed(.finnish), userName: "Doğan",
             onStep: { (_: ProcessingStep) async -> Void in }
         )
@@ -98,7 +98,7 @@ extension CloudTests {
             failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let result: MeetingRecord = await processMeeting(
-            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: ["Aino", "raportti"])),
             llm: nil, languageMode: .automatic, userName: "Doğan",
             onStep: { (_: ProcessingStep) async -> Void in }
         )

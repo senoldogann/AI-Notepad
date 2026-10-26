@@ -35,7 +35,7 @@ extension CloudTests {
         let audio: AsyncStream<[Float]> = chunkedStream(samples: try loadFixture(name: "fi-dialog"), chunkSize: 3200)
         var finals: [(text: String, start: Double)] = []
         var failures: [String] = []
-        for await event in startDeepgramStream(apiKey: key, language: .finnish, audio: audio).events {
+        for await event in startDeepgramStream(apiKey: key, language: .finnish, keyterms: ["Aino", "raportti"], audio: audio).events {
             switch event {
             case .final(let text, let start, _): finals.append((text, start))
             case .failed(let message): failures.append(message)
@@ -54,7 +54,7 @@ extension CloudTests {
     @Test func switchesLanguageMidStream() async throws {
         let key: String = try cloudKey(account: .deepgram)
         let (audio, input): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
-        let stream: DeepgramStream = startDeepgramStream(apiKey: key, language: .english, audio: audio)
+        let stream: DeepgramStream = startDeepgramStream(apiKey: key, language: .english, keyterms: [], audio: audio)
         await stream.switchLanguage(to: .finnish)
         let fixture: [Float] = try loadFixture(name: "fi-dialog")
         for offset in stride(from: 0, to: fixture.count, by: 3200) {
@@ -73,7 +73,7 @@ extension CloudTests {
     @Test func invalidKeyFailsWithStatus() async throws {
         let audio: AsyncStream<[Float]> = chunkedStream(samples: silence(seconds: 1), chunkSize: 3200)
         var events: [StreamingEvent] = []
-        for await event in startDeepgramStream(apiKey: "gecersiz", language: .finnish, audio: audio).events {
+        for await event in startDeepgramStream(apiKey: "gecersiz", language: .finnish, keyterms: [], audio: audio).events {
             events.append(event)
         }
         guard case .failed(let message) = events.first else {
@@ -86,7 +86,7 @@ extension CloudTests {
     // Bağlantı konuşma ortasında koparsa yeniden bağlanmalı, kesinleşmemiş ses yeniden gönderilmeli.
     @Test func forcedDisconnectKeepsTranscribing() async throws {
         let key: String = try cloudKey(account: .deepgram)
-        let stream: DeepgramStream = startDeepgramStream(apiKey: key, language: .finnish, audio: pacedStream(samples: try loadFixture(name: "fi-dialog")))
+        let stream: DeepgramStream = startDeepgramStream(apiKey: key, language: .finnish, keyterms: ["Aino", "raportti"], audio: pacedStream(samples: try loadFixture(name: "fi-dialog")))
         Task {
             // 2. cümlenin ortası ("Minulla on raportti valmiina").
             try await Task.sleep(for: .seconds(4.5))

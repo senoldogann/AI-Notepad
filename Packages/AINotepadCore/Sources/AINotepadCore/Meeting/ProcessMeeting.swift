@@ -42,14 +42,17 @@ public enum FinalPassPlan: Sendable {
 /// Bulut son geçişi: ElevenLabs Scribe v2, konuşmacı ayırma açık.
 public struct ElevenLabsFinalTranscriber: FinalTranscriber {
     private let apiKey: String
+    /// Adlar ve terimler (bkz. `meetingKeyterms`).
+    private let keyterms: [String]
 
-    public init(apiKey: String) {
+    public init(apiKey: String, keyterms: [String]) {
         self.apiKey = apiKey
+        self.keyterms = keyterms
     }
 
     public func transcribeFinal(audioURL: URL, languageMode: LanguageMode) async throws -> FinalPassResult {
         let result: DiarizationResult = try await diarizeFile(
-            apiKey: apiKey, fileURL: audioURL, mimeType: "audio/mp4", languageMode: languageMode,
+            apiKey: apiKey, fileURL: audioURL, mimeType: "audio/mp4", languageMode: languageMode, keyterms: keyterms,
             timeoutSec: finalPassTimeoutSec(durationSec: try audioDurationSec(url: audioURL))
         )
         return FinalPassResult(
@@ -90,17 +93,11 @@ public func processMeeting(
     var current: MeetingRecord = record.with(status: .processing, failureMessage: nil).with(notice: nil)
     await onStep(.convertingAudio)
 
-    for name in ["me", "others"] {
-        let caf: URL = directory.appending(path: "\(name).caf")
-        guard FileManager.default.fileExists(atPath: caf.path) else {
-            continue
-        }
-        do {
-            try convertToM4A(source: caf, destination: directory.appending(path: "\(name).m4a"))
-            try FileManager.default.removeItem(at: caf)
-        } catch {
-            return failed(record: current, step: String(localized: "Ses dönüştürülemedi"), error: error)
-        }
+    // İki kayıt aynı anda dönüştürülür (uzun toplantıda bekleme yarıya iner).
+    do {
+        try await convertRecordings(directory: directory)
+    } catch {
+        return failed(record: current, step: String(localized: "Ses dönüştürülemedi"), error: error)
     }
 
     await onStep(.finalPass)
@@ -116,6 +113,22 @@ public func processMeeting(
 
     await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
+}
+
+/// Kayıttaki `.caf` dosyalarını (`me`, `others`) aynı anda `.m4a`'ya dönüştürür ve `.caf`'ları siler; ilk hata fırlatılır.
+private func convertRecordings(directory: URL) async throws {
+    let sources: [URL] = ["me", "others"]
+        .map { (name: String) -> URL in directory.appending(path: "\(name).caf") }
+        .filter { FileManager.default.fileExists(atPath: $0.path) }
+    try await withThrowingTaskGroup(of: Void.self) { (group: inout ThrowingTaskGroup<Void, any Error>) -> Void in
+        for caf in sources {
+            group.addTask {
+                try convertToM4A(source: caf, destination: caf.deletingPathExtension().appendingPathExtension("m4a"))
+                try FileManager.default.removeItem(at: caf)
+            }
+        }
+        try await group.waitForAll()
+    }
 }
 
 /// "Diğerleri" kaydının tamamından konuşmacılı son geçiş. Ses yoksa ya da geçiş başarısızsa canlı metin kalır, uyarı

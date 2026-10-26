@@ -21,9 +21,6 @@ final class PanelRouter {
 /// Modeli gözleyip sayfayı seçen kabuk; tüm sayfalara aynı cam yüzeyi verir.
 struct PanelHost: View {
     let model: AppModel
-    /// "Arka planda devam et" ile kapatılan ilerleme kartları.
-    @State private var dismissedProgress: Set<String> = []
-    @State private var dismissedFinishing: Bool = false
     let router: PanelRouter
     let player: MeetingAudioPlayer
     let onStart: @MainActor () -> Void
@@ -32,48 +29,13 @@ struct PanelHost: View {
     let onOpenMainWindow: @MainActor (MainSection) -> Void
 
     var body: some View {
-        let progress: ProcessingProgress? = processingProgress
         content
-            // Toplantı hazırlanırken arka plan bulanıklaşır; ortadaki kart tamamlanana kadar kalır.
-            .blur(radius: progress == nil ? 0 : 8)
-            .allowsHitTesting(progress == nil)
-            .overlay {
-                if let progress {
-                    ProcessingOverlay(progress: progress) {
-                        if let id = progress.meetingID {
-                            dismissedProgress.insert(id)
-                        } else {
-                            dismissedFinishing = true
-                        }
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                }
-            }
-            .animation(.easeInOut(duration: 0.3), value: progress)
-            .onChange(of: model.phase) { (_: RecordingPhase, phase: RecordingPhase) in
-                // Yeni bir bitirme için kart yeniden gösterilir.
-                if phase == .recording {
-                    dismissedFinishing = false
-                }
-            }
+            .modifier(ProcessingOverlayHost(model: model))
             // Canlı metin ile toplantı sayfası arasında yumuşak geçiş.
             .animation(.smooth(duration: 0.25), value: router.page)
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
             .modifier(AppearanceEnvironment())
-    }
-
-    /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
-    private var processingProgress: ProcessingProgress? {
-        if model.phase == .finishing {
-            return dismissedFinishing ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: model.liveEngine == .whisperKit)
-        }
-        // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
-        guard !dismissedFinishing, let id = model.lastFinishedMeetingID, let step = model.processingSteps[id], !dismissedProgress.contains(id) else {
-            return nil
-        }
-        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
-        return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
     }
 
     @ViewBuilder
@@ -227,6 +189,46 @@ struct AppearanceEnvironment: ViewModifier {
 
 
 /// İlerleme kartının durumu: hangi toplantı (bitirilirken henüz yok), kaçıncı adım, yerel motor mu.
+/// Toplantı hazırlanırken içeriği bulanıklaştırıp ortada ilerleme kartını gösterir; panel ve ana pencere aynı kartı
+/// gösterir, "Arka planda devam et" ikisinde birden kapatır (durum modelde).
+struct ProcessingOverlayHost: ViewModifier {
+    let model: AppModel
+
+    func body(content: Content) -> some View {
+        let progress: ProcessingProgress? = processingProgress
+        content
+            .blur(radius: progress == nil ? 0 : 8)
+            .allowsHitTesting(progress == nil)
+            .overlay {
+                if let progress {
+                    ProcessingOverlay(progress: progress) {
+                        if let id = progress.meetingID {
+                            model.dismissedProgressIDs.insert(id)
+                        } else {
+                            model.finishingCardDismissed = true
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: progress)
+    }
+
+    /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
+    private var processingProgress: ProcessingProgress? {
+        if model.phase == .finishing {
+            return model.finishingCardDismissed ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: model.liveEngine == .whisperKit)
+        }
+        // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
+        guard !model.finishingCardDismissed, let id = model.lastFinishedMeetingID, let step = model.processingSteps[id],
+              !model.dismissedProgressIDs.contains(id) else {
+            return nil
+        }
+        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
+        return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
+    }
+}
+
 struct ProcessingProgress: Equatable {
     let meetingID: String?
     /// 0: kayıt bitiriliyor, 1: ses, 2: son geçiş, 3: not.

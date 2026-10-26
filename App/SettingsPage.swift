@@ -321,7 +321,7 @@ private struct LLMSettings: View {
             if provider == LLMProviderKind.anthropic.rawValue {
                 Section {
                     ClaudeModelPicker(selection: $claudeFastModel)
-                    ClaudeEffortPicker(selection: $claudeFastEffort)
+                    ClaudeEffortPicker(selection: $claudeFastEffort, levels: LLMEffort.allCases)
                 } header: {
                     Text("Canlı çeviri")
                 } footer: {
@@ -329,11 +329,11 @@ private struct LLMSettings: View {
                 }
                 Section {
                     ClaudeModelPicker(selection: $claudeSmartModel)
-                    ClaudeEffortPicker(selection: $claudeSmartEffort)
+                    ClaudeEffortPicker(selection: $claudeSmartEffort, levels: smartEfforts)
                 } header: {
                     Text("\"Ne kaçırdım?\", soru ve toplantı notu")
                 } footer: {
-                    Text("Haiku ve medium/high effort önerilir: uzun toplantı notu parça parça yazılır, büyük model gerekmez. max effort yavaştır.")
+                    Text("Haiku ve yüksek effort önerilir: uzun toplantının notu parça parça yazılır, büyük model gerekmez.")
                 }
             } else {
                 Section {
@@ -403,15 +403,26 @@ private struct ClaudeModelPicker: View {
 /// Claude effort seçimi: düşükten en yükseğe.
 private struct ClaudeEffortPicker: View {
     @Binding var selection: String
+    /// Sunulan seviyeler: not/özet için en çok `high` (bkz. `smartEfforts`).
+    let levels: [LLMEffort]
 
     var body: some View {
         Picker("Effort", selection: $selection) {
-            Text("Düşük").tag(LLMEffort.low.rawValue)
-            Text("Orta").tag(LLMEffort.medium.rawValue)
-            Text("Yüksek").tag(LLMEffort.high.rawValue)
-            Text("Çok yüksek").tag(LLMEffort.xhigh.rawValue)
-            Text("En yüksek").tag(LLMEffort.max.rawValue)
+            ForEach(levels, id: \.self) { (level: LLMEffort) in
+                Text(effortTitle(level: level)).tag(level.rawValue)
+            }
         }
+    }
+}
+
+/// Effort seviyesinin arayüz adı.
+private func effortTitle(level: LLMEffort) -> LocalizedStringKey {
+    switch level {
+    case .low: "Düşük"
+    case .medium: "Orta"
+    case .high: "Yüksek"
+    case .xhigh: "Çok yüksek"
+    case .max: "En yüksek"
     }
 }
 

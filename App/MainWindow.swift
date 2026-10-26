@@ -118,6 +118,8 @@ struct MainWindowView: View {
             }
         }
         .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
+        .modifier(ProcessingOverlayHost(model: model))
         .frame(minWidth: 820, minHeight: 560)
         // Liquid Glass: pencere zemini yarı saydam malzeme; masaüstü arkadan hafifçe görünür, metin okunaklı kalır.
         .containerBackground(.thinMaterial, for: .window)
@@ -127,7 +129,8 @@ struct MainWindowView: View {
     }
 
     private var split: some View {
-        NavigationSplitView {
+        // Kenar çubuğu hep açık: açma/kapama düğmesi yok (cam arka planı köşeden taşıyordu), kapalı kalırsa geri açılamazdı.
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             List(selection: Binding<MainSection?>(
                 get: { router.section },
                 set: { (section: MainSection?) -> Void in
@@ -141,6 +144,7 @@ struct MainWindowView: View {
                 sidebarItem(title: "Ayarlar", symbol: "gearshape", section: .settings)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+            .toolbar(removing: .sidebarToggle)
             .safeAreaInset(edge: .bottom) {
                 SidebarStatus(model: model)
             }
@@ -151,9 +155,6 @@ struct MainWindowView: View {
                 .transition(.opacity)
                 .animation(.smooth(duration: 0.25), value: router.section)
         }
-        // Kenar çubuğu açma/kapama düğmesi kaldırıldı: cam arka planı kenar çubuğunun köşesinden taşıyordu; dar
-        // kenar çubuğunu gizlemeye gerek yok.
-        .toolbar(removing: .sidebarToggle)
     }
 
     /// Kenar çubuğu öğesi; seçilince simgesi zıplar.
@@ -240,6 +241,7 @@ private struct HomePage: View {
     let shortcuts: ShortcutController
     let onStartRecording: @MainActor () -> Void
     let onShowPanel: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         ScrollView {
@@ -263,75 +265,96 @@ private struct HomePage: View {
         }
     }
 
+    /// Banner: simge, başlık ve duruma göre ana eylem (Kaydı başlat / Bitir); altında kayıt seçenekleri.
     private var hero: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
-            HStack(spacing: DesignTokens.Spacing.l) {
-                // Sistemin çizdiği simge (köşe maskesi ve cam kenarıyla); Dock'taki ile aynı.
-                Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                    .resizable()
-                    .frame(width: 64, height: 64)
-                    .floating3D()
-                    .tilt3D(maxAngle: 14)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("AI-Notepad")
-                        .font(.system(size: 28, weight: .bold))
-                    Text("Toplantıyı yazıya döker, Türkçeye çevirir; sonunda sana düşenleri çıkarır.")
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+            GradientBanner(accent: appearance.accent.color) {
+                VStack(spacing: DesignTokens.Spacing.m) {
+                    // Sistemin çizdiği simge (köşe maskesi ve cam kenarıyla); Dock'taki ile aynı.
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                        .floating3D()
+                        .tilt3D(maxAngle: 14)
+                    bannerText
+                    bannerActions
                 }
+                .multilineTextAlignment(.center)
             }
-            recordingCard
+            if model.phase == .idle {
+                RecordingOptions(model: model)
+                    .padding(.horizontal, DesignTokens.Spacing.l)
+                    .padding(.vertical, DesignTokens.Spacing.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 
     @ViewBuilder
-    private var recordingCard: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
-            switch model.phase {
-            case .recording:
-                HStack(spacing: DesignTokens.Spacing.m) {
+    private var bannerText: some View {
+        switch model.phase {
+        case .recording:
+            VStack(spacing: 4) {
+                HStack(spacing: DesignTokens.Spacing.s) {
                     Image(systemName: "record.circle.fill")
                         .foregroundStyle(.red)
                         .symbolEffect(.pulse, isActive: !model.isPaused)
                     if let startedAt = model.recordingStartedAt {
                         Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
-                            .font(.system(size: 22, weight: .semibold).monospacedDigit())
+                            .monospacedDigit()
                     }
-                    Text(model.isPaused ? "Duraklatıldı" : "Kayıt sürüyor")
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
-                    Button("Bitir", systemImage: "stop.fill") { model.stopRecording() }
-                        .buttonStyle(.glassProminentAction)
                 }
-            case .finishing:
-                HStack(spacing: DesignTokens.Spacing.m) {
-                    ProgressView().controlSize(.small)
-                    Text("Bitiriliyor… kalan metin ve konuşmacılar tamamlanıyor.")
-                        .foregroundStyle(.secondary)
-                }
-            case .idle:
-                HStack(alignment: .center, spacing: DesignTokens.Spacing.l) {
-                    Button(action: onStartRecording) {
-                        Label("Kaydı başlat", systemImage: "record.circle")
-                            .font(.system(size: 15, weight: .semibold))
-                            .padding(.horizontal, DesignTokens.Spacing.s)
-                    }
-                    .buttonStyle(.glassProminentAction)
-                    .controlSize(.extraLarge)
-                    .disabled(!model.isReadyToRecord || model.isStarting)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.viewState.statusText)
-                        Text("Kısayol: \(keyBindingDisplay(binding: shortcuts.currentBinding(action: .record)))")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.callout)
-                }
-                RecordingOptions(model: model)
+                .font(.system(size: 30, weight: .semibold))
+                Text(model.isPaused ? "Duraklatıldı" : "Kayıt sürüyor")
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        case .finishing:
+            VStack(spacing: 6) {
+                Text("Bitiriliyor…")
+                    .font(.system(size: 28, weight: .semibold))
+                Text("Kalan metin ve konuşmacılar tamamlanıyor.")
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        case .idle:
+            VStack(spacing: 6) {
+                Text("Toplantını dinle, gerisini bana bırak")
+                    .font(.system(size: 28, weight: .semibold))
+                Text("Toplantıyı yazıya döker, istersen Türkçeye çevirir; sonunda sana düşen görevleri çıkarır.")
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(maxWidth: 520)
             }
         }
-        .padding(DesignTokens.Spacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var bannerActions: some View {
+        switch model.phase {
+        case .recording:
+            HStack(spacing: DesignTokens.Spacing.l) {
+                Button("Bitir", systemImage: "stop.fill") { model.stopRecording() }
+                    .buttonStyle(.bannerPrimary)
+                Button("Paneli göster") { onShowPanel() }
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(.white)
+            }
+        case .finishing:
+            ProgressView().controlSize(.small)
+        case .idle:
+            HStack(spacing: DesignTokens.Spacing.l) {
+                Button("Kaydı başlat", systemImage: "record.circle", action: onStartRecording)
+                    .buttonStyle(.bannerPrimary)
+                    .disabled(!model.isReadyToRecord || model.isStarting)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.viewState.statusText)
+                    Text("Kısayol: \(keyBindingDisplay(binding: shortcuts.currentBinding(action: .record)))")
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .font(.callout)
+                .multilineTextAlignment(.leading)
+            }
+        }
     }
 
     private var problems: some View {

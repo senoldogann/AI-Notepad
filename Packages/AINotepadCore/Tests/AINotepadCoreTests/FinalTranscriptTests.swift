@@ -40,7 +40,7 @@ extension CloudTests {
         try convertToM4A(source: caf, destination: m4a)
 
         let result: DiarizationResult = try await diarizeFile(
-            apiKey: try cloudKey(account: .elevenlabs), fileURL: m4a, mimeType: "audio/mp4", languageMode: .automatic, timeoutSec: 300
+            apiKey: try cloudKey(account: .elevenlabs), fileURL: m4a, mimeType: "audio/mp4", languageMode: .automatic, keyterms: ["raportti", "diat"], timeoutSec: 300
         )
         let segments: [StoredSegment] = finalSegments(words: result.words, gapSec: 1.5)
         #expect(Set(segments.compactMap(\.person)).count >= 2)
