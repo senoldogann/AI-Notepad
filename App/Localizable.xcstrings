@@ -878,6 +878,16 @@
         }
       }
     },
+    "Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting in the same room: everyone on the microphone is separated into speakers"
+          }
+        }
+      }
+    },
     "Açık": {
       "localizations": {
         "en": {
@@ -5049,6 +5059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "High"
+          }
+        }
+      }
+    },
+    "Yüz yüze": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In person"
           }
         }
       }

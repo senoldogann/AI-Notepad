@@ -67,6 +67,8 @@ final class AppModel {
     var isPaused: Bool = false
     /// "Sen" kapalı: hoparlörle dinlerken yankı olmasın. Ayar olarak saklanır.
     var isMicMuted: Bool = UserDefaults.standard.bool(forKey: SettingsKey.micMuted)
+    /// Yüz yüze toplantı modu (bkz. `SettingsKey.inPersonMode`); kayıt başında okunur.
+    var isInPerson: Bool = UserDefaults.standard.bool(forKey: SettingsKey.inPersonMode)
     /// Bu kayıtta mikrofon açıldı mı: mikrofon kapalıyken başlayan kayıt yalnızca bilgisayardan gelen sesi alır, mikrofonu
     /// hiç açmaz (menü çubuğunda mikrofon göstergesi yanmaz, Deepgram'a sessizlik gönderilip ücretlendirilmez).
     var micOpenedForRecording: Bool = false
@@ -518,6 +520,21 @@ final class AppModel {
         let pauseGate: AudioGate = AudioGate(isOpen: true)
         let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
+        let othersAudio: AsyncStream<[Float]>
+        if isInPerson {
+            // Yüz yüze: odadaki herkes mikrofondan gelir; "Diğerleri" akışı olarak konuşmacılara ayrılır (kullanıcı da
+            // onlardan biri). Sistem sesi dinlenmez.
+            meAudio = finishedStream()
+            micOpenedForRecording = false
+            do {
+                let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+                othersAudio = gatedStream(audio: aligned, gate: pauseGate)
+                startedSpeakers.insert(.others)
+            } catch {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                othersAudio = finishedStream()
+            }
+        } else {
         if isMicMuted {
             // Yalnızca karşı taraf: mikrofon hiç açılmaz.
             meAudio = finishedStream()
@@ -534,7 +551,6 @@ final class AppModel {
                 micOpenedForRecording = false
             }
         }
-        let othersAudio: AsyncStream<[Float]>
         do {
             let aligned: AsyncStream<[Float]> = clockAlignedStream(audio: try await systemAudio.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
             othersAudio = gatedStream(audio: aligned, gate: pauseGate)
@@ -542,6 +558,7 @@ final class AppModel {
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             othersAudio = finishedStream()
+        }
         }
         guard !startedSpeakers.isEmpty else {
             return
@@ -948,6 +965,15 @@ final class AppModel {
         if !trimmed.isEmpty, UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition), let voice = record.voiceprints?[person] {
             storeVoices(voices: registering(voices: registeredVoices, name: trimmed, voiceprint: voice, now: Date()))
         }
+    }
+
+    /// Yüz yüze modunu değiştirir (kayıt yokken).
+    func toggleInPerson() {
+        guard !isRecording else {
+            return
+        }
+        isInPerson.toggle()
+        UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
     }
 
     // MARK: Takvim

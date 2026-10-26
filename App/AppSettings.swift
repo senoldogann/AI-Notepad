@@ -58,6 +58,8 @@ enum SettingsKey {
     static let calendarEnabled: String = "calendar.enabled"
     static let meetingReminders: String = "calendar.reminders"
     static let micSuggestions: String = "calendar.micSuggestions"
+    /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
+    static let inPersonMode: String = "inPersonMode"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
@@ -196,6 +198,7 @@ func registerDefaultSettings() {
         SettingsKey.voiceRecognition: true,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
+        SettingsKey.inPersonMode: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,

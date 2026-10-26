@@ -528,13 +528,22 @@ private struct RecordBar: View {
                 .tilt3D(maxAngle: 18)
             switch model.phase {
             case .idle:
-                Text("Toplantını dinlemeye başla")
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
+                // Sığmazsa yarım kesilmek yerine hiç gösterilmez (seçenek çipleri öncelikli).
+                ViewThatFits(in: .horizontal) {
+                    Text("Toplantını dinlemeye başla")
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Color.clear.frame(width: 0, height: 0)
+                }
                 Spacer(minLength: 6)
                 languageChip
-                chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
-                    model.toggleMicrophone()
+                chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
+                    .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
+                if !model.isInPerson {
+                    chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
+                        model.toggleMicrophone()
+                    }
                 }
                 chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
                     model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
