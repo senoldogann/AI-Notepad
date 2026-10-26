@@ -199,6 +199,30 @@ sırasında durdur düğmesi.
 erişilebilirlik izni gerektirmez). Etkin bir macOS sistem kısayoluyla ya da başka uygulamayla çakışan kısayol
 kaydedilmez ve menüde adıyla bildirilir.
 
+### 4.4 LLM (aşama 4)
+
+**Sağlayıcı:** Anthropic Claude (kullanıcı seçimi), ham HTTP `POST https://api.anthropic.com/v1/messages`
+(Swift için resmi SDK yok), başlıklar `x-api-key`, `anthropic-version: 2026-10-21`. Anahtar Keychain'de
+(`AINotepad` / `anthropic`). OpenAI uyumlu istemci sonraki iş.
+
+**Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
+saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort: medium`, `fallbacks: "default"` +
+`anthropic-beta: server-side-fallback-2026-07-01`). Her yanıtta `stop_reason == "refusal"` önce denetlenir.
+
+**Canlı çeviri:** yalnızca "Diğerleri"nin kesin bölümleri, sırayla (tek seri kuyruk), önceki 3 kesin bölüm
+bağlam olarak. Panel her bloğun altında Türkçesini gösterir; görünüm ayarı "İki dil" (orijinal soluk + Türkçe)
+ya da "Sadece Türkçe". Adanın son cümlesi varsa Türkçesidir. Çeviri hatası panelde tek satır (tekilleştirilmiş).
+
+**"Ne kaçırdım?":** son 3 dk transkripti (`[mm:ss] Etiket: metin`) → yapılandırılmış çıktı
+(`output_config.format` JSON şeması) `{konu: String, kararlar: [String], sendenIstenenler: [String]}`;
+panelde kapatılabilir kart.
+
+**Soru kutusu:** panel altında metin alanı; o ana kadarki transkript + Türkçe soru → Türkçe kısa cevap,
+ilgili anların zaman damgalarıyla. Panel metin girişi için anahtar pencere olabilen `NSPanel` alt sınıfıdır.
+
+**Hatalar:** 429/5xx/ağ hatası 3 deneme (üstel bekleme, uyarı logu), 4xx denenmez; `LLMError` durum kodu ve
+yanıt gövdesini içerir, anahtar içermez.
+
 ### 4.2 Toplantı durum makinesi
 
 `idle → recording → processing → done`, ayrıca `processing → failed` ve
