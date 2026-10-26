@@ -32,7 +32,8 @@ func cloudConfig(
         diarizationIntervalSec: diarizationIntervalSec,
         diarizationWindowSec: 120,
         minDiarizationAudioSec: minDiarizationAudioSec,
-        languageConfidence: 0.8
+        languageConfidence: 0.8,
+        keyterms: ["Aino", "raportti"]
     )
 }
 
@@ -155,7 +156,7 @@ extension CloudTests {
         let config: CloudSessionConfig = CloudSessionConfig(
             languageMode: .fixed(.finnish), recordingDirectory: base.recordingDirectory, deepgramKey: base.deepgramKey,
             elevenLabsKey: base.elevenLabsKey, firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000,
-            diarizationWindowSec: 120, minDiarizationAudioSec: 1000, languageConfidence: 0.8
+            diarizationWindowSec: 120, minDiarizationAudioSec: 1000, languageConfidence: 0.8, keyterms: []
         )
         let handle: LiveSessionHandle = runCloudLiveSession(
             config: config,

@@ -119,24 +119,25 @@ struct LLMScenarioTests {
         .anthropic(AnthropicConfig(apiKey: try cloudKey(account: .anthropic), fastModel: model, smartModel: model, fastEffort: effort, smartEffort: effort))
     }
 
-    // Kullanıcının karşılaştığı hata: düşünme en yüksek effort'ta çıktı sınırını tüketip notu kesiyordu.
-    // Her model, en yüksek effort'ta 1 saatlik toplantının notunu eksiksiz yazmalı.
+    // Her model, notta sunulan en yüksek effort'ta (high; xhigh/max gerçek toplantıda notu kesiyordu) 1 saatlik
+    // toplantının notunu eksiksiz yazmalı.
     @Test(arguments: ClaudeModel.allCases)
-    func oneHourNoteAtMaxEffort(model: ClaudeModel) async throws {
+    func oneHourNoteAtHighestOfferedEffort(model: ClaudeModel) async throws {
         let request: LLMRequest = try #require(meetingNoteRequest(segments: longMeetingSegments(rounds: 15), speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan"))
         let started: ContinuousClock.Instant = .now
         // Uygulamayla aynı yol: boş/bozuk not yeniden istenir.
-        let note: MeetingNote = try await requestStructured(provider: try anthropic(model: model, effort: .max), request: request) { (text: String) throws -> MeetingNote in
+        let note: MeetingNote = try await requestStructured(provider: try anthropic(model: model, effort: .high), request: request) { (text: String) throws -> MeetingNote in
             try parseMeetingNote(text: text)
         }
-        print("SENARYO not \(model.rawValue) max: \(ContinuousClock.now - started), görev: \(note.tasks.count)")
+        print("SENARYO not \(model.rawValue) high: \(ContinuousClock.now - started), görev: \(note.tasks.count)")
         #expect(note.tasks.contains { $0.isMine }, "not: \(note)")
         #expect(!note.decisions.isEmpty)
     }
 
-    // Asistan istekleri ve konuşmacı incelemesi de en yüksek effort'ta uzun toplantıda kesilmeden ayrıştırılabilmeli.
-    @Test func assistantRequestsAtMaxEffort() async throws {
-        let provider: LLMProvider = try anthropic(model: .haiku, effort: .max)
+    // Asistan istekleri ve konuşmacı incelemesi de sunulan en yüksek effort'ta uzun toplantıda kesilmeden
+    // ayrıştırılabilmeli.
+    @Test func assistantRequestsAtHighEffort() async throws {
+        let provider: LLMProvider = try anthropic(model: .haiku, effort: .high)
         let stored: [StoredSegment] = longMeetingSegments(rounds: 15)
         let live: [LiveSegment] = liveSegments(stored: stored)
         let nowSec: Double = live.map(\.endSec).max() ?? 0

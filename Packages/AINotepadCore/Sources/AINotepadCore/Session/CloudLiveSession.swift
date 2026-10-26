@@ -18,6 +18,8 @@ public struct CloudSessionConfig: Sendable {
     public let minDiarizationAudioSec: Double
     /// Otomatik modda dili kilitlemek için gereken en düşük ElevenLabs dil olasılığı.
     public let languageConfidence: Double
+    /// Deepgram'a verilen adlar ve terimler (bkz. `meetingKeyterms`).
+    public let keyterms: [String]
 
     public init(
         languageMode: LanguageMode,
@@ -28,7 +30,8 @@ public struct CloudSessionConfig: Sendable {
         diarizationIntervalSec: Double,
         diarizationWindowSec: Double,
         minDiarizationAudioSec: Double,
-        languageConfidence: Double
+        languageConfidence: Double,
+        keyterms: [String]
     ) {
         self.languageMode = languageMode
         self.recordingDirectory = recordingDirectory
@@ -39,6 +42,7 @@ public struct CloudSessionConfig: Sendable {
         self.diarizationWindowSec = diarizationWindowSec
         self.minDiarizationAudioSec = minDiarizationAudioSec
         self.languageConfidence = languageConfidence
+        self.keyterms = keyterms
     }
 }
 
@@ -59,8 +63,8 @@ public func runCloudLiveSession(
     let startLanguage: MeetingLanguage = initialLanguage(languageMode: config.languageMode)
     let (meForward, meInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     let (othersForward, othersInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
-    let meStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: meForward)
-    let othersStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, audio: othersForward)
+    let meStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, keyterms: config.keyterms, audio: meForward)
+    let othersStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, keyterms: config.keyterms, audio: othersForward)
     let streams: [DeepgramStream] = [meStream, othersStream]
 
     Task {

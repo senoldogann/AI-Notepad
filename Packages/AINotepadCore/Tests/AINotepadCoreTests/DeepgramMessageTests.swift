@@ -35,7 +35,9 @@ import Testing
     }
 
     @Test func urlHasStreamingParameters() throws {
-        let query: String = try #require(deepgramListenURL(language: .finnish).query)
+        let query: String = try #require(deepgramListenURL(language: .finnish, keyterms: ["Aino", "kiitos paljon"]).query)
+        // Her terim ayrı `keyterm` parametresi; çok kelimeli terimde boşluk kodlanır.
+        #expect(query.contains("keyterm=Aino&keyterm=kiitos%20paljon"))
         for part in ["language=fi", "model=nova-3", "encoding=linear16", "sample_rate=16000", "channels=1", "interim_results=true", "smart_format=true"] {
             #expect(query.contains(part), "eksik: \(part)")
         }
@@ -43,6 +45,6 @@ import Testing
     }
 
     @Test func urlUsesEnForEnglish() throws {
-        #expect(try #require(deepgramListenURL(language: .english).query).contains("language=en"))
+        #expect(try #require(deepgramListenURL(language: .english, keyterms: []).query).contains("language=en"))
     }
 }

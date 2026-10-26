@@ -102,6 +102,10 @@ final class AppModel {
     var processingSteps: [String: ProcessingStep] = [:]
     /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
     var activeMeetingID: String?
+    /// "Arka planda devam et" ile kapatılan hazırlanma kartları (panel ve ana pencere ortak).
+    var dismissedProgressIDs: Set<String> = []
+    /// Kayıt bitirilirken kart kapatıldı; yeni kayıtta sıfırlanır.
+    var finishingCardDismissed: Bool = false
     /// Toplantı → konuşmacı incelemesi kartı.
     var speakerReviews: [String: SpeakerReviewState] = [:]
 
@@ -532,7 +536,8 @@ final class AppModel {
                     diarizationIntervalSec: 60,
                     diarizationWindowSec: 120,
                     minDiarizationAudioSec: 5,
-                    languageConfidence: 0.8
+                    languageConfidence: 0.8,
+                    keyterms: recognitionKeyterms
                 ),
                 meAudio: meAudio,
                 othersAudio: othersAudio
@@ -559,6 +564,8 @@ final class AppModel {
             return
         }
         isRecording = true
+        // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
+        finishingCardDismissed = false
         recordingStartedAt = startedAt
         session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
@@ -778,6 +785,12 @@ final class AppModel {
         }
     }
 
+    /// Konuşma tanımaya verilen adlar ve terimler: kullanıcının adı, son toplantıların konuşmacı adları ve sözlük
+    /// terimleri (en fazla 30; ElevenLabs'ta %20 ek ücret, sınırlı tutulur).
+    private var recognitionKeyterms: [String] {
+        meetingKeyterms(records: Array(meetings.prefix(20)), userName: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", limit: 30)
+    }
+
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
         switch record.engine ?? .cloud {
@@ -792,7 +805,7 @@ final class AppModel {
                 guard let key = try await optionalSecretInBackground(service: keychainService, account: .elevenlabs) else {
                     return .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
                 }
-                return .run(ElevenLabsFinalTranscriber(apiKey: key))
+                return .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: recognitionKeyterms))
             } catch {
                 return .skip(reason: userFacingMessage(error: error))
             }

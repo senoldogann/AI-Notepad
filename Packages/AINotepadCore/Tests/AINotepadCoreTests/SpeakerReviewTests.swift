@@ -38,6 +38,25 @@ import Testing
     }
 }
 
+@Suite struct KeytermTests {
+    // Ad ve terimler servis kurallarına göre temizlenir, tekilleşir, sınırlanır; uymayanlar atlanır.
+    @Test func keytermsAreCleanUniqueAndLimited() {
+        let note: MeetingNote = MeetingNote(title: "T", summary: "S", decisions: [], tasks: [], glossary: [
+            GlossaryEntry(term: "maahanmuuttopolitiikka", meaning: "göç politikası"),
+            GlossaryEntry(term: "aino", meaning: "tekrar"),
+            GlossaryEntry(term: "yksi kaksi kolme neljä viisi kuusi", meaning: "çok uzun"),
+            GlossaryEntry(term: "Kela; etuudet", meaning: "ayırıcı"),
+        ])
+        let record: MeetingRecord = MeetingRecord(
+            id: "1", title: "T", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [2: "Aino", 1: "Mikko"], note: note,
+            audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        #expect(meetingKeyterms(records: [record], userName: "Senol", limit: 10) == ["Senol", "Mikko", "Aino", "maahanmuuttopolitiikka", "Kela etuudet"])
+        #expect(meetingKeyterms(records: [record], userName: "", limit: 2) == ["Mikko", "Aino"])
+    }
+}
+
 extension CloudTests {
 @Suite struct SpeakerReviewCloudTests {
     // Gerçek model: hitap edilip cevap veren kişiye ad, aynı kişinin ikiye bölünmüş cümlesine birleştirme önerir.

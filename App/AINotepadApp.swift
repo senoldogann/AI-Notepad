@@ -3,6 +3,8 @@ import AINotepadUI
 import os
 import SwiftUI
 
+private let appLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "App")
+
 /// Uygulamanın giriş noktası: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
 @main
 struct AINotepadApp: App {
@@ -16,6 +18,9 @@ struct AINotepadApp: App {
 
     init() {
         registerDefaultSettings()
+        if migrateSmartEffort(defaults: .standard) {
+            appLogger.info("Not effort'u high'a taşındı (xhigh/max notu kesiyordu)")
+        }
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
         let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: SettingsKey.displayMode) ?? "") ?? .bilingual
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode)
@@ -52,7 +57,7 @@ struct AINotepadApp: App {
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
-                // İlk açılışta ana pencere kurulumda açılır; sonra Ana sayfada (kenar çubuğunda "Kurulum" hep var).
+                // Kurulum yalnızca ilk açılışta bir kez (tam pencere); sonra ayarlar Ayarlar'dan değişir.
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
@@ -221,9 +226,6 @@ private struct MenuContent: View {
 
         Button("Ayarlar", systemImage: "gearshape") {
             openMainWindow(router: router, section: .settings)
-        }
-        Button("Kurulum", systemImage: "wand.and.stars") {
-            openMainWindow(router: router, section: .setup)
         }
 
         if model.liveEngine == .whisperKit {

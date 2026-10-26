@@ -53,6 +53,9 @@ struct SetupPage: View {
                 case .ready: ReadyStep(shortcuts: shortcuts)
                 }
             }
+            // Adımlar kart gibi 3D dönerek geçer.
+            .id(step)
+            .transition(.flip3D)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             HStack {
                 if step != .welcome {
@@ -75,7 +78,7 @@ struct SetupPage: View {
             .controlSize(.large)
         }
         .padding(DesignTokens.Spacing.xl)
-        .animation(.easeInOut(duration: 0.2), value: step)
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: step)
     }
 
     private func move(by offset: Int) {
