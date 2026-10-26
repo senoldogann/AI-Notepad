@@ -45,5 +45,5 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/AINotepad.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1.1"
+        CURRENT_PROJECT_VERSION: "2"

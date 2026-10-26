@@ -347,6 +347,16 @@
         }
       }
     },
+    "%lld dk konuşmadan · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from %lld min of speech · %@"
+          }
+        }
+      }
+    },
     "%lld görev": {
       "localizations": {
         "en": {
@@ -503,6 +513,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Name or merge with another speaker"
+          }
+        }
+      }
+    },
+    "Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The voiceprint of people you name (numbers only, no audio) is kept on this Mac: in later meetings their name appears automatically, and someone who goes quiet and speaks again during a recording keeps the same number. No name is given when unsure."
           }
         }
       }
@@ -674,6 +694,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Interface language"
+          }
+        }
+      }
+    },
+    "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage the interface language, recognition engine, appearance, AI models, keys and shortcuts."
           }
         }
       }
@@ -966,6 +996,16 @@
         }
       }
     },
+    "Bu kişi bundan sonra sesinden tanınmaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This person will no longer be recognised by voice"
+          }
+        }
+      }
+    },
     "Bu toplantıda sana düşen görev yok.": {
       "localizations": {
         "en": {
@@ -1012,16 +1052,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen from here"
-          }
-        }
-      }
-    },
-    "Bölüm": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Section"
           }
         }
       }
@@ -2325,12 +2355,32 @@
         }
       }
     },
+    "Konuşmacılar sesinden tanınamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speakers couldn't be recognised by voice: %@"
+          }
+        }
+      }
+    },
     "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Name your speakers — \"Review\" suggests names and merges"
+          }
+        }
+      }
+    },
+    "Konuşmacıları sesinden tanı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognise speakers by voice"
           }
         }
       }
@@ -3235,6 +3285,16 @@
         }
       }
     },
+    "Sesinden tanındı: %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognised by voice: %@."
+          }
+        }
+      }
+    },
     "Sesleri sakla": {
       "localizations": {
         "en": {
@@ -3460,6 +3520,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "TRANSCRIPT"
+          }
+        }
+      }
+    },
+    "Tanınan sesler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Known voices"
           }
         }
       }
@@ -3859,6 +3929,16 @@
         }
       }
     },
+    "Unut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forget"
+          }
+        }
+      }
+    },
     "Uygula": {
       "localizations": {
         "en": {
@@ -3896,6 +3976,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Long meetings are now noted part by part — no task gets lost"
+          }
+        }
+      }
+    },
+    "Varsayılan görünüm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default appearance"
           }
         }
       }
@@ -4100,16 +4190,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "a valid base URL (e.g. http://localhost:11434/v1)"
-          }
-        }
-      }
-    },
-    "http://localhost:11434/v1": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "http://localhost:11434/v1"
           }
         }
       }

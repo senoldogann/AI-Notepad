@@ -88,8 +88,20 @@ public func mergingPersons(record: MeetingRecord, from: Int, into: Int) -> Meeti
         names[into] = moved
     }
     names[from] = nil
+    // Aynı kişinin iki izi birleşir (sesinden tanıma bir sonraki toplantıda bu kişiyi tek iz olarak bilsin).
+    let voiceprints: [Int: Voiceprint]? = record.voiceprints.map { (voices: [Int: Voiceprint]) -> [Int: Voiceprint] in
+        var merged: [Int: Voiceprint] = voices
+        merged[into] = switch (voices[from], voices[into]) {
+        case (.some(let moved), .some(let kept)): mergedVoiceprint(kept, moved)
+        case (.some(let moved), .none): moved
+        case (.none, let kept): kept
+        }
+        merged[from] = nil
+        return merged
+    }
     return record
         .with(finalSegments: record.finalSegments.map(remap), language: record.language)
         .with(liveSegments: record.liveSegments.map(remap))
         .with(speakerNames: names)
+        .with(voiceprints: voiceprints)
 }

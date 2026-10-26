@@ -1,8 +1,9 @@
 import AINotepadCore
+import AINotepadUI
 import AppKit
 import SwiftUI
 
-/// Tek bir anahtar alanı: gizli giriş, kaydet/kaldır, kayıt durumu. Kayıtlı değer hiçbir zaman gösterilmez.
+/// Tek bir anahtar satırı: gizli giriş, kaydet/kaldır, kayıt durumu (açıklama satırında). Kayıtlı değer hiçbir zaman gösterilmez.
 /// Kaydetme ya da kaldırma sonrası `onChange` çağrılır (açık kayıtta çeviri yeni anahtarla sürsün).
 struct SecretField: View {
     let title: LocalizedStringKey
@@ -13,9 +14,22 @@ struct SecretField: View {
     @State private var status: SecretStatus = .unknown
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        SettingsRow(title: Text(title)) {
+            switch status {
+            case .unknown:
+                EmptyView()
+            case .saved:
+                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .missing:
+                Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+            case .failed(let message):
+                Text(message).foregroundStyle(.red)
+            }
+        } control: {
+            HStack(spacing: 8) {
                 SecureField(title, text: $input, prompt: Text(status == .saved ? "Kayıtlı · değiştirmek için yapıştır" : "Anahtarı yapıştır"))
+                    .labelsHidden()
+                    .settingsField(width: 230)
                 // Panel uygulamayı öne getirmediği için ⌘V menü kısayolu her zaman ulaşmayabilir: panodan doğrudan al.
                 Button("Yapıştır") {
                     input = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -34,16 +48,6 @@ struct SecretField: View {
                         onChange()
                     }
                 }
-            }
-            switch status {
-            case .unknown:
-                EmptyView()
-            case .saved:
-                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.green).appFont(size: 11, weight: .regular)
-            case .missing:
-                Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange).appFont(size: 11, weight: .regular)
-            case .failed(let message):
-                Text(message).foregroundStyle(.red).appFont(size: 11, weight: .regular)
             }
         }
         .task {

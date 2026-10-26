@@ -125,9 +125,13 @@ private struct RawMissedSummary: Decodable {
 
 /// Bir "Diğerleri" bölümünü çevirirken bağlam: ondan önceki son `count` metinli kesin "Diğerleri" bölümü. Saf fonksiyondur.
 public func translationContext(transcript: [LiveSegment], before id: SegmentID, count: Int) -> [String] {
-    transcript
+    // Sıra zamana göre: doldurulan boşlukların numarası Deepgram'ınkilerden büyüktür.
+    guard let target = transcript.first(where: { $0.id == id }) else {
+        return []
+    }
+    return transcript
         .filter { (segment: LiveSegment) -> Bool in
-            segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty && segment.id.index < id.index
+            segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty && segment.startSec < target.startSec
         }
         .suffix(count)
         .map(\.text)

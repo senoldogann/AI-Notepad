@@ -77,6 +77,10 @@ final class AppModel {
     /// Bir sonraki kaydın dil modu (kayıt sırasında dil `setLanguage` ile değişir).
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
+    /// Adı verilmiş kişilerin ses izleri (sesinden tanıma; `Voices.json`).
+    var registeredVoices: [RegisteredVoice] = []
+    /// Kayıtlı sesler okunamadı ya da yazılamadı (Ayarlar'da gösterilir).
+    var voiceRegistryError: String?
     var transcript: [LiveSegment] = []
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
@@ -537,7 +541,8 @@ final class AppModel {
                     diarizationWindowSec: 120,
                     minDiarizationAudioSec: 5,
                     languageConfidence: 0.8,
-                    keyterms: recognitionKeyterms
+                    keyterms: recognitionKeyterms,
+                    voiceEmbedder: voiceEmbedderIfEnabled()
                 ),
                 meAudio: meAudio,
                 othersAudio: othersAudio
@@ -758,7 +763,8 @@ final class AppModel {
             let plan: FinalPassPlan = await finalPassPlan(record: record)
             let llm: LLMProvider? = await optionalLLMProvider()
             let result: MeetingRecord = await processMeeting(
-                record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName
+                record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName,
+                voiceEmbedder: voiceEmbedderIfEnabled(), registry: registeredVoices
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
             }
@@ -866,10 +872,57 @@ final class AppModel {
             return
         }
         var names: [Int: String] = record.speakerNames
-        names[person] = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
+        let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        names[person] = trimmed.isEmpty ? nil : trimmed
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             saveRecord(record: record.with(speakerNames: names), directory: directory)
         }
+        // Adı verilen kişinin sesi hatırlanır: sonraki toplantılarda (ve "Tekrar işle"de) ad kendiliğinden gelir.
+        if !trimmed.isEmpty, UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition), let voice = record.voiceprints?[person] {
+            storeVoices(voices: registering(voices: registeredVoices, name: trimmed, voiceprint: voice, now: Date()))
+        }
+    }
+
+    // MARK: Sesinden tanıma
+
+    /// Ses izi servisi; Ayarlar'da kapalıysa ya da model klasörü yoksa nil (kayıt ve işleme izsiz sürer).
+    private func voiceEmbedderIfEnabled() -> (any VoiceEmbedder)? {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition) else {
+            return nil
+        }
+        do {
+            return SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory())
+        } catch {
+            Self.logger.error("Ses izi için model klasörü alınamadı, hata: \(String(describing: error), privacy: .public)")
+            voiceRegistryError = userFacingMessage(error: error)
+            return nil
+        }
+    }
+
+    private func loadVoices() {
+        do {
+            registeredVoices = try loadRegisteredVoices(url: try voicesFileURL())
+            voiceRegistryError = nil
+        } catch {
+            Self.logger.error("Kayıtlı sesler okunamadı, hata: \(String(describing: error), privacy: .public)")
+            voiceRegistryError = userFacingMessage(error: error)
+        }
+    }
+
+    private func storeVoices(voices: [RegisteredVoice]) {
+        do {
+            try saveRegisteredVoices(voices: voices, url: try voicesFileURL())
+            registeredVoices = voices
+            voiceRegistryError = nil
+        } catch {
+            Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            voiceRegistryError = userFacingMessage(error: error)
+        }
+    }
+
+    /// Kayıtlı sesi unutur (bu kişi bundan sonra sesinden tanınmaz; verilmiş adlar toplantılarda kalır).
+    func forgetVoice(name: String) {
+        storeVoices(voices: registeredVoices.filter { $0.name != name })
     }
 
     // MARK: Konuşmacı incelemesi
@@ -1018,6 +1071,7 @@ final class AppModel {
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
     func performStartupMaintenance() {
         reloadMeetings()
+        loadVoices()
         for record in staleStatusesToInterrupt(records: meetings) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                 saveRecord(record: record, directory: directory)
