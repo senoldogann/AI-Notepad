@@ -53,7 +53,7 @@ struct AINotepadApp: App {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 // Tema açılışta bir kez uygulanır (hiç pencere açılmasa da ada ve menüler doğru temada olsun).
-                applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .system)
+                applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
@@ -98,8 +98,9 @@ struct AINotepadApp: App {
                 }
             )
         }
-        .defaultSize(width: 1040, height: 720)
-        .windowToolbarStyle(.unified)
+        .defaultSize(width: 1180, height: 780)
+        // Başlık çubuğu gizli: ElevenLabs gibi kendi kenar çubuğu ve üst çubuğu pencerenin tepesine kadar.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Ayarlar…") { openMainWindow(router: router, section: .settings) }

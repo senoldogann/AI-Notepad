@@ -167,7 +167,7 @@ public struct TranscriptPanel: View {
             items()
         } label: {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: 12, weight: .medium))
+                .appFont(size: 12, weight: .medium)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -192,11 +192,11 @@ public struct TranscriptPanel: View {
             )
             Button(action: actions.onStart) {
                 Label("Başlat", systemImage: "record.circle")
-                    .font(DesignTokens.statusFont)
+                    .appFont(size: 12, weight: .medium)
                     .padding(.horizontal, DesignTokens.Spacing.s)
                     .padding(.vertical, 3)
-                    .background(appearance.accent.color, in: Capsule())
-                    .foregroundStyle(.white)
+                    .background(Theme.primary, in: Capsule())
+                    .foregroundStyle(Theme.onPrimary)
             }
             .buttonStyle(.hoverCapsule)
             .disabled(!state.canStart)
@@ -220,12 +220,12 @@ public struct TranscriptPanel: View {
     @ViewBuilder
     private var languageChip: some View {
         let chip: some View = Text(state.languageText)
-            .font(DesignTokens.statusFont)
+            .appFont(size: 12, weight: .medium)
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, DesignTokens.Spacing.s)
             .padding(.vertical, 3)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
+            .background(Theme.soft, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
         if state.isRecording {
             Menu {
                 LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
@@ -247,15 +247,15 @@ public struct TranscriptPanel: View {
     private var emptyState: some View {
         VStack(spacing: DesignTokens.Spacing.s) {
             Image(systemName: state.isRecording ? "waveform" : "waveform.badge.mic")
-                .font(.system(size: 30, weight: .light))
+                .appFont(size: 30, weight: .light)
                 .foregroundStyle(.tint)
                 .symbolEffect(.variableColor.iterative, isActive: state.isRecording)
             Text(state.isRecording ? "Dinleniyor…" : "Kayıt yok")
-                .font(.system(size: 15, weight: .semibold))
+                .appFont(size: 15, weight: .semibold)
             Text(state.isRecording
                 ? "Konuşma başlayınca metin burada akar."
                 : "\"Başlat\"a bas; konuşmalar burada canlı yazıya dökülür, bitince toplantının notu hazırlanır.")
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 260)
@@ -323,11 +323,11 @@ public struct TranscriptPanel: View {
                         hasUnseenText = false
                     } label: {
                         Label("Yeni metin", systemImage: "arrow.down")
-                            .font(DesignTokens.statusFont)
+                            .appFont(size: 12, weight: .medium)
                             .padding(.horizontal, DesignTokens.Spacing.m)
                             .padding(.vertical, 5)
-                            .background(appearance.accent.color, in: Capsule())
-                            .foregroundStyle(.white)
+                            .background(Theme.primary, in: Capsule())
+                            .foregroundStyle(Theme.onPrimary)
                     }
                     .buttonStyle(.hoverCapsule)
                     .padding(.bottom, DesignTokens.Spacing.s)
@@ -363,16 +363,18 @@ public struct TranscriptPanel: View {
 
     /// "Ne kaçırdım?" düğmesi; etiketi (yazılı ya da yalnızca simge) genişliğe göre verilir.
     private func missedButton(horizontalPadding: CGFloat, @ViewBuilder label: () -> some View) -> some View {
-        Button(action: actions.onMissed) {
+        // Metin yokken soluk gri hap (yarı saydam siyah leke gibi durmasın).
+        let isEnabled: Bool = !state.blocks.isEmpty
+        return Button(action: actions.onMissed) {
             label()
-            .font(DesignTokens.statusFont)
+            .appFont(size: 12, weight: .medium)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, 6)
-            .background(appearance.accent.color, in: Capsule())
-            .foregroundStyle(.white)
+            .background(isEnabled ? Theme.primary : Theme.soft, in: Capsule())
+            .foregroundStyle(isEnabled ? Theme.onPrimary : Theme.muted)
         }
         .buttonStyle(.hoverCapsule)
-        .disabled(state.blocks.isEmpty)
+        .disabled(!isEnabled)
         .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
         .accessibilityLabel("Ne kaçırdım?")
         .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
@@ -381,10 +383,10 @@ public struct TranscriptPanel: View {
     private var questionField: some View {
         TextField("Toplantı hakkında sor…", text: $question)
             .textFieldStyle(.plain)
-            .font(DesignTokens.statusFont)
+            .appFont(size: 12, weight: .medium)
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
+            .background(Theme.soft, in: Capsule())
             .onSubmit {
                 let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
@@ -400,7 +402,7 @@ public struct TranscriptPanel: View {
             ForEach(Array(state.errors.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
                 let message: String = item.element
                 Text(message)
-                    .font(.system(size: 11))
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
             }
@@ -441,19 +443,19 @@ struct StatusLabel: View {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.mini)
                 Text("Bitiriliyor…")
-                    .font(DesignTokens.statusFont)
+                    .appFont(size: 12, weight: .medium)
             }
             .accessibilityElement(children: .combine)
         } else if state.isRecording, state.isPaused {
             Label("Duraklatıldı", systemImage: "pause.circle.fill")
-                .font(DesignTokens.statusFont)
+                .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.orange)
         } else if state.isRecording, let startedAt = state.startedAt {
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 7, height: 7)
                 TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
                     Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
-                        .font(DesignTokens.statusFont)
+                        .appFont(size: 12, weight: .medium)
                         .monospacedDigit()
                 }
             }
@@ -461,7 +463,7 @@ struct StatusLabel: View {
             .accessibilityLabel("Kayıtta")
         } else {
             Text(state.statusText)
-                .font(DesignTokens.statusFont)
+                .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.secondary)
         }
     }
@@ -500,7 +502,7 @@ struct BlockView: View {
                         HStack(spacing: 3) {
                             speakerLabelText
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 7, weight: .bold))
+                                .appFont(size: 7, weight: .bold)
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -536,7 +538,7 @@ struct BlockView: View {
                 }
                 ForEach(block.segments.filter { (segment: LiveSegment) -> Bool in segment.failureMessage != nil }) { (segment: LiveSegment) in
                     Text("Yazıya dökülemedi: \(segment.failureMessage ?? "")")
-                        .font(.system(size: 11))
+                        .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.red)
                 }
                 if !failedTranslations.isEmpty, displayMode.needsLiveTranslation {
@@ -544,7 +546,7 @@ struct BlockView: View {
                         onRetryTranslations(failedTranslations)
                     } label: {
                         Label("Çeviri alınamadı · Tekrar dene", systemImage: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .medium))
+                            .appFont(size: 11, weight: .medium)
                     }
                     .buttonStyle(.hoverPlain)
                     .foregroundStyle(.orange)
@@ -562,7 +564,7 @@ struct BlockView: View {
 
     private var speakerLabelText: some View {
         Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased(with: interfaceLocale()))
-            .font(DesignTokens.labelFont)
+            .appFont(size: 11, weight: .semibold)
             .tracking(DesignTokens.labelTracking)
             .foregroundStyle(.secondary)
     }
@@ -629,7 +631,7 @@ struct AssistantCardView: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             HStack {
                 Text(title)
-                    .font(DesignTokens.labelFont)
+                    .appFont(size: 11, weight: .semibold)
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -646,7 +648,7 @@ struct AssistantCardView: View {
         }
         .padding(DesignTokens.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+        .cardSurface(cornerRadius: 14)
     }
 
     private var title: String {
@@ -676,11 +678,11 @@ struct AssistantCardView: View {
                 Text(summary.topic)
                 // Aynı metin iki kez gelebilir: kimlik sıradan.
                 if !summary.decisions.isEmpty {
-                    Text("Kararlar").font(DesignTokens.labelFont).foregroundStyle(.secondary)
+                    Text("Kararlar").appFont(size: 11, weight: .semibold).foregroundStyle(.secondary)
                     ForEach(Array(summary.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
                 if !summary.askedOfYou.isEmpty {
-                    Text("Senden istenenler").font(DesignTokens.labelFont).foregroundStyle(appearance.accent.color)
+                    Text("Senden istenenler").appFont(size: 11, weight: .semibold).foregroundStyle(appearance.accent.color)
                     ForEach(Array(summary.askedOfYou.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in Text("• " + item.element) }
                 }
             }
@@ -704,7 +706,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
+                .appFont(size: 12, weight: .medium)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }

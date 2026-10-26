@@ -13,10 +13,11 @@ struct MeetingsListPage: View {
     let model: AppModel
     /// Açık toplantı (satırı vurgulanır).
     let selectedID: String?
+    /// Üst çubuktaki arama.
+    let query: String
     let onOpen: @MainActor (String) -> Void
     /// Toplu silmeden sonra (açık toplantı silindiyse sayfa kapanır).
     let onDeleted: @MainActor (Set<String>) -> Void
-    @State private var query: String = ""
     /// "Seç" modu: satırlara tıklamak toplantıyı açmaz, işaretler.
     @State private var isSelecting: Bool = false
     @State private var checked: Set<String> = []
@@ -27,19 +28,19 @@ struct MeetingsListPage: View {
         let visible: [MeetingRecord] = filterMeetings(records: model.meetings, query: query)
         VStack(spacing: 0) {
             HStack(spacing: DesignTokens.Spacing.s) {
-                TextField("Toplantılarda ara", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(DesignTokens.statusFont)
-                    .padding(.horizontal, DesignTokens.Spacing.m)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
+                Text(query.isEmpty ? String(localized: "\(model.meetings.count) toplantı") : String(localized: "\(visible.count) sonuç"))
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                Spacer(minLength: 0)
                 if !model.meetings.isEmpty {
                     Button(isSelecting ? "Bitti" : "Seç") { setSelecting(!isSelecting) }
+                        .buttonStyle(.pill)
                         .controlSize(.small)
                         .hoverHint("Birden çok toplantıyı seçip sil", alignment: .trailing, edge: .bottom)
                 }
             }
-            .padding(DesignTokens.Spacing.m)
+            .padding(.horizontal, DesignTokens.Spacing.m)
+            .padding(.vertical, DesignTokens.Spacing.s)
             if model.meetings.isEmpty {
                 ContentUnavailableView("Henüz toplantı yok", systemImage: "waveform", description: Text("Kaydı başlatınca toplantılar burada görünür."))
             } else {
@@ -60,7 +61,7 @@ struct MeetingsListPage: View {
             }
             if !model.meetingLoadFailures.isEmpty {
                 Text("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.red)
                     .padding(DesignTokens.Spacing.m)
             }
@@ -84,7 +85,7 @@ struct MeetingsListPage: View {
             } label: {
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 16))
+                        .appFont(size: 16, weight: .regular)
                         .foregroundStyle(isChecked ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                         .contentTransition(.symbolEffect(.replace))
                         .padding(.leading, DesignTokens.Spacing.s)
@@ -108,11 +109,11 @@ struct MeetingsListPage: View {
         let selectable: Set<String> = Set(visible.map(\.id).filter { !model.isLocked(meetingID: $0) })
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             ForEach(deleteErrors, id: \.self) { (error: String) in
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
             }
             if isConfirmingDelete {
                 Text("\(checked.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
-                    .font(.callout)
+                    .appFont(size: 12, weight: .regular)
                     .foregroundStyle(.red)
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Button("Sil", role: .destructive) { deleteChecked() }
@@ -127,7 +128,7 @@ struct MeetingsListPage: View {
                     .foregroundStyle(.tint)
                     Spacer(minLength: 0)
                     Text("\(checked.count) seçili")
-                        .font(.caption)
+                        .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                     Button("Sil", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
@@ -137,7 +138,8 @@ struct MeetingsListPage: View {
         }
         .controlSize(.small)
         .padding(DesignTokens.Spacing.m)
-        .background(.bar)
+        .background(Theme.background)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func setSelecting(_ selecting: Bool) {
@@ -183,7 +185,7 @@ struct MeetingRow: View {
         HStack(spacing: DesignTokens.Spacing.s) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(record.note?.title ?? record.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .appFont(size: 13, weight: .semibold)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
@@ -191,26 +193,26 @@ struct MeetingRow: View {
                         Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
                     }
                 }
-                .font(.system(size: 11))
+                .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
             if mine > 0 {
                 Label("\(mine)", systemImage: "star.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(.tint)
                     .help("Sana düşen görev sayısı")
             }
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .appFont(size: 10, weight: .semibold)
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, DesignTokens.Spacing.m)
         .padding(.vertical, DesignTokens.Spacing.s)
         .background(
-            appearance.accent.color.opacity(isSelected ? 0.18 : 0),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            isSelected ? Theme.selected : Color.clear,
+            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
         )
         .contentShape(Rectangle())
     }
@@ -350,17 +352,17 @@ struct MeetingDetailPage: View {
                     : "Kaydın tamamı işleniyor ve not hazırlanıyor…")
                     .foregroundStyle(.secondary)
             }
-            .font(.callout)
+            .appFont(size: 12, weight: .regular)
         }
         if let message = record.failureMessage {
             Text(message)
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(.secondary)
         }
     }
@@ -378,10 +380,11 @@ struct MeetingDetailPage: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             Text(record.note?.title ?? record.title)
-                .font(.system(size: 20, weight: .semibold))
+                .appFont(size: 26, weight: .regular)
+                .tracking(-0.4)
                 .textSelection(.enabled)
             Text(meetingMetaLine(record: record))
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(.secondary)
             // İpuçları düğmelerin altındaki satırların üstünde çizilsin (birbirine girmesin).
             actions.zIndex(1)
@@ -403,6 +406,7 @@ struct MeetingDetailPage: View {
                             play(from: 0)
                         }
                     }
+                    .buttonStyle(.pillPrimary)
                     .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
                 }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
@@ -446,7 +450,7 @@ struct MeetingDetailPage: View {
         case .none:
             if record.audioDeleted {
                 Text("Ses dosyaları silindi; metin ve not duruyor.")
-                    .font(.caption)
+                    .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
         case .saved(let url):
@@ -461,14 +465,14 @@ struct MeetingDetailPage: View {
                 .buttonStyle(.link)
                         .pointerStyle(.link)
             }
-            .font(.caption)
+            .appFont(size: 11, weight: .regular)
         case .copied:
             Label("Markdown panoya kopyalandı", systemImage: "checkmark.circle.fill")
-                .font(.caption)
+                .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.green)
         case .failed(let message):
             Text(message)
-                .font(.caption)
+                .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.red)
         case .confirmDelete:
             HStack(spacing: DesignTokens.Spacing.s) {
@@ -484,7 +488,7 @@ struct MeetingDetailPage: View {
                 }
                 Button("Vazgeç") { export = .none }
             }
-            .font(.caption)
+            .appFont(size: 11, weight: .regular)
             .controlSize(.small)
         }
     }
@@ -550,16 +554,17 @@ private struct NoteSections: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
-                        .font(DesignTokens.labelFont)
+                        .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(appearance.accent.color)
                     ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
                         TaskRow(task: item.element)
                     }
                 }
-                .padding(DesignTokens.Spacing.m)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(appearance.accent.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                .background(appearance.accent.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(appearance.accent.color.opacity(0.28)))
             }
             section(title: "ÖZET") {
                 Text(note.summary).textSelection(.enabled)
@@ -592,14 +597,18 @@ private struct NoteSections: View {
         .lineSpacing(appearance.lineSpacing)
     }
 
+    /// Bölüm: beyaz kart içinde küçük büyük harfli başlık ve içerik (ElevenLabs kartı).
     private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(DesignTokens.labelFont)
+                .appFont(size: 11, weight: .semibold)
                 .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.muted)
             content()
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 14)
     }
 }
 
@@ -610,7 +619,7 @@ private struct TaskRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "circle")
-                .font(.system(size: 9))
+                .appFont(size: 9, weight: .regular)
                 .foregroundStyle(task.isMine ? appearance.accent.color : .secondary)
             let owner: Text = Text("\(task.owner): ").fontWeight(.semibold)
             let due: Text = Text(task.dueDate.map { " (\($0))" } ?? "").foregroundStyle(.secondary)
@@ -636,7 +645,7 @@ private struct SpeakerNamesSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Text("KONUŞMACILAR")
-                        .font(DesignTokens.labelFont)
+                        .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
@@ -692,7 +701,7 @@ private struct SpeakerReviewCard: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Konuşmacı önerileri", systemImage: "sparkles")
-                    .font(.callout.weight(.semibold))
+                    .appFont(size: 12, weight: .semibold)
                     .foregroundStyle(.tint)
                 Spacer(minLength: 0)
                 Button("Kapat", systemImage: "xmark") { model.closeSpeakerReview(meetingID: record.id) }
@@ -717,10 +726,10 @@ private struct SpeakerReviewCard: View {
                 ProgressView().controlSize(.small)
                 Text("Transkript okunuyor…").foregroundStyle(.secondary)
             }
-            .font(.callout)
+            .appFont(size: 12, weight: .regular)
         case .failed(let message):
             Text(message)
-                .font(.callout)
+                .appFont(size: 12, weight: .regular)
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         case .ready(let review, let applied):
@@ -742,7 +751,7 @@ private struct SpeakerReviewCard: View {
             }
             if !review.suspicious.isEmpty {
                 Text("KONTROL ET")
-                    .font(DesignTokens.labelFont)
+                    .appFont(size: 11, weight: .semibold)
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
                     .padding(.top, DesignTokens.Spacing.xs)
@@ -752,13 +761,13 @@ private struct SpeakerReviewCard: View {
             }
             if !review.hasPendingSuggestions && review.suspicious.isEmpty && applied == 0 {
                 Text("Öneri yok: transkriptte ad ya da birleştirme için yeterli ipucu bulunamadı.")
-                    .font(.callout)
+                    .appFont(size: 12, weight: .regular)
                     .foregroundStyle(.secondary)
             }
             if applied > 0 {
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Text("Not eski adlarla yazıldı.")
-                        .font(.callout)
+                        .appFont(size: 12, weight: .regular)
                         .foregroundStyle(.secondary)
                     Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
                         .controlSize(.small)
@@ -788,7 +797,7 @@ private struct SpeakerReviewCard: View {
             Spacer(minLength: 0)
             Button("Uygula", systemImage: "checkmark", action: onAccept)
                 .labelStyle(.iconOnly)
-                .buttonStyle(.glassProminentAction)
+                .buttonStyle(.pillPrimary)
                 .controlSize(.small)
                 .disabled(isLocked)
                 .hoverHint("Öneriyi uygula", alignment: .trailing, edge: .bottom)
@@ -803,7 +812,7 @@ private struct SpeakerReviewCard: View {
     private func suspiciousRow(passage: SuspiciousPassage) -> some View {
         let row: some View = HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s) {
             Text(passage.time)
-                .font(.caption.monospacedDigit())
+                .appFont(size: 11, weight: .regular).monospacedDigit()
                 .foregroundStyle(.tint)
             Text(passage.note)
                 .font(appearance.secondaryFont)
@@ -878,7 +887,7 @@ private struct TranscriptSection: View {
         let time: Double = player.currentTime
         LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             if let error = player.errorMessage {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
             }
             ForEach(paragraphs) { (paragraph: TranscriptParagraph) in
                 let isActive: Bool = isActivePlayer && time >= paragraph.startSec && time < paragraph.endSec + 0.4
@@ -888,7 +897,7 @@ private struct TranscriptSection: View {
                         Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames)).fontWeight(.semibold)
                         Text(timestamp(seconds: paragraph.startSec)).monospacedDigit().foregroundStyle(.secondary)
                     }
-                    .font(.system(size: 11))
+                    .appFont(size: 11, weight: .regular)
                     paragraphText(paragraph: paragraph, isActive: isActive, time: time)
                         .font(appearance.bodyFont)
                         .lineSpacing(appearance.lineSpacing)
@@ -961,9 +970,9 @@ private struct NowPlayingBar: View {
                         .frame(width: 7, height: 7)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(paragraphLabel(paragraph: current, speakerNames: speakerNames))
-                            .font(.system(size: 12, weight: .semibold))
+                            .appFont(size: 12, weight: .semibold)
                         Text(current.turkish ?? current.text)
-                            .font(.system(size: 11))
+                            .appFont(size: 11, weight: .regular)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -973,11 +982,11 @@ private struct NowPlayingBar: View {
                     player.cycleRate()
                 } label: {
                     Text(rateText(rate: player.rate))
-                        .font(.system(size: 11, weight: .semibold))
+                        .appFont(size: 11, weight: .semibold)
                         .monospacedDigit()
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(.quaternary, in: Capsule())
+                        .background(Theme.soft, in: Capsule())
                 }
                 .buttonStyle(.hoverCapsule)
                 .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)
@@ -985,7 +994,7 @@ private struct NowPlayingBar: View {
                     player.stop()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
+                        .appFont(size: 11, weight: .semibold)
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.hoverPlain)
@@ -1005,7 +1014,7 @@ private struct NowPlayingBar: View {
                     Spacer()
                     Text("-" + timestamp(seconds: max(0, player.duration - time)))
                 }
-                .font(.system(size: 10))
+                .appFont(size: 10, weight: .regular)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
             }
@@ -1013,7 +1022,7 @@ private struct NowPlayingBar: View {
                 Button {
                     player.skip(by: -10)
                 } label: {
-                    Image(systemName: "gobackward.10").font(.system(size: 17, weight: .medium))
+                    Image(systemName: "gobackward.10").appFont(size: 17, weight: .medium)
                 }
                 .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn geri", alignment: .center, edge: .top)
@@ -1021,7 +1030,7 @@ private struct NowPlayingBar: View {
                     player.togglePause()
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 17, weight: .bold))
+                        .appFont(size: 17, weight: .bold)
                         .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
                         .background(appearance.accent.color, in: Circle())
@@ -1031,14 +1040,14 @@ private struct NowPlayingBar: View {
                 Button {
                     player.skip(by: 10)
                 } label: {
-                    Image(systemName: "goforward.10").font(.system(size: 17, weight: .medium))
+                    Image(systemName: "goforward.10").appFont(size: 17, weight: .medium)
                 }
                 .buttonStyle(.hoverPlain)
                 .hoverHint("10 sn ileri", alignment: .center, edge: .top)
             }
         }
         .padding(DesignTokens.Spacing.m)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .cardSurface(cornerRadius: 18)
         .padding(.horizontal, DesignTokens.Spacing.m)
         .padding(.bottom, DesignTokens.Spacing.m)
     }

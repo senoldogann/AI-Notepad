@@ -55,12 +55,12 @@ public struct IslandView: View {
                 if !state.errors.isEmpty {
                     // Panel gizliyken de sorun fark edilsin.
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .appFont(size: 11, weight: .semibold)
                         .foregroundStyle(.red)
                         .accessibilityLabel("Hata var")
                 }
                 Text(state.languageText)
-                    .font(DesignTokens.statusFont)
+                    .appFont(size: 12, weight: .medium)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
             }
@@ -112,25 +112,25 @@ public struct IslandView: View {
                         .fill(line.person.map { personColor(person: $0) } ?? Color.white.opacity(0.6))
                         .frame(width: 6, height: 6)
                     Text(speakerLabel(speaker: line.speaker, person: line.person).uppercased(with: interfaceLocale()))
-                        .font(DesignTokens.labelFont)
+                        .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 Text(line.primary)
-                    .font(.system(size: 14, weight: .medium))
+                    .appFont(size: 14, weight: .medium)
                     .foregroundStyle(.white.opacity(line.primaryIsOriginal ? 0.75 : 0.98))
                     .lineLimit(2)
                     .truncationMode(.head)
                     .fixedSize(horizontal: false, vertical: true)
                 if let error = state.errors.last {
                     Text(error)
-                        .font(.system(size: 11))
+                        .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.red)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 } else if let secondary = line.secondary {
                     Text(secondary)
-                        .font(.system(size: 11.5))
+                        .appFont(size: 11.5, weight: .regular)
                         .foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1)
                         .truncationMode(.head)
@@ -139,11 +139,11 @@ public struct IslandView: View {
         } else {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Henüz konuşma yok")
-                    .font(.system(size: 13))
+                    .appFont(size: 13, weight: .regular)
                     .foregroundStyle(.white.opacity(0.5))
                 if let error = state.errors.last {
                     Text(error)
-                        .font(.system(size: 11))
+                        .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.red)
                         .lineLimit(2)
                 }

@@ -348,6 +348,16 @@
         }
       }
     },
+    "%lld görev": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tasks"
+          }
+        }
+      }
+    },
     "%lld gün": {
       "localizations": {
         "en": {
@@ -364,6 +374,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld selected"
+          }
+        }
+      }
+    },
+    "%lld sonuç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld results"
+          }
+        }
+      }
+    },
+    "%lld toplantı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings"
           }
         }
       }
@@ -732,6 +762,16 @@
         }
       }
     },
+    "Benim sesim de": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My voice too"
+          }
+        }
+      }
+    },
     "Bilinmiyor": {
       "localizations": {
         "en": {
@@ -887,6 +927,16 @@
         }
       }
     },
+    "Bugün hangi toplantıyı dinleyelim?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which meeting shall we listen to today?"
+          }
+        }
+      }
+    },
     "Bulut konuşma tanıma": {
       "localizations": {
         "en": {
@@ -928,16 +978,6 @@
         }
       }
     },
-    "Cam": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glass"
-          }
-        }
-      }
-    },
     "Canlı": {
       "localizations": {
         "en": {
@@ -964,6 +1004,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Back to live transcript"
+          }
+        }
+      }
+    },
+    "Canlı panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live panel"
           }
         }
       }
@@ -1417,6 +1467,16 @@
         }
       }
     },
+    "Görevlerim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My tasks"
+          }
+        }
+      }
+    },
     "Görünüm": {
       "localizations": {
         "en": {
@@ -1550,6 +1610,16 @@
         }
       }
     },
+    "Henüz sana düşen görev yok. Toplantı notlarında senin adına yazılan işler burada toplanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tasks for you yet. Work assigned to you in meeting notes is collected here."
+          }
+        }
+      }
+    },
     "Henüz sorulmadı": {
       "localizations": {
         "en": {
@@ -1616,6 +1686,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A fast model and low effort are recommended: translations arrive in 1–2 s. Haiku and Sonnet turn thinking off at high and below; with Opus, Fable or xhigh/max, thinking stays on and translations can lag and pile up."
+          }
+        }
+      }
+    },
+    "Inter (varsayılan)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inter (default)"
           }
         }
       }
@@ -1822,6 +1902,16 @@
         }
       }
     },
+    "Kayıt duraklatıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording paused"
+          }
+        }
+      }
+    },
     "Kayıt klasörü oluşturulamadı: %@": {
       "localizations": {
         "en": {
@@ -1838,6 +1928,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording"
+          }
+        }
+      }
+    },
+    "Kayıt sürüyor — konuşmalar canlı panelde": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording — the conversation is in the live panel"
           }
         }
       }
@@ -2136,6 +2236,16 @@
         }
       }
     },
+    "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name your speakers — \"Review\" suggests names and merges"
+          }
+        }
+      }
+    },
     "Konuşmacıyı düzelt": {
       "extractionState": "stale",
       "localizations": {
@@ -2167,22 +2277,22 @@
         }
       }
     },
-    "Koyu cam (hareketli arka planda okunaklı)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dark glass (readable on busy backgrounds)"
-          }
-        }
-      }
-    },
     "Kurulum": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Setup"
+          }
+        }
+      }
+    },
+    "Kısayol %@ ile her yerden kaydı başlat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording from anywhere with %@."
           }
         }
       }
@@ -2627,16 +2737,6 @@
         }
       }
     },
-    "Opak": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opaque"
-          }
-        }
-      }
-    },
     "OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)": {
       "localizations": {
         "en": {
@@ -2667,6 +2767,16 @@
         }
       }
     },
+    "Otomatik dil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto language"
+          }
+        }
+      }
+    },
     "Oynat": {
       "localizations": {
         "en": {
@@ -2693,16 +2803,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save as PDF to Downloads"
-          }
-        }
-      }
-    },
-    "Panel arka planı": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Panel background"
           }
         }
       }
@@ -2855,6 +2955,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No tasks for you."
+          }
+        }
+      }
+    },
+    "Sana düşen görevler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your tasks"
           }
         }
       }
@@ -3213,6 +3323,26 @@
         }
       }
     },
+    "Son toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent meetings"
+          }
+        }
+      }
+    },
+    "Son toplantıyı aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open latest meeting"
+          }
+        }
+      }
+    },
     "SÖZLÜK": {
       "localizations": {
         "en": {
@@ -3468,6 +3598,16 @@
         }
       }
     },
+    "Toplantılarda ara…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search meetings…"
+          }
+        }
+      }
+    },
     "Toplantıları anla, hiçbir şeyi kaçırma": {
       "localizations": {
         "en": {
@@ -3484,6 +3624,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen to your meeting, leave the rest to me"
+          }
+        }
+      }
+    },
+    "Toplantını dinlemeye başla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start listening to your meeting"
           }
         }
       }
@@ -3568,6 +3718,16 @@
         }
       }
     },
+    "Tümü ›": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All ›"
+          }
+        }
+      }
+    },
     "Tümünü birleştir: %@ →": {
       "extractionState": "stale",
       "localizations": {
@@ -3575,6 +3735,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merge all: %@ →"
+          }
+        }
+      }
+    },
+    "Tümünü gör ›": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See all ›"
           }
         }
       }
@@ -3641,6 +3811,16 @@
         }
       }
     },
+    "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Long meetings are now noted part by part — no task gets lost"
+          }
+        }
+      }
+    },
     "Vazgeç": {
       "localizations": {
         "en": {
@@ -3671,12 +3851,32 @@
         }
       }
     },
+    "Yalnız karşı taraf": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other side only"
+          }
+        }
+      }
+    },
     "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Only the other side will be recorded (click: include your voice)"
+          }
+        }
+      }
+    },
+    "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record only the other side — the microphone never opens, no echo"
           }
         }
       }
@@ -3851,6 +4051,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "· dinleniyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· listening"
+          }
+        }
+      }
+    },
+    "· duraklatıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· paused"
           }
         }
       }
@@ -4175,6 +4395,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "If you denied it:"
+          }
+        }
+      }
+    },
+    "İşleniyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Processing"
           }
         }
       }

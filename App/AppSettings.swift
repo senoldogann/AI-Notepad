@@ -51,7 +51,6 @@ enum SettingsKey {
     /// Görünüm.
     static let theme: String = "appearance.theme"
     static let accent: String = "appearance.accent"
-    static let panelBackground: String = "appearance.background"
     static let fontDesign: String = "appearance.fontDesign"
     static let textSize: String = "appearance.textSize"
     static let lineSpacing: String = "appearance.lineSpacing"
@@ -136,7 +135,7 @@ enum SettingsRange {
 
 /// Görünüm ayarlarını varsayılana döndürür.
 func resetAppearanceSettings(defaults: UserDefaults) {
-    for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.panelBackground, SettingsKey.fontDesign, SettingsKey.textSize,
+    for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.textSize,
                 SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled] {
         defaults.removeObject(forKey: key)
     }
@@ -180,9 +179,8 @@ func registerDefaultSettings() {
         SettingsKey.claudeSmartEffort: LLMEffort.high.rawValue,
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
-        SettingsKey.theme: AppTheme.system.rawValue,
+        SettingsKey.theme: AppTheme.light.rawValue,
         SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
-        SettingsKey.panelBackground: PanelAppearance.standard.background.rawValue,
         SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,
         SettingsKey.textSize: PanelAppearance.standard.textSize,
         SettingsKey.lineSpacing: PanelAppearance.standard.lineSpacing,
