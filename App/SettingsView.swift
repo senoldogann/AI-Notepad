@@ -1,4 +1,5 @@
 import AINotepadCore
+import AINotepadUI
 import SwiftUI
 
 /// Ayarlar: canlı motor seçimi ve bulut API anahtarları (Keychain).
@@ -21,9 +22,19 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Türkçe çeviri") {
+                Picker("Görünüm", selection: Binding<DisplayMode>(
+                    get: { model.displayMode },
+                    set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
+                )) {
+                    Text("İki dil (orijinal + Türkçe)").tag(DisplayMode.bilingual)
+                    Text("Sadece Türkçe").tag(DisplayMode.turkishOnly)
+                }
+            }
             Section("API anahtarları") {
                 SecretField(title: "Deepgram", account: .deepgram)
                 SecretField(title: "ElevenLabs", account: .elevenlabs)
+                SecretField(title: "Anthropic (Claude)", account: .anthropic)
             }
         }
         .formStyle(.grouped)

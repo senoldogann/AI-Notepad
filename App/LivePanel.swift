@@ -11,12 +11,19 @@ func sharingType(hideFromCapture: Bool) -> NSWindow.SharingType {
     hideFromCapture ? .none : .readOnly
 }
 
+/// Kenarlıksız panel normalde anahtar pencere olamaz; soru alanına yazılabilmesi ve metin seçimi için olabilir.
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool {
+        true
+    }
+}
+
 /// Kenarlıksız, saydam, arka planından taşınabilen, uygulamayı öne getirmeyen yüzen panel.
 /// Cam görünüm içerikteki `TranscriptPanel`'den gelir.
 @MainActor
 func makeLivePanel(rootView: some View) -> NSPanel {
-    let size: NSSize = NSSize(width: 380, height: 520)
-    let panel: NSPanel = NSPanel(
+    let size: NSSize = NSSize(width: 400, height: 640)
+    let panel: NSPanel = KeyablePanel(
         contentRect: NSRect(origin: .zero, size: size),
         styleMask: [.borderless, .nonactivatingPanel, .resizable],
         backing: .buffered,
@@ -89,6 +96,15 @@ private struct PanelHost: View {
     let onHide: @MainActor () -> Void
 
     var body: some View {
-        TranscriptPanel(state: model.viewState, onHide: onHide, onStop: { model.stopRecording() })
+        TranscriptPanel(
+            state: model.viewState,
+            actions: PanelActions(
+                onHide: onHide,
+                onStop: { model.stopRecording() },
+                onMissed: { model.askWhatIMissed() },
+                onAsk: { (question: String) -> Void in model.ask(question: question) },
+                onCloseCard: { model.assistantCard = nil }
+            )
+        )
     }
 }

@@ -9,7 +9,7 @@ func seg(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pers
 }
 
 func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> LiveViewState {
-    makeLiveViewState(transcript: transcript, isRecording: isRecording, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
+    makeLiveViewState(transcript: transcript, translations: [:], displayMode: .bilingual, assistantCard: nil, isRecording: isRecording, startedAt: nil, statusText: "Hazır", languageText: "Fince", errors: errors)
 }
 
 @Suite struct PresentationTests {
@@ -61,5 +61,25 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         #expect(languageText(locked: nil, mode: .automatic, isRecording: true) == "Dil algılanıyor…")
         #expect(languageText(locked: nil, mode: .automatic, isRecording: false) == "Dil: Otomatik")
         #expect(languageText(locked: nil, mode: .fixed(.english), isRecording: false) == "🇬🇧 İngilizce")
+    }
+}
+
+@Suite struct TranslationPresentationTests {
+    @Test func translationsKeyedBySegment() {
+        let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
+        let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, second])
+        let translations: [SegmentID: String] = [second.id: "Başlayalım.", first.id: "Günaydın."]
+        #expect(blockTurkishText(block: blocks[0], translations: translations) == "Günaydın. Başlayalım.")
+        #expect(blockTurkishText(block: blocks[0], translations: [:]) == nil)
+    }
+
+    @Test func latestUsesTurkishWhenAvailable() {
+        let others: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
+        let viewState: LiveViewState = makeLiveViewState(
+            transcript: [others], translations: [others.id: "Günaydın."], displayMode: .bilingual, assistantCard: nil,
+            isRecording: true, startedAt: nil, statusText: "", languageText: "", errors: []
+        )
+        #expect(viewState.latestOthersSentence == "Günaydın.")
     }
 }

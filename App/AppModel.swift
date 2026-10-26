@@ -37,6 +37,16 @@ final class AppModel {
     var recordingStartedAt: Date?
     /// Global kısayol kaydedilemediyse menüde gösterilen hata.
     var shortcutError: String?
+    /// "Diğerleri" bölümlerinin Türkçesi.
+    var translations: [SegmentID: String] = [:]
+    var displayMode: DisplayMode
+    /// Paneldeki "Ne kaçırdım?" / soru kartı.
+    var assistantCard: AssistantCard?
+
+    /// Çeviriler sırayla yapılır: her iş bir öncekini bekler.
+    @ObservationIgnored private var translationTail: Task<Void, Never>?
+    /// Anahtar yoksa ya da reddedildiyse bu kayıtta çeviri durur (her cümlede aynı hata çıkmasın).
+    @ObservationIgnored private var translationDisabled: Bool = false
 
     @ObservationIgnored private var engine: WhisperKitEngine?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
@@ -44,8 +54,81 @@ final class AppModel {
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
     @ObservationIgnored private var isStopping: Bool = false
 
-    init(liveEngine: LiveEngine) {
+    init(liveEngine: LiveEngine, displayMode: DisplayMode) {
         self.liveEngine = liveEngine
+        self.displayMode = displayMode
+    }
+
+    /// Görünümü değiştirir ve kaydeder.
+    func selectDisplayMode(mode: DisplayMode) {
+        displayMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
+    }
+
+    /// Son 3 dakikanın Türkçe özeti (Claude Opus).
+    func askWhatIMissed() {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
+        let nowSec: Double = transcript.map(\.endSec).max() ?? 0
+        guard let request = missedSummaryRequest(blocks: blocks, nowSec: nowSec, windowSec: 180) else {
+            assistantCard = .summary(MissedSummary(topic: "Son 3 dakikada konuşma yok.", decisions: [], askedOfYou: []))
+            return
+        }
+        assistantCard = .loading(title: "Ne kaçırdım?")
+        Task {
+            do {
+                let text: String = try await sendClaude(apiKey: try readSecret(service: keychainService, account: .anthropic), request: request)
+                assistantCard = .summary(try parseMissedSummary(text: text))
+            } catch {
+                assistantCard = .failed(message: llmUserMessage(error: error))
+            }
+        }
+    }
+
+    /// Toplantı hakkında Türkçe soru (Claude Opus).
+    func ask(question: String) {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
+        let request: ClaudeRequest = questionRequest(blocks: blocks, question: question)
+        assistantCard = .loading(title: "Cevap hazırlanıyor")
+        Task {
+            do {
+                let text: String = try await sendClaude(apiKey: try readSecret(service: keychainService, account: .anthropic), request: request)
+                assistantCard = .answer(question: question, text: text)
+            } catch {
+                assistantCard = .failed(message: llmUserMessage(error: error))
+            }
+        }
+    }
+
+    /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp Türkçeye çevirir (Claude Haiku).
+    private func enqueueTranslation(segment: LiveSegment) {
+        guard !translationDisabled else {
+            return
+        }
+        let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
+        let previous: Task<Void, Never>? = translationTail
+        translationTail = Task { [weak self] in
+            await previous?.value
+            await self?.translate(segment: segment, context: context)
+        }
+    }
+
+    private func translate(segment: LiveSegment, context: [String]) async {
+        guard !translationDisabled else {
+            return
+        }
+        do {
+            let key: String = try readSecret(service: keychainService, account: .anthropic)
+            translations[segment.id] = try await sendClaude(apiKey: key, request: translationRequest(sentence: segment.text, context: context))
+        } catch {
+            if case KeychainError.notFound = error {
+                translationDisabled = true
+            }
+            if case LLMError.http(let status, _) = error, status == 401 || status == 403 {
+                translationDisabled = true
+            }
+            Self.logger.error("Çeviri başarısız: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: "Çeviri: " + llmUserMessage(error: error))
+        }
     }
 
     /// Kayıt başlatılabilir mi: Deepgram'da her zaman, WhisperKit'te model hazırsa.
@@ -57,6 +140,9 @@ final class AppModel {
     var viewState: LiveViewState {
         makeLiveViewState(
             transcript: transcript,
+            translations: translations,
+            displayMode: displayMode,
+            assistantCard: assistantCard,
             isRecording: isRecording,
             startedAt: recordingStartedAt,
             statusText: statusText,
@@ -105,6 +191,9 @@ final class AppModel {
         isStarting = true
         defer { isStarting = false }
         transcript = []
+        translations = [:]
+        assistantCard = nil
+        translationDisabled = false
         lockedLanguage = nil
         errorMessages = []
         isStopping = false
@@ -226,7 +315,10 @@ final class AppModel {
     private func handle(event: LiveSessionEvent) {
         transcript = applyEvent(transcript: transcript, event: event)
         switch event {
-        case .segment:
+        case .segment(let segment):
+            if segment.id.speaker == .others, segment.isFinal, !segment.text.isEmpty {
+                enqueueTranslation(segment: segment)
+            }
             break
         case .languageLocked(let language):
             lockedLanguage = language
@@ -258,6 +350,27 @@ private func finishedStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     continuation.finish()
     return stream
+}
+
+/// Görünüm ayarının UserDefaults anahtarı.
+let displayModeKey: String = "displayMode"
+
+/// Claude hatalarını kullanıcıya gösterilecek Türkçe metne çevirir (anahtar içermez).
+func llmUserMessage(error: any Error) -> String {
+    switch error {
+    case KeychainError.notFound:
+        return "Anthropic anahtarı kayıtlı değil. Menüden Ayarlar…'ı açıp ekle."
+    case LLMError.http(let status, _) where status == 401 || status == 403:
+        return "Anthropic anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
+    case LLMError.http(let status, _):
+        return "Claude isteği başarısız (HTTP \(status))."
+    case LLMError.refusal:
+        return "Claude bu isteği yanıtlamadı (güvenlik denetimi)."
+    case LLMError.malformed, LLMError.empty:
+        return "Claude'dan beklenmeyen yanıt geldi."
+    default:
+        return "Claude'a ulaşılamadı: \(error.localizedDescription)"
+    }
 }
 
 /// Hataları kullanıcıya gösterilecek Türkçe metne çevirir.

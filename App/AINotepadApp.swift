@@ -1,4 +1,5 @@
 import AINotepadCore
+import AINotepadUI
 import os
 import SwiftUI
 
@@ -13,7 +14,9 @@ struct AINotepadApp: App {
     init() {
         UserDefaults.standard.register(defaults: [liveEngineKey: LiveEngine.deepgram.rawValue])
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: liveEngineKey) ?? "") ?? .deepgram
-        let model: AppModel = AppModel(liveEngine: engine)
+        UserDefaults.standard.register(defaults: [displayModeKey: DisplayMode.bilingual.rawValue])
+        let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: displayModeKey) ?? "") ?? .bilingual
+        let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode)
         _model = State(initialValue: model)
         // Varsayılan: gizli. Kullanıcı menüden değiştirince UserDefaults'a yazılır.
         UserDefaults.standard.register(defaults: [hideFromScreenCaptureKey: true])

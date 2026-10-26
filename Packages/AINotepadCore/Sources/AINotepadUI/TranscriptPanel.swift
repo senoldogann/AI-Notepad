@@ -2,17 +2,39 @@ import AINotepadCore
 import AppKit
 import SwiftUI
 
-/// Canlı transkriptin Liquid Glass paneli: üst satırda durum ve eylemler, gövdede konuşmacı blokları,
-/// altta son hatalar. Yalnızca `LiveViewState` ile beslenir.
-public struct TranscriptPanel: View {
-    let state: LiveViewState
-    let onHide: @MainActor () -> Void
-    let onStop: @MainActor () -> Void
+/// Panelin kullanıcı eylemleri.
+public struct PanelActions {
+    public let onHide: @MainActor () -> Void
+    public let onStop: @MainActor () -> Void
+    public let onMissed: @MainActor () -> Void
+    public let onAsk: @MainActor (String) -> Void
+    public let onCloseCard: @MainActor () -> Void
 
-    public init(state: LiveViewState, onHide: @escaping @MainActor () -> Void, onStop: @escaping @MainActor () -> Void) {
-        self.state = state
+    public init(
+        onHide: @escaping @MainActor () -> Void,
+        onStop: @escaping @MainActor () -> Void,
+        onMissed: @escaping @MainActor () -> Void,
+        onAsk: @escaping @MainActor (String) -> Void,
+        onCloseCard: @escaping @MainActor () -> Void
+    ) {
         self.onHide = onHide
         self.onStop = onStop
+        self.onMissed = onMissed
+        self.onAsk = onAsk
+        self.onCloseCard = onCloseCard
+    }
+}
+
+/// Canlı transkriptin Liquid Glass paneli: üst satırda durum ve eylemler, gövdede konuşmacı blokları (Türkçesiyle),
+/// altta asistan kartı, "Ne kaçırdım?" ve soru alanı, son hatalar. Yalnızca `LiveViewState` ile beslenir.
+public struct TranscriptPanel: View {
+    let state: LiveViewState
+    let actions: PanelActions
+    @State private var question: String = ""
+
+    public init(state: LiveViewState, actions: PanelActions) {
+        self.state = state
+        self.actions = actions
     }
 
     public var body: some View {
@@ -22,6 +44,14 @@ public struct TranscriptPanel: View {
                 .padding(.vertical, DesignTokens.Spacing.m)
             Divider().opacity(0.35)
             transcript
+            if let card = state.assistantCard {
+                AssistantCardView(card: card, onClose: actions.onCloseCard)
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .padding(.bottom, DesignTokens.Spacing.s)
+            }
+            footer
+                .padding(.horizontal, DesignTokens.Spacing.m)
+                .padding(.bottom, DesignTokens.Spacing.m)
             if !state.errors.isEmpty {
                 errorBand
             }
@@ -42,13 +72,13 @@ public struct TranscriptPanel: View {
                 .padding(.vertical, 3)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
             if state.isRecording {
-                IconButton(symbol: "stop.circle", help: "Kaydı durdur", action: onStop)
+                IconButton(symbol: "stop.circle", help: "Kaydı durdur", action: actions.onStop)
             }
             IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala") {
                 copyToPasteboard(text: plainText(blocks: state.blocks))
             }
             .disabled(state.blocks.isEmpty)
-            IconButton(symbol: "minus", help: "Paneli gizle", action: onHide)
+            IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
         }
     }
 
@@ -57,18 +87,52 @@ public struct TranscriptPanel: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
                     ForEach(state.blocks) { (block: SpeakerBlock) in
-                        BlockView(block: block)
-                            .id(block.id)
+                        BlockView(
+                            block: block,
+                            turkish: blockTurkishText(block: block, translations: state.translations),
+                            displayMode: state.displayMode
+                        )
+                        .id(block.id)
                     }
                 }
                 .padding(DesignTokens.Spacing.l)
             }
-            // Blok içinde metin büyüdüğünde de en alta kaydır.
+            // Blok içinde metin ya da çeviri büyüdüğünde de en alta kaydır.
             .onChange(of: state.blocks) { (_: [SpeakerBlock], blocks: [SpeakerBlock]) in
                 if let last = blocks.last {
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
+        }
+    }
+
+    /// "Ne kaçırdım?" düğmesi ve Türkçe soru alanı.
+    private var footer: some View {
+        HStack(spacing: DesignTokens.Spacing.s) {
+            Button(action: actions.onMissed) {
+                Label("Ne kaçırdım?", systemImage: "sparkles")
+                    .font(DesignTokens.statusFont)
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .padding(.vertical, 6)
+                    .background(DesignTokens.meColor, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .disabled(state.blocks.isEmpty)
+            TextField("Toplantı hakkında sor…", text: $question)
+                .textFieldStyle(.plain)
+                .font(DesignTokens.statusFont)
+                .padding(.horizontal, DesignTokens.Spacing.m)
+                .padding(.vertical, 6)
+                .background(.quaternary, in: Capsule())
+                .onSubmit {
+                    let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else {
+                        return
+                    }
+                    actions.onAsk(trimmed)
+                    question = ""
+                }
         }
     }
 
@@ -110,9 +174,12 @@ struct StatusLabel: View {
     }
 }
 
-/// Konuşmacı bloğu: renk noktası, etiket ve akan metin (kesinleşmemiş kısım soluk).
+/// Konuşmacı bloğu: renk noktası, etiket, akan metin (kesinleşmemiş kısım soluk) ve Türkçesi.
+/// İki dilde orijinal küçük ve soluk, Türkçe asıl metin; "Sadece Türkçe"de çevirisi olmayan metin orijinal kalır.
 struct BlockView: View {
     let block: SpeakerBlock
+    let turkish: String?
+    let displayMode: DisplayMode
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s) {
@@ -126,11 +193,21 @@ struct BlockView: View {
                     .font(DesignTokens.labelFont)
                     .tracking(DesignTokens.labelTracking)
                     .foregroundStyle(.secondary)
-                flowingText
-                    .font(DesignTokens.bodyFont)
-                    .lineSpacing(DesignTokens.bodyLineSpacing)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                if displayMode == .bilingual || turkish == nil {
+                    flowingText
+                        .font(turkish == nil ? DesignTokens.bodyFont : .system(size: 13))
+                        .opacity(turkish == nil ? 1 : 0.6)
+                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let turkish {
+                    Text(turkish)
+                        .font(DesignTokens.bodyFont)
+                        .lineSpacing(DesignTokens.bodyLineSpacing)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(block.segments.filter { (segment: LiveSegment) -> Bool in segment.failureMessage != nil }) { (segment: LiveSegment) in
                     Text("Yazıya dökülemedi: \(segment.failureMessage ?? "")")
                         .font(.system(size: 11))
@@ -158,6 +235,68 @@ struct BlockView: View {
     }
 }
 
+/// Asistan kartı: yükleniyor, "Ne kaçırdım?" özeti, soru cevabı ya da hata; kapatılabilir.
+struct AssistantCardView: View {
+    let card: AssistantCard
+    let onClose: @MainActor () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+            HStack {
+                Text(title)
+                    .font(DesignTokens.labelFont)
+                    .tracking(DesignTokens.labelTracking)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                IconButton(symbol: "xmark", help: "Kapat", action: onClose)
+            }
+            content
+                .font(.system(size: 13))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(DesignTokens.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var title: String {
+        switch card {
+        case .loading(let title): title.uppercased()
+        case .summary: "NE KAÇIRDIM?"
+        case .answer: "CEVAP"
+        case .failed: "HATA"
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch card {
+        case .loading:
+            ProgressView().controlSize(.small)
+        case .summary(let summary):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(summary.topic)
+                if !summary.decisions.isEmpty {
+                    Text("Kararlar").font(DesignTokens.labelFont).foregroundStyle(.secondary)
+                    ForEach(summary.decisions, id: \.self) { (item: String) in Text("• " + item) }
+                }
+                if !summary.askedOfYou.isEmpty {
+                    Text("Senden istenenler").font(DesignTokens.labelFont).foregroundStyle(DesignTokens.meColor)
+                    ForEach(summary.askedOfYou, id: \.self) { (item: String) in Text("• " + item) }
+                }
+            }
+        case .answer(let question, let text):
+            VStack(alignment: .leading, spacing: 4) {
+                Text(question).foregroundStyle(.secondary)
+                Text(text)
+            }
+        case .failed(let message):
+            Text(message).foregroundStyle(.red)
+        }
+    }
+}
+
 /// Sade ikon düğmesi.
 struct IconButton: View {
     let symbol: String
@@ -174,6 +313,7 @@ struct IconButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .help(help)
+        .accessibilityLabel(help)
     }
 }
 

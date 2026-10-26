@@ -98,3 +98,13 @@ private struct RawMissedSummary: Decodable {
     let kararlar: [String]
     let sendenIstenenler: [String]
 }
+
+/// Bir "Diğerleri" bölümünü çevirirken bağlam: ondan önceki son `count` metinli kesin "Diğerleri" bölümü. Saf fonksiyondur.
+public func translationContext(transcript: [LiveSegment], before id: SegmentID, count: Int) -> [String] {
+    transcript
+        .filter { (segment: LiveSegment) -> Bool in
+            segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty && segment.id.index < id.index
+        }
+        .suffix(count)
+        .map(\.text)
+}

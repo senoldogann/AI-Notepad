@@ -32,5 +32,15 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Adaya sağ tık → "Kaydı durdur"; panel başlığında durdur düğmesi.
 - [ ] Menü: ikonlu, kısayollar menüde görünür; Ayarlar penceresi öne gelir.
 
+## Türkçe çeviri ve asistan (aşama 4)
+- [ ] Ayarlar'da Anthropic anahtarı "Kayıtlı"; ilk kullanımda Keychain izni → "Her Zaman İzin Ver".
+- [ ] Fince video: her "Diğerleri" cümlesinin altında 1–2 sn içinde doğal Türkçesi; "Sen" cümleleri çevrilmez.
+- [ ] Görünüm "Sadece Türkçe": orijinal metin gizlenir, çevirisi gelmemiş metin soluk orijinal kalır.
+- [ ] Ada açılınca son cümlenin Türkçesi görünür.
+- [ ] "Ne kaçırdım?": birkaç saniyede konu / kararlar / senden istenenler kartı; kapat düğmesi çalışır.
+- [ ] Soru alanına Türkçe soru yazılabiliyor (panel klavye alıyor); cevap zaman damgalı.
+- [ ] Yanlış Anthropic anahtarı: tek bir "anahtar geçersiz" hatası, canlı metin akmaya devam eder.
+- [ ] Anthropic panelinde 10 dk'lık çeviri maliyeti (Haiku: birkaç sent bekleniyor).
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).
