@@ -21,5 +21,15 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Motor "Mac'te (WhisperKit)": model yüklenir, aşama 1 davranışı çalışır.
 - [ ] Deepgram ve ElevenLabs panellerinde 10 dk'lık gerçek maliyet; spec §9 tahminiyle karşılaştır.
 
+## Arayüz (aşama 3)
+- [ ] Kayıt başlayınca çentikte siyah ada: solda kırmızı nokta + süre, sağda dil; kayıt bitince kaybolur.
+- [ ] Fare adanın üstüne gelince yumuşakça açılır, son "Diğerleri" bloğunun metni 2 satırda; çekince kapanır.
+- [ ] Adaya tıklama paneli açar/kapatır; kayıt yokken adanın olduğu yer (menü çubuğu ortası, altındaki sekmeler) tıklanabilir kalır.
+- [ ] Harici monitörde ya da çentiksiz ekranda ada, menü çubuğunun altında ortada hap olarak görünür; ekran değişince yer değiştirir.
+- [ ] Cam panel: arka planından sürüklenir, köşesinden boyutlanır, açık ve koyu duvar kağıdında okunaklı.
+- [ ] Panelde konuşmacı renkleri: Sen mavi, Konuşmacı 1 yeşil, 2 turuncu…; kesinleşmemiş metin soluk.
+- [ ] ⌃⌥R kayıt başlatır/durdurur, ⌃⌥Space ada + paneli gizler/gösterir (uygulama öndeyken de değilken).
+- [ ] Menü: ikonlu, kısayollar menüde görünür; Ayarlar penceresi öne gelir.
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).
