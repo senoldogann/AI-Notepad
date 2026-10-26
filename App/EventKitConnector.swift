@@ -33,14 +33,18 @@ final class EventKitConnector {
         }
     }
 
-    /// Şu andan (sürmekte olanlar dahil) `hours` saat sonrasına kadarki etkinlikler; tüm gün etkinlikleri hariç.
+    /// `start`tan (o anda sürenler dahil) `hours` saat sonrasına kadarki etkinlikler; tüm gün etkinlikleri hariç.
     func meetings(from start: Date, hours: Double) throws -> [CalendarMeeting] {
         guard hasCalendarAccess else {
             throw EventKitError.calendarAccessDenied
         }
         let predicate: NSPredicate = store.predicateForEvents(withStart: start.addingTimeInterval(-8 * 3600), end: start.addingTimeInterval(hours * 3600), calendars: nil)
         return store.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.endDate > start && $0.status != .canceled }
+            // Reddedilen davetler toplantı sayılmaz (kendiliğinden kayıt ve hatırlatma onlara bağlanmasın).
+            .filter { (event: EKEvent) -> Bool in
+                !event.isAllDay && event.endDate > start && event.status != .canceled
+                    && event.attendees?.first(where: \.isCurrentUser)?.participantStatus != .declined
+            }
             .map { (event: EKEvent) -> CalendarMeeting in
                 CalendarMeeting(
                     id: "\(event.eventIdentifier ?? event.calendarItemIdentifier)-\(Int(event.startDate.timeIntervalSince1970))",

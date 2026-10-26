@@ -456,8 +456,13 @@ private struct HomePage: View {
                     problems
                 }
                 UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
+                    // Brifing yeni bir konu: önceki sohbet bağlam olmasın.
+                    model.clearArchiveConversation()
                     model.askArchive(question: briefingQuestion(meeting: meeting))
                     router.section = .ask
+                } onOpenMeeting: { (id: String) -> Void in
+                    router.selectedMeetingID = id
+                    router.section = .meetings
                 }
                 BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
@@ -805,28 +810,76 @@ private struct UpcomingMeetings: View {
     let onStartRecording: @MainActor () -> Void
     /// Toplantı öncesi brifing (arşive sorulur, Sor sayfasında açılır).
     let onBriefing: @MainActor (CalendarMeeting) -> Void
+    /// Bugün biten etkinliğin kaydını açar.
+    let onOpenMeeting: @MainActor (String) -> Void
 
     var body: some View {
         let now: Date = Date()
         let items: [CalendarMeeting] = model.upcomingMeetings.filter { $0.end > now && $0.start.timeIntervalSince(now) < 12 * 3600 }
+        // Bugün biten etkinlikler: kaydı olanın notu takvimden açılır (en yeni önce).
+        let earlier: [CalendarMeeting] = model.upcomingMeetings
+            .filter { $0.end <= now && Calendar.current.isDate($0.start, inSameDayAs: now) }
+            .sorted { $0.start > $1.start }
         if let error = model.calendarError {
             EmptyStateCard(symbol: "calendar.badge.exclamationmark", title: "Takvim okunamadı", message: LocalizedStringKey(error))
-        } else if !items.isEmpty {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
-                Text("Yaklaşan toplantılar").appFont(size: 15, weight: .medium)
-                VStack(spacing: 0) {
-                    ForEach(Array(items.prefix(4).enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
-                        if item.offset > 0 {
-                            Rectangle().fill(Theme.line).frame(height: 1)
-                        }
-                        row(meeting: item.element, now: now)
+        } else if !items.isEmpty || !earlier.isEmpty {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+                if !items.isEmpty {
+                    group(title: "Yaklaşan toplantılar", meetings: Array(items.prefix(4))) { (meeting: CalendarMeeting) in
+                        row(meeting: meeting, now: now)
                     }
                 }
-                .padding(.horizontal, 14)
-                .cardSurface(cornerRadius: 16)
+                if !earlier.isEmpty {
+                    group(title: "Bugün biten toplantılar", meetings: Array(earlier.prefix(4))) { (meeting: CalendarMeeting) in
+                        pastRow(meeting: meeting)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func group(title: LocalizedStringKey, meetings: [CalendarMeeting], @ViewBuilder row: @escaping (CalendarMeeting) -> some View) -> some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+            Text(title).appFont(size: 15, weight: .medium)
+            VStack(spacing: 0) {
+                ForEach(Array(meetings.enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
+                    if item.offset > 0 {
+                        Rectangle().fill(Theme.line).frame(height: 1)
+                    }
+                    row(item.element)
+                }
+            }
+            .padding(.horizontal, 14)
+            .cardSurface(cornerRadius: 16)
+        }
+    }
+
+    /// Biten etkinlik: kaydı varsa notun durumu ve "Notu aç", yoksa "Kaydedilmedi".
+    private func pastRow(meeting: CalendarMeeting) -> some View {
+        let time: String = meeting.start.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+            + "–" + meeting.end.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+        let record: MeetingRecord? = recordedMeeting(meeting: meeting, records: model.meetings)
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(time).appFont(size: 12, weight: .medium).monospacedDigit().foregroundStyle(Theme.muted)
+                Text(meeting.title).appFont(size: 14, weight: .medium).lineLimit(1)
+                if let summary = record?.note?.summary {
+                    Text(summary)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if let record {
+                Button(record.note == nil ? LocalizedStringKey("Kaydı aç") : LocalizedStringKey("Notu aç"), systemImage: "doc.text") { onOpenMeeting(record.id) }
+                    .controlSize(.small)
+            } else {
+                Text("Kaydedilmedi").appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
+            }
+        }
+        .padding(.vertical, 10)
     }
 
     private func row(meeting: CalendarMeeting, now: Date) -> some View {

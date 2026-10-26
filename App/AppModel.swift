@@ -92,6 +92,10 @@ final class AppModel {
     @ObservationIgnored let eventKit: EventKitConnector = EventKitConnector()
     @ObservationIgnored private let notifier: MeetingNotifier = MeetingNotifier()
     @ObservationIgnored private let micMonitor: MicrophoneActivityMonitor = MicrophoneActivityMonitor()
+    /// Kaydı panel ve adayla birlikte başlatır (uygulama bağlar; kendiliğinden kayıtta kullanılır).
+    @ObservationIgnored var onAutoRecord: (@MainActor () async -> Void)?
+    /// Kendiliğinden kayıtta bağlanacak etkinlik (çakışan etkinliklerde doğru olan kayda geçsin).
+    @ObservationIgnored private var pendingAutoMeeting: CalendarMeeting?
     @ObservationIgnored private var calendarTask: Task<Void, Never>?
     @ObservationIgnored private var calendarChangesTask: Task<Void, Never>?
     @ObservationIgnored private var lastMicSuggestion: Date = .distantPast
@@ -506,9 +510,10 @@ final class AppModel {
         }
 
         // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
-        linkedMeeting = UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
+        linkedMeeting = pendingAutoMeeting ?? (UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
             ? currentMeeting(meetings: upcomingMeetings, now: Date())
-            : nil
+            : nil)
+        pendingAutoMeeting = nil
         let directory: URL
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: Date())
@@ -782,7 +787,7 @@ final class AppModel {
         // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
         .with(template: recordingTemplate)
         .with(highlights: liveHighlights)
-        return linkedMeeting.map { base.with(attendees: $0.attendees) } ?? base
+        return linkedMeeting.map { base.with(attendees: $0.attendees).with(calendarEventID: $0.id) } ?? base
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
@@ -865,7 +870,8 @@ final class AppModel {
         // Kullanıcının adı ve sözlüğü öne; sınırda (30) önce toplantılardan gelenler düşer.
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         return keytermsWithAttendees(
-            attendees: [userName] + customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? ""),
+            attendees: [userName] + customVocabulary(text: UserDefaults.standard.string(forKey: SettingsKey.customVocabulary) ?? "")
+                + peopleBook.saved.map(\.name),
             keyterms: meetingKeyterms(records: Array(meetings.prefix(20)), userName: userName, limit: 30),
             limit: 30
         )
@@ -1175,7 +1181,7 @@ final class AppModel {
                 await self?.refreshCalendar()
             }
         }
-        if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) {
+        if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) || UserDefaults.standard.bool(forKey: SettingsKey.autoRecord) {
             micMonitor.start { [weak self] in self?.microphoneStartedElsewhere() }
         }
     }
@@ -1201,10 +1207,13 @@ final class AppModel {
         startCalendarServices()
     }
 
-    /// Önümüzdeki 24 saatin toplantılarını okur ve 3 saat içindekiler için hatırlatma kurar.
+    /// Bugünün (biteni de: notu takvimden açılır) ve önümüzdeki 24 saatin toplantılarını okur, 3 saat içindekiler için
+    /// hatırlatma kurar.
     private func refreshCalendar() async {
         do {
-            upcomingMeetings = try eventKit.meetings(from: Date(), hours: 24)
+            let now: Date = Date()
+            let dayStart: Date = Calendar.current.startOfDay(for: now)
+            upcomingMeetings = try eventKit.meetings(from: dayStart, hours: now.timeIntervalSince(dayStart) / 3600 + 24)
             let remind: [CalendarMeeting] = UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders)
                 // Son bir dakikaya girmiş toplantı yeniden kurulmaz (hatırlatması zaten gösterildi; çift bildirim olmasın).
                 ? meetingsToRemind(meetings: upcomingMeetings, now: Date().addingTimeInterval(60), horizonSec: 3 * 3600)
@@ -1217,9 +1226,35 @@ final class AppModel {
         }
     }
 
-    /// Başka bir uygulama mikrofonu açtı: kayıt yoksa (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
+    /// Başka bir uygulama mikrofonu açtı (kayıt yokken). Takvimde süren çevrim içi görüşme varsa ve kendiliğinden başlatma
+    /// açıksa kayıt başlar ve bildirilir; değilse (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
     private func microphoneStartedElsewhere() {
-        guard !isRecording, !isStarting, Date().timeIntervalSince(lastMicSuggestion) > 600 else {
+        guard !isRecording, !isStarting else {
+            return
+        }
+        if UserDefaults.standard.bool(forKey: SettingsKey.autoRecord),
+           let meeting = meetingToAutoRecord(meetings: upcomingMeetings, records: meetings, now: Date()),
+           let onAutoRecord {
+            Self.logger.info("Görüşme kendiliğinden kaydediliyor, etkinlik: \(meeting.id, privacy: .private)")
+            pendingAutoMeeting = meeting
+            Task {
+                await onAutoRecord()
+                // Başlatma sessizce bitmiş olabilir (anahtar ya da model yok): bildirim gerçeği söylesin.
+                pendingAutoMeeting = nil
+                do {
+                    if isRecording {
+                        try await notifier.announceAutoRecording(title: meeting.title)
+                    } else {
+                        Self.logger.error("Kendiliğinden kayıt başlamadı, etkinlik: \(meeting.id, privacy: .private)")
+                        try await notifier.announceAutoRecordingFailed(title: meeting.title)
+                    }
+                } catch {
+                    Self.logger.error("Kendiliğinden kayıt bildirilemedi, hata: \(String(describing: error), privacy: .public)")
+                }
+            }
+            return
+        }
+        guard UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions), Date().timeIntervalSince(lastMicSuggestion) > 600 else {
             return
         }
         lastMicSuggestion = Date()
@@ -1236,31 +1271,96 @@ final class AppModel {
 
     /// Arşive sorulan sorular ve cevapları (bu oturumda; yeniden açılınca boş).
     var archiveExchanges: [ArchiveExchange] = []
+    /// Cevaplanan soru (durdurulabilir).
+    @ObservationIgnored private var archiveTask: Task<Void, Never>?
 
-    /// Tüm toplantılara soru sorar; cevap gelince listede güncellenir.
+    /// Bir soru cevaplanıyor (yenisi sorulamaz, durdurulabilir).
+    var isAnsweringArchive: Bool {
+        archiveExchanges.last.map { [.understanding, .searching, .writing].contains($0.phase) } ?? false
+    }
+
+    /// Tüm toplantılara soru sorar; ajanın adımları (terimler, okunan parçalar) ve akan cevap listede güncellenir.
+    /// Önceki cevaplar devam soruları için bağlamdır.
     func askArchive(question: String) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
         }
-        let exchange: ArchiveExchange = ArchiveExchange(id: UUID(), question: trimmed, state: .loading)
-        archiveExchanges.append(exchange)
+        let history: [ArchiveTurn] = archiveExchanges.compactMap { (exchange: ArchiveExchange) -> ArchiveTurn? in
+            exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
+        }
+        let id: UUID = UUID()
+        archiveExchanges.append(ArchiveExchange(
+            id: id, question: trimmed, startedAt: Date(), phase: .understanding, terms: [], passages: [],
+            answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
+        ))
         let records: [MeetingRecord] = meetings
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
-        Task { [weak self] in
-            let state: ArchiveExchange.State
+        archiveTask = Task { [weak self] in
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                state = .answered(try await AINotepadCore.askArchive(question: trimmed, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date()))
+                self?.updateExchange(id: id) { $0.modelName = llmModelDisplayName(provider: provider, tier: .smart) }
+                _ = try await AINotepadCore.askArchive(
+                    question: trimmed, history: history, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date()
+                ) { [weak self] (progress: ArchiveProgress) -> Void in
+                    await self?.apply(progress: progress, id: id)
+                }
+                self?.updateExchange(id: id) {
+                    $0.phase = .done
+                    $0.finishedAt = Date()
+                }
+            } catch is CancellationError {
+                self?.updateExchange(id: id) {
+                    $0.phase = .stopped
+                    $0.finishedAt = Date()
+                }
+            } catch let error as URLError where error.code == .cancelled {
+                self?.updateExchange(id: id) {
+                    $0.phase = .stopped
+                    $0.finishedAt = Date()
+                }
             } catch {
                 Self.logger.error("Arşiv sorusu cevaplanamadı, hata: \(String(describing: error), privacy: .private)")
-                state = .failed(userFacingMessage(error: error))
+                self?.updateExchange(id: id) {
+                    $0.phase = .failed(userFacingMessage(error: error))
+                    $0.finishedAt = Date()
+                }
             }
-            guard let self, let index = self.archiveExchanges.firstIndex(where: { $0.id == exchange.id }) else {
-                return
-            }
-            self.archiveExchanges[index] = ArchiveExchange(id: exchange.id, question: trimmed, state: state)
         }
+    }
+
+    /// Akan cevabı durdurur; o ana kadar yazılan kalır.
+    func stopArchiveAnswer() {
+        archiveTask?.cancel()
+    }
+
+    /// Sohbeti temizler (yeni konu: önceki cevaplar bağlam olmaz).
+    func clearArchiveConversation() {
+        archiveTask?.cancel()
+        archiveExchanges = []
+    }
+
+    /// Ajanın adımını soruya yazar.
+    private func apply(progress: ArchiveProgress, id: UUID) {
+        updateExchange(id: id) { (exchange: inout ArchiveExchange) -> Void in
+            switch progress {
+            case .searchTerms(let terms):
+                exchange.terms = terms
+                exchange.phase = .searching
+            case .passages(let passages):
+                exchange.passages = passages
+                exchange.phase = .writing
+            case .answer(let answer):
+                exchange.answer = answer
+            }
+        }
+    }
+
+    private func updateExchange(id: UUID, change: (inout ArchiveExchange) -> Void) {
+        guard let index = archiveExchanges.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        change(&archiveExchanges[index])
     }
 
     // MARK: Görevler
@@ -1330,6 +1430,69 @@ final class AppModel {
             Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .public)")
             voiceRegistryError = userFacingMessage(error: error)
         }
+    }
+
+    // MARK: Kişiler
+
+    /// Elle eklenen ve kaldırılan kişiler (`People.json`).
+    var peopleBook: PeopleBook = .empty
+    /// Kişiler defteri okunamadı ya da yazılamadı.
+    var peopleBookError: String?
+    /// Defter okundu: okunamadıysa üzerine yazılmaz (boş defterle eski kişiler silinmesin).
+    @ObservationIgnored private var peopleBookLoaded: Bool = false
+
+    private func loadPeople() {
+        do {
+            peopleBook = try loadPeopleBook(url: try peopleFileURL())
+            peopleBookLoaded = true
+            peopleBookError = nil
+        } catch {
+            Self.logger.error("Kişiler defteri okunamadı, hata: \(String(describing: error), privacy: .public)")
+            peopleBookError = userFacingMessage(error: error)
+        }
+    }
+
+    private func storePeople(book: PeopleBook) {
+        guard peopleBookLoaded else {
+            peopleBookError = String(localized: "Kişiler defteri okunamadığı için değişiklik kaydedilmedi; People.json dosyasını denetle ve uygulamayı yeniden aç.")
+            return
+        }
+        do {
+            try savePeopleBook(book: book, url: try peopleFileURL())
+            peopleBook = book
+            peopleBookError = nil
+        } catch {
+            Self.logger.error("Kişiler defteri yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            peopleBookError = userFacingMessage(error: error)
+        }
+    }
+
+    /// Kişi ekler ya da bilgilerini günceller (adı tanımaya da verilir).
+    func savePerson(name: String, role: String, email: String) {
+        storePeople(book: addingPerson(book: peopleBook, person: SavedPerson(name: name, role: role, email: email, addedAt: Date())))
+    }
+
+    /// Elle eklenen kişinin adını ve bilgilerini değiştirir; kayıtlı sesi yeni ada taşınır.
+    func renamePerson(oldName: String, name: String, role: String, email: String) {
+        storePeople(book: renamingPerson(book: peopleBook, oldName: oldName, person: SavedPerson(name: name, role: role, email: email, addedAt: Date())))
+        let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard peopleBookError == nil, !trimmed.isEmpty else {
+            return
+        }
+        storeVoices(voices: registeredVoices.map { (voice: RegisteredVoice) -> RegisteredVoice in
+            voice.name.caseInsensitiveCompare(oldName) == .orderedSame
+                ? RegisteredVoice(name: trimmed, voiceprint: voice.voiceprint, updatedAt: voice.updatedAt)
+                : voice
+        })
+    }
+
+    /// Kişiyi Kişiler'den kaldırır ve sesini unutur; toplantılardaki adı ve görevleri kalır.
+    func removePerson(name: String) {
+        storePeople(book: removingPerson(book: peopleBook, name: name, now: Date()))
+        guard peopleBookError == nil else {
+            return
+        }
+        storeVoices(voices: registeredVoices.filter { $0.name.caseInsensitiveCompare(name) != .orderedSame })
     }
 
     /// Kayıtlı sesi unutur (bu kişi bundan sonra sesinden tanınmaz; verilmiş adlar toplantılarda kalır).
@@ -1484,6 +1647,7 @@ final class AppModel {
     func performStartupMaintenance() {
         reloadMeetings()
         loadVoices()
+        loadPeople()
         startCalendarServices()
         for record in staleStatusesToInterrupt(records: meetings) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in
@@ -1598,15 +1762,29 @@ private func finishedStream() -> AsyncStream<[Float]> {
 
 /// Arşive sorulan bir soru ve durumu.
 struct ArchiveExchange: Identifiable, Equatable {
-    enum State: Equatable {
-        case loading
-        case answered(ArchiveAnswer)
+    /// Ajanın adımı: soruyu anlama (arama terimleri) → arşivde arama → cevabı yazma → bitti.
+    enum Phase: Equatable {
+        case understanding
+        case searching
+        case writing
+        case done
+        case stopped
         case failed(String)
     }
 
     let id: UUID
     let question: String
-    let state: State
+    let startedAt: Date
+    var phase: Phase
+    /// Hızlı modelin çıkardığı arama terimleri.
+    var terms: [String]
+    /// Okunan parçalar.
+    var passages: [ArchivePassage]
+    /// Akan (ya da bitmiş) cevap.
+    var answer: ArchiveAnswer
+    var finishedAt: Date?
+    /// Cevabı yazan model.
+    var modelName: String?
 }
 
 /// İçe aktarma hatasının kullanıcı metni. Saf fonksiyondur.

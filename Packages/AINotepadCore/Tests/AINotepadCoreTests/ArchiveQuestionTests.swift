@@ -36,8 +36,12 @@ private func archive() -> [MeetingRecord] {
         #expect(coffee.first?.meetingID == "a" && coffee.first?.kind == .transcript && coffee.first?.text.contains("Kahvikone") == true)
         #expect(relevantPassages(passages: passages, terms: ["xyzzy"], maxChars: 10_000).map(\.id) == ["a-note", "b-note"])
         #expect(relevantPassages(passages: passages, terms: ["xyzzy"], maxChars: 80).count == 1)
-        let answer: ArchiveAnswer = try parseArchiveAnswer(text: #"{"cevap":"Mikko yenisini sipariş edecek.","kaynaklar":[1,9,1]}"#, passages: coffee)
-        #expect(answer.sources.map(\.id) == [coffee[0].id])
+        // Kaynak işaretleri ilk geçiş sırasıyla numaralanır; geçersizler atılır; akışta yarım işaret görünmez.
+        let both: [ArchivePassage] = Array(passages.prefix(2))
+        let answer: ArchiveAnswer = citedAnswer(text: "Mikko yenisini sipariş edecek [2][9]. Bütçe artacak [1, 2] [", passages: both)
+        #expect(answer.text == "Mikko yenisini sipariş edecek [1]. Bütçe artacak [2][1]")
+        #expect(answer.sources.map(\.id) == [both[1].id, both[0].id])
+        #expect(citedAnswer(text: "Kaikki [1-2].", passages: both).text == "Kaikki [1][2].")
     }
 }
 
@@ -48,10 +52,34 @@ extension CloudTests {
         let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
         let answer: ArchiveAnswer = try await askArchive(
             question: "Kahve makinesi bozulduğunda ne yapılmasına karar verildi, kim ilgilenecek?",
-            records: archive(), userName: "Senol", llm: provider, maxChars: 60_000, now: Date(timeIntervalSince1970: 1_792_000_000)
-        )
+            history: [], records: archive(), userName: "Senol", llm: provider, maxChars: 60_000, now: Date(timeIntervalSince1970: 1_792_000_000)
+        ) { (_: ArchiveProgress) -> Void in }
         #expect(answer.text.contains("Mikko"), "\(answer.text)")
         #expect(answer.sources.contains { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
+    }
+
+    // Gerçek model: devam sorusu ("bunu") önceki konuşmadan anlaşılır; adımlar sırayla bildirilir ve cevap parça parça akar.
+    @Test func followUpStreamsWithSteps() async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let events: ProgressBox = ProgressBox()
+        let earlier: [ArchivePassage] = archivePassages(records: archive()).filter { $0.text.contains("Kahvikone") }
+        let answer: ArchiveAnswer = try await askArchive(
+            question: "Peki bunu kim halledecek ve ne zaman?",
+            history: [ArchiveTurn(question: "Kahve makinesiyle ilgili ne konuşuldu?", answer: "Haftalık ekip toplantısında kahve makinesinin yine bozulduğu söylendi [1].", sources: earlier)],
+            records: archive(), userName: "Senol", llm: provider, maxChars: 60_000, now: Date(timeIntervalSince1970: 1_792_000_000)
+        ) { (progress: ArchiveProgress) -> Void in
+            events.append(progress)
+        }
+        let all: [ArchiveProgress] = events.values
+        #expect(answer.text.contains("Mikko"), "\(answer.text)")
+        #expect(answer.text.lowercased().contains("pazartesi"), "\(answer.text)")
+        #expect(answer.text.contains("[1]") && answer.sources.contains { $0.meetingID == "a" }, "\(answer.text)")
+        guard case .searchTerms = all.first, case .passages = all.dropFirst().first else {
+            Issue.record("adımlar sırasız: \(all.count)")
+            return
+        }
+        let partials: Int = all.filter { if case .answer = $0 { true } else { false } }.count
+        #expect(partials > 3, "akış parça sayısı: \(partials)")
     }
 
     // Gerçek model: Mikko'yla yapılacak toplantı için brifing, önceki toplantıda Mikko'nun üstlendiği işi bulur.
@@ -59,12 +87,30 @@ extension CloudTests {
         let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
         let meeting: CalendarMeeting = CalendarMeeting(id: "c", title: "Viikkopalaveri", start: Date(timeIntervalSince1970: 1_792_000_000), end: Date(timeIntervalSince1970: 1_792_001_800), attendees: ["Mikko"], joinURL: nil)
         let answer: ArchiveAnswer = try await askArchive(
-            question: briefingQuestion(meeting: meeting), records: archive(), userName: "Senol", llm: provider, maxChars: 60_000,
+            question: briefingQuestion(meeting: meeting), history: [], records: archive(), userName: "Senol", llm: provider, maxChars: 60_000,
             now: Date(timeIntervalSince1970: 1_791_999_000)
-        )
+        ) { (_: ArchiveProgress) -> Void in }
         let text: String = answer.text.lowercased()
         #expect(text.contains("kahve") || text.contains("kahvi"), "\(answer.text)")
         #expect(answer.sources.contains { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
     }
 }
+}
+
+/// İlerleme bildirimlerini toplar (testte eşzamanlı erişim için kilitli).
+private final class ProgressBox: @unchecked Sendable {
+    private let lock: NSLock = NSLock()
+    private var stored: [ArchiveProgress] = []
+
+    func append(_ value: ArchiveProgress) {
+        lock.lock()
+        stored.append(value)
+        lock.unlock()
+    }
+
+    var values: [ArchiveProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
 }

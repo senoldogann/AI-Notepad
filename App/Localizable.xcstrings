@@ -274,6 +274,16 @@
         }
       }
     },
+    "%@ sürümü hazırlanıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the %@ version…"
+          }
+        }
+      }
+    },
     "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
       "extractionState": "stale",
       "localizations": {
@@ -437,6 +447,16 @@
         }
       }
     },
+    "%lld sa %lld dk konuşma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld h %lld min of conversation"
+          }
+        }
+      }
+    },
     "%lld seçili": {
       "localizations": {
         "en": {
@@ -577,12 +597,42 @@
         }
       }
     },
+    "Ad": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
+      }
+    },
     "Ad (ör. Aino)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Name (e.g. Aino)"
+          }
+        }
+      }
+    },
+    "Ad konuşma tanımaya verilir; bir toplantıda konuşmacıya bu adı verince toplantıları ve görevleri burada toplanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The name is given to speech recognition; when you give a speaker this name in a meeting, their meetings and tasks gather here."
+          }
+        }
+      }
+    },
+    "Ad toplantılarda verildi; değiştirmek için toplantının Transkript sekmesini kullan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The name was given in meetings; to change it, use the meeting's Transcript tab."
           }
         }
       }
@@ -828,12 +878,32 @@
         }
       }
     },
+    "Arama terimleri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search terms"
+          }
+        }
+      }
+    },
     "Aranıyor…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Searching…"
+          }
+        }
+      }
+    },
+    "Arayüz boyutu: %lld%%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interface size: %lld%%"
           }
         }
       }
@@ -864,6 +934,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue in background"
+          }
+        }
+      }
+    },
+    "Arşivi tarıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching the archive"
           }
         }
       }
@@ -1141,6 +1221,26 @@
         }
       }
     },
+    "Bir toplantının Transkript sekmesinde konuşmacıya ad verince kişi burada görünür; sesi hatırlanır ve sonraki toplantılarda adıyla tanınır. Sık görüştüğün kişileri \"Kişi ekle\" ile şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you name a speaker in a meeting's Transcript tab, the person appears here; their voice is remembered and recognized by name in later meetings. You can add people you meet often with \"Add person\"; their names also go to speech recognition."
+          }
+        }
+      }
+    },
+    "Bir toplantının Transkript sekmesinde konuşmacıya bu adı verince toplantıları, konuşma payı ve görevleri burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you give a speaker this name in a meeting's Transcript tab, their meetings, talk share and tasks appear here."
+          }
+        }
+      }
+    },
     "Birden çok toplantıyı seçip sil": {
       "localizations": {
         "en": {
@@ -1296,6 +1396,16 @@
         }
       }
     },
+    "Bu hafta kimlerle neler konuştum?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who did I talk to this week, and about what?"
+          }
+        }
+      }
+    },
     "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor": {
       "localizations": {
         "en": {
@@ -1362,6 +1472,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add this configuration to the client's MCP settings (Claude Desktop: Settings › Developer › Edit Config). The client can list and search your meetings and read notes and transcripts; it only reads and changes nothing."
+          }
+        }
+      }
+    },
+    "Bugün biten toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier today"
           }
         }
       }
@@ -1473,6 +1593,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live translation"
+          }
+        }
+      }
+    },
+    "Cevabı durdur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the answer"
+          }
+        }
+      }
+    },
+    "Cevabı yazıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing the answer"
+          }
+        }
+      }
+    },
+    "Cevap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answer"
           }
         }
       }
@@ -1628,6 +1778,16 @@
         }
       }
     },
+    "Devam sorusu sor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask a follow-up…"
+          }
+        }
+      }
+    },
     "Dil": {
       "localizations": {
         "en": {
@@ -1716,6 +1876,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "More"
+          }
+        }
+      }
+    },
+    "Diğer diller": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other languages"
           }
         }
       }
@@ -1816,6 +1986,36 @@
         }
       }
     },
+    "Durdur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        }
+      }
+    },
+    "Durduruldu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
+    "Düzenle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
     "Düşük": {
       "localizations": {
         "en": {
@@ -1832,6 +2032,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OTHER TASKS"
+          }
+        }
+      }
+    },
+    "E-posta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
           }
         }
       }
@@ -1912,6 +2122,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monospaced (SF Mono)"
+          }
+        }
+      }
+    },
+    "Eşleşen kişi yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching people"
           }
         }
       }
@@ -2178,6 +2398,16 @@
         }
       }
     },
+    "Henüz kimse yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No one here yet"
+          }
+        }
+      }
+    },
     "Henüz konuşma yok": {
       "extractionState": "stale",
       "localizations": {
@@ -2299,6 +2529,16 @@
         }
       }
     },
+    "KAYNAKLAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SOURCES"
+          }
+        }
+      }
+    },
     "KONTROL ET": {
       "localizations": {
         "en": {
@@ -2345,6 +2585,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't remove: %@"
+          }
+        }
+      }
+    },
+    "Kaldırılsın mı?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove?"
           }
         }
       }
@@ -2400,6 +2650,16 @@
         }
       }
     },
+    "Kaydedilmedi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not recorded"
+          }
+        }
+      }
+    },
     "Kaydet": {
       "localizations": {
         "en": {
@@ -2416,6 +2676,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start recording with \"Start recording\" on Home, the shortcut or the menu. While recording, the glass panel shows the live text; when the meeting ends its page opens with your tasks at the top."
+          }
+        }
+      }
+    },
+    "Kaydı aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open recording"
           }
         }
       }
@@ -2511,12 +2781,32 @@
         }
       }
     },
+    "Kayıt başladı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording started: %@"
+          }
+        }
+      }
+    },
     "Kayıt başlarken haber vermeyi hatırlat": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Remind me to tell participants"
+          }
+        }
+      }
+    },
+    "Kayıt başlatılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't start recording: %@"
           }
         }
       }
@@ -2781,12 +3071,62 @@
         }
       }
     },
+    "Kişi ara": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search people"
+          }
+        }
+      }
+    },
+    "Kişi ekle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add person"
+          }
+        }
+      }
+    },
     "Kişiler": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "People"
+          }
+        }
+      }
+    },
+    "Kişiler defteri okunamadığı için değişiklik kaydedilmedi; People.json dosyasını denetle ve uygulamayı yeniden aç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The change wasn't saved because the people list couldn't be read; check People.json and reopen the app."
+          }
+        }
+      }
+    },
+    "Kişiler'den kaldırır ve sesini unutur; toplantılardaki adı kalır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removes from People and forgets the voice; the name stays in meetings"
+          }
+        }
+      }
+    },
+    "Kişiyi düzenle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit person"
           }
         }
       }
@@ -3287,6 +3627,16 @@
         }
       }
     },
+    "Menüler, başlıklar ve düğmeler dahil tüm yazılar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All text, including menus, headings and buttons."
+          }
+        }
+      }
+    },
     "Metin": {
       "localizations": {
         "en": {
@@ -3474,6 +3824,16 @@
         }
       }
     },
+    "Nasıl cevapladım · %lld toplantı, %lld parça · %@ sn": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How I answered · %lld meetings, %lld passages · %@ s"
+          }
+        }
+      }
+    },
     "Ne kaçırdım?": {
       "localizations": {
         "en": {
@@ -3556,12 +3916,42 @@
         }
       }
     },
+    "Notların ve Fince/İngilizce transkriptlerin arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searches your notes and Finnish/English transcripts, answers in Turkish and shows which meeting each fact came from."
+          }
+        }
+      }
+    },
+    "Notu 30'dan fazla dilden birine çevir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate the note into one of 30+ languages"
+          }
+        }
+      }
+    },
     "Notu adlarla yeniden yaz": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Rewrite the note with names"
+          }
+        }
+      }
+    },
+    "Notu aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open note"
           }
         }
       }
@@ -3592,6 +3982,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You'll see the note, tasks and transcript here."
+          }
+        }
+      }
+    },
+    "Okunan toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings read"
           }
         }
       }
@@ -4312,6 +4712,16 @@
         }
       }
     },
+    "Soruyu anlıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Understanding the question"
+          }
+        }
+      }
+    },
     "Suomi": {
       "localizations": {
         "en": {
@@ -4420,6 +4830,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the calendar"
+          }
+        }
+      }
+    },
+    "Takvimde görüşme bağlantısı (Teams, Zoom, Meet) olan bir toplantı sürerken başka bir uygulama mikrofonu açınca kayıt kendiliğinden başlar ve bildirilir; bir kez kur, unut. Katılımcılara kaydettiğini söylemek senin sorumluluğunda.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While a calendar meeting with a call link (Teams, Zoom, Meet) is in progress and another app turns on the microphone, recording starts automatically and you're notified. Set it once and forget it. Telling participants you're recording is your responsibility."
+          }
+        }
+      }
+    },
+    "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için AI-Notepad'i aç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your calendar call started but recording couldn't turn on. Open AI-Notepad to see why."
+          }
+        }
+      }
+    },
+    "Takvimdeki görüşme başladı ve kayıt kendiliğinden açıldı. Katılımcılara kaydettiğini söylemeyi unutma.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your calendar call started and recording turned on automatically. Remember to tell participants you're recording."
+          }
+        }
+      }
+    },
+    "Takvimdeki görüşmeleri kendiliğinden kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record calendar calls automatically"
           }
         }
       }
@@ -4797,6 +5247,16 @@
         }
       }
     },
+    "Toplantılarına bir şey sor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask your meetings anything…"
+          }
+        }
+      }
+    },
     "Toplantılarına sor": {
       "localizations": {
         "en": {
@@ -4937,6 +5397,16 @@
         }
       }
     },
+    "Tüm yüklü yazı tipleri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All installed fonts"
+          }
+        }
+      }
+    },
     "Tümü": {
       "localizations": {
         "en": {
@@ -5046,6 +5516,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The app closed during recording or processing."
+          }
+        }
+      }
+    },
+    "Uygulamanın tamamında; Mac'te yüklü her yazı tipi seçilebilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to the whole app; any font installed on your Mac can be chosen."
           }
         }
       }
@@ -5293,6 +5773,16 @@
         }
       }
     },
+    "Yeni sohbet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat"
+          }
+        }
+      }
+    },
     "Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).": {
       "localizations": {
         "en": {
@@ -5504,6 +5994,16 @@
         }
       }
     },
+    "not": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "note"
+          }
+        }
+      }
+    },
     "okunamadı (%@)": {
       "localizations": {
         "en": {
@@ -5550,6 +6050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "meetings"
+          }
+        }
+      }
+    },
+    "ve %lld toplantı daha": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "and %lld more meetings"
           }
         }
       }
@@ -5695,6 +6205,16 @@
         }
       }
     },
+    "ÖRNEK SORULAR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EXAMPLE QUESTIONS"
+          }
+        }
+      }
+    },
     "ÖZET": {
       "localizations": {
         "en": {
@@ -5711,6 +6231,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "First create a folder with \"+\" in the sidebar"
+          }
+        }
+      }
+    },
+    "Önceki cevaplar bağlam olmaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier answers won't be used as context"
           }
         }
       }
@@ -5765,12 +6295,32 @@
         }
       }
     },
+    "Örn. Aino Virtanen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. Aino Virtanen"
+          }
+        }
+      }
+    },
     "Örn. Aino ile proje takvimi hakkında ne konuştuk?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "E.g. What did we discuss with Aino about the project schedule?"
+          }
+        }
+      }
+    },
+    "Örn. Ürün müdürü, Acme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. Product manager, Acme"
           }
         }
       }
@@ -5791,6 +6341,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summary"
+          }
+        }
+      }
+    },
+    "Ünvan ya da kurum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title or organization"
           }
         }
       }
@@ -5984,6 +6544,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A Finnish or English version of the note to send to colleagues"
+          }
+        }
+      }
+    },
+    "İş arkadaşlarına göndermek için notun başka dildeki sürümü": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The note in another language, to send to colleagues"
           }
         }
       }

@@ -63,6 +63,30 @@ final class MeetingNotifier {
         }
     }
 
+    /// Kayıt takvimdeki görüşme için kendiliğinden başladı (kullanıcı bilsin; katılımcılara haber vermeyi hatırlasın).
+    func announceAutoRecording(title: String) async throws {
+        let content: UNMutableNotificationContent = UNMutableNotificationContent()
+        content.title = String(localized: "Kayıt başladı: \(title)")
+        content.body = String(localized: "Takvimdeki görüşme başladı ve kayıt kendiliğinden açıldı. Katılımcılara kaydettiğini söylemeyi unutma.")
+        do {
+            try await center.add(UNNotificationRequest(identifier: MeetingNotificationID.micSuggestion, content: content, trigger: nil))
+        } catch {
+            throw NotificationError.scheduleFailed(reason: error.localizedDescription)
+        }
+    }
+
+    /// Takvimdeki görüşme için kayıt kendiliğinden başlatılamadı (anahtar, model ya da izin eksik olabilir).
+    func announceAutoRecordingFailed(title: String) async throws {
+        let content: UNMutableNotificationContent = UNMutableNotificationContent()
+        content.title = String(localized: "Kayıt başlatılamadı: \(title)")
+        content.body = String(localized: "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için AI-Notepad'i aç.")
+        do {
+            try await center.add(UNNotificationRequest(identifier: MeetingNotificationID.micSuggestion, content: content, trigger: nil))
+        } catch {
+            throw NotificationError.scheduleFailed(reason: error.localizedDescription)
+        }
+    }
+
     /// Başka bir uygulama mikrofonu açtı: görüşme başlamış olabilir.
     func suggestRecording() async throws {
         let content: UNMutableNotificationContent = UNMutableNotificationContent()

@@ -165,6 +165,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var highlights: [Highlight]?
     /// Takvimdeki katılımcıların adları (kayıt bir etkinliğe bağlandıysa).
     public private(set) var attendees: [String]?
+    /// Bağlı takvim etkinliğinin kimliği (`CalendarMeeting.id`); takvimden notu açmak için.
+    public private(set) var calendarEventID: String?
     /// Notun şablonu; eski toplantılarda ve genel şablonda nil.
     public private(set) var template: NoteTemplate?
     /// Notun paylaşım dillerindeki sürümleri (dil kodu → not); not yeniden yazılınca silinir.
@@ -277,6 +279,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(attendees newAttendees: [String]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.attendees = newAttendees
+        return copy
+    }
+
+    /// Takvim etkinliği bağlanmış kopya.
+    public func with(calendarEventID newID: String) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.calendarEventID = newID
         return copy
     }
 

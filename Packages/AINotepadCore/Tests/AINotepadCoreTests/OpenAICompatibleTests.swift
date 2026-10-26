@@ -80,6 +80,19 @@ struct OllamaTests {
         #expect(!text.isEmpty)
     }
 
+    // Akışlı yol: metin parça parça gelir, sondaki doğrulama tam metni verir (düşünme bölümü görünmez).
+    @Test func streamsAnswer() async throws {
+        let parts: StreamBox = StreamBox()
+        let text: String = try await streamLLM(
+            provider: .openAICompatible(try config()),
+            request: LLMRequest(tier: .smart, system: "Türkçe cevap ver.", userText: "Fince'de 'günaydın' nasıl denir? İki cümleyle anlat.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 180)
+        ) { (partial: String) -> Void in
+            parts.append(partial)
+        }
+        #expect(!text.isEmpty && parts.values.count > 1, "parça: \(parts.values.count)")
+        #expect(parts.values.allSatisfy { !$0.contains("<think>") })
+    }
+
     @Test func structuredMissedSummary() async throws {
         let segments: [LiveSegment] = [
             LiveSegment(id: SegmentID(speaker: .others, index: 0), startSec: 0, endSec: 4, text: "Päätimme, että raportti valmistuu perjantaina.", isFinal: true, failureMessage: nil, person: 1),
@@ -101,5 +114,23 @@ struct OllamaTests {
         #expect(config.apiKey == nil)
         #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "localhost", apiKey: nil, fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil) }
         #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "https://api.openai.com/v1", apiKey: "k", fastModel: "", smartModel: "b", fastEffort: nil, smartEffort: nil) }
+    }
+}
+
+/// Akış parçalarını toplar (testte eşzamanlı erişim için kilitli).
+private final class StreamBox: @unchecked Sendable {
+    private let lock: NSLock = NSLock()
+    private var stored: [String] = []
+
+    func append(_ value: String) {
+        lock.lock()
+        stored.append(value)
+        lock.unlock()
+    }
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
     }
 }

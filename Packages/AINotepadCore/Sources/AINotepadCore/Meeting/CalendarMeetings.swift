@@ -79,6 +79,25 @@ public func keytermsWithAttendees(attendees: [String], keyterms: [String], limit
     .map { $0 }
 }
 
+/// Takvim etkinliğinin kaydı: etkinliğe bağlanarak başlamış kayıt, yoksa (eski kayıtlar) aynı başlıkla etkinliğin
+/// 15 dk öncesiyle bitişi arasında başlamış kayıt; en yenisi. Saf fonksiyondur.
+public func recordedMeeting(meeting: CalendarMeeting, records: [MeetingRecord]) -> MeetingRecord? {
+    records.first { $0.calendarEventID == meeting.id }
+        ?? records
+            .filter { (record: MeetingRecord) -> Bool in
+                record.calendarEventID == nil && record.title == meeting.title
+                    && record.startedAt >= meeting.start.addingTimeInterval(-900) && record.startedAt <= meeting.end
+            }
+            .max { $0.startedAt < $1.startedAt }
+}
+
+/// Kendiliğinden kaydedilecek toplantı: şu an süren (10 dk önceden itibaren), görüşme bağlantısı olan (çevrim içi
+/// görüşme) ve henüz kaydı olmayan takvim toplantısı; yoksa nil. Saf fonksiyondur.
+public func meetingToAutoRecord(meetings: [CalendarMeeting], records: [MeetingRecord], now: Date) -> CalendarMeeting? {
+    currentMeeting(meetings: meetings.filter { $0.joinURL != nil }, now: now)
+        .flatMap { recordedMeeting(meeting: $0, records: records) == nil ? $0 : nil }
+}
+
 /// Kullanıcının tanıma sözlüğü: satır ya da virgülle ayrılmış; servis kurallarına uymayanlar (2–40 karakter, en fazla
 /// 5 sözcük) atılır. Saf fonksiyondur.
 public func customVocabulary(text: String) -> [String] {

@@ -58,6 +58,8 @@ enum SettingsKey {
     static let calendarEnabled: String = "calendar.enabled"
     static let meetingReminders: String = "calendar.reminders"
     static let micSuggestions: String = "calendar.micSuggestions"
+    /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
+    static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
     static let inPersonMode: String = "inPersonMode"
     /// Kullanıcının tanıma sözlüğü (satır başına bir ad ya da terim).
@@ -73,6 +75,8 @@ enum SettingsKey {
     static let accent: String = "appearance.accent"
     static let fontDesign: String = "appearance.fontDesign"
     static let textSize: String = "appearance.textSize"
+    /// Arayüz yazılarının ölçeği (1 = varsayılan).
+    static let uiScale: String = "appearance.uiScale"
     static let lineSpacing: String = "appearance.lineSpacing"
     static let bottomSpacing: String = "appearance.bottomSpacing"
     static let islandEnabled: String = "appearance.islandEnabled"
@@ -149,13 +153,14 @@ enum SettingsRange {
     static let missedWindowMinutes: ClosedRange<Int> = 1...10
     static let audioRetentionDays: ClosedRange<Int> = 7...365
     static let textSize: ClosedRange<Double> = 11...24
+    static let uiScale: ClosedRange<Double> = 0.85...1.3
     static let lineSpacing: ClosedRange<Double> = 0...12
     static let bottomSpacing: ClosedRange<Double> = 0...160
 }
 
 /// Görünüm ayarlarını varsayılana döndürür.
 func resetAppearanceSettings(defaults: UserDefaults) {
-    for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.textSize,
+    for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.uiScale, SettingsKey.textSize,
                 SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled] {
         defaults.removeObject(forKey: key)
     }
@@ -205,11 +210,13 @@ func registerDefaultSettings() {
         SettingsKey.inPersonMode: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
+        SettingsKey.autoRecord: false,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
         SettingsKey.customTemplate: "",
         SettingsKey.theme: AppTheme.light.rawValue,
         SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
-        SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,
+        SettingsKey.fontDesign: PanelAppearance.standard.fontChoice.storageValue,
+        SettingsKey.uiScale: PanelAppearance.standard.uiScale,
         SettingsKey.textSize: PanelAppearance.standard.textSize,
         SettingsKey.lineSpacing: PanelAppearance.standard.lineSpacing,
         SettingsKey.bottomSpacing: PanelAppearance.standard.bottomSpacing,

@@ -39,6 +39,7 @@ private func sampleRecord() -> MeetingRecord {
     @Test func shareTextUsesLanguageHeadings() {
         let finnish: String = shareText(record: sampleRecord(), note: sampleNote, language: .finnish)
         #expect(finnish.contains("## Yhteenveto") && finnish.contains("## Tehtävät") && !finnish.contains("talousarvio"))
+        #expect(shareText(record: sampleRecord(), note: sampleNote, language: .japanese).contains("## 決定事項"))
         #expect(shareText(record: sampleRecord(), note: sampleNote, language: nil).contains("talousarvio"))
         // Çeviride görev sayısı değişirse kullanılmaz.
         #expect(throws: LLMError.self) {
@@ -49,8 +50,9 @@ private func sampleRecord() -> MeetingRecord {
 
 extension CloudTests {
 @Suite struct SharedNoteCloudTests {
-    // Gerçek model: not Fince ve İngilizceye çevrilir; görev sayısı ve sahipliği korunur, kullanıcı adıyla yazılır.
-    @Test(arguments: ShareLanguage.allCases)
+    // Gerçek model: not Fince, İngilizce ve farklı yazı sistemli dillere çevrilir; görev sayısı ve sahipliği korunur,
+    // kullanıcı adıyla yazılır.
+    @Test(arguments: [ShareLanguage.finnish, .english, .german, .japanese, .arabic])
     func noteTranslatesForSharing(language: ShareLanguage) async throws {
         let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
         let note: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: sampleNote, language: language, userName: "Senol")) { (text: String) throws -> MeetingNote in
@@ -65,6 +67,14 @@ extension CloudTests {
             #expect(text.contains("aino") && ["markkinointi", "budjet", "rapor"].contains { text.contains($0) }, "\(text)")
         case .english:
             #expect(text.contains("aino") && ["marketing", "budget", "report"].contains { text.contains($0) }, "\(text)")
+        case .german:
+            #expect(text.contains("aino") && ["marketing", "budget", "bericht"].contains { text.contains($0) }, "\(text)")
+        case .japanese:
+            #expect(["予算", "マーケティング", "レポート", "報告"].contains { text.contains($0) }, "\(text)")
+        case .arabic:
+            #expect(["الميزانية", "التسويق", "التقرير"].contains { text.contains($0) }, "\(text)")
+        default:
+            Issue.record("beklenmeyen dil: \(language)")
         }
         #expect(!text.contains("bütçe") && !text.contains("rapor göndermek"), "çevrilmemiş: \(text)")
     }
