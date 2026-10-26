@@ -1,4 +1,5 @@
 import AINotepadCore
+import AINotepadUI
 import Foundation
 import Observation
 import os
@@ -48,6 +49,28 @@ final class AppModel {
     /// Kayıt başlatılabilir mi: Deepgram'da her zaman, WhisperKit'te model hazırsa.
     var isReadyToRecord: Bool {
         liveEngine == .deepgram || modelStatus == .ready
+    }
+
+    /// Ada ve panelin gösterdiği durum.
+    var viewState: LiveViewState {
+        makeLiveViewState(
+            transcript: transcript,
+            isRecording: isRecording,
+            startedAt: recordingStartedAt,
+            statusText: statusText,
+            languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording),
+            errors: errorMessages
+        )
+    }
+
+    /// Kayıt yokken gösterilen durum metni.
+    private var statusText: String {
+        switch (liveEngine, modelStatus) {
+        case (.deepgram, _): "Hazır · Deepgram"
+        case (.whisperKit, .loading): "Model hazırlanıyor…"
+        case (.whisperKit, .ready): "Hazır · Mac'te"
+        case (.whisperKit, .failed(let message)): message
+        }
     }
 
     /// Motoru değiştirir ve kaydeder; WhisperKit seçilirse model (henüz yoksa) yüklenir.

@@ -13,12 +13,21 @@ public struct IslandView: View {
     let layout: IslandLayout
     let isExpanded: Bool
     let onTap: @MainActor () -> Void
+    /// Fare adanın (saydam pay değil) üstüne gelince/çıkınca çağrılır.
+    let onHover: @MainActor (Bool) -> Void
 
-    public init(state: LiveViewState, layout: IslandLayout, isExpanded: Bool, onTap: @escaping @MainActor () -> Void) {
+    public init(
+        state: LiveViewState,
+        layout: IslandLayout,
+        isExpanded: Bool,
+        onTap: @escaping @MainActor () -> Void,
+        onHover: @escaping @MainActor (Bool) -> Void
+    ) {
         self.state = state
         self.layout = layout
         self.isExpanded = isExpanded
         self.onTap = onTap
+        self.onHover = onHover
     }
 
     public var body: some View {
@@ -58,6 +67,7 @@ public struct IslandView: View {
         .background(.black, in: islandShape)
         .contentShape(islandShape)
         .onTapGesture { onTap() }
+        .onHover { (hovering: Bool) -> Void in onHover(hovering) }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isExpanded)
     }
 

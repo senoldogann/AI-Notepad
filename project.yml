@@ -13,6 +13,9 @@ targets:
     sources: [App]
     dependencies:
       - package: AINotepadCore
+        product: AINotepadCore
+      - package: AINotepadCore
+        product: AINotepadUI
     info:
       path: App/Info.plist
       properties:

@@ -60,7 +60,7 @@ MainActor.assumeIsolated {
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}),
+            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")
