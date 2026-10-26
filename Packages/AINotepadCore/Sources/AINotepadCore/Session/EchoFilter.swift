@@ -39,19 +39,51 @@ public func suppressStoredEchoes(segments: [StoredSegment]) -> [StoredSegment] {
     return segments.enumerated().filter { !echoes.contains($0.offset) }.map(\.element)
 }
 
-/// Yankı olan "Sen" bölümlerinin sıra numaraları.
+/// Yankı olan "Sen" bölümlerinin sıra numaraları. "Diğerleri" bir kez başlangıca göre sıralanır; her "Sen" bölümü için
+/// yalnızca zamanca çakışabilecekler (ikili aramayla) taranır — uzun toplantıda her güncellemede tüm çiftler
+/// karşılaştırılmasın.
 private func echoIndices(candidates: [EchoCandidate]) -> Set<Int> {
-    let others: [EchoCandidate] = candidates.filter { !$0.isMe }
+    let others: [EchoCandidate] = candidates
+        .filter { !$0.isMe }
+        .sorted { (left: EchoCandidate, right: EchoCandidate) -> Bool in left.startSec < right.startSec }
+    let longest: Double = others.map { $0.endSec - $0.startSec }.max() ?? 0
     return Set(candidates.enumerated().compactMap { (item: (offset: Int, element: EchoCandidate)) -> Int? in
-        item.element.isMe && isEcho(mine: item.element, others: others) ? item.offset : nil
+        guard item.element.isMe else {
+            return nil
+        }
+        let simultaneous: [EchoCandidate] = overlapping(sortedOthers: others, longest: longest, mine: item.element)
+        return isEcho(mine: item.element, simultaneous: simultaneous) ? item.offset : nil
     })
 }
 
-private func isEcho(mine: EchoCandidate, others: [EchoCandidate]) -> Bool {
+/// `mine` ile zamanca çakışan "Diğerleri" bölümleri (başlangıca göre sıralı). Çakışan bir bölüm `mine` bitmeden başlar ve
+/// en uzun bölüm süresinden daha önce başlamış olamaz; aralık ikili aramayla bulunur. Saf fonksiyondur.
+private func overlapping(sortedOthers: [EchoCandidate], longest: Double, mine: EchoCandidate) -> [EchoCandidate] {
+    let upper: Int = firstIndex(sorted: sortedOthers, startingAtOrAfter: mine.endSec)
+    let lower: Int = firstIndex(sorted: sortedOthers, startingAtOrAfter: mine.startSec - longest)
+    guard lower < upper else {
+        return []
+    }
+    return sortedOthers[lower..<upper].filter { (other: EchoCandidate) -> Bool in other.endSec > mine.startSec }
+}
+
+/// Başlangıcı `seconds`'tan küçük olmayan ilk bölümün sırası (yoksa dizinin sonu). Saf fonksiyondur.
+private func firstIndex(sorted: [EchoCandidate], startingAtOrAfter seconds: Double) -> Int {
+    var low: Int = 0
+    var high: Int = sorted.count
+    while low < high {
+        let middle: Int = (low + high) / 2
+        if sorted[middle].startSec < seconds {
+            low = middle + 1
+        } else {
+            high = middle
+        }
+    }
+    return low
+}
+
+private func isEcho(mine: EchoCandidate, simultaneous: [EchoCandidate]) -> Bool {
     let duration: Double = mine.endSec - mine.startSec
-    let simultaneous: [EchoCandidate] = others
-        .filter { (other: EchoCandidate) -> Bool in other.startSec < mine.endSec && other.endSec > mine.startSec }
-        .sorted { (left: EchoCandidate, right: EchoCandidate) -> Bool in left.startSec < right.startSec }
     guard duration > 0, coveredDuration(intervals: simultaneous, from: mine.startSec, to: mine.endSec) / duration >= echoTimeCoverage else {
         return false
     }

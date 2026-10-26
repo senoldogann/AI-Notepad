@@ -36,6 +36,13 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
         ))
     }
 
+    // Model arada bir şemaya uyan ama yalnızca başlıklı not döndürür; kullanılamaz, yeniden istenir.
+    @Test func noteWithoutSummaryIsEmpty() {
+        #expect(throws: LLMError.empty) {
+            try parseMeetingNote(text: #"{"baslik":"Proje","gorevler":[],"kararlar":[],"ozet":" ","sozluk":[]}"#)
+        }
+    }
+
     @Test func markdownUsesSpeakerNames() {
         let record: MeetingRecord = MeetingRecord(
             id: "20261026-100000", title: "Proje toplantısı", startedAt: Date(timeIntervalSince1970: 1_800_000_000), endedAt: nil,
@@ -43,7 +50,7 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
             liveSegments: [], finalSegments: [stored("final-0", .others, 1, 5, "Hyvää huomenta.")],
             translations: [:], speakerNames: [1: "Aino"],
             note: MeetingNote(title: "Proje toplantısı", summary: "Kısa.", decisions: [], tasks: [NoteTask(owner: "Sen", description: "Slaytlar", dueDate: nil, isMine: true)], glossary: []),
-            audioDeleted: false, engine: .cloud, notice: nil
+            audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let markdown: String = meetingMarkdown(record: record)
         #expect(markdown.hasPrefix("# Proje toplantısı"))
@@ -91,7 +98,7 @@ extension CloudTests {
                 StoredSegment(key: "final-3", speaker: .others, person: 2, startSec: 80, endSec: 85, text: "Kiitos.", words: nil),
             ],
             translations: ["final-0": "Basın toplantısından.", "final-1": "Konu tasarruflar."],
-            speakerNames: [2: "Riikka"], note: nil, audioDeleted: false, engine: .cloud, notice: nil
+            speakerNames: [2: "Riikka"], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
         #expect(paragraphs.map(\.id) == ["final-0", "final-2", "final-3", "me-1"])

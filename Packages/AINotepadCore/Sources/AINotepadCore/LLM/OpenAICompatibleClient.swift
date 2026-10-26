@@ -22,7 +22,7 @@ public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEff
     } ?? request.system
     var body: [String: Any] = [
         "model": model,
-        "max_completion_tokens": request.maxTokens,
+        "max_completion_tokens": openAIMaxTokens(requested: request.maxTokens, effort: effort),
         "stream": false,
         "messages": [
             ["role": "system", "content": system],
@@ -39,6 +39,13 @@ public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEff
         ]
     }
     return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+}
+
+/// Gönderilecek `max_completion_tokens`: effort seçildiyse model akıl yürütür ve bu tokenlar da sınırdan harcanır,
+/// sınır en az `reasoningTokenFloor`; effort yoksa (akıl yürütmeyen modeller daha büyük sınırı 400 ile reddedebilir)
+/// isteğin sınırı. Saf fonksiyondur.
+public func openAIMaxTokens(requested: Int, effort: LLMEffort?) -> Int {
+    effort == nil ? requested : max(requested, reasoningTokenFloor)
 }
 
 /// İstek başlıkları; anahtar yoksa (Ollama) yetkilendirme başlığı gönderilmez. Saf fonksiyondur.
@@ -67,11 +74,21 @@ public func parseOpenAIResponse(data: Data, model: String) throws -> String {
     default:
         break
     }
-    let text: String = (choice.message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let text: String = strippingThinkBlock(text: choice.message.content ?? "")
     guard !text.isEmpty else {
         throw LLMError.empty
     }
     return text
+}
+
+/// Bazı uyumlu sunucuların (akıl yürüten yerel modeller) cevabın başına koyduğu `<think>…</think>` bölümünü atar;
+/// çeviri ya da JSON bu bölümle başlarsa panelde düşünme metni görünür, not ayrıştırılamazdı. Saf fonksiyondur.
+public func strippingThinkBlock(text: String) -> String {
+    let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("<think>"), let end = trimmed.range(of: "</think>") else {
+        return trimmed
+    }
+    return String(trimmed[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// Durum koduna ve gövdeye göre sonucu belirler; kurallar Claude ile aynıdır. Saf fonksiyondur.

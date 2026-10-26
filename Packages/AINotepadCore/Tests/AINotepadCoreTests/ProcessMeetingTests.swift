@@ -20,7 +20,7 @@ extension CloudTests {
         me.close()
         let recording: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: nil, status: .processing,
-            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil
+            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
 
         let log: StepLog = await StepLog()
@@ -45,6 +45,49 @@ extension CloudTests {
         #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "others.caf").path))
     }
 
+    // Son geçiş başarısız olursa (ör. ElevenLabs kotası/anahtarı) not yine canlı metinden yazılır, uyarı kalır.
+    @Test func finalPassFailureStillWritesNoteFromLiveText() async throws {
+        let directory: URL = try temporaryDirectory()
+        let others: CafRecorder = try CafRecorder(fileURL: directory.appending(path: "others.caf"))
+        try others.append(samples: try loadFixture(name: "fi-dialog"))
+        others.close()
+        let recording: MeetingRecord = MeetingRecord(
+            id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: .finnish, status: .processing,
+            failureMessage: nil, liveSegments: longMeetingSegments(rounds: 1),
+            finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        let result: MeetingRecord = await processMeeting(
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: "gecersiz")),
+            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), languageMode: .automatic, userName: "Doğan",
+            onStep: { (_: ProcessingStep) async -> Void in }
+        )
+        #expect(result.status == .done, "hata: \(result.failureMessage ?? "")")
+        #expect(result.note != nil)
+        #expect(result.finalSegments.isEmpty)
+        #expect(result.notice?.contains("Tekrar işle") == true, "uyarı: \(result.notice ?? "")")
+    }
+
+    // Ağ gidip "Sen"in canlı akışı koptuysa "Sen" kaydı da son geçişten geçer: konuşma not ve transkriptte kaybolmaz.
+    @Test func brokenLiveStreamTranscribesOwnAudio() async throws {
+        let directory: URL = try temporaryDirectory()
+        let me: CafRecorder = try CafRecorder(fileURL: directory.appending(path: "me.caf"))
+        try me.append(samples: try loadFixture(name: "fi-dialog"))
+        me.close()
+        let recording: MeetingRecord = MeetingRecord(
+            id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: .finnish, status: .processing,
+            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false,
+            engine: .cloud, notice: nil, meNeedsFinalPass: true
+        )
+        let result: MeetingRecord = await processMeeting(
+            record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),
+            llm: nil, languageMode: .fixed(.finnish), userName: "Doğan",
+            onStep: { (_: ProcessingStep) async -> Void in }
+        )
+        let mine: [StoredSegment] = meetingSegments(record: result).filter { $0.speaker == .me }
+        #expect(!mine.isEmpty, "uyarı: \(result.notice ?? "")")
+        #expect(mine.allSatisfy { $0.person == nil })
+    }
+
     @Test func missingAnthropicKeyFailsButKeepsTranscript() async throws {
         let directory: URL = try temporaryDirectory()
         let others: CafRecorder = try CafRecorder(fileURL: directory.appending(path: "others.caf"))
@@ -52,7 +95,7 @@ extension CloudTests {
         others.close()
         let recording: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: nil, status: .processing,
-            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil
+            failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         let result: MeetingRecord = await processMeeting(
             record: recording, directory: directory, finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs))),

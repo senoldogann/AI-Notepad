@@ -14,7 +14,9 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
         )
         let body: [String: Any] = try jsonObject(openAIRequestBody(request: request, model: openAIModel(config: sampleConfig, tier: request.tier), effort: .high))
         #expect(body["model"] as? String == "akilli")
-        #expect(body["max_completion_tokens"] as? Int == 512)
+        // Effort seçiliyse akıl yürütme de sınırdan harcar: en az 64.000; effort yoksa isteğin sınırı.
+        #expect(body["max_completion_tokens"] as? Int == 64000)
+        #expect(openAIMaxTokens(requested: 512, effort: nil) == 512)
         #expect(body["temperature"] == nil)
         #expect(body["effort"] == nil)
         #expect(body["reasoning_effort"] as? String == "high")
@@ -41,6 +43,15 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
         #expect(throws: LLMError.truncated(model: "m")) { try parseOpenAIResponse(data: length, model: "m") }
         #expect(throws: LLMError.refusal(category: nil)) { try parseOpenAIResponse(data: refusal, model: "m") }
         #expect(classifyOpenAIResponse(status: 503, data: Data("x".utf8), model: "m", requestID: nil) == .retryable(.http(status: 503, body: "x", model: "m", requestID: nil)))
+    }
+
+    // Yerel modeller cevabı `<think>` ile başlatabilir ve JSON'u çite sarabilir; not yine ayrıştırılmalı.
+    @Test func thinkBlockAndCodeFenceAreRemoved() throws {
+        let fenced: Data = Data(#"{"choices":[{"message":{"content":"<think>şemaya bakayım</think>\n```json\n{\"konu\":\"Rapor\",\"kararlar\":[],\"sendenIstenenler\":[\"Slaytlar\"]}\n```"},"finish_reason":"stop"}]}"#.utf8)
+        let summary: MissedSummary = try parseMissedSummary(text: try parseOpenAIResponse(data: fenced, model: "m"))
+        #expect(summary == MissedSummary(topic: "Rapor", decisions: [], askedOfYou: ["Slaytlar"]))
+        #expect(strippingThinkBlock(text: "Merhaba") == "Merhaba")
+        #expect(jsonBody(text: "{\"a\":1}") == "{\"a\":1}")
     }
 
     @Test func missingModelIsNotConfigured() async {

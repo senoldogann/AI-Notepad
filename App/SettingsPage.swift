@@ -305,7 +305,7 @@ private struct LLMSettings: View {
                 } header: {
                     Text("Canlı çeviri")
                 } footer: {
-                    Text("Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te düşünme bu görevde kapatılır.")
+                    Text("Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te high ve altında düşünme kapatılır; Opus, Fable ve xhigh/max'ta düşünme açık kalır, çeviriler gecikip birikebilir.")
                 }
                 Section {
                     ClaudeModelPicker(selection: $claudeSmartModel)

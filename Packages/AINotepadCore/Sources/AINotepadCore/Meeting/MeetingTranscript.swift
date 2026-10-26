@@ -38,12 +38,15 @@ public func activeWordIndex(words: [StoredWord], timeSec: Double) -> Int? {
 /// Bir paragraf bu süreyi geçince sonraki bölüm yeni paragraf başlatır (uzun konuşma tek duvar olmasın).
 let paragraphMaxSec: Double = 60
 
-/// Toplantının gösterilecek bölümleri: son geçiş varsa "Diğerleri" ondan, "Sen" canlıdan; zamana göre sıralı,
-/// boşlar ve hoparlör yankısı süzülmüş. Toplantılar penceresi, not ve dışa aktarma bunu kullanır. Saf fonksiyondur.
+/// Toplantının gösterilecek bölümleri: her taraf için son geçiş varsa ondan, yoksa canlıdan ("Sen" yalnızca canlı akış
+/// koptuysa son geçişten gelir); zamana göre sıralı, boşlar ve hoparlör yankısı süzülmüş. Toplantılar penceresi, not ve
+/// dışa aktarma bunu kullanır. Saf fonksiyondur.
 public func meetingSegments(record: MeetingRecord) -> [StoredSegment] {
-    let segments: [StoredSegment] = record.finalSegments.isEmpty
-        ? record.liveSegments
-        : record.finalSegments + record.liveSegments.filter { $0.speaker == .me }
+    let side: (Speaker) -> [StoredSegment] = { (speaker: Speaker) -> [StoredSegment] in
+        let final: [StoredSegment] = record.finalSegments.filter { $0.speaker == speaker }
+        return final.isEmpty ? record.liveSegments.filter { $0.speaker == speaker } : final
+    }
+    let segments: [StoredSegment] = side(.others) + side(.me)
     return suppressStoredEchoes(segments: segments
         .filter { !$0.text.isEmpty }
         .sorted { (left: StoredSegment, right: StoredSegment) -> Bool in left.startSec < right.startSec })

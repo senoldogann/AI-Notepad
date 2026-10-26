@@ -44,6 +44,28 @@
         }
       }
     },
+    "\"Sen\" kaydı yazıya dökülemedi: %@ Canlı metin eksik olabilir; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't transcribe the \"You\" recording: %@ The live text may be incomplete; you can try again with \"Reprocess\"."
+          }
+        }
+      }
+    },
+    "\"Sen\" metni eksik: kayıt sırasında akış koptu ve \"Sen\" sesi kaydedilmemiş.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"You\" text is incomplete: the stream dropped during recording and the \"You\" audio wasn't saved."
+          }
+        }
+      }
+    },
     "%@ / %@": {
       "extractionState": "stale",
       "localizations": {
@@ -966,13 +988,13 @@
         }
       }
     },
-    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor.": {
+    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
       "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded."
+            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
           }
         }
       }
@@ -1458,12 +1480,12 @@
         }
       }
     },
-    "Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te düşünme bu görevde kapatılır.": {
+    "Hızlı model ve düşük effort önerilir: çeviri 1–2 sn'de gelir. Haiku ve Sonnet'te high ve altında düşünme kapatılır; Opus, Fable ve xhigh/max'ta düşünme açık kalır, çeviriler gecikip birikebilir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A fast model with low effort is recommended: translations arrive in 1–2 s. Thinking is turned off for this task on Haiku and Sonnet."
+            "value": "A fast model and low effort are recommended: translations arrive in 1–2 s. Haiku and Sonnet turn thinking off at high and below; with Opus, Fable or xhigh/max, thinking stays on and translations can lag and pile up."
           }
         }
       }
@@ -2828,13 +2850,13 @@
         }
       }
     },
-    "Son geçiş başarısız": {
+    "Son geçiş başarısız: %@ Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
       "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Final pass failed"
+            "value": "Final pass failed: %@ The note was written from the live text; you can try again with \"Reprocess\"."
           }
         }
       }

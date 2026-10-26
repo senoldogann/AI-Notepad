@@ -47,15 +47,10 @@ public func claudeSupportsServerFallback(model: ClaudeModel) -> Bool {
     model != .haiku
 }
 
-/// Düşünme açıkken en az bu kadar `max_tokens`: düşünme de bu sınırdan harcar; `max` effort'ta kısa bir toplantının
-/// notu bile 16.000'i doldurup kesiliyordu. 64.000, `xhigh`/`max` için yayımlanan başlangıç değeridir; sınır yalnızca
-/// güvenlik payıdır (kullanılan kadar ödenir).
-let claudeThinkingTokenFloor: Int = 64000
-
 /// Gönderilecek `max_tokens`: düşünme kapalıysa (`thinking` alanı var) isteğin sınırı, açıksa en az
-/// `claudeThinkingTokenFloor`. Saf fonksiyondur.
+/// `reasoningTokenFloor`. Saf fonksiyondur.
 public func claudeMaxTokens(requested: Int, thinking: [String: String]?) -> Int {
-    thinking == nil ? max(requested, claudeThinkingTokenFloor) : requested
+    thinking == nil ? max(requested, reasoningTokenFloor) : requested
 }
 
 /// İstek gövdesi: seçili model ve effort, hızlı sınıfta mümkünse düşünme kapalı, destekleyen modelde sunucu tarafı

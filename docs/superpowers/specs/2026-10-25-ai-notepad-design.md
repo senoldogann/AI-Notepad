@@ -160,15 +160,20 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
    uyarı (`notice`) görünür ve not canlı transkriptten üretilir.
 3. Not: seçili LLM'in akıllı modeli (Claude Opus), yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
    sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi görev sahipliği için verilir.
-4. Canlı transkript silinmez; son geçiş ayrı saklanır. Bir adım başarısızsa toplantı `failed` olur, hata
-   saklanır; ses dosyaları kaldığı için "Tekrar işle" mümkündür.
+4. Canlı transkript silinmez; son geçiş ayrı saklanır. Son geçiş başarısızsa (kota, ağ) not yine canlı metinden
+   yazılır ve uyarı kalır; dönüştürme ya da not başarısızsa toplantı `failed` olur, hata saklanır; ses dosyaları
+   kaldığı için "Tekrar işle" mümkündür. Yeni son geçiş konuşmacıları baştan numaraladığı için verilmiş adlar silinir.
+5. Kayıt sırasında "Sen"in canlı akışı koptuysa (`meNeedsFinalPass`), son geçiş "Sen" kaydını da yazıya döker ve
+   canlı "Sen" metninin yerini alır (ağ kopması kullanıcının kendi sözlerini kaybettirmez).
+6. Kayıt ve işleme sürerken Mac boşta uykuya geçmez.
 
 **Storage**
 - Her toplantı kendi oturum klasöründe: `Sessions/<yyyyMMdd-HHmmss>/meeting.json` + `me.m4a`, `others.m4a`.
   SQLite + GRDB yerine JSON seçildi: tek kullanıcı, en fazla birkaç yüz toplantı; ek bağımlılık yok, elle
   okunabilir, bozulma tek toplantıyla sınırlı; arama bellekte. Yazma atomik (`.atomic`).
 - Saklama süresi (Ayarlar, 7–365 gün, varsayılan 30) dolan ses dosyaları açılışta, saatte bir ve Toplantılar
-  penceresi açılınca silinir; kayıttaki/işlenen toplantı atlanır; metin ve not kalır.
+  penceresi açılınca silinir; yalnızca işlenmesi bitmiş (`done`) toplantılar — başarısız ya da yarıda kalan toplantının
+  sesi "Tekrar işle" için tek eksiksiz kopya olduğundan kalır; kayıttaki/işlenen toplantı atlanır; metin ve not kalır.
 - Kayıt sonrası bellekteki toplantı listesi yerinde güncellenir (her kayıtta tüm klasörler yeniden okunmaz).
 - Açılışta `recording` ya da `processing` durumunda kalmış toplantı `interrupted` olur.
 
@@ -352,7 +357,11 @@ onu gizlemez). Kayıt bitince bekleyen çeviriler en fazla 10 sn beklenip toplan
 
 **Hatalar:** 408/429/5xx/ağ hatası 3 deneme (`retry-after` saniyesine uyulur, en fazla 30 sn; yoksa 1, 2 sn; uyarı
 logu), diğer 4xx denenmez; 200 içinde reddetme, `max_tokens`/`length` kesilmesi (`LLMError.truncated`), bozuk ve
-boş yanıt kesin hatadır. `LLMError.http` durum kodu, gövde, model ve istek kimliğini (`request-id` /
+boş yanıt kesin hatadır. Düşünme / akıl yürütme açıkken (Claude'da düşünme kapatılmamışsa, OpenAI uyumluda effort
+seçiliyse) çıktı sınırı en az 64.000'dir: düşünme de bu sınırdan harcar ve `max` effort'ta kısa bir notu bile
+kesiyordu. Claude yanıtları akışla (SSE) alınır; uzun düşünmede bağlantı boşta zaman aşımına düşmez, akış ortası
+aşırı yük yeniden denenir. Yapılandırılmış yanıtlar (not, "Ne kaçırdım?", konuşmacı incelemesi) şemaya uysa da boş
+gelebilir (ör. özeti boş not); boş ya da bozuk yanıt aynı istekle en fazla 3 kez yeniden sorulur. `LLMError.http` durum kodu, gövde, model ve istek kimliğini (`request-id` /
 `x-request-id`) içerir, anahtar içermez; gövde yalnızca özel (private) loglanır.
 
 ### 4.2 Toplantı durum makinesi
@@ -385,7 +394,10 @@ ses saklama süresi (gün, varsayılan 30); dil (Otomatik | Fince | İngilizce);
 - Dış API çağrıları: 3 deneme, üstel bekleme, her başarısız denemede uyarı logu, sonra son hata fırlatılır.
 - Gizli yedek yok: bulut STT çökerse yerele kendiliğinden geçilmez; ada hatayı gösterir.
 - Deepgram bağlantısı koparsa ~120 sn boyunca geri çekilmeli yeniden bağlanır; tükenirse o akış biter ve panelde
-  hata görünür. Ses kaydı her durumda diske yazılmaya devam eder.
+  hata görünür. Ses kaydı her durumda diske yazılmaya devam eder; metin toplantı sonunda son geçişle kayıttan çıkarılır.
+- Kayıt durunca son konuşmacı etiketleri en fazla 20 sn beklenir ("Bitiriliyor…" ağ takılınca dakikalarca sürmez).
+- Uzun toplantı: canlı panel blokları paragraflar gibi en fazla 60 sn; gruplama doğrusal, yankı filtresi yalnızca
+  zamanca çakışabilecek bölümlere bakar (4 saatlik transkriptte bir güncelleme milisaniyeler sürer).
 - Kullanıcıya gösterilen tüm hata metinleri tek saf fonksiyondan (`userFacingMessage`) geçer: Türkçe, ne
   yapılacağını söyler, anahtar ve toplantı metni içermez. Mikrofon ve sistem sesi hataları ayrı adlandırılır;
   ElevenLabs'in kota dolunca döndürdüğü 401 "anahtar geçersiz" değil "kota doldu" olarak gösterilir.
@@ -403,6 +415,8 @@ Swift Testing; `AINotepadCore` için `swift test`.
 - **Gerçek API testleri:** LLM ve bulut STT için mock yok. Anahtarlar Keychain'den (`AINotepad`)
   okunur; yalnızca `AINOTEPAD_CLOUD_TESTS=1` ile çalışır; CI'da çalışmaz. Gerçek Fince ses:
   repoya eklenen kısa, çok konuşmacılı bir kayıt.
+- **Senaryo testleri (pahalı):** `AINOTEPAD_SCENARIO_TESTS=1` (bulut testleriyle birlikte) — 1 saatlik toplantının
+  notu her Claude modelinde `max` effort'ta, asistan istekleri ve konuşmacı incelemesi, her modelde çeviri gecikmesi.
 - **Birim testleri (az):** VAD bölümleme, dil sabitleme, prompt oluşturma, not JSON ayrıştırma.
 - **Elle uçtan uca kontrol listesi:** gerçek Zoom ve Teams görüşmesi, ekran paylaşımı görünmezliği,
   çökme sonrası kurtarma.

@@ -33,7 +33,7 @@ extension ModelTests {
         let recording: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: nil, status: .processing,
             failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false,
-            engine: .local, notice: nil
+            engine: .local, notice: nil, meNeedsFinalPass: nil
         )
         let result: MeetingRecord = await processMeeting(
             record: recording, directory: directory,

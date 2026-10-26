@@ -75,8 +75,8 @@ public func audioDurationSec(url: URL) throws -> Double {
     }
 }
 
-/// Toplantı sonrası işleme: (1) `.caf` → `.m4a`, (2) kaydın tamamından son geçiş (bulut ya da yerel; atlanırsa
-/// toplantıda uyarı), (3) Türkçe not. Bir adım başarısız olursa o ana kadarki ilerleme korunur, durum `failed` olur;
+/// Toplantı sonrası işleme: (1) `.caf` → `.m4a`, (2) kaydın tamamından son geçiş (bulut ya da yerel; atlanır ya da
+/// başarısız olursa toplantıda uyarı, canlı metin kullanılır), (3) Türkçe not. Bir adım başarısız olursa o ana kadarki ilerleme korunur, durum `failed` olur;
 /// ses dosyaları kaldığı için yeniden işlenebilir.
 public func processMeeting(
     record: MeetingRecord,
@@ -103,30 +103,70 @@ public func processMeeting(
         }
     }
 
-    let othersAudio: URL = directory.appending(path: "others.m4a")
     await onStep(.finalPass)
     switch finalPass {
     case .skip(let reason):
         current = current.with(notice: String(localized: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı."))
-    case .run where !FileManager.default.fileExists(atPath: othersAudio.path):
-        current = current.with(notice: String(localized: "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı."))
     case .run(let transcriber):
-        do {
-            let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: othersAudio, languageMode: languageMode)
-            // Canlıdaki Türkçeler son geçiş bölümlerine taşınır; geçmişte de Türkçe görünsün.
-            current = current
-                .with(translations: current.translations.merging(
-                    alignTranslations(final: result.segments, live: current.liveSegments, translations: current.translations)
-                ) { (existing: String, _: String) -> String in existing })
-                .with(finalSegments: result.segments, language: current.language ?? result.language)
-                .with(notice: result.notice)
-        } catch {
-            return failed(record: current, step: String(localized: "Son geçiş başarısız"), error: error)
+        current = await transcribeOthers(record: current, directory: directory, transcriber: transcriber, languageMode: languageMode)
+        if current.meNeedsFinalPass == true {
+            current = await transcribeMe(record: current, directory: directory, transcriber: transcriber, languageMode: languageMode)
         }
     }
 
     await onStep(.writingNote)
     return await regenerateNote(record: current, llm: llm, userName: userName)
+}
+
+/// "Diğerleri" kaydının tamamından konuşmacılı son geçiş. Ses yoksa ya da geçiş başarısızsa canlı metin kalır, uyarı
+/// eklenir: son geçiş yalnızca metni ve konuşmacıları iyileştirir; başarısızlığı (kota, ağ, uzun yükleme) notu
+/// engellemez, "Tekrar işle" yeniden dener.
+private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber: any FinalTranscriber, languageMode: LanguageMode) async -> MeetingRecord {
+    let othersAudio: URL = directory.appending(path: "others.m4a")
+    guard FileManager.default.fileExists(atPath: othersAudio.path) else {
+        return record.with(notice: String(localized: "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı."))
+    }
+    do {
+        let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: othersAudio, languageMode: languageMode)
+        // Canlıdaki Türkçeler son geçiş bölümlerine taşınır; geçmişte de Türkçe görünsün.
+        return record
+            .with(translations: record.translations.merging(
+                alignTranslations(final: result.segments, live: record.liveSegments, translations: record.translations)
+            ) { (existing: String, _: String) -> String in existing })
+            .with(finalSegments: result.segments, language: record.language ?? result.language)
+            // Yeni son geçiş konuşmacıları baştan numaralar: eski adlar ("Konuşmacı 2 = Aino") başka kişiye düşerdi ve
+            // not yanlış kişilere görev yazardı. Adlar yeniden verilir ("Gözden geçir" önerir).
+            .with(speakerNames: [:])
+            .with(notice: result.notice)
+    } catch {
+        processLogger.error("Son geçiş başarısız, canlı metinle devam ediliyor, hata: \(String(describing: error), privacy: .private)")
+        return record.with(notice: String(localized: "Son geçiş başarısız: \(userFacingMessage(error: error)) Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin."))
+    }
+}
+
+/// "Sen"in canlı akışı koptuysa "Sen" kaydını da yazıya döker; bölümler "Sen" olarak son geçişe eklenir ve canlı
+/// "Sen" metninin yerini alır. Başarısızsa canlı metin kalır, uyarı eklenir.
+private func transcribeMe(record: MeetingRecord, directory: URL, transcriber: any FinalTranscriber, languageMode: LanguageMode) async -> MeetingRecord {
+    let meAudio: URL = directory.appending(path: "me.m4a")
+    guard FileManager.default.fileExists(atPath: meAudio.path) else {
+        return record.with(notice: joinedNotice(record.notice, String(localized: "\"Sen\" metni eksik: kayıt sırasında akış koptu ve \"Sen\" sesi kaydedilmemiş.")))
+    }
+    do {
+        let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: meAudio, languageMode: languageMode)
+        let meSegments: [StoredSegment] = result.segments.map { $0.asMe() }
+        return record.with(
+            finalSegments: record.finalSegments.filter { $0.speaker != .me } + meSegments,
+            language: record.language ?? result.language
+        )
+    } catch {
+        processLogger.error("\"Sen\" son geçişi başarısız, hata: \(String(describing: error), privacy: .private)")
+        return record.with(notice: joinedNotice(record.notice, String(localized: "\"Sen\" kaydı yazıya dökülemedi: \(userFacingMessage(error: error)) Canlı metin eksik olabilir; \"Tekrar işle\" ile yeniden deneyebilirsin.")))
+    }
+}
+
+/// İki uyarıyı birleştirir. Saf fonksiyondur.
+private func joinedNotice(_ first: String?, _ second: String) -> String {
+    first.map { "\($0) \(second)" } ?? second
 }
 
 /// Yalnızca notu (yeniden) üretir: saklı bölümler ve güncel konuşmacı adlarıyla. Ses gerekmez; ad verdikten
@@ -140,7 +180,9 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
-        let note: MeetingNote = try parseMeetingNote(text: try await sendLLM(provider: llm, request: request))
+        let note: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
+            try parseMeetingNote(text: text)
+        }
         return record.with(note: note).with(status: .done, failureMessage: nil)
     } catch {
         return failed(record: record, step: String(localized: "Not oluşturulamadı"), error: error)

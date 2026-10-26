@@ -49,14 +49,18 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
     )
 }
 
-/// Not yanıtını ayrıştırır; boş tarih "yok" demektir.
+/// Not yanıtını ayrıştırır; boş tarih "yok" demektir. Özeti boş not `LLMError.empty`dir.
 public func parseMeetingNote(text: String) throws -> MeetingNote {
     let raw: RawMeetingNote
     do {
-        raw = try JSONDecoder().decode(RawMeetingNote.self, from: Data(text.utf8))
+        raw = try JSONDecoder().decode(RawMeetingNote.self, from: Data(jsonBody(text: text).utf8))
     } catch {
         // Ayrıştırma ayrıntısı (eksik alan vb.) hata ayıklamada gerekir.
         throw LLMError.malformed(body: "\(error): \(text)")
+    }
+    // Şemaya uyan ama özeti boş not kullanılamaz (model arada bir yalnızca başlık döndürür); boş yanıt sayılır.
+    guard !raw.ozet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw LLMError.empty
     }
     return MeetingNote(
         title: raw.baslik,
