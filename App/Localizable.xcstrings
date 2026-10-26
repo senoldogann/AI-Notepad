@@ -3927,6 +3927,26 @@
         }
       }
     },
+    "Toplantını dinler, notunu yazar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listens to your meeting, writes your notes."
+          }
+        }
+      }
+    },
+    "Toplantıyı aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open meeting"
+          }
+        }
+      }
+    },
     "Toplantıyı sil": {
       "localizations": {
         "en": {

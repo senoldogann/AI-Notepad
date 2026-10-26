@@ -30,6 +30,10 @@ struct PanelHost: View {
 
     var body: some View {
         content
+            // Çalan toplantı canlı sayfada da altta görünür (geri dönünce ses durmaz).
+            .safeAreaInset(edge: .bottom) {
+                PlayerDock(model: model, player: player) { (id: String) -> Void in router.page = .meeting(id: id) }
+            }
             .modifier(ProcessingOverlayHost(model: model))
             // Canlı metin ile toplantı sayfası arasında yumuşak geçiş.
             .animation(.smooth(duration: 0.25), value: router.page)

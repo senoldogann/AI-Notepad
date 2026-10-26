@@ -328,26 +328,9 @@ struct MeetingDetailPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if player.meetingID == record.id {
-                NowPlayingBar(player: player, paragraphs: paragraphs, speakerNames: record.speakerNames)
-            }
-        }
         .onAppear {
             // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
             tab = record.note == nil ? .transcript : .summary
-        }
-        // Yalnızca bu toplantı çalıyorsa durur (aynı çalar başka bir sayfada başka toplantıyı çalıyor olabilir).
-        .onDisappear {
-            if player.meetingID == record.id {
-                player.stop()
-            }
-        }
-        // Saklama süresi sesi bu sayfa açıkken silebilir.
-        .onChange(of: record.audioDeleted) { (_: Bool, deleted: Bool) in
-            if deleted {
-                player.stop()
-            }
         }
     }
 
@@ -1469,12 +1452,43 @@ private struct TranscriptSection: View {
     }
 }
 
-/// Spotify tarzı çalma çubuğu: çalan konuşmacı ve sözü, konum çubuğu ve süreler, 10 sn geri / oynat-duraklat /
-/// 10 sn ileri, hız ve kapat.
+/// Çalan toplantının oynatıcısı (ana pencerenin ve panelin altında): sayfa değişse de ses sürer ve oynatıcı görünür.
+/// Toplantı silinir ya da sesi silinirse (saklama süresi) çalma durur.
+struct PlayerDock: View {
+    let model: AppModel
+    let player: MeetingAudioPlayer
+    /// Toplantı başlığına tıklanınca o toplantıyı açar.
+    let onOpen: @MainActor (String) -> Void
+
+    var body: some View {
+        // Bu gövde yalnızca çalan toplantı değişince yeniden hesaplanır; konum güncellemeleri çubuğun içinde kalır.
+        let record: MeetingRecord? = player.meetingID.flatMap { (id: String) -> MeetingRecord? in model.meetings.first { $0.id == id } }
+        Group {
+            if let record, !record.audioDeleted {
+                NowPlayingBar(
+                    player: player, paragraphs: transcriptParagraphs(record: record), speakerNames: record.speakerNames,
+                    title: record.note?.title ?? record.title, onOpen: { onOpen(record.id) }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: record?.id)
+        .onChange(of: player.meetingID.map { (id: String) -> Bool in record?.audioDeleted ?? true }) { (_: Bool?, gone: Bool?) in
+            if gone == true {
+                player.stop()
+            }
+        }
+    }
+}
+
+/// Spotify tarzı çalma çubuğu: toplantı başlığı (tıklayınca açılır), çalan konuşmacı ve sözü, konum çubuğu ve
+/// süreler, 10 sn geri / oynat-duraklat / 10 sn ileri, hız ve kapat.
 private struct NowPlayingBar: View {
     let player: MeetingAudioPlayer
     let paragraphs: [TranscriptParagraph]
     let speakerNames: [Int: String]
+    let title: String
+    let onOpen: @MainActor () -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -1482,19 +1496,18 @@ private struct NowPlayingBar: View {
         let current: TranscriptParagraph? = paragraphs.last { $0.startSec <= time }
         VStack(spacing: 8) {
             HStack(spacing: DesignTokens.Spacing.s) {
-                if let current {
-                    Circle()
-                        .fill(speakerColor(key: SpeakerKey(speaker: current.speaker, person: current.person)))
-                        .frame(width: 7, height: 7)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(paragraphLabel(paragraph: current, speakerNames: speakerNames))
+                Button(action: onOpen) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform")
+                            .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
+                            .foregroundStyle(appearance.accent.color)
+                        Text(title)
                             .appFont(size: 12, weight: .semibold)
-                        Text(current.turkish ?? current.text)
-                            .appFont(size: 11, weight: .regular)
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
+                .buttonStyle(.hoverPlain)
+                .hoverHint("Toplantıyı aç", alignment: .leading, edge: .top)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 Button {
                     player.cycleRate()
@@ -1518,6 +1531,22 @@ private struct NowPlayingBar: View {
                 .buttonStyle(.hoverPlain)
                 .foregroundStyle(.secondary)
                 .hoverHint("Çalmayı kapat", alignment: .trailing, edge: .top)
+            }
+            HStack(spacing: DesignTokens.Spacing.s) {
+                if let current {
+                    Circle()
+                        .fill(speakerColor(key: SpeakerKey(speaker: current.speaker, person: current.person)))
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(paragraphLabel(paragraph: current, speakerNames: speakerNames))
+                            .appFont(size: 11, weight: .medium)
+                            .foregroundStyle(.secondary)
+                        Text(current.turkish ?? current.text)
+                            .appFont(size: 12, weight: .regular)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
             }
             VStack(spacing: 2) {
                 Slider(
