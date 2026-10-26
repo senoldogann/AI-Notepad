@@ -381,7 +381,7 @@ private struct NoteSections: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
             if mine.isEmpty {
                 Label("Sana düşen görev yok.", systemImage: "checkmark.seal")
-                    .font(.callout)
+                    .font(appearance.secondaryFont)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -423,6 +423,9 @@ private struct NoteSections: View {
                 }
             }
         }
+        // Özet sekmesi transkriptle aynı metin ayarlarını kullanır (Ayarlar › Görünüm); bölüm başlıkları kendi yazı tipinde.
+        .font(appearance.bodyFont)
+        .lineSpacing(appearance.lineSpacing)
     }
 
     private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
@@ -438,12 +441,13 @@ private struct NoteSections: View {
 
 private struct TaskRow: View {
     let task: NoteTask
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "circle")
                 .font(.system(size: 9))
-                .foregroundStyle(task.isMine ? DesignTokens.meColor : .secondary)
+                .foregroundStyle(task.isMine ? appearance.accent.color : .secondary)
             let owner: Text = Text("\(task.owner): ").fontWeight(.semibold)
             let due: Text = Text(task.dueDate.map { " (\($0))" } ?? "").foregroundStyle(.secondary)
             Text("\(owner)\(task.description)\(due)")
