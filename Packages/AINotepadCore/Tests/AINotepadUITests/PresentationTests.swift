@@ -43,4 +43,11 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
     @Test func errorsKeepLastThree() {
         #expect(state(transcript: [], isRecording: true, errors: ["1", "2", "3", "4"]).errors == ["2", "3", "4"])
     }
+
+    @Test func latestSentenceJoinsLastOthersBlock() {
+        let first: LiveSegment = seg(.others, 0, 1, "Hienoa. Kuka voisi ottaa vastuun esityksestä", person: 2)
+        let second: LiveSegment = seg(.others, 1, 4, "perjantaina?", person: 2)
+        let viewState: LiveViewState = state(transcript: [first, second], isRecording: true, errors: [])
+        #expect(viewState.latestOthersSentence == "Hienoa. Kuka voisi ottaa vastuun esityksestä perjantaina?")
+    }
 }

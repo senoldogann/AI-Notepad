@@ -29,16 +29,20 @@ public func makeLiveViewState(
     languageText: String,
     errors: [String]
 ) -> LiveViewState {
-    let visible: [LiveSegment] = suppressEchoes(transcript: transcript)
-    let latest: String? = visible
-        .last { (segment: LiveSegment) -> Bool in segment.id.speaker == .others && !segment.text.isEmpty }
-        .map { (segment: LiveSegment) -> String in truncateFromStart(text: segment.text, maxCharacters: islandSentenceLimit) }
+    let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
+    // Son "Diğerleri" bloğunun tüm metni: tek parça cümlenin yalnızca sonunu gösterebilir.
+    let latest: String? = blocks
+        .last { (block: SpeakerBlock) -> Bool in block.speaker == .others }
+        .map { (block: SpeakerBlock) -> String in
+            block.segments.map(\.text).filter { (text: String) -> Bool in !text.isEmpty }.joined(separator: " ")
+        }
+        .flatMap { (text: String) -> String? in text.isEmpty ? nil : truncateFromStart(text: text, maxCharacters: islandSentenceLimit) }
     return LiveViewState(
         isRecording: isRecording,
         startedAt: startedAt,
         statusText: statusText,
         languageText: languageText,
-        blocks: groupBySpeaker(transcript: visible),
+        blocks: blocks,
         errors: Array(errors.suffix(3)),
         latestOthersSentence: latest,
         isIslandVisible: isRecording

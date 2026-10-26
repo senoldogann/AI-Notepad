@@ -49,6 +49,22 @@ MainActor.assumeIsolated {
         frame: NSRect(x: 120, y: 200, width: 380, height: 520)
     )
     print("panel \(panel)")
+    // Çentikli 14" ekran benzeri düzen; pencereler önizleme için ekranın ortasına konur.
+    let notchScreen: ScreenGeometry = ScreenGeometry(
+        frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 950),
+        safeAreaTop: 32,
+        auxiliaryTopLeft: CGRect(x: 0, y: 950, width: 660, height: 32),
+        auxiliaryTopRight: CGRect(x: 852, y: 950, width: 660, height: 32)
+    )
+    let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
+    for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
+        let number: Int = showWindow(
+            view: IslandView(state: sampleState(), layout: layout, isExpanded: expanded, onTap: {}),
+            frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
+        )
+        print("\(name) \(number)")
+    }
     // Çıktı bir dosyaya yönlendirildiğinde de hemen görünsün.
     fflush(stdout)
 }
