@@ -629,6 +629,16 @@
         }
       }
     },
+    "Ayarları aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
     "Ayarlar…": {
       "localizations": {
         "en": {
@@ -2173,16 +2183,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Setup"
-          }
-        }
-      }
-    },
-    "Kurulumu aç": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open setup"
           }
         }
       }

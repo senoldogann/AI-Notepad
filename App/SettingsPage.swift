@@ -5,6 +5,21 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Ayarlar bölümleri.
+/// `--ayar genel|gorunum|llm|anahtarlar|kisayollar` başlatma argümanından açılacak sekme (görsel kontrol için); yoksa
+/// genel. Saf fonksiyondur.
+private func launchSettingsSection(arguments: [String]) -> SettingsSection {
+    guard let index = arguments.firstIndex(of: "--ayar"), arguments.indices.contains(index + 1) else {
+        return .general
+    }
+    switch arguments[index + 1] {
+    case "gorunum": return .appearance
+    case "llm": return .llm
+    case "anahtarlar": return .keys
+    case "kisayollar": return .shortcuts
+    default: return .general
+    }
+}
+
 private enum SettingsSection: CaseIterable {
     case general
     case appearance
@@ -27,7 +42,7 @@ private enum SettingsSection: CaseIterable {
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
-    @State private var section: SettingsSection = .general
+    @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
     private var sectionPicker: some View {
         Picker("Bölüm", selection: $section) {

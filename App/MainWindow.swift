@@ -95,7 +95,8 @@ struct MenuBarLabel: View {
     }
 }
 
-/// Uygulamanın ana penceresi: kenar çubuğunda Ana sayfa, Toplantılar, Ayarlar ve Kurulum. Kayıt sırasındaki yüzen panel
+/// Uygulamanın ana penceresi: kenar çubuğunda Ana sayfa, Toplantılar ve Ayarlar; Kurulum yalnızca ilk açılışta tam
+/// pencere gösterilir. Kayıt sırasındaki yüzen panel
 /// ve ada ayrıca çalışır; pencere kapatılınca uygulama menü çubuğunda sürer.
 struct MainWindowView: View {
     let model: AppModel
@@ -107,7 +108,7 @@ struct MainWindowView: View {
 
     var body: some View {
         ZStack {
-            // Kurulum odaklı, tam pencere: kenar çubuğu yok, kart ortada.
+            // İlk açılışta bir kez: tam pencere, kenar çubuğu yok, içerik ortada.
             if router.section == .setup {
                 SetupScreen(model: model, router: router, shortcuts: shortcuts)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -135,10 +136,9 @@ struct MainWindowView: View {
                     }
                 }
             )) {
-                Label("Ana sayfa", systemImage: "house").tag(MainSection.home)
-                Label("Toplantılar", systemImage: "list.bullet.rectangle").tag(MainSection.meetings)
-                Label("Ayarlar", systemImage: "gearshape").tag(MainSection.settings)
-                Label("Kurulum", systemImage: "wand.and.stars").tag(MainSection.setup)
+                sidebarItem(title: "Ana sayfa", symbol: "house", section: .home)
+                sidebarItem(title: "Toplantılar", symbol: "list.bullet.rectangle", section: .meetings)
+                sidebarItem(title: "Ayarlar", symbol: "gearshape", section: .settings)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
             .safeAreaInset(edge: .bottom) {
@@ -151,6 +151,20 @@ struct MainWindowView: View {
                 .transition(.opacity)
                 .animation(.smooth(duration: 0.25), value: router.section)
         }
+        // Kenar çubuğu açma/kapama düğmesi kaldırıldı: cam arka planı kenar çubuğunun köşesinden taşıyordu; dar
+        // kenar çubuğunu gizlemeye gerek yok.
+        .toolbar(removing: .sidebarToggle)
+    }
+
+    /// Kenar çubuğu öğesi; seçilince simgesi zıplar.
+    private func sidebarItem(title: LocalizedStringKey, symbol: String, section: MainSection) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: symbol)
+                .symbolEffect(.bounce, value: router.section == section)
+        }
+        .tag(section)
     }
 
     @ViewBuilder
@@ -172,7 +186,7 @@ struct MainWindowView: View {
     }
 }
 
-/// Kurulum ekranı: kenar çubuğu yok; simge ve cam kart pencerenin ortasında. Kaydırma alanı, uzun ve satır kaydıran
+/// Kurulum ekranı (ilk açılışta bir kez): kenar çubuğu ve arka plan kartı yok; simge ve adımlar pencerenin ortasında. Kaydırma alanı, uzun ve satır kaydıran
 /// "Hoş geldin" metinlerinin pencereyi ekran boyuna büyütüp içeriği boş bırakmasını önler; kart yüksekliği sabit
 /// (adımlar arasında düğmeler yerinde kalır, formlar kendi içinde kayar).
 private struct SetupScreen: View {
@@ -186,10 +200,11 @@ private struct SetupScreen: View {
                 VStack(spacing: DesignTokens.Spacing.l) {
                     Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                         .resizable()
-                        .frame(width: 72, height: 72)
+                        .frame(width: 88, height: 88)
+                        .floating3D()
+                        .tilt3D(maxAngle: 14)
                     SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
                         .frame(width: min(660, max(geometry.size.width - 64, 360)), height: 540)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 }
                 .padding(.vertical, DesignTokens.Spacing.xl)
                 .frame(maxWidth: .infinity, minHeight: geometry.size.height)
@@ -255,6 +270,8 @@ private struct HomePage: View {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
                     .resizable()
                     .frame(width: 64, height: 64)
+                    .floating3D()
+                    .tilt3D(maxAngle: 14)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("AI-Notepad")
                         .font(.system(size: 28, weight: .bold))
@@ -272,7 +289,9 @@ private struct HomePage: View {
             switch model.phase {
             case .recording:
                 HStack(spacing: DesignTokens.Spacing.m) {
-                    Circle().fill(.red).frame(width: 10, height: 10)
+                    Image(systemName: "record.circle.fill")
+                        .foregroundStyle(.red)
+                        .symbolEffect(.pulse, isActive: !model.isPaused)
                     if let startedAt = model.recordingStartedAt {
                         Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
                             .font(.system(size: 22, weight: .semibold).monospacedDigit())
@@ -323,7 +342,7 @@ private struct HomePage: View {
             ForEach(model.setupProblems, id: \.self) { (problem: String) in
                 Text(problem).foregroundStyle(.secondary)
             }
-            Button("Kurulumu aç") { router.section = .setup }
+            Button("Ayarları aç") { router.section = .settings }
         }
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -52,7 +52,7 @@ struct AINotepadApp: App {
                 island.install()
                 model.performStartupMaintenance()
                 shortcuts.registerAll()
-                // İlk açılışta ana pencere kurulumda açılır; sonra Ana sayfada (kenar çubuğunda "Kurulum" hep var).
+                // Kurulum yalnızca ilk açılışta bir kez (tam pencere); sonra ayarlar Ayarlar'dan değişir.
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
@@ -221,9 +221,6 @@ private struct MenuContent: View {
 
         Button("Ayarlar", systemImage: "gearshape") {
             openMainWindow(router: router, section: .settings)
-        }
-        Button("Kurulum", systemImage: "wand.and.stars") {
-            openMainWindow(router: router, section: .setup)
         }
 
         if model.liveEngine == .whisperKit {
