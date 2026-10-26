@@ -39,6 +39,11 @@ struct AINotepadApp: App {
                 onboarding.showIfNeeded()
             }
         }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                shortcuts.unregisterAll()
+            }
+        }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir.
         if engine == .whisperKit {
             Task { await model.loadModel() }

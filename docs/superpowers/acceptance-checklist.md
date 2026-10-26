@@ -52,5 +52,20 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Kayıt sırasında uygulamayı zorla kapat (Etkinlik Monitörü) → yeniden aç: toplantı "Yarıda kaldı"; "Tekrar işle" çalışır.
 - [ ] "Sesi sil": m4a dosyaları gider, metin/not kalır. 30 günden eski toplantının sesi açılışta silinir.
 
+## Tamamlama (aşama 6)
+- [ ] İlk açılışta karşılama penceresi: mikrofon "İzin ver" → izin penceresi; "İzin penceresini aç" → sistem sesi izni; ad, motor, anahtarlar; "Başla" sonrası bir daha açılmaz; menüde "Kurulum…" ile yeniden açılır.
+- [ ] Anahtarı eksik motor seçiliyken menüde kırmızı satır; Ayarlar'dan ekleyince kaybolur. Deepgram ve ElevenLabs ikisi de eksikken kayıt: iki hata birlikte.
+- [ ] Kayıt sırasında menü → "Dili değiştir" → İngilizce (ya da panelin dil çipi, adanın sağ tık menüsü): sonraki cümleler İngilizce, dil çipi "🇬🇧 İngilizce".
+- [ ] Kaydı durdurunca ada, panel ve menü "Bitiriliyor…" gösterir; bu sırada yeni kayıt başlatılamaz; bitince toplantı işlenir.
+- [ ] Ayarlar › Kısayollar: kayıt kısayolunu ⌃⌥K yap → ⌃⌥K çalışır, ⌃⌥R artık çalışmaz; ⌃⌥Space ya da yalnızca "K" reddedilir ve eski kısayol çalışır; menüdeki ipucu güncellenir.
+- [ ] Ayarlar › Genel: "Ne kaçırdım?" 5 dk → kart son 5 dakikayı özetler; ses saklama 7 gün → 7 günden eski toplantıların sesi silinir.
+- [ ] Ayarlar › LLM: OpenAI uyumlu + Ollama (`http://localhost:11434/v1`, hızlı bir model) → "Bağlantıyı dene" Türkçe cevap; kayıtta çeviri, "Ne kaçırdım?" ve not Ollama ile.
+- [ ] Kayıt sırasında Anthropic anahtarını kaldır → çeviri hatası, bloğun altında "Çeviri alınamadı · Tekrar dene"; anahtarı geri ekle → "Tekrar dene" çevirir.
+- [ ] Toplantılar: zaman damgasına tıklayınca o andan ses çalar, çalan satır mavi çizgiyle vurgulu, alttaki çubukta duraklat/konum; "Sesi sil" sonrası çalma düğmeleri yok.
+- [ ] Motor "Mac'te" ile 2+ dk'lık çok konuşmacılı video: Wi-Fi kapalıyken kayıt; toplantı sonrası "Konuşmacı 1/2…" (SpeakerKit), not için LLM gerekir.
+- [ ] Bulut motorunda ElevenLabs anahtarını kaldırıp kayıt: toplantıda "Son geçiş yapılmadı: ElevenLabs anahtarı kayıtlı değil." uyarısı.
+- [ ] VoiceOver (⌘F5): ada "AI-Notepad, Kayıtta, 🇫🇮 Fince, …" okunur; panel düğmeleri adlarıyla okunur.
+- [ ] Kayıt sırasında AirPods bağla: "Sen" ve "Diğerleri" zaman damgaları kaymaz (toplantı sonrası transkriptte sıralama doğru).
+
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).

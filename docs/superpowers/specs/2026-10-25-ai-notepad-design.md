@@ -77,7 +77,7 @@ AudioCapture ──► Transcription ──► LLM (çeviri) ──► Canlı UI
      │            (ElevenLabs, dakikada bir)             │
      ▼                                                   ▼
  .caf → .m4a ──► PostProcessing ──────────────────► Storage ──► Ana pencere
-                 (2. geçiş STT + diarization + not)  (SQLite)   (geçmiş, not, dışa aktarma)
+                 (2. geçiş STT + diarization + not)  (JSON)     (geçmiş, not, dışa aktarma)
 ```
 
 Proje yapısı: Xcode uygulama hedefi (`AINotepad`) + yerel Swift paketi (`AINotepadCore`).
@@ -92,8 +92,11 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   izni gerektirmez; `NSAudioCaptureUsageDescription` ile ses yakalama izni ister.
 - Çıktı: iki akış, 16 kHz mono Float32 — `speaker = .me` ve `speaker = .others`.
 - Eşzamanlı olarak diske iki mono `.caf` yazar (`me.caf`, `others.caf`; 16 kHz Int16). İki cihazın
-  saatleri farklı olduğu için akışlar ayrı dosyalarda tutulur. Toplantı bitince ikisi tek bir
-  2 kanallı `.m4a`'da birleştirilir (sol: Sen, sağ: Diğerleri) ve `.caf`'ler silinir.
+  saatleri farklı olduğu için akışlar ayrı dosyalarda tutulur (toplantı bitince ayrı `.m4a`'lar).
+- İki akış kaydın başladığı ana hizalanır (`clockAlignedStream`): geç başlayan akış (izin penceresi) ve cihaz
+  değişiminde yakalama yeniden kurulurken oluşan 0,5 sn'den uzun boşluklar sessizlikle doldurulur; böylece "Sen"
+  ve "Diğerleri" aynı zaman çizgisinde kalır.
+- Ses thread'indeki tekrarlayan hata logları dakikada bire seyreltilir.
 - STT/LLM'den tamamen bağımsızdır: aşağı akıştaki hiçbir hata kaydı durdurmaz.
 
 **Transcription** — iki canlı motor, ikisi de aynı `LiveSessionEvent` olaylarını üretir:
@@ -105,10 +108,16 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
   ayırma penceresinin (15. sn) ElevenLabs dil sonucu olasılık ≥ 0,8 ile `eng` ise iki akış `en`'e geçer
   (yeniden bağlanma yolu), `fin` ise Fince kalır; dil kilitlenir. Güvensizse sonraki pencere denenir.
   (`multi` ölçümde güvenilmez çıktı: sentetik Fince diyaloğu Norveççe sandı; kullanıcı bu yolu seçti.)
-  Bağlantı koparsa geri çekilmeli yeniden bağlanır; arada gelen ses tamponda bekleyip sonra gönderilir.
+  Bağlantı koparsa geri çekilmeli yeniden bağlanır (~120 sn bütçe, en fazla 5 sn bekleme); arada gelen ses ve
+  kesinleşmemiş gönderilmiş ses bağlanınca sırasıyla yeniden gönderilir. Kapanışta süren yeniden bağlanma
+  (en fazla 5 sn) beklenir ki kuyruktaki son ses gönderilsin.
   Yakalama sessizlikte de sürekli ses ürettiği için `KeepAlive` gerekmez.
 - **WhisperKit (Mac'te):** mevcut `TranscriptionEngine` + bölümleyici + seri işçi (aşama 1).
-  Model yalnızca bu motor seçiliyse yüklenir. Dil 30 sn sonra kilitlenir.
+  Model yalnızca bu motor seçiliyse yüklenir. Dil 30 sn sonra kilitlenir. Bölümleyici konuşmadan önceki sessiz
+  çerçeveyi (100 ms) bölümün başına ekler ki ilk hece kesilmesin; bu ön-kayıt konuşma süresine sayılmaz.
+- **Toplantı ortasında dil değişimi:** oturum `LiveSessionHandle` döndürür; kullanıcı kayıt sırasında dili
+  (menü, panelin dil çipi ya da adanın sağ tık menüsü) değiştirirse bulutta iki Deepgram akışı, WhisperKit'te
+  sonraki işler o andan itibaren yeni dille yapılır ve dil kilitlenir (otomatik algılama artık değiştirmez).
 
 **LiveDiarization** (yalnızca Deepgram motoruyla)
 - İlk pencere 15. sn'de (dil algılama için erken), sonra her 60 sn'de, "Diğerleri"nin son 120 sn'si (16 kHz WAV) ElevenLabs `POST /v1/speech-to-text`
@@ -122,7 +131,8 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - Bir pencere başarısız olursa hata gösterilir, bölümler "Diğerleri" kalır, sonraki pencere denenir.
 
 **LLM**
-- `protocol LLMClient` — `AnthropicClient`, `OpenAICompatibleClient`.
+- Sağlayıcıdan bağımsız `LLMRequest` (`tier: fast | smart`) + `sendLLM(provider:request:)`; `LLMProvider` =
+  Anthropic ya da OpenAI uyumlu (temel adres + hızlı/akıllı model + isteğe bağlı anahtar). Ayrıntı §4.4.
 - Görevler (her biri ayrı, tek amaçlı fonksiyon):
   - `translateSegment`: yalnızca "Diğerleri"nin kesin bölümleri; son birkaç bölüm bağlam olarak eklenir.
   - `summarizeRecent`: son N dk → *konu*, *kararlar*, *senden istenenler*.
@@ -133,11 +143,17 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 **PostProcessing** (aşama 5; kayıt bitince otomatik, "Tekrar işle" ile elle)
 1. `me.caf` ve `others.caf` ayrı ayrı AAC `.m4a`'ya (16 kHz mono) dönüştürülür, `.caf`'ler silinir.
    (İki kanallı birleştirme yapılmaz: cihaz saatleri farklı, ayrı dosyalar daha sağlam.)
-2. `others.m4a` tek istekle ElevenLabs Scribe v2'ye (`diarize=true`) gönderilir: kaydın tamamında en doğru metin ve
-   kesin konuşmacılar (`speaker_N` → "Konuşmacı N"). Kelimeler konuşmacı değişiminde ya da 1,5 sn'den uzun
-   boşlukta kesin bölümlere ayrılır (`pass = final`). "Sen" için canlı Deepgram bölümleri kullanılır.
-   WhisperKit motorunda bu adım atlanır; not canlı transkriptten üretilir (yerel SpeakerKit sonraki iş).
-3. Not: Claude Opus, yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
+2. Son geçiş kaydın motoruna göre (`MeetingRecord.engine`; yerel toplantı buluta gönderilmez), dil kaydın
+   kilitlenmiş dilidir (yoksa otomatik):
+   - **Bulut:** `others.m4a` tek istekle ElevenLabs Scribe v2'ye (`diarize=true`); zaman aşımı en az 300 sn,
+     kaydın her dakikası için +10 sn.
+   - **Yerel (internetsiz):** `others.m4a` canlıdaki WhisperKit modeliyle (large-v3 turbo, ayrı örnek; canlı motor
+     meşgul edilmez) VAD parçalı, kelime zamanlı yazıya dökülür; SpeakerKit (Pyannote) konuşmacı dönemlerini verir;
+     her kelime en çok örtüştüğü (yoksa en yakın) dönemin konuşmacısını alır.
+   Kelimeler konuşmacı değişiminde ya da 1,5 sn'den uzun boşlukta kesin bölümlere ayrılır ("Konuşmacı N").
+   "Sen" için canlı bölümler kullanılır. Son geçiş yapılamazsa (anahtar yok, `others` sesi yok) toplantıda
+   uyarı (`notice`) görünür ve not canlı transkriptten üretilir.
+3. Not: seçili LLM'in akıllı modeli (Claude Opus), yapılandırılmış çıktı `{baslik, ozet, kararlar[], gorevler[{sahip, aciklama, tarih?, benimMi}],
    sozluk[{terim, anlam}]}`. Kullanıcının adı (Ayarlar) ve "Sen" etiketi görev sahipliği için verilir.
 4. Canlı transkript silinmez; son geçiş ayrı saklanır. Bir adım başarısızsa toplantı `failed` olur, hata
    saklanır; ses dosyaları kaldığı için "Tekrar işle" mümkündür.
@@ -146,16 +162,28 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - Her toplantı kendi oturum klasöründe: `Sessions/<yyyyMMdd-HHmmss>/meeting.json` + `me.m4a`, `others.m4a`.
   SQLite + GRDB yerine JSON seçildi: tek kullanıcı, en fazla birkaç yüz toplantı; ek bağımlılık yok, elle
   okunabilir, bozulma tek toplantıyla sınırlı; arama bellekte. Yazma atomik (`.atomic`).
-- Uygulama açılışında süresi dolan (varsayılan 30 gün) ses dosyaları silinir; metin ve not kalır.
+- Saklama süresi (Ayarlar, 7–365 gün, varsayılan 30) dolan ses dosyaları açılışta, saatte bir ve Toplantılar
+  penceresi açılınca silinir; kayıttaki/işlenen toplantı atlanır; metin ve not kalır.
+- Kayıt sonrası bellekteki toplantı listesi yerinde güncellenir (her kayıtta tüm klasörler yeniden okunmaz).
 - Açılışta `recording` ya da `processing` durumunda kalmış toplantı `interrupted` olur.
 
 **Settings**
-- API anahtarları Keychain'de (servis `AINotepad`, hesaplar `deepgram`, `elevenlabs`); diğer ayarlar
-  `UserDefaults`'ta. Ayarlar penceresi: iki anahtar alanı (gizli giriş) ve canlı motor seçimi.
-- Seçili motorun anahtarı yoksa kayıt başlatılmaz; menü ve panel açık Türkçe hata gösterir.
+- API anahtarları Keychain'de (servis `AINotepad`, hesaplar `deepgram`, `elevenlabs`, `anthropic`, `openai`);
+  diğer ayarlar `UserDefaults`'ta. Anahtarlar arka planda okunur (izin penceresi arayüzü dondurmaz);
+  `security` ile eklenmiş öğe için ilk okumada macOS izin sorar ("Her Zaman İzin Ver"). Öğeyi uygulamaya
+  devretmek (sil + yeniden ekle) seçilmedi: Terminal'den okuyan bulut testleri izin penceresinde takılırdı.
+- Ayarlar penceresi sekmeli: Genel (motor, ad, görünüm, "Ne kaçırdım?" süresi 1–10 dk, ses saklama süresi),
+  LLM (sağlayıcı, adres, modeller, anahtar, "Bağlantıyı dene"), Anahtarlar (Deepgram, ElevenLabs), Kısayollar
+  (kaydedici).
+- Seçili motorun anahtarları yoksa kayıt başlatılmaz; eksiklerin hepsi birlikte bildirilir. Eksik anahtar/ayar
+  ve kısayol hataları kayıt başlamadan menüde kırmızı satır olarak görünür. Kayıt sırasında anahtar kaydedilirse
+  çeviri yeni anahtarla sürer.
 
 **UI**
-- `MenuBarExtra`: kayıt başlat/durdur, ana pencere, ayarlar.
+- `MenuBarExtra`: kayıt başlat/durdur ("Bitiriliyor…" sırasında kapalı), ada + panel, kırmızı kurulum sorunları,
+  dil (kayıtta "Dili değiştir"), ekran görüntüsünde gizle, Toplantılar, Ayarlar, Kurulum, Çık.
+- **Bitiriliyor durumu:** durdurmadan oturum bitene kadar (son metin, bekleyen çeviriler en fazla 10 sn, son
+  konuşmacı ayırma) menü, panel ve ada "Bitiriliyor…" gösterir; yeni kayıt başlatılamaz.
 - **Ada** (`NSPanel`, çentiğe hizalı, her zaman üstte): kayıt göstergesi + süre, algılanan dil,
   son "Diğerleri" cümlesinin Türkçesi. Hata durumunda kırmızıya döner. Çentiksiz ekranda
   (harici monitör) üst ortada hap biçiminde görünür.
@@ -166,12 +194,16 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 - "Ekran görüntülerinde ve kayıtlarda gizle" ayarı (varsayılan açık) `sharingType = .none` uygular.
   Ölçüm: macOS 26'da sistem ekran görüntüsü bunu dikkate almadı, panel görüntüde çıktı. Görünmezlik
   garanti edilmez; asıl güvence ada + paneli birlikte gizleyen kısayoldur.
-- **Ana pencere**: toplantı listesi (arama ile), toplantı notu, transkript (cümleye tıklayınca
-  ses o andan çalar), konuşmacıları adlandırma, Markdown dışa aktarma/kopyalama,
-  sesi silme, "Tekrar işle".
-- **Karşılama ekranı**: mikrofon ve sistem sesi izinlerini kontrol eder; adı, LLM sağlayıcısını
-  ve anahtarı ister; WhisperKit modelini indirir.
-- Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir:
+- **Ana pencere**: toplantı listesi (arama ile), toplantı notu, transkript (zaman damgasına tıklayınca
+  ilgili kayıt — "Sen" için `me`, diğerleri için `others` — o andan 0,3 sn önce çalar; çalan bölüm vurgulanır;
+  altta cam çalma çubuğu), konuşmacıları adlandırma, Markdown dışa aktarma/kopyalama, sesi silme, "Tekrar işle",
+  "Notu yeniden oluştur", son geçiş uyarısı. Ses silinmişse ya da toplantı kayıttaysa çalma düğmesi yok.
+- **Karşılama ekranı** (ilk açılışta bir kez, sonra menüde "Kurulum…"): hoş geldin → izinler (mikrofon durumu +
+  izin iste; sistem sesi için 2 sn deneme yakalamasıyla macOS izin penceresi, macOS bu iznin durumunu
+  sorgulatmadığı için açık metin; reddedildiyse Sistem Ayarları kısayolu) → ad + motor → anahtarlar → kısayollar.
+- Kısayollar — yalnızca iki tane, aynı tuş çiftiyle, ayarlardan değiştirilebilir (değişince eskisi bırakılır;
+  yalnızca ⇧ ya da değiştiricisiz harf, sistem kısayolu, diğer eylemin kısayolu ya da başka uygulamanın kısayolu
+  reddedilir ve eski kısayol çalışmaya devam eder):
   kayıt başlat/durdur ⌃⌥R, ada + paneli göster/gizle ⌃⌥P (⌃⌥Space macOS'ta giriş kaynağı kısayolu olduğu için kullanılmaz).
 
 ### 4.3 Görsel tasarım (aşama 3)
@@ -209,9 +241,13 @@ kaydedilmez ve menüde adıyla bildirilir.
 
 ### 4.4 LLM (aşama 4)
 
-**Sağlayıcı:** Anthropic Claude (kullanıcı seçimi), ham HTTP `POST https://api.anthropic.com/v1/messages`
+**Sağlayıcı:** varsayılan Anthropic Claude, ham HTTP `POST https://api.anthropic.com/v1/messages`
 (Swift için resmi SDK yok), başlıklar `x-api-key`, `anthropic-version: 2026-10-21`. Anahtar Keychain'de
-(`AINotepad` / `anthropic`). OpenAI uyumlu istemci sonraki iş.
+(`AINotepad` / `anthropic`). İkinci seçenek **OpenAI uyumlu** (OpenAI, Ollama, OpenCode Go…):
+`POST {temel adres}/chat/completions`, `Authorization: Bearer` (anahtar yoksa gönderilmez), sistem + kullanıcı
+mesajı, `max_completion_tokens`, şema varsa katı `response_format: json_schema`. Ölçüm: Ollama'daki model
+`response_format`'ı uygulamadı (Markdown döndü), bu yüzden şema sistem mesajında da verilir. Çeviri hızlı modelle,
+diğerleri akıllı modelle (ikisi Ayarlar'dan).
 
 **Modeller:** canlı cümle çevirisi `claude-haiku-5-5` (düşünme kapalı, `effort: low`; hız ve maliyet —
 saatte birkaç sent); "Ne kaçırdım?" ve soru-cevap `claude-opus-5-5` (`effort: medium`, `fallbacks: "default"` +
@@ -228,8 +264,18 @@ panelde kapatılabilir kart.
 **Soru kutusu:** panel altında metin alanı; o ana kadarki transkript + Türkçe soru → Türkçe kısa cevap,
 ilgili anların zaman damgalarıyla. Panel metin girişi için anahtar pencere olabilen `NSPanel` alt sınıfıdır.
 
-**Hatalar:** 429/5xx/ağ hatası 3 deneme (üstel bekleme, uyarı logu), 4xx denenmez; `LLMError` durum kodu ve
-yanıt gövdesini içerir, anahtar içermez.
+**Güvenlik:** transkript tüm istemlerde etiketlidir (`<transkript>`, `<cumle>`, `<baglam>`) ve sistem istemi
+etiket içindeki metnin veri olduğunu, içindeki talimatların uygulanmayacağını söyler. Henüz konuşma yokken soru
+LLM'e gönderilmez, yerelde cevaplanır.
+
+**Çeviri hatası:** bölüm "çeviri alınamadı" olarak işaretlenir; panelde bloğun altında "Tekrar dene" (sağlayıcı
+yeniden çözülür). Çevirisi beklenen en yeni "Diğerleri" metni adada orijinal haliyle soluk görünür (eski Türkçe
+onu gizlemez). Kayıt bitince bekleyen çeviriler en fazla 10 sn beklenip toplantıya yazılır.
+
+**Hatalar:** 408/429/5xx/ağ hatası 3 deneme (`retry-after` saniyesine uyulur, en fazla 30 sn; yoksa 1, 2 sn; uyarı
+logu), diğer 4xx denenmez; 200 içinde reddetme, `max_tokens`/`length` kesilmesi (`LLMError.truncated`), bozuk ve
+boş yanıt kesin hatadır. `LLMError.http` durum kodu, gövde, model ve istek kimliğini (`request-id` /
+`x-request-id`) içerir, anahtar içermez; gövde yalnızca özel (private) loglanır.
 
 ### 4.2 Toplantı durum makinesi
 
@@ -242,7 +288,8 @@ diskteki sesten "Tekrar işle" ile yeniden işlenebilir.
 ```
 MeetingRecord  id (klasör adı), title, startedAt, endedAt?, language?, status (recording|processing|done|failed|interrupted),
                failureMessage?, liveSegments[StoredSegment], finalSegments[StoredSegment],
-               translations{segmentKey: Türkçe}, speakerNames{kişi: ad}, note?, audioDeleted
+               translations{segmentKey: Türkçe}, speakerNames{kişi: ad}, note?, audioDeleted,
+               engine? (cloud|local; eski toplantılarda yok = bulut), notice? (ör. son geçiş atlandı)
 StoredSegment  key ("others-3"), speaker (me|others), person?, startSec, endSec, text
 MeetingNote    title, summary, decisions[String], tasks[NoteTask], glossary[GlossaryEntry]
 NoteTask       owner, description, dueDate?, isMine
@@ -259,10 +306,14 @@ ses saklama süresi (gün, varsayılan 30); dil (Otomatik | Fince | İngilizce);
   HTTP hataları durum kodu, yanıt gövdesi ve istek parametrelerini içerir.
 - Dış API çağrıları: 3 deneme, üstel bekleme, her başarısız denemede uyarı logu, sonra son hata fırlatılır.
 - Gizli yedek yok: bulut STT çökerse yerele kendiliğinden geçilmez; ada hatayı gösterir.
-- Deepgram bağlantısı koparsa geri çekilmeli 4 deneme; tükenirse o akış biter ve panelde
+- Deepgram bağlantısı koparsa ~120 sn boyunca geri çekilmeli yeniden bağlanır; tükenirse o akış biter ve panelde
   hata görünür. Ses kaydı her durumda diske yazılmaya devam eder.
+- Kullanıcıya gösterilen tüm hata metinleri tek saf fonksiyondan (`userFacingMessage`) geçer: Türkçe, ne
+  yapılacağını söyler, anahtar ve toplantı metni içermez. Mikrofon ve sistem sesi hataları ayrı adlandırılır;
+  ElevenLabs'in kota dolunca döndürdüğü 401 "anahtar geçersiz" değil "kota doldu" olarak gösterilir.
+- Başlatılamayan ses akışı için ek "beklenmedik şekilde durdu" gösterilmez.
 - ElevenLabs penceresi başarısızsa yalnızca o pencere etkilenir; panelde hata, sonraki pencere denenir.
-- Çeviri hatası yalnızca ilgili bölümü etkiler (`translationError` + tekrar dene); akış devam eder.
+- Çeviri hatası yalnızca ilgili bölümü etkiler (işaret + "Tekrar dene"); akış devam eder.
 - Kayıt `.caf` ile çökmeye dayanıklıdır; yarıda kalan toplantı açılışta `interrupted` olur.
 - Loglama: `os.Logger`, dinamik değerler yapılandırılmış alanlarda.
 
@@ -290,7 +341,10 @@ Her aşama ayrı bir uygulama planıyla yapılır ve sonunda çalışan bir uygu
    ayarlar; tipografi, renk, boşluk sistemi; kısayollar. Önce mockup ile yön seçilir.
 4. **LLM:** LLMClient'lar, canlı Türkçe çeviri, "Ne kaçırdım?", soru kutusu.
 5. **Toplantı sonrası:** Storage, `.m4a` dönüşümü, tüm kayıtta konuşmacı ayırma, not, ana pencere,
-   konuşmacılara isim verme, dışa aktarma, ses saklama süresi, çökme kurtarma, karşılama ekranı.
+   konuşmacılara isim verme, dışa aktarma, ses saklama süresi, çökme kurtarma.
+6. **Tamamlama:** OpenAI uyumlu LLM, toplantı ortasında dil değişimi, yerel son geçiş (WhisperKit + SpeakerKit),
+   karşılama ekranı, ayarlanabilir kısayollar ve süreler, ses çalma, "Bitiriliyor…", saat hizalama, ön-kayıt,
+   önceki aşamaların incelemelerinden ertelenen tüm düzeltmeler.
 
 ## 9. Riskler ve açık noktalar
 
@@ -304,5 +358,9 @@ Her aşama ayrı bir uygulama planıyla yapılır ve sonunda çalışan bir uygu
 - **Maliyet:** iki Deepgram akışı ~0,6–0,9 $/sa + ElevenLabs (örtüşme nedeniyle sesin ~2 katı)
   ~0,45 $/sa → toplam ~1–1,4 $/sa (fiyatlar ikincil kaynaklardan; kendi hesaplarında doğrulanmalı).
 - **Ekran paylaşımı görünmezliği** garanti değildir (bkz. 4.1 UI).
-- **SpeakerKit (yerel) konuşmacı ayırma kalitesi** aşama 5'te ölçülecek.
-- **OpenAI uyumlu sağlayıcılar** (ör. OpenCode Go) gerçek bir çağrıyla test edilecek.
+- **SpeakerKit (yerel) konuşmacı ayırma:** ölçüm — 12 sn'lik üç sesli sentetik diyalogda herkesi tek kişi saydı
+  (eşik 0,3–0,6 fark etmedi), aynı diyalog ~48 sn olunca üç konuşmacıyı doğru ayırdı. Gerçek toplantılar
+  dakikalarca sürdüğü için varsayılan ayarlar kullanılır; çok kısa kayıtlarda tek konuşmacı çıkabilir.
+- **OpenAI uyumlu sağlayıcılar:** Ollama (`gpt-oss:20b-cloud`) ile gerçek çağrıyla test edildi; yerel 9B düşünen
+  model (`bonsai-2:9b`) 120 sn'lik zaman aşımına sığmadı — canlı çeviri için hızlı model seçilmeli.
+  OpenCode Go yalnızca OpenAI uyumlu uç noktası üzerinden; gerçek hesapla denenmedi.

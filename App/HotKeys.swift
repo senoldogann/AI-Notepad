@@ -242,6 +242,11 @@ final class ShortcutController {
         self.actions = actions
     }
 
+    /// Uygulama kapanırken tüm kısayolları ve Carbon işleyicisini bırakır.
+    func unregisterAll() {
+        hotKeys.unregisterAll()
+    }
+
     /// Kayıtlı (ya da varsayılan) kısayolları kurar.
     func registerAll() {
         for action in ShortcutAction.allCases {
