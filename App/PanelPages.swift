@@ -56,6 +56,8 @@ struct PanelHost: View {
                     dismissedFinishing = false
                 }
             }
+            // Canlı metin ile toplantı sayfası arasında yumuşak geçiş.
+            .animation(.smooth(duration: 0.25), value: router.page)
             .frame(minWidth: 300, minHeight: 240)
             .panelSurface()
             .modifier(AppearanceEnvironment())

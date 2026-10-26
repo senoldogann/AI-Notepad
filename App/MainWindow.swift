@@ -106,6 +106,26 @@ struct MainWindowView: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
+        ZStack {
+            // Kurulum odaklı, tam pencere: kenar çubuğu yok, kart ortada.
+            if router.section == .setup {
+                SetupScreen(model: model, router: router, shortcuts: shortcuts)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                split
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        .frame(minWidth: 820, minHeight: 560)
+        // Liquid Glass: pencere zemini yarı saydam malzeme; masaüstü arkadan hafifçe görünür, metin okunaklı kalır.
+        .containerBackground(.thinMaterial, for: .window)
+        // Başlık şeridi ayrı opak bant olmasın; cam zemin pencerenin tepesine kadar sürsün.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .modifier(AppearanceEnvironment())
+    }
+
+    private var split: some View {
         NavigationSplitView {
             List(selection: Binding<MainSection?>(
                 get: { router.section },
@@ -125,14 +145,12 @@ struct MainWindowView: View {
                 SidebarStatus(model: model)
             }
         } detail: {
+            // Bölüm değişince içerik yumuşakça geçer.
             detail
+                .id(router.section)
+                .transition(.opacity)
+                .animation(.smooth(duration: 0.25), value: router.section)
         }
-        .frame(minWidth: 820, minHeight: 560)
-        // Liquid Glass: pencere zemini yarı saydam malzeme; masaüstü arkadan hafifçe görünür, metin okunaklı kalır.
-        .containerBackground(.thinMaterial, for: .window)
-        // Başlık şeridi ayrı opak bant olmasın; cam zemin pencerenin tepesine kadar sürsün.
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .modifier(AppearanceEnvironment())
     }
 
     @ViewBuilder
@@ -148,13 +166,33 @@ struct MainWindowView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
         case .setup:
-            // Kaydırma alanında, okunur genişlikte. Kaydırma alanı olmadan "Hoş geldin" adımı (uzun, satır kaydıran
-            // metinler) pencereyi ekran boyuna büyütüp tüm içeriği boş bırakıyordu; adımlardaki formlar için yer ayrılır.
+            // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
+            EmptyView()
+        }
+    }
+}
+
+/// Kurulum ekranı: kenar çubuğu yok; simge ve cam kart pencerenin ortasında. Kaydırma alanı, uzun ve satır kaydıran
+/// "Hoş geldin" metinlerinin pencereyi ekran boyuna büyütüp içeriği boş bırakmasını önler; kart yüksekliği sabit
+/// (adımlar arasında düğmeler yerinde kalır, formlar kendi içinde kayar).
+private struct SetupScreen: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let shortcuts: ShortcutController
+
+    var body: some View {
+        GeometryReader { (geometry: GeometryProxy) in
             ScrollView {
-                SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
-                    .frame(maxWidth: 640, minHeight: 560, alignment: .top)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DesignTokens.Spacing.l)
+                VStack(spacing: DesignTokens.Spacing.l) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                    SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
+                        .frame(width: min(660, max(geometry.size.width - 64, 360)), height: 540)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
+                .padding(.vertical, DesignTokens.Spacing.xl)
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }
         }
     }
@@ -204,6 +242,9 @@ private struct HomePage: View {
             .padding(32)
             .frame(maxWidth: 860, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .animation(.smooth(duration: 0.3), value: router.quitWarning)
+            .animation(.smooth(duration: 0.3), value: model.phase)
+            .animation(.smooth(duration: 0.3), value: model.setupProblems)
         }
     }
 
@@ -453,18 +494,30 @@ private struct MeetingsSplit: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            MeetingsListPage(model: model, selectedID: router.selectedMeetingID) { (id: String) -> Void in router.selectedMeetingID = id }
-                .frame(width: 300)
+            MeetingsListPage(
+                model: model, selectedID: router.selectedMeetingID,
+                onOpen: { (id: String) -> Void in router.selectedMeetingID = id },
+                onDeleted: { (ids: Set<String>) -> Void in
+                    if let open = router.selectedMeetingID, ids.contains(open) {
+                        router.selectedMeetingID = nil
+                    }
+                }
+            )
+            .frame(width: 300)
             Divider()
-            if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
-                MeetingDetailPage(model: model, player: player, record: record) { router.selectedMeetingID = nil }
-                    // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
-                    .id(record.id)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text", description: Text("Notu, görevleri ve transkripti burada görürsün."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
+                    MeetingDetailPage(model: model, player: player, record: record) { router.selectedMeetingID = nil }
+                        // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
+                        .id(record.id)
+                        .transition(.opacity)
+                } else {
+                    ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text", description: Text("Notu, görevleri ve transkripti burada görürsün."))
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.smooth(duration: 0.25), value: router.selectedMeetingID)
         }
     }
 }

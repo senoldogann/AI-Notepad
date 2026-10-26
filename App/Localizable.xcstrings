@@ -358,6 +358,26 @@
         }
       }
     },
+    "%lld seçili": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selected"
+          }
+        }
+      }
+    },
+    "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move %lld meetings (text, note and audio) to the Trash?"
+          }
+        }
+      }
+    },
     "%lld toplantı okunamadı: %@": {
       "localizations": {
         "en": {
@@ -722,6 +742,16 @@
         }
       }
     },
+    "Birden çok toplantıyı seçip sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select several meetings to delete"
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -769,6 +799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finishing… completing the remaining text and speakers."
+          }
+        }
+      }
+    },
+    "Bitti": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         }
       }
@@ -3006,6 +3046,26 @@
         }
       }
     },
+    "Seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        }
+      }
+    },
+    "Seçimi kaldır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect all"
+          }
+        }
+      }
+    },
     "Sil": {
       "localizations": {
         "en": {
@@ -3516,6 +3576,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy all"
+          }
+        }
+      }
+    },
+    "Tümünü seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
           }
         }
       }

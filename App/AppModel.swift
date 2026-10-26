@@ -975,6 +975,16 @@ final class AppModel {
         return nil
     }
 
+    /// Seçilen toplantıları Çöp Sepeti'ne taşır; silinemeyenlerin hataları (tekilleştirilmiş) döner, silinenler listeden
+    /// çıkar.
+    func deleteMeetings(meetingIDs: Set<String>) -> [String] {
+        meetingIDs.sorted().reduce(into: [String]()) { (errors: inout [String], id: String) -> Void in
+            if let error = deleteMeeting(meetingID: id), !errors.contains(error) {
+                errors.append(error)
+            }
+        }
+    }
+
     func deleteAudio(meetingID: String) {
         // Kayıttaki toplantının sesi silinirse kayıt yazılmaya devam ederken dosyalar kaybolur.
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {

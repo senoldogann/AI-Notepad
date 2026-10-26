@@ -55,6 +55,9 @@ public struct HoverPlainButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .modifier(HoverSurface(cornerRadius: cornerRadius, isPressed: configuration.isPressed))
+            // Basılınca hafifçe küçülür (tıklama hissedilsin).
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 

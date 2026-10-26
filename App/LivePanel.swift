@@ -146,7 +146,20 @@ final class LivePanelController {
         ))
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
+        // Süren bir gizleme varsa iptal edilir (yarıda kalan solma paneli sonradan kapatmasın).
+        hideGeneration += 1
+        let appearing: Bool = !target.isVisible || target.alphaValue < 1
+        if !target.isVisible {
+            target.alphaValue = 0
+        }
         target.orderFrontRegardless()
+        if appearing {
+            // Belirerek açılır.
+            NSAnimationContext.runAnimationGroup { (context: NSAnimationContext) -> Void in
+                context.duration = 0.18
+                target.animator().alphaValue = 1
+            }
+        }
         // Gölge içerik çizildikten sonra (yuvarlak köşelerle) yeniden hesaplanır.
         DispatchQueue.main.async {
             target.invalidateShadow()
@@ -165,8 +178,28 @@ final class LivePanelController {
         if case .meeting(let id) = router.page, player.meetingID == id {
             player.stop()
         }
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else {
+            return
+        }
+        // Solarak kapanır; bu arada yeniden gösterilirse kapatma yapılmaz.
+        hideGeneration += 1
+        let generation: Int = hideGeneration
+        NSAnimationContext.runAnimationGroup({ (context: NSAnimationContext) -> Void in
+            context.duration = 0.15
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.hideGeneration == generation else {
+                    return
+                }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        })
     }
+
+    /// Her gösterme/gizlemede artar: eski bir solma animasyonunun bitişi yeni durumu bozmasın.
+    private var hideGeneration: Int = 0
 
     func toggle() {
         if isVisible {
