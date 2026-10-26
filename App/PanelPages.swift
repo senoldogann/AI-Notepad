@@ -164,9 +164,12 @@ private struct PanelPageView<Content: View>: View {
     }
 }
 
-/// `--sayfa canli|toplantilar|ayarlar|kurulum` başlatma argümanının sayfası (geliştirme ve görsel kontrol için);
-/// argüman yoksa ya da tanınmıyorsa nil.
+/// `--sayfa canli|toplantilar|ayarlar|kurulum` ya da `--toplanti <kimlik>` başlatma argümanının sayfası (geliştirme ve
+/// görsel kontrol için); argüman yoksa ya da tanınmıyorsa nil.
 func launchPage(arguments: [String]) -> PanelPage? {
+    if let index = arguments.firstIndex(of: "--toplanti"), arguments.indices.contains(index + 1) {
+        return .meeting(id: arguments[index + 1])
+    }
     guard let index = arguments.firstIndex(of: "--sayfa"), arguments.indices.contains(index + 1) else {
         return nil
     }
