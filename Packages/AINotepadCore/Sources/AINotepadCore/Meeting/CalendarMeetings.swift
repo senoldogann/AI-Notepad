@@ -78,3 +78,10 @@ public func keytermsWithAttendees(attendees: [String], keyterms: [String], limit
     .prefix(limit)
     .map { $0 }
 }
+
+/// Toplantı öncesi brifing sorusu (arşive sorulur): aynı kişilerle ya da konuda önceki görüşmeler, kararlar ve açık
+/// görevler. Saf fonksiyondur.
+public func briefingQuestion(meeting: CalendarMeeting) -> String {
+    let people: String = meeting.attendees.isEmpty ? "" : " Katılımcılar: \(meeting.attendees.prefix(8).joined(separator: ", "))."
+    return "\"\(meeting.title)\" toplantısı öncesi brifing:\(people) Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak."
+}

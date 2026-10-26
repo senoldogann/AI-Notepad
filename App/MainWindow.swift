@@ -455,7 +455,10 @@ private struct HomePage: View {
                 if !model.setupProblems.isEmpty {
                     problems
                 }
-                UpcomingMeetings(model: model, onStartRecording: onStartRecording)
+                UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
+                    model.askArchive(question: briefingQuestion(meeting: meeting))
+                    router.section = .ask
+                }
                 BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
                 RecentMeetingCards(model: model, router: router)
@@ -800,6 +803,8 @@ private struct HomeTasks: View {
 private struct UpcomingMeetings: View {
     let model: AppModel
     let onStartRecording: @MainActor () -> Void
+    /// Toplantı öncesi brifing (arşive sorulur, Sor sayfasında açılır).
+    let onBriefing: @MainActor (CalendarMeeting) -> Void
 
     var body: some View {
         let now: Date = Date()
@@ -840,6 +845,11 @@ private struct UpcomingMeetings: View {
                 }
             }
             Spacer(minLength: 8)
+            if !model.meetings.isEmpty {
+                Button("Brifing", systemImage: "text.magnifyingglass") { onBriefing(meeting) }
+                    .controlSize(.small)
+                    .hoverHint("Bu kişilerle ve konuda önceki toplantılar, kararlar, açık görevler", alignment: .trailing, edge: .bottom)
+            }
             if let url = meeting.joinURL {
                 Button("Katıl", systemImage: "video") { NSWorkspace.shared.open(url) }
                     .controlSize(.small)

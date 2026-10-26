@@ -53,5 +53,18 @@ extension CloudTests {
         #expect(answer.text.contains("Mikko"), "\(answer.text)")
         #expect(answer.sources.contains { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
     }
+
+    // Gerçek model: Mikko'yla yapılacak toplantı için brifing, önceki toplantıda Mikko'nun üstlendiği işi bulur.
+    @Test func briefingFindsEarlierCommitments() async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let meeting: CalendarMeeting = CalendarMeeting(id: "c", title: "Viikkopalaveri", start: Date(timeIntervalSince1970: 1_792_000_000), end: Date(timeIntervalSince1970: 1_792_001_800), attendees: ["Mikko"], joinURL: nil)
+        let answer: ArchiveAnswer = try await askArchive(
+            question: briefingQuestion(meeting: meeting), records: archive(), userName: "Senol", llm: provider, maxChars: 60_000,
+            now: Date(timeIntervalSince1970: 1_791_999_000)
+        )
+        let text: String = answer.text.lowercased()
+        #expect(text.contains("kahve") || text.contains("kahvi"), "\(answer.text)")
+        #expect(answer.sources.contains { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
+    }
 }
 }

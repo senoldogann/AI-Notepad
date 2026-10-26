@@ -1233,6 +1233,16 @@
         }
       }
     },
+    "Brifing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing"
+          }
+        }
+      }
+    },
     "Bu andan dinle": {
       "localizations": {
         "en": {
@@ -1302,6 +1312,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This person will no longer be recognised by voice"
+          }
+        }
+      }
+    },
+    "Bu kişilerle ve konuda önceki toplantılar, kararlar, açık görevler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier meetings with these people and on this topic, decisions, open tasks"
           }
         }
       }
