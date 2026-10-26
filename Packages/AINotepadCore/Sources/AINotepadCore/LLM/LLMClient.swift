@@ -191,8 +191,9 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
 }
 
 /// Yapılandırılmış yanıt ister ve ayrıştırır. Model şemaya uyan ama boş ya da bozuk içerik döndürebilir (ör. Haiku
-/// `max` effort'ta uzun toplantıda arada bir yalnızca başlıklı not); bu aralıklıdır, aynı istek yeniden sorulur
-/// (uyarı logu) ve son denemenin hatası fırlatılır. Diğer hatalar `sendLLM`'in kendi kurallarıyla biter.
+/// `max` effort'ta uzun toplantıda arada bir yalnızca başlıklı not) ya da arada bir döngüye girip çıktı sınırına
+/// dayanabilir (ör. Haiku `low` effort'ta ~2 bin token'lık konuşmacı incelemesi seyrek olarak 64 bin sınırında
+/// kesilir). Bunlar aralıklıdır: aynı istek yeniden sorulur (uyarı logu) ve son denemenin hatası fırlatılır. Diğer hatalar `sendLLM`'in kendi kurallarıyla biter.
 public func requestStructured<Value: Sendable>(
     provider: LLMProvider, request: LLMRequest, parse: @Sendable (String) throws -> Value
 ) async throws -> Value {
@@ -202,7 +203,7 @@ public func requestStructured<Value: Sendable>(
             return try parse(try await sendLLM(provider: provider, request: request))
         } catch let error as LLMError {
             switch error {
-            case .malformed, .empty:
+            case .malformed, .empty, .truncated:
                 lastError = error
                 llmLogger.warning("Yapılandırılmış yanıt kullanılamadı, deneme: \(attempt, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             default:

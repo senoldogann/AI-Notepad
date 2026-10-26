@@ -338,7 +338,6 @@
       }
     },
     "%lld dk": {
-      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -368,6 +367,26 @@
         }
       }
     },
+    "%lld karar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld decisions"
+          }
+        }
+      }
+    },
+    "%lld konuşmacı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld speakers"
+          }
+        }
+      }
+    },
     "%lld seçili": {
       "localizations": {
         "en": {
@@ -384,6 +403,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld results"
+          }
+        }
+      }
+    },
+    "%lld terim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld terms"
           }
         }
       }
@@ -468,6 +497,26 @@
         }
       }
     },
+    "Ad ver ya da başka konuşmacıyla birleştir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name or merge with another speaker"
+          }
+        }
+      }
+    },
+    "Ad ver…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name…"
+          }
+        }
+      }
+    },
     "Ada": {
       "localizations": {
         "en": {
@@ -484,6 +533,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show / hide island and panel"
+          }
+        }
+      }
+    },
+    "Adı değiştir…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename…"
           }
         }
       }
@@ -710,16 +769,6 @@
         }
       }
     },
-    "Başka konuşmacıyla birleştir": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Merge with another speaker"
-          }
-        }
-      }
-    },
     "Başla": {
       "localizations": {
         "en": {
@@ -917,6 +966,16 @@
         }
       }
     },
+    "Bu toplantıda sana düşen görev yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tasks for you in this meeting."
+          }
+        }
+      }
+    },
     "Bu toplantının notu yok.": {
       "localizations": {
         "en": {
@@ -963,6 +1022,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Section"
+          }
+        }
+      }
+    },
+    "BİR BAKIŞTA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AT A GLANCE"
           }
         }
       }
@@ -1238,6 +1307,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other tasks"
+          }
+        }
+      }
+    },
+    "Diğer işlemler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More actions"
           }
         }
       }
@@ -1720,16 +1799,6 @@
         }
       }
     },
-    "KONUŞMACILAR": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SPEAKERS"
-          }
-        }
-      }
-    },
     "Kalan metin ve konuşmacılar tamamlanıyor.": {
       "localizations": {
         "en": {
@@ -2092,6 +2161,26 @@
         }
       }
     },
+    "Kim ne zaman konuştu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who spoke when"
+          }
+        }
+      }
+    },
+    "Kim ne zaman konuştu · tıkla, oradan çal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who spoke when · click to play from there"
+          }
+        }
+      }
+    },
     "Klasöre erişilemedi: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -2287,12 +2376,12 @@
         }
       }
     },
-    "Kısayol %@ ile her yerden kaydı başlat.": {
+    "KİM NE KADAR KONUŞTU": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start recording from anywhere with %@."
+            "value": "TALK TIME"
           }
         }
       }
@@ -2474,16 +2563,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text size: %lld pt"
-          }
-        }
-      }
-    },
-    "Metin, not ve sesle birlikte Çöp Sepeti'ne taşı": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move to the Trash with its text, note and audio"
           }
         }
       }
@@ -2793,6 +2872,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDF olarak kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as PDF"
           }
         }
       }
@@ -3309,16 +3398,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "No final pass: %@ The live transcript was used."
-          }
-        }
-      }
-    },
-    "Son geçişi ve notu yeniden yap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Redo final pass and note"
           }
         }
       }
@@ -3881,16 +3960,6 @@
         }
       }
     },
-    "Yalnızca ses dosyalarını sil; metin ve not kalır": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete only the audio files; the text and note stay"
-          }
-        }
-      }
-    },
     "Yapıştır": {
       "localizations": {
         "en": {
@@ -4045,12 +4114,52 @@
         }
       }
     },
+    "karar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "decisions"
+          }
+        }
+      }
+    },
+    "konuşmacı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "speakers"
+          }
+        }
+      }
+    },
     "macOS bu iznin durumunu göstermez; deneyerek açılır": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "senin görevin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your tasks"
+          }
+        }
+      }
+    },
+    "süre": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "duration"
           }
         }
       }
@@ -4415,6 +4524,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restart now"
+          }
+        }
+      }
+    },
+    "Şununla birleştir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge with"
           }
         }
       }
