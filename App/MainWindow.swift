@@ -2,6 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Ana pencerenin sahne kimliği.
@@ -633,6 +634,10 @@ private struct ToolTiles: View {
             tile(title: "Kaydı başlat", symbol: "waveform", isEnabled: model.phase == .idle && model.isReadyToRecord) { onStartRecording() }
             tile(title: "Canlı panel", symbol: "rectangle.on.rectangle", isEnabled: true) { onShowPanel() }
             tile(title: "Toplantılar", symbol: "list.bullet.rectangle", isEnabled: true) { router.section = .meetings }
+            tile(title: "Dosya içe aktar", symbol: "square.and.arrow.down.on.square", isEnabled: true) {
+                router.section = .meetings
+                chooseMediaToImport(model: model)
+            }
             tile(title: "Görevlerim", symbol: "checkmark.circle", isEnabled: true) { router.section = .tasks }
             tile(title: "Ayarlar", symbol: "gearshape", isEnabled: true) { router.section = .settings }
         }
@@ -1051,6 +1056,20 @@ private struct MeetingsSplit: View {
                 }
             )
             .frame(width: 300)
+            // Ses/video dosyası listeye bırakılınca toplantı olarak içe aktarılır.
+            .dropDestination(for: URL.self) { (urls: [URL], _: CGPoint) -> Bool in
+                let media: [URL] = urls.filter { (url: URL) -> Bool in
+                    guard let type = UTType(filenameExtension: url.pathExtension) else {
+                        return false
+                    }
+                    return type.conforms(to: .audio) || type.conforms(to: .audiovisualContent)
+                }
+                guard !media.isEmpty else {
+                    return false
+                }
+                model.importMedia(urls: media)
+                return true
+            }
             .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
             ZStack {
                 if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {

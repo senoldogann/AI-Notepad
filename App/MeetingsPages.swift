@@ -32,6 +32,14 @@ struct MeetingsListPage: View {
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
                 Spacer(minLength: 0)
+                if model.importingCount > 0 {
+                    ProgressView().controlSize(.small)
+                }
+                Button("İçe aktar", systemImage: "square.and.arrow.down.on.square") { chooseMediaToImport(model: model) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.pill)
+                    .controlSize(.small)
+                    .hoverHint("Ses ya da video dosyasından toplantı (sürükleyip bırakabilirsin)", alignment: .trailing, edge: .bottom)
                 if !model.meetings.isEmpty {
                     Button(isSelecting ? "Bitti" : "Seç") { setSelecting(!isSelecting) }
                         .buttonStyle(.pill)
@@ -41,8 +49,15 @@ struct MeetingsListPage: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, DesignTokens.Spacing.s)
+            if let error = model.importError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if model.meetings.isEmpty {
-                EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantılar burada görünür.")
+                EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.")
             } else if visible.isEmpty {
                 EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
             } else {

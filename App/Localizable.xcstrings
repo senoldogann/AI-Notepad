@@ -192,6 +192,16 @@
         }
       }
     },
+    "%@ içe aktarılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't import %@: %@"
+          }
+        }
+      }
+    },
     "%@ kaydedilemedi.": {
       "localizations": {
         "en": {
@@ -1712,6 +1722,16 @@
         }
       }
     },
+    "Dosya içe aktar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import file"
+          }
+        }
+      }
+    },
     "Dosya okunamadı: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -2396,6 +2416,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your meetings and notes appear here once you start recording."
+          }
+        }
+      }
+    },
+    "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings appear here once you start recording or drag an audio/video file here."
           }
         }
       }
@@ -3894,6 +3924,16 @@
         }
       }
     },
+    "Ses ya da video dosyasından toplantı (sürükleyip bırakabilirsin)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting from an audio or video file (you can drag and drop)"
+          }
+        }
+      }
+    },
     "Ses yakalama zaten çalışıyor.": {
       "extractionState": "stale",
       "localizations": {
@@ -4473,6 +4513,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save the meeting: %@"
+          }
+        }
+      }
+    },
+    "Toplantı kaydı seç (ses ya da video); yazıya dökülür ve notu çıkarılır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a meeting recording (audio or video); it is transcribed and a note is written."
           }
         }
       }
@@ -5213,6 +5263,16 @@
         }
       }
     },
+    "dosyada ses yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the file has no audio"
+          }
+        }
+      }
+    },
     "effort (%@)": {
       "localizations": {
         "en": {
@@ -5254,6 +5314,16 @@
         }
       }
     },
+    "kaydedilemedi (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't be saved (%@)"
+          }
+        }
+      }
+    },
     "konuşma": {
       "localizations": {
         "en": {
@@ -5280,6 +5350,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "okunamadı (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't be read (%@)"
           }
         }
       }
@@ -5704,6 +5784,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "If you denied it:"
+          }
+        }
+      }
+    },
+    "İçe aktar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
           }
         }
       }

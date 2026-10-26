@@ -1,7 +1,9 @@
 import AINotepadCore
 import AINotepadUI
 import AVFoundation
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import Observation
 import os
 
@@ -990,6 +992,46 @@ final class AppModel {
         UserDefaults.standard.set(isInPerson, forKey: SettingsKey.inPersonMode)
     }
 
+    // MARK: Dosya içe aktarma
+
+    /// İçe aktarılmakta olan dosya sayısı (dönüştürme sürerken).
+    var importingCount: Int = 0
+    /// Son içe aktarma hatası (Toplantılar listesinde gösterilir).
+    var importError: String?
+
+    /// Ses/video dosyalarını toplantı olarak içe aktarır: ses izi `others.m4a` olur, sonra kayıt gibi son geçiş
+    /// (konuşmacılar, sesinden tanıma) ve not. Motor ve şablon şu anki ayarlardır.
+    func importMedia(urls: [URL]) {
+        importError = nil
+        for (index, url) in urls.enumerated() {
+            importingCount += 1
+            Task {
+                defer { importingCount -= 1 }
+                // Aynı saniyede birden çok dosya: klasör adları çakışmasın.
+                let startedAt: Date = Date().addingTimeInterval(Double(index))
+                do {
+                    let directory: URL = try AppPaths.newSessionDirectory(startedAt: startedAt)
+                    let accessed: Bool = url.startAccessingSecurityScopedResource()
+                    defer {
+                        if accessed {
+                            url.stopAccessingSecurityScopedResource()
+                        }
+                    }
+                    let duration: Double = try await importMediaAudio(source: url, destination: directory.appending(path: "others.m4a"))
+                    let record: MeetingRecord = importedMeetingRecord(
+                        id: directory.lastPathComponent, source: url, startedAt: startedAt, durationSec: duration,
+                        engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
+                    )
+                    Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
+                    process(record: record, directory: directory)
+                } catch {
+                    Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
+                    importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
+                }
+            }
+        }
+    }
+
     // MARK: Takvim
 
     /// Takvim açıksa toplantıları 5 dk'da bir ve takvim değişince yeniler, hatırlatmaları kurar; görüşme önerisi açıksa
@@ -1460,4 +1502,32 @@ struct ArchiveExchange: Identifiable, Equatable {
     let id: UUID
     let question: String
     let state: State
+}
+
+/// İçe aktarma hatasının kullanıcı metni. Saf fonksiyondur.
+func mediaImportMessage(error: any Error) -> String {
+    switch error {
+    case MediaImportError.noAudioTrack:
+        String(localized: "dosyada ses yok")
+    case MediaImportError.readFailed(_, let reason):
+        String(localized: "okunamadı (\(reason))")
+    case MediaImportError.writeFailed(_, let reason):
+        String(localized: "kaydedilemedi (\(reason))")
+    default:
+        userFacingMessage(error: error)
+    }
+}
+
+/// Ses/video dosyası seçtirir (birden çok); seçilenleri içe aktarır.
+@MainActor
+func chooseMediaToImport(model: AppModel) {
+    let panel: NSOpenPanel = NSOpenPanel()
+    panel.allowsMultipleSelection = true
+    panel.canChooseDirectories = false
+    panel.allowedContentTypes = [.audio, .movie, .audiovisualContent]
+    panel.message = String(localized: "Toplantı kaydı seç (ses ya da video); yazıya dökülür ve notu çıkarılır.")
+    guard panel.runModal() == .OK, !panel.urls.isEmpty else {
+        return
+    }
+    model.importMedia(urls: panel.urls)
 }
