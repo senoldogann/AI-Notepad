@@ -31,3 +31,23 @@ public func finalSegments(words: [DiarizedWord], gapSec: Double) -> [StoredSegme
         )
     }
 }
+
+/// Canlı "Diğerleri" bölümlerinin Türkçelerini, zamanı kesişen son geçiş bölümlerine taşır (sırayla birleştirir);
+/// böylece son geçişten sonra da geçmişte Türkçe görünür. Saf fonksiyondur.
+public func alignTranslations(final: [StoredSegment], live: [StoredSegment], translations: [String: String]) -> [String: String] {
+    let translatedLive: [StoredSegment] = live
+        .filter { (segment: StoredSegment) -> Bool in segment.speaker == .others && translations[segment.key] != nil }
+        .sorted { $0.startSec < $1.startSec }
+    return final.reduce(into: [String: String]()) { (result: inout [String: String], segment: StoredSegment) -> Void in
+        let parts: [String] = translatedLive
+            .filter { (liveSegment: StoredSegment) -> Bool in
+                // Canlı bölümün yarısından fazlası bu son geçiş bölümüne düşüyorsa ona aittir.
+                let overlap: Double = min(liveSegment.endSec, segment.endSec) - max(liveSegment.startSec, segment.startSec)
+                return overlap > (liveSegment.endSec - liveSegment.startSec) / 2
+            }
+            .compactMap { translations[$0.key] }
+        if !parts.isEmpty {
+            result[segment.key] = parts.joined(separator: " ")
+        }
+    }
+}

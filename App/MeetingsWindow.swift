@@ -19,14 +19,24 @@ struct MeetingsWindow: View {
             }
             .searchable(text: $query, placement: .sidebar, prompt: "Toplantılarda ara")
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .safeAreaInset(edge: .bottom) {
+                if !model.meetingLoadFailures.isEmpty {
+                    Text("\(model.meetingLoadFailures.count) toplantı okunamadı: " + model.meetingLoadFailures.map(\.folder).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(8)
+                }
+            }
             .overlay {
                 if model.meetings.isEmpty {
                     ContentUnavailableView("Henüz toplantı yok", systemImage: "waveform", description: Text("Kaydı başlatınca toplantılar burada görünür."))
                 }
             }
         } detail: {
-            if let id = selection, let record = model.meetings.first(where: { $0.id == id }) {
-                MeetingDetail(model: model, record: record, isProcessing: model.processingMeetingIDs.contains(id))
+            if let id = selection, let record = visible.first(where: { $0.id == id }) {
+                MeetingDetail(model: model, record: record, isProcessing: model.processingMeetingIDs.contains(id), isLocked: model.isLocked(meetingID: id))
+                    // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
+                    .id(record.id)
             } else {
                 ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text")
             }
@@ -83,6 +93,8 @@ private struct MeetingDetail: View {
     let model: AppModel
     let record: MeetingRecord
     let isProcessing: Bool
+    /// Kayıtta ya da işlemede: değiştiren eylemler kapalı.
+    let isLocked: Bool
 
     var body: some View {
         ScrollView {
@@ -97,7 +109,7 @@ private struct MeetingDetail: View {
                 if let note = record.note {
                     NoteSection(note: note)
                 }
-                SpeakerNamesSection(model: model, record: record)
+                SpeakerNamesSection(model: model, record: record, isLocked: isLocked)
                 TranscriptSection(record: record)
             }
             .padding(DesignTokens.Spacing.xl)
@@ -129,14 +141,19 @@ private struct MeetingDetail: View {
                 Button("Markdown kaydet…", systemImage: "square.and.arrow.down") {
                     saveMarkdown(record: record)
                 }
+                Button("Notu yeniden oluştur", systemImage: "sparkles") {
+                    model.regenerateNote(meetingID: record.id)
+                }
+                .disabled(isLocked)
+                .help("Konuşmacı adlarıyla notu yeniden yazar; ses gerekmez.")
                 Button("Tekrar işle", systemImage: "arrow.clockwise") {
                     model.reprocess(meetingID: record.id)
                 }
-                .disabled(isProcessing || record.audioDeleted)
+                .disabled(isLocked || record.audioDeleted)
                 Button("Sesi sil", systemImage: "trash", role: .destructive) {
                     model.deleteAudio(meetingID: record.id)
                 }
-                .disabled(isProcessing || record.audioDeleted)
+                .disabled(isLocked || record.audioDeleted)
             }
             .controlSize(.small)
             if record.audioDeleted {
@@ -222,9 +239,12 @@ private struct NoteSection: View {
 private struct SpeakerNamesSection: View {
     let model: AppModel
     let record: MeetingRecord
+    let isLocked: Bool
 
     var body: some View {
-        let persons: [Int] = Array(Set((record.finalSegments + record.liveSegments).compactMap(\.person))).sorted()
+        // Gösterilen transkriptle aynı bölüm kümesi.
+        let shown: [StoredSegment] = record.finalSegments.isEmpty ? record.liveSegments : record.finalSegments
+        let persons: [Int] = Array(Set(shown.compactMap(\.person))).sorted()
         if !persons.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text("KONUŞMACILAR")
@@ -233,6 +253,7 @@ private struct SpeakerNamesSection: View {
                     .foregroundStyle(.secondary)
                 ForEach(persons, id: \.self) { (person: Int) in
                     SpeakerNameField(model: model, meetingID: record.id, person: person, current: record.speakerNames[person] ?? "")
+                        .disabled(isLocked)
                 }
             }
         }

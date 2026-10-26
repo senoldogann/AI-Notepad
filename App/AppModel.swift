@@ -56,6 +56,10 @@ final class AppModel {
     var meetingLoadFailures: [MeetingLoadFailure] = []
     /// İşlenmekte olan toplantıların kimlikleri.
     var processingMeetingIDs: Set<String> = []
+    /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
+    var activeMeetingID: String?
+    /// Kayıt sırasında transkripti periyodik saklayan görev (çökmede metin kaybolmasın).
+    @ObservationIgnored private var checkpointTask: Task<Void, Never>?
     /// Süren kaydın klasörü, başlangıcı ve (bulut motorunda) ElevenLabs anahtarı.
     @ObservationIgnored private var currentSession: (directory: URL, startedAt: Date, elevenLabsKey: String?)?
     /// Süren "Ne kaçırdım?"/soru isteği; yenisi, kapatma ya da yeni kayıt eskisini iptal eder.
@@ -337,6 +341,8 @@ final class AppModel {
         let startedAt: Date = Date()
         recordingStartedAt = startedAt
         currentSession = (directory, startedAt, cloudKeys?.elevenLabs)
+        activeMeetingID = directory.lastPathComponent
+        startCheckpoints(directory: directory, startedAt: startedAt)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
         saveRecord(record: MeetingRecord(
             id: directory.lastPathComponent, title: "Toplantı", startedAt: startedAt, endedAt: nil, language: nil,
@@ -401,18 +407,67 @@ final class AppModel {
         recordingStartedAt = nil
         sessionTask = nil
         Self.logger.info("Kayıt bitti")
+        checkpointTask?.cancel()
+        checkpointTask = nil
         guard let session = currentSession else {
             return
         }
         currentSession = nil
-        let record: MeetingRecord = MeetingRecord(
-            id: session.directory.lastPathComponent, title: "Toplantı", startedAt: session.startedAt, endedAt: Date(),
-            language: lockedLanguage, status: .processing, failureMessage: nil,
+        activeMeetingID = nil
+        let record: MeetingRecord = liveRecord(directory: session.directory, startedAt: session.startedAt, status: .processing, endedAt: Date())
+        process(record: record, directory: session.directory, elevenLabsKey: session.elevenLabsKey, anthropicKey: anthropicKey)
+    }
+
+    /// Canlı transkript ve çevirilerden toplantı kaydı.
+    private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
+        MeetingRecord(
+            id: directory.lastPathComponent, title: "Toplantı", startedAt: startedAt, endedAt: endedAt,
+            language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: transcript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false
         )
-        process(record: record, directory: session.directory, elevenLabsKey: session.elevenLabsKey, anthropicKey: anthropicKey)
+    }
+
+    /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
+    private func startCheckpoints(directory: URL, startedAt: Date) {
+        checkpointTask?.cancel()
+        checkpointTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    // İptal: kayıt bitti.
+                    return
+                }
+                guard let self, self.isRecording else {
+                    return
+                }
+                self.saveRecord(record: self.liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
+            }
+        }
+    }
+
+    /// Bu toplantı üzerinde değişiklik yapılabilir mi (kayıtta ya da işlemede değil).
+    func isLocked(meetingID: String) -> Bool {
+        activeMeetingID == meetingID || processingMeetingIDs.contains(meetingID)
+    }
+
+    /// Yalnızca notu yeniden üretir (ad verdikten sonra notta da adlar görünsün); ses gerekmez.
+    func regenerateNote(meetingID: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        let anthropicKey: String? = optionalSecret(account: .anthropic)
+        let userName: String = UserDefaults.standard.string(forKey: userNameKey) ?? ""
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            processingMeetingIDs.insert(meetingID)
+            Task {
+                let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, anthropicKey: anthropicKey, userName: userName)
+                saveRecord(record: result, directory: directory)
+                processingMeetingIDs.remove(meetingID)
+            }
+        }
     }
 
     // MARK: Toplantı kayıtları
@@ -435,7 +490,7 @@ final class AppModel {
 
     /// "Tekrar işle": anahtarları şimdi okur (Ayarlar'dan sonradan eklenmiş olabilir).
     func reprocess(meetingID: String) {
-        guard let record = meetings.first(where: { $0.id == meetingID }), !processingMeetingIDs.contains(meetingID) else {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
         // Anahtar yoksa ilgili adım atlanır (ElevenLabs) ya da açık hatayla biter (Anthropic); okuma hatası yok sayılmaz.
@@ -448,7 +503,8 @@ final class AppModel {
 
     /// "Konuşmacı 2 = Aino": adı kaydeder; boş ad etiketi geri getirir.
     func renameSpeaker(meetingID: String, person: Int, name: String) {
-        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+        // İşleme bitince kayıt bütünüyle yazıldığı için bu sırada verilen ad kaybolurdu.
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
         var names: [Int: String] = record.speakerNames
@@ -472,12 +528,19 @@ final class AppModel {
 
     /// Ses dosyalarını siler; metin ve not kalır.
     func deleteAudio(meetingID: String) {
-        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+        // Kayıttaki toplantının sesi silinirse kayıt yazılmaya devam ederken dosyalar kaybolur.
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-            deleteAudioFiles(directory: directory)
-            saveRecord(record: record.withAudioDeleted(), directory: directory)
+            do {
+                try deleteAudioFiles(directory: directory)
+                saveRecord(record: record.withAudioDeleted(), directory: directory)
+            } catch {
+                // Silinemediyse "silindi" işaretlenmez; saklama süresi bir sonraki açılışta yeniden dener.
+                Self.logger.error("Ses silinemedi: \(directory.path, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                errorMessages = appendUnique(messages: errorMessages, message: "Ses silinemedi: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -499,6 +562,9 @@ final class AppModel {
             let result: MeetingLoadResult = loadMeetings(sessionsDirectory: try AppPaths.sessionsDirectory())
             meetings = result.meetings
             meetingLoadFailures = result.failures
+            for failure in result.failures {
+                Self.logger.error("Toplantı okunamadı: \(failure.folder, privacy: .public), neden: \(failure.reason, privacy: .public)")
+            }
         } catch {
             meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: String(describing: error))]
         }
@@ -541,17 +607,12 @@ let userNameKey: String = "userName"
 /// Ses dosyalarının saklama süresi (gün).
 let audioRetentionDays: Int = 30
 
-/// Bir toplantının `.m4a`/`.caf` ses dosyalarını siler.
-private func deleteAudioFiles(directory: URL) {
+/// Bir toplantının `.m4a`/`.caf` ses dosyalarını siler; biri silinemezse hata fırlatır.
+private func deleteAudioFiles(directory: URL) throws {
     for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
         let file: URL = directory.appending(path: name)
         if FileManager.default.fileExists(atPath: file.path) {
-            do {
-                try FileManager.default.removeItem(at: file)
-            } catch {
-                Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel")
-                    .error("Ses silinemedi: \(file.path, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            }
+            try FileManager.default.removeItem(at: file)
         }
     }
 }
@@ -559,22 +620,9 @@ private func deleteAudioFiles(directory: URL) {
 /// Görünüm ayarının UserDefaults anahtarı.
 let displayModeKey: String = "displayMode"
 
-/// Claude hatalarını kullanıcıya gösterilecek Türkçe metne çevirir (anahtar içermez).
+/// Claude hatalarını kullanıcıya gösterilecek Türkçe metne çevirir (çekirdekteki tek eşleme).
 func llmUserMessage(error: any Error) -> String {
-    switch error {
-    case KeychainError.notFound:
-        return "Anthropic anahtarı kayıtlı değil. Menüden Ayarlar…'ı açıp ekle."
-    case LLMError.http(let status, _) where status == 401 || status == 403:
-        return "Anthropic anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et."
-    case LLMError.http(let status, _):
-        return "Claude isteği başarısız (HTTP \(status))."
-    case LLMError.refusal:
-        return "Claude bu isteği yanıtlamadı (güvenlik denetimi)."
-    case LLMError.malformed, LLMError.empty:
-        return "Claude'dan beklenmeyen yanıt geldi."
-    default:
-        return "Claude'a ulaşılamadı: \(error.localizedDescription)"
-    }
+    userFacingMessage(error: error)
 }
 
 /// Hataları kullanıcıya gösterilecek Türkçe metne çevirir.
