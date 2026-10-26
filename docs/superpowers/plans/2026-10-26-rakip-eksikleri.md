@@ -20,8 +20,11 @@ yok (sonraki aşama). Rakipler: Granola, Otter, Fireflies, Fathom, tl;dv, Jamie,
 7. **Yüz yüze toplantı modu:** sistem sesi yerine mikrofon "Diğerleri" akışına gider; konuşmacılar ayrılır.
 8. **Yerel MCP sunucusu:** `AINotepad --mcp` (stdio); araçlar: toplantıları listele, ara, toplantıyı getir. Ayarlar'da
    Claude/ChatGPT için yapılandırma.
-9. **Anahtarsız deneme:** WhisperKit + Apple'ın cihaz üstü modeli (Foundation Models) LLM sağlayıcısı olarak; dil ve
-   kalite gerçek testle doğrulanır, yetersizse açıkça belirtilir.
+9. **Anahtarsız kullanım:** WhisperKit + Mac'teki Ollama; Ollama algılanır, önerilen model tek tıkla seçilir.
+   Apple'ın cihaz üstü modeli (Foundation Models) denendi: Fince desteklenmiyor, Fince toplantıdan Türkçe notta Fince
+   sözcükler kalıyor ve anlamlar kayıyor (2026-10-26 ölçümü); not modeli olarak eklenmedi.
+
+Durum: 1–9 tamamlandı (2026-10-27).
 
 ## Sonraki aşama
 

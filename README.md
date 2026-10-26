@@ -22,9 +22,25 @@
 - **Meeting library:** search, a Spotify-style player that highlights the spoken word, PDF/Markdown export,
   speaker naming, merging and AI suggestions ("Review speakers").
 - **Assistant during the meeting:** "What did I miss?" and free questions about the conversation.
-- **Engines:** Deepgram + ElevenLabs in the cloud, or fully on-device WhisperKit + SpeakerKit.
+- **Ask your meetings:** questions across all notes and Finnish/English transcripts, answered in Turkish
+  with links to the source meetings.
+- **Speakers recognised by voice:** name someone once and they are named in later meetings (local voiceprints,
+  numbers only); a person who goes quiet and speaks again keeps their number. People pages show each person's
+  meetings, talk time and tasks.
+- **Calendar:** upcoming meetings on Home, a notification one minute before with "Start listening", a suggestion
+  when another app turns on the microphone; recordings take the event's title and attendee names.
+- **Tasks:** tick tasks off, see open and done tasks, send them to Apple Reminders.
+- **Sharing:** note templates (one-on-one, client, lecture, interview, your own), a Finnish or English version of
+  the note for colleagues and the macOS share menu.
+- **In-person mode:** everyone on the microphone is separated into speakers.
+- **MCP server:** `AINotepad --mcp` lets Claude Desktop, ChatGPT and other MCP clients list, search and read your
+  meetings locally (read-only).
+- **No keys needed, if you prefer:** on-device WhisperKit plus a local Ollama model, detected in one click.
+- **Engines:** Deepgram + ElevenLabs in the cloud (gaps in the live transcript are filled from ElevenLabs), or
+  fully on-device WhisperKit + SpeakerKit.
   LLM: Claude (default Claude Haiku 5.5) or any OpenAI-compatible server (OpenAI, Ollama, …).
-- **Privacy:** API keys live only in the macOS Keychain; recordings stay on your Mac
+- **Privacy:** a reminder to tell participants you are recording; API keys live only in the macOS Keychain;
+  recordings stay on your Mac
   (`~/Library/Application Support/AINotepad`) and audio is deleted after a retention period you choose.
 - English and Turkish user interface.
 

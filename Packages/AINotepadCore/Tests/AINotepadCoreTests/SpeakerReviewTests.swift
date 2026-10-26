@@ -59,7 +59,8 @@ import Testing
 
 extension CloudTests {
 @Suite struct SpeakerReviewCloudTests {
-    // Gerçek model: hitap edilip cevap veren kişiye ad, aynı kişinin ikiye bölünmüş cümlesine birleştirme önerir.
+    // Gerçek model: hitap edilip cevap veren kişiye ad (takvimdeki tam adıyla olabilir), aynı kişinin ikiye bölünmüş
+    // cümlesine birleştirme önerir.
     @Test func reviewSuggestsNameAndMerge() async throws {
         let segments: [StoredSegment] = [
             stored("final-0", .others, 1, 0, "Hyvää huomenta kaikille, minä olen Aino ja vedän tämän palaverin."),
@@ -72,7 +73,8 @@ extension CloudTests {
         let review: SpeakerReview = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> SpeakerReview in
             try parseSpeakerReview(text: text, persons: [1, 2, 3], speakerNames: [:])
         }
-        #expect(review.names.contains { $0.person == 1 && $0.name == "Aino" }, "adlar: \(review.names)")
+        // Takvimdeki katılımcı verildiği için tam ad ("Aino Virtanen") da doğrudur.
+        #expect(review.names.contains { $0.person == 1 && $0.name.hasPrefix("Aino") }, "adlar: \(review.names)")
         #expect(review.merges.contains { Set([$0.from, $0.into]) == [2, 3] }, "birleştirmeler: \(review.merges)")
     }
 }
