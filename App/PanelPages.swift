@@ -4,13 +4,11 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Panelin sayfaları: tüm uygulama tek cam panelin içinde (ayrı pencere ya da açılır pencere yok).
+/// Kayıt sırasındaki cam panelin sayfaları: canlı metin ve biten toplantının sonucu. Toplantılar, Ayarlar ve Kurulum
+/// ana pencerededir (tek kopya: iki ayrı ekran birbirinden habersiz kalmasın).
 enum PanelPage: Equatable {
     case live
-    case meetings
     case meeting(id: String)
-    case settings
-    case setup
 }
 
 /// Panelde hangi sayfanın açık olduğu.
@@ -27,10 +25,11 @@ struct PanelHost: View {
     @State private var dismissedProgress: Set<String> = []
     @State private var dismissedFinishing: Bool = false
     let router: PanelRouter
-    let shortcuts: ShortcutController
     let player: MeetingAudioPlayer
     let onStart: @MainActor () -> Void
     let onHide: @MainActor () -> Void
+    /// Ana pencereyi bir bölümde açar (Toplantılar, Ayarlar).
+    let onOpenMainWindow: @MainActor (MainSection) -> Void
 
     var body: some View {
         let progress: ProcessingProgress? = processingProgress
@@ -87,8 +86,8 @@ struct PanelHost: View {
                     onTogglePause: { model.togglePause() },
                     onToggleMic: { model.toggleMicrophone() },
                     onStop: { model.stopRecording() },
-                    onOpenMeetings: { router.page = .meetings },
-                    onOpenSettings: { router.page = .settings },
+                    onOpenMeetings: { onOpenMainWindow(.meetings) },
+                    onOpenSettings: { onOpenMainWindow(.settings) },
                     onMissed: { model.askWhatIMissed() },
                     onAsk: { (question: String) -> Void in model.ask(question: question) },
                     onCloseCard: { model.closeAssistantCard() },
@@ -98,27 +97,15 @@ struct PanelHost: View {
                     onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) }
                 )
             )
-        case .meetings:
-            PanelPageView(model: model, router: router, title: "Toplantılar", back: .live, onHide: onHide) {
-                MeetingsListPage(model: model) { (id: String) -> Void in router.page = .meeting(id: id) }
-            }
         case .meeting(let id):
-            PanelPageView(model: model, router: router, title: "Toplantı", back: .meetings, onHide: onHide) {
+            PanelPageView(model: model, router: router, title: "Toplantı", back: .live, onHide: onHide) {
                 if let record = model.meetings.first(where: { $0.id == id }) {
-                    MeetingDetailPage(model: model, player: player, record: record)
+                    MeetingDetailPage(model: model, player: player, record: record) { router.page = .live }
                         // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                         .id(record.id)
                 } else {
                     ContentUnavailableView("Toplantı bulunamadı", systemImage: "doc.questionmark")
                 }
-            }
-        case .settings:
-            PanelPageView(model: model, router: router, title: "Ayarlar", back: .live, onHide: onHide) {
-                SettingsPage(model: model, shortcuts: shortcuts)
-            }
-        case .setup:
-            PanelPageView(model: model, router: router, title: "Kurulum", back: .live, onHide: onHide) {
-                SetupPage(model: model, shortcuts: shortcuts) { router.page = .live }
             }
         }
     }
@@ -140,7 +127,7 @@ private struct PanelPageView<Content: View>: View {
                     router.page = back
                 } label: {
                     ViewThatFits(in: .horizontal) {
-                        Label(back == .live ? "Canlı" : "Toplantılar", systemImage: "chevron.left")
+                        Label("Canlı", systemImage: "chevron.left")
                         Image(systemName: "chevron.left")
                     }
                     .font(DesignTokens.statusFont)
@@ -191,22 +178,16 @@ private struct PanelPageView<Content: View>: View {
     }
 }
 
-/// `--sayfa canli|toplantilar|ayarlar|kurulum` ya da `--toplanti <kimlik>` başlatma argümanının sayfası (geliştirme ve
-/// görsel kontrol için); argüman yoksa ya da tanınmıyorsa nil.
+/// `--sayfa canli` ya da `--toplanti <kimlik>` başlatma argümanının panel sayfası (geliştirme ve görsel kontrol için;
+/// ana pencere bölümleri `--bolum` ile); argüman yoksa ya da tanınmıyorsa nil. Saf fonksiyondur.
 func launchPage(arguments: [String]) -> PanelPage? {
     if let index = arguments.firstIndex(of: "--toplanti"), arguments.indices.contains(index + 1) {
         return .meeting(id: arguments[index + 1])
     }
-    guard let index = arguments.firstIndex(of: "--sayfa"), arguments.indices.contains(index + 1) else {
+    guard let index = arguments.firstIndex(of: "--sayfa"), arguments.indices.contains(index + 1), arguments[index + 1] == "canli" else {
         return nil
     }
-    switch arguments[index + 1] {
-    case "canli": return .live
-    case "toplantilar": return .meetings
-    case "ayarlar": return .settings
-    case "kurulum": return .setup
-    default: return nil
-    }
+    return .live
 }
 
 /// Ayarlar › Görünüm değerlerini (AppStorage) okuyup görünüme uygular: panel görünümü ortamı, vurgu rengi (sistem

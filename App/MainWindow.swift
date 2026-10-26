@@ -26,6 +26,34 @@ enum MainSection: Hashable {
 final class MainWindowRouter {
     var section: MainSection = .home
     var selectedMeetingID: String?
+    /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
+    var quitWarning: Bool = false
+}
+
+/// Çıkış koruması: kayıt ya da işleme sürerken uygulama hemen kapanmaz (toplantı "yarıda kaldı" olurdu); ana pencere
+/// sorar. Uygulama açılışında bağlanır.
+@MainActor
+final class QuitGuard {
+    static let shared: QuitGuard = QuitGuard()
+    var isBusy: (@MainActor () -> Bool)?
+    var onBlocked: (@MainActor () -> Void)?
+    /// "Yine de çık" seçildi: bir sonraki çıkış sorulmaz.
+    var allowQuit: Bool = false
+}
+
+/// `--bolum ana|toplantilar|ayarlar|kurulum` başlatma argümanından ana pencere bölümü (görsel kontrol ve geliştirme
+/// için); yoksa nil. Saf fonksiyondur.
+func launchSection(arguments: [String]) -> MainSection? {
+    guard let index = arguments.firstIndex(of: "--bolum"), arguments.indices.contains(index + 1) else {
+        return nil
+    }
+    switch arguments[index + 1] {
+    case "ana": return .home
+    case "toplantilar": return .meetings
+    case "ayarlar": return .settings
+    case "kurulum": return .setup
+    default: return nil
+    }
 }
 
 /// Ana pencereyi verilen bölümde açar ve uygulamayı öne getirir.
@@ -41,6 +69,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let quitGuard: QuitGuard = .shared
+        guard !quitGuard.allowQuit, let isBusy = quitGuard.isBusy, isBusy() else {
+            return .terminateNow
+        }
+        quitGuard.onBlocked?()
+        return .terminateCancel
     }
 }
 
@@ -106,11 +143,19 @@ struct MainWindowView: View {
         case .meetings:
             MeetingsSplit(model: model, router: router, player: player)
         case .settings:
+            // Geniş pencerede form satırları ekran boyu uzamasın.
             SettingsPage(model: model, shortcuts: shortcuts)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
         case .setup:
-            SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Kaydırma alanında, okunur genişlikte. Kaydırma alanı olmadan "Hoş geldin" adımı (uzun, satır kaydıran
+            // metinler) pencereyi ekran boyuna büyütüp tüm içeriği boş bırakıyordu; adımlardaki formlar için yer ayrılır.
+            ScrollView {
+                SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
+                    .frame(maxWidth: 640, minHeight: 560, alignment: .top)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DesignTokens.Spacing.l)
+            }
         }
     }
 }
@@ -146,6 +191,9 @@ private struct HomePage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+                if router.quitWarning {
+                    QuitWarning(model: model, router: router)
+                }
                 hero
                 if !model.setupProblems.isEmpty {
                     problems
@@ -239,6 +287,49 @@ private struct HomePage: View {
         .padding(DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular.tint(Color.orange.opacity(0.18)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+/// Kayıt ya da işleme sürerken çıkış istendiğinde sayfanın içindeki soru (ayrı uyarı penceresi yok). İş biterse
+/// kendiliğinden kapanır.
+private struct QuitWarning: View {
+    let model: AppModel
+    let router: MainWindowRouter
+
+    var body: some View {
+        let isBusy: Bool = model.phase != .idle || !model.processingMeetingIDs.isEmpty
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+            Label(
+                model.phase == .idle
+                    ? "Toplantı işleniyor. Şimdi çıkarsan not hazırlanmaz; açılınca \"Tekrar işle\" gerekir."
+                    : "Kayıt sürüyor. Şimdi çıkarsan toplantı yarıda kalır.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.headline)
+            .foregroundStyle(.orange)
+            HStack(spacing: DesignTokens.Spacing.s) {
+                if model.phase == .recording {
+                    Button("Kaydı bitir", systemImage: "stop.fill") {
+                        model.stopRecording()
+                        router.quitWarning = false
+                    }
+                    .buttonStyle(.glassProminentAction)
+                }
+                Button("Yine de çık", role: .destructive) {
+                    QuitGuard.shared.allowQuit = true
+                    NSApplication.shared.terminate(nil)
+                }
+                Button("Vazgeç") { router.quitWarning = false }
+            }
+        }
+        .padding(DesignTokens.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular.tint(Color.orange.opacity(0.18)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onChange(of: isBusy) { (_: Bool, busy: Bool) in
+            if !busy {
+                router.quitWarning = false
+            }
+        }
     }
 }
 
@@ -345,7 +436,7 @@ private struct HomeRecentMeetings: View {
                         router.selectedMeetingID = record.id
                         router.section = .meetings
                     } label: {
-                        MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
+                        MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id), isSelected: false)
                     }
                     .buttonStyle(.hoverPlain)
                 }
@@ -362,11 +453,11 @@ private struct MeetingsSplit: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            MeetingsListPage(model: model) { (id: String) -> Void in router.selectedMeetingID = id }
+            MeetingsListPage(model: model, selectedID: router.selectedMeetingID) { (id: String) -> Void in router.selectedMeetingID = id }
                 .frame(width: 300)
             Divider()
             if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
-                MeetingDetailPage(model: model, player: player, record: record)
+                MeetingDetailPage(model: model, player: player, record: record) { router.selectedMeetingID = nil }
                     // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                     .id(record.id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -19,6 +19,8 @@ private struct HoverSurface: ViewModifier {
                     .fill(Color.primary.opacity(highlightOpacity))
                     .padding(-hoverOutset)
             }
+            // Devre dışıyken soluk: tıklanabilir görünmesin.
+            .opacity(isEnabled ? 1 : 0.4)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
             .pointerStyle(isEnabled ? .link : nil)
             .animation(.easeOut(duration: 0.12), value: isHovering)
@@ -59,6 +61,9 @@ public struct HoverPlainButtonStyle: ButtonStyle {
 public extension ButtonStyle where Self == HoverPlainButtonStyle {
     /// Satır ve simge düğmeleri.
     static var hoverPlain: HoverPlainButtonStyle { HoverPlainButtonStyle(cornerRadius: 7) }
+    /// Kapsül ve yuvarlak düğmeler (vurgu hapları, oynat düğmesi, seçici bölümleri): vurgu da kapsül biçiminde
+    /// (yarıçap yüksekliğin yarısını aşınca köşeler tam yuvarlanır).
+    static var hoverCapsule: HoverPlainButtonStyle { HoverPlainButtonStyle(cornerRadius: 1000) }
 }
 
 /// Liquid Glass düğmenin boyutu: denetim boyutuna göre dolgu ve yazı.

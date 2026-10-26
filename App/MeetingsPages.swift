@@ -8,9 +8,11 @@ private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 
 // MARK: Liste
 
-/// Panelin Toplantılar sayfası: arama ve yeniden eskiye liste.
+/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama ve yeniden eskiye liste.
 struct MeetingsListPage: View {
     let model: AppModel
+    /// Ana pencerede seçili toplantı (satırı vurgulanır); panelde nil.
+    let selectedID: String?
     let onOpen: @MainActor (String) -> Void
     @State private var query: String = ""
 
@@ -33,7 +35,7 @@ struct MeetingsListPage: View {
                             Button {
                                 onOpen(record.id)
                             } label: {
-                                MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
+                                MeetingRow(record: record, isProcessing: model.processingMeetingIDs.contains(record.id), isSelected: record.id == selectedID)
                             }
                             .buttonStyle(.hoverPlain)
                         }
@@ -59,6 +61,8 @@ struct MeetingsListPage: View {
 struct MeetingRow: View {
     let record: MeetingRecord
     let isProcessing: Bool
+    let isSelected: Bool
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.s) {
@@ -89,6 +93,10 @@ struct MeetingRow: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.m)
         .padding(.vertical, DesignTokens.Spacing.s)
+        .background(
+            appearance.accent.color.opacity(isSelected ? 0.18 : 0),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .contentShape(Rectangle())
     }
 }
@@ -126,6 +134,8 @@ private enum ExportStatus: Equatable {
     case saved(URL)
     case copied
     case failed(String)
+    /// "Toplantıyı sil"e basıldı: satır içi onay bekleniyor (ayrı uyarı penceresi yok).
+    case confirmDelete
 }
 
 /// Seçili toplantının sayfası: önce sana düşen görevler, sonra özet, kararlar, diğer görevler, sözlük,
@@ -134,6 +144,8 @@ struct MeetingDetailPage: View {
     let model: AppModel
     let player: MeetingAudioPlayer
     let record: MeetingRecord
+    /// Toplantı silinince (sayfa artık gösterilemez) çağrılır.
+    let onDeleted: @MainActor () -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
 
@@ -171,11 +183,14 @@ struct MeetingDetailPage: View {
                         )
                         TranscriptSection(
                             record: record, paragraphs: paragraphs, player: player, proxy: proxy,
+                            canPlay: !playableAudio.isEmpty,
                             onPlay: { (startSec: Double) -> Void in play(from: startSec) }
                         )
                     }
                 }
                 .padding(DesignTokens.Spacing.l)
+                // Geniş ana pencerede satırlar okunur uzunlukta kalsın (panelde etkisiz).
+                .frame(maxWidth: 820, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -188,7 +203,12 @@ struct MeetingDetailPage: View {
             // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
             tab = record.note == nil ? .transcript : .summary
         }
-        .onDisappear { player.stop() }
+        // Yalnızca bu toplantı çalıyorsa durur (aynı çalar başka bir sayfada başka toplantıyı çalıyor olabilir).
+        .onDisappear {
+            if player.meetingID == record.id {
+                player.stop()
+            }
+        }
         // Saklama süresi sesi bu sayfa açıkken silebilir.
         .onChange(of: record.audioDeleted) { (_: Bool, deleted: Bool) in
             if deleted {
@@ -281,11 +301,17 @@ struct MeetingDetailPage: View {
                 }
                 .disabled(isLocked || record.audioDeleted)
                 .hoverHint("Son geçişi ve notu yeniden yap", alignment: .leading, edge: .bottom)
-                Button("Sesi sil", systemImage: "trash", role: .destructive) {
+                Button("Sesi sil", systemImage: "speaker.slash", role: .destructive) {
                     player.stop()
                     model.deleteAudio(meetingID: record.id)
                 }
                 .disabled(isLocked || record.audioDeleted)
+                .hoverHint("Yalnızca ses dosyalarını sil; metin ve not kalır", alignment: .leading, edge: .bottom)
+                Button("Toplantıyı sil", systemImage: "trash", role: .destructive) {
+                    export = .confirmDelete
+                }
+                .disabled(isLocked)
+                .hoverHint("Metin, not ve sesle birlikte Çöp Sepeti'ne taşı", alignment: .leading, edge: .bottom)
         }
         .controlSize(.small)
     }
@@ -320,6 +346,22 @@ struct MeetingDetailPage: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.red)
+        case .confirmDelete:
+            HStack(spacing: DesignTokens.Spacing.s) {
+                Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")
+                    .foregroundStyle(.red)
+                Button("Sil", role: .destructive) {
+                    player.stop()
+                    if let error = model.deleteMeeting(meetingID: record.id) {
+                        export = .failed(error)
+                    } else {
+                        onDeleted()
+                    }
+                }
+                Button("Vazgeç") { export = .none }
+            }
+            .font(.caption)
+            .controlSize(.small)
         }
     }
 
@@ -676,6 +718,24 @@ private struct SpeakerNameField: View {
     }
 }
 
+/// Ses varsa paragraf tıklanabilir (el imleci, hover, "Buradan dinle"); yoksa düz metin (tıklanabilir görünmesin).
+private struct PlayableParagraph: ViewModifier {
+    let canPlay: Bool
+    let onTap: @MainActor () -> Void
+
+    func body(content: Content) -> some View {
+        if canPlay {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { onTap() }
+                .hoverHighlight(cornerRadius: 8)
+                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+        } else {
+            content
+        }
+    }
+}
+
 /// Paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, yankı süzülmüş); altında Türkçesi.
 /// Çalarken şarkı sözü gibi akar: çalan paragrafta söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecek
 /// kelimeler soluk; çalan paragraf ortaya kaydırılır. Paragrafa tıklayınca oradan çalar.
@@ -684,6 +744,8 @@ private struct TranscriptSection: View {
     let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
     let proxy: ScrollViewProxy
+    /// Ses var (silinmemiş, kayıtta değil): paragrafa tıklayınca oradan çalar.
+    let canPlay: Bool
     let onPlay: @MainActor (Double) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
@@ -719,10 +781,7 @@ private struct TranscriptSection: View {
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(isActive ? appearance.accent.color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-                .contentShape(Rectangle())
-                .onTapGesture { onPlay(paragraph.startSec) }
-                .hoverHighlight(cornerRadius: 8)
-                .hoverHint("Buradan dinle", alignment: .trailing, edge: .top)
+                .modifier(PlayableParagraph(canPlay: canPlay) { onPlay(paragraph.startSec) })
                 .id(paragraph.id)
             }
         }
@@ -796,7 +855,7 @@ private struct NowPlayingBar: View {
                         .padding(.vertical, 3)
                         .background(.quaternary, in: Capsule())
                 }
-                .buttonStyle(.hoverPlain)
+                .buttonStyle(.hoverCapsule)
                 .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)
                 Button {
                     player.stop()
@@ -843,7 +902,7 @@ private struct NowPlayingBar: View {
                         .frame(width: 42, height: 42)
                         .background(appearance.accent.color, in: Circle())
                 }
-                .buttonStyle(.hoverPlain)
+                .buttonStyle(.hoverCapsule)
                 .accessibilityLabel(player.isPlaying ? "Duraklat" : "Oynat")
                 Button {
                     player.skip(by: 10)

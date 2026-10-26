@@ -61,21 +61,24 @@ func makeLivePanel(rootView: some View) -> NSPanel {
     return panel
 }
 
-/// Uygulamanın tek penceresi olan paneli bir kez oluşturur; sayfa açar, gösterir, gizler, ekran görüntüsü
-/// ayarını uygular.
+/// Kayıt sırasındaki cam paneli bir kez oluşturur; sayfa açar, gösterir, gizler, ekran görüntüsü ayarını uygular.
+/// Ses çalar ve ana pencerenin yönlendiricisi uygulamayla ortaktır (aynı anda iki toplantı çalmasın; panelden
+/// Toplantılar/Ayarlar ana pencerede açılsın).
 @MainActor
 final class LivePanelController {
     private let model: AppModel
     private let router: PanelRouter = PanelRouter()
-    private let player: MeetingAudioPlayer = MeetingAudioPlayer()
+    private let mainRouter: MainWindowRouter
+    private let player: MeetingAudioPlayer
     private var panel: NSPanel?
     private var hideFromCapture: Bool
-    private var shortcuts: ShortcutController?
     private var onStart: (@MainActor () -> Void)?
 
-    init(model: AppModel, hideFromCapture: Bool) {
+    init(model: AppModel, hideFromCapture: Bool, mainRouter: MainWindowRouter, player: MeetingAudioPlayer) {
         self.model = model
         self.hideFromCapture = hideFromCapture
+        self.mainRouter = mainRouter
+        self.player = player
         // Ekran değişince (monitör çıkarıldı, çözünürlük değişti) panel görünür alanın içine çekilir.
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -99,9 +102,8 @@ final class LivePanelController {
         }
     }
 
-    /// Kısayollar ve kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.
-    func attach(shortcuts: ShortcutController, onStart: @escaping @MainActor () -> Void) {
-        self.shortcuts = shortcuts
+    /// Kayıt başlatma eylemi panelden sonra kurulduğu için ilk gösterimden önce bağlanır.
+    func attach(onStart: @escaping @MainActor () -> Void) {
         self.onStart = onStart
         observeFinishedMeetings()
     }
@@ -117,7 +119,10 @@ final class LivePanelController {
                     return
                 }
                 if let id = self.model.lastFinishedMeetingID {
-                    self.show(page: .meeting(id: id))
+                    // Ana pencerede de seçilir; panel klavye odağını almaz (kullanıcı başka yerde yazıyor olabilir).
+                    self.mainRouter.selectedMeetingID = id
+                    self.router.page = .meeting(id: id)
+                    self.show()
                 }
                 self.observeFinishedMeetings()
             }
@@ -130,12 +135,14 @@ final class LivePanelController {
 
     /// Paneli gösterir (açık sayfa değişmez).
     func show() {
-        guard let shortcuts, let onStart else {
-            preconditionFailure("Panel, attach(shortcuts:onStart:) çağrılmadan gösterildi")
+        guard let onStart else {
+            preconditionFailure("Panel, attach(onStart:) çağrılmadan gösterildi")
         }
+        let mainRouter: MainWindowRouter = mainRouter
         let target: NSPanel = panel ?? makeLivePanel(rootView: PanelHost(
-            model: model, router: router, shortcuts: shortcuts, player: player, onStart: onStart,
-            onHide: { [weak self] in self?.hide() }
+            model: model, router: router, player: player, onStart: onStart,
+            onHide: { [weak self] in self?.hide() },
+            onOpenMainWindow: { (section: MainSection) -> Void in openMainWindow(router: mainRouter, section: section) }
         ))
         target.sharingType = sharingType(hideFromCapture: hideFromCapture)
         panel = target
@@ -153,7 +160,11 @@ final class LivePanelController {
         panel?.makeKey()
     }
 
+    /// Paneli gizler; panelde açık toplantı çalıyorsa durur (görünmeyen sayfadan ses gelmesin).
     func hide() {
+        if case .meeting(let id) = router.page, player.meetingID == id {
+            player.stop()
+        }
         panel?.orderOut(nil)
     }
 

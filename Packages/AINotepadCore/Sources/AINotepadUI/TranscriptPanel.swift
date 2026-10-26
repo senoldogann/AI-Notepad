@@ -83,6 +83,11 @@ public struct TranscriptPanel: View {
                 .zIndex(1)
             Divider().opacity(0.35)
             transcript
+                .overlay {
+                    if state.blocks.isEmpty {
+                        emptyState
+                    }
+                }
             if let card = state.assistantCard {
                 AssistantCardView(card: card, onClose: actions.onCloseCard)
                     .padding(.horizontal, DesignTokens.Spacing.m)
@@ -191,7 +196,7 @@ public struct TranscriptPanel: View {
                     .background(appearance.accent.color, in: Capsule())
                     .foregroundStyle(.white)
             }
-            .buttonStyle(.hoverPlain)
+            .buttonStyle(.hoverCapsule)
             .disabled(!state.canStart)
             .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
         case .recording:
@@ -226,7 +231,7 @@ public struct TranscriptPanel: View {
                 chip
             }
             .menuStyle(.button)
-            .buttonStyle(.hoverPlain)
+            .buttonStyle(.hoverCapsule)
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHint("Toplantı dilini değiştir", alignment: .center, edge: .bottom)
@@ -234,6 +239,27 @@ public struct TranscriptPanel: View {
         } else {
             chip
         }
+    }
+
+    /// Henüz metin yokken ortada ne olacağını söyler (boş siyah alan kalmasın).
+    private var emptyState: some View {
+        VStack(spacing: DesignTokens.Spacing.s) {
+            Image(systemName: state.isRecording ? "waveform" : "waveform.badge.mic")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.tint)
+                .symbolEffect(.variableColor.iterative, isActive: state.isRecording)
+            Text(state.isRecording ? "Dinleniyor…" : "Kayıt yok")
+                .font(.system(size: 15, weight: .semibold))
+            Text(state.isRecording
+                ? "Konuşma başlayınca metin burada akar."
+                : "\"Başlat\"a bas; konuşmalar burada canlı yazıya dökülür, bitince toplantının notu hazırlanır.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+        }
+        .padding(DesignTokens.Spacing.l)
+        .allowsHitTesting(false)
     }
 
     /// Transkript: konuşma akarken en alttaysa en yeni metni izler; kullanıcı yukarı kaydırdıysa yerinde kalır ve
@@ -294,7 +320,7 @@ public struct TranscriptPanel: View {
                             .background(appearance.accent.color, in: Capsule())
                             .foregroundStyle(.white)
                     }
-                    .buttonStyle(.hoverPlain)
+                    .buttonStyle(.hoverCapsule)
                     .padding(.bottom, DesignTokens.Spacing.s)
                     .transition(.opacity)
                 }
@@ -336,7 +362,7 @@ public struct TranscriptPanel: View {
             .background(appearance.accent.color, in: Capsule())
             .foregroundStyle(.white)
         }
-        .buttonStyle(.hoverPlain)
+        .buttonStyle(.hoverCapsule)
         .disabled(state.blocks.isEmpty)
         .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
         .accessibilityLabel("Ne kaçırdım?")

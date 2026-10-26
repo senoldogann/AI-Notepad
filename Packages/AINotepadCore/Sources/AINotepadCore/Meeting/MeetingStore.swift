@@ -44,6 +44,16 @@ public func saveMeeting(record: MeetingRecord, directory: URL) throws {
 }
 
 /// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
+/// Toplantının klasörünü (meeting.json ve ses dosyaları) Çöp Sepeti'ne taşır: yanlışlıkla silinen toplantı Finder'dan
+/// geri alınabilir. Taşınamazsa `deleteFailed`.
+public func trashMeetingDirectory(directory: URL) throws {
+    do {
+        try FileManager.default.trashItem(at: directory, resultingItemURL: nil)
+    } catch {
+        throw StorageError.deleteFailed(path: directory.path, reason: error.localizedDescription)
+    }
+}
+
 public func deleteAudioFiles(directory: URL) throws {
     for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
         let file: URL = directory.appending(path: name)

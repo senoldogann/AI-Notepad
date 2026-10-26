@@ -23,8 +23,8 @@ private enum OnboardingStep: Int, CaseIterable {
     }
 }
 
-/// Panelin Kurulum sayfası (ilk açılışta bir kez, sonra menüde "Kurulum…"): izinler, ad, motor, anahtarlar;
-/// her adım atlanabilir, ayarlar sonra Ayarlar sayfasından değişir.
+/// Kurulum (ana pencerede; ilk açılışta pencere burada açılır): izinler, ad, motor, anahtarlar; her adım atlanabilir,
+/// ayarlar sonra Ayarlar'dan değişir.
 struct SetupPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
@@ -61,12 +61,14 @@ struct SetupPage: View {
                 Spacer()
                 if step == .ready {
                     Button("Başla") { onFinish() }
+                        .buttonStyle(.glassProminentAction)
                         .keyboardShortcut(.defaultAction)
                 } else {
                     Button("Atla") { onFinish() }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(.secondary)
                     Button("İleri") { move(by: 1) }
+                        .buttonStyle(.glassProminentAction)
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -300,7 +302,7 @@ private struct ReadyStep: View {
                     Text(action.title)
                 }
             }
-            Text("Kaydı paneldeki \"Başlat\" düğmesiyle ya da menüden başlat. Toplantı bitince panel toplantının sayfasını açar: görevlerin en üstte.")
+            Text("Kaydı Ana sayfadaki \"Kaydı başlat\" düğmesiyle, kısayolla ya da menüden başlat. Kayıt sırasında cam panel canlı metni gösterir; toplantı bitince toplantının sayfası açılır: görevlerin en üstte.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
