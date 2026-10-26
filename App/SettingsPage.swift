@@ -132,6 +132,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
+    @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
@@ -228,6 +229,11 @@ private struct GeneralSettings: View {
                     }
                 ))
                 .settingsToggle()
+            }
+            SettingsRow(title: Text("Kayıt başlarken haber vermeyi hatırlat")) {
+                Text("Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak Fince/İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.")
+            } control: {
+                Toggle("Kayıt başlarken haber vermeyi hatırlat", isOn: $consentReminder).settingsToggle()
             }
             SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
                 Text("Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.")

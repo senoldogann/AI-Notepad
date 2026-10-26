@@ -901,6 +901,16 @@
         }
       }
     },
+    "Bildirimi kopyala": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy notice"
+          }
+        }
+      }
+    },
     "Bilinmiyor": {
       "localizations": {
         "en": {
@@ -1606,6 +1616,16 @@
         }
       }
     },
+    "Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short notice in Finnish and English; paste it into the meeting chat"
+          }
+        }
+      }
+    },
     "Finder'da göster": {
       "localizations": {
         "en": {
@@ -2071,6 +2091,16 @@
         }
       }
     },
+    "Kayıt başlarken haber vermeyi hatırlat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remind me to tell participants"
+          }
+        }
+      }
+    },
     "Kayıt bitiriliyor": {
       "localizations": {
         "en": {
@@ -2177,6 +2207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You can restart once recording and processing finish"
+          }
+        }
+      }
+    },
+    "Kayıt yapıyorsun: katılımcılara haber ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're recording: let the participants know."
           }
         }
       }
@@ -2492,6 +2532,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy"
+          }
+        }
+      }
+    },
+    "Kopyalandı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
           }
         }
       }
@@ -3042,6 +3092,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The panel and island can be hidden from screen sharing."
+          }
+        }
+      }
+    },
+    "Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak Fince/İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A short reminder in the panel and a Finnish/English notice to paste into the meeting chat. In most places you must tell participants before recording."
           }
         }
       }

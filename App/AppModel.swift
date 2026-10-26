@@ -81,6 +81,8 @@ final class AppModel {
     var registeredVoices: [RegisteredVoice] = []
     /// Kayıtlı sesler okunamadı ya da yazılamadı (Ayarlar'da gösterilir).
     var voiceRegistryError: String?
+    /// Kayıt başında panelde "katılımcılara haber ver" hatırlatması gösteriliyor.
+    var consentReminderVisible: Bool = false
     var transcript: [LiveSegment] = []
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
@@ -569,6 +571,7 @@ final class AppModel {
             return
         }
         isRecording = true
+        consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
         finishingCardDismissed = false
         recordingStartedAt = startedAt
@@ -611,6 +614,7 @@ final class AppModel {
             return
         }
         isFinishing = true
+        consentReminderVisible = false
         microphone.stop()
         systemAudio.stop()
     }

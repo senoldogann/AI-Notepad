@@ -48,6 +48,8 @@ enum SettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// "Sen" (mikrofon) kapalı mı.
     static let micMuted: String = "micMuted"
+    /// Kayıt başlarken katılımcılara haber verme hatırlatması.
+    static let consentReminder: String = "consentReminder"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
@@ -184,6 +186,7 @@ func registerDefaultSettings() {
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
         SettingsKey.voiceRecognition: true,
+        SettingsKey.consentReminder: true,
         SettingsKey.theme: AppTheme.light.rawValue,
         SettingsKey.accent: PanelAppearance.standard.accent.rawValue,
         SettingsKey.fontDesign: PanelAppearance.standard.fontDesign.rawValue,

@@ -62,6 +62,10 @@ struct AINotepadApp: App {
                     UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
                 }
+                // "--riza": kayıt başlatmadan rıza hatırlatmasını gösterir (görsel kontrol için).
+                if CommandLine.arguments.contains("--riza") {
+                    model.consentReminderVisible = true
+                }
                 let section: MainSection? = launchSection(arguments: CommandLine.arguments)
                 let page: PanelPage? = launchPage(arguments: CommandLine.arguments)
                 if let section {
