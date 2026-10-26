@@ -111,6 +111,24 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.audioDeleted = audioDeleted
     }
 
+    /// Konuşmacı adları değişmiş kopya.
+    public func with(speakerNames newNames: [Int: String]) -> MeetingRecord {
+        MeetingRecord(
+            id: id, title: title, startedAt: startedAt, endedAt: endedAt, language: language, status: status,
+            failureMessage: failureMessage, liveSegments: liveSegments, finalSegments: finalSegments,
+            translations: translations, speakerNames: newNames, note: note, audioDeleted: audioDeleted
+        )
+    }
+
+    /// Ses dosyaları silinmiş olarak işaretli kopya.
+    public func withAudioDeleted() -> MeetingRecord {
+        MeetingRecord(
+            id: id, title: title, startedAt: startedAt, endedAt: endedAt, language: language, status: status,
+            failureMessage: failureMessage, liveSegments: liveSegments, finalSegments: finalSegments,
+            translations: translations, speakerNames: speakerNames, note: note, audioDeleted: true
+        )
+    }
+
     /// Yalnızca durumu (ve hata mesajını) değişmiş kopya.
     public func with(status newStatus: MeetingStatus, failureMessage newFailure: String?) -> MeetingRecord {
         MeetingRecord(
@@ -124,4 +142,16 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
 /// Canlı bölümün saklama anahtarı: "me-0", "others-3".
 public func segmentKey(id: SegmentID) -> String {
     "\(id.speaker.rawValue)-\(id.index)"
+}
+
+/// Canlı transkriptten saklanacak bölümler: metinli kesin bölümler. Saf fonksiyondur.
+public func storedSegments(transcript: [LiveSegment]) -> [StoredSegment] {
+    transcript
+        .filter { (segment: LiveSegment) -> Bool in segment.isFinal && !segment.text.isEmpty && segment.failureMessage == nil }
+        .map { (segment: LiveSegment) -> StoredSegment in
+            StoredSegment(
+                key: segmentKey(id: segment.id), speaker: segment.id.speaker, person: segment.person,
+                startSec: segment.startSec, endSec: segment.endSec, text: segment.text
+            )
+        }
 }

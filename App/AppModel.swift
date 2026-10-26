@@ -51,6 +51,13 @@ final class AppModel {
     @ObservationIgnored private var recordingGeneration: Int = 0
     /// Kayıt başında bir kez okunan Anthropic anahtarı (her cümlede Keychain okunmasın).
     @ObservationIgnored private var anthropicKey: String?
+    /// Kaydedilmiş toplantılar (yeniden eskiye) ve okunamayanlar.
+    var meetings: [MeetingRecord] = []
+    var meetingLoadFailures: [MeetingLoadFailure] = []
+    /// İşlenmekte olan toplantıların kimlikleri.
+    var processingMeetingIDs: Set<String> = []
+    /// Süren kaydın klasörü, başlangıcı ve (bulut motorunda) ElevenLabs anahtarı.
+    @ObservationIgnored private var currentSession: (directory: URL, startedAt: Date, elevenLabsKey: String?)?
     /// Süren "Ne kaçırdım?"/soru isteği; yenisi, kapatma ya da yeni kayıt eskisini iptal eder.
     @ObservationIgnored private var assistantTask: Task<Void, Never>?
     /// Kartı yazmaya yetkili son istek.
@@ -327,7 +334,15 @@ final class AppModel {
             return
         }
         isRecording = true
-        recordingStartedAt = Date()
+        let startedAt: Date = Date()
+        recordingStartedAt = startedAt
+        currentSession = (directory, startedAt, cloudKeys?.elevenLabs)
+        // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
+        saveRecord(record: MeetingRecord(
+            id: directory.lastPathComponent, title: "Toplantı", startedAt: startedAt, endedAt: nil, language: nil,
+            status: .recording, failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:],
+            speakerNames: [:], note: nil, audioDeleted: false
+        ), directory: directory)
         Self.logger.info("Kayıt başladı: \(directory.path, privacy: .public), motor: \(self.liveEngine.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in events {
@@ -386,6 +401,131 @@ final class AppModel {
         recordingStartedAt = nil
         sessionTask = nil
         Self.logger.info("Kayıt bitti")
+        guard let session = currentSession else {
+            return
+        }
+        currentSession = nil
+        let record: MeetingRecord = MeetingRecord(
+            id: session.directory.lastPathComponent, title: "Toplantı", startedAt: session.startedAt, endedAt: Date(),
+            language: lockedLanguage, status: .processing, failureMessage: nil,
+            liveSegments: storedSegments(transcript: transcript), finalSegments: [],
+            translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
+            speakerNames: [:], note: nil, audioDeleted: false
+        )
+        process(record: record, directory: session.directory, elevenLabsKey: session.elevenLabsKey, anthropicKey: anthropicKey)
+    }
+
+    // MARK: Toplantı kayıtları
+
+    /// Toplantıyı sonradan işler (son geçiş + not) ve kaydeder.
+    private func process(record: MeetingRecord, directory: URL, elevenLabsKey: String?, anthropicKey: String?) {
+        saveRecord(record: record, directory: directory)
+        processingMeetingIDs.insert(record.id)
+        let languageMode: LanguageMode = languageMode
+        let userName: String = UserDefaults.standard.string(forKey: userNameKey) ?? ""
+        Task {
+            let result: MeetingRecord = await processMeeting(
+                record: record, directory: directory, elevenLabsKey: elevenLabsKey, anthropicKey: anthropicKey,
+                languageMode: languageMode, userName: userName
+            )
+            saveRecord(record: result, directory: directory)
+            processingMeetingIDs.remove(record.id)
+        }
+    }
+
+    /// "Tekrar işle": anahtarları şimdi okur (Ayarlar'dan sonradan eklenmiş olabilir).
+    func reprocess(meetingID: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !processingMeetingIDs.contains(meetingID) else {
+            return
+        }
+        // Anahtar yoksa ilgili adım atlanır (ElevenLabs) ya da açık hatayla biter (Anthropic); okuma hatası yok sayılmaz.
+        let elevenLabsKey: String? = optionalSecret(account: .elevenlabs)
+        let anthropicKey: String? = optionalSecret(account: .anthropic)
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            process(record: record, directory: directory, elevenLabsKey: elevenLabsKey, anthropicKey: anthropicKey)
+        }
+    }
+
+    /// "Konuşmacı 2 = Aino": adı kaydeder; boş ad etiketi geri getirir.
+    func renameSpeaker(meetingID: String, person: Int, name: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return
+        }
+        var names: [Int: String] = record.speakerNames
+        names[person] = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: record.with(speakerNames: names), directory: directory)
+        }
+    }
+
+    /// Kayıtlı değilse nil; Keychain başka bir hata verirse panelde gösterilir ve nil döner.
+    private func optionalSecret(account: SecretAccount) -> String? {
+        do {
+            return try readSecret(service: keychainService, account: account)
+        } catch KeychainError.notFound {
+            return nil
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: "Anahtar okunamadı: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Ses dosyalarını siler; metin ve not kalır.
+    func deleteAudio(meetingID: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            deleteAudioFiles(directory: directory)
+            saveRecord(record: record.withAudioDeleted(), directory: directory)
+        }
+    }
+
+    /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresi dolan sesleri siler.
+    func performStartupMaintenance() {
+        reloadMeetings()
+        for record in staleStatusesToInterrupt(records: meetings) {
+            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                saveRecord(record: record, directory: directory)
+            }
+        }
+        for id in audioToDelete(records: meetings, now: Date(), retentionDays: audioRetentionDays) {
+            deleteAudio(meetingID: id)
+        }
+    }
+
+    func reloadMeetings() {
+        do {
+            let result: MeetingLoadResult = loadMeetings(sessionsDirectory: try AppPaths.sessionsDirectory())
+            meetings = result.meetings
+            meetingLoadFailures = result.failures
+        } catch {
+            meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: String(describing: error))]
+        }
+    }
+
+    private func saveRecord(record: MeetingRecord, directory: URL) {
+        do {
+            try saveMeeting(record: record, directory: directory)
+        } catch {
+            Self.logger.error("Toplantı kaydedilemedi: \(directory.path, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: "Toplantı kaydedilemedi: \(error.localizedDescription)")
+        }
+        reloadMeetings()
+    }
+
+    /// Toplantının klasörü (klasör adı toplantı kimliğidir).
+    private func sessionDirectory(id: String) throws -> URL {
+        try AppPaths.sessionsDirectory().appending(path: id, directoryHint: .isDirectory)
+    }
+
+    /// Klasör gerektiren bir eylemi çalıştırır; klasör alınamazsa hata panelde görünür.
+    private func withSessionDirectory(id: String, action: (URL) -> Void) {
+        do {
+            action(try sessionDirectory(id: id))
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: "Toplantı klasörüne erişilemedi: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -394,6 +534,26 @@ private func finishedStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     continuation.finish()
     return stream
+}
+
+/// Kullanıcı adı (not görevlerinde "benim" tespiti için) UserDefaults anahtarı.
+let userNameKey: String = "userName"
+/// Ses dosyalarının saklama süresi (gün).
+let audioRetentionDays: Int = 30
+
+/// Bir toplantının `.m4a`/`.caf` ses dosyalarını siler.
+private func deleteAudioFiles(directory: URL) {
+    for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
+        let file: URL = directory.appending(path: name)
+        if FileManager.default.fileExists(atPath: file.path) {
+            do {
+                try FileManager.default.removeItem(at: file)
+            } catch {
+                Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel")
+                    .error("Ses silinemedi: \(file.path, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
 }
 
 /// Görünüm ayarının UserDefaults anahtarı.

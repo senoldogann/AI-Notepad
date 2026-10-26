@@ -18,10 +18,14 @@ public enum AppPaths {
         try ensureDirectory(url: applicationSupport().appending(path: "Models", directoryHint: .isDirectory))
     }
 
+    /// Tüm toplantıların klasörü: `Sessions`.
+    public static func sessionsDirectory() throws -> URL {
+        try ensureDirectory(url: applicationSupport().appending(path: "Sessions", directoryHint: .isDirectory))
+    }
+
     /// Yeni bir kayıt oturumu klasörü: `Sessions/<yyyyMMdd-HHmmss>`.
     public static func newSessionDirectory(startedAt: Date) throws -> URL {
-        let sessions: URL = try applicationSupport().appending(path: "Sessions", directoryHint: .isDirectory)
-        return try ensureDirectory(url: sessions.appending(path: sessionFolderName(startedAt: startedAt), directoryHint: .isDirectory))
+        try ensureDirectory(url: sessionsDirectory().appending(path: sessionFolderName(startedAt: startedAt), directoryHint: .isDirectory))
     }
 
     /// Oturum klasörü adını üretir (yerel saat dilimi).

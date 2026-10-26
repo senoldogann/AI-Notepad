@@ -57,3 +57,14 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(audioToDelete(records: records, now: now, retentionDays: 30) == ["old"])
     }
 }
+
+@Suite struct StoredSegmentsTests {
+    @Test func keepsOnlyFinalTextSegmentsWithKeys() {
+        let transcript: [LiveSegment] = [
+            LiveSegment(id: SegmentID(speaker: .others, index: 3), startSec: 1, endSec: 2, text: "Hei", isFinal: true, failureMessage: nil, person: 2),
+            LiveSegment(id: SegmentID(speaker: .me, index: 0), startSec: 3, endSec: 4, text: "kesk", isFinal: false, failureMessage: nil, person: nil),
+            LiveSegment(id: SegmentID(speaker: .others, index: 4), startSec: 5, endSec: 6, text: "", isFinal: true, failureMessage: "x", person: nil),
+        ]
+        #expect(storedSegments(transcript: transcript) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei")])
+    }
+}

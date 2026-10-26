@@ -7,6 +7,11 @@ public let meetingFileName: String = "meeting.json"
 public struct MeetingLoadFailure: Sendable, Equatable {
     public let folder: String
     public let reason: String
+
+    public init(folder: String, reason: String) {
+        self.folder = folder
+        self.reason = reason
+    }
 }
 
 /// Tüm toplantılar ve okunamayanlar; bir bozuk dosya diğerlerini engellemez.
