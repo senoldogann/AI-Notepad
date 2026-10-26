@@ -426,7 +426,7 @@ struct MeetingDetailPage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Yalnızca zemin kırpılır: düğme ipuçları kapağın dışına taşabilsin.
         .background {
-            CoverBackground(seed: record.id)
+            LivingCoverBackground(seed: record.id)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .environment(\.colorScheme, .dark)

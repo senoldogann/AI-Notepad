@@ -668,21 +668,21 @@ private struct BannerCarousel: View {
         let title: LocalizedStringKey
         let primary: LocalizedStringKey
         let secondary: LocalizedStringKey
-        let color: Color
+        let palette: FilmPalette
     }
 
     private var slides: [Slide] {
         [
-            Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", color: appearance.accent.color),
-            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", color: Color(red: 0.18, green: 0.36, blue: 0.88)),
-            Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", color: Color(red: 0.16, green: 0.55, blue: 0.45)),
+            Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", palette: .sunset),
+            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", palette: .coral),
+            Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", palette: .violet),
         ]
     }
 
     var body: some View {
         let slide: Slide = slides[index]
         VStack(spacing: 10) {
-            GradientBanner(accent: slide.color) {
+            GradientBanner(palette: slide.palette, seed: "banner-\(index)") {
                 VStack(spacing: 14) {
                     Text(slide.title)
                         .appFont(size: 24, weight: .regular)
