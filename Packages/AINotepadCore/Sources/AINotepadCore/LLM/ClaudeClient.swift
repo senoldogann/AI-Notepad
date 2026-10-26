@@ -47,21 +47,35 @@ public func claudeSupportsServerFallback(model: ClaudeModel) -> Bool {
     model != .haiku
 }
 
+/// Düşünme açıkken en az bu kadar `max_tokens`: düşünme de bu sınırdan harcar; `max` effort'ta kısa bir toplantının
+/// notu bile 16.000'i doldurup kesiliyordu. 64.000, `xhigh`/`max` için yayımlanan başlangıç değeridir; sınır yalnızca
+/// güvenlik payıdır (kullanılan kadar ödenir).
+let claudeThinkingTokenFloor: Int = 64000
+
+/// Gönderilecek `max_tokens`: düşünme kapalıysa (`thinking` alanı var) isteğin sınırı, açıksa en az
+/// `claudeThinkingTokenFloor`. Saf fonksiyondur.
+public func claudeMaxTokens(requested: Int, thinking: [String: String]?) -> Int {
+    thinking == nil ? max(requested, claudeThinkingTokenFloor) : requested
+}
+
 /// İstek gövdesi: seçili model ve effort, hızlı sınıfta mümkünse düşünme kapalı, destekleyen modelde sunucu tarafı
-/// yedek model. Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
+/// yedek model, akış (SSE) açık — model uzun düşünürken de bağlantıdan veri gelir, boşta zaman aşımı dolmaz.
+/// Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
 public func claudeRequestBody(request: LLMRequest, model: ClaudeModel, effort: LLMEffort) throws -> Data {
     var outputConfig: [String: Any] = ["effort": effort.rawValue]
     if let schemaText = request.jsonSchema {
         outputConfig["format"] = ["type": "json_schema", "schema": try parsedSchema(text: schemaText)]
     }
+    let thinking: [String: String]? = claudeThinking(model: model, tier: request.tier, effort: effort)
     var body: [String: Any] = [
         "model": model.rawValue,
-        "max_tokens": request.maxTokens,
+        "max_tokens": claudeMaxTokens(requested: request.maxTokens, thinking: thinking),
+        "stream": true,
         "system": request.system,
         "messages": [["role": "user", "content": request.userText]],
         "output_config": outputConfig,
     ]
-    if let thinking = claudeThinking(model: model, tier: request.tier, effort: effort) {
+    if let thinking {
         body["thinking"] = thinking
     }
     if claudeSupportsServerFallback(model: model) {
@@ -91,22 +105,39 @@ public func claudeHeaders(apiKey: String, model: ClaudeModel) -> [String: String
     return headers
 }
 
-/// Yanıttaki metin bloklarını birleştirir; düşünme ve diğer bloklar atlanır. Önce reddetme, sonra
-/// `max_tokens` kesilmesi denetlenir (yarım JSON ayrıştırılmaya çalışılmasın).
-public func parseClaudeResponse(data: Data, model: String) throws -> String {
+/// Akışın (SSE) sonucu: metin parçaları birleştirilir (sunucu tarafı yedek model akışın ortasında devralırsa metni
+/// sürdürür, birleşim tam yanıttır), durma nedeni son `message_delta`'dan gelir. Önce akış içi hata, sonra reddetme,
+/// sonra kesilme denetlenir. Saf fonksiyondur.
+public func parseClaudeStream(data: Data, model: String) throws -> String {
     let body: String = String(decoding: data, as: UTF8.self)
-    guard let raw = try? JSONDecoder().decode(RawClaudeResponse.self, from: data) else {
+    let events: [RawStreamEvent] = try body
+        .split(whereSeparator: \.isNewline)
+        .filter { $0.hasPrefix("data:") }
+        .map { (line: Substring) -> RawStreamEvent in
+            let payload: Substring = line.dropFirst("data:".count).drop { $0 == " " }
+            do {
+                return try JSONDecoder().decode(RawStreamEvent.self, from: Data(payload.utf8))
+            } catch {
+                throw LLMError.malformed(body: "\(error): \(body)")
+            }
+        }
+    if let failure = events.first(where: { $0.type == "error" })?.error {
+        throw LLMError.streamFailed(errorType: failure.type, message: failure.message, model: model)
+    }
+    let stop: RawStreamDelta? = events.last { $0.type == "message_delta" }?.delta
+    guard events.contains(where: { $0.type == "message_stop" }), let stopReason = stop?.stop_reason else {
+        // Akış bitmeden kapandı: yarım yanıt kullanılmaz.
         throw LLMError.malformed(body: body)
     }
-    if raw.stop_reason == "refusal" {
-        throw LLMError.refusal(category: raw.stop_details?.category)
+    if stopReason == "refusal" {
+        throw LLMError.refusal(category: stop?.stop_details?.category)
     }
-    if raw.stop_reason == "max_tokens" {
+    if stopReason == "max_tokens" {
         throw LLMError.truncated(model: model)
     }
-    let text: String = raw.content
-        .filter { (block: RawContentBlock) -> Bool in block.type == "text" }
-        .compactMap(\.text)
+    let text: String = events
+        .filter { $0.type == "content_block_delta" && $0.delta?.type == "text_delta" }
+        .compactMap { $0.delta?.text }
         .joined()
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
@@ -115,15 +146,24 @@ public func parseClaudeResponse(data: Data, model: String) throws -> String {
     return text
 }
 
-/// Durum koduna ve gövdeye göre sonucu belirler. 200 içindeki reddetme/kesilme/bozuk/boş yanıt kesin hatadır
-/// (yeniden denemek aynı sonucu verir, maliyeti katlar ve canlı çeviriyi tıkar). Saf fonksiyondur.
+/// Akış içi hatanın türü yeniden denenebilir mi (aşırı yük, sunucu hatası, hız sınırı).
+func isRetryableStreamError(errorType: String) -> Bool {
+    ["overloaded_error", "api_error", "rate_limit_error"].contains(errorType)
+}
+
+/// Durum koduna ve gövdeye göre sonucu belirler. 2xx gövde bir akıştır (SSE); başarısız durumda gövde JSON hatadır.
+/// 200 içindeki reddetme/kesilme/bozuk/boş yanıt kesin hatadır (yeniden denemek aynı sonucu verir, maliyeti katlar ve
+/// canlı çeviriyi tıkar); akış ortasındaki aşırı yük ve sunucu hatası yeniden denenir. Saf fonksiyondur.
 public func classifyClaudeResponse(status: Int, data: Data, model: String, requestID: String?) -> LLMOutcome {
     let body: String = String(decoding: data, as: UTF8.self)
     switch status {
     case 200..<300:
         do {
-            return .success(try parseClaudeResponse(data: data, model: model))
+            return .success(try parseClaudeStream(data: data, model: model))
         } catch let error as LLMError {
+            if case .streamFailed(let errorType, _, _) = error, isRetryableStreamError(errorType: errorType) {
+                return .retryable(error)
+            }
             return .final(error)
         } catch {
             return .final(.malformed(body: body))
@@ -152,17 +192,26 @@ func prepareClaudeCall(config: AnthropicConfig, request: LLMRequest) throws -> P
 }
 
 // Claude JSON alan adları snake_case olduğu için ara tipler aynı adları kullanır.
-private struct RawClaudeResponse: Decodable {
-    let stop_reason: String?
-    let stop_details: RawStopDetails?
-    let content: [RawContentBlock]
-}
-
 private struct RawStopDetails: Decodable {
     let category: String?
 }
 
-private struct RawContentBlock: Decodable {
+private struct RawStreamEvent: Decodable {
     let type: String
-    let text: String?
+    let delta: RawStreamDelta?
+    let error: RawStreamError?
 }
+
+/// `content_block_delta` (`type`, `text`) ve `message_delta` (`stop_reason`, `stop_details`) aynı alanı kullanır.
+private struct RawStreamDelta: Decodable {
+    let type: String?
+    let text: String?
+    let stop_reason: String?
+    let stop_details: RawStopDetails?
+}
+
+private struct RawStreamError: Decodable {
+    let type: String
+    let message: String
+}
+

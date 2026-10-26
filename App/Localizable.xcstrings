@@ -222,6 +222,28 @@
         }
       }
     },
+    "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ response failed midway (%@). Try again in a moment."
+          }
+        }
+      }
+    },
+    "%@ yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ response hit the output limit and was cut off. Lower the effort in Settings › LLM and try again."
+          }
+        }
+      }
+    },
     "%@ — %@": {
       "localizations": {
         "en": {
@@ -3233,17 +3255,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Capture started. If a permission dialog appeared and you chose \"Allow\", you're ready."
-          }
-        }
-      }
-    },
-    "Yanıt çok uzun olduğu için yarıda kesildi. Tekrar dene.": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The response was cut off because it was too long. Try again."
           }
         }
       }

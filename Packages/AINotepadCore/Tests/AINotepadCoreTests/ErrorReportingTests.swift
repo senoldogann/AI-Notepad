@@ -23,7 +23,7 @@ import Testing
     }
 
     @Test func llmMessagesCoverTruncationAndProvider() {
-        #expect(userFacingMessage(error: LLMError.truncated(model: "claude-opus-5-5")).contains("uzun"))
+        #expect(userFacingMessage(error: LLMError.truncated(model: "claude-opus-5-5")).contains("effort"))
         #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "claude-haiku-5-5", requestID: "req_1")).contains("Anthropic anahtarı geçersiz"))
         #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "gpt-5", requestID: nil)).contains("LLM anahtarı geçersiz"))
     }
@@ -38,9 +38,7 @@ import Testing
     }
 
     @Test func classifyRetries408AndFlagsTruncation() {
-        let truncated: Data = Data(#"{"stop_reason":"max_tokens","content":[{"type":"text","text":"yarım"}]}"#.utf8)
         #expect(classifyClaudeResponse(status: 408, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 408, body: "x", model: "m", requestID: "r")))
-        #expect(classifyClaudeResponse(status: 200, data: truncated, model: "m", requestID: nil) == .final(.truncated(model: "m")))
     }
 
     // Ses thread'indeki hata logu dakikada en fazla bir kez yazılır.

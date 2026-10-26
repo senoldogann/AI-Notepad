@@ -66,8 +66,11 @@ private func llmMessage(error: LLMError) -> String {
         String(localized: "\(providerName(model: model)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et.")
     case .http(let status, _, let model, _):
         String(localized: "\(providerName(model: model)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene.")
-    case .truncated:
-        String(localized: "Yanıt çok uzun olduğu için yarıda kesildi. Tekrar dene.")
+    case .truncated(let model):
+        // Düşünme de çıktı sınırından harcar: aynı ayarla tekrar denemek aynı sonucu verir.
+        String(localized: "\(model) yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.")
+    case .streamFailed(let errorType, _, let model):
+        String(localized: "\(providerName(model: model)) yanıtı yarıda hata verdi (\(errorType)). Biraz sonra tekrar dene.")
     case .refusal:
         String(localized: "Model bu isteği yanıtlamadı (güvenlik denetimi).")
     case .malformed, .empty, .invalidSchema:

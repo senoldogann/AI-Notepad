@@ -36,6 +36,8 @@ public enum LLMError: Error, Equatable {
     case http(status: Int, body: String, model: String, requestID: String?)
     /// Yanıt `max_tokens` sınırında kesildi.
     case truncated(model: String)
+    /// Akış (SSE) başarılı başladıktan sonra hata olayıyla bitti (ör. `overloaded_error`).
+    case streamFailed(errorType: String, message: String, model: String)
     /// Güvenlik sınıflandırıcısı isteği reddetti.
     case refusal(category: String?)
     case malformed(body: String)
