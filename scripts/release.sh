@@ -19,6 +19,7 @@ mkdir -p "$out/export"
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Release \
     -derivedDataPath .build/xcode-dist -destination 'platform=macOS,arch=arm64' \
     CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" OTHER_CODE_SIGN_FLAGS="--timestamp" \
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     build -quiet
 ditto .build/xcode-dist/Build/Products/Release/AINotepad.app "$app"
 
@@ -29,6 +30,8 @@ signature="$(codesign -dv --verbose=2 "$app" 2>&1)"
 [[ "$signature" == *"(runtime)"* ]] || { echo "Hardened runtime kapalı (noter onayı reddeder)." >&2; exit 1; }
 entitlements="$(codesign -d --entitlements - "$app" 2>/dev/null)"
 [[ "$entitlements" == *"com.apple.security.device.audio-input"* ]] || { echo "Mikrofon yetkisi (entitlement) eksik." >&2; exit 1; }
+# Hata ayıklayıcı izni dağıtımda olmamalı (Apple noter onayı reddeder).
+[[ "$entitlements" != *"get-task-allow"* ]] || { echo "get-task-allow yetkisi var (noter onayı reddeder)." >&2; exit 1; }
 
 # DMG: uygulama + Uygulamalar kısayolu (sürükle-bırak kurulum).
 staging="$out/dmg"
