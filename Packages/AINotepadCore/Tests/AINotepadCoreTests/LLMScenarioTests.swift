@@ -151,7 +151,7 @@ struct LLMScenarioTests {
         #expect(!answer.isEmpty)
 
         let review: SpeakerReview = try await requestStructured(
-            provider: provider, request: try #require(speakerReviewRequest(segments: stored, speakerNames: [:], userName: "Doğan"))
+            provider: provider, request: try #require(speakerReviewRequest(segments: stored, speakerNames: [:], userName: "Doğan", attendees: []))
         ) { (text: String) throws -> SpeakerReview in try parseSpeakerReview(text: text, persons: [1, 2], speakerNames: [:]) }
         #expect(review.names.contains { $0.person == 2 && $0.name == "Mikko" }, "adlar: \(review.names)")
     }

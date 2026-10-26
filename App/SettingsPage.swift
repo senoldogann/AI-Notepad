@@ -133,6 +133,9 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
     @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
+    @AppStorage(SettingsKey.calendarEnabled) private var calendarEnabled: Bool = false
+    @AppStorage(SettingsKey.meetingReminders) private var meetingReminders: Bool = true
+    @AppStorage(SettingsKey.micSuggestions) private var micSuggestions: Bool = true
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
     @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
@@ -194,6 +197,41 @@ private struct GeneralSettings: View {
             } control: {
                 TextField("Adın", text: $userName)
                     .settingsField(width: 200)
+            }
+            SettingsRow(title: Text("Takvimi kullan")) {
+                Text("Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.")
+                if let error = model.calendarError {
+                    Text(error).foregroundStyle(.red)
+                }
+            } control: {
+                Toggle("Takvimi kullan", isOn: Binding<Bool>(
+                    get: { calendarEnabled },
+                    set: { (enabled: Bool) -> Void in
+                        if enabled {
+                            Task { await model.enableCalendar() }
+                        } else {
+                            calendarEnabled = false
+                            model.startCalendarServices()
+                        }
+                    }
+                ))
+                .settingsToggle()
+            }
+            if calendarEnabled {
+                SettingsRow(title: Text("Toplantıdan 1 dk önce hatırlat")) {
+                    Text("Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.")
+                } control: {
+                    Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
+                        .settingsToggle()
+                        .onChange(of: meetingReminders) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                }
+                SettingsRow(title: Text("Görüşme başlayınca öner")) {
+                    Text("Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.")
+                } control: {
+                    Toggle("Görüşme başlayınca öner", isOn: $micSuggestions)
+                        .settingsToggle()
+                        .onChange(of: micSuggestions) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                }
             }
             SettingsRow(title: Text("Not şablonu")) {
                 Text("Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).")

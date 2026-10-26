@@ -42,6 +42,12 @@ struct AINotepadApp: App {
         _shortcuts = State(initialValue: shortcuts)
         // Kayıt ya da işleme sürerken çıkış (⌘Q, Dock, menü) sorulur; toplantı yarıda kalmasın.
         QuitGuard.shared.isBusy = { model.phase != .idle || !model.processingMeetingIDs.isEmpty }
+        AppDelegate.onStartFromNotification = {
+            guard !model.isRecording else {
+                return
+            }
+            Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
+        }
         QuitGuard.shared.onBlocked = {
             router.quitWarning = true
             openMainWindow(router: router, section: .home)

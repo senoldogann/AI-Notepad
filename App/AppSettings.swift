@@ -54,6 +54,10 @@ enum SettingsKey {
     /// Yeni toplantıların not şablonu (`NoteTemplateKind`) ve kendi şablonunun yönergesi.
     static let noteTemplate: String = "noteTemplate"
     static let customTemplate: String = "customTemplate"
+    /// Takvim: yaklaşan toplantılar, 1 dk önce hatırlatma, görüşme başlayınca öneri.
+    static let calendarEnabled: String = "calendar.enabled"
+    static let meetingReminders: String = "calendar.reminders"
+    static let micSuggestions: String = "calendar.micSuggestions"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
@@ -191,6 +195,9 @@ func registerDefaultSettings() {
         SettingsKey.micMuted: false,
         SettingsKey.voiceRecognition: true,
         SettingsKey.consentReminder: true,
+        SettingsKey.calendarEnabled: false,
+        SettingsKey.meetingReminders: true,
+        SettingsKey.micSuggestions: true,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
         SettingsKey.customTemplate: "",
         SettingsKey.theme: AppTheme.light.rawValue,

@@ -85,6 +85,17 @@ final class AppModel {
     var consentReminderVisible: Bool = false
     /// Takvim ve Anımsatıcılar.
     @ObservationIgnored let eventKit: EventKitConnector = EventKitConnector()
+    @ObservationIgnored private let notifier: MeetingNotifier = MeetingNotifier()
+    @ObservationIgnored private let micMonitor: MicrophoneActivityMonitor = MicrophoneActivityMonitor()
+    @ObservationIgnored private var calendarTask: Task<Void, Never>?
+    @ObservationIgnored private var calendarChangesTask: Task<Void, Never>?
+    @ObservationIgnored private var lastMicSuggestion: Date = .distantPast
+    /// Önümüzdeki 24 saatin toplantıları (takvim açıksa).
+    var upcomingMeetings: [CalendarMeeting] = []
+    /// Takvim ya da bildirim hatası (Ayarlar ve Ana sayfada gösterilir).
+    var calendarError: String?
+    /// Bu kaydın bağlandığı takvim toplantısı.
+    @ObservationIgnored private var linkedMeeting: CalendarMeeting?
     var transcript: [LiveSegment] = []
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
@@ -489,6 +500,10 @@ final class AppModel {
             cloudKeys = nil
         }
 
+        // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
+        linkedMeeting = UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
+            ? currentMeeting(meetings: upcomingMeetings, now: Date())
+            : nil
         let directory: URL
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: Date())
@@ -545,7 +560,7 @@ final class AppModel {
                     diarizationWindowSec: 120,
                     minDiarizationAudioSec: 5,
                     languageConfidence: 0.8,
-                    keyterms: recognitionKeyterms,
+                    keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30),
                     voiceEmbedder: voiceEmbedderIfEnabled()
                 ),
                 meAudio: meAudio,
@@ -719,8 +734,8 @@ final class AppModel {
 
     /// Canlı transkript ve çevirilerden toplantı kaydı.
     private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
-        MeetingRecord(
-            id: directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
+        let base: MeetingRecord = MeetingRecord(
+            id: directory.lastPathComponent, title: linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
@@ -730,6 +745,7 @@ final class AppModel {
         )
         // Not, kayıt başladığında seçili şablonla yazılır.
         .with(template: recordingTemplate)
+        return linkedMeeting.map { base.with(attendees: $0.attendees) } ?? base
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
@@ -934,6 +950,93 @@ final class AppModel {
         }
     }
 
+    // MARK: Takvim
+
+    /// Takvim açıksa toplantıları 5 dk'da bir ve takvim değişince yeniler, hatırlatmaları kurar; görüşme önerisi açıksa
+    /// mikrofonu izler. Ayar değişince yeniden çağrılır.
+    func startCalendarServices() {
+        calendarTask?.cancel()
+        calendarChangesTask?.cancel()
+        micMonitor.stop()
+        guard UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled) else {
+            upcomingMeetings = []
+            calendarError = nil
+            // Kapatılınca kurulu hatırlatmalar kaldırılır.
+            Task {
+                do {
+                    try await notifier.scheduleReminders(meetings: [])
+                } catch {
+                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .public)")
+                }
+            }
+            return
+        }
+        let changes: NotificationCenter.Notifications = eventKit.changes
+        calendarTask = Task { [weak self] in
+            await self?.refreshCalendar()
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(300))
+                } catch {
+                    return
+                }
+                await self?.refreshCalendar()
+            }
+        }
+        calendarChangesTask = Task { [weak self] in
+            for await _ in changes {
+                await self?.refreshCalendar()
+            }
+        }
+        if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) {
+            micMonitor.start { [weak self] in self?.microphoneStartedElsewhere() }
+        }
+    }
+
+    /// Takvimi açar: takvim ve bildirim izni ister, servisleri başlatır. İzin yoksa ayar kapalı kalır, hata gösterilir.
+    func enableCalendar() async {
+        do {
+            try await eventKit.requestCalendarAccess()
+            try await notifier.requestAuthorization()
+            UserDefaults.standard.set(true, forKey: SettingsKey.calendarEnabled)
+            calendarError = nil
+        } catch {
+            UserDefaults.standard.set(false, forKey: SettingsKey.calendarEnabled)
+            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+        }
+        startCalendarServices()
+    }
+
+    /// Önümüzdeki 24 saatin toplantılarını okur ve 3 saat içindekiler için hatırlatma kurar.
+    private func refreshCalendar() async {
+        do {
+            upcomingMeetings = try eventKit.meetings(from: Date(), hours: 24)
+            let remind: [CalendarMeeting] = UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders)
+                ? meetingsToRemind(meetings: upcomingMeetings, now: Date(), horizonSec: 3 * 3600)
+                : []
+            try await notifier.scheduleReminders(meetings: remind)
+            calendarError = nil
+        } catch {
+            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .public)")
+            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+        }
+    }
+
+    /// Başka bir uygulama mikrofonu açtı: kayıt yoksa (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
+    private func microphoneStartedElsewhere() {
+        guard !isRecording, !isStarting, Date().timeIntervalSince(lastMicSuggestion) > 600 else {
+            return
+        }
+        lastMicSuggestion = Date()
+        Task {
+            do {
+                try await notifier.suggestRecording()
+            } catch {
+                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
     // MARK: Görevler
 
     /// Görevin tamamlandı işaretini değiştirir (kilitli toplantıda değil: işleme bitince kayıt bütünüyle yazılır).
@@ -1018,7 +1121,7 @@ final class AppModel {
         }
         let segments: [StoredSegment] = meetingSegments(record: record)
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
-        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName) else {
+        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName, attendees: record.attendees ?? []) else {
             return
         }
         let persons: Set<Int> = Set(segments.compactMap(\.person))
@@ -1155,6 +1258,7 @@ final class AppModel {
     func performStartupMaintenance() {
         reloadMeetings()
         loadVoices()
+        startCalendarServices()
         for record in staleStatusesToInterrupt(records: meetings) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                 saveRecord(record: record, directory: directory)

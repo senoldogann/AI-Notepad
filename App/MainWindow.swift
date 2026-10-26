@@ -2,6 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import AppKit
 import SwiftUI
+import UserNotifications
 
 /// Ana pencerenin sahne kimliği.
 let mainWindowID: String = "main"
@@ -71,7 +72,27 @@ func openMainWindow(router: MainWindowRouter, section: MainSection) {
 
 /// Dock simgesine tıklanınca ana pencere açılır: ada penceresi hep açık olduğu için sistem "görünür pencere var" sayıp
 /// kendiliğinden açmazdı.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Bildirimdeki "Dinlemeye başla" (ya da bildirime tıklama) kaydı başlatır; uygulama açılışında bağlanır.
+    @MainActor static var onStartFromNotification: (@MainActor () -> Void)?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard response.notification.request.content.categoryIdentifier == MeetingNotificationID.category,
+              response.actionIdentifier != UNNotificationDismissActionIdentifier else {
+            return
+        }
+        await MainActor.run { AppDelegate.onStartFromNotification?() }
+    }
+
+    // Uygulama öndeyken de toplantı bildirimi görünsün.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return true
@@ -415,6 +436,7 @@ private struct HomePage: View {
                 if !model.setupProblems.isEmpty {
                     problems
                 }
+                UpcomingMeetings(model: model, onStartRecording: onStartRecording)
                 BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
                 RecentMeetingCards(model: model, router: router)
@@ -737,6 +759,66 @@ private struct HomeTasks: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// Yaklaşan toplantılar (takvim açıksa, önümüzdeki 12 saat): saat, başlık, katılımcılar; bağlantısı varsa "Katıl",
+/// başlamak üzereyse (10 dk) ya da sürüyorsa "Dinle".
+private struct UpcomingMeetings: View {
+    let model: AppModel
+    let onStartRecording: @MainActor () -> Void
+
+    var body: some View {
+        let now: Date = Date()
+        let items: [CalendarMeeting] = model.upcomingMeetings.filter { $0.end > now && $0.start.timeIntervalSince(now) < 12 * 3600 }
+        if let error = model.calendarError {
+            EmptyStateCard(symbol: "calendar.badge.exclamationmark", title: "Takvim okunamadı", message: LocalizedStringKey(error))
+        } else if !items.isEmpty {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+                Text("Yaklaşan toplantılar").appFont(size: 15, weight: .medium)
+                VStack(spacing: 0) {
+                    ForEach(Array(items.prefix(4).enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
+                        if item.offset > 0 {
+                            Rectangle().fill(Theme.line).frame(height: 1)
+                        }
+                        row(meeting: item.element, now: now)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .cardSurface(cornerRadius: 16)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func row(meeting: CalendarMeeting, now: Date) -> some View {
+        let isSoon: Bool = meeting.start.timeIntervalSince(now) <= 600
+        let time: String = meeting.start.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+            + "–" + meeting.end.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(time).appFont(size: 12, weight: .medium).monospacedDigit().foregroundStyle(isSoon ? Color.orange : Theme.muted)
+                Text(meeting.title).appFont(size: 14, weight: .medium).lineLimit(1)
+                if !meeting.attendees.isEmpty {
+                    Text(meeting.attendees.prefix(4).joined(separator: ", ") + (meeting.attendees.count > 4 ? " +\(meeting.attendees.count - 4)" : ""))
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if let url = meeting.joinURL {
+                Button("Katıl", systemImage: "video") { NSWorkspace.shared.open(url) }
+                    .controlSize(.small)
+                    .hoverHint("Görüşme bağlantısını aç", alignment: .trailing, edge: .bottom)
+            }
+            if isSoon, !model.isRecording {
+                Button("Dinle", systemImage: "record.circle") { onStartRecording() }
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 10)
     }
 }
 

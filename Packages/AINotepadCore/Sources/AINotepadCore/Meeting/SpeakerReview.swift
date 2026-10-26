@@ -107,7 +107,7 @@ private func uniqueMerges(merges: [SpeakerMergeSuggestion]) -> [SpeakerMergeSugg
 
 /// Konuşmacı incelemesi isteği (akıllı model, yapılandırılmış çıktı). Transkript adlar yerine numaralarla gönderilir
 /// ki öneriler numaraya bağlanabilsin; verilmiş adlar ayrıca listelenir. Numaralı konuşmacı yoksa nil. Saf fonksiyondur.
-public func speakerReviewRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String) -> LLMRequest? {
+public func speakerReviewRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String, attendees: [String]) -> LLMRequest? {
     let persons: [Int] = Array(Set(segments.compactMap(\.person))).sorted()
     guard !persons.isEmpty else {
         return nil
@@ -132,6 +132,7 @@ public func speakerReviewRequest(segments: [StoredSegment], speakerNames: [Int: 
         userText: """
         Konuşmacılar: \(persons.map { "Konuşmacı \($0)" }.joined(separator: ", "))
         Verilmiş adlar: \(named.isEmpty ? "(yok)" : named.joined(separator: ", "))
+        Takvimdeki katılımcılar (yalnızca ipucu; transkriptte kanıt yoksa ad verme): \(attendees.isEmpty ? "(bilinmiyor)" : attendees.joined(separator: ", "))
 
         <transkript>
         \(storedLines(segments: segments, speakerNames: [:]))

@@ -137,6 +137,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var completedTasks: [String]?
     /// Anımsatıcılar'a eklenen görevlerin kimlikleri.
     public private(set) var remindedTasks: [String]?
+    /// Takvimdeki katılımcıların adları (kayıt bir etkinliğe bağlandıysa).
+    public private(set) var attendees: [String]?
     /// Notun şablonu; eski toplantılarda ve genel şablonda nil.
     public private(set) var template: NoteTemplate?
     /// Notun paylaşım dillerindeki sürümleri (dil kodu → not); not yeniden yazılınca silinir.
@@ -228,6 +230,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(liveSegments newSegments: [StoredSegment]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.liveSegments = newSegments
+        return copy
+    }
+
+    /// Katılımcıları değişmiş kopya.
+    public func with(attendees newAttendees: [String]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.attendees = newAttendees
         return copy
     }
 

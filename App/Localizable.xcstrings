@@ -286,6 +286,16 @@
         }
       }
     },
+    "%@ · Dinlemeye başlamak için tıkla.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Click to start listening."
+          }
+        }
+      }
+    },
     "%@ — %@": {
       "localizations": {
         "en": {
@@ -463,6 +473,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld meetings could not be read: %@"
+          }
+        }
+      }
+    },
+    "1 dk sonra: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In 1 min: %@"
           }
         }
       }
@@ -971,6 +991,36 @@
         }
       }
     },
+    "Bildirim izni yok: Sistem Ayarları › Bildirimler › AI-Notepad'den izin ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No permission for notifications: allow AI-Notepad in System Settings › Notifications."
+          }
+        }
+      }
+    },
+    "Bildirim kurulamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't schedule the notification: %@"
+          }
+        }
+      }
+    },
+    "Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"Start listening\" in the notification starts recording right away."
+          }
+        }
+      }
+    },
     "Bildirimi kopyala": {
       "localizations": {
         "en": {
@@ -997,6 +1047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Click a task's circle to move it here."
+          }
+        }
+      }
+    },
+    "Bir görüşme başlamış olabilir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A call may have started"
           }
         }
       }
@@ -1490,6 +1550,26 @@
         }
       }
     },
+    "Dinlemeye başla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start listening"
+          }
+        }
+      }
+    },
+    "Dinlemeye başlamak için tıkla.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click to start listening."
+          }
+        }
+      }
+    },
     "Dinleniyor…": {
       "localizations": {
         "en": {
@@ -1826,6 +1906,26 @@
         }
       }
     },
+    "Görüşme bağlantısını aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the meeting link"
+          }
+        }
+      }
+    },
+    "Görüşme başlayınca öner": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggest when a call starts"
+          }
+        }
+      }
+    },
     "Gösterim": {
       "localizations": {
         "en": {
@@ -2106,6 +2206,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Decisions"
+          }
+        }
+      }
+    },
+    "Katıl": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
           }
         }
       }
@@ -2913,6 +3023,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Microphone"
+          }
+        }
+      }
+    },
+    "Mikrofon başka bir uygulamada açıldı. Toplantıyı dinlemeye başlamak için tıkla.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another app turned on the microphone. Click to start listening to the meeting."
           }
         }
       }
@@ -3924,12 +4044,32 @@
         }
       }
     },
+    "Takvim okunamadı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read the calendar"
+          }
+        }
+      }
+    },
     "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "No access to Calendar: allow AI-Notepad in System Settings › Privacy & Security › Calendars."
+          }
+        }
+      }
+    },
+    "Takvimi kullan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use calendar"
           }
         }
       }
@@ -3970,6 +4110,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Due: %@"
+          }
+        }
+      }
+    },
+    "Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When Teams, Zoom or another app turns on the microphone (and you're not recording), suggests starting to listen; at most once every 10 minutes."
           }
         }
       }
@@ -4183,6 +4333,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other people in the meeting (Teams, Zoom). macOS asks for permission on the first try."
+          }
+        }
+      }
+    },
+    "Toplantıdan 1 dk önce hatırlat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remind me 1 min before meetings"
           }
         }
       }
@@ -4506,6 +4666,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Capture started. If a permission dialog appeared and you chose \"Allow\", you're ready."
+          }
+        }
+      }
+    },
+    "Yaklaşan toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming meetings"
+          }
+        }
+      }
+    },
+    "Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming meetings appear on Home; a recording is linked to the current meeting, taking its title and attendee names (as recognition and speaker-name hints). The calendar is read only on this Mac."
           }
         }
       }
