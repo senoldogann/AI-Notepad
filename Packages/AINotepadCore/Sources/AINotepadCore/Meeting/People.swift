@@ -49,7 +49,12 @@ public func peopleDirectory(records: [MeetingRecord], voices: [RegisteredVoice],
     }
     let grouped: [String: [(name: String, meeting: PersonMeeting)]] = Dictionary(grouping: entries) { $0.name.lowercased() }
     return grouped.values.compactMap { (group: [(name: String, meeting: PersonMeeting)]) -> PersonSummary? in
-        let meetings: [PersonMeeting] = group.map(\.meeting).sorted { $0.date > $1.date }
+        // Aynı ad bir toplantıda iki numaraya verildiyse (ayırma kişiyi bölmüş) toplantı bir kez, süreler toplanır.
+        let meetings: [PersonMeeting] = Dictionary(grouping: group.map(\.meeting)) { $0.meetingID }.values
+            .compactMap { (rows: [PersonMeeting]) -> PersonMeeting? in
+                rows.first.map { PersonMeeting(meetingID: $0.meetingID, title: $0.title, date: $0.date, seconds: rows.map(\.seconds).reduce(0, +), fraction: rows.map(\.fraction).reduce(0, +)) }
+            }
+            .sorted { $0.date > $1.date }
         guard let latest = group.max(by: { $0.meeting.date < $1.meeting.date }) else {
             return nil
         }

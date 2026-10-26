@@ -42,9 +42,12 @@ public indirect enum JSONValue: Sendable, Equatable, Codable {
 /// JSON-RPC isteği (MCP, stdio: satır başına bir ileti). Bildirimlerde `id` yoktur.
 struct MCPRequest: Decodable {
     let id: JSONValue?
-    let method: String
+    let method: String?
     let params: [String: JSONValue]?
 }
+
+/// Desteklenen MCP protokol sürümleri (en yenisi önce).
+let mcpProtocolVersions: [String] = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 /// MCP aracı: ad, açıklama ve giriş şeması.
 struct MCPTool {
@@ -101,9 +104,13 @@ public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], v
         // Bildirim (ör. notifications/initialized): yanıt yok.
         return nil
     }
-    switch request.method {
+    guard let method = request.method else {
+        return mcpError(id: id, code: -32600, message: "Invalid Request: method is required")
+    }
+    switch method {
     case "initialize":
-        let requested: String = if case .string(let value) = request.params?["protocolVersion"] { value } else { "2025-06-18" }
+        // İstemcinin sürümü destekleniyorsa o, değilse desteklenen en yenisi.
+        let requested: String = if case .string(let value) = request.params?["protocolVersion"], mcpProtocolVersions.contains(value) { value } else { mcpProtocolVersions[0] }
         return mcpResult(id: id, result: .object([
             "protocolVersion": .string(requested),
             "capabilities": .object(["tools": .object([:])]),
@@ -127,7 +134,7 @@ public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], v
             "isError": .bool(output.isError),
         ]))
     default:
-        return mcpError(id: id, code: -32601, message: "Method not found: \(request.method)")
+        return mcpError(id: id, code: -32601, message: "Method not found: \(method)")
     }
 }
 
@@ -139,7 +146,8 @@ func callMCPTool(name: String, arguments: [String: JSONValue], records: [Meeting
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     switch name {
     case "list_meetings":
-        let limit: Int = if case .number(let value) = arguments["limit"] { max(1, Int(value)) } else { 20 }
+        // Aşırı büyük ya da kesirli değer çökertmesin: 1...1000 aralığına sıkıştırılır.
+        let limit: Int = if case .number(let value) = arguments["limit"], value.isFinite { Int(min(max(value, 1), 1000)) } else { 20 }
         let lines: [String] = sorted.prefix(limit).map { (record: MeetingRecord) -> String in
             let minutes: String = meetingDurationMinutes(record: record).map { "\($0) min" } ?? "—"
             return "- id: \(record.id) | \(formatter.string(from: record.startedAt)) | \(record.note?.title ?? record.title) | \(minutes) | \(record.note == nil ? "no note" : "note")"

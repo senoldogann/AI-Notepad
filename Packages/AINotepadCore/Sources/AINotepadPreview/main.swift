@@ -42,6 +42,7 @@ func sampleState(phase: RecordingPhase) -> LiveViewState {
         newPersonNumber: 3,
         isPaused: false,
         isMicMuted: false, canToggleMic: true,
+        isInPerson: false,
         canStart: true,
         startedAt: Date(timeIntervalSinceNow: -754),
         statusText: "Hazır · Deepgram",

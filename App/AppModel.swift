@@ -32,6 +32,7 @@ private struct ViewStateInputs: Equatable {
     let isPaused: Bool
     let isMicMuted: Bool
     let canToggleMic: Bool
+    let isInPerson: Bool
     let canStart: Bool
     let startedAt: Date?
     let statusText: String
@@ -183,7 +184,7 @@ final class AppModel {
         let inputs: ViewStateInputs = ViewStateInputs(
             transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
             assistantCard: assistantCard, phase: phase,
-            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, canStart: isReadyToRecord && !isStarting,
+            newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
@@ -193,7 +194,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, isInPerson: inputs.isInPerson, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -521,6 +522,11 @@ final class AppModel {
         let micGate: AudioGate = AudioGate(isOpen: !isMicMuted)
         let meAudio: AsyncStream<[Float]>
         let othersAudio: AsyncStream<[Float]>
+        recordingInPerson = isInPerson
+        if isInPerson, linkedMeeting?.joinURL != nil {
+            // Çevrimiçi görüşmede yüz yüze modu karşı tarafı kaydetmez: açıkça uyarılır.
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Yüz yüze modu açık: çevrimiçi görüşmenin karşı tarafı kaydedilmiyor. Ana sayfadaki \"Yüz yüze\"yi kapatıp kaydı yeniden başlat."))
+        }
         if isInPerson {
             // Yüz yüze: odadaki herkes mikrofondan gelir; "Diğerleri" akışı olarak konuşmacılara ayrılır (kullanıcı da
             // onlardan biri). Sistem sesi dinlenmez.
@@ -833,6 +839,9 @@ final class AppModel {
         }
     }
 
+    /// Bu kayıt yüz yüze başladı (mod kayıt sırasında değişmez).
+    @ObservationIgnored private var recordingInPerson: Bool = false
+
     /// Bu kaydın not şablonu: kayıt başlarken Ayarlar'daki varsayılan.
     @ObservationIgnored private var recordingTemplate: NoteTemplate = .general
 
@@ -922,6 +931,11 @@ final class AppModel {
                 saveRecord(record: current.with(sharedNotes: (current.sharedNotes ?? [:]).merging([language.rawValue: shared]) { $1 }), directory: directory)
             }
             return nil
+        } catch is CancellationError {
+            // Görünüm kapandı ya da dil değişti: hata değil.
+            return nil
+        } catch let error as URLError where error.code == .cancelled {
+            return nil
         } catch {
             Self.logger.error("Paylaşım notu yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return userFacingMessage(error: error)
@@ -985,8 +999,8 @@ final class AppModel {
         calendarChangesTask?.cancel()
         micMonitor.stop()
         guard UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled) else {
+            // Hata burada silinmez: izin reddedilince ayar kapanır ve neden görünür kalmalı.
             upcomingMeetings = []
-            calendarError = nil
             // Kapatılınca kurulu hatırlatmalar kaldırılır.
             Task {
                 do {
@@ -1019,6 +1033,13 @@ final class AppModel {
         }
     }
 
+    /// Takvimi kapatır (kullanıcı); önceki hata da kalkar.
+    func disableCalendar() {
+        UserDefaults.standard.set(false, forKey: SettingsKey.calendarEnabled)
+        calendarError = nil
+        startCalendarServices()
+    }
+
     /// Takvimi açar: takvim ve bildirim izni ister, servisleri başlatır. İzin yoksa ayar kapalı kalır, hata gösterilir.
     func enableCalendar() async {
         do {
@@ -1038,7 +1059,8 @@ final class AppModel {
         do {
             upcomingMeetings = try eventKit.meetings(from: Date(), hours: 24)
             let remind: [CalendarMeeting] = UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders)
-                ? meetingsToRemind(meetings: upcomingMeetings, now: Date(), horizonSec: 3 * 3600)
+                // Son bir dakikaya girmiş toplantı yeniden kurulmaz (hatırlatması zaten gösterildi; çift bildirim olmasın).
+                ? meetingsToRemind(meetings: upcomingMeetings, now: Date().addingTimeInterval(60), horizonSec: 3 * 3600)
                 : []
             try await notifier.scheduleReminders(meetings: remind)
             calendarError = nil

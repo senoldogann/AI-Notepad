@@ -1,7 +1,7 @@
 import Foundation
 
-/// Görevin toplantı içindeki kalıcı kimliği: sahibi ve işi (küçük harf, boşluklar sadeleşmiş). Not yeniden yazılınca
-/// aynı görev aynı kimliği alır; tamamlandı işareti korunur. Saf fonksiyondur.
+/// Görevin toplantı içindeki kimliği: sahibi ve işi (küçük harf, boşluklar sadeleşmiş). Not yeniden yazılınca sözcükler
+/// değişebilir; işaretler `withCarriedTaskMarks` ile benzer yeni göreve taşınır. Saf fonksiyondur.
 public func taskKey(task: NoteTask) -> String {
     let simplify: (String) -> String = { (text: String) -> String in
         text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -33,8 +33,8 @@ public func markingReminded(record: MeetingRecord, task: NoteTask) -> MeetingRec
     return reminded.contains(key) ? record : record.with(remindedTasks: reminded + [key])
 }
 
-/// Notun serbest metin tarihinden takvim günü: "2026-11-03", "3.11.2026", "3.11." (yıl toplantınınki; toplantıdan
-/// önceye düşerse ertesi yıl). "Perjantai", "sonraki dönem" gibi göreli ifadeler tarih vermez (nil). Saf fonksiyondur.
+/// Notun serbest metin tarihinden takvim günü: "2026-11-03", "3.11.2026", "3.11.", Türkçe "5 Kasım" ve "5 Kasım 2026"
+/// (not tarihleri Türkçe yazar; yılsızda yıl toplantınınki, toplantıdan önceye düşerse ertesi yıl). "Perjantai", "sonraki dönem" gibi göreli ifadeler tarih vermez (nil). Saf fonksiyondur.
 public func parseDueDate(text: String, meetingDate: Date, calendar: Calendar) -> DateComponents? {
     let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let meeting: DateComponents = calendar.dateComponents([.year, .month, .day], from: meetingDate)
@@ -45,6 +45,9 @@ public func parseDueDate(text: String, meetingDate: Date, calendar: Calendar) ->
         parts = (Int(match.3), Int(match.2) ?? 0, Int(match.1) ?? 0)
     } else if let match = trimmed.firstMatch(of: /(\d{1,2})\.(\d{1,2})\./) {
         parts = (nil, Int(match.2) ?? 0, Int(match.1) ?? 0)
+    } else if let match = trimmed.lowercased(with: Locale(identifier: "tr")).firstMatch(of: /(\d{1,2})\s+(ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık)\w*(?:\s+(\d{4}))?/) {
+        let months: [String] = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"]
+        parts = (match.3.flatMap { Int($0) }, (months.firstIndex(of: String(match.2)) ?? -1) + 1, Int(match.1) ?? 0)
     } else {
         parts = nil
     }
@@ -84,4 +87,33 @@ public func reminderDraft(record: MeetingRecord, task: NoteTask, calendar: Calen
         notes: notes.joined(separator: "\n"),
         due: task.dueDate.flatMap { parseDueDate(text: $0, meetingDate: record.startedAt, calendar: calendar) }
     )
+}
+
+/// Not yeniden yazılınca (ad verildi, şablon değişti) görevler başka sözcüklerle yazılır ve kimlikleri değişir.
+/// İşaretli eski görevler yeni görevlere açıklamalarının sözcük benzerliğiyle (Jaccard ≥ 0,5, en benzeri) eşlenir;
+/// eşleşenlerin yeni kimlikleri döner. Saf fonksiyondur.
+public func carriedTaskKeys(oldTasks: [NoteTask], newTasks: [NoteTask], keys: [String]) -> [String] {
+    let words: (NoteTask) -> Set<String> = { (task: NoteTask) -> Set<String> in Set(searchTokens(text: task.description).map { String($0.prefix(5)) }) }
+    let marked: [NoteTask] = oldTasks.filter { keys.contains(taskKey(task: $0)) }
+    return marked.reduce(into: [String]()) { (result: inout [String], old: NoteTask) -> Void in
+        let oldWords: Set<String> = words(old)
+        let best: (task: NoteTask, score: Double)? = newTasks
+            .map { (new: NoteTask) -> (task: NoteTask, score: Double) in
+                let newWords: Set<String> = words(new)
+                let union: Int = oldWords.union(newWords).count
+                return (task: new, score: union == 0 ? 0 : Double(oldWords.intersection(newWords).count) / Double(union))
+            }
+            .max { $0.score < $1.score }
+        if let best, best.score >= 0.5, !result.contains(taskKey(task: best.task)) {
+            result.append(taskKey(task: best.task))
+        }
+    }
+}
+
+/// Yeni not yazılmış kayıtta tamamlandı ve Anımsatıcılar işaretlerini eski nottan taşır. Saf fonksiyondur.
+public func withCarriedTaskMarks(old: MeetingRecord, new: MeetingRecord) -> MeetingRecord {
+    let oldTasks: [NoteTask] = old.note?.tasks ?? []
+    let newTasks: [NoteTask] = new.note?.tasks ?? []
+    let completed: MeetingRecord = old.completedTasks.map { new.with(completedTasks: carriedTaskKeys(oldTasks: oldTasks, newTasks: newTasks, keys: $0)) } ?? new
+    return old.remindedTasks.map { completed.with(remindedTasks: carriedTaskKeys(oldTasks: oldTasks, newTasks: newTasks, keys: $0)) } ?? completed
 }

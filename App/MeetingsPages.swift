@@ -302,7 +302,9 @@ struct MeetingDetailPage: View {
                             .fixedSize()
                             .hoverHint("İş arkadaşlarına göndermek için notun Fince ya da İngilizce sürümü", alignment: .leading, edge: .bottom)
                             if let language = noteLanguage {
+                                // Dil değişince durum (hata, deneme) sıfırlansın.
                                 SharedNoteSection(model: model, record: record, note: note, language: language)
+                                    .id(language)
                             } else {
                                 SummaryTab(model: model, note: note, record: record, paragraphs: paragraphs)
                             }
@@ -979,7 +981,8 @@ private struct SharedNoteSection: View {
                 .padding(.vertical, 8)
             }
         }
-        .task(id: "\(language.rawValue)-\(attempt)-\(record.sharedNotes?[language.rawValue] == nil)") {
+        // Not yeniden yazılınca ya da kilit kalkınca yeniden denenir (aksi halde bekleme göstergesi takılı kalırdı).
+        .task(id: "\(language.rawValue)-\(attempt)-\(record.sharedNotes?[language.rawValue] == nil)-\(note.summary.hashValue)-\(model.isLocked(meetingID: record.id))") {
             guard record.sharedNotes?[language.rawValue] == nil, error == nil else {
                 return
             }
@@ -1138,7 +1141,8 @@ struct ReminderButton: View {
                 .frame(width: 22, height: 22)
             }
             .buttonStyle(.hoverPlain)
-            .disabled(reminded || isAdding)
+            // İşlenirken eklenen anımsatıcı işaretlenemezdi; tekrar eklenmesin diye kapalı.
+            .disabled(reminded || isAdding || model.isLocked(meetingID: record.id))
             .hoverHint(reminded ? "Anımsatıcılar'da" : "Anımsatıcılar'a ekle", alignment: .trailing, edge: .bottom)
             if let error {
                 Text(error)

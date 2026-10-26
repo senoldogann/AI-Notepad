@@ -203,7 +203,11 @@ public struct TranscriptPanel: View {
             .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
         case .recording:
             IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
-            if state.canToggleMic {
+            if state.isInPerson {
+                // Yüz yüze: mikrofon tek kaynak ve odadaki herkesi kaydediyor.
+                IconButton(symbol: "person.3", help: "Yüz yüze: mikrofon odadaki herkesi kaydediyor", action: actions.onToggleMic)
+                    .disabled(true)
+            } else if state.canToggleMic {
                 IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
             } else {
                 // Kayıt mikrofonsuz başladı: mikrofon hiç açılmadı, bu kayıtta açılamaz.

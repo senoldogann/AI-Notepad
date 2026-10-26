@@ -42,6 +42,8 @@ public struct LiveViewState: Equatable, Sendable {
     /// Mikrofon düğmesi kullanılabilir: kayıt yokken her zaman; kayıtta yalnızca mikrofon kayıt başında açıldıysa
     /// (mikrofonsuz başlayan kayıtta mikrofon hiç açılmaz).
     public let canToggleMic: Bool
+    /// Yüz yüze kayıt: mikrofon odadaki herkesi "Diğerleri" olarak kaydediyor (mikrofon düğmesi yerine gösterge).
+    public let isInPerson: Bool
     /// Kayıt başlatılabilir (model hazır, önceki kayıt bitti).
     public let canStart: Bool
     public let startedAt: Date?
@@ -125,6 +127,7 @@ public func makeLiveViewState(
     isPaused: Bool,
     isMicMuted: Bool,
     canToggleMic: Bool,
+    isInPerson: Bool,
     canStart: Bool,
     startedAt: Date?,
     statusText: String,
@@ -140,6 +143,7 @@ public func makeLiveViewState(
         isPaused: isPaused,
         isMicMuted: isMicMuted,
         canToggleMic: canToggleMic,
+        isInPerson: isInPerson,
         canStart: canStart,
         startedAt: startedAt,
         statusText: statusText,

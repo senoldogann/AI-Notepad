@@ -28,6 +28,9 @@ import Testing
             #"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_my_tasks","arguments":{}}}"#,
             #"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_meeting","arguments":{"id":"yok"}}}"#,
             #"{"jsonrpc":"2.0","id":7,"method":"bilinmeyen"}"#,
+            #"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"list_meetings","arguments":{"limit":1e20}}}"#,
+            #"{"jsonrpc":"2.0","id":9}"#,
+            #"{"jsonrpc":"2.0","id":10,"method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#,
         ]
         let input: Pipe = Pipe()
         let output: Pipe = Pipe()
@@ -36,8 +39,8 @@ import Testing
         runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectory: sessions, version: "test")
         try output.fileHandleForWriting.close()
         let lines: [String] = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n").map(String.init)
-        // Bildirime yanıt yok: 7 yanıt.
-        #expect(lines.count == 7)
+        // Bildirime yanıt yok: 10 yanıt.
+        #expect(lines.count == 10)
         #expect(lines[0].contains(#""protocolVersion":"2025-06-18""#) && lines[0].contains(#""tools":{}"#))
         #expect(["list_meetings", "search_meetings", "get_meeting", "list_my_tasks"].allSatisfy { lines[1].contains($0) })
         #expect(lines[2].contains("Kahvikone") && lines[2].contains("20261026-100000"))
@@ -45,5 +48,8 @@ import Testing
         #expect(lines[4].contains("Faturayı onayla"))
         #expect(lines[5].contains(#""isError":true"#))
         #expect(lines[6].contains("-32601"))
+        #expect(lines[7].contains("Ofis işleri"))
+        #expect(lines[8].contains("-32600"))
+        #expect(lines[9].contains(#""protocolVersion":"2025-06-18""#))
     }
 }

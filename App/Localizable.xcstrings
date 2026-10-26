@@ -2289,12 +2289,12 @@
         }
       }
     },
-    "Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.": {
+    "Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur. Yüz yüze modunda mikrofon her zaman açıktır (odadaki herkesi kaydeder).": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When off, only the audio coming from the computer (the other side) is recorded: the microphone is never opened and speaker echo isn't written as \"You\". You can also choose with the microphone button in the panel before recording; in a recording started with the microphone, the button only mutes it."
+            "value": "When off, only the audio coming from the computer (the other side) is recorded: the microphone is never opened and speaker echo isn't written as \"You\". You can also choose with the microphone button in the panel before recording; in a recording started with the microphone, the button only mutes it. In in-person mode the microphone is always on (it records everyone in the room)."
           }
         }
       }
@@ -5189,6 +5189,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "In person"
+          }
+        }
+      }
+    },
+    "Yüz yüze modu açık: çevrimiçi görüşmenin karşı tarafı kaydedilmiyor. Ana sayfadaki \"Yüz yüze\"yi kapatıp kaydı yeniden başlat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-person mode is on: the other side of the online call is not being recorded. Turn off \"In person\" on Home and restart the recording."
+          }
+        }
+      }
+    },
+    "Yüz yüze: mikrofon odadaki herkesi kaydediyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In person: the microphone is recording everyone in the room"
           }
         }
       }

@@ -535,6 +535,7 @@ private struct RecordBar: View {
                         .fixedSize()
                     Color.clear.frame(width: 0, height: 0)
                 }
+                .layoutPriority(1)
                 Spacer(minLength: 6)
                 languageChip
                 chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }

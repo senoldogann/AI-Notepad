@@ -210,8 +210,7 @@ private struct GeneralSettings: View {
                         if enabled {
                             Task { await model.enableCalendar() }
                         } else {
-                            calendarEnabled = false
-                            model.startCalendarServices()
+                            model.disableCalendar()
                         }
                     }
                 ))
@@ -283,7 +282,7 @@ private struct GeneralSettings: View {
                 }
             }
             SettingsRow(title: Text("Kendi sesimi de kaydet (mikrofon)")) {
-                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur.")
+                Text("Kapalıyken yalnızca bilgisayardan gelen ses (karşı taraf) kaydedilir: mikrofon hiç açılmaz, hoparlör yankısı \"Sen\" diye yazılmaz. Paneldeki mikrofon düğmesiyle kayıttan önce de seçilebilir; mikrofonla başlayan kayıtta düğme yalnızca susturur. Yüz yüze modunda mikrofon her zaman açıktır (odadaki herkesi kaydeder).")
             } control: {
                 Toggle("Kendi sesimi de kaydet (mikrofon)", isOn: Binding<Bool>(
                     get: { !model.isMicMuted },
