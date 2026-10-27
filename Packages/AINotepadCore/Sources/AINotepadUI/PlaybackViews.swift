@@ -36,6 +36,6 @@ public struct KaraokeParagraph: View {
     }
 
     public var body: some View {
-        Text(karaokeText(words: words, activeIndex: activeWordIndex(words: words, timeSec: player.currentTime), accent: accent))
+        Text(karaokeText(words: words, activeIndex: activeWordIndex(words: words, timeSec: player.currentTime), accent: accent, ink: Theme.ink))
     }
 }

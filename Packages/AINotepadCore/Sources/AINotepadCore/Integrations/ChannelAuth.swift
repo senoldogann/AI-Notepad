@@ -198,6 +198,12 @@ public struct ChannelSignIn: Sendable, Equatable {
     public let service: ChannelService
     public let tokens: OAuthTokens
     public let workspace: String
+
+    public init(service: ChannelService, tokens: OAuthTokens, workspace: String) {
+        self.service = service
+        self.tokens = tokens
+        self.workspace = workspace
+    }
 }
 
 /// Bağlantıyı Anahtar Zinciri'ne yazılacak metne çevirir. Saf fonksiyondur.
@@ -282,13 +288,46 @@ private func channelData(service: ChannelService, request: URLRequest) async thr
     throw lastError
 }
 
-/// Jetonla yapılan istek: 401 oturumun bittiğini gösterir (`expired`, yeniden bağlan).
+/// Jetonla yapılan istek: 401 oturumun bittiğini gösterir (`expired`; çağıran bir kez yenileyip yeniden dener).
 private func authorizedChannelData(service: ChannelService, request: URLRequest) async throws -> Data {
     do {
         return try await channelData(service: service, request: request)
     } catch ChannelAuthError.http(_, 401, _) {
         throw ChannelAuthError.expired(service: service)
     }
+}
+
+/// Mesaj gönderimi: yalnızca istek sunucuya ulaşmadıysa ya da 429'da yeniden denenir (bkz. `isSafeToRetryPost`);
+/// zaman aşımı ve 5xx'te mesaj kanala düşmüş olabilir, yeniden deneme notu iki kez gönderirdi. 401 `expired`.
+private func postChannelData(service: ChannelService, request: URLRequest) async throws -> Data {
+    let path: String = request.url?.path() ?? "?"
+    var lastError: ChannelAuthError = .network(service: service, reason: "deneme yapılmadı")
+    for attempt in 1...channelAttempts {
+        do {
+            let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
+            let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) {
+                return data
+            }
+            let body: String = String(decoding: data.prefix(600), as: UTF8.self)
+            if status == 401 {
+                throw ChannelAuthError.expired(service: service)
+            }
+            guard status == 429 else {
+                throw ChannelAuthError.http(service: service, status: status, body: body)
+            }
+            lastError = .http(service: service, status: status, body: body)
+        } catch let error as URLError where isSafeToRetryPost(code: error.code) {
+            lastError = .network(service: service, reason: error.localizedDescription)
+        } catch let error as URLError where error.code != .cancelled {
+            throw ChannelAuthError.network(service: service, reason: error.localizedDescription)
+        }
+        channelLogger.warning("Kanal mesajı gönderilemedi, servis: \(service.rawValue, privacy: .public), yol: \(path, privacy: .private), deneme: \(attempt, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
+        if attempt < channelAttempts {
+            try await Task.sleep(for: .seconds(Double(attempt)))
+        }
+    }
+    throw lastError
 }
 
 private func decode<Value: Decodable>(_ type: Value.Type, service: ChannelService, data: Data) throws -> Value {
@@ -460,7 +499,7 @@ private struct SlackPost: Encodable {
 /// Notu kanala kullanıcının adıyla yazar.
 func postSlackMessage(connection: ChannelConnection, text: String) async throws {
     let body: Data = try JSONEncoder().encode(SlackPost(channel: connection.channel.id, text: text, mrkdwn: true, unfurlLinks: false))
-    let data: Data = try await authorizedChannelData(
+    let data: Data = try await postChannelData(
         service: .slack, request: bearerRequest(url: slackAPI.appending(path: "chat.postMessage"), token: connection.tokens.accessToken, method: "POST", json: body)
     )
     let status: SlackStatus = try decode(SlackStatus.self, service: .slack, data: data)
@@ -592,7 +631,7 @@ func postTeamsMessage(connection: ChannelConnection, html: String) async throws 
     }
     let body: Data = try JSONEncoder().encode(GraphMessage(body: GraphMessage.Body(contentType: "html", content: html)))
     let path: String = "teams/\(graphPathComponent(id: teamID))/channels/\(graphPathComponent(id: connection.channel.id))/messages"
-    _ = try await authorizedChannelData(service: .teams, request: bearerRequest(url: graphURL(path: path), token: connection.tokens.accessToken, method: "POST", json: body))
+    _ = try await postChannelData(service: .teams, request: bearerRequest(url: graphURL(path: path), token: connection.tokens.accessToken, method: "POST", json: body))
 }
 
 // MARK: Ortak
@@ -619,6 +658,11 @@ public func refreshedConnection(connection: ChannelConnection, now: Date) async 
     guard needsRefresh(tokens: connection.tokens, now: now) else {
         return connection
     }
+    return try await refreshConnectionTokens(connection: connection)
+}
+
+/// Jetonları süresine bakmadan yeniler (sunucu erişim jetonunu erken geri aldıysa, 401 sonrası).
+public func refreshConnectionTokens(connection: ChannelConnection) async throws -> ChannelConnection {
     let clientID: String = channelClientID(service: connection.service)
     switch connection.service {
     case .slack:
@@ -627,6 +671,23 @@ public func refreshedConnection(connection: ChannelConnection, now: Date) async 
         return connection.with(tokens: try await refreshTeamsTokens(tokens: connection.tokens, clientID: clientID))
     case .discord:
         throw ChannelAuthError.invalidResponse(service: .discord, reason: "Discord bağlantısı webhook adresidir")
+    }
+}
+
+/// Bağlantıyı servis tarafında da kapatır: Slack'te jeton geri alınır (yenileme jetonu Slack'te geçerli kalmasın).
+/// Teams'te uygulamaya özel geri alma çağrısı yok; erişim myapps.microsoft.com'dan kaldırılır.
+public func revokeChannelConnection(connection: ChannelConnection) async throws {
+    switch connection.service {
+    case .slack:
+        var request: URLRequest = bearerRequest(url: slackAPI.appending(path: "auth.revoke"), token: connection.tokens.accessToken, method: "POST", json: nil)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
+        let data: Data = try await authorizedChannelData(service: .slack, request: request)
+        let status: SlackStatus = try decode(SlackStatus.self, service: .slack, data: data)
+        guard status.ok else {
+            throw slackAPIError(code: status.error ?? "bilinmeyen")
+        }
+    case .teams, .discord:
+        return
     }
 }
 

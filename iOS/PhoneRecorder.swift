@@ -60,6 +60,8 @@ final class PhoneRecorder {
 
     @ObservationIgnored private let store: PhoneStore
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
+    /// Mikrofon telefon çağrısı ya da alarmla kesildi: kayıt ekranı uyarır, kesinti bitince kayıt sürer.
+    private(set) var micInterrupted: Bool = false
     @ObservationIgnored private var active: ActiveRecording?
     @ObservationIgnored private var translationQueue: [SegmentID] = []
     @ObservationIgnored private var translationsInFlight: Int = 0
@@ -107,6 +109,9 @@ final class PhoneRecorder {
         do {
             directory = try AppPaths.newSessionDirectory(startedAt: started)
             let origin: ContinuousClock.Instant = .now
+            microphone.onInterruptionChange = { [weak self] (interrupted: Bool) -> Void in
+                self?.micInterrupted = interrupted
+            }
             audio = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -151,6 +156,9 @@ final class PhoneRecorder {
     /// Mikrofonu kapatır; oturum kalan bölümleri bitirip kendiliğinden biter.
     func stop() {
         guard phase == .recording else {
+            // Kayıt yokken "Bitir" (kilit ekranı, Denetim Merkezi): uygulama kayıt sırasında kapandıysa kalan canlı
+            // etkinlik kalkar.
+            endStaleActivities()
             return
         }
         phase = .finishing
@@ -295,6 +303,9 @@ final class PhoneRecorder {
         if !completed {
             Self.logger.warning("Kayıt sonunda bekleyen çeviriler süre içinde bitmedi")
         }
+        // Başlamamış çeviriler artık başlamaz (oturum kapandı); kuyruk boşalmazsa bir sonraki kayda dek her 200 ms'de
+        // bekleniyordu.
+        translationQueue = []
         checkpointTask?.cancel()
         checkpointTask = nil
         microphone.stop()
@@ -336,7 +347,7 @@ final class PhoneRecorder {
             saveRecord(record: result, directory: directory)
             processingSteps[record.id] = nil
             if result.status == .done {
-                await store.cloud.moveFinishedMeetings(excluding: busyMeetingIDs) { [store] in store.reload() }
+                await store.cloud.moveFinishedMeetings(excluding: busyMeetingIDs.union([store.playingMeetingID].compactMap { $0 })) { [store] in store.reload() }
             }
             endBackgroundTask(id: record.id)
         }
@@ -386,7 +397,7 @@ final class PhoneRecorder {
         do {
             activity = try Activity.request(
                 attributes: RecordingActivityAttributes(startedAt: startedAt),
-                content: ActivityContent(state: RecordingActivityAttributes.ContentState(lastLine: "", speaker: "", isFinishing: false), staleDate: nil),
+                content: ActivityContent(state: RecordingActivityAttributes.ContentState(lastLine: "", speaker: "", isFinishing: false), staleDate: Date().addingTimeInterval(activityStaleSec)),
                 pushType: nil
             )
             lastActivityUpdate = .distantPast
@@ -405,7 +416,7 @@ final class PhoneRecorder {
         Task.detached {
             // Etkinlik görev içinde kimliğiyle bulunur (ana aktörden başka göreve geçirilmez).
             for running in Activity<RecordingActivityAttributes>.activities where running.id == id {
-                await running.update(ActivityContent(state: state, staleDate: nil))
+                await running.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(activityStaleSec)))
             }
         }
     }
@@ -515,6 +526,8 @@ final class PhoneRecorder {
                     return
                 }
                 self.saveRecord(record: self.liveRecord(recording: recording, status: .recording, endedAt: nil), directory: recording.directory)
+                // Sessizlikte de canlı etkinlik tazelenir: uygulama kapanırsa 2 dk sonra eskimiş görünür, saymayı sürdürmez.
+                self.updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: self.activityLine.text, speaker: self.activityLine.speaker, isFinishing: false), force: true)
             }
         }
     }
@@ -575,3 +588,7 @@ private func finishedAudioStream() -> AsyncStream<[Float]> {
     continuation.finish()
     return stream
 }
+
+/// Canlı etkinliğin eskimiş sayılma süresi: kayıt 30 sn'de bir tazeler; uygulama kapanırsa kilit ekranında saymayı
+/// sürdürmez.
+private let activityStaleSec: TimeInterval = 120

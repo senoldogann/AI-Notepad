@@ -5,19 +5,31 @@ import SwiftUI
 /// Ayarlar: bulut anahtarları, toplantı dili, ad ve sürüm (iCloud eşitleme aşama 4'te).
 struct PhoneSettingsTab: View {
     let store: PhoneStore
+    /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
+    let excludedFromMoves: Set<String>
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
+    @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    Picker("Tema", selection: $theme) {
+                        ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
+                            Text(verbatim: item.displayName).tag(item.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Görünüm")
+                }
+                Section {
                     Toggle("iCloud ile eşitle", isOn: Binding<Bool>(
                         get: { store.cloud.location == .iCloud },
                         set: { (enabled: Bool) -> Void in
-                            Task { await store.cloud.setEnabled(enabled, excluding: []) { store.reload() } }
+                            Task { await store.cloud.setEnabled(enabled, excluding: excludedFromMoves) { store.reload() } }
                         }
                     ))
                     .disabled(store.cloud.state == .working)

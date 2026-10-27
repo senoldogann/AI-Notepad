@@ -144,39 +144,6 @@ func relaunchApplication() throws {
 }
 
 /// Panelin açık/koyu görünümü.
-/// Tema takımları: Sistem (ElevenLabs açık/koyu, sistemi izler), Açık, Koyu ve kendi renk takımı olan temalar.
-enum AppTheme: String, CaseIterable {
-    case system
-    case light
-    case dark
-    case paper
-    case sand
-    case midnight
-    case graphite
-
-    /// Takımın görünümü koyu mu (Sistem'de nil: sistemi izler). Saf fonksiyondur.
-    var isDark: Bool? {
-        switch self {
-        case .system: nil
-        case .light, .paper, .sand: false
-        case .dark, .midnight, .graphite: true
-        }
-    }
-
-    /// Açık ve koyu görünüm için renk takımları; sabit görünümlü temalarda ikisi de aynıdır. Saf fonksiyondur.
-    var colorSets: (light: ThemeColorSet, dark: ThemeColorSet) {
-        switch self {
-        case .system: (.light, .dark)
-        case .light: (.light, .light)
-        case .dark: (.dark, .dark)
-        case .paper: (.paper, .paper)
-        case .sand: (.sand, .sand)
-        case .midnight: (.midnight, .midnight)
-        case .graphite: (.graphite, .graphite)
-        }
-    }
-}
-
 /// Temanın macOS görünümü; sistem temasında nil (sistemi izler). Saf fonksiyondur.
 func nsAppearance(theme: AppTheme) -> NSAppearance? {
     switch theme.isDark {

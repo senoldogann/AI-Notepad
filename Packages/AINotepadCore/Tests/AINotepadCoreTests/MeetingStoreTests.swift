@@ -192,3 +192,20 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(loadMeetings(sessionsDirectory: local).meetings.count == 3)
     }
 }
+
+@Suite struct CloudConflictMergeTests {
+    // Diğer cihazda tamamlanan ve Anımsatıcılar'a eklenen görevler son yazılan sürüme eklenir, tekrar etmez.
+    @Test func taskMarksAreUnited() {
+        let base: MeetingRecord = MeetingRecord(
+            id: "x", title: "T", startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, language: nil, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud,
+            notice: nil, meNeedsFinalPass: nil
+        )
+        let current: MeetingRecord = base.with(completedTasks: ["a"])
+        let phone: MeetingRecord = base.with(completedTasks: ["a", "b"]).with(remindedTasks: ["c"])
+        let merged: MeetingRecord = mergedConflictRecord(current: current, others: [phone])
+        #expect(merged.completedTasks == ["a", "b"])
+        #expect(merged.remindedTasks == ["c"])
+        #expect(mergedConflictRecord(current: current, others: []) == current.with(remindedTasks: []))
+    }
+}

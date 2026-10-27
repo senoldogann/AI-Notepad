@@ -305,6 +305,8 @@ public func askArchive(
         maxChars: maxChars - carried.map(\.text.count).reduce(0, +)
     )
     let passages: [ArchivePassage] = chronological(passages: carried + found)
+    // Arayüz "N toplantı okunuyor" ve sonda okunan parça sayısını bundan gösterir (yoksa "aranıyor"da kalıyordu).
+    await onProgress(.passages(passages))
     return try await answerFromPassages(question: question, passages: passages, history: history, userName: userName, llm: llm, now: now, onProgress: onProgress)
 }
 

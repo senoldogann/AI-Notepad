@@ -15,6 +15,9 @@ struct AINotepadiOSApp: App {
 
     init() {
         registerPhoneDefaults()
+        // Tema ilk kareden önce uygulanır.
+        let theme: AppTheme = AppTheme(rawValue: UserDefaults.standard.string(forKey: PhoneSettingsKey.theme) ?? "") ?? .system
+        ThemeStore.shared.set(light: theme.colorSets.light, dark: theme.colorSets.dark)
         #if DEBUG
         // `--karsilama` (yalnız Debug, görsel kontrol): ilk açılış karşılaması yeniden gösterilir.
         if CommandLine.arguments.contains("--karsilama") {
@@ -115,6 +118,7 @@ struct RootView: View {
     let player: MeetingAudioPlayer
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
+    @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
 
     var body: some View {
         TabView(selection: $router.tab) {
@@ -131,7 +135,7 @@ struct RootView: View {
                 TasksTab(store: store, router: router)
             }
             Tab("Ayarlar", systemImage: "gearshape", value: PhoneTab.settings) {
-                PhoneSettingsTab(store: store)
+                PhoneSettingsTab(store: store, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
             }
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {
@@ -144,6 +148,14 @@ struct RootView: View {
             } onFinish: {
                 onboardingCompleted = true
             }
+        }
+        .preferredColorScheme((AppTheme(rawValue: theme) ?? .system).isDark.map { $0 ? ColorScheme.dark : ColorScheme.light })
+        .onChange(of: theme) { (_: String, value: String) in
+            let selected: AppTheme = AppTheme(rawValue: value) ?? .system
+            ThemeStore.shared.set(light: selected.colorSets.light, dark: selected.colorSets.dark)
+        }
+        .onChange(of: player.meetingID, initial: true) { (_: String?, id: String?) in
+            store.playingMeetingID = id
         }
         .onChange(of: recorder.phase) { (_: RecorderPhase, phase: RecorderPhase) in
             // Kayıt başlarken çalma durur (mikrofon ve hoparlör aynı oturumu paylaşamaz).
@@ -165,6 +177,8 @@ final class PhoneStore {
     private(set) var downloadingCount: Int = 0
     /// iCloud eşitlemesi (Ayarlar › Eşitleme).
     let cloud: CloudSyncController = CloudSyncController()
+    /// Çalan toplantı: iCloud'a taşınmaz, sesi saklama süresiyle silinmez (dosyaları kullanımda).
+    var playingMeetingID: String?
 
     /// Toplantıları diskten yeniden okur (en yeni önce): bu iPhone'daki ve iCloud açıksa iCloud'daki.
     func reload() {
@@ -210,15 +224,8 @@ final class PhoneStore {
     /// nedeni sorunlarda görünür, bir sonraki açılışta yeniden denenir.
     func applyRetention(now: Date) {
         let days: Int = min(365, max(7, UserDefaults.standard.integer(forKey: PhoneSettingsKey.audioRetentionDays)))
-        // Yalnızca bu iPhone'daki toplantılar: Mac'in sesi Mac'in saklama süresine göre silinir.
-        let local: Set<String>
-        do {
-            local = try AppPaths.localMeetingIDs()
-        } catch {
-            problems = appendUnique(messages: problems, message: userFacingMessage(error: error))
-            return
-        }
-        for id in audioToDelete(records: meetings.filter { local.contains($0.id) }, now: now, retentionDays: days) {
+        // iCloud'daki toplantılar da (eşitleme açıkken biten her toplantı iCloud'a taşınır); çalan toplantının sesi kalır.
+        for id in audioToDelete(records: meetings.filter { $0.id != playingMeetingID }, now: now, retentionDays: days) {
             guard let record = meetings.first(where: { $0.id == id }) else {
                 continue
             }
@@ -231,6 +238,29 @@ final class PhoneStore {
             } catch {
                 problems = appendUnique(messages: problems, message: userFacingMessage(error: error))
             }
+        }
+    }
+
+    /// Notu yeniden yazılan toplantılar (menüde "Not yazılıyor…").
+    private(set) var regeneratingIDs: Set<String> = []
+
+    /// Notu yeniden yazar (Mac'teki "Notu yenile"): başarısız ya da yarım kalan toplantı da iPhone'dan düzelir.
+    func regenerateNote(meetingID: String) async {
+        guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing,
+              !regeneratingIDs.contains(meetingID) else {
+            return
+        }
+        regeneratingIDs.insert(meetingID)
+        defer { regeneratingIDs.remove(meetingID) }
+        do {
+            let llm: LLMProvider = try await phoneLLMProvider()
+            let directory: URL = try sessionDirectory(id: meetingID)
+            let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
+            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+            try saveMeeting(record: result, directory: directory)
+            upsert(record: result)
+        } catch {
+            problems = appendUnique(messages: problems, message: String(localized: "Not yenilenemedi: \(userFacingMessage(error: error))"))
         }
     }
 

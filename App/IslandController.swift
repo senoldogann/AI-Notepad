@@ -78,7 +78,8 @@ final class IslandController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.sharingType = sharingType(hideFromCapture: UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture))
-        panel.contentView = NSHostingView(rootView: IslandHost(model: model, layoutState: state, onTap: onTap))
+        // Vurgu rengi ve yazı tipi ayarları adada da geçerli.
+        panel.contentView = NSHostingView(rootView: IslandHost(model: model, layoutState: state, onTap: onTap).modifier(AppearanceEnvironment()))
         layoutState = state
         return panel
     }

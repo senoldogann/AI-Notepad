@@ -37,13 +37,14 @@ public func appleNotesScript(html: String) -> String {
     """
 }
 
-/// Klasöre yazılacak Markdown dosyasının adı: "2026-10-27 Bütçe toplantısı.md"; dosya sisteminde sorunlu karakterler
-/// temizlenir, ad 80 karakterle sınırlı. Aynı toplantı her zaman aynı ada yazılır (yeniden işlenince güncellenir).
+/// Klasöre yazılacak Markdown dosyasının adı: "2026-10-27 0930 Bütçe toplantısı.md"; dosya sisteminde sorunlu
+/// karakterler temizlenir, ad 80 karakterle sınırlı. Saat aynı gün aynı adlı iki toplantının (iki "Daily") birbirinin
+/// üstüne yazılmasını önler; aynı toplantı her zaman aynı ada yazılır (yeniden işlenince güncellenir).
 /// Saf fonksiyondur.
 public func markdownFileName(record: MeetingRecord) -> String {
     let formatter: DateFormatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd"
+    formatter.dateFormat = "yyyy-MM-dd HHmm"
     let title: String = (record.note?.title ?? record.title)
         .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t"))
         .joined(separator: " ")

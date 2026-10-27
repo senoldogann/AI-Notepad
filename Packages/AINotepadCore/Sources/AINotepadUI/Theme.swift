@@ -56,6 +56,53 @@ public struct ThemeColorSet: Equatable, Sendable {
     )
 }
 
+/// Tema takımları: Sistem (ElevenLabs açık/koyu, sistemi izler), Açık, Koyu ve kendi renk takımı olan temalar. Mac ve
+/// iPhone aynı ayarı (`appearance.theme`) kullanır.
+public enum AppTheme: String, CaseIterable, Sendable {
+    case system
+    case light
+    case dark
+    case paper
+    case sand
+    case midnight
+    case graphite
+
+    /// Takımın görünümü koyu mu (Sistem'de nil: sistemi izler). Saf fonksiyondur.
+    public var isDark: Bool? {
+        switch self {
+        case .system: nil
+        case .light, .paper, .sand: false
+        case .dark, .midnight, .graphite: true
+        }
+    }
+
+    /// Açık ve koyu görünüm için renk takımları; sabit görünümlü temalarda ikisi de aynıdır. Saf fonksiyondur.
+    public var colorSets: (light: ThemeColorSet, dark: ThemeColorSet) {
+        switch self {
+        case .system: (.light, .dark)
+        case .light: (.light, .light)
+        case .dark: (.dark, .dark)
+        case .paper: (.paper, .paper)
+        case .sand: (.sand, .sand)
+        case .midnight: (.midnight, .midnight)
+        case .graphite: (.graphite, .graphite)
+        }
+    }
+
+    /// Arayüzdeki adı.
+    public var displayName: String {
+        switch self {
+        case .system: String(localized: "Sistem")
+        case .light: String(localized: "Açık")
+        case .dark: String(localized: "Koyu")
+        case .paper: String(localized: "Kâğıt")
+        case .sand: String(localized: "Kum")
+        case .midnight: String(localized: "Gece")
+        case .graphite: String(localized: "Grafit")
+        }
+    }
+}
+
 /// Seçili tema takımı: açık ve koyu görünüm için birer renk takımı. Uygulama Ayarlar › Görünüm'den değiştirir;
 /// `Theme` renklerini okuyan her görünüm gözlemle yeniden çizilir.
 @MainActor

@@ -139,7 +139,7 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         let words: [StoredWord] = [
             StoredWord(text: "Hei", startSec: 0, endSec: 1), StoredWord(text: "kaikki", startSec: 1, endSec: 2), StoredWord(text: "taas", startSec: 2, endSec: 3),
         ]
-        let text: AttributedString = karaokeText(words: words, activeIndex: 1, accent: .blue)
+        let text: AttributedString = karaokeText(words: words, activeIndex: 1, accent: .blue, ink: .black)
         #expect(String(text.characters) == "Hei kaikki taas")
         let accented: [String] = text.runs.compactMap { (run: AttributedString.Runs.Run) -> String? in
             run.foregroundColor == .blue ? String(text[run.range].characters) : nil

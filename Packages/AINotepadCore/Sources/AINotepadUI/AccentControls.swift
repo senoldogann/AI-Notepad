@@ -50,7 +50,7 @@ public struct PillPicker<Value: Hashable>: View {
 
 /// Çalan paragrafın metni: söylenen kelimeler tam renk, o anki kelime vurgu renginde ve kalın, gelecek kelimeler
 /// soluk. Tek biçimli metin olarak üretilir (her karede kelime başına ayrı metin kurulmaz). Saf fonksiyondur.
-public func karaokeText(words: [StoredWord], activeIndex: Int?, accent: Color) -> AttributedString {
+public func karaokeText(words: [StoredWord], activeIndex: Int?, accent: Color, ink: Color) -> AttributedString {
     words.enumerated().reduce(into: AttributedString()) { (result: inout AttributedString, item: (offset: Int, element: StoredWord)) -> Void in
         var word: AttributedString = AttributedString((item.offset == 0 ? "" : " ") + item.element.text)
         switch activeIndex {
@@ -58,9 +58,9 @@ public func karaokeText(words: [StoredWord], activeIndex: Int?, accent: Color) -
             // Yalnızca renk: kalınlaştırmak kelimeyi genişletip satırları her kelimede yeniden kırıyor, metin titriyordu.
             word.foregroundColor = accent
         case .some(let index) where item.offset < index:
-            word.foregroundColor = Color.primary
+            word.foregroundColor = ink
         default:
-            word.foregroundColor = Color.primary.opacity(0.45)
+            word.foregroundColor = ink.opacity(0.45)
         }
         result.append(word)
     }

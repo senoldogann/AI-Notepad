@@ -1,6 +1,9 @@
 import AVFoundation
 import Foundation
 import os
+#if os(iOS)
+import UIKit
+#endif
 
 /// Mikrofonu 16 kHz mono Float parçalar halinde yakalar ("Sen" akışı).
 ///
@@ -16,8 +19,14 @@ public final class MicrophoneCapture {
     private var configurationObserver: (any NSObjectProtocol)?
     /// iOS: ses oturumu kesintisi (telefon çağrısı, alarm) bitince yeniden kurma.
     private var interruptionObserver: (any NSObjectProtocol)?
+    /// iOS: uygulama öne gelince kesinti sürüyorsa yeniden kurma (VoIP uygulamaları kesinti bitişini her zaman bildirmez).
+    private var activationObserver: (any NSObjectProtocol)?
     /// Her yeniden kurma isteğinde artar; eski denemeler yenisi gelince vazgeçer.
     private var restartGeneration: Int = 0
+    /// Ses oturumu kesildi (telefon çağrısı, alarm): mikrofon ses vermiyor, arayüz bunu gösterir.
+    public private(set) var isInterrupted: Bool = false
+    /// Kesinti başlayınca ve bitince çağrılır (iPhone kayıt ekranı "Mikrofon kesildi" gösterir).
+    public var onInterruptionChange: (@MainActor (Bool) -> Void)?
 
     public init() {}
 
@@ -57,11 +66,26 @@ public final class MicrophoneCapture {
             queue: .main
         ) { [weak self] (notification: Notification) -> Void in
             let rawType: UInt? = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
-            guard rawType.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .ended else {
-                return
-            }
+            let type: AVAudioSession.InterruptionType? = rawType.flatMap(AVAudioSession.InterruptionType.init(rawValue:))
             Task { @MainActor in
-                await self?.restartAfterConfigurationChange()
+                switch type {
+                case .began:
+                    self?.setInterrupted(true)
+                case .ended:
+                    await self?.resumeAfterInterruption()
+                default:
+                    return
+                }
+            }
+        }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            Task { @MainActor in
+                guard self?.isInterrupted == true else {
+                    return
+                }
+                await self?.resumeAfterInterruption()
             }
         }
         #endif
@@ -78,6 +102,11 @@ public final class MicrophoneCapture {
             NotificationCenter.default.removeObserver(observer)
         }
         interruptionObserver = nil
+        if let observer = activationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        activationObserver = nil
+        isInterrupted = false
         #if os(iOS)
         let wasRunning: Bool = continuation != nil
         #endif
@@ -92,6 +121,30 @@ public final class MicrophoneCapture {
     }
 
     #if os(iOS)
+    private func setInterrupted(_ interrupted: Bool) {
+        guard isInterrupted != interrupted else {
+            return
+        }
+        isInterrupted = interrupted
+        Self.logger.info("Ses oturumu kesintisi, sürüyor: \(interrupted, privacy: .public)")
+        onInterruptionChange?(interrupted)
+    }
+
+    /// Kesinti bitti: ses oturumu yeniden etkinleştirilir (kesinti onu kapatır) ve motor yeniden kurulur.
+    private func resumeAfterInterruption() async {
+        guard continuation != nil else {
+            return
+        }
+        do {
+            try activateRecordingSession()
+        } catch {
+            Self.logger.error("Kesinti sonrası ses oturumu açılamadı, hata: \(String(describing: error), privacy: .public)")
+            return
+        }
+        await restartAfterConfigurationChange()
+        setInterrupted(false)
+    }
+
     /// Kayıt için ses oturumu: odadaki konuşmayı yerleşik mikrofonla alır; kayıt arka planda ve ekran kilitliyken sürer
     /// (Info.plist'te `audio` arka plan modu). Bluetooth kulaklık yalnızca çalma için (A2DP) kullanılır; kulaklık
     /// mikrofonu (HFP) sesi 16 kHz dar banda düşürdüğü için seçilmez.

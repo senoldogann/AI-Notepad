@@ -206,7 +206,8 @@ private struct PanelSurface: ViewModifier {
         content
             .foregroundStyle(Theme.ink)
             .clipShape(shape)
-            .background(Theme.background, in: shape)
+            // Cam yüzey seçiliyse panel de camdan (dolu yüzeyde zemin rengi).
+            .background { WindowBackdrop().clipShape(shape) }
             .overlay(shape.strokeBorder(Theme.line))
     }
 }
@@ -272,7 +273,8 @@ private struct HoverHint: ViewModifier {
             if scope == nil {
                 content.help(text)
             } else {
-                content.accessibilityHint(Text(text))
+                // Simgeli düğmelerin görünür adı yok: ipucu metni ekran okuyucunun okuduğu ad olur.
+                content.accessibilityLabel(Text(text))
             }
         }
             .onHover { (hovering: Bool) -> Void in

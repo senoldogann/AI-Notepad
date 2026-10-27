@@ -53,10 +53,7 @@ public func editMeetingNote(record: MeetingRecord, instruction: String, llm: LLM
     let edited: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
         try parseMeetingNote(text: text)
     }
-    let normalized: MeetingNote = MeetingNote(
-        title: edited.title, summary: edited.summary, decisions: edited.decisions,
-        tasks: edited.tasks.map { normalizedTask(task: $0, userName: userName) }, glossary: edited.glossary
-    )
-    let withOutline: MeetingNote = edited.outline.map { normalized.with(outline: $0) } ?? normalized
-    return withCarriedTaskMarks(old: record, new: record.with(note: withOutline))
+    // Yazılan notla aynı kural: sahip düzeltilir, aynı görev iki kez yazıldıysa tek kalır (aynı kimliği paylaşıp
+    // birlikte işaretlenmesinler).
+    return withCarriedTaskMarks(old: record, new: record.with(note: withNormalizedTasks(note: edited, userName: userName)))
 }

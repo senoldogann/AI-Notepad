@@ -29,7 +29,7 @@ private func meetingEncoder() -> JSONEncoder {
     return encoder
 }
 
-private func meetingDecoder() -> JSONDecoder {
+func meetingDecoder() -> JSONDecoder {
     let decoder: JSONDecoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return decoder
@@ -76,11 +76,24 @@ public func deleteAudioFiles(directory: URL) throws {
         guard FileManager.default.fileExists(atPath: file.path) else {
             continue
         }
+        try coordinatedRemoveItem(at: file)
+    }
+}
+
+/// Dosyayı ya da klasörü dosya koordinasyonuyla siler: iCloud'daki öğe başka cihazda yazılırken ya da eşitlenirken
+/// silme çakışmasın.
+func coordinatedRemoveItem(at url: URL) throws {
+    var coordinationError: NSError?
+    var removeError: (any Error)?
+    NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forDeleting, error: &coordinationError) { (target: URL) -> Void in
         do {
-            try FileManager.default.removeItem(at: file)
+            try FileManager.default.removeItem(at: target)
         } catch {
-            throw StorageError.deleteFailed(path: file.path, reason: error.localizedDescription)
+            removeError = error
         }
+    }
+    if let failure = coordinationError ?? removeError.map({ $0 as NSError }) {
+        throw StorageError.deleteFailed(path: url.path, reason: failure.localizedDescription)
     }
 }
 
@@ -116,6 +129,16 @@ public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
     for folder in folders.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
         let file: URL = folder.appending(path: meetingFileName)
         guard FileManager.default.fileExists(atPath: file.path) else {
+            // iPhone'da inmemiş iCloud dosyası yerine ".meeting.json.icloud" yer tutucusu durur: indirmesi başlatılır
+            // (yoksa Mac'in toplantısı iPhone'da hiç görünmüyordu).
+            if FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path) {
+                do {
+                    try FileManager.default.startDownloadingUbiquitousItem(at: file)
+                    downloading.append(folder.lastPathComponent)
+                } catch {
+                    failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
+                }
+            }
             continue
         }
         do {
@@ -130,6 +153,27 @@ public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
         }
     }
     return MeetingLoadResult(meetings: newestFirst(records: meetings), failures: failures, downloading: downloading)
+}
+
+/// iCloud'dan inmemiş dosyanın iPhone'daki yer tutucusu (".ad.icloud"). Saf fonksiyondur.
+public func cloudPlaceholder(file: URL) -> URL {
+    file.deletingLastPathComponent().appending(path: ".\(file.lastPathComponent).icloud")
+}
+
+/// Toplantı klasöründeki inmemiş ses kayıtlarının indirmesini başlatır; inen kayıt varsa true (çalmadan önce
+/// "iniyor" gösterilir).
+public func startDownloadingCloudAudio(directory: URL) throws -> Bool {
+    var started: Bool = false
+    for name in ["others.m4a", "me.m4a"] {
+        let file: URL = directory.appending(path: name)
+        if FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path) {
+            try FileManager.default.startDownloadingUbiquitousItem(at: file)
+            started = true
+        } else if FileManager.default.fileExists(atPath: file.path), try !isDownloaded(file: file) {
+            started = true
+        }
+    }
+    return started
 }
 
 /// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. İnmemişse indirmesi başlatılır ve false döner.
@@ -176,11 +220,7 @@ public func audioToDelete(records: [MeetingRecord], now: Date, retentionDays: In
 /// Toplantı klasörünü kalıcı olarak siler (iPhone: Çöp Sepeti yok; silmeden önce onay sorulur). Silinemezse
 /// `deleteFailed`.
 public func deleteMeetingDirectory(directory: URL) throws {
-    do {
-        try FileManager.default.removeItem(at: directory)
-    } catch {
-        throw StorageError.deleteFailed(path: directory.path, reason: error.localizedDescription)
-    }
+    try coordinatedRemoveItem(at: directory)
 }
 
 /// Başlık, not ve transkriptte büyük/küçük harf duyarsız arama; boş sorgu hepsini döndürür. Saf fonksiyondur.
@@ -190,8 +230,11 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
         return records
     }
     return records.filter { (record: MeetingRecord) -> Bool in
-        let haystack: [String] = [record.title, record.note?.summary ?? ""]
+        // Listede görünen başlık notun başlığıdır; görevler, konuşmacı adları ve kendi notların da aranır.
+        let haystack: [String] = [record.title, record.note?.title ?? "", record.note?.summary ?? "", record.myNotes ?? ""]
             + (record.note?.decisions ?? [])
+            + (record.note?.tasks ?? []).flatMap { [$0.owner, $0.description] }
+            + Array(record.speakerNames.values)
             + (record.liveSegments + record.finalSegments).map(\.text)
             + Array(record.translations.values)
         // Yerel ayardan bağımsız: Türkçe yerel ayarda "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
