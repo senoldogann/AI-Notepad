@@ -3,10 +3,10 @@ import AINotepadUI
 import AppKit
 import SwiftUI
 
-/// Toplantılarıma sor: tüm notlar ve transkriptler arasında sohbet. Her cevabın üstünde ajanın adımları (arama
-/// terimleri, okunan toplantılar, yazan model ve süre), cevap akarak yumuşakça gelir; metindeki [1] işaretleri ve
-/// altındaki kaynak kartları toplantıyı açar. Devam soruları önceki cevapları bağlam alır. Boşken film gradyanlı giriş
-/// ve örnek sorular.
+/// Toplantılarıma sor: tüm notlar ve transkriptler arasında sohbet, sade bir LLM akışı gibi: çalışırken tek satır
+/// parıltılı "Düşünüyor…", cevap akarak yumuşakça gelir, altında küçük ve kapalı "Kaynaklar" ve "nasıl cevaplandı"
+/// satırları; metindeki [1] işaretleri toplantıyı açar. Devam soruları önceki cevapları bağlam alır. Boşken film
+/// gradyanlı giriş ve örnek sorular.
 struct AskPage: View {
     let model: AppModel
     let router: MainWindowRouter
@@ -139,20 +139,20 @@ struct AskPage: View {
     }
 }
 
-/// Ajan çalışırken giriş alanının çerçevesinde dönen yumuşak renk halkası.
+/// Ajan çalışırken giriş alanının çerçevesinde dönen ince, tek renk ışık.
 private struct ThinkingRing: View {
     let shape: RoundedRectangle
     @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { (context: TimelineViewDefaultContext) in
-            let angle: Double = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) / 4 * 360
+            let angle: Double = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3) / 3 * 360
             shape.strokeBorder(
                 AngularGradient(
-                    colors: [Color(red: 0.95, green: 0.55, blue: 0.35), Color(red: 0.62, green: 0.48, blue: 0.95), Color(red: 0.35, green: 0.65, blue: 0.95), Color(red: 0.95, green: 0.55, blue: 0.35)],
+                    colors: [Theme.line, Theme.ink.opacity(0.55), Theme.line, Theme.line],
                     center: .center, angle: .degrees(angle)
                 ),
-                lineWidth: 1.5
+                lineWidth: 1.2
             )
         }
         .allowsHitTesting(false)
@@ -251,7 +251,7 @@ private struct ExchangeView: View {
     let onOpen: @MainActor (ArchivePassage) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Spacer(minLength: 80)
                 Text(exchange.question)
@@ -261,7 +261,11 @@ private struct ExchangeView: View {
                     .background(Theme.soft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .textSelection(.enabled)
             }
-            AgentTrace(exchange: exchange)
+            // Çalışırken tek satır "Düşünüyor…" (parıltılı); cevap akmaya başlayınca kalkar.
+            if exchange.answer.text.isEmpty, [.understanding, .searching, .writing].contains(exchange.phase) {
+                ThinkingLine(exchange: exchange)
+                    .transition(.opacity)
+            }
             if !exchange.answer.text.isEmpty {
                 StreamingAnswer(exchange: exchange) { (number: Int) -> Void in
                     if exchange.answer.sources.indices.contains(number - 1) {
@@ -282,218 +286,149 @@ private struct ExchangeView: View {
             case .understanding, .searching, .writing, .done:
                 EmptyView()
             }
-            if !exchange.answer.sources.isEmpty {
-                SourceCards(sources: exchange.answer.sources, onOpen: onOpen)
-            }
-            if exchange.phase == .done {
-                AnswerActions(exchange: exchange)
+            if ![.understanding, .searching, .writing].contains(exchange.phase) {
+                // Bitince: küçük, kapalı satırlar (kaynaklar, nasıl cevaplandı) ve kopyala.
+                VStack(alignment: .leading, spacing: 6) {
+                    if !exchange.answer.sources.isEmpty {
+                        SourcesDisclosure(sources: exchange.answer.sources, onOpen: onOpen)
+                    }
+                    ReasoningDisclosure(exchange: exchange)
+                    if exchange.phase == .done {
+                        AnswerActions(exchange: exchange)
+                    }
+                }
+                .transition(.opacity)
             }
         }
     }
 }
 
-/// Ajanın adımları: soruyu anlama (terimler), arşivi tarama (okunan toplantılar), cevabı yazma (model). Çalışırken
-/// açık; bitince tek satıra katlanır ("3 adım · 5 toplantı · 4,2 sn"), tıklayınca açılır.
-private struct AgentTrace: View {
+/// Çalışırken tek satır: parıltılı durum ("Düşünüyor…", "Arşiv taranıyor…", "8 toplantı okunuyor…").
+private struct ThinkingLine: View {
     let exchange: ArchiveExchange
-    @State private var isExpanded: Bool = false
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
-
-    private var isWorking: Bool {
-        [.understanding, .searching, .writing].contains(exchange.phase)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if isWorking || isExpanded {
-                steps
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-            if !isWorking {
-                Button {
-                    withAnimation(.smooth(duration: 0.3)) { isExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                        Text(summary)
-                        Image(systemName: "chevron.down")
-                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    }
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
-                    .padding(.top, isExpanded ? 10 : 0)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.hoverPlain)
-            }
-        }
-        .animation(.smooth(duration: 0.3), value: exchange.phase)
-    }
-
-    /// "Nasıl cevapladım · 5 toplantı, 12 parça · 4,2 sn".
-    private var summary: String {
-        let meetings: Int = Set(exchange.passages.map(\.meetingID)).count
-        let seconds: Double = (exchange.finishedAt ?? Date()).timeIntervalSince(exchange.startedAt)
-        let duration: String = seconds.formatted(.number.precision(.fractionLength(1)).locale(interfaceLocale()))
-        return String(localized: "Nasıl cevapladım · \(meetings) toplantı, \(exchange.passages.count) parça · \(duration) sn")
-    }
-
-    private var steps: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TraceStep(
-                symbol: "text.magnifyingglass", title: "Soruyu anlıyor", doneTitle: "Arama terimleri",
-                state: stepState(order: 0), isLast: false
-            ) {
-                if !exchange.terms.isEmpty {
-                    FlowLayout(spacing: 5, lineSpacing: 5) {
-                        ForEach(Array(exchange.terms.prefix(14).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                            Text(item.element)
-                                .appFont(size: 11, weight: .medium)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Theme.soft, in: Capsule())
-                        }
-                        if exchange.terms.count > 14 {
-                            Text(verbatim: "+\(exchange.terms.count - 14)")
-                                .appFont(size: 11, weight: .medium)
-                                .foregroundStyle(Theme.muted)
-                        }
-                    }
-                }
-            }
-            TraceStep(
-                symbol: "tray.full", title: "Arşivi tarıyor", doneTitle: "Okunan toplantılar",
-                state: stepState(order: 1), isLast: false
-            ) {
-                if !exchange.passages.isEmpty {
-                    let titles: [String] = exchange.passages.reduce(into: [String]()) { (result: inout [String], passage: ArchivePassage) -> Void in
-                        if !result.contains(passage.meetingTitle) {
-                            result.append(passage.meetingTitle)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(titles.prefix(6).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                            Label(item.element, systemImage: "doc.text")
-                                .appFont(size: 12, weight: .regular)
-                                .foregroundStyle(Theme.ink.opacity(0.8))
-                                .lineLimit(1)
-                        }
-                        if titles.count > 6 {
-                            Text("ve \(titles.count - 6) toplantı daha")
-                                .appFont(size: 12, weight: .regular)
-                                .foregroundStyle(Theme.muted)
-                        }
-                    }
-                }
-            }
-            TraceStep(
-                symbol: "pencil.line", title: "Cevabı yazıyor", doneTitle: "Cevap",
-                state: stepState(order: 2), isLast: true
-            ) {
-                if let name = exchange.modelName {
-                    Text(name)
-                        .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(Theme.muted)
-                }
-            }
-        }
-    }
-
-    /// Adımın durumu: sırası gelmedi, sürüyor, bitti.
-    private func stepState(order: Int) -> TraceStepState {
-        let current: Int = switch exchange.phase {
-        case .understanding: 0
-        case .searching: 1
-        case .writing: 2
-        case .done, .stopped, .failed: 3
-        }
-        return order < current ? .done : (order == current ? .active : .waiting)
-    }
-}
-
-/// Ajan adımının durumu.
-private enum TraceStepState {
-    case waiting
-    case active
-    case done
-}
-
-/// Ajanın tek adımı: solda durum simgesi ve dikey çizgi, sağda başlık ve ayrıntı.
-private struct TraceStep<Detail: View>: View {
-    let symbol: String
-    let title: LocalizedStringKey
-    let doneTitle: LocalizedStringKey
-    let state: TraceStepState
-    let isLast: Bool
-    let detail: Detail
-
-    init(symbol: String, title: LocalizedStringKey, doneTitle: LocalizedStringKey, state: TraceStepState, isLast: Bool, @ViewBuilder detail: () -> Detail) {
-        self.symbol = symbol
-        self.title = title
-        self.doneTitle = doneTitle
-        self.state = state
-        self.isLast = isLast
-        self.detail = detail()
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(state == .waiting ? Theme.soft : Theme.card)
-                        .overlay(Circle().strokeBorder(state == .waiting ? Color.clear : Theme.line))
-                        .frame(width: 24, height: 24)
-                    switch state {
-                    case .waiting:
-                        Image(systemName: symbol).appFont(size: 10, weight: .medium).foregroundStyle(Theme.muted.opacity(0.6))
-                    case .active:
-                        ProgressView().controlSize(.mini)
-                    case .done:
-                        Image(systemName: "checkmark").appFont(size: 10, weight: .bold).foregroundStyle(Theme.ink)
-                    }
-                }
-                if !isLast {
-                    Rectangle().fill(Theme.line).frame(width: 1).frame(maxHeight: .infinity)
-                }
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                ShimmerText(text: Text(state == .done ? doneTitle : title), isActive: state == .active)
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(state == .waiting ? Theme.muted.opacity(0.7) : Theme.ink)
-                if state != .waiting {
-                    detail
-                }
-            }
-            .padding(.bottom, isLast ? 0 : 14)
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-/// Çalışan adımın başlığında soldan sağa kayan parıltı.
-private struct ShimmerText: View {
-    let text: Text
-    let isActive: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
-        if isActive, !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { (context: TimelineViewDefaultContext) in
-                let phase: Double = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
-                text.overlay {
-                    GeometryReader { (geometry: GeometryProxy) in
-                        LinearGradient(colors: [.clear, Theme.background.opacity(0.85), .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: geometry.size.width * 0.5)
-                            .offset(x: (phase * 1.6 - 0.3) * geometry.size.width)
-                    }
-                    .mask(text)
-                    .allowsHitTesting(false)
-                }
-            }
-        } else {
-            text
+        HStack(spacing: 8) {
+            Image(systemName: "sparkle")
+                .appFont(size: 12, weight: .semibold)
+                .foregroundStyle(Theme.muted)
+                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+            ShimmerText(text: status)
+                .appFont(size: 14, weight: .medium)
         }
+        .animation(.easeOut(duration: 0.2), value: exchange.phase)
+    }
+
+    private var status: Text {
+        switch exchange.phase {
+        case .searching:
+            Text("Arşiv taranıyor…")
+        case .writing:
+            Text("\(Set(exchange.passages.map(\.meetingID)).count) toplantı okunuyor…")
+        case .understanding, .done, .stopped, .failed:
+            Text("Düşünüyor…")
+        }
+    }
+}
+
+/// Metnin üstünden soldan sağa yavaşça geçen ışık (düşünme göstergesi); "Hareketi azalt" açıksa durgun ve soluk.
+private struct ShimmerText: View {
+    let text: Text
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
+
+    var body: some View {
+        if reduceMotion {
+            text.foregroundStyle(Theme.muted)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { (context: TimelineViewDefaultContext) in
+                let phase: Double = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+                text
+                    .foregroundStyle(Theme.muted.opacity(0.75))
+                    .overlay {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: max(0, phase * 1.6 - 0.5)),
+                                .init(color: Theme.ink, location: max(0, phase * 1.6 - 0.3)),
+                                .init(color: .clear, location: max(0, phase * 1.6 - 0.1)),
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .mask(text)
+                        .allowsHitTesting(false)
+                    }
+            }
+        }
+    }
+}
+
+/// Bitince küçük, kapalı satır: "8 toplantıdan 42 parça okundu · 6,0 sn"; açılınca arama terimleri, okunan toplantılar
+/// ve model küçük yazıyla.
+private struct ReasoningDisclosure: View {
+    let exchange: ArchiveExchange
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        let titles: [String] = exchange.passages.reduce(into: [String]()) { (result: inout [String], passage: ArchivePassage) -> Void in
+            if !result.contains(passage.meetingTitle) {
+                result.append(passage.meetingTitle)
+            }
+        }
+        VStack(alignment: .leading, spacing: 6) {
+            DisclosureLine(title: Text(summary(meetings: titles.count)), isExpanded: $isExpanded)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !exchange.terms.isEmpty {
+                        detail(label: "Aranan", value: exchange.terms.joined(separator: ", "))
+                    }
+                    if !titles.isEmpty {
+                        detail(label: "Okunan", value: titles.joined(separator: " · "))
+                    }
+                    if let model = exchange.modelName {
+                        detail(label: "Model", value: model)
+                    }
+                }
+                .padding(.leading, 18)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func summary(meetings: Int) -> String {
+        let seconds: Double = (exchange.finishedAt ?? Date()).timeIntervalSince(exchange.startedAt)
+        let duration: String = seconds.formatted(.number.precision(.fractionLength(1)).locale(interfaceLocale()))
+        return String(localized: "\(meetings) toplantıdan \(exchange.passages.count) parça okundu · \(duration) sn")
+    }
+
+    private func detail(label: LocalizedStringKey, value: String) -> some View {
+        (Text(label).foregroundStyle(Theme.muted) + Text(verbatim: "  ") + Text(value).foregroundStyle(Theme.ink.opacity(0.7)))
+            .appFont(size: 11, weight: .regular)
+            .lineSpacing(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+}
+
+/// Küçük açılır satır: soluk metin ve dönen ok.
+private struct DisclosureLine: View {
+    let title: Text
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.25)) { isExpanded.toggle() }
+        } label: {
+            HStack(spacing: 5) {
+                title
+                Image(systemName: "chevron.right")
+                    .appFont(size: 9, weight: .semibold)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(Theme.muted)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.hoverPlain)
     }
 }
 
@@ -548,10 +483,12 @@ private struct StreamingAnswer: View {
 private let citationScheme: String = "ainotepad-source"
 
 /// Cevap metnini biçimler: satır başı "- " madde işareti olur, **kalın** yazı kalınlaşır, [n] işaretleri küçük,
-/// yükseltilmiş, vurgu renkli bağlantılara dönüşür (tıklayınca kaynak açılır). Akarken yarım kalan "**" düz görünür.
+/// yükseltilmiş, vurgu renkli bağlantılara dönüşür (tıklayınca kaynak açılır). Akarken yarım kalan "**" düz görünür,
+/// yarım kaynak işareti gizlenir.
 /// Saf fonksiyondur.
 private func answerAttributedText(text: String, accent: Color) -> AttributedString {
-    let bulleted: String = text
+    // Harf harf açılırken yarım kalan kaynak işareti ("[1") görünmesin.
+    let bulleted: String = text.replacing(/\[\d*$/, with: "")
         .split(separator: "\n", omittingEmptySubsequences: false)
         .map { (line: Substring) -> String in
             let trimmed: Substring = line.drop { $0 == " " }
@@ -588,55 +525,50 @@ private func streamingCaret(accent: Color) -> AttributedString {
     return cursor
 }
 
-/// Kaynak kartları: numara (metindeki [n]), toplantı, tarih ve zaman, parçanın başı; tıklayınca toplantı açılır.
-private struct SourceCards: View {
+/// Kaynaklar: varsayılan kapalı küçük satır ("Kaynaklar · 7"); açılınca numaralı, ince satırlar (numara metindeki
+/// [n]; toplantı, tarih, not ya da zaman). Tıklayınca toplantı açılır.
+private struct SourcesDisclosure: View {
     let sources: [ArchivePassage]
     let onOpen: @MainActor (ArchivePassage) -> Void
+    @State private var isExpanded: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("KAYNAKLAR")
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], alignment: .leading, spacing: 10) {
-                ForEach(Array(sources.enumerated()), id: \.element.id) { (item: (offset: Int, element: ArchivePassage)) in
-                    Button {
-                        onOpen(item.element)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            DisclosureLine(title: Text("Kaynaklar · \(sources.count)"), isExpanded: $isExpanded)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(sources.enumerated()), id: \.element.id) { (item: (offset: Int, element: ArchivePassage)) in
+                        Button {
+                            onOpen(item.element)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(verbatim: "\(item.offset + 1)")
-                                    .appFont(size: 10, weight: .bold)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 18, height: 18)
-                                    .background(appearance.accent.color, in: Circle())
+                                    .appFont(size: 10, weight: .semibold)
+                                    .monospacedDigit()
+                                    .foregroundStyle(appearance.accent.color)
+                                    .frame(width: 14, alignment: .trailing)
                                 Text(item.element.meetingTitle)
-                                    .appFont(size: 13, weight: .medium)
+                                    .appFont(size: 12, weight: .regular)
+                                    .foregroundStyle(Theme.ink.opacity(0.85))
                                     .lineLimit(1)
+                                Text(sourceDetail(source: item.element))
+                                    .appFont(size: 11, weight: .regular)
+                                    .foregroundStyle(Theme.muted)
+                                    .lineLimit(1)
+                                    .fixedSize()
                             }
-                            Label(sourceDetail(source: item.element), systemImage: item.element.kind == .note ? "doc.text" : "text.bubble")
-                                .appFont(size: 11, weight: .regular)
-                                .foregroundStyle(Theme.muted)
-                                .lineLimit(1)
-                            Text(sourceSnippet(source: item.element))
-                                .appFont(size: 12, weight: .regular)
-                                .foregroundStyle(Theme.ink.opacity(0.72))
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
+                            .padding(.vertical, 3)
+                            .contentShape(Rectangle())
                         }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .cardSurface(cornerRadius: 14)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.hoverPlain)
+                        .hoverHint("Toplantıyı aç", alignment: .leading, edge: .bottom)
                     }
-                    .buttonStyle(.hoverPlain)
-                    .hoverHint("Toplantıyı aç", alignment: .leading, edge: .bottom)
                 }
+                .padding(.leading, 4)
+                .transition(.opacity)
             }
         }
-        .transition(.opacity)
     }
 
     /// "26 Eki · not" ya da "26 Eki · 04:12".
@@ -644,13 +576,6 @@ private struct SourceCards: View {
         let date: String = source.meetingDate.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale()))
         let place: String = source.kind == .note ? String(localized: "not") : timestamp(seconds: source.startSec)
         return "\(date) · \(place)"
-    }
-
-    /// Parçanın ilk anlamlı satırı (zaman ve konuşmacı öneki atılır).
-    private func sourceSnippet(source: ArchivePassage) -> String {
-        let line: String = source.text.split(separator: "\n").first.map(String.init) ?? ""
-        let withoutTime: String = line.replacing(/^\[\d+:\d+(:\d+)?\]\s*/, with: "")
-        return withoutTime.replacing(/^Özet:\s*/, with: "")
     }
 }
 
@@ -667,7 +592,7 @@ private struct AnswerActions: View {
                 copied = true
             } label: {
                 Label(copied ? "Kopyalandı" : "Kopyala", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .appFont(size: 12, weight: .medium)
+                    .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
             }
             .buttonStyle(.hoverPlain)

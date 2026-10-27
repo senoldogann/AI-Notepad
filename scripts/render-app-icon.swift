@@ -1,12 +1,18 @@
 // Uygulama simgesini çizer (ElevenLabs sadeliğinde): neredeyse siyah zemin, çok hafif kumlu doku; beyaz üç yuvarlak
-// çubuk sesi, sağdaki yatay çizgi notu anlatır (ses → not). Zemin tam kare çizilir; macOS köşeleri kendi maskesiyle
-// yuvarlar. Açılış ekranındaki işaret (`AppMark`) aynı ölçüleri kullanır.
+// çubuk sesi, sağdaki yatay çizgi notu anlatır (ses → not). Apple'ın macOS simge ızgarasına uyar: 1024'lük tuvalde
+// 824'lük yuvarlak köşeli gövde, çevresinde saydam pay ve hafif gölge. Tam kare (kenara taşan) simgeyi macOS 26
+// standart şekil saymaz, küçültüp gri bir çerçeveye koyar (Dock'ta logo görünmez olur). Açılış ekranındaki işaret
+// (`AppMark`) aynı ölçüleri kullanır.
 // Kullanım: swift scripts/render-app-icon.swift <çıktı.png>
 import AppKit
 import CoreGraphics
 import Foundation
 
-let size: CGFloat = 1024
+let canvas: CGFloat = 1024
+/// Gövde: Apple ızgarasında 824×824, her yanda 100 pt saydam pay; köşe yarıçapı gövdenin ~%22,4'ü.
+let body: CGRect = CGRect(x: 100, y: 100, width: 824, height: 824)
+let cornerRadius: CGFloat = 185
+let size: CGFloat = body.width
 let unit: CGFloat = size / 100
 let outputPath: String = CommandLine.arguments[1]
 
@@ -17,9 +23,23 @@ func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat) ->
 
 let space: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 let context: CGContext = CGContext(
-    data: nil, width: Int(size), height: Int(size), bitsPerComponent: 8, bytesPerRow: 0,
+    data: nil, width: Int(canvas), height: Int(canvas), bitsPerComponent: 8, bytesPerRow: 0,
     space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
 )!
+let bodyPath: CGPath = CGPath(roundedRect: body, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+
+// Gövdenin altında hafif gölge (macOS simgeleri gibi).
+context.saveGState()
+context.setShadow(offset: CGSize(width: 0, height: -10), blur: 22, color: rgb(0, 0, 0, 0.32))
+context.addPath(bodyPath)
+context.setFillColor(rgb(6, 6, 6, 1))
+context.fillPath()
+context.restoreGState()
+
+// Sonraki her şey gövdenin içine, gövdenin sol alt köşesi başlangıç olacak şekilde çizilir.
+context.addPath(bodyPath)
+context.clip()
+context.translateBy(x: body.minX, y: body.minY)
 
 // Zemin: yukarıdan aşağı koyu griden siyaha.
 let background: CGGradient = CGGradient(colorsSpace: space, colors: [rgb(34, 34, 34, 1), rgb(6, 6, 6, 1)] as CFArray, locations: [0, 1])!
