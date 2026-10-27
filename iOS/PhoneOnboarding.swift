@@ -136,7 +136,13 @@ struct PhoneOnboarding: View {
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 16)
-        .background(Theme.background)
+        .background {
+            ZStack {
+                Theme.background
+                FlowingLines(seed: "iphone-karsilama", lineCount: 10, isAnimated: true)
+            }
+            .ignoresSafeArea()
+        }
         .animation(.smooth(duration: 0.4), value: page)
     }
 
