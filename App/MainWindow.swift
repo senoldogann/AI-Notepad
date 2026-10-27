@@ -833,7 +833,7 @@ private struct UpcomingMeetings: View {
             .filter { $0.end <= now && Calendar.current.isDate($0.start, inSameDayAs: now) }
             .sorted { $0.start > $1.start }
         if let error = model.calendarError {
-            EmptyStateCard(symbol: "calendar.badge.exclamationmark", title: "Takvim okunamadı", message: LocalizedStringKey(error))
+            EmptyStateCard(symbol: "calendar.badge.exclamationmark", title: "Takvim okunamadı", message: "\(error)")
         } else if !items.isEmpty || !earlier.isEmpty {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
                 if !items.isEmpty {
@@ -1099,7 +1099,7 @@ private struct TasksPage: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.hoverPlain)
-                        ForEach(Array(group.tasks.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
+                        ForEach(Array(group.tasks.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
                             TaskLine(model: model, record: group.record, task: item.element) {
                                 router.selectedMeetingID = group.record.id
                                 router.section = .meetings

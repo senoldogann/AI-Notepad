@@ -101,7 +101,12 @@ public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord
     records
         .filter { (record: MeetingRecord) -> Bool in record.status == .recording || record.status == .processing }
         .map { (record: MeetingRecord) -> MeetingRecord in
-            record.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
+            let interrupted: MeetingRecord = record.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
+            // Yarıda kalan kaydın bitişi bilinmez: son konuşmanın sonu kabul edilir (süre "–" görünmesin).
+            guard record.endedAt == nil, let lastSec = (record.liveSegments + record.finalSegments).map(\.endSec).max() else {
+                return interrupted
+            }
+            return interrupted.with(endedAt: record.startedAt.addingTimeInterval(lastSec))
         }
 }
 

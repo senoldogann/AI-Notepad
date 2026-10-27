@@ -289,7 +289,14 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
 private func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
     let normalized: MeetingNote = MeetingNote(
         title: note.title, summary: note.summary, decisions: note.decisions,
-        tasks: note.tasks.map { normalizedTask(task: $0, userName: userName) }, glossary: note.glossary
+        tasks: note.tasks.map { normalizedTask(task: $0, userName: userName) }
+            // Aynı sahip ve işle iki kez yazılan görev tek görev olur (aynı kimliği paylaşıp birlikte işaretlenmesinler).
+            .reduce(into: [NoteTask]()) { (result: inout [NoteTask], task: NoteTask) -> Void in
+                if !result.contains(where: { taskKey(task: $0) == taskKey(task: task) }) {
+                    result.append(task)
+                }
+            },
+        glossary: note.glossary
     )
     return note.outline.map { normalized.with(outline: $0) } ?? normalized
 }

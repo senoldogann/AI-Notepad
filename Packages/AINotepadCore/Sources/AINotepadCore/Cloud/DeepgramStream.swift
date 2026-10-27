@@ -83,6 +83,8 @@ private let reconnectBudgetSec: Double = 120
 private let silenceTimeoutSec: Double = 20
 /// Kapanışta son sonuçlar için en fazla bekleme.
 private let closeDeadlineSec: Double = 5
+/// Tek mesajda gönderilen en fazla ses (0,5 sn): Deepgram kısa parçaları hızlı işler.
+private let maxSendSamples: Int = 8000
 
 /// Tek bir Deepgram akışının bağlantı durumu.
 private actor DeepgramConnection {
@@ -113,6 +115,9 @@ private actor DeepgramConnection {
     private var isConnected: Bool = false
     private var isReconnecting: Bool = false
     private var isFlushing: Bool = false
+    /// Bağlanma sonrası dil geçişi ve bekleyen sesin gönderimi sürüyor: kapanış bunun bitmesini bekler (yoksa
+    /// `CloseStream` bekleyen sesten önce gidip sesin sonu yazıya dökülmezdi).
+    private var isResuming: Bool = false
     private var isClosing: Bool = false
     /// Kapanış süresi doldu: yeniden bağlanma denemeleri bırakılır.
     private var closeDeadlinePassed: Bool = false
@@ -129,12 +134,11 @@ private actor DeepgramConnection {
     }
 
     func run(audio: AsyncStream<[Float]>) async {
-        do {
-            try await connectWithRetry()
-            await reconnectIfLanguageChanged()
-        } catch {
-            fail(error: error)
-        }
+        // İlk bağlantı da yeniden bağlanma gibi arka planda kurulur: ses bu sırada sıraya girer ve bağlanınca gönderilir.
+        // Önceden ses ancak bağlantıdan sonra okunuyordu; ağ yokken durdurmak bağlanma denemeleri (2 dk) bitene dek
+        // bekliyordu. Şimdi kapanış en fazla `closeDeadlineSec` bekler.
+        isReconnecting = true
+        Task { await self.connectAndResume() }
         watchdog = Task { await self.watchSilence() }
         for await chunk in audio {
             // Kalıcı hatadan sonra da akış tüketilir ki üretici tarafta ses birikmesin.
@@ -255,6 +259,14 @@ private actor DeepgramConnection {
         pending = unacknowledged + inFlight + pending
         unacknowledged = []
         inFlight = []
+        await connectAndResume()
+    }
+
+    /// Bağlanır, istenen dile geçer ve bekleyen sesi gönderir; bağlanılamazsa (kapanış sürmüyorsa) akış başarısız olur.
+    /// `isReconnecting` çağıran tarafından açılmış olmalıdır; bitince kapanır.
+    private func connectAndResume() async {
+        isResuming = true
+        defer { isResuming = false }
         do {
             try await connectWithRetry()
             isReconnecting = false
@@ -262,6 +274,11 @@ private actor DeepgramConnection {
             await flush()
         } catch {
             isReconnecting = false
+            // Anahtar reddi (4xx) kapanışta da bildirilir: kullanıcı nedenini görmeli.
+            if case CloudSTTError.http(_, let status, _) = error, (400..<500).contains(status) {
+                fail(error: error)
+                return
+            }
             guard !isClosing else {
                 // Kapanış süresi içinde bağlanılamadı: ses dosyada duruyor, son geçiş kapsar; kullanıcıya hata gösterilmez.
                 deepgramLogger.warning("Kapanışta yeniden bağlanılamadı, son ses gönderilmedi, örnek: \(self.pending.count, privacy: .public)")
@@ -297,8 +314,10 @@ private actor DeepgramConnection {
         defer { isFlushing = false }
         // Her turda geçerli bağlantı yeniden okunur: gönderim sürerken yeniden bağlanılmış olabilir.
         while isConnected, let sending = socket, !pending.isEmpty {
-            inFlight = pending
-            pending = []
+            // Biriken ses (bağlanırken ya da kopukken) tek dev mesaj yerine kısa parçalarla gider: Deepgram büyük parçaları
+            // yavaş işliyor, son sonuçlar geç geliyordu.
+            inFlight = Array(pending.prefix(maxSendSamples))
+            pending.removeFirst(inFlight.count)
             do {
                 try await sending.send(.data(linear16Data(samples: inFlight)))
                 // Gönderim sürerken yeniden bağlanma parçayı zaten yeniden sıraya aldıysa inFlight boştur.
@@ -376,16 +395,11 @@ private actor DeepgramConnection {
     /// `closeDeadlineSec` sürer; süre dolarsa bağlantı kesilir ve bekleyen gönderme/alma biter.
     private func close() async {
         isClosing = true
-        let deadline: Task<Void, Never> = Task {
-            do {
-                try await Task.sleep(for: .seconds(closeDeadlineSec))
-                self.expireCloseDeadline()
-            } catch {
-                // Kapanış süre dolmadan bitti; zamanlayıcı iptal edildi.
-            }
-        }
+        // İki aşamalı süre: önce bağlanma/gönderim için en fazla `closeDeadlineSec` (ağ yokken durdurma uzamasın), sonra
+        // `CloseStream`'den sonra son sonuçlar için yazıya dökülmemiş sesin süresine göre yeni bir süre.
+        var deadline: Task<Void, Never> = closeDeadline(seconds: closeDeadlineSec)
         // Süren yeniden bağlanma ya da gönderim bitsin: kuyruktaki son ses sırasıyla gönderilsin.
-        while isReconnecting || isFlushing, !closeDeadlinePassed {
+        while isReconnecting || isResuming || isFlushing, !closeDeadlinePassed {
             do {
                 try await Task.sleep(for: .milliseconds(100))
             } catch {
@@ -395,8 +409,8 @@ private actor DeepgramConnection {
         }
         if let socket, isConnected, !hasFailed, !closeDeadlinePassed {
             while !pending.isEmpty {
-                let chunk: [Float] = pending
-                pending = []
+                let chunk: [Float] = Array(pending.prefix(maxSendSamples))
+                pending.removeFirst(chunk.count)
                 do {
                     try await socket.send(.data(linear16Data(samples: chunk)))
                 } catch {
@@ -406,6 +420,9 @@ private actor DeepgramConnection {
             }
             do {
                 try await socket.send(.string(#"{"type":"CloseStream"}"#))
+                deadline.cancel()
+                let unprocessedSec: Double = Double(unacknowledged.count) / Double(deepgramSampleRate)
+                deadline = closeDeadline(seconds: closeDeadlineSec + unprocessedSec * 0.5)
                 await receiver?.value
             } catch {
                 deepgramLogger.error("CloseStream gönderilemedi: \(String(describing: error), privacy: .private)")
@@ -417,6 +434,18 @@ private actor DeepgramConnection {
         socket = nil
         session.finishTasksAndInvalidate()
         events.finish()
+    }
+
+    /// `seconds` sonra kapanış süresini doldurur; kapanış önce biterse iptal edilir.
+    private func closeDeadline(seconds: Double) -> Task<Void, Never> {
+        Task {
+            do {
+                try await Task.sleep(for: .seconds(seconds))
+                self.expireCloseDeadline()
+            } catch {
+                // Kapanış süre dolmadan bitti; zamanlayıcı iptal edildi.
+            }
+        }
     }
 
     /// Kapanış süresi doldu: süren gönderme/alma kesilir, yeniden bağlanma bırakılır.
