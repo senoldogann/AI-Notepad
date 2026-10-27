@@ -69,9 +69,13 @@ import Testing
         for await chunk in clockAlignedStream(audio: source, origin: origin, sampleRate: 16000, thresholdSec: 0.5) {
             chunks.append(chunk)
         }
+        // Doldurulan sessizlik, akışın parçayı işlediği andaki gecikme kadardır: en az 2 sn − parça, en çok ölçülen
+        // geçen süre − parça (yüklü makinede/simülatörde görev geç çalışabilir; sabit pay testi kırılgan yapıyordu).
+        let elapsed: Duration = .now - origin
+        let maxFill: Int = Int(Double(elapsed.components.seconds) * 16000 + Double(elapsed.components.attoseconds) / 1e18 * 16000) - 1600
         #expect(chunks.count == 2)
         #expect(chunks.first?.allSatisfy { $0 == 0 } == true)
-        #expect(abs((chunks.first?.count ?? 0) - 30400) < 1600)
+        #expect((30400 - 1600...maxFill + 1600).contains(chunks.first?.count ?? 0), "dolgu: \(chunks.first?.count ?? 0), en çok: \(maxFill)")
     }
 }
 

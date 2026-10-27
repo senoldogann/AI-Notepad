@@ -5,6 +5,7 @@ options:
   developmentLanguage: tr
   deploymentTarget:
     macOS: "26.0"
+    iOS: "26.0"
 packages:
   AINotepadCore:
     path: Packages/AINotepadCore
@@ -49,3 +50,45 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
         MARKETING_VERSION: "0.1.2"
         CURRENT_PROJECT_VERSION: "3"
+  AINotepadiOS:
+    type: application
+    platform: iOS
+    sources:
+      - iOS
+      # Ortak metin kataloğu ve gömülü Inter yazı tipi Mac uygulamasıyla paylaşılır.
+      - path: App/Localizable.xcstrings
+      - path: App/Fonts/InterVariable.ttf
+        buildPhase: resources
+    dependencies:
+      - package: AINotepadCore
+        product: AINotepadCore
+      - package: AINotepadCore
+        product: AINotepadUI
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.senoldogan.AINotepad
+        PRODUCT_NAME: AINotepad
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad yüz yüze toplantıyı yazıya dökmek için mikrofonu kullanır."
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
+        UIBackgroundModes: [audio]
+        UIAppFonts: [InterVariable.ttf]

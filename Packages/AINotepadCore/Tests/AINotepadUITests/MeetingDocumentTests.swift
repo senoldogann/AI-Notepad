@@ -26,6 +26,8 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
 }
 
 @Suite struct MeetingDocumentTests {
+    // PDF çizimi AppKit ile: yalnızca macOS.
+    #if os(macOS)
     @Test @MainActor func pdfHasNoteSectionsInOrderAndTranscript() throws {
         let document: PDFDocument = try #require(PDFDocument(data: try meetingPDF(record: sampleRecord(paragraphCount: 4))))
         let text: String = try #require(document.string)
@@ -57,6 +59,7 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
         try meetingPDF(record: sampleRecord(paragraphCount: 30)).write(to: URL(fileURLWithPath: path))
     }
 
+    #endif
     @Test func exportNameIsCleanAndUnique() throws {
         let directory: URL = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

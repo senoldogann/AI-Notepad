@@ -3,7 +3,9 @@ import Testing
 @testable import AINotepadCore
 
 /// Gerçek Keychain'de, uygulamanınkinden ayrı bir test servisinde çalışır.
-@Suite(.serialized) struct KeychainTests {
+// iOS simülatöründe paket testleri barındırıcı uygulamasız çalışır ve Anahtar Zinciri yetkisi (entitlement) yoktur;
+// iPhone'da Anahtar Zinciri uygulamanın kendisinde (eşitleme aşaması) denenir.
+@Suite(.serialized, .enabled(if: keychainTestsAvailable)) struct KeychainTests {
     let service: String = "AINotepad.tests"
 
     @Test func saveThenReadReturnsValue() throws {
@@ -34,3 +36,10 @@ import Testing
         try deleteSecret(service: service, account: .elevenlabs)
     }
 }
+
+/// Anahtar Zinciri testleri yalnızca macOS'ta çalışır (bkz. `KeychainTests`).
+#if os(macOS)
+let keychainTestsAvailable: Bool = true
+#else
+let keychainTestsAvailable: Bool = false
+#endif

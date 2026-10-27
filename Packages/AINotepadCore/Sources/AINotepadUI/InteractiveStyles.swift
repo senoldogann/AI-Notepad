@@ -22,7 +22,7 @@ private struct HoverSurface: ViewModifier {
             // Devre dışıyken soluk: tıklanabilir görünmesin.
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
-            .pointerStyle(isEnabled ? .link : nil)
+            .linkPointer(isEnabled: isEnabled)
             .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 
@@ -108,7 +108,7 @@ private struct PillButtonBody: View {
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled || isPrimary ? 1 : 0.45)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
-            .pointerStyle(isEnabled ? .link : nil)
+            .linkPointer(isEnabled: isEnabled)
             .animation(.easeOut(duration: 0.12), value: isHovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }

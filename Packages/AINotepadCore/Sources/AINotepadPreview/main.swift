@@ -1,3 +1,5 @@
+// Önizleme aracı AppKit pencereleri açar: yalnızca macOS'ta çalışır (iOS derlemesinde boş).
+#if os(macOS)
 // Tasarımı gözle kontrol etmek için ada ve paneli örnek verilerle gerçek pencerelerde gösterir.
 // Kullanım: swift run --package-path Packages/AINotepadCore AINotepadPreview <saniye>
 // Pencere numaralarını yazdırır; `screencapture -l <numara>` ile görüntü alınır.
@@ -99,3 +101,4 @@ DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
     exit(0)
 }
 app.run()
+#endif

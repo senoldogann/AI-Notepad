@@ -1,5 +1,9 @@
 import AINotepadCore
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 /// Panelin kullanıcı eylemleri.
@@ -758,6 +762,10 @@ func blockColor(block: SpeakerBlock) -> Color {
 /// Metni genel panoya yazar.
 @MainActor
 func copyToPasteboard(text: String) {
+    #if os(macOS)
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
+    #else
+    UIPasteboard.general.string = text
+    #endif
 }

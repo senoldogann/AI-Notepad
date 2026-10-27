@@ -15,6 +15,8 @@ import Testing
         let file: AVAudioFile = try AVAudioFile(forReading: directory.appending(path: "a.m4a"))
         #expect(file.fileFormat.sampleRate == 16000 && file.fileFormat.channelCount == 1)
 
+        // Stereo AAC dosyası macOS'un `afconvert` aracıyla üretilir (iOS simülatöründe bu adım atlanır).
+        #if os(macOS)
         let stereo: URL = directory.appending(path: "stereo.m4a")
         let process: Process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
@@ -23,6 +25,7 @@ import Testing
         process.waitUntilExit()
         let converted: Double = try await importMediaAudio(source: stereo, destination: directory.appending(path: "b.m4a"))
         #expect(abs(converted - expected) < 0.3)
+        #endif
 
         let text: URL = directory.appending(path: "not-audio.txt")
         try Data("merhaba".utf8).write(to: text)

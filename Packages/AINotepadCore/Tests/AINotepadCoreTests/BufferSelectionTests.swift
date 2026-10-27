@@ -1,3 +1,5 @@
+// Sistem sesi yakalamanın tampon seçimi (yalnızca macOS'ta var).
+#if os(macOS)
 import CoreAudio
 import Foundation
 import Testing
@@ -40,3 +42,4 @@ func makeBufferList(byteSizes: [UInt32]) -> UnsafeMutableAudioBufferListPointer 
         free(destination.unsafeMutablePointer)
     }
 }
+#endif

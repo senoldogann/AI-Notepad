@@ -1,3 +1,5 @@
+// Sesleri macOS'un `say` aracıyla üretir: yalnızca macOS'ta çalışır.
+#if os(macOS)
 import AVFoundation
 import Foundation
 import Testing
@@ -77,3 +79,4 @@ private func meeting(turns: [(person: Int, voice: String, text: String)], direct
         #expect(recognizedNames(voiceprints: secondVoices, registry: registry) == [2: "Aino"])
     }
 }
+#endif
