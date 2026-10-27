@@ -110,3 +110,39 @@ public func saveUserRecipes(recipes: [Recipe], defaults: UserDefaults) throws {
         throw StorageError.writeFailed(path: userRecipesKey, reason: error.localizedDescription)
     }
 }
+
+/// Agent Skill dosyası (`SKILL.md`) okunamadı ya da biçimi beklenmedik.
+public enum SkillImportError: Error, Equatable {
+    /// Ön bilgi (`---` arasındaki `name` ve `description`) yok.
+    case missingFrontMatter(file: String)
+    /// Gövde boş: tarifte kullanılacak yönerge yok.
+    case emptyBody(file: String)
+}
+
+/// Agent Skill (`SKILL.md`: `name`/`description` ön bilgisi ve Markdown yönergeler) tarif olur: başlık adın okunur hali,
+/// istem açıklama ve yönergeler. Böylece Claude ve diğer araçlar için yazılmış beceriler Sor'da "/" ile kullanılır.
+/// Saf fonksiyondur.
+public func recipeFromSkill(text: String, file: String, id: String) throws -> Recipe {
+    let lines: [Substring] = text.split(separator: "\n", omittingEmptySubsequences: false)
+    guard lines.first?.trimmingCharacters(in: .whitespaces) == "---",
+          let end = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }) else {
+        throw SkillImportError.missingFrontMatter(file: file)
+    }
+    let front: [String: String] = lines[1..<end].reduce(into: [String: String]()) { (result: inout [String: String], line: Substring) -> Void in
+        let parts: [Substring] = line.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2 else {
+            return
+        }
+        result[parts[0].trimmingCharacters(in: .whitespaces)] = parts[1].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+    }
+    guard let name = front["name"], !name.isEmpty else {
+        throw SkillImportError.missingFrontMatter(file: file)
+    }
+    let body: String = lines[(end + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !body.isEmpty else {
+        throw SkillImportError.emptyBody(file: file)
+    }
+    let title: String = name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+    let prompt: String = [front["description"], body].compactMap { $0 }.joined(separator: "\n\n")
+    return Recipe(id: id, title: title, prompt: prompt, symbol: "sparkles", isBuiltIn: false)
+}

@@ -42,6 +42,10 @@ public func userFacingMessage(error: any Error) -> String {
         return channelMessage(error: error)
     case let error as MCPRemoteError:
         return mcpRemoteMessage(error: error)
+    case SkillImportError.missingFrontMatter(let file):
+        return String(localized: "\(file) bir Agent Skill değil: başta name ve description içeren --- bölümü yok.")
+    case SkillImportError.emptyBody(let file):
+        return String(localized: "\(file) boş: yönerge yok.")
     case DestinationError.notFound:
         return String(localized: "Bu bağlantı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.")
     case DestinationError.notAnAccount:

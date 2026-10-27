@@ -191,12 +191,32 @@
         }
       }
     },
+    "%@ bir Agent Skill değil: başta name ve description içeren --- bölümü yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn't an Agent Skill: it has no leading --- section with name and description."
+          }
+        }
+      }
+    },
     "%@ bir macOS sistem kısayolu; başka bir kısayol seç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ is a macOS system shortcut; choose another one."
+          }
+        }
+      }
+    },
+    "%@ boş: yönerge yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is empty: no instructions."
           }
         }
       }
@@ -603,6 +623,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld moments marked"
+          }
+        }
+      }
+    },
+    "%lld beceri Sor'a tarif olarak eklendi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld skills added to Ask as recipes."
           }
         }
       }
@@ -1073,6 +1103,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter your name (so your tasks are recognised)"
+          }
+        }
+      }
+    },
+    "Agent Skill dosyalarını (SKILL.md) seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Agent Skill files (SKILL.md)"
           }
         }
       }
@@ -1756,6 +1796,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listen from the start; the spoken word lights up"
+          }
+        }
+      }
+    },
+    "Beceriler (Agent Skills)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skills (Agent Skills)"
           }
         }
       }
@@ -2653,6 +2703,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude model (%@)"
+          }
+        }
+      }
+    },
+    "Claude ve diğer yapay zekâ araçları için yazılmış beceriler Sor'da \"/\" ile tarif olarak çalışır (ör. haftalık özet, takip e-postası).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skills written for Claude and other AI tools work as recipes in Ask with \"/\" (e.g. weekly review, follow-up email)."
           }
         }
       }
@@ -6848,6 +6908,16 @@
         }
       }
     },
+    "SKILL.md içe aktar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import SKILL.md"
+          }
+        }
+      }
+    },
     "SON TOPLANTILAR": {
       "localizations": {
         "en": {
@@ -10274,6 +10344,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import"
+          }
+        }
+      }
+    },
+    "İçe aktar…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import…"
           }
         }
       }

@@ -37,6 +37,13 @@
 - **In-person mode:** everyone on the microphone is separated into speakers.
 - **MCP server:** `AINotepad --mcp` lets Claude Desktop, ChatGPT and other MCP clients list, search and read your
   meetings (read-only). What the client reads is sent to that client's AI provider.
+- **Agent Skill for Claude:** [`skills/ai-notepad-meetings`](skills/ai-notepad-meetings/SKILL.md) teaches Claude how to
+  use the MCP server (weekly review, follow-up email, meeting prep). Skills written for other tools can be imported in
+  Settings › Connections and run in Ask with `/`.
+- **Send notes and tasks:** Slack, Microsoft Teams, Discord, Zoom Team Chat, Notion, Apple Notes, a Markdown folder and
+  any webhook (Zapier, Make, n8n) — several at once, each with its own automatic sending. Tasks go to Linear or Jira.
+  Slack/Teams/Discord sign in with OAuth + PKCE; Notion, Linear and Jira through their official MCP servers with
+  dynamic client registration, so no API keys are pasted.
 - **No keys needed, if you prefer:** on-device WhisperKit plus a local Ollama model, detected in one click.
 - **Engines:** Deepgram + ElevenLabs in the cloud (gaps in the live transcript are filled from ElevenLabs), or
   fully on-device WhisperKit + SpeakerKit.

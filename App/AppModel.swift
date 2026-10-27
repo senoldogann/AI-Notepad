@@ -1549,6 +1549,24 @@ final class AppModel {
         storeUserRecipes(userRecipes + [recipeFromQuestion(question: question, id: UUID().uuidString)])
     }
 
+    /// Agent Skill dosyalarını (`SKILL.md`) tarif olarak ekler; okunamayanların nedeni döner.
+    func importSkills(files: [URL]) -> [String] {
+        var imported: [Recipe] = []
+        var failures: [String] = []
+        for file in files {
+            do {
+                let text: String = try String(contentsOf: file, encoding: .utf8)
+                imported.append(try recipeFromSkill(text: text, file: file.lastPathComponent, id: UUID().uuidString))
+            } catch {
+                failures.append("\(file.lastPathComponent): \(userFacingMessage(error: error))")
+            }
+        }
+        if !imported.isEmpty {
+            storeUserRecipes(userRecipes + imported)
+        }
+        return failures
+    }
+
     /// Kullanıcı tarifini siler.
     func deleteRecipe(id: String) {
         storeUserRecipes(userRecipes.filter { $0.id != id })

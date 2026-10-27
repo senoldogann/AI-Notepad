@@ -4,6 +4,7 @@ import AppKit
 import AuthenticationServices
 import Carbon.HIToolbox
 import SwiftUI
+import UniformTypeIdentifiers
 import os
 
 /// Ayarlar bölümleri.
@@ -920,6 +921,7 @@ private struct ConnectionSettings: View {
             }
             WebhookSettings(model: model)
             TaskTrackerSettings(model: model)
+            SkillSettings(model: model)
             MCPSettings()
         }
     }
@@ -1597,6 +1599,46 @@ private struct TaskTrackerSettings: View {
                 status = userFacingMessage(error: error)
             }
         }
+    }
+}
+
+/// Agent Skills: Claude ve diğer araçlar için yazılmış becerileri (`SKILL.md`) Sor'da "/" tarifi olarak kullanma.
+private struct SkillSettings: View {
+    let model: AppModel
+    @State private var status: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Beceriler (Agent Skills)")
+            SettingsRow(title: Text("SKILL.md içe aktar")) {
+                Text("Claude ve diğer yapay zekâ araçları için yazılmış beceriler Sor'da \"/\" ile tarif olarak çalışır (ör. haftalık özet, takip e-postası).")
+            } control: {
+                Button("İçe aktar…") { importSkills() }
+            }
+            if let status {
+                Text(status)
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
+    private func importSkills() {
+        let panel: NSOpenPanel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.prompt = String(localized: "İçe aktar")
+        panel.message = String(localized: "Agent Skill dosyalarını (SKILL.md) seç")
+        guard panel.runModal() == .OK else {
+            return
+        }
+        let failures: [String] = model.importSkills(files: panel.urls)
+        let added: Int = panel.urls.count - failures.count
+        status = ([added > 0 ? String(localized: "\(added) beceri Sor'a tarif olarak eklendi.") : nil] + failures).compactMap { $0 }.joined(separator: "\n")
     }
 }
 
