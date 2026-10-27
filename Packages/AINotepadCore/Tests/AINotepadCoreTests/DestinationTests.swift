@@ -37,6 +37,18 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         #expect(pending.map { "\($0.meetingID)>\($0.destinationID)" } == ["yeni>a"])
     }
 
+    // Aynı webhook başka bir Mac'te farklı kimlikle bağlı: oradan gönderilmiş işaret (cihazdan bağımsız anahtar) burada
+    // ikinci gönderimi önler.
+    @Test func sendKeyPreventsSecondMacSending() throws {
+        let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
+        let here: NoteDestination = webhookDestination(id: "bu-mac", autoSend: true, createdAt: now.addingTimeInterval(-86_400), needsReconnect: false)
+        let other: NoteDestination = webhookDestination(id: "diger-mac", autoSend: true, createdAt: now.addingTimeInterval(-86_400), needsReconnect: false)
+        let key: String = try #require(destinationSendKey(destination: other))
+        #expect(destinationSendKey(destination: here) == key && !key.contains("zapier"))
+        let record: MeetingRecord = destinationRecord(id: "m", endedAt: now.addingTimeInterval(-60), sent: ["diger-mac", key])
+        #expect(pendingAutoSends(records: [record], destinations: [here], now: now).isEmpty)
+    }
+
     // Eski tek bağlantı (hesap + webhook) iki hedefe taşınır; taşıma anı bağlanma anıdır (eskiler yeniden gönderilmez).
     @Test func legacyConnectionMigrates() {
         let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
@@ -130,6 +142,94 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         }
         #expect(try await vault.all().first?.needsReconnect == true)
         try deleteSecret(service: service, account: .destinations)
+    }
+
+    private func mcpConnection(refresh: String) -> MCPConnection {
+        MCPConnection(
+            serverURL: URL(string: "https://mcp.notion.com/mcp")!, clientID: "c", tokenEndpoint: URL(string: "https://mcp.notion.com/token")!,
+            tokens: OAuthTokens(accessToken: "a-\(refresh)", refreshToken: refresh, expiresAt: Date().addingTimeInterval(3600))
+        )
+    }
+
+    // Notion: yenilenen jeton işlem sonradan başarısız olsa da saklanır; sonra gelen ret hedefi "yeniden bağlan" yapar.
+    @Test func notionRefreshSurvivesFailureAndExpiryMarksReconnect() async throws {
+        try deleteSecret(service: service, account: .destinations)
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
+        let original: MCPConnection = mcpConnection(refresh: "n1")
+        try await vault.upsert(NoteDestination(id: "n", target: .notion(NotionTarget(connection: original, pageTitle: "P")), autoSend: true, createdAt: Date(), needsReconnect: false))
+        await #expect(throws: MCPRemoteError.http(server: "mcp.notion.com", status: 502, body: "")) {
+            try await vault.withNotion(id: "n") { (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+                try await persist(target.connection, self.mcpConnection(refresh: "n2"))
+                throw MCPRemoteError.http(server: "mcp.notion.com", status: 502, body: "")
+            }
+        }
+        guard case .notion(let saved) = try await vault.all().first?.target else {
+            Issue.record("hedef Notion değil")
+            return
+        }
+        #expect(saved.connection.tokens.refreshToken == "n2")
+        await #expect(throws: MCPRemoteError.expired(server: "mcp.notion.com")) {
+            try await vault.withNotion(id: "n") { (_: NotionTarget, _: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+                throw MCPRemoteError.expired(server: "mcp.notion.com")
+            }
+        }
+        #expect(try await vault.all().first?.needsReconnect == true)
+        try deleteSecret(service: service, account: .destinations)
+    }
+
+    // Notion: işlem sürerken kullanıcı yeniden bağlandıysa işlemin yenilemesi ve reddi yeni bağlantıya dokunmaz.
+    @Test func notionReconnectDuringOperationIsKept() async throws {
+        try deleteSecret(service: service, account: .destinations)
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
+        let destination: NoteDestination = NoteDestination(
+            id: "n", target: .notion(NotionTarget(connection: mcpConnection(refresh: "n1"), pageTitle: "P")), autoSend: true, createdAt: Date(), needsReconnect: false
+        )
+        try await vault.upsert(destination)
+        let reconnected: NoteDestination = destination.with(target: .notion(NotionTarget(connection: mcpConnection(refresh: "yeni"), pageTitle: "P")))
+        await #expect(throws: MCPRemoteError.expired(server: "mcp.notion.com")) {
+            try await vault.withNotion(id: "n") { (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+                try await vault.upsert(reconnected)
+                try await persist(target.connection, self.mcpConnection(refresh: "n2"))
+                throw MCPRemoteError.expired(server: "mcp.notion.com")
+            }
+        }
+        // Tarihler ISO 8601'de saniyeye yuvarlanır: yenileme jetonu ve işaret karşılaştırılır.
+        let stored: [NoteDestination] = try await vault.all()
+        guard stored.count == 1, case .notion(let kept) = stored[0].target else {
+            Issue.record("hedef Notion değil")
+            return
+        }
+        #expect(kept.connection.tokens.refreshToken == "yeni" && !stored[0].needsReconnect)
+        try deleteSecret(service: service, account: .destinations)
+    }
+}
+
+/// Görev araçlarının deposu: yeniden bağlanınca kimlik ve hedef korunur, yenilenen jeton işlem başarısız olsa da saklanır.
+@Suite(.serialized, .enabled(if: keychainTestsAvailable)) struct TrackerVaultTests {
+    let service: String = "AINotepad.tests.trackers"
+
+    private func connection(refresh: String) -> MCPConnection {
+        MCPConnection(
+            serverURL: URL(string: "https://mcp.linear.app/mcp")!, clientID: "c", tokenEndpoint: URL(string: "https://mcp.linear.app/token")!,
+            tokens: OAuthTokens(accessToken: "a-\(refresh)", refreshToken: refresh, expiresAt: Date().addingTimeInterval(3600))
+        )
+    }
+
+    @Test func reconnectKeepsIdentityAndRefreshIsStored() async throws {
+        try deleteSecret(service: service, account: .taskTrackers)
+        let vault: TrackerVault = TrackerVault(service: service)
+        let first: TaskTracker = try await vault.connect(service: .linear, connection: connection(refresh: "r1"), newID: "id-1")
+        try await vault.setTarget(id: first.id, target: "Eng")
+        let second: TaskTracker = try await vault.connect(service: .linear, connection: connection(refresh: "r2"), newID: "id-2")
+        #expect(second.id == "id-1" && second.target == "Eng")
+        await #expect(throws: TaskTrackerError.partial(service: "Linear", created: [0], total: 2, reason: "x")) {
+            try await vault.withTracker(id: "id-1") { (tracker: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Int in
+                try await persist(tracker.connection, self.connection(refresh: "r3"))
+                throw TaskTrackerError.partial(service: "Linear", created: [0], total: 2, reason: "x")
+            }
+        }
+        #expect(try await vault.all().map(\.connection.tokens.refreshToken) == ["r3"])
+        try deleteSecret(service: service, account: .taskTrackers)
     }
 }
 

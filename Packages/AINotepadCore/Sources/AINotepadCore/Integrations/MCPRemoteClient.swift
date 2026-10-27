@@ -90,12 +90,33 @@ public struct AuthorizationServerMetadata: Sendable, Equatable, Decodable {
     }
 }
 
-private struct ProtectedResourceMetadata: Decodable {
+struct ProtectedResourceMetadata: Decodable, Equatable {
+    let resource: String?
     let authorizationServers: [URL]
 
     enum CodingKeys: String, CodingKey {
+        case resource
         case authorizationServers = "authorization_servers"
     }
+}
+
+/// Keşfedilen bilgilerin denetimi: tüm adresler https, korunan kaynak gerçekten bu sunucu (RFC 9728 §3.3) ve
+/// yetkilendirme sunucusunun `issuer` değeri bilgisinin alındığı kimlikle aynı (RFC 8414 §3.3). Böylece ele geçmiş ya da
+/// yanıltıcı bir yanıt, giriş kodunu ve jetonları başka bir adrese yönlendiremez. Saf fonksiyondur.
+func validateDiscovery(resource: ProtectedResourceMetadata, issuer: URL, metadata: AuthorizationServerMetadata, server: URL) throws {
+    let name: String = server.host() ?? server.absoluteString
+    let trimmed: (String) -> String = { (text: String) -> String in text.hasSuffix("/") ? String(text.dropLast()) : text }
+    guard let declared = resource.resource, trimmed(declared) == trimmed(server.absoluteString) else {
+        throw MCPRemoteError.invalidResponse(server: name, reason: "korunan kaynak bu sunucu değil: \(resource.resource ?? "yok")")
+    }
+    guard let stated = metadata.issuer, trimmed(stated) == trimmed(issuer.absoluteString) else {
+        throw MCPRemoteError.invalidResponse(server: name, reason: "yetkilendirme sunucusu kimliği uyuşmuyor: \(metadata.issuer ?? "yok")")
+    }
+    let addresses: [URL] = [issuer, metadata.authorizationEndpoint, metadata.tokenEndpoint] + [metadata.registrationEndpoint].compactMap { $0 }
+    guard let insecure = addresses.first(where: { $0.scheme?.lowercased() != "https" }) else {
+        return
+    }
+    throw MCPRemoteError.invalidResponse(server: name, reason: "güvenli olmayan adres: \(insecure.absoluteString)")
 }
 
 /// `WWW-Authenticate` başlığındaki `resource_metadata` adresi (RFC 9728). Saf fonksiyondur.
@@ -173,17 +194,24 @@ public func discoverAuthorization(server: URL) async throws -> AuthorizationServ
     guard let metadataURL = resourceMetadataURL(wwwAuthenticate: header) ?? wellKnownResourceMetadataURL(server: server) else {
         throw MCPRemoteError.noAuthorizationMetadata(server: name)
     }
+    guard metadataURL.scheme?.lowercased() == "https" else {
+        throw MCPRemoteError.invalidResponse(server: name, reason: "güvenli olmayan adres: \(metadataURL.absoluteString)")
+    }
     let resource: ProtectedResourceMetadata = try await getJSON(ProtectedResourceMetadata.self, url: metadataURL, server: name)
     guard let issuer = resource.authorizationServers.first else {
         throw MCPRemoteError.noAuthorizationMetadata(server: name)
     }
     var lastError: MCPRemoteError = .noAuthorizationMetadata(server: name)
     for candidate in authorizationMetadataURLs(issuer: issuer) {
+        let metadata: AuthorizationServerMetadata
         do {
-            return try await getJSON(AuthorizationServerMetadata.self, url: candidate, server: name)
+            metadata = try await getJSON(AuthorizationServerMetadata.self, url: candidate, server: name)
         } catch let error as MCPRemoteError {
             lastError = error
+            continue
         }
+        try validateDiscovery(resource: resource, issuer: issuer, metadata: metadata, server: server)
+        return metadata
     }
     throw lastError
 }
@@ -360,15 +388,29 @@ private func initializeParams() -> JSONValue {
     ])
 }
 
+/// SSE gövdesindeki olayların verileri: bir olayın birden çok `data:` satırı "\n" ile birleşir, olaylar boş satırla
+/// ayrılır. Swift'te "\r\n" tek karakterdir; satırlar her tür satır sonuna göre bölünür. Saf fonksiyondur.
+func serverSentEventData(body: String) -> [String] {
+    let lines: [Substring] = body.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+    var events: [String] = []
+    var current: [String] = []
+    for line in lines + [""] {
+        if line.isEmpty {
+            if !current.isEmpty {
+                events.append(current.joined(separator: "\n"))
+            }
+            current = []
+        } else if line.hasPrefix("data:") {
+            let value: Substring = line.dropFirst(5)
+            current.append(String(value.hasPrefix(" ") ? value.dropFirst() : value))
+        }
+    }
+    return events
+}
+
 /// Yanıt gövdesinden verilen kimlikli JSON-RPC yanıtı: düz JSON ya da SSE (`data:` satırları). Saf fonksiyondur.
 func jsonRPCResponse(body: String, contentType: String, id: Int, server: String) throws -> JSONValue {
-    let candidates: [String] = contentType.contains("text/event-stream")
-        // Swift'te "\r\n" tek karakterdir: satırlar her tür satır sonuna göre bölünür.
-        ? body.split(whereSeparator: \.isNewline).compactMap { (line: Substring) -> String? in
-            // Satırlar "\r\n" ile de bitebilir (ör. uvicorn): satır sonu karakterleri de atılır.
-            line.hasPrefix("data:") ? String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        }
-        : [body]
+    let candidates: [String] = contentType.contains("text/event-stream") ? serverSentEventData(body: body) : [body]
     for candidate in candidates {
         let decoded: JSONRPCResponse
         do {
@@ -483,6 +525,9 @@ public struct MCPRemoteSession: Sendable {
             }
             id += 1
         } while cursor != nil && id < 12
+        guard cursor == nil else {
+            throw MCPRemoteError.invalidResponse(server: serverName, reason: "araç listesi 10 sayfadan uzun")
+        }
         return tools
     }
 
@@ -544,15 +589,24 @@ public func jsonText(value: JSONValue) -> String {
     }
 }
 
-/// Bağlantıyla oturum açar; jeton süresi bitmek üzereyse önce yenilenir. Yenilenen bağlantı da döner (çağıran saklar).
-public func openMCPSession(connection: MCPConnection) async throws -> (session: MCPRemoteSession, connection: MCPConnection) {
-    let current: MCPConnection = needsRefresh(tokens: connection.tokens, now: Date()) ? try await refreshMCPConnection(connection: connection) : connection
+/// Bağlantıyla oturum açar; jeton süresi bitmek üzereyse önce yenilenir. Yenilenen bağlantı oturum kullanılmadan önce
+/// `persist(önceki, yeni)` ile hemen saklanır: sunucu yenileme jetonunu döndürdüyse eskisi artık geçersizdir, sonraki
+/// işlem başarısız olsa bile yeni jeton kaybolmamalı.
+public func openMCPSession(connection: MCPConnection, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> MCPRemoteSession {
+    let current: MCPConnection
+    if needsRefresh(tokens: connection.tokens, now: Date()) {
+        current = try await refreshMCPConnection(connection: connection)
+        try await persist(connection, current)
+    } else {
+        current = connection
+    }
     do {
-        return (try await MCPRemoteSession.open(serverURL: current.serverURL, accessToken: current.tokens.accessToken), current)
+        return try await MCPRemoteSession.open(serverURL: current.serverURL, accessToken: current.tokens.accessToken)
     } catch MCPRemoteError.expired {
         // Jeton süresinden önce geri alınmış olabilir: bir kez yenileyip yeniden denenir.
         let fresh: MCPConnection = try await refreshMCPConnection(connection: current)
+        try await persist(current, fresh)
         mcpRemoteLogger.info("MCP jetonu erken yenilendi, sunucu: \(current.serverURL.host() ?? "?", privacy: .public)")
-        return (try await MCPRemoteSession.open(serverURL: fresh.serverURL, accessToken: fresh.tokens.accessToken), fresh)
+        return try await MCPRemoteSession.open(serverURL: fresh.serverURL, accessToken: fresh.tokens.accessToken)
     }
 }

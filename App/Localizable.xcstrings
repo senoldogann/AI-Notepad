@@ -160,6 +160,16 @@
         }
       }
     },
+    "%@ bağlantısında iş açan araç bulunamadı; sunucunun araçları değişmiş olabilir. Uygulamayı güncelle ya da yeniden bağlan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ offers no tool for creating issues; its tools may have changed. Update the app or reconnect."
+          }
+        }
+      }
+    },
     "%@ başka bir uygulamada kullanılıyor.": {
       "localizations": {
         "en": {
@@ -281,16 +291,6 @@
         }
       }
     },
-    "%@ görevleri bitiremedi: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ couldn't finish the tasks: %@"
-          }
-        }
-      }
-    },
     "%@ hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -348,16 +348,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't import %@: %@"
-          }
-        }
-      }
-    },
-    "%@ için geçersiz istek üretildi (%@); yeniden dene.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "An invalid request was produced for %@ (%@); try again."
           }
         }
       }
@@ -480,6 +470,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ rejected the webhook (HTTP %lld). Check that the URL is correct and active."
+          }
+        }
+      }
+    },
+    "%@ yanıt vermedi (%@); not gitmiş olabilir. Kontrol et, gitmediyse elle yeniden gönder. Kendiliğinden yeniden gönderilmeyecek.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not respond (%@); the note may have been delivered. Check, and send it again manually if it did not arrive. It will not be resent automatically."
           }
         }
       }
@@ -613,6 +613,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: %@"
+          }
+        }
+      }
+    },
+    "%@: %lld/%lld görev açıldı; kalanlar açılamadı: %@. Yeniden gönderince yalnızca kalanlar gider.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld of %lld tasks created; the rest could not be created: %@. Sending again creates only the remaining ones."
           }
         }
       }
@@ -2282,6 +2292,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assign this part to"
+          }
+        }
+      }
+    },
+    "Bu görev aracı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This task tool no longer exists (it was removed); reopen Settings › Connections."
           }
         }
       }
@@ -6382,6 +6402,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notion connected; notes go to your private pages as new pages."
+          }
+        }
+      }
+    },
+    "Notion yeniden bağlandı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notion reconnected."
           }
         }
       }
