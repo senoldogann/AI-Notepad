@@ -123,7 +123,7 @@ public func processMeeting(
     }
 
     await onStep(.writingNote)
-    return await regenerateNote(record: current, llm: llm, userName: userName)
+    return await regenerateNote(record: current, directory: directory, llm: llm, userName: userName)
 }
 
 /// Sesinden tanıma: kişilerin ses izleri "Diğerleri" kaydından çıkarılır, adı olmayan kişilere kayıtlı seslerden emin
@@ -234,9 +234,13 @@ private func joinedNotice(_ first: String?, _ second: String) -> String {
     first.map { "\($0) \(second)" } ?? second
 }
 
+/// Uzun notun parça ilerlemesinin toplantı klasöründeki dosyası (not bitince silinir).
+let noteProgressFileName: String = "note-progress.json"
+
 /// Yalnızca notu (yeniden) üretir: saklı bölümler ve güncel konuşmacı adlarıyla. Ses gerekmez; ad verdikten
-/// sonra notta da adlar görünsün diye kullanılır.
-public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: String) async -> MeetingRecord {
+/// sonra notta da adlar görünsün diye kullanılır. Uzun notun ilerlemesi toplantı klasörüne yazılır (bkz.
+/// `writeMeetingNote`).
+public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvider?, userName: String) async -> MeetingRecord {
     // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
     // İşaretli anlar istemde "★" ile öne çıkar.
     let segments: [StoredSegment] = markingHighlights(segments: meetingSegments(record: record), highlights: record.highlights ?? [])
@@ -249,7 +253,10 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
-        guard let note = try await writeMeetingNote(segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general, llm: llm) else {
+        guard let note = try await writeMeetingNote(
+            segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general, llm: llm,
+            progressFile: directory.appending(path: noteProgressFileName)
+        ) else {
             return record.with(status: .done, failureMessage: nil)
         }
         // Görevler yeniden yazıldı: tamamlandı ve Anımsatıcılar işaretleri benzer yeni görevlere taşınır.

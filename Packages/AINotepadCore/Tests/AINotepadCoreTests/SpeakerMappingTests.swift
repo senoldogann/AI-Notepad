@@ -169,6 +169,9 @@ func othersSegment(index: Int, start: Double, end: Double) -> LiveSegment {
         #expect(unregistering(voices: undone, name: "aino", source: "a#1", now: now).map(\.name) == ["Mikko"])
         #expect(registering(voices: undone, name: "Aino", voiceprint: voice([1, 0, 0], seconds: 100), source: "a#1", now: now).first?.voiceprint.seconds == 100)
         #expect(unregistering(voices: registry, name: "Mikko", source: "a#1", now: now) == registry)
+        // Toplantı silinince o toplantının katkıları geri alınır; tek katkısı o toplantıdan olan ses unutulur.
+        #expect(forgettingMeeting(voices: registry, meetingID: "b", now: now).first?.voiceprint == voice([1, 0, 0], seconds: 100))
+        #expect(forgettingMeeting(voices: forgettingMeeting(voices: registry, meetingID: "b", now: now), meetingID: "a", now: now).map(\.name) == ["Mikko"])
     }
 
     // Etiketin izi yalnızca ona ait (konuşmasının çoğu o etiket olan) SpeakerKit konuşmacılarından gelir; ikiye

@@ -131,7 +131,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
-    @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = true
+    @AppStorage(SettingsKey.voiceRecognition) private var voiceRecognition: Bool = false
     @AppStorage(SettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(SettingsKey.calendarEnabled) private var calendarEnabled: Bool = false
     @AppStorage(SettingsKey.customVocabulary) private var vocabulary: String = ""
@@ -339,7 +339,7 @@ private struct GeneralSettings: View {
                 Toggle("Kayıt başlarken haber vermeyi hatırlat", isOn: $consentReminder).settingsToggle()
             }
             SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
-                Text("Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.")
+                Text("Açıkken 8 sn'den fazla konuşan herkesin ses izi (sesi tanıyan sayılar; biyometrik veridir) o toplantıyla saklanır; ad verdiğin kişininki bu Mac'te hatırlanır ve sonraki toplantılarda adı kendiliğinden gelir. Toplantı silinince ondan öğrenilen izler, sesi silinince toplantıdaki izler de silinir. Başkalarının ses izini saklamadan önce onaylarını al.")
                 if let error = model.voiceRegistryError {
                     Text(error).foregroundStyle(.red)
                 }
@@ -1026,27 +1026,35 @@ extension View {
     }
 }
 
+/// İstemcinin MCP yapılandırması; yol JSON olarak kaçışlanır (tırnak ya da ters bölü içeren yol yapılandırmayı bozmasın).
+/// Saf fonksiyondur.
+func mcpClientConfig(executablePath: String) -> String {
+    let encoded: String = "\"" + executablePath.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+    return """
+    {
+      "mcpServers": {
+        "ai-notepad": {
+          "command": \(encoded),
+          "args": ["--mcp"]
+        }
+      }
+    }
+    """
+}
+
 /// Yerel MCP sunucusu: Claude Desktop, ChatGPT ya da başka MCP istemcisinin toplantı arşivini sorgulaması için
-/// yapılandırma (uygulama `--mcp` ile pencere açmadan çalışır; veri Mac'ten çıkmaz, istemci yalnızca okur).
+/// yapılandırma (uygulama `--mcp` ile pencere açmadan çalışır; istemci yalnızca okur ve okuduğunu kendi yapay zekâ
+/// sağlayıcısına gönderir).
 private struct MCPSettings: View {
     @State private var copied: Bool = false
 
     var body: some View {
         let path: String = Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
-        let config: String = """
-        {
-          "mcpServers": {
-            "ai-notepad": {
-              "command": "\(path)",
-              "args": ["--mcp"]
-            }
-          }
-        }
-        """
+        let config: String = mcpClientConfig(executablePath: path)
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Yapay zekâ uygulamalarına bağla (MCP)")
             SettingsRow(title: Text("Claude Desktop, ChatGPT ve diğerleri")) {
-                Text("Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez.")
+                Text("Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okunan notlar ve transkriptler istemcinin yapay zekâ sağlayıcısına (ör. Anthropic, OpenAI) gönderilir.")
             } control: {
                 Button(copied ? "Kopyalandı" : "Yapılandırmayı kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
                     NSPasteboard.general.clearContents()

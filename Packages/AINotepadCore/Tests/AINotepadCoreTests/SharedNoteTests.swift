@@ -87,7 +87,7 @@ extension CloudTests {
             stored("me-0", .me, nil, 6, "Selvä. Lähetän teille tarjouksen ensi viikon tiistaina."),
             stored("final-1", .others, 1, 11, "Hyvä. Kilpailijanne Acme tarjosi jo, mutta heidän aikataulunsa oli liian hidas."),
         ]
-        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino"], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), llm: provider))
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino"], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
         let summary: String = note.summary.lowercased()
         #expect(summary.contains("40") && summary.contains("acme"), "\(note.summary)")
         #expect(note.tasks.contains { $0.isMine }, "\(note.tasks)")

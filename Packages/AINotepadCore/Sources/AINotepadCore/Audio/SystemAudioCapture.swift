@@ -40,7 +40,8 @@ public final class SystemAudioCapture {
         guard continuation == nil else {
             throw AudioCaptureError.alreadyRunning(source: "SystemAudioCapture")
         }
-        let description: CATapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        // Uygulamanın kendi sesi (ör. eski toplantıyı çalmak) "Diğerleri" diye yazıya dökülmesin: kendi süreci hariç.
+        let description: CATapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: try ownProcessObjects())
         description.isPrivate = true
         description.muteBehavior = .unmuted
         var newTapID: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
@@ -61,6 +62,24 @@ public final class SystemAudioCapture {
             throw error
         }
         return stream
+    }
+
+    /// Bu sürecin Core Audio süreç nesnesi (tap'ten hariç tutmak için). Core Audio süreci henüz tanımıyorsa (hiç ses
+    /// açmamış) hariç tutulacak çıkışı da yoktur: boş liste.
+    private func ownProcessObjects() throws -> [AudioObjectID] {
+        var pid: pid_t = getpid()
+        var object: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
+        var size: UInt32 = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address: AudioObjectPropertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        try check(
+            status: AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, UInt32(MemoryLayout<pid_t>.size), &pid, &size, &object),
+            operation: "kAudioHardwarePropertyTranslatePIDToProcessObject"
+        )
+        return object == AudioObjectID(kAudioObjectUnknown) ? [] : [object]
     }
 
     /// Yakalamayı durdurur, Core Audio nesnelerini siler ve akışı bitirir.

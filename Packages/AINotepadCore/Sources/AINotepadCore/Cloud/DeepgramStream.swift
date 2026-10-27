@@ -207,7 +207,7 @@ private actor DeepgramConnection {
     }
 
     /// `reconnectBudgetSec` boyunca geri çekilmeli (en fazla 5 sn) bağlanmayı dener.
-    /// 4xx yanıtı (ör. geçersiz anahtar) yeniden denenmez; kapanış başlarsa denemeler bırakılır.
+    /// Kalıcı 4xx yanıtı (ör. geçersiz anahtar) yeniden denenmez (408 ve 429 denenir); kapanış başlarsa denemeler bırakılır.
     private func connectWithRetry() async throws {
         let delays: [Double] = reconnectDelays(budgetSec: reconnectBudgetSec, initialSec: 0.25, capSec: 5)
         var lastError: any Error = CloudSTTError.connectionFailed(service: "deepgram", reason: "deneme yapılmadı")
@@ -219,7 +219,7 @@ private actor DeepgramConnection {
             do {
                 try await connect()
                 return
-            } catch CloudSTTError.http(let service, let status, let body) where (400..<500).contains(status) {
+            } catch CloudSTTError.http(let service, let status, let body) where isPermanentHTTPRejection(status: status) {
                 throw CloudSTTError.http(service: service, status: status, body: body)
             } catch {
                 lastError = error
@@ -244,7 +244,8 @@ private actor DeepgramConnection {
         guard isConnected, !isReconnecting, !isClosing, !hasFailed, connectedURL != url else {
             return
         }
-        deepgramLogger.info("Deepgram dili değişiyor: \(self.url.absoluteString, privacy: .public)")
+        // Adres loglanmaz: içindeki terimler kişi adlarıdır (kullanıcı, katılımcılar, Kişiler).
+        deepgramLogger.info("Deepgram dili değişiyor, dil: \(self.url.query()?.split(separator: "&").first { $0.hasPrefix("language=") } ?? "", privacy: .public)")
         await reconnect()
     }
 
@@ -275,7 +276,7 @@ private actor DeepgramConnection {
         } catch {
             isReconnecting = false
             // Anahtar reddi (4xx) kapanışta da bildirilir: kullanıcı nedenini görmeli.
-            if case CloudSTTError.http(_, let status, _) = error, (400..<500).contains(status) {
+            if case CloudSTTError.http(_, let status, _) = error, isPermanentHTTPRejection(status: status) {
                 fail(error: error)
                 return
             }

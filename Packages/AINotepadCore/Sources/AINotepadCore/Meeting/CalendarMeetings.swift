@@ -22,11 +22,20 @@ public struct CalendarMeeting: Sendable, Equatable, Identifiable, Codable {
     }
 }
 
-/// Konum, not ve adres alanlarındaki ilk görüşme bağlantısı (Teams, Zoom, Google Meet, Webex). Saf fonksiyondur.
+/// Görüşme servislerinin alan adları; bağlantının ana bilgisayarı bunlardan biri ya da alt alan adı olmalı.
+let meetingHosts: [String] = ["teams.microsoft.com", "teams.live.com", "zoom.us", "meet.google.com", "webex.com"]
+
+/// Konum, not ve adres alanlarındaki ilk görüşme bağlantısı (Teams, Zoom, Google Meet, Webex). Yalnız ana bilgisayarı
+/// servisin alan adı ya da alt alan adı olan `https` bağlantısı kabul edilir: `https://evil.example/?x=zoom.us` ya da
+/// `https://zoom.us.evil.example/` gibi takvim davetine yazılmış sahte adresler açılmaz. Saf fonksiyondur.
 public func meetingJoinURL(texts: [String]) -> URL? {
-    let pattern: Regex = /https:\/\/[^\s<>"]*(teams\.microsoft\.com|teams\.live\.com|zoom\.us|meet\.google\.com|webex\.com)[^\s<>"]*/
+    let candidate: Regex = /https:\/\/[^\s<>"]+/
     for text in texts {
-        if let match = text.firstMatch(of: pattern), let url = URL(string: String(match.output.0)) {
+        for match in text.matches(of: candidate) {
+            guard let url = URL(string: String(match.output)), url.scheme == "https", let host = url.host()?.lowercased(),
+                  meetingHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
+                continue
+            }
             return url
         }
     }

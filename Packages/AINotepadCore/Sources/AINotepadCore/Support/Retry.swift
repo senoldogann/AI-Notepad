@@ -26,3 +26,9 @@ public func retryWithBackoff(
         }
     }
 }
+
+/// HTTP yanıtı kalıcı ret mi (yeniden denemenin anlamı yok: geçersiz anahtar, bozuk istek). 408 (zaman aşımı) ve 429
+/// (hız sınırı) geçicidir; beklenip yeniden denenir. Saf fonksiyondur.
+public func isPermanentHTTPRejection(status: Int) -> Bool {
+    (400..<500).contains(status) && status != 408 && status != 429
+}

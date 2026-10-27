@@ -69,11 +69,12 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             record(id: "old", startedAt: now.addingTimeInterval(-31 * 86_400), status: .done, audioDeleted: false),
             record(id: "gone", startedAt: now.addingTimeInterval(-40 * 86_400), status: .done, audioDeleted: true),
             record(id: "new", startedAt: now.addingTimeInterval(-29 * 86_400), status: .done, audioDeleted: false),
-            // Yeniden işlenebilmesi için başarısız ve yarıda kalan toplantının sesi kalır.
-            record(id: "failed", startedAt: now.addingTimeInterval(-60 * 86_400), status: .failed, audioDeleted: false),
-            record(id: "interrupted", startedAt: now.addingTimeInterval(-60 * 86_400), status: .interrupted, audioDeleted: false),
+            // Başarısız ve yarıda kalan toplantının sesi iki kat süre kalır ("Tekrar işle" için), sonra silinir.
+            record(id: "failed", startedAt: now.addingTimeInterval(-59 * 86_400), status: .failed, audioDeleted: false),
+            record(id: "interrupted", startedAt: now.addingTimeInterval(-61 * 86_400), status: .interrupted, audioDeleted: false),
+            record(id: "processing", startedAt: now.addingTimeInterval(-90 * 86_400), status: .processing, audioDeleted: false),
         ]
-        #expect(audioToDelete(records: records, now: now, retentionDays: 30) == ["old"])
+        #expect(audioToDelete(records: records, now: now, retentionDays: 30) == ["old", "interrupted"])
     }
 }
 
@@ -113,5 +114,9 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         let updated: [MeetingRecord] = upsertMeeting(records: list, record: new.with(status: .done, failureMessage: nil))
         #expect(updated.count == 2)
         #expect(updated.first?.status == .done)
+        // Saat dilimi değişince klasör adı yanıltır: sıra başlangıç anına göredir.
+        let abroad: MeetingRecord = record(id: "20261027-230000", startedAt: Date(timeIntervalSince1970: 1_000), status: .done, audioDeleted: false)
+        let home: MeetingRecord = record(id: "20261027-220000", startedAt: Date(timeIntervalSince1970: 2_000), status: .done, audioDeleted: false)
+        #expect(newestFirst(records: [abroad, home]).map(\.id) == ["20261027-220000", "20261027-230000"])
     }
 }

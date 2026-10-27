@@ -727,16 +727,6 @@
         }
       }
     },
-    "Ad verdiğin kişilerin ses izi (ses değil, yalnızca sayılar) bu Mac'te saklanır: sonraki toplantılarda adı kendiliğinden gelir, kayıtta bir süre susup dönen kişi aynı numarayı alır. Emin olunmayan durumda ad verilmez.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The voiceprint of people you name (numbers only, no audio) is kept on this Mac: in later meetings their name appears automatically, and someone who goes quiet and speaks again during a recording keeps the same number. No name is given when unsure."
-          }
-        }
-      }
-    },
     "Ad ver…": {
       "localizations": {
         "en": {
@@ -763,6 +753,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show / hide island and panel"
+          }
+        }
+      }
+    },
+    "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The address isn't encrypted (http), so it was blocked for security. Use an https address."
           }
         }
       }
@@ -1174,6 +1174,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open · %lld"
+          }
+        }
+      }
+    },
+    "Açıkken 8 sn'den fazla konuşan herkesin ses izi (sesi tanıyan sayılar; biyometrik veridir) o toplantıyla saklanır; ad verdiğin kişininki bu Mac'te hatırlanır ve sonraki toplantılarda adı kendiliğinden gelir. Toplantı silinince ondan öğrenilen izler, sesi silinince toplantıdaki izler de silinir. Başkalarının ses izini saklamadan önce onaylarını al.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, a voiceprint (numbers that recognise a voice; this is biometric data) of everyone who speaks for more than 8 s is stored with the meeting; people you name are remembered on this Mac and named automatically in later meetings. Deleting a meeting forgets what was learned from it; deleting its audio removes its prints. Ask others before storing their voiceprints."
           }
         }
       }
@@ -1666,12 +1676,12 @@
         }
       }
     },
-    "Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez.": {
+    "Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okunan notlar ve transkriptler istemcinin yapay zekâ sağlayıcısına (ör. Anthropic, OpenAI) gönderilir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add this configuration to the client's MCP settings (Claude Desktop: Settings › Developer › Edit Config). The client can list and search your meetings and read notes and transcripts; it only reads and changes nothing."
+            "value": "Add this configuration to the client's MCP settings (Claude Desktop: Settings › Developer › Edit Config). The client lists, searches and reads your meetings, notes and transcripts; it only reads and never changes anything. Notes and transcripts it reads are sent to the client's AI provider (e.g. Anthropic, OpenAI)."
           }
         }
       }
@@ -2622,6 +2632,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open the meeting link"
+          }
+        }
+      }
+    },
+    "Görüşme bağlantısını aç: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open meeting link: %@"
           }
         }
       }
@@ -6880,6 +6900,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "tasks"
+          }
+        }
+      }
+    },
+    "https adresi (http yalnızca bu bilgisayardaki sunucu için: localhost, 127.0.0.1)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "an https address (http only for a server on this computer: localhost, 127.0.0.1)"
           }
         }
       }

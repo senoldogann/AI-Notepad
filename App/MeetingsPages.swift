@@ -830,10 +830,10 @@ struct MeetingDetailPage: View {
         }
     }
 
-    /// Çalınabilir kayıtlar ("Sen" ve "Diğerleri"): ses silinmediyse ve toplantı kayıtta/işlemede değilse (dosya
-    /// yazılıyor olabilir).
+    /// Çalınabilir kayıtlar ("Sen" ve "Diğerleri"): ses silinmediyse, toplantı kayıtta/işlemede değilse (dosya
+    /// yazılıyor olabilir) ve şu an kayıt yapılmıyorsa (çalınan ses mikrofona girip yeni kayda karışmasın).
     private var playableAudio: [URL] {
-        guard !record.audioDeleted, !isLocked else {
+        guard !record.audioDeleted, !isLocked, !model.isRecording else {
             return []
         }
         do {

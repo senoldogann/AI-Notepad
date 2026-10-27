@@ -185,10 +185,14 @@ final class AppModel {
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
 
-    init(liveEngine: LiveEngine, displayMode: DisplayMode) {
+    init(liveEngine: LiveEngine, displayMode: DisplayMode, player: MeetingAudioPlayer) {
         self.liveEngine = liveEngine
         self.displayMode = displayMode
+        self.player = player
     }
+
+    /// Uygulamanın tek oynatıcısı: kayıt başlarken durdurulur (çalan ses mikrofona girip yeni kayda karışmasın).
+    @ObservationIgnored private let player: MeetingAudioPlayer
 
     // MARK: Görünüm
 
@@ -523,6 +527,7 @@ final class AppModel {
         }
         isStarting = true
         defer { isStarting = false }
+        player.stop()
         transcript = []
         speakerCorrections = .none
         meStreamFailed = false
@@ -1068,7 +1073,7 @@ final class AppModel {
             }
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
-                let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, llm: llm, userName: userName)
+                let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
                 saveRecord(record: applyingPendingReminders(record: result), directory: directory)
                 processingMeetingIDs.remove(meetingID)
             }
@@ -1794,6 +1799,11 @@ final class AppModel {
         }
         closeSpeakerReview(meetingID: meetingID)
         meetings.removeAll { $0.id == meetingID }
+        // Bu toplantıdan öğrenilen ses izleri de geri alınır (biyometrik veri toplantıdan uzun yaşamasın).
+        let voices: [RegisteredVoice] = forgettingMeeting(voices: registeredVoices, meetingID: meetingID, now: Date())
+        if voices != registeredVoices {
+            storeVoices(voices: voices)
+        }
         if lastFinishedMeetingID == meetingID {
             lastFinishedMeetingID = nil
         }
@@ -1818,7 +1828,8 @@ final class AppModel {
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             do {
                 try deleteAudioFiles(directory: directory)
-                saveRecord(record: record.withAudioDeleted(), directory: directory)
+                // Ses gidince toplantıdaki ses izleri de gider (ad verilmiş kişilerin kayıtlı sesi Ayarlar'da kalır).
+                saveRecord(record: record.withAudioDeleted().with(voiceprints: nil), directory: directory)
             } catch {
                 // Silinemediyse "silindi" işaretlenmez; saklama süresi bir sonraki denemede yeniden dener.
                 Self.logger.error("Ses silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
@@ -1871,7 +1882,7 @@ final class AppModel {
     func reloadMeetings() {
         do {
             let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: activeStorageLocation))
-            meetings = result.meetings.sorted { $0.id > $1.id }
+            meetings = result.meetings
             meetingLoadFailures = result.failures
             cloudDownloadingCount = result.downloading.count
             for failure in result.failures {

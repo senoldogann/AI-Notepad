@@ -181,6 +181,18 @@ public func voiceSource(meetingID: String, person: Int) -> String {
     "\(meetingID)#\(person)"
 }
 
+/// Toplantı silinince o toplantıdan gelen ses izi katkıları kayıtlı seslerden geri alınır; başka katkısı kalmayan ses
+/// tümden unutulur. Saf fonksiyondur.
+public func forgettingMeeting(voices: [RegisteredVoice], meetingID: String, now: Date) -> [RegisteredVoice] {
+    voices.reduce(voices) { (result: [RegisteredVoice], voice: RegisteredVoice) -> [RegisteredVoice] in
+        (voice.contributions ?? [:]).keys
+            .filter { $0.hasPrefix(meetingID + "#") }
+            .reduce(result) { (current: [RegisteredVoice], source: String) -> [RegisteredVoice] in
+                unregistering(voices: current, name: voice.name, source: source, now: now)
+            }
+    }
+}
+
 /// Kaynak izlerinin süre ağırlıklı birleşimi (anahtar sırasıyla, her seferinde aynı); kaynak yoksa nil. Saf fonksiyondur.
 func combinedVoiceprint(contributions: [String: Voiceprint]) -> Voiceprint? {
     contributions.keys.sorted().compactMap { contributions[$0] }.reduce(nil) { (result: Voiceprint?, voice: Voiceprint) -> Voiceprint? in

@@ -24,9 +24,11 @@
 - **Assistant during the meeting:** "What did I miss?" and free questions about the conversation.
 - **Ask your meetings:** questions across all notes and Finnish/English transcripts, answered in Turkish
   with links to the source meetings.
-- **Speakers recognised by voice:** name someone once and they are named in later meetings (local voiceprints,
-  numbers only); a person who goes quiet and speaks again keeps their number. People pages show each person's
-  meetings, talk time and tasks.
+- **Speakers recognised by voice (off by default):** name someone once and they are named in later meetings.
+  Voiceprints are biometric data: when on, a print of everyone who speaks for more than 8 seconds is stored with the
+  meeting, and named people are remembered on this Mac. Deleting a meeting forgets what was learned from it; deleting
+  its audio removes its prints. Ask participants before turning this on. People pages show each person's meetings,
+  talk time and tasks.
 - **Calendar:** upcoming meetings on Home, a notification one minute before with "Start listening", a suggestion
   when another app turns on the microphone; recordings take the event's title and attendee names.
 - **Tasks:** tick tasks off, see open and done tasks, send them to Apple Reminders.
@@ -34,14 +36,21 @@
   the note for colleagues and the macOS share menu.
 - **In-person mode:** everyone on the microphone is separated into speakers.
 - **MCP server:** `AINotepad --mcp` lets Claude Desktop, ChatGPT and other MCP clients list, search and read your
-  meetings locally (read-only).
+  meetings (read-only). What the client reads is sent to that client's AI provider.
 - **No keys needed, if you prefer:** on-device WhisperKit plus a local Ollama model, detected in one click.
 - **Engines:** Deepgram + ElevenLabs in the cloud (gaps in the live transcript are filled from ElevenLabs), or
   fully on-device WhisperKit + SpeakerKit.
   LLM: Claude (default Claude Haiku 5.5) or any OpenAI-compatible server (OpenAI, Ollama, …).
-- **Privacy:** a reminder to tell participants you are recording; API keys live only in the macOS Keychain;
-  recordings stay on your Mac
-  (`~/Library/Application Support/AINotepad`) and audio is deleted after a retention period you choose.
+- **iPhone app:** records in-person meetings with live text and Turkish translation, a Live Activity on the Lock
+  Screen and Dynamic Island, Shortcuts and a Control Center button; reads, plays and searches your meetings.
+- **iCloud sync (opt-in):** finished meetings move to your iCloud Drive and appear on both Mac and iPhone; keys can be
+  sent to the iPhone through iCloud Keychain. Off by default: meetings stay in
+  `~/Library/Application Support/AINotepad`.
+- **Privacy:** a reminder to tell participants you are recording; API keys live only in the Keychain. With the cloud
+  engine, audio is sent to Deepgram (live) and ElevenLabs (speaker windows during the meeting and the full recording
+  afterwards, so roughly three times in total), and the transcript goes to your LLM provider; the on-device engine
+  keeps audio on your Mac. Audio files are deleted after the retention period you choose (failed or interrupted
+  meetings after twice that period, so they can still be reprocessed).
 - English and Turkish user interface.
 
 ## Install

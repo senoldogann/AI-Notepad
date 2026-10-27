@@ -139,7 +139,7 @@ public func retryDelay(retryAfterHeader: String?, attempt: Int) -> Double {
 
 /// Durum koduna göre yeniden denenebilir mi: zaman aşımı, hız sınırı ve sunucu hataları.
 func isRetryableLLMStatus(status: Int) -> Bool {
-    status == 408 || status == 429 || status >= 500
+    status >= 500 || ((400..<500).contains(status) && !isPermanentHTTPRejection(status: status))
 }
 
 private let llmLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "LLM")

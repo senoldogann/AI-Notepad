@@ -1,0 +1,35 @@
+# Her PR'da ve main'e her gönderimde: hızlı testler (macOS), Mac uygulaması ve iPhone uygulaması (simülatör) derlemesi.
+# İmza yok (CODE_SIGNING_ALLOWED=NO); gerçek bulut ve model testleri yerelde ortam değişkenleriyle çalışır.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Araç sürümleri
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Hızlı testler (macOS)
+        run: swift test --package-path Packages/AINotepadCore
+      - name: Projeyi üret
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Mac uygulaması
+        run: >
+          xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug
+          -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64'
+          CODE_SIGNING_ALLOWED=NO build -quiet
+      - name: iPhone uygulaması (simülatör)
+        run: >
+          xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debug
+          -derivedDataPath .build/xcode-ios -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build -quiet
