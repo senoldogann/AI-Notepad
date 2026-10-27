@@ -1132,6 +1132,8 @@ private struct WebhookSettings: View {
     @AppStorage(SettingsKey.markdownFolder) private var markdownFolder: String = ""
     @AppStorage(SettingsKey.markdownAutoExport) private var markdownAuto: Bool = false
     @State private var setup: ChannelSetup = .idle
+    /// Tarayıcıda süren Notion girişi: "Vazgeç" bunu iptal eder (yerel dönüş dinleyicisi kapanır).
+    @State private var notionSignIn: Task<Void, Never>?
     @State private var selectedChannelID: String = ""
     @State private var manualAddress: String = ""
     @State private var zoomToken: String = ""
@@ -1182,7 +1184,7 @@ private struct WebhookSettings: View {
                     }
                 }
                 if case .notion = destination.target, destination.needsReconnect {
-                    Button("Yeniden bağlan") { Task { await reconnectNotion(destinationID: destination.id) } }
+                    Button("Yeniden bağlan") { notionSignIn = Task { await reconnectNotion(destinationID: destination.id) } }
                         .buttonStyle(.pillPrimary)
                 }
                 Button("Dene") { Task { await test(destinationID: destination.id) } }
@@ -1208,6 +1210,9 @@ private struct WebhookSettings: View {
                 ProgressView().controlSize(.small)
                 Text("Açılan pencerede \(name) hesabınla giriş yap ve izin ver.").appFont(size: 13, weight: .regular)
                 Spacer()
+                if let notionSignIn {
+                    Button("Vazgeç") { notionSignIn.cancel() }
+                }
             }
         case .choosing(let signIn, let options, let replacing):
             statusPanel {
@@ -1362,7 +1367,7 @@ private struct WebhookSettings: View {
         case .webhook:
             setup = .pasting
         case .notion:
-            Task { await connectNotion() }
+            notionSignIn = Task { await connectNotion() }
         case .slack, .teams, .discord:
             if let service = card.service {
                 Task { await signIn(service: service, replacing: nil) }
@@ -1451,6 +1456,7 @@ private struct WebhookSettings: View {
 
     private func connectNotion() async {
         setup = .signingIn("Notion")
+        defer { notionSignIn = nil }
         do {
             try await model.connectNotion()
             setup = .done(String(localized: "Notion bağlandı; notlar özel sayfalarına yeni sayfa olarak gider."))
@@ -1462,16 +1468,18 @@ private struct WebhookSettings: View {
         }
     }
 
-    /// Notion oturumu bitti: yeni bağlantı kurulur, eski hedef kaldırılır (ayarı korunur).
+    /// Notion oturumu bitti: aynı hedefin bağlantısı yenilenir (ayarı ve gönderim geçmişi korunur).
     private func reconnectNotion(destinationID: String) async {
-        let autoSend: Bool = model.destinations.first { $0.id == destinationID }?.autoSend ?? false
-        await connectNotion()
-        guard case .done = setup else {
-            return
-        }
-        await model.removeDestination(id: destinationID)
-        if autoSend, let added = model.destinations.last(where: { if case .notion = $0.target { true } else { false } }) {
-            await model.setAutoSend(destinationID: added.id, enabled: true)
+        setup = .signingIn("Notion")
+        defer { notionSignIn = nil }
+        do {
+            try await model.reconnectNotion(destinationID: destinationID)
+            setup = .done(String(localized: "Notion yeniden bağlandı."))
+        } catch is CancellationError {
+            setup = .idle
+        } catch {
+            channelSettingsLogger.error("Notion yeniden bağlanamadı, hata: \(String(describing: error), privacy: .private)")
+            setup = .failed(userFacingMessage(error: error))
         }
     }
 
@@ -1536,6 +1544,8 @@ private struct TaskTrackerSettings: View {
     let model: AppModel
     @State private var status: String?
     @State private var connecting: MCPService?
+    /// Tarayıcıda süren giriş: "Vazgeç" bunu iptal eder.
+    @State private var signIn: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1565,22 +1575,26 @@ private struct TaskTrackerSettings: View {
                 Label("Bağlı", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             } control: {
                 HStack(spacing: 8) {
-                    TextField(
-                        service == .atlassian ? "Proje (boş: ilki)" : "Takım (boş: ilki)",
-                        text: Binding<String>(get: { tracker.target }, set: { (value: String) -> Void in model.setTrackerTarget(id: tracker.id, target: value) })
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-                    Button("Kaldır", role: .destructive) { model.removeTracker(id: tracker.id) }
+                    TrackerTargetField(
+                        placeholder: service == .atlassian ? "Proje (boş: ilki)" : "Takım (boş: ilki)", saved: tracker.target
+                    ) { (value: String) -> Void in
+                        Task { await model.setTrackerTarget(id: tracker.id, target: value) }
+                    }
+                    Button("Kaldır", role: .destructive) { Task { await model.removeTracker(id: tracker.id) } }
                 }
             }
         } else {
             SettingsRow(title: Text(verbatim: service.displayName)) {
                 Text(service == .linear ? "Takımındaki işler" : "Jira projesindeki işler")
             } control: {
-                Button(connecting == service ? "Tarayıcıda izin ver…" : "Bağlan") { connect(service: service) }
-                    .buttonStyle(.pillPrimary)
-                    .disabled(connecting != nil)
+                HStack(spacing: 8) {
+                    if connecting == service, let signIn {
+                        Button("Vazgeç") { signIn.cancel() }
+                    }
+                    Button(connecting == service ? "Tarayıcıda izin ver…" : "Bağlan") { connect(service: service) }
+                        .buttonStyle(.pillPrimary)
+                        .disabled(connecting != nil)
+                }
             }
         }
     }
@@ -1588,8 +1602,11 @@ private struct TaskTrackerSettings: View {
     private func connect(service: MCPService) {
         connecting = service
         status = nil
-        Task {
-            defer { connecting = nil }
+        signIn = Task {
+            defer {
+                connecting = nil
+                signIn = nil
+            }
             do {
                 try await model.connectTracker(service: service)
                 status = String(localized: "\(service.displayName) bağlandı.")
@@ -1598,6 +1615,42 @@ private struct TaskTrackerSettings: View {
             } catch {
                 status = userFacingMessage(error: error)
             }
+        }
+    }
+}
+
+/// Görev aracının takım/proje alanı: yazarken değil, Return'de ya da alandan çıkınca kaydedilir (her tuşta Anahtar
+/// Zinciri'ne yazılmasın, yazılan metin geri gelen eski değerle ezilmesin).
+private struct TrackerTargetField: View {
+    let placeholder: LocalizedStringKey
+    let saved: String
+    let commit: (String) -> Void
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 180)
+            .focused($focused)
+            .onAppear { text = saved }
+            .onChange(of: saved) { (_: String, value: String) -> Void in
+                if !focused {
+                    text = value
+                }
+            }
+            .onSubmit { save() }
+            .onChange(of: focused) { (_: Bool, isFocused: Bool) -> Void in
+                if !isFocused {
+                    save()
+                }
+            }
+    }
+
+    private func save() {
+        let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed != saved {
+            commit(trimmed)
         }
     }
 }

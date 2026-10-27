@@ -30,6 +30,7 @@ import Testing
         #expect(url?.absoluteString == "http://127.0.0.1:5555/callback?code=abc&state=s1")
         #expect(try mcpCallbackCode(url: try #require(url), expectedState: "s1", server: "x") == "abc")
         #expect(callbackURL(request: "GET /favicon.ico HTTP/1.1\r\n", redirectURI: "http://127.0.0.1:5555/callback") == nil)
+        #expect(callbackURL(request: "GET /callback HTTP/1.1\r\n", redirectURI: "http://127.0.0.1:5555/callback")?.absoluteString == "http://127.0.0.1:5555/callback")
         #expect(throws: MCPRemoteError.denied(server: "x", reason: "access_denied")) {
             try mcpCallbackCode(url: URL(string: "http://127.0.0.1:1/callback?error=access_denied&state=s1")!, expectedState: "s1", server: "x")
         }
@@ -49,10 +50,53 @@ import Testing
         }
         #expect(page["properties"] == .object(["title": .string("Bütçe")]))
         #expect(!content.hasPrefix("# Bütçe") && content.contains("Özet metni"))
-        let tools: [MCPRemoteTool] = ["create_issue", "list_teams", "delete_issue", "update_issue", "search_documentation", "createJiraIssue", "getAccessibleAtlassianResources", "deleteJiraIssue"]
-            .compactMap { MCPRemoteTool(json: .object(["name": .string($0)])) }
-        #expect(trackerAgentTools(tools: tools, service: .linear).map(\.name) == ["create_issue", "list_teams", "createJiraIssue"])
-        #expect(trackerAgentTools(tools: tools, service: .atlassian).map(\.name) == ["create_issue", "createJiraIssue", "getAccessibleAtlassianResources"])
+        // Yalnızca izin listesindeki araçlar: düzenleme, yorum, iş kaydı, bağlantı, proje/etiket oluşturma görünmez.
+        let tools: [MCPRemoteTool] = [
+            "create_issue", "save_issue", "list_teams", "update_issue", "create_project", "create_issue_label", "create_comment",
+            "createJiraIssue", "getAccessibleAtlassianResources", "editJiraIssue", "addCommentToJiraIssue", "addWorklogToJiraIssue", "createIssueLink",
+        ]
+        .compactMap { MCPRemoteTool(json: .object(["name": .string($0)])) }
+        #expect(trackerAgentTools(tools: tools, service: .linear).map(\.name) == ["create_issue", "save_issue", "list_teams"])
+        #expect(trackerAgentTools(tools: tools, service: .atlassian).map(\.name) == ["createJiraIssue", "getAccessibleAtlassianResources"])
+        // Kimlik taşıyan argüman var olan öğeyi günceller: iş açarken reddedilir.
+        #expect(referencesExistingItem(arguments: .object(["id": .string("LIN-1"), "title": .string("x")])))
+        #expect(referencesExistingItem(arguments: .object(["issueIdOrKey": .string("PROJ-1")])))
+        #expect(!referencesExistingItem(arguments: .object(["title": .string("x"), "team": .string("Eng")])))
+    }
+
+    // SSE'de bir olayın birden çok data satırı birleşir.
+    @Test func multiLineEventData() throws {
+        let body: String = "event: message\ndata: {\"jsonrpc\":\"2.0\",\ndata: \"id\":4,\"result\":{}}\n\n"
+        #expect(serverSentEventData(body: body) == ["{\"jsonrpc\":\"2.0\",\n\"id\":4,\"result\":{}}"])
+        #expect(try jsonRPCResponse(body: body, contentType: "text/event-stream", id: 4, server: "s") == .object([:]))
+    }
+
+    // Yerel dönüş: yalnızca tam /callback yolu ve bu girişin state'i kabul edilir; başkaları dinlemeyi bitirmez.
+    @Test func loopbackAcceptsOnlyThisSignIn() {
+        let redirect: String = "http://127.0.0.1:5555/callback"
+        #expect(loopbackDecision(request: "GET /favicon.ico HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1") == .notFound)
+        #expect(loopbackDecision(request: "GET /callbackXYZ?state=s1 HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1") == .notFound)
+        #expect(loopbackDecision(request: "GET /callback?code=c&state=evil HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1") == .foreign)
+        #expect(loopbackDecision(request: "GET /callback?code=c&state=s1 HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1")
+            == .completed(url: URL(string: "http://127.0.0.1:5555/callback?code=c&state=s1")!, granted: true))
+        #expect(loopbackDecision(request: "GET /callback?error=access_denied&state=s1 HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1")
+            == .completed(url: URL(string: "http://127.0.0.1:5555/callback?error=access_denied&state=s1")!, granted: false))
+        #expect(loopbackResponse(decision: .foreign).hasPrefix("HTTP/1.1 400"))
+    }
+
+    // Keşif denetimi: kaynak bu sunucu, issuer bilginin alındığı kimlik ve tüm adresler https olmalı.
+    @Test func discoveryValidation() throws {
+        let server: URL = URL(string: "https://mcp.example.com/mcp")!
+        let issuer: URL = URL(string: "https://auth.example.com")!
+        let resource: ProtectedResourceMetadata = ProtectedResourceMetadata(resource: "https://mcp.example.com/mcp", authorizationServers: [issuer])
+        let good: AuthorizationServerMetadata = try JSONDecoder().decode(AuthorizationServerMetadata.self, from: Data(#"{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/a","token_endpoint":"https://auth.example.com/t"}"#.utf8))
+        try validateDiscovery(resource: resource, issuer: issuer, metadata: good, server: server)
+        let otherIssuer: AuthorizationServerMetadata = try JSONDecoder().decode(AuthorizationServerMetadata.self, from: Data(#"{"issuer":"https://evil.example","authorization_endpoint":"https://auth.example.com/a","token_endpoint":"https://auth.example.com/t"}"#.utf8))
+        #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: resource, issuer: issuer, metadata: otherIssuer, server: server) }
+        let insecure: AuthorizationServerMetadata = try JSONDecoder().decode(AuthorizationServerMetadata.self, from: Data(#"{"issuer":"https://auth.example.com","authorization_endpoint":"file:///Applications/X.app","token_endpoint":"https://auth.example.com/t"}"#.utf8))
+        #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: resource, issuer: issuer, metadata: insecure, server: server) }
+        let otherResource: ProtectedResourceMetadata = ProtectedResourceMetadata(resource: "https://other.example.com/mcp", authorizationServers: [issuer])
+        #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: otherResource, issuer: issuer, metadata: good, server: server) }
     }
 }
 

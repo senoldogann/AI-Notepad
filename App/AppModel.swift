@@ -1745,15 +1745,20 @@ final class AppModel {
         (connection: ChannelConnection) async throws -> ChannelConnection in
         try await refreshConnectionTokens(connection: connection)
     }
+    /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
+    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: keychainService)
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
+    /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
+    /// beklemez.
+    @ObservationIgnored private var autoSendRequested: Bool = false
 
     /// Hedefleri ve görev araçlarını yükler; eski sürümün tek bağlantısı (hesap ya da webhook) bir kez hedeflere taşınır.
     func loadDestinations() async {
         do {
             try await migrateLegacyChannelIfNeeded()
             destinations = try await destinationVault.all()
-            taskTrackers = try await Task.detached { try loadTaskTrackers(service: keychainService) }.value
+            taskTrackers = try await trackerVault.all()
         } catch {
             Self.logger.error("Hedefler okunamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bağlantılar okunamadı: \(userFacingMessage(error: error))"))
@@ -1841,11 +1846,18 @@ final class AppModel {
               let destination = destinations.first(where: { $0.id == destinationID }) else {
             return nil
         }
+        // Elle gönderim belirsiz işaretini kaldırır: kullanıcı kontrol edip yeniden göndermeyi seçti.
+        setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: false)
         do {
             try await deliverNote(vault: destinationVault, destination: destination, record: record, note: note)
-            markSent(meetingID: meetingID, destinationID: destinationID)
+            markSent(meetingID: meetingID, destination: destination)
             Self.logger.info("Not hedefe gönderildi, toplantı: \(meetingID, privacy: .public), hedef: \(destinationName(destination: destination), privacy: .public)")
             return nil
+        } catch let error as DeliveryUncertainError {
+            // Not gitmiş olabilir: kendiliğinden yeniden gönderilmez (iki kez düşmesin); kullanıcıya gösterilir.
+            setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: true)
+            Self.logger.warning("Not gönderiminin sonucu belirsiz, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
         } catch {
             Self.logger.error("Not hedefe gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
@@ -1899,18 +1911,45 @@ final class AppModel {
         }
     }
 
-    /// Gönderildi işareti: toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
-    private func markSent(meetingID: String, destinationID: String) {
-        guard let current = meetings.first(where: { $0.id == meetingID }) else {
-            return
-        }
+    /// Gönderildi işareti: hedefin kimliği ve cihazdan bağımsız anahtarı (başka Mac aynı kanala yeniden göndermesin).
+    /// Toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markSent(meetingID: String, destination: NoteDestination) {
+        let marks: [String] = [destination.id] + [destinationSendKey(destination: destination)].compactMap { $0 }
         guard !isLocked(meetingID: meetingID) else {
-            pendingSentMarks[meetingID, default: []].insert(destinationID)
+            pendingSentMarks[meetingID, default: []].formUnion(marks)
             return
         }
-        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-            saveRecord(record: current.markingSent(destinationID: destinationID), directory: directory)
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in
+            marks.reduce(record) { (result: MeetingRecord, mark: String) -> MeetingRecord in result.markingSent(destinationID: mark) }
         }
+    }
+
+    /// Değişikliği diskteki en güncel kayda uygular (iPhone'dan iCloud'la gelmiş düzenlemeler bellekteki eski kopyayla
+    /// ezilmesin).
+    private func updateRecordFromDisk(meetingID: String, change: (MeetingRecord) -> MeetingRecord) {
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            do {
+                saveRecord(record: change(try loadMeeting(directory: directory)), directory: directory)
+            } catch {
+                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
+            }
+        }
+    }
+
+    /// Sonucu belirsiz gönderimler: kendiliğinden gönderim bunları atlar.
+    private func uncertainSends() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: SettingsKey.uncertainSends) ?? [])
+    }
+
+    private func setUncertain(meetingID: String, destinationID: String, uncertain: Bool) {
+        let key: String = "\(meetingID)|\(destinationID)"
+        let current: Set<String> = uncertainSends()
+        let updated: Set<String> = uncertain ? current.union([key]) : current.subtracting([key])
+        guard updated != current else {
+            return
+        }
+        UserDefaults.standard.set(updated.sorted(), forKey: SettingsKey.uncertainSends)
     }
 
     /// İşleme sürerken gönderilen hedefler; işleme bitince kayda işlenir.
@@ -1920,61 +1959,94 @@ final class AppModel {
     /// sonra gider; her (toplantı, hedef) bir kez gönderilir.
     func processPendingAutoSends() async {
         guard !autoSendRunning else {
+            autoSendRequested = true
             return
         }
         autoSendRunning = true
         defer { autoSendRunning = false }
-        await refreshDestinationList()
-        let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
-            .filter { !(pendingSentMarks[$0.meetingID] ?? []).contains($0.destinationID) && !isLocked(meetingID: $0.meetingID) }
-        for item in pending {
-            if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
-                errorMessages = appendUnique(messages: errorMessages, message: failure)
-            }
-        }
-        if !pending.isEmpty {
+        repeat {
+            autoSendRequested = false
             await refreshDestinationList()
-        }
+            let uncertain: Set<String> = uncertainSends()
+            let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
+                .filter { (item: (meetingID: String, destinationID: String)) -> Bool in
+                    !(pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID) && !isLocked(meetingID: item.meetingID)
+                        && !uncertain.contains("\(item.meetingID)|\(item.destinationID)")
+                }
+            for item in pending {
+                if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
+                    errorMessages = appendUnique(messages: errorMessages, message: failure)
+                }
+            }
+            if !pending.isEmpty {
+                await refreshDestinationList()
+            }
+        } while autoSendRequested
     }
 
     /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler.
     func connectNotion() async throws {
         let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            await MainActor.run { openSignInPage(url: url) }
         }
         try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
+    }
+
+    /// Notion hedefini yeniden bağlar: kimliği, kendiliğinden gönderim ayarı ve bağlanma anı korunur (bağlantı koptuğu
+    /// sırada kaçan toplantılar da gönderilir, gönderim geçmişi kaybolmaz).
+    func reconnectNotion(destinationID: String) async throws {
+        let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
+            await MainActor.run { openSignInPage(url: url) }
+        }
+        try await replaceDestinationTarget(id: destinationID, target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
     }
 
     // MARK: Görev araçları (Linear, Jira)
 
     /// Linear ya da Jira'ya tek tıkla bağlanır (tarayıcıda izin; uygulama kaydı ya da API anahtarı gerekmez).
+    /// Bağlanırken sunucuda iş açan araç olduğu denetlenir; yoksa bağlantı kaldırılır ve neden gösterilir. Aynı servis
+    /// yeniden bağlanırsa kimlik ve hedef korunur (gönderilen görevler yeniden gönderilmez).
     func connectTracker(service: MCPService) async throws {
         let connection: MCPConnection = try await signInToMCP(service: service) { (url: URL) async -> Void in
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            await MainActor.run { openSignInPage(url: url) }
         }
-        let tracker: TaskTracker = TaskTracker(id: UUID().uuidString, service: service, connection: connection, target: "")
-        try saveTrackers(taskTrackers.filter { $0.service != service } + [tracker])
+        let tracker: TaskTracker = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
+        defer { Task { await self.refreshTrackerList() } }
+        do {
+            try await trackerVault.withTracker(id: tracker.id) {
+                (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+                try await validateTracker(service: current.service, connection: current.connection, persist: persist)
+            }
+        } catch TaskTrackerError.noCreateTool(let name) {
+            try await trackerVault.remove(id: tracker.id)
+            throw TaskTrackerError.noCreateTool(service: name)
+        }
     }
 
-    func removeTracker(id: String) {
+    func removeTracker(id: String) async {
         do {
-            try saveTrackers(taskTrackers.filter { $0.id != id })
+            try await trackerVault.remove(id: id)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
+        await refreshTrackerList()
     }
 
-    func setTrackerTarget(id: String, target: String) {
+    func setTrackerTarget(id: String, target: String) async {
         do {
-            try saveTrackers(taskTrackers.map { $0.id == id ? $0.with(target: target.trimmingCharacters(in: .whitespacesAndNewlines)) : $0 })
+            try await trackerVault.setTarget(id: id, target: target.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
+        await refreshTrackerList()
     }
 
-    private func saveTrackers(_ trackers: [TaskTracker]) throws {
-        try saveTaskTrackers(trackers: trackers, service: keychainService)
-        taskTrackers = trackers
+    private func refreshTrackerList() async {
+        do {
+            taskTrackers = try await trackerVault.all()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
     }
 
     /// Toplantının görevlerini araçta iş olarak açar (`onlyMine`: yalnız sana düşenler); daha önce gönderilenler
@@ -1991,26 +2063,44 @@ final class AppModel {
             return
         }
         trackerStates[meetingID] = .sending
+        defer { Task { await self.refreshTrackerList() } }
         do {
             let llm: LLMProvider = try await resolveLLMProvider()
-            let result: (summary: String, connection: MCPConnection) = try await sendTasksToTracker(tracker: tracker, tasks: tasks, meetingTitle: note.title, llm: llm)
-            if result.connection != tracker.connection {
-                try saveTrackers(taskTrackers.map { $0.id == trackerID ? $0.with(connection: result.connection) : $0 })
+            let title: String = note.title
+            let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
+                (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
+                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, llm: llm)
             }
-            if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
-                let marked: MeetingRecord = tasks.reduce(current) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in
-                    result.markingTaskSent(trackerID: trackerID, task: task)
-                }
-                withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-                    saveRecord(record: marked, directory: directory)
-                }
-            }
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: result.createdTaskIndices.map { tasks[$0] })
             trackerStates[meetingID] = .done(result.summary)
+        } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
+            // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            let error: TaskTrackerError = .partial(service: service, created: created, total: total, reason: reason)
+            Self.logger.error("Görevlerin bir kısmı açılamadı, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public)")
+            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
         } catch {
             Self.logger.error("Görevler araca gönderilemedi, araç: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             trackerStates[meetingID] = .failed(String(localized: "\(tracker.service.displayName): \(userFacingMessage(error: error))"))
         }
     }
+
+    /// Araçta açılan görevleri işaretler; toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markTasksSent(meetingID: String, trackerID: String, tasks: [NoteTask]) {
+        guard !tasks.isEmpty else {
+            return
+        }
+        guard !isLocked(meetingID: meetingID) else {
+            pendingTaskMarks[meetingID, default: []] += tasks.map { (trackerID: trackerID, task: $0) }
+            return
+        }
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in
+            tasks.reduce(record) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in result.markingTaskSent(trackerID: trackerID, task: task) }
+        }
+    }
+
+    /// İşleme sürerken araca gönderilen görevler; işleme bitince kayda işlenir.
+    @ObservationIgnored private var pendingTaskMarks: [String: [(trackerID: String, task: NoteTask)]] = [:]
 
     // MARK: Apple Notlar ve klasör
 
@@ -2092,7 +2182,11 @@ final class AppModel {
         let tasks: [NoteTask] = pendingReminded.removeValue(forKey: record.id) ?? []
         let sent: Set<String> = pendingSentMarks.removeValue(forKey: record.id) ?? []
         let withSent: MeetingRecord = sent.sorted().reduce(record) { (result: MeetingRecord, id: String) -> MeetingRecord in result.markingSent(destinationID: id) }
-        return tasks.reduce(withSent) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
+        let trackerMarks: [(trackerID: String, task: NoteTask)] = pendingTaskMarks.removeValue(forKey: record.id) ?? []
+        let withTasks: MeetingRecord = trackerMarks.reduce(withSent) { (result: MeetingRecord, mark: (trackerID: String, task: NoteTask)) -> MeetingRecord in
+            result.markingTaskSent(trackerID: mark.trackerID, task: mark.task)
+        }
+        return tasks.reduce(withTasks) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
     }
 
     // MARK: Sesinden tanıma
@@ -2638,4 +2732,15 @@ private func runAppleScript(source: String) -> String? {
     let number: Int = (error[NSAppleScript.errorNumber] as? Int) ?? 0
     let message: String = (error[NSAppleScript.errorMessage] as? String) ?? ""
     return "\(message) (\(number))"
+}
+
+/// Giriş sayfasını varsayılan tarayıcıda açar; yalnızca https (keşiften gelen adres `file:` ya da özel şema olup yerel
+/// bir uygulamayı başlatamasın).
+@MainActor
+private func openSignInPage(url: URL) {
+    guard url.scheme?.lowercased() == "https" else {
+        Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel").error("Güvenli olmayan giriş adresi açılmadı, şema: \(url.scheme ?? "yok", privacy: .public)")
+        return
+    }
+    NSWorkspace.shared.open(url)
 }

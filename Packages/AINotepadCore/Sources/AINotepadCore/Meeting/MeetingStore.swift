@@ -59,6 +59,25 @@ public func saveMeeting(record: MeetingRecord, directory: URL) throws {
     }
 }
 
+/// Klasördeki `meeting.json`'u dosya koordinatörüyle okur: başka cihazdan (iCloud) gelmiş en güncel hali. Bellekteki
+/// kopyanın üzerine yazmadan önce değişiklik buna uygulanır.
+public func loadMeeting(directory: URL) throws -> MeetingRecord {
+    let file: URL = directory.appending(path: meetingFileName)
+    var coordinationError: NSError?
+    var result: Result<Data, any Error> = .failure(StorageError.readFailed(path: file.path, reason: "okunmadı"))
+    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: file, options: [], error: &coordinationError) { (url: URL) -> Void in
+        result = Result { try Data(contentsOf: url) }
+    }
+    if let coordinationError {
+        throw StorageError.readFailed(path: file.path, reason: coordinationError.localizedDescription)
+    }
+    do {
+        return try meetingDecoder().decode(MeetingRecord.self, from: try result.get())
+    } catch {
+        throw StorageError.readFailed(path: file.path, reason: error.localizedDescription)
+    }
+}
+
 /// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
 /// Toplantının klasörünü (meeting.json ve ses dosyaları) Çöp Sepeti'ne taşır: yanlışlıkla silinen toplantı Finder'dan
 /// geri alınabilir. Taşınamazsa `deleteFailed`.

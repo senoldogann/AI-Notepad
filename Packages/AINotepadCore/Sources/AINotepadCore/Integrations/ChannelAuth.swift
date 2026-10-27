@@ -297,9 +297,10 @@ private func authorizedChannelData(service: ChannelService, request: URLRequest)
     }
 }
 
-/// Mesaj gönderimi: yalnızca istek sunucuya ulaşmadıysa ya da 429'da yeniden denenir (bkz. `isSafeToRetryPost`);
-/// zaman aşımı ve 5xx'te mesaj kanala düşmüş olabilir, yeniden deneme notu iki kez gönderirdi. 401 `expired`.
-private func postChannelData(service: ChannelService, request: URLRequest) async throws -> Data {
+/// Tek kullanımlık istek (mesaj gönderimi, Slack'in tek kullanımlık yenileme jetonu): yalnızca istek sunucuya
+/// ulaşmadıysa ya da 429'da yeniden denenir (bkz. `isSafeToRetryPost`). Zaman aşımı, bağlantının yarıda kopması ve 5xx'te
+/// istek işlenmiş olabilir: yeniden denenmez, `DeliveryUncertainError` fırlar.
+private func singleUseChannelData(service: ChannelService, request: URLRequest) async throws -> Data {
     let path: String = request.url?.path() ?? "?"
     var lastError: ChannelAuthError = .network(service: service, reason: "deneme yapılmadı")
     for attempt in 1...channelAttempts {
@@ -310,8 +311,8 @@ private func postChannelData(service: ChannelService, request: URLRequest) async
                 return data
             }
             let body: String = String(decoding: data.prefix(600), as: UTF8.self)
-            if status == 401 {
-                throw ChannelAuthError.expired(service: service)
+            if status >= 500 {
+                throw DeliveryUncertainError(host: service.displayName, reason: "HTTP \(status)")
             }
             guard status == 429 else {
                 throw ChannelAuthError.http(service: service, status: status, body: body)
@@ -320,14 +321,23 @@ private func postChannelData(service: ChannelService, request: URLRequest) async
         } catch let error as URLError where isSafeToRetryPost(code: error.code) {
             lastError = .network(service: service, reason: error.localizedDescription)
         } catch let error as URLError where error.code != .cancelled {
-            throw ChannelAuthError.network(service: service, reason: error.localizedDescription)
+            throw DeliveryUncertainError(host: service.displayName, reason: error.localizedDescription)
         }
-        channelLogger.warning("Kanal mesajı gönderilemedi, servis: \(service.rawValue, privacy: .public), yol: \(path, privacy: .private), deneme: \(attempt, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
+        channelLogger.warning("Tek kullanımlık kanal isteği başarısız, servis: \(service.rawValue, privacy: .public), yol: \(path, privacy: .private), deneme: \(attempt, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
         if attempt < channelAttempts {
             try await Task.sleep(for: .seconds(Double(attempt)))
         }
     }
     throw lastError
+}
+
+/// Mesaj gönderimi: tek kullanımlık istek; 401 `expired` (çağıran bir kez yenileyip yeniden dener).
+private func postChannelData(service: ChannelService, request: URLRequest) async throws -> Data {
+    do {
+        return try await singleUseChannelData(service: service, request: request)
+    } catch ChannelAuthError.http(_, 401, _) {
+        throw ChannelAuthError.expired(service: service)
+    }
 }
 
 private func decode<Value: Decodable>(_ type: Value.Type, service: ChannelService, data: Data) throws -> Value {
@@ -476,9 +486,15 @@ public func listSlackChannels(token: String) async throws -> [ChannelOption] {
 
 /// Erişim jetonunu yeniler (dönen yeni yenileme jetonu eskisinin yerine geçer).
 public func refreshSlackTokens(tokens: OAuthTokens, clientID: String) async throws -> OAuthTokens {
-    let data: Data = try await channelData(service: .slack, request: formRequest(url: slackAPI.appending(path: "oauth.v2.access"), fields: [
-        ("client_id", clientID), ("grant_type", "refresh_token"), ("refresh_token", tokens.refreshToken),
-    ]))
+    let data: Data
+    do {
+        // Slack yenileme jetonu tek kullanımlık: ilk istek ulaştıysa yeniden deneme `invalid_refresh_token` alırdı.
+        data = try await singleUseChannelData(service: .slack, request: formRequest(url: slackAPI.appending(path: "oauth.v2.access"), fields: [
+            ("client_id", clientID), ("grant_type", "refresh_token"), ("refresh_token", tokens.refreshToken),
+        ]))
+    } catch let error as DeliveryUncertainError {
+        throw ChannelAuthError.network(service: .slack, reason: error.reason)
+    }
     return try slackTokens(response: try decode(SlackTokenResponse.self, service: .slack, data: data), now: Date())
 }
 
