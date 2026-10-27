@@ -1,0 +1,205 @@
+import Foundation
+import os
+
+/// Webhook'un gittiği servis: biçim servise göre seçilir (Slack metin, Discord içerik, Teams Adaptive Card; diğerleri
+/// — Zapier, Make, n8n… — metin ve yapılandırılmış toplantı).
+public enum WebhookKind: Sendable, Equatable {
+    case slack
+    case discord
+    case teams
+    case generic
+}
+
+/// Webhook gönderilemedi. Adres gizli anahtar içerdiği için hatada yalnızca sunucu adı yer alır.
+public enum WebhookError: Error, Equatable {
+    case invalidURL
+    case http(host: String, status: Int, body: String)
+    case network(host: String, reason: String)
+}
+
+/// Adresten servis. Saf fonksiyondur.
+public func webhookKind(url: URL) -> WebhookKind {
+    let host: String = url.host()?.lowercased() ?? ""
+    if host == "hooks.slack.com" {
+        return .slack
+    }
+    if (host == "discord.com" || host == "discordapp.com" || host.hasSuffix(".discord.com")) && url.path().hasPrefix("/api/webhooks") {
+        return .discord
+    }
+    // Teams kanal webhook'ları artık Power Automate iş akışlarıyla (logic.azure.com, powerplatform.com) gelir.
+    if host.hasSuffix(".webhook.office.com") || host.hasSuffix(".logic.azure.com") || host.hasSuffix(".powerplatform.com") {
+        return .teams
+    }
+    return .generic
+}
+
+/// Kullanıcının yapıştırdığı webhook adresi: yalnızca https (ve yerel denemeler için http://localhost/127.0.0.1).
+/// Geçersizse `invalidURL`. Saf fonksiyondur.
+public func webhookURL(text: String) throws -> URL {
+    let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), let host = url.host()?.lowercased(),
+          scheme == "https" || (scheme == "http" && (host == "localhost" || host == "127.0.0.1")) else {
+        throw WebhookError.invalidURL
+    }
+    return url
+}
+
+/// Yapılandırılmış toplantı (Zapier, Make, n8n gibi servisler alanları ayrı ayrı kullanabilsin).
+public struct WebhookMeeting: Sendable, Equatable, Encodable {
+    public let id: String
+    public let title: String
+    public let startedAt: Date
+    public let durationMinutes: Int?
+    public let language: String?
+    public let summary: String
+    public let decisions: [String]
+    public let tasks: [WebhookTask]
+    public let outline: [WebhookOutlineItem]
+}
+
+public struct WebhookTask: Sendable, Equatable, Encodable {
+    public let owner: String
+    public let description: String
+    public let dueDate: String?
+    public let isMine: Bool
+}
+
+public struct WebhookOutlineItem: Sendable, Equatable, Encodable {
+    public let startSec: Double
+    public let title: String
+    public let summary: String
+}
+
+/// Toplantının yapılandırılmış hali. Saf fonksiyondur.
+public func webhookMeeting(record: MeetingRecord, note: MeetingNote) -> WebhookMeeting {
+    WebhookMeeting(
+        id: record.id, title: note.title, startedAt: record.startedAt, durationMinutes: meetingDurationMinutes(record: record),
+        language: record.language?.rawValue, summary: note.summary, decisions: note.decisions,
+        tasks: note.tasks.map { WebhookTask(owner: $0.owner, description: $0.description, dueDate: $0.dueDate, isMine: $0.isMine) },
+        outline: (note.outline ?? []).map { WebhookOutlineItem(startSec: $0.startSec, title: $0.title, summary: $0.summary) }
+    )
+}
+
+/// Markdown'ı Slack biçimine çevirir: başlıklar ve `**kalın**` tek yıldızlı kalın, yapılacak kutuları madde işareti.
+/// Saf fonksiyondur.
+public func slackText(markdown: String) -> String {
+    markdown
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .map { (line: Substring) -> String in
+            let text: String = String(line)
+            if let heading = text.firstMatch(of: /^#{1,6}\s+(.+)$/) {
+                return "*\(heading.1)*"
+            }
+            return text
+                .replacing(/^- \[ \]\s/, with: "• ")
+                .replacing(/^-\s/, with: "• ")
+                .replacing(/\*\*(.+?)\*\*/) { (match: Regex<(Substring, Substring)>.Match) -> String in "*\(match.output.1)*" }
+        }
+        .joined(separator: "\n")
+}
+
+/// Discord mesaj sınırı (karakter).
+let discordContentLimit: Int = 2000
+
+/// Gönderilecek gövde: servise uygun biçimde notun paylaşım metni (Türkçe), genel webhook'ta ayrıca yapılandırılmış
+/// toplantı. Saf fonksiyondur.
+public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote) throws -> Data {
+    let markdown: String = shareText(record: record, note: note, language: nil)
+    let encoder: JSONEncoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    switch kind {
+    case .slack:
+        return try encoder.encode(["text": slackText(markdown: markdown)])
+    case .discord:
+        let content: String = markdown.count > discordContentLimit ? String(markdown.prefix(discordContentLimit - 1)) + "…" : markdown
+        return try encoder.encode(["content": content])
+    case .teams:
+        return try encoder.encode(TeamsMessage(markdown: markdown))
+    case .generic:
+        return try encoder.encode(GenericWebhookBody(text: markdown, meeting: webhookMeeting(record: record, note: note)))
+    }
+}
+
+private struct GenericWebhookBody: Encodable {
+    let text: String
+    let meeting: WebhookMeeting
+}
+
+/// Teams (Power Automate "webhook isteği alındığında kanala gönder") Adaptive Card mesajı.
+private struct TeamsMessage: Encodable {
+    let type: String = "message"
+    let attachments: [TeamsAttachment]
+
+    init(markdown: String) {
+        attachments = [TeamsAttachment(content: TeamsCard(body: [TeamsTextBlock(text: markdown)]))]
+    }
+}
+
+private struct TeamsAttachment: Encodable {
+    let contentType: String = "application/vnd.microsoft.card.adaptive"
+    let content: TeamsCard
+}
+
+private struct TeamsCard: Encodable {
+    let type: String = "AdaptiveCard"
+    let version: String = "1.4"
+    let body: [TeamsTextBlock]
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case version
+        case body
+        case schema = "$schema"
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode("http://adaptivecards.io/schemas/adaptive-card.json", forKey: .schema)
+        try container.encode(type, forKey: .type)
+        try container.encode(version, forKey: .version)
+        try container.encode(body, forKey: .body)
+    }
+}
+
+private struct TeamsTextBlock: Encodable {
+    let type: String = "TextBlock"
+    let text: String
+    let wrap: Bool = true
+}
+
+private let webhookLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Webhook")
+private let webhookAttempts: Int = 3
+
+/// Gövdeyi JSON olarak gönderir: 408/429/5xx ve ağ hataları 3 deneme (1, 2 sn bekleyerek, uyarı logu); 4xx kesin hata.
+/// Adres gizli olduğu için log ve hatada yalnızca sunucu adı yer alır.
+public func sendWebhook(url: URL, payload: Data) async throws {
+    let host: String = url.host() ?? "?"
+    var request: URLRequest = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 30
+    request.setValue("application/json", forHTTPHeaderField: "content-type")
+    request.httpBody = payload
+    var lastError: WebhookError = .network(host: host, reason: "deneme yapılmadı")
+    for attempt in 1...webhookAttempts {
+        do {
+            let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
+            let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) {
+                return
+            }
+            let error: WebhookError = .http(host: host, status: status, body: String(decoding: data.prefix(500), as: UTF8.self))
+            guard isRetryableLLMStatus(status: status) else {
+                throw error
+            }
+            lastError = error
+        } catch let error as URLError where error.code != .cancelled {
+            lastError = .network(host: host, reason: error.localizedDescription)
+        }
+        webhookLogger.warning("Webhook gönderilemedi, deneme: \(attempt, privacy: .public), sunucu: \(host, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
+        if attempt < webhookAttempts {
+            try await Task.sleep(for: .seconds(Double(attempt)))
+        }
+    }
+    throw lastError
+}

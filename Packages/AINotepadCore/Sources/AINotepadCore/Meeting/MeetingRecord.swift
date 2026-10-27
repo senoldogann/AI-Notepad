@@ -165,6 +165,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var highlights: [Highlight]?
     /// Takvimdeki katılımcıların adları (kayıt bir etkinliğe bağlandıysa).
     public private(set) var attendees: [String]?
+    /// Not webhook'a kendiliğinden gönderildi (tekrar işlemede yeniden gönderilmesin).
+    public private(set) var webhookSentAt: Date?
     /// Bağlı takvim etkinliğinin kimliği (`CalendarMeeting.id`); takvimden notu açmak için.
     public private(set) var calendarEventID: String?
     /// Notun şablonu; eski toplantılarda ve genel şablonda nil.
@@ -286,6 +288,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(attendees newAttendees: [String]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.attendees = newAttendees
+        return copy
+    }
+
+    /// Webhook'a gönderildiği işaretlenmiş kopya.
+    public func with(webhookSentAt newDate: Date) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.webhookSentAt = newDate
         return copy
     }
 

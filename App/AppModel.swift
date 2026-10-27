@@ -905,10 +905,12 @@ final class AppModel {
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
             }
-            saveRecord(record: applyingPendingReminders(record: result), directory: directory)
+            let saved: MeetingRecord = applyingPendingReminders(record: result)
+            saveRecord(record: saved, directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
+            autoSendToWebhookIfEnabled(record: saved)
         }
     }
 
@@ -1488,6 +1490,75 @@ final class AppModel {
         return nil
     }
 
+    // MARK: Webhook
+
+    /// Toplantı başına webhook gönderiminin durumu (toplantı sayfasında görünür).
+    var webhookStates: [String: WebhookSendState] = [:]
+
+    /// Ayarlardaki webhook adresi (Anahtar Zinciri); yoksa ya da geçersizse hata.
+    private func configuredWebhookURL() async throws -> URL {
+        try webhookURL(text: try await readSecretInBackground(service: keychainService, account: .webhook))
+    }
+
+    /// Toplantının notunu webhook'a gönderir; hata varsa kullanıcı metni döner.
+    func sendToWebhook(meetingID: String) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
+            return nil
+        }
+        webhookStates[meetingID] = .sending
+        do {
+            let url: URL = try await configuredWebhookURL()
+            try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
+            webhookStates[meetingID] = .sent
+            Self.logger.info("Not webhook'a gönderildi, toplantı: \(meetingID, privacy: .public)")
+            return nil
+        } catch {
+            Self.logger.error("Not webhook'a gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            let message: String = userFacingMessage(error: error)
+            webhookStates[meetingID] = .failed(message)
+            return message
+        }
+    }
+
+    /// Ayarlardaki "Dene": örnek bir not gönderir.
+    func sendTestWebhook() async -> String? {
+        let sample: MeetingRecord = MeetingRecord(
+            id: "deneme", title: "AI-Notepad", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud,
+            notice: nil, meNeedsFinalPass: nil
+        )
+        let note: MeetingNote = MeetingNote(
+            title: String(localized: "AI-Notepad bağlantı denemesi"),
+            summary: String(localized: "Bu bir deneme mesajıdır: toplantı notların buraya böyle gelecek."),
+            decisions: [], tasks: [], glossary: []
+        )
+        do {
+            let url: URL = try await configuredWebhookURL()
+            try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: sample, note: note))
+            return nil
+        } catch {
+            Self.logger.error("Webhook denemesi başarısız, hata: \(String(describing: error), privacy: .private)")
+            return userFacingMessage(error: error)
+        }
+    }
+
+    /// İşleme bitince: ayar açıksa ve not daha önce gönderilmediyse webhook'a kendiliğinden gönderir; başarılıysa
+    /// toplantıya işlenir (tekrar işlemede yeniden gönderilmez).
+    private func autoSendToWebhookIfEnabled(record: MeetingRecord) {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.webhookAutoSend), record.note != nil, record.webhookSentAt == nil else {
+            return
+        }
+        Task {
+            guard await sendToWebhook(meetingID: record.id) == nil,
+                  let current = meetings.first(where: { $0.id == record.id }), !isLocked(meetingID: record.id) else {
+                return
+            }
+            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                saveRecord(record: current.with(webhookSentAt: Date()), directory: directory)
+            }
+        }
+    }
+
     /// İşleme sürerken Anımsatıcılar'a eklenen görevler; işleme bitince kayda işlenir.
     @ObservationIgnored private var pendingReminded: [String: [NoteTask]] = [:]
 
@@ -1895,6 +1966,13 @@ private func fixedLanguage(mode: LanguageMode) -> MeetingLanguage? {
         return nil
     }
     return language
+}
+
+/// Webhook gönderiminin durumu.
+enum WebhookSendState: Equatable {
+    case sending
+    case sent
+    case failed(String)
 }
 
 /// Sırası bekleyen canlı çeviri.
