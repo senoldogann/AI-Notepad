@@ -10,6 +10,8 @@ enum PhoneSettingsKey {
     static let consentReminder: String = "consentReminder"
     /// Ses dosyalarının saklama süresi (gün).
     static let audioRetentionDays: String = "audioRetentionDays"
+    /// İlk açılış karşılaması bitti ya da atlandı.
+    static let onboardingCompleted: String = "onboardingCompleted"
 }
 
 /// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).

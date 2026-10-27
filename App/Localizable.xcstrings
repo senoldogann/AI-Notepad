@@ -24,16 +24,6 @@
         }
       }
     },
-    "\"Ne kaçırdım?\" ile son dakikaların Türkçe özeti; toplantı hakkında Türkçe soru.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "\"What did I miss?\" gives a Turkish summary of the last minutes; ask questions about the meeting in Turkish."
-          }
-        }
-      }
-    },
     "\"Ne kaçırdım?\" son %lld dakikayı özetler": {
       "localizations": {
         "en": {
@@ -667,6 +657,16 @@
         }
       }
     },
+    "35 dil; konuşmacılar ayrılır, Türkçesi altında akar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "35 languages; speakers separated, Turkish underneath."
+          }
+        }
+      }
+    },
     "AI-Notepad": {
       "localizations": {
         "en": {
@@ -693,16 +693,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opens AI-Notepad and starts recording an in-person meeting."
-          }
-        }
-      }
-    },
-    "AI-Notepad, Teams ve Zoom toplantılarını canlı olarak yazıya döker ve Türkçeye çevirir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI-Notepad transcribes Teams and Zoom meetings live and translates them into Turkish."
           }
         }
       }
@@ -837,6 +827,36 @@
         }
       }
     },
+    "Adın (ör. Doğan)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name (e.g. Doğan)"
+          }
+        }
+      }
+    },
+    "Adın notta sana düşen görevleri ayırır; ana dil canlı metnin hangi dille başlayacağını belirler.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name marks your tasks in the note; the main language sets which language live text starts in."
+          }
+        }
+      }
+    },
+    "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name marks your tasks in the note; live text runs in the cloud or on this Mac."
+          }
+        }
+      }
+    },
     "Adını yaz (görevlerin tanınsın)": {
       "localizations": {
         "en": {
@@ -944,6 +964,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keys are stored in the macOS Keychain and are never shown. If you added them from Terminal, choose \"Always Allow\" in the permission dialog on first use."
+          }
+        }
+      }
+    },
+    "Anahtarlar yalnız sende": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your keys stay with you"
           }
         }
       }
@@ -1471,6 +1501,16 @@
         }
       }
     },
+    "Bir kısayol uzağında": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One shortcut away"
+          }
+        }
+      }
+    },
     "Bir toplantı seç": {
       "localizations": {
         "en": {
@@ -1531,6 +1571,16 @@
         }
       }
     },
+    "Birkaç adımda hazırsın; her adım atlanabilir, hepsi sonra Ayarlar'dan değişir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A few steps and you're ready; every step can be skipped and changed later in Settings."
+          }
+        }
+      }
+    },
     "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantılar bu iPhone'a taşınır.": {
       "localizations": {
         "en": {
@@ -1547,6 +1597,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off moves the meetings in iCloud back to this Mac."
+          }
+        }
+      }
+    },
+    "Bitince not: görevler, kararlar ve özet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When it ends: tasks, decisions and summary."
+          }
+        }
+      }
+    },
+    "Bitince not: görevler, kararlar, özet ve sözlük.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When it ends: tasks, decisions, summary and glossary."
+          }
+        }
+      }
+    },
+    "Bitince toplantının sayfası": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The meeting page when it ends"
           }
         }
       }
@@ -1639,6 +1719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Briefing"
+          }
+        }
+      }
+    },
+    "Bu Mac'te": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On this Mac"
           }
         }
       }
@@ -1876,6 +1966,16 @@
         }
       }
     },
+    "Bulut (en hızlı)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud (fastest)"
+          }
+        }
+      }
+    },
     "Bulut konuşma tanıma": {
       "localizations": {
         "en": {
@@ -1957,6 +2057,26 @@
         }
       }
     },
+    "Canlı metin ve Türkçesi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and its Turkish, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+          }
+        }
+      }
+    },
+    "Canlı metin ve çeviri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and translation"
+          }
+        }
+      }
+    },
     "Canlı metne dön": {
       "localizations": {
         "en": {
@@ -1983,6 +2103,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live translation"
+          }
+        }
+      }
+    },
+    "Cebinde hazır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready in your pocket"
           }
         }
       }
@@ -2077,16 +2207,6 @@
         }
       }
     },
-    "Deepgram (bulut, en hızlı)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deepgram (cloud, fastest)"
-          }
-        }
-      }
-    },
     "Deepgram (bulut, ~1 sn)": {
       "localizations": {
         "en": {
@@ -2097,12 +2217,12 @@
         }
       }
     },
-    "Deepgram ve ElevenLabs anahtarı gerekir. Konuşmacılar canlı ayrılır.": {
+    "Deepgram ve ElevenLabs; konuşmacılar canlı ayrılır. İki anahtar gerekir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Requires Deepgram and ElevenLabs keys. Speakers are separated live."
+            "value": "Deepgram and ElevenLabs; speakers separated live. Needs two keys."
           }
         }
       }
@@ -2556,6 +2676,16 @@
         }
       }
     },
+    "Ekran paylaşımında gizli": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hidden when screen sharing"
+          }
+        }
+      }
+    },
     "ElevenLabs": {
       "localizations": {
         "en": {
@@ -2592,6 +2722,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Max"
+          }
+        }
+      }
+    },
+    "En üstte senin görevlerin; özet, kararlar, konuşmacılı transkript ve çalma.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your tasks on top; summary, decisions, speaker transcript and playback."
           }
         }
       }
@@ -2716,12 +2856,12 @@
         }
       }
     },
-    "Fince, İngilizce ve 33 dilde daha konuşmalar canlı metin ve Türkçe çeviri olarak panelde.": {
+    "Fince, İngilizce ve 33 dil daha; Türkçesi altında akar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Conversations in Finnish, English and 33 more languages appear in the panel as live text with Turkish translation."
+            "value": "Finnish, English and 33 more languages; Turkish flows underneath."
           }
         }
       }
@@ -3129,6 +3269,16 @@
         }
       }
     },
+    "Hoş geldin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome"
+          }
+        }
+      }
+    },
     "Hyvää huomenta kaikille, aloitetaan palaveri.": {
       "localizations": {
         "en": {
@@ -3350,16 +3500,6 @@
         }
       }
     },
-    "Kaydı Ana sayfadaki \"Kaydı başlat\" düğmesiyle, kısayolla ya da menüden başlat. Kayıt sırasında cam panel canlı metni gösterir; toplantı bitince toplantının sayfası açılır: görevlerin en üstte.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start recording with \"Start recording\" on Home, the shortcut or the menu. While recording, the glass panel shows the live text; when the meeting ends its page opens with your tasks at the top."
-          }
-        }
-      }
-    },
     "Kaydı aç": {
       "localizations": {
         "en": {
@@ -3451,6 +3591,16 @@
         }
       }
     },
+    "Kaydı kısayolla başlat; toplantı bitince notun ve görevlerin hazır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording with a shortcut; when the meeting ends your note and tasks are ready."
+          }
+        }
+      }
+    },
     "Kaydın tamamı işleniyor": {
       "localizations": {
         "en": {
@@ -3507,6 +3657,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remind me to tell participants"
+          }
+        }
+      }
+    },
+    "Kayıt başlarken katılımcılara söylemeyi hatırlatır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminds you to tell participants when recording starts."
           }
         }
       }
@@ -3607,6 +3767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Translate to Turkish while recording"
+          }
+        }
+      }
+    },
+    "Kayıt sırasında cam panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glass panel while recording"
           }
         }
       }
@@ -3787,6 +3957,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your template: describe what the note should emphasise"
+          }
+        }
+      }
+    },
+    "Kilit ekranında süre ve son cümle; Denetim Merkezi ya da Eylem düğmesiyle tek dokunuşla kayıt.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time and the latest sentence on the Lock Screen; one-tap recording from Control Center or the Action button."
           }
         }
       }
@@ -4457,6 +4637,16 @@
         }
       }
     },
+    "Mac'te Ayarlar › Anahtarlar › \"iPhone'a gönder\".": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On your Mac: Settings › Keys › \"Send to iPhone\"."
+          }
+        }
+      }
+    },
     "Mac'te, anahtarsız (Ollama)": {
       "localizations": {
         "en": {
@@ -4467,12 +4657,32 @@
         }
       }
     },
+    "Mac'teki anahtarlar iCloud Anahtar Zinciri ile gelir ya da burada girersin; hiçbir yere gönderilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Mac's keys arrive via iCloud Keychain, or you enter them here; they're never sent anywhere."
+          }
+        }
+      }
+    },
     "Mac'ten": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "From Mac"
+          }
+        }
+      }
+    },
+    "Mac'ten gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send from Mac"
           }
         }
       }
@@ -4625,6 +4835,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No microphone permission. Allow AI-Notepad in System Settings › Privacy & Security › Microphone."
+          }
+        }
+      }
+    },
+    "Mikrofon senin sesin, sistem sesi karşı taraf. İkisi ayrı kaydedilir, konuşmacılar ayrılır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The microphone is you, system audio is the other side. Both are recorded separately and speakers are separated."
           }
         }
       }
@@ -4926,6 +5146,16 @@
         }
       }
     },
+    "Notta sana düşen görevler bu adla ayrılır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your tasks in the note are recognised by this name."
+          }
+        }
+      }
+    },
     "Notu 30'dan fazla dilden birine çevir": {
       "localizations": {
         "en": {
@@ -5166,12 +5396,12 @@
         }
       }
     },
-    "Panel ve ada ekran paylaşımlarında gizlenebilir.": {
+    "Panel ve ada paylaşılan ekranda görünmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The panel and island can be hidden from screen sharing."
+            "value": "The panel and island don't appear on a shared screen."
           }
         }
       }
@@ -5384,6 +5614,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your tasks"
+          }
+        }
+      }
+    },
+    "Sana göre ayarlanır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Made for you"
           }
         }
       }
@@ -5778,6 +6018,16 @@
         }
       }
     },
+    "Son dakikaların Türkçe özeti, toplantıya soru.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Turkish summary of the last minutes, questions about the meeting."
+          }
+        }
+      }
+    },
     "Son dakikaların Türkçe özetini gösterir": {
       "extractionState": "stale",
       "localizations": {
@@ -6154,6 +6404,16 @@
         }
       }
     },
+    "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the Turkish note is ready, with your tasks on top."
+          }
+        }
+      }
+    },
     "Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.": {
       "localizations": {
         "en": {
@@ -6260,16 +6520,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "After a meeting the note is written; tasks assigned to you collect here."
-          }
-        }
-      }
-    },
-    "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When the meeting ends: summary, decisions, your tasks and a glossary."
           }
         }
       }
@@ -6527,16 +6777,6 @@
         }
       }
     },
-    "Toplantıları anla, hiçbir şeyi kaçırma": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Understand meetings, miss nothing"
-          }
-        }
-      }
-    },
     "Toplantılarıma sor": {
       "localizations": {
         "en": {
@@ -6573,6 +6813,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask your meetings"
+          }
+        }
+      }
+    },
+    "Toplantılarını dinler, notunu yazar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listens to your meetings, writes your notes"
           }
         }
       }
@@ -7040,6 +7290,26 @@
         }
       }
     },
+    "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperKit, offline. A ~630 MB model downloads on first use."
+          }
+        }
+      }
+    },
+    "Ya da anahtarları burada gir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or enter the keys here"
+          }
+        }
+      }
+    },
     "Yakalama başladı. İzin penceresi çıktıysa \"İzin Ver\"i seçtiysen hazır.": {
       "localizations": {
         "en": {
@@ -7373,6 +7643,16 @@
         }
       }
     },
+    "Yüz yüze toplantılar canlı yazıya dökülür, Türkçesi altında akar; bitince not hazır, en üstte senin görevlerin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-person meetings are transcribed live with Turkish underneath; when they end the note is ready, your tasks on top."
+          }
+        }
+      }
+    },
     "Yüz yüze: mikrofon odadaki herkesi kaydediyor": {
       "localizations": {
         "en": {
@@ -7520,6 +7800,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "speakers"
+          }
+        }
+      }
+    },
+    "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stored in the macOS Keychain and never sent anywhere; if you like, they go to your iPhone via iCloud."
           }
         }
       }
@@ -7815,12 +8105,32 @@
         }
       }
     },
+    "Önce haber ver": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell them first"
+          }
+        }
+      }
+    },
     "Önce kenar çubuğunda \"+\" ile klasör oluştur": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "First create a folder with \"+\" in the sidebar"
+          }
+        }
+      }
+    },
+    "Önce senin görevlerin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your tasks first"
           }
         }
       }
@@ -8038,22 +8348,22 @@
         }
       }
     },
+    "İki ses, tek kayıt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Two sources, one recording"
+          }
+        }
+      }
+    },
     "İleri": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Next"
-          }
-        }
-      }
-    },
-    "İlk açılışta model (~630 MB) indirilir ve hazırlanır; birkaç dakika sürebilir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "On first launch the model (~630 MB) is downloaded and prepared; this can take a few minutes."
           }
         }
       }

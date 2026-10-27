@@ -373,22 +373,12 @@ private struct SetupScreen: View {
     let shortcuts: ShortcutController
 
     var body: some View {
-        GeometryReader { (geometry: GeometryProxy) in
-            ScrollView {
-                VStack(spacing: DesignTokens.Spacing.l) {
-                    // Simgeyle aynı işaret (macOS'un simge önbelleği eski simgeyi gösterebiliyordu).
-                    AppMark(size: 72, barsRaised: true, lineDrawn: true)
-                        .floating3D()
-                        .tilt3D(maxAngle: 14)
-                    SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
-                        .frame(width: min(660, max(geometry.size.width - 64, 360)), height: 540)
-                }
-                .padding(.vertical, DesignTokens.Spacing.xl)
-                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
-            }
-        }
+        // Tüm pencere: solda adımın film gradyanlı paneli, sağda içeriği (bkz. `SetupPage`).
+        SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
+            .padding(.top, 28)
     }
 }
+
 private struct QuitWarning: View {
     let model: AppModel
     let router: MainWindowRouter
