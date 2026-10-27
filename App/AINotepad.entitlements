@@ -8,5 +8,18 @@
 	<!-- Hardened runtime altında takvim ve anımsatıcılar (EventKit): yaklaşan toplantılar, görevleri Anımsatıcılar'a ekleme. -->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
+	<!-- iCloud eşitlemesi: biten toplantılar iCloud Drive kapsayıcısında (iPhone uygulamasıyla ortak). -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.senoldogan.AINotepad</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudDocuments</string>
+	</array>
+	<key>com.apple.developer.ubiquity-container-identifiers</key>
+	<array>
+		<string>iCloud.com.senoldogan.AINotepad</string>
+	</array>
 </dict>
 </plist>

@@ -34,24 +34,23 @@ de gelsin. Telefonda arşive soru sorulabilsin, görevler takip edilebilsin.
 
 ### 3.2 Depolama ve eşitleme (iCloud Drive)
 
-- Toplantı klasörleri (`meeting.json` + `others.m4a`/`me.m4a`) uygulamanın iCloud kapsayıcısında:
-  `iCloud.com.senoldogan.AINotepad/Documents/Sessions/<id>/`. Mac ve iPhone aynı klasör yapısını okur ve yazar; biçim
-  bugünkü `meeting.json`'dır (yeni alanlar isteğe bağlı kalır).
-- Değişiklikler `NSMetadataQuery` ile izlenir; dosyalar `NSFileCoordinator` ile yazılır. Çakışmada (aynı toplantı iki
-  cihazda aynı anda değişirse) son yazılan kazanır, diğer sürüm `NSFileVersion` ile kaldırılır ve loglanır.
-- Kayıt sürerken ses yerelde (`.caf`) yazılır; toplantı bitip `.m4a`'ya dönüşünce iCloud'a taşınır (yarım dosya
-  eşitlenmez).
-- Mac'te tek seferlik taşıma: `Application Support/AINotepad/Sessions` → iCloud kapsayıcısı (kullanıcı onayıyla,
-  Ayarlar'dan; kopyalayıp doğrular, sonra eskiyi siler). iCloud kapalıysa açık uyarı; uygulama yerel klasörle çalışmayı
-  sürdürmez — iCloud ayarı kullanıcının açık seçimidir (Ayarlar › Eşitleme: "iCloud ile eşitle").
-- Kişiler (`People.json`), ses izleri (`Voices.json`) ve klasörler de kapsayıcıda.
+- Kayıt ve işleme her cihazda yerel `Sessions` klasöründe yapılır (yarım ses dosyası eşitlenmez). iCloud açıksa biten
+  (`done`) toplantının klasörü `iCloud.com.senoldogan.AINotepad/Documents/Sessions/<id>/`'e taşınır (`setUbiquitous`);
+  biçim bugünkü `meeting.json` + `others.m4a`/`me.m4a`.
+- Liste yerel ve iCloud klasörünün birleşimidir; aynı toplantı ikisinde varsa yereldeki kullanılır. Değişiklikler
+  `NSMetadataQuery` ile izlenir; inmemiş dosyanın indirmesi başlatılır, okuma beklemez. `meeting.json` dosya
+  koordinatörüyle yazılır; çakışmada son yazılan kalır, diğer sürümler kaldırılır ve loglanır.
+- Ayar (`storage.location`) iki uygulamada da açık seçimdir (varsayılan yerel). Açınca bitmiş toplantılar taşınır,
+  kapatınca iCloud'dakiler o cihaza geri taşınır. iCloud kullanılamıyorsa neden ayarlarda ve listede görünür; yerel
+  toplantılar listelenmeye devam eder.
+- Kişiler (`People.json`), ses izleri (`Voices.json`) ve klasörler şimdilik Mac'te yerel kalır (iPhone kullanmıyor).
 
 ### 3.3 Anahtarlar
 
-- Mac Ayarlar › Anahtarlar: "iPhone'da da kullan" — anahtarın `kSecAttrSynchronizable` kopyası yazılır (mevcut yerel
-  öğe silinmez; testler onu okur).
-- iPhone önce eşitlenen kopyayı okur; yoksa telefonda elle girilebilir.
-- Paylaşılan erişim grubu (`$(TeamIdentifierPrefix)com.senoldogan.AINotepad`) iki uygulamanın entitlement'ında.
+- Mac Ayarlar › Anahtarlar › "iPhone'a gönder": kayıtlı anahtarların iCloud Anahtar Zinciri ile eşitlenen kopyası
+  (`kSecAttrSynchronizable`, veri koruma anahtar zinciri) yazılır; yerel öğeye dokunulmaz. Mac ve iPhone uygulamasının
+  kimliği aynı (`TAKIM.com.senoldogan.AINotepad`) olduğu için varsayılan erişim grubu ortaktır.
+- iPhone önce cihazda girilen anahtarı, yoksa Mac'ten geleni okur.
 
 ### 3.4 iPhone uygulaması
 

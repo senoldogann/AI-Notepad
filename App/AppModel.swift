@@ -126,6 +126,14 @@ final class AppModel {
     /// Kaydedilmiş toplantılar (yeniden eskiye) ve okunamayanlar.
     var meetings: [MeetingRecord] = []
     var meetingLoadFailures: [MeetingLoadFailure] = []
+    /// iCloud eşitlemesi (Ayarlar › Genel › iCloud ile eşitle).
+    let cloud: CloudSyncController = CloudSyncController()
+    /// iCloud'dan henüz inmemiş toplantı sayısı.
+    private(set) var cloudDownloadingCount: Int = 0
+    /// Anahtarların iCloud Anahtar Zinciri kopyası (iPhone için) yazılıyor ya da başarısız oldu.
+    private(set) var keySync: SyncWorkState = .idle
+    /// Eşitlenen kopyası olan anahtarlar.
+    private(set) var sharedKeyAccounts: [SecretAccount] = []
     /// İşlenmekte olan toplantıların kimlikleri.
     var processingMeetingIDs: Set<String> = []
     /// İşlenen toplantının şu anki adımı (panelde ilerleme kartı).
@@ -911,6 +919,9 @@ final class AppModel {
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
             autoSendToWebhookIfEnabled(record: saved)
+            if saved.status == .done {
+                await cloud.moveFinishedMeetings { [weak self] in self?.reloadMeetings() }
+            }
         }
     }
 
@@ -1829,7 +1840,9 @@ final class AppModel {
         }
         applyRetention()
         startRetentionTimer()
+        startCloudSyncIfEnabled()
         Task { await refreshSetupProblems() }
+        Task { await refreshSharedKeys() }
     }
 
     /// Saklama süresi (Ayarlar) dolan toplantıların sesini siler; kilitli toplantılar atlanır.
@@ -1857,9 +1870,10 @@ final class AppModel {
 
     func reloadMeetings() {
         do {
-            let result: MeetingLoadResult = loadMeetings(sessionsDirectory: try AppPaths.sessionsDirectory())
-            meetings = result.meetings
+            let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: activeStorageLocation))
+            meetings = result.meetings.sorted { $0.id > $1.id }
             meetingLoadFailures = result.failures
+            cloudDownloadingCount = result.downloading.count
             for failure in result.failures {
                 Self.logger.error("Toplantı okunamadı, klasör: \(failure.folder, privacy: .public), neden: \(failure.reason, privacy: .private)")
             }
@@ -1881,7 +1895,77 @@ final class AppModel {
 
     /// Toplantının klasörü (klasör adı toplantı kimliğidir).
     func sessionDirectory(id: String) throws -> URL {
-        try AppPaths.sessionsDirectory().appending(path: id, directoryHint: .isDirectory)
+        try AppPaths.meetingDirectory(id: id, location: activeStorageLocation)
+    }
+
+    // MARK: iCloud eşitlemesi
+
+    /// Okuma ve klasör çözümünde kullanılan yer (iCloud hazır olana dek yerel).
+    private var activeStorageLocation: StorageLocation {
+        cloud.activeLocation
+    }
+
+    /// Açılışta iCloud seçiliyse eşitlemeyi başlatır; iCloud kullanılamıyorsa neden listede de görünür.
+    func startCloudSyncIfEnabled() {
+        Task {
+            await cloud.start { [weak self] in self?.reloadMeetings() }
+            if case .failed(let message) = cloud.state {
+                meetingLoadFailures.append(MeetingLoadFailure(folder: "iCloud", reason: message))
+            }
+        }
+    }
+
+    /// iCloud eşitlemesini açar ya da kapatır (bkz. `CloudSyncController.setEnabled`).
+    func setCloudSync(enabled: Bool) async {
+        await cloud.setEnabled(enabled) { [weak self] in self?.reloadMeetings() }
+    }
+
+    // MARK: Anahtar eşitleme
+
+    /// Kayıtlı anahtarların iCloud Anahtar Zinciri'ne eşitlenen kopyasını yazar (iPhone uygulaması okur); yerel
+    /// öğelere dokunulmaz. Yalnızca bu Mac'te kayıtlı olan anahtarlar kopyalanır.
+    func shareKeysWithIPhone() async {
+        keySync = .working
+        do {
+            for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
+                guard let value = try await optionalSecretInBackground(service: keychainService, account: account) else {
+                    continue
+                }
+                try await Task.detached { try saveSyncedSecret(service: keychainService, account: account, value: value) }.value
+            }
+            keySync = .idle
+        } catch {
+            Self.logger.error("Anahtarlar iCloud'a kopyalanamadı, hata: \(String(describing: error), privacy: .public)")
+            keySync = .failed(userFacingMessage(error: error))
+        }
+        await refreshSharedKeys()
+    }
+
+    /// Eşitlenen kopyaları siler (iPhone'daki uygulama da artık göremez).
+    func stopSharingKeys() async {
+        keySync = .working
+        do {
+            for account in SecretAccount.allCases {
+                try await Task.detached { try deleteSyncedSecret(service: keychainService, account: account) }.value
+            }
+            keySync = .idle
+        } catch {
+            keySync = .failed(userFacingMessage(error: error))
+        }
+        await refreshSharedKeys()
+    }
+
+    /// Hangi anahtarların eşitlenen kopyası var.
+    func refreshSharedKeys() async {
+        do {
+            var shared: [SecretAccount] = []
+            for account in SecretAccount.allCases where try await Task.detached(operation: { try syncedSecretExists(service: keychainService, account: account) }).value {
+                shared.append(account)
+            }
+            sharedKeyAccounts = shared
+        } catch {
+            keySync = .failed(userFacingMessage(error: error))
+        }
     }
 
     /// Klasör gerektiren bir eylemi çalıştırır; klasör alınamazsa hata panelde görünür.

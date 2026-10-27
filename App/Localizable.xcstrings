@@ -527,6 +527,16 @@
         }
       }
     },
+    "%lld toplantı iCloud'dan iniyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings downloading from iCloud…"
+          }
+        }
+      }
+    },
     "%lld toplantı okunamadı: %@": {
       "localizations": {
         "en": {
@@ -878,16 +888,6 @@
         }
       }
     },
-    "Anahtarlar bu iPhone'un Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez. Mac'teki anahtarların iCloud ile gelmesi eşitleme sürümünde açılıyor.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keys are stored in this iPhone's Keychain and never sent anywhere. Bringing your Mac's keys over iCloud arrives with the sync release."
-          }
-        }
-      }
-    },
     "Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.": {
       "localizations": {
         "en": {
@@ -1114,6 +1114,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Meeting in the same room: everyone on the microphone is separated into speakers"
+          }
+        }
+      }
+    },
+    "Aynı toplantı hedefte zaten var: %@. İki kopyayı karşılaştırıp birini sil.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The same meeting already exists at the destination: %@. Compare the two copies and delete one."
           }
         }
       }
@@ -1391,6 +1401,26 @@
         }
       }
     },
+    "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantılar bu iPhone'a taşınır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your Mac (it must be on there too). Recording and processing happen on this iPhone. Turning it off moves the meetings in iCloud to this iPhone."
+          }
+        }
+      }
+    },
+    "Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantılar bu Mac'e geri taşınır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off moves the meetings in iCloud back to this Mac."
+          }
+        }
+      }
+    },
     "Bitince toplantının sayfası açılır; görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -1520,16 +1550,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "This is a test message: your meeting notes will arrive here like this."
-          }
-        }
-      }
-    },
-    "Bu bölüm bir sonraki sürümde geliyor.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This section is coming in the next release."
           }
         }
       }
@@ -1924,6 +1944,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
+          }
+        }
+      }
+    },
+    "Deepgram, ElevenLabs ve LLM anahtarlarının bir kopyası iCloud Anahtar Zinciri ile iPhone'daki AI-Notepad'e gider; telefonda yeniden girmen gerekmez. Bu Mac'teki anahtarlar değişmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A copy of your Deepgram, ElevenLabs and LLM keys goes to AI-Notepad on your iPhone via iCloud Keychain, so you don't have to enter them again. The keys on this Mac don't change."
           }
         }
       }
@@ -2602,6 +2632,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review"
+          }
+        }
+      }
+    },
+    "Güncelle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update"
           }
         }
       }
@@ -3796,6 +3836,26 @@
         }
       }
     },
+    "Kopyalanıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copying…"
+          }
+        }
+      }
+    },
+    "Kopyalar iCloud'dan silinir; iPhone'da anahtarlar yeniden girilmeli": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The copies are deleted from iCloud; keys must be entered again on the iPhone"
+          }
+        }
+      }
+    },
     "Korece": {
       "localizations": {
         "en": {
@@ -3997,12 +4057,32 @@
         }
       }
     },
+    "Mac'te Ayarlar › Anahtarlar › \"iPhone'a gönder\" dersen anahtarlar iCloud Anahtar Zinciri ile buraya gelir. Burada girdiğin anahtar yalnız bu iPhone'da saklanır ve öncelik onundur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Settings › Keys › \"Send to iPhone\" on your Mac and the keys arrive here via iCloud Keychain. A key you enter here is stored only on this iPhone and takes priority."
+          }
+        }
+      }
+    },
     "Mac'te, anahtarsız (Ollama)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "On this Mac, no keys (Ollama)"
+          }
+        }
+      }
+    },
+    "Mac'ten": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Mac"
           }
         }
       }
@@ -4542,6 +4622,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't reach Ollama. Check that the Ollama app is running and the address is correct."
+          }
+        }
+      }
+    },
+    "OpenAI uyumlu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI-compatible"
           }
         }
       }
@@ -5817,6 +5907,16 @@
         }
       }
     },
+    "Toplantı taşınamadı: %@. İnternet bağlantısını kontrol edip yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't move the meeting: %@. Check your internet connection and try again."
+          }
+        }
+      }
+    },
     "Toplantı: %@": {
       "localizations": {
         "en": {
@@ -5867,12 +5967,12 @@
         }
       }
     },
-    "Toplantılar şimdilik bu iPhone'da saklanır. iCloud ile Mac'le eşitleme bir sonraki sürümlerde açılıyor.": {
+    "Toplantılar taşınıyor…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meetings are stored on this iPhone for now. iCloud sync with your Mac arrives in upcoming releases."
+            "value": "Moving meetings…"
           }
         }
       }
@@ -6720,6 +6820,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "tasks"
+          }
+        }
+      }
+    },
+    "iCloud ile eşitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync with iCloud"
+          }
+        }
+      }
+    },
+    "iCloud kullanılamıyor. Ayarlar'da iCloud'a giriş yapıp iCloud Drive'ı aç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud isn't available. Sign in to iCloud in Settings and turn on iCloud Drive."
+          }
+        }
+      }
+    },
+    "iPhone'a gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to iPhone"
+          }
+        }
+      }
+    },
+    "iPhone'da da kullan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use on iPhone too"
+          }
+        }
+      }
+    },
+    "iPhone'da kullanılıyor: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used on iPhone: %@"
           }
         }
       }

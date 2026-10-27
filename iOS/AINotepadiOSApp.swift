@@ -29,6 +29,7 @@ struct AINotepadiOSApp: App {
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
                     store.reload()
+                    await store.cloud.start { store.reload() }
                     #if DEBUG
                     if CommandLine.arguments.contains("--ornek-kayit") {
                         recorder.showSampleRecording()
@@ -134,13 +135,18 @@ final class PhoneStore {
     private(set) var meetings: [MeetingRecord] = []
     /// Okunamayan klasörler ya da klasöre erişim hatası (kullanıcıya gösterilir).
     private(set) var problems: [String] = []
+    /// iCloud'dan henüz inmemiş toplantı sayısı.
+    private(set) var downloadingCount: Int = 0
+    /// iCloud eşitlemesi (Ayarlar › Eşitleme).
+    let cloud: CloudSyncController = CloudSyncController()
 
-    /// Toplantıları diskten yeniden okur (en yeni önce).
+    /// Toplantıları diskten yeniden okur (en yeni önce): bu iPhone'daki ve iCloud açıksa iCloud'daki.
     func reload() {
         do {
-            let result: MeetingLoadResult = loadMeetings(sessionsDirectory: try AppPaths.sessionsDirectory())
+            let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: cloud.activeLocation))
             meetings = result.meetings.sorted { $0.startedAt > $1.startedAt }
             problems = result.failures.map { "\($0.folder): \($0.reason)" }
+            downloadingCount = result.downloading.count
         } catch {
             problems = [userFacingMessage(error: error)]
         }
@@ -167,7 +173,7 @@ final class PhoneStore {
 
     /// Toplantının klasörü (klasör adı toplantı kimliğidir).
     func sessionDirectory(id: String) throws -> URL {
-        try AppPaths.sessionsDirectory().appending(path: id, directoryHint: .isDirectory)
+        try AppPaths.meetingDirectory(id: id, location: cloud.activeLocation)
     }
 
     /// Toplantının ses kayıtları ("Diğerleri" önce); ses silindiyse ya da hiç yoksa boş.

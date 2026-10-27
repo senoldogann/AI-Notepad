@@ -212,7 +212,7 @@ private func encodedJSON(value: JSONValue) -> String {
 }
 
 /// stdio üzerinden MCP sunucusu: girişten satır satır okur, her yanıtı tek satır olarak yazar; giriş kapanınca biter.
-public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirectory: URL, version: String) {
+public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirectories: [URL], version: String) {
     var buffer: Data = Data()
     while true {
         let chunk: Data = input.availableData
@@ -226,7 +226,7 @@ public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirector
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
                 continue
             }
-            if let response = handleMCPMessage(line: line, loadRecords: { loadMeetings(sessionsDirectory: sessionsDirectory).meetings }, version: version) {
+            if let response = handleMCPMessage(line: line, loadRecords: { loadMeetings(directories: sessionsDirectories).meetings }, version: version) {
                 output.write(Data((response + "\n").utf8))
             }
         }

@@ -10,19 +10,61 @@ private let appLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", ca
 @main
 enum AppEntry {
     static func main() {
+        #if DEBUG
+        if CommandLine.arguments.contains("--icloud-yokla") {
+            probeICloud()
+            return
+        }
+        #endif
         guard CommandLine.arguments.contains("--mcp") else {
             AINotepadApp.main()
             return
         }
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectory: try AppPaths.sessionsDirectory(), version: version)
+            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version)
         } catch {
             FileHandle.standardError.write(Data("AI-Notepad MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)
         }
     }
 }
+
+#if DEBUG
+/// `--icloud-yokla` (yalnız Debug): iCloud kapsayıcısını çözer, içine deneme dosyası yazıp okur ve siler; sonucu
+/// standart çıktıya yazar. Ayarlara ve toplantılara dokunmaz.
+private func probeICloud() {
+    do {
+        let cloud: URL = try AppPaths.cloudSessionsDirectory()
+        // Sahte toplantı geçici yerel klasörde; kullanıcının toplantılarına dokunulmaz.
+        let local: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-icloud-probe-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let id: String = "probe-\(UUID().uuidString)"
+        let folder: URL = local.appending(path: id, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let record: MeetingRecord = MeetingRecord(
+            id: id, title: "Yoklama", startedAt: Date(), endedAt: Date(), language: .finnish, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: true,
+            engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        try saveMeeting(record: record, directory: folder)
+        let inCloud: URL = try moveMeetingToCloud(directory: folder, cloudSessions: cloud)
+        let seenInCloud: Bool = loadMeetings(sessionsDirectory: cloud).meetings.contains { $0.id == id }
+        let back: URL = try moveMeetingToLocal(directory: inCloud, localSessions: local)
+        let seenLocally: Bool = loadMeetings(sessionsDirectory: local).meetings.contains { $0.id == id }
+        let goneFromCloud: Bool = !FileManager.default.fileExists(atPath: inCloud.path)
+        try FileManager.default.removeItem(at: local)
+        print("iCloud tamam: \(cloud.path) | iCloud'da görüldü: \(seenInCloud) | geri geldi: \(seenLocally) (\(back.lastPathComponent)) | iCloud'dan kalktı: \(goneFromCloud)")
+        // Anahtar Zinciri eşitlemesi: ayrı servis adıyla deneme değeri (gerçek anahtarlara dokunulmaz).
+        let service: String = "AINotepad-yoklama"
+        try saveSyncedSecret(service: service, account: .webhook, value: "deneme")
+        let synced: Bool = try syncedSecretExists(service: service, account: .webhook)
+        try deleteSyncedSecret(service: service, account: .webhook)
+        print("Anahtar Zinciri eşitlemesi: yazıldı \(synced), silindi \(try !syncedSecretExists(service: service, account: .webhook))")
+    } catch {
+        print("iCloud hata: \(error)")
+    }
+}
+#endif
 
 /// Uygulama: ana pencere (Dock), menü çubuğu, kayıt sırasında yüzen panel ve ada.
 struct AINotepadApp: App {

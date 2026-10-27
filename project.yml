@@ -82,6 +82,7 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad yüz yüze toplantıyı yazıya dökmek için mikrofonu kullanır."
+        CODE_SIGN_ENTITLEMENTS: iOS/AINotepad.entitlements
         MARKETING_VERSION: "0.1.2"
         CURRENT_PROJECT_VERSION: "3"
     info:
