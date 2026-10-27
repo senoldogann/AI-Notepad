@@ -1339,6 +1339,16 @@
         }
       }
     },
+    "Başkalarına düşen görevler ve kararlar aşağıda.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks for others and decisions are below."
+          }
+        }
+      }
+    },
     "Başla": {
       "localizations": {
         "en": {
@@ -8251,6 +8261,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summary"
+          }
+        }
+      }
+    },
+    "Özet ve kararlar aşağıda.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary and decisions are below."
           }
         }
       }

@@ -887,7 +887,7 @@ private struct SummaryTab: View {
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
         return VStack(alignment: .leading, spacing: 30) {
             if mine.isEmpty {
-                EmptyStateCard(symbol: "checkmark.circle", title: "Bu toplantıda sana düşen görev yok", message: nil)
+                NoMyTasksCard(seed: record.id, hasOtherTasks: !others.isEmpty)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
@@ -1005,12 +1005,20 @@ private struct SummaryTab: View {
             ("\(note.decisions.count)", "karar"),
             ("\(note.tasks.filter(\.isMine).count)", "senin görevin"),
         ]
-        return asideCard(title: "BİR BAKIŞTA") {
-            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 12) {
+        let symbols: [String] = ["clock", "person.2", "checkmark.seal", "checklist"]
+        return asideCard(title: "BİR BAKIŞTA", symbol: "chart.bar.xaxis") {
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 14) {
                 ForEach(Array(stats.enumerated()), id: \.offset) { (item: (offset: Int, element: (value: String, label: LocalizedStringKey))) in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(item.element.value).appFont(size: 22, weight: .regular).tracking(-0.4)
-                        Text(item.element.label).appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: symbols[item.offset])
+                            .appFont(size: 12, weight: .semibold)
+                            .foregroundStyle(appearance.accent.color)
+                            .frame(width: 28, height: 28)
+                            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(item.element.value).appFont(size: 20, weight: .regular).tracking(-0.4).monospacedDigit()
+                            Text(item.element.label).appFont(size: 11, weight: .regular).foregroundStyle(Theme.muted)
+                        }
                     }
                 }
             }
@@ -1019,7 +1027,7 @@ private struct SummaryTab: View {
 
     /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde.
     private func talkShare(shares: [SpeakerShare]) -> some View {
-        asideCard(title: "KİM NE KADAR KONUŞTU") {
+        asideCard(title: "KİM NE KADAR KONUŞTU", symbol: "waveform") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(shares, id: \.key) { (share: SpeakerShare) in
                     // Ad ve yüzde üstte, pay çubuğu altta tam genişlikte: dar yan sütunda ad kesilmez.
@@ -1032,20 +1040,28 @@ private struct SummaryTab: View {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                 Spacer(minLength: 4)
-                                Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
-                                    .appFont(size: 12, weight: .regular)
+                                Text(String(localized: "\(max(1, Int((share.seconds / 60).rounded()))) dk"))
+                                    .appFont(size: 11, weight: .regular)
                                     .monospacedDigit()
                                     .foregroundStyle(Theme.muted)
                                     .fixedSize()
+                                Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                                    .appFont(size: 12, weight: .semibold)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.ink)
+                                    .fixedSize()
                             }
+                            // Pay çubuğu kişinin renginde (gradyanla hafif derinlik).
                             GeometryReader { (proxy: GeometryProxy) in
                                 Capsule()
                                     .fill(Theme.soft)
                                     .overlay(alignment: .leading) {
-                                        Capsule().fill(Theme.ink.opacity(0.55)).frame(width: max(3, proxy.size.width * share.fraction))
+                                        Capsule()
+                                            .fill(LinearGradient(colors: [speakerColor(key: share.key).opacity(0.65), speakerColor(key: share.key)], startPoint: .leading, endPoint: .trailing))
+                                            .frame(width: max(4, proxy.size.width * share.fraction))
                                     }
                             }
-                            .frame(height: 4)
+                            .frame(height: 6)
                         }
                     }
                 }
@@ -1053,17 +1069,29 @@ private struct SummaryTab: View {
         }
     }
 
-    private func asideCard(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
+    /// Yan sütun kartı: üstte toplantının kapağından ince film gradyanı şerit, simgeli küçük başlık, içerik.
+    private func asideCard(title: LocalizedStringKey, symbol: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label {
+                Text(title).tracking(DesignTokens.labelTracking)
+            } icon: {
+                Image(systemName: symbol)
+            }
+            .appFont(size: 11, weight: .semibold)
+            .foregroundStyle(Theme.muted)
             content()
         }
         .padding(16)
+        .padding(.top, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface(cornerRadius: 16)
+        // Şerit kartın yuvarlak köşelerini izler: tüm kart boyunca çizilip üst 3 pt'ye maskelenir, kart şekliyle kırpılır.
+        .overlay {
+            CoverBackground(seed: record.id)
+                .mask(alignment: .top) { Rectangle().frame(height: 3) }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .allowsHitTesting(false)
+        }
     }
 
     /// Bölüm: kart olmadan küçük büyük harfli başlık ve içerik (belge düzeni).
@@ -1079,6 +1107,38 @@ private struct SummaryTab: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// "Bu toplantıda sana düşen görev yok": toplantının kapağından küçük gradyan simge kutusu, başlık ve kısa açıklama;
+/// vurgu renginde çok hafif zemin.
+private struct NoMyTasksCard: View {
+    let seed: String
+    let hasOtherTasks: Bool
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        HStack(spacing: 14) {
+            Image(systemName: "checkmark")
+                .appFont(size: 15, weight: .bold)
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background { CoverBackground(seed: seed) }
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Bu toplantıda sana düşen görev yok")
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.ink)
+                Text(hasOtherTasks ? "Başkalarına düşen görevler ve kararlar aşağıda." : "Özet ve kararlar aşağıda.")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(appearance.accent.color.opacity(0.05), in: shape)
+        .overlay(shape.strokeBorder(appearance.accent.color.opacity(0.18)))
     }
 }
 
