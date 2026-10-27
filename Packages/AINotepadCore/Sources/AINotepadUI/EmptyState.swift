@@ -155,6 +155,12 @@ public struct EmptyStateHero<Actions: View>: View {
         .padding(.vertical, 28)
         .padding(.horizontal, DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity)
+        // Arkada ince, soluk eğriler (kâğıt dokusu); kenarlara doğru söner.
+        .background {
+            FlowingLines(seed: "bos-\(symbol)", lineCount: 9, isAnimated: !reduceMotion)
+                .mask(RadialGradient(colors: [.black, .clear], center: .center, startRadius: 60, endRadius: 520))
+                .padding(-80)
+        }
         .onAppear {
             withAnimation(reduceMotion ? .none : .easeOut(duration: 0.5)) { isShown = true }
         }
