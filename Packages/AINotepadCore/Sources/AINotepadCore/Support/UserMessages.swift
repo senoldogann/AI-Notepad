@@ -26,6 +26,12 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Ollama isteği reddetti (HTTP \(status)). Adresi ve Ollama sürümünü kontrol et.")
     case OllamaError.malformed:
         return String(localized: "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.")
+    case WebhookError.invalidURL:
+        return String(localized: "Webhook adresi geçersiz: https:// ile başlayan tam adresi yapıştır.")
+    case WebhookError.http(let host, let status, _):
+        return String(localized: "\(host) webhook'u reddetti (HTTP \(status)). Adresin doğru ve etkin olduğunu kontrol et.")
+    case WebhookError.network(let host, _):
+        return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
     case let urlError as URLError:
         return String(localized: "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene.")
     default:
@@ -124,6 +130,7 @@ private func serviceName(account: String) -> String {
     case SecretAccount.deepgram.rawValue: "Deepgram"
     case SecretAccount.elevenlabs.rawValue: "ElevenLabs"
     case SecretAccount.anthropic.rawValue: "Anthropic"
+    case SecretAccount.webhook.rawValue: "Webhook"
     default: "LLM"
     }
 }

@@ -713,6 +713,7 @@ private struct KeySettings: View {
         VStack(alignment: .leading, spacing: 0) {
             SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
             SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
+            WebhookSettings(model: model)
             Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
@@ -720,6 +721,54 @@ private struct KeySettings: View {
                 .padding(.top, 16)
         }
     }
+}
+
+/// Not hazır olunca gönderilen webhook (Slack, Teams, Discord, Zapier, Make, n8n): adres Anahtar Zinciri'nde, kendiliğinden
+/// gönderim ve deneme.
+private struct WebhookSettings: View {
+    let model: AppModel
+    @AppStorage(SettingsKey.webhookAutoSend) private var autoSend: Bool = false
+    @State private var testState: WebhookTestState = .idle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Bağlantılar")
+            SecretField(title: "Webhook adresi", account: .webhook, onChange: { testState = .idle })
+            SettingsRow(title: Text("Not hazır olunca gönder")) {
+                Text("Slack, Microsoft Teams (iş akışı), Discord, Zapier, Make ya da n8n webhook adresi: her toplantının notu (özet, kararlar, görevler) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.")
+                switch testState {
+                case .idle:
+                    EmptyView()
+                case .running:
+                    ProgressView().controlSize(.small)
+                case .sent:
+                    Label("Deneme notu gönderildi", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                case .failed(let message):
+                    Text(message).foregroundStyle(.red)
+                }
+            } control: {
+                HStack(spacing: 8) {
+                    Button("Dene") {
+                        testState = .running
+                        Task {
+                            let error: String? = await model.sendTestWebhook()
+                            testState = error.map { WebhookTestState.failed($0) } ?? .sent
+                        }
+                    }
+                    .disabled(testState == .running)
+                    Toggle("Not hazır olunca gönder", isOn: $autoSend)
+                        .settingsToggle()
+                }
+            }
+        }
+    }
+}
+
+private enum WebhookTestState: Equatable {
+    case idle
+    case running
+    case sent
+    case failed(String)
 }
 
 /// Kısayolları değiştirme.

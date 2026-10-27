@@ -444,6 +444,16 @@ struct MeetingDetailPage: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
+        switch model.webhookStates[record.id] {
+        case .sending:
+            Label("Webhook'a gönderiliyor…", systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .sent:
+            Label("Not webhook'a gönderildi", systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+        case nil:
+            EmptyView()
+        }
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
                 .appFont(size: 12, weight: .regular)
@@ -567,7 +577,11 @@ struct MeetingDetailPage: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.coverGlass)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
-                moreMenu { manageItems }
+                moreMenu {
+                    webhookItem
+                    Divider()
+                    manageItems
+                }
             }
             HStack(spacing: DesignTokens.Spacing.s) {
                 listenButton
@@ -621,6 +635,18 @@ struct MeetingDetailPage: View {
         Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
         Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
         Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
+        webhookItem
+    }
+
+    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
+    @ViewBuilder
+    private var webhookItem: some View {
+        Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
+            .disabled(record.note == nil)
+        Button("Webhook'a gönder (Slack, Teams…)", systemImage: "paperplane") {
+            Task { _ = await model.sendToWebhook(meetingID: record.id) }
+        }
+        .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
     }
 
     /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
@@ -742,6 +768,19 @@ struct MeetingDetailPage: View {
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: record).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Paylaşılabilir tek dosyalık web sayfası (seçili not dilinde) İndirilenler'e.
+    private func exportHTML() {
+        guard let note = record.note else {
+            return
+        }
+        let shown: (note: MeetingNote, language: ShareLanguage?) = noteLanguage.flatMap { (language: ShareLanguage) -> (note: MeetingNote, language: ShareLanguage?)? in
+            record.sharedNotes?[language.rawValue].map { (note: $0, language: language) }
+        } ?? (note: note, language: nil)
+        export = saveExport(fileExtension: "html") { (url: URL) throws -> Void in
+            try Data(meetingHTML(record: record, note: shown.note, language: shown.language).utf8).write(to: url, options: .atomic)
         }
     }
 

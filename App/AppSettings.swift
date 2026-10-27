@@ -58,6 +58,8 @@ enum SettingsKey {
     static let calendarEnabled: String = "calendar.enabled"
     static let meetingReminders: String = "calendar.reminders"
     static let micSuggestions: String = "calendar.micSuggestions"
+    /// Not hazır olunca webhook'a kendiliğinden gönder.
+    static let webhookAutoSend: String = "integrations.webhookAutoSend"
     /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
     static let primaryMeetingLanguage: String = "language.primary"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
@@ -212,6 +214,7 @@ func registerDefaultSettings() {
         SettingsKey.inPersonMode: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
+        SettingsKey.webhookAutoSend: false,
         SettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
         SettingsKey.autoRecord: false,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,

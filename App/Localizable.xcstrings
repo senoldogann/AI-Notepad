@@ -97,6 +97,16 @@
         }
       }
     },
+    "%@ adresine ulaşılamadı; internet bağlantını kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach %@; check your internet connection."
+          }
+        }
+      }
+    },
     "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
       "extractionState": "stale",
       "localizations": {
@@ -280,6 +290,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing the %@ version…"
+          }
+        }
+      }
+    },
+    "%@ webhook'u reddetti (HTTP %lld). Adresin doğru ve etkin olduğunu kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ rejected the webhook (HTTP %lld). Check that the URL is correct and active."
           }
         }
       }
@@ -603,6 +623,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "AI-Notepad"
+          }
+        }
+      }
+    },
+    "AI-Notepad bağlantı denemesi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad connection test"
           }
         }
       }
@@ -1109,6 +1139,16 @@
         }
       }
     },
+    "Bağlantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections"
+          }
+        }
+      }
+    },
     "Bağlantıyı dene": {
       "localizations": {
         "en": {
@@ -1420,6 +1460,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bookmark this moment (highlighted in the note)"
+          }
+        }
+      }
+    },
+    "Bu bir deneme mesajıdır: toplantı notların buraya böyle gelecek.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a test message: your meeting notes will arrive here like this."
           }
         }
       }
@@ -1794,6 +1844,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
+          }
+        }
+      }
+    },
+    "Dene": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
+          }
+        }
+      }
+    },
+    "Deneme notu gönderildi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test note sent"
           }
         }
       }
@@ -4044,6 +4114,16 @@
         }
       }
     },
+    "Not hazır olunca gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send when the note is ready"
+          }
+        }
+      }
+    },
     "Not hazırlanıyor": {
       "localizations": {
         "en": {
@@ -4092,6 +4172,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't create the note: no LLM key or setting. Add it in Settings, then click \"Refresh note\"."
+          }
+        }
+      }
+    },
+    "Not webhook'a gönderildi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note sent to webhook"
           }
         }
       }
@@ -4873,6 +4963,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't capture system audio (%@, code %lld). Check the output device and restart the recording."
+          }
+        }
+      }
+    },
+    "Slack, Microsoft Teams (iş akışı), Discord, Zapier, Make ya da n8n webhook adresi: her toplantının notu (özet, kararlar, görevler) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Slack, Microsoft Teams (workflow), Discord, Zapier, Make or n8n webhook URL: each meeting's note (summary, decisions, tasks) goes there automatically. You can also send it from the ⋯ menu on the meeting page."
           }
         }
       }
@@ -5886,6 +5986,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Accent color"
+          }
+        }
+      }
+    },
+    "Web sayfası olarak kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as web page"
+          }
+        }
+      }
+    },
+    "Webhook adresi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook URL"
+          }
+        }
+      }
+    },
+    "Webhook adresi geçersiz: https:// ile başlayan tam adresi yapıştır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid webhook URL: paste the full address starting with https://."
+          }
+        }
+      }
+    },
+    "Webhook'a gönder (Slack, Teams…)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to webhook (Slack, Teams…)"
+          }
+        }
+      }
+    },
+    "Webhook'a gönderiliyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending to webhook…"
           }
         }
       }

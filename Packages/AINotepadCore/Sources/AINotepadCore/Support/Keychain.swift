@@ -8,6 +8,8 @@ public enum SecretAccount: String, Sendable, CaseIterable {
     case anthropic
     /// OpenAI uyumlu LLM sağlayıcısının anahtarı (OpenAI, OpenCode Go…); Ollama'da gerekmez.
     case openai
+    /// Not hazır olunca gönderilen webhook adresi (Slack, Teams, Discord, Zapier, Make, n8n); adreste gizli anahtar var.
+    case webhook
 }
 
 /// Uygulamanın Keychain servis adı.
