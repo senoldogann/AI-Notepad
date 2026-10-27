@@ -45,7 +45,7 @@ struct AINotepadiOSApp: App {
                         return
                     }
                     if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
-                        ask.ask(question: CommandLine.arguments[index + 1])
+                        ask.ask(question: CommandLine.arguments[index + 1], meetingIDs: [])
                     }
                     #endif
                     await recorder.resumeUnfinished()

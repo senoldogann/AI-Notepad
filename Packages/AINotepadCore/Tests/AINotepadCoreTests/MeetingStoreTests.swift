@@ -120,3 +120,25 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(newestFirst(records: [abroad, home]).map(\.id) == ["20261027-220000", "20261027-230000"])
     }
 }
+
+@Suite struct MentionTests {
+    // "@" bahsi: kelime başında başlar, e-postadaki "@" bahis değildir; seçilince yazılan kısım silinir.
+    @Test func mentionQueryAndRemoval() {
+        #expect(mentionQuery(text: "Bu toplantıda @perus") == "perus")
+        #expect(mentionQuery(text: "@") == "")
+        #expect(mentionQuery(text: "senol@example.com") == nil)
+        #expect(mentionQuery(text: "Merhaba") == nil)
+        #expect(removingMentionQuery(text: "Kararlar neler @peru") == "Kararlar neler ")
+        #expect(removingMentionQuery(text: "Kararlar neler") == "Kararlar neler")
+    }
+
+    // Öneriler: başlıkta geçen (büyük/küçük ve aksan duyarsız), bitmiş, seçilmemiş toplantılar; en yeni önce.
+    @Test func mentionCandidatesFilterAndOrder() {
+        let old: MeetingRecord = record(id: "a", startedAt: Date(timeIntervalSince1970: 1_000), status: .done, audioDeleted: false).with(folder: nil)
+        let new: MeetingRecord = record(id: "b", startedAt: Date(timeIntervalSince1970: 2_000), status: .done, audioDeleted: false)
+        let processing: MeetingRecord = record(id: "c", startedAt: Date(timeIntervalSince1970: 3_000), status: .processing, audioDeleted: false)
+        #expect(mentionCandidates(records: [old, new, processing], query: "PALA", excluding: [], limit: 5).map(\.id) == ["b", "a"])
+        #expect(mentionCandidates(records: [old, new], query: "", excluding: ["b"], limit: 5).map(\.id) == ["a"])
+        #expect(mentionCandidates(records: [old, new], query: "budjetti", excluding: [], limit: 5).isEmpty)
+    }
+}

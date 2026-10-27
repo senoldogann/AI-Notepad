@@ -18,6 +18,8 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
 
     public let id: UUID
     public let question: String
+    /// `@` ile seçilen toplantıların başlıkları (soru yalnız onlara soruldu); boşsa tüm arşiv.
+    public let scopeTitles: [String]
     public let startedAt: Date
     public var phase: Phase
     /// Hızlı modelin çıkardığı arama terimleri.
@@ -31,11 +33,12 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
     public var modelName: String?
 
     public init(
-        id: UUID, question: String, startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
+        id: UUID, question: String, scopeTitles: [String], startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
         answer: ArchiveAnswer, finishedAt: Date?, modelName: String?
     ) {
         self.id = id
         self.question = question
+        self.scopeTitles = scopeTitles
         self.startedAt = startedAt
         self.phase = phase
         self.terms = terms
@@ -83,6 +86,17 @@ public struct ExchangeView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if !exchange.scopeTitles.isEmpty {
+                HStack {
+                    Spacer(minLength: 80)
+                    FlowLayout(spacing: 6, lineSpacing: 6) {
+                        ForEach(exchange.scopeTitles, id: \.self) { (title: String) in
+                            MentionChip(title: title)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             HStack {
                 Spacer(minLength: 80)
                 Text(exchange.question)
@@ -496,5 +510,118 @@ private struct CopyAnswerButton: View {
             }
             copied = false
         }
+    }
+}
+
+
+/// `@` ile etiketlenen toplantının çipi: vurgu renginde soluk kapsül, "@" ve başlık.
+public struct MentionChip: View {
+    let title: String
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    public init(title: String) {
+        self.title = title
+    }
+
+    public var body: some View {
+        HStack(spacing: 3) {
+            Text(verbatim: "@").appFont(size: 12, weight: .bold)
+            Text(title).appFont(size: 12, weight: .medium).lineLimit(1)
+        }
+        .foregroundStyle(appearance.accent.color)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(appearance.accent.color.opacity(0.12), in: Capsule())
+    }
+}
+
+/// Soru alanındaki seçili toplantı çipi: dokununca (x) kaldırılır.
+public struct RemovableMentionChip: View {
+    let title: String
+    let onRemove: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    public init(title: String, onRemove: @escaping @MainActor () -> Void) {
+        self.title = title
+        self.onRemove = onRemove
+    }
+
+    public var body: some View {
+        Button(action: onRemove) {
+            HStack(spacing: 4) {
+                Text(verbatim: "@").appFont(size: 12, weight: .bold)
+                Text(title).appFont(size: 12, weight: .medium).lineLimit(1)
+                Image(systemName: "xmark").appFont(size: 8, weight: .bold).opacity(0.7)
+            }
+            .foregroundStyle(appearance.accent.color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(appearance.accent.color.opacity(0.12), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(title) etiketini kaldır"))
+        .transition(.scale(scale: 0.8).combined(with: .opacity))
+    }
+}
+
+/// `@` önerileri: toplantı kapağının küçük dairesi, başlık ve tarih; seçili satır (klavyeyle gezilir) soluk dolgulu.
+/// Dokununca ya da Return ile toplantı etikete eklenir.
+public struct MentionSuggestions: View {
+    let candidates: [MeetingRecord]
+    let highlighted: Int
+    let onPick: @MainActor (MeetingRecord) -> Void
+
+    public init(candidates: [MeetingRecord], highlighted: Int, onPick: @escaping @MainActor (MeetingRecord) -> Void) {
+        self.candidates = candidates
+        self.highlighted = highlighted
+        self.onPick = onPick
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Toplantı etiketle — soru yalnız ona sorulur")
+                .appFont(size: 11, weight: .semibold)
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+            if candidates.isEmpty {
+                Text("Eşleşen toplantı yok")
+                    .appFont(size: 13, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .padding(10)
+            }
+            ForEach(Array(candidates.enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
+                Button {
+                    onPick(item.element)
+                } label: {
+                    HStack(spacing: 10) {
+                        CoverBackground(seed: item.element.id)
+                            .frame(width: 22, height: 22)
+                            .clipShape(Circle())
+                        Text(item.element.note?.title ?? item.element.title)
+                            .appFont(size: 14, weight: .regular)
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(item.element.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale())))
+                            .appFont(size: 12, weight: .regular)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(item.offset == highlighted ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+        .shadow(color: .black.opacity(0.12), radius: 18, y: 6)
     }
 }

@@ -163,6 +163,7 @@ private struct IslandHost: View {
         if state.isIslandVisible {
             IslandView(
                 state: state,
+                levels: model.audioLevels,
                 layout: layout,
                 isExpanded: isExpanded,
                 onTap: onTap,

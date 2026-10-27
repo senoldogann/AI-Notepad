@@ -1389,7 +1389,8 @@ final class AppModel {
 
     /// Tüm toplantılara soru sorar; ajanın adımları (terimler, okunan parçalar) ve akan cevap listede güncellenir.
     /// Önceki cevaplar devam soruları için bağlamdır.
-    func askArchive(question: String) {
+    /// Arşive sorar; `meetingIDs` boş değilse soru yalnız o toplantılara sorulur (`@` ile etiketlenenler).
+    func askArchive(question: String, meetingIDs: [String]) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
@@ -1398,9 +1399,10 @@ final class AppModel {
             exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
         }
         let id: UUID = UUID()
+        let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }
         archiveExchanges.append(ArchiveExchange(
-            id: id, question: trimmed, startedAt: Date(), phase: .understanding, terms: [], passages: [],
-            answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
+            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, startedAt: Date(), phase: .understanding,
+            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         let records: [MeetingRecord] = meetings
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
@@ -1408,10 +1410,19 @@ final class AppModel {
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
                 self?.updateExchange(id: id) { $0.modelName = llmModelDisplayName(provider: provider, tier: .smart) }
-                _ = try await AINotepadCore.askArchive(
-                    question: trimmed, history: history, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date()
-                ) { [weak self] (progress: ArchiveProgress) -> Void in
+                let onProgress: ArchiveProgressHandler = { [weak self] (progress: ArchiveProgress) -> Void in
                     await self?.apply(progress: progress, id: id)
+                }
+                if scoped.isEmpty {
+                    _ = try await AINotepadCore.askArchive(
+                        question: trimmed, history: history, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date(),
+                        onProgress: onProgress
+                    )
+                } else {
+                    _ = try await askAboutMeetings(
+                        question: trimmed, history: history, records: scoped, userName: userName, llm: provider, maxChars: 60_000, now: Date(),
+                        onProgress: onProgress
+                    )
                 }
                 self?.updateExchange(id: id) {
                     $0.phase = .done

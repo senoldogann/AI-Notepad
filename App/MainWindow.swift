@@ -460,7 +460,7 @@ private struct HomePage: View {
                 UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
                     // Brifing yeni bir konu: önceki sohbet bağlam olmasın.
                     model.clearArchiveConversation()
-                    model.askArchive(question: briefingQuestion(meeting: meeting))
+                    model.askArchive(question: briefingQuestion(meeting: meeting), meetingIDs: [])
                     router.section = .ask
                 } onOpenMeeting: { (id: String) -> Void in
                     router.selectedMeetingID = id
@@ -1068,9 +1068,29 @@ private struct TasksPage: View {
                     if showsDone {
                         EmptyStateCard(symbol: "checkmark.circle", title: "Tamamlanan görev yok", message: "Bir görevin dairesine tıklayınca buraya taşınır.")
                     } else if doneCount > 0 {
-                        EmptyStateCard(symbol: "party.popper", title: "Açık görevin kalmadı", message: "Hepsi tamamlandı.")
+                        EmptyStateHero(
+                            symbol: "party.popper.fill", title: "Açık görevin kalmadı",
+                            message: "Hepsi tamamlandı. Yeni toplantılarda sana düşen işler buraya gelir.", palette: .sunset, steps: []
+                        ) {
+                            EmptyView()
+                        }
+                        .overlay { ConfettiBurst(palette: .sunset) }
                     } else {
-                        EmptyStateCard(symbol: "checklist", title: "Henüz sana düşen görev yok", message: "Toplantı notlarında senin adına yazılan işler burada toplanır.")
+                        EmptyStateHero(
+                            symbol: "checklist", title: "Henüz sana düşen görev yok",
+                            message: "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır, tamamlayınca işaretlersin.",
+                            palette: .mint,
+                            steps: [
+                                EmptyStateStep(symbol: "record.circle", title: "Toplantıyı kaydet"),
+                                EmptyStateStep(symbol: "sparkles", title: "Türkçe not yazılır"),
+                                EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
+                            ]
+                        ) {
+                            if (UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "").isEmpty {
+                                Button("Adını yaz (görevlerin tanınsın)", systemImage: "person.text.rectangle") { router.section = .settings }
+                                    .buttonStyle(.pillPrimary)
+                            }
+                        }
                     }
                 }
                 ForEach(groups, id: \.record.id) { (group: (record: MeetingRecord, tasks: [NoteTask])) in
@@ -1154,8 +1174,32 @@ private struct MeetingsSplit: View {
                         .id(record.id)
                         .transition(.opacity)
                 } else {
-                    ContentUnavailableView("Bir toplantı seç", systemImage: "doc.text", description: Text("Notu, görevleri ve transkripti burada görürsün."))
-                        .transition(.opacity)
+                    ScrollView {
+                        if model.meetings.isEmpty {
+                            EmptyStateHero(
+                                symbol: "waveform", title: "Henüz toplantı yok",
+                                message: "Kaydı başlat ya da bir ses/video dosyasını soldaki listeye sürükle; bitince notu, görevleri ve konuşmacılı transkripti burada görürsün.",
+                                palette: .sunset,
+                                steps: [
+                                    EmptyStateStep(symbol: "record.circle", title: "Kaydı başlat"),
+                                    EmptyStateStep(symbol: "square.and.arrow.down", title: "ya da dosya sürükle"),
+                                    EmptyStateStep(symbol: "doc.text", title: "Not burada"),
+                                ]
+                            ) {
+                                EmptyView()
+                            }
+                        } else {
+                            EmptyStateHero(
+                                symbol: "doc.text.magnifyingglass", title: "Bir toplantı seç",
+                                message: "Notu, görevleri, konu akışını ve konuşmacılı transkripti burada görürsün.", palette: .ocean, steps: []
+                            ) {
+                                EmptyView()
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                    .padding(.top, 40)
+                    .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

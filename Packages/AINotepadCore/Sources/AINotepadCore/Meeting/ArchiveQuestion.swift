@@ -304,8 +304,36 @@ public func askArchive(
         passages: archivePassages(records: records).filter { !carried.map(\.id).contains($0.id) }, terms: terms + [question],
         maxChars: maxChars - carried.map(\.text.count).reduce(0, +)
     )
-    let passages: [ArchivePassage] = (carried + found).sorted { $0.meetingDate != $1.meetingDate ? $0.meetingDate < $1.meetingDate : $0.startSec < $1.startSec }
-    await onProgress(.passages(passages))
+    let passages: [ArchivePassage] = chronological(passages: carried + found)
+    return try await answerFromPassages(question: question, passages: passages, history: history, userName: userName, llm: llm, now: now, onProgress: onProgress)
+}
+
+/// `@` ile seçilen toplantılara sorulan soru: yalnız bu toplantılar okunur. Hepsi sığıyorsa aranmadan tamamı okunur
+/// (seçilen toplantının her yerine bakılsın); sığmıyorsa yine bu toplantılar içinde aranır.
+public func askAboutMeetings(
+    question: String, history: [ArchiveTurn], records: [MeetingRecord], userName: String, llm: LLMProvider, maxChars: Int, now: Date,
+    onProgress: ArchiveProgressHandler
+) async throws -> ArchiveAnswer {
+    let all: [ArchivePassage] = archivePassages(records: records)
+    guard all.map(\.text.count).reduce(0, +) > maxChars else {
+        await onProgress(.searchTerms([]))
+        let passages: [ArchivePassage] = chronological(passages: all)
+        await onProgress(.passages(passages))
+        return try await answerFromPassages(question: question, passages: passages, history: history, userName: userName, llm: llm, now: now, onProgress: onProgress)
+    }
+    return try await askArchive(question: question, history: history, records: records, userName: userName, llm: llm, maxChars: maxChars, now: now, onProgress: onProgress)
+}
+
+/// Parçalar zaman sırasıyla (toplantı tarihi, sonra toplantıdaki an). Saf fonksiyondur.
+private func chronological(passages: [ArchivePassage]) -> [ArchivePassage] {
+    passages.sorted { $0.meetingDate != $1.meetingDate ? $0.meetingDate < $1.meetingDate : $0.startSec < $1.startSec }
+}
+
+/// Okunan parçalardan cevabı akıtarak yazar; kaynak işaretleri parçalara bağlanır.
+private func answerFromPassages(
+    question: String, passages: [ArchivePassage], history: [ArchiveTurn], userName: String, llm: LLMProvider, now: Date,
+    onProgress: ArchiveProgressHandler
+) async throws -> ArchiveAnswer {
     let text: String = try await streamLLM(
         provider: llm, request: archiveAnswerRequest(question: question, passages: passages, history: history, userName: userName, now: now)
     ) { (partial: String) -> Void in
@@ -314,4 +342,44 @@ public func askArchive(
     let answer: ArchiveAnswer = citedAnswer(text: text, passages: passages)
     await onProgress(.answer(answer))
     return answer
+}
+
+
+/// Yazılan metnin sonundaki `@` bahsinin aranan kısmı ("…@perus" → "perus"); metin `@` ile bitiyorsa boş. Sondaki `@`
+/// bir kelimenin içinde (e-posta gibi) ya da arada satır sonu varsa nil. Saf fonksiyondur.
+public func mentionQuery(text: String) -> String? {
+    guard let at = text.lastIndex(of: "@") else {
+        return nil
+    }
+    if at > text.startIndex, let before = text[..<at].last, !before.isWhitespace {
+        return nil
+    }
+    let query: Substring = text[text.index(after: at)...]
+    guard !query.contains(where: \.isNewline), query.count <= 60 else {
+        return nil
+    }
+    return String(query)
+}
+
+/// Metinden sondaki `@` bahsini çıkarır (toplantı seçilince yazılan "@perus" silinir). Saf fonksiyondur.
+public func removingMentionQuery(text: String) -> String {
+    guard mentionQuery(text: text) != nil, let at = text.lastIndex(of: "@") else {
+        return text
+    }
+    return String(text[..<at])
+}
+
+/// `@` önerileri: başlığında (ya da notun başlığında) aranan metin geçen toplantılar, en yeni önce; zaten seçilenler
+/// hariç. Boş aramada son toplantılar. Saf fonksiyondur.
+public func mentionCandidates(records: [MeetingRecord], query: String, excluding: [String], limit: Int) -> [MeetingRecord] {
+    let needle: String = query.trimmingCharacters(in: .whitespaces)
+    return newestFirst(records: records)
+        .filter { !excluding.contains($0.id) && $0.status == .done }
+        .filter { (record: MeetingRecord) -> Bool in
+            needle.isEmpty || [record.title, record.note?.title ?? ""].contains { (title: String) -> Bool in
+                title.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
+            }
+        }
+        .prefix(limit)
+        .map { $0 }
 }

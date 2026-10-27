@@ -11,6 +11,10 @@ struct AskPage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var question: String = ""
+    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; kaldırılana ya da yeni sohbete dek kalır.
+    @State private var mentioned: [MeetingRecord] = []
+    /// `@` önerilerinde klavyeyle seçili satır.
+    @State private var highlighted: Int = 0
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -20,7 +24,7 @@ struct AskPage: View {
                     VStack(alignment: .leading, spacing: 34) {
                         if model.archiveExchanges.isEmpty {
                             AskIntro(meetings: model.meetings) { (example: String) -> Void in
-                                model.askArchive(question: example)
+                                model.askArchive(question: example, meetingIDs: [])
                             }
                         }
                         ForEach(model.archiveExchanges) { (exchange: ArchiveExchange) in
@@ -53,15 +57,25 @@ struct AskPage: View {
                     }
                 }
             }
-            composer
-                .padding(.horizontal, 40)
-                .padding(.bottom, 22)
-                .frame(maxWidth: 780)
+            VStack(spacing: 8) {
+                if mentionQuery(text: question) != nil {
+                    MentionSuggestions(candidates: suggestions, highlighted: highlighted) { (record: MeetingRecord) -> Void in
+                        pick(record: record)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+                composer
+            }
+            .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 22)
+            .frame(maxWidth: 780)
         }
         .overlay(alignment: .topTrailing) {
             if !model.archiveExchanges.isEmpty {
                 Button("Yeni sohbet", systemImage: "square.and.pencil") {
                     model.clearArchiveConversation()
+                    mentioned = []
                     isFocused = true
                 }
                 .controlSize(.small)
@@ -78,9 +92,21 @@ struct AskPage: View {
         let isEmpty: Bool = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 24, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
+            if !mentioned.isEmpty {
+                FlowLayout(spacing: 6, lineSpacing: 6) {
+                    ForEach(mentioned, id: \.id) { (record: MeetingRecord) in
+                        RemovableMentionChip(title: record.note?.title ?? record.title) {
+                            withAnimation(.smooth(duration: 0.2)) { mentioned.removeAll { $0.id == record.id } }
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
             HStack(alignment: .bottom, spacing: 10) {
                 TextField(
-                    model.archiveExchanges.isEmpty ? "Toplantılarına bir şey sor…" : "Devam sorusu sor…",
+                    mentioned.isEmpty
+                        ? (model.archiveExchanges.isEmpty ? "Toplantılarına bir şey sor… (@ ile toplantı etiketle)" : "Devam sorusu sor…")
+                        : "Etiketlenen toplantılara sor…",
                     text: $question, axis: .vertical
                 )
                 .textFieldStyle(.plain)
@@ -88,6 +114,11 @@ struct AskPage: View {
                 .lineLimit(1...6)
                 .focused($isFocused)
                 .onSubmit(send)
+                .onKeyPress(.downArrow) { moveHighlight(by: 1) }
+                .onKeyPress(.upArrow) { moveHighlight(by: -1) }
+                .onKeyPress(.return) { pickHighlighted() }
+                .onKeyPress(.escape) { dismissSuggestions() }
+                .onChange(of: question) { (_: String, _: String) in highlighted = 0 }
                 .padding(.vertical, 6)
                 if model.isAnsweringArchive {
                     Button(action: model.stopArchiveAnswer) {
@@ -131,11 +162,52 @@ struct AskPage: View {
     }
 
     private func send() {
-        guard !model.isAnsweringArchive else {
+        guard !model.isAnsweringArchive, mentionQuery(text: question) == nil else {
             return
         }
-        model.askArchive(question: question)
+        model.askArchive(question: question, meetingIDs: mentioned.map(\.id))
         question = ""
+    }
+
+    /// `@` önerileri (en fazla 6).
+    private var suggestions: [MeetingRecord] {
+        mentionCandidates(records: model.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 6)
+    }
+
+    /// Toplantıyı etikete ekler; yazılan "@…" silinir.
+    private func pick(record: MeetingRecord) {
+        withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
+        question = removingMentionQuery(text: question)
+        highlighted = 0
+        isFocused = true
+    }
+
+    private func moveHighlight(by step: Int) -> KeyPress.Result {
+        guard mentionQuery(text: question) != nil, !suggestions.isEmpty else {
+            return .ignored
+        }
+        highlighted = (highlighted + step + suggestions.count) % suggestions.count
+        return .handled
+    }
+
+    /// Öneriler açıkken Return seçili toplantıyı ekler (soru gönderilmez).
+    private func pickHighlighted() -> KeyPress.Result {
+        guard mentionQuery(text: question) != nil else {
+            return .ignored
+        }
+        if suggestions.indices.contains(highlighted) {
+            pick(record: suggestions[highlighted])
+        }
+        return .handled
+    }
+
+    /// Escape önerileri kapatır: yazılan "@…" silinir.
+    private func dismissSuggestions() -> KeyPress.Result {
+        guard mentionQuery(text: question) != nil else {
+            return .ignored
+        }
+        question = removingMentionQuery(text: question)
+        return .handled
     }
 }
 

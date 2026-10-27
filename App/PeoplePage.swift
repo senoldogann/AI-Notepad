@@ -99,21 +99,25 @@ struct PeoplePage: View {
                     .id(current.id)
                     .transition(.opacity)
                 } else {
-                    VStack {
-                        EmptyStateCard(
-                            symbol: "person.2", title: "Henüz kimse yok",
-                            message: "Bir toplantının Transkript sekmesinde konuşmacıya ad verince kişi burada görünür; sesi hatırlanır ve sonraki toplantılarda adıyla tanınır. Sık görüştüğün kişileri \"Kişi ekle\" ile şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir."
-                        )
-                        .frame(maxWidth: 620)
-                        Button("Kişi ekle", systemImage: "person.badge.plus") {
-                            withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                    ScrollView {
+                        EmptyStateHero(
+                            symbol: "person.2.fill", title: "Henüz kimse yok",
+                            message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle. Sık görüştüğün kişileri şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir.",
+                            palette: .violet,
+                            steps: [
+                                EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
+                                EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),
+                                EmptyStateStep(symbol: "person.crop.circle.badge.checkmark", title: "Kişi burada toplanır"),
+                            ]
+                        ) {
+                            Button("Kişi ekle", systemImage: "person.badge.plus") {
+                                withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                            }
+                            .buttonStyle(.pillPrimary)
                         }
-                        .buttonStyle(.pillPrimary)
-                        .padding(.top, 8)
-                        Spacer()
+                        .padding(.top, 24)
                     }
-                    .padding(36)
-                    .frame(maxWidth: .infinity)
+                    .scrollIndicators(.hidden)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
