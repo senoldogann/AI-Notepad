@@ -1433,6 +1433,16 @@
         }
       }
     },
+    "Bu an için ses yok (kayıt silinmiş ya da bu bölümde ses kaydedilmemiş).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No audio for this moment (the recording was deleted or this part wasn't recorded)."
+          }
+        }
+      }
+    },
     "Bu andan dinle": {
       "localizations": {
         "en": {
@@ -3402,6 +3412,26 @@
         }
       }
     },
+    "Klip kaydedilemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the clip: %@"
+          }
+        }
+      }
+    },
+    "Klip olarak kaydet (ses)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as audio clip"
+          }
+        }
+      }
+    },
     "Konu akışı": {
       "localizations": {
         "en": {
@@ -3913,6 +3943,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text size: %lld pt"
+          }
+        }
+      }
+    },
+    "Metni kopyala": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy text"
           }
         }
       }

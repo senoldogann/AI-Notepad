@@ -113,3 +113,19 @@ private final class LevelBox: @unchecked Sendable {
         return stored
     }
 }
+
+@Suite struct AudioClipTests {
+    // İki kayıt aynı aralıkta tek klibe karışır; süre aralık kadar; aralık kayıtların dışındaysa açık hata.
+    @Test func exportsMixedClip() async throws {
+        let first: URL = try #require(Bundle.module.url(forResource: "fi-meeting", withExtension: "wav", subdirectory: "Fixtures"))
+        let second: URL = try #require(Bundle.module.url(forResource: "en-meeting", withExtension: "wav", subdirectory: "Fixtures"))
+        let destination: URL = try temporaryDirectory().appending(path: "klip.m4a")
+        let range: (start: Double, end: Double) = clipRange(startSec: 1.5, endSec: 5.5)
+        try await exportAudioClip(sources: [first, second], startSec: range.start, endSec: range.end, destination: destination)
+        let duration: Double = try await AVURLAsset(url: destination).load(.duration).seconds
+        #expect(abs(duration - 5) < 0.3, "süre: \(duration)")
+        await #expect(throws: AudioClipError.self) {
+            try await exportAudioClip(sources: [first], startSec: 600, endSec: 610, destination: try temporaryDirectory().appending(path: "bos.m4a"))
+        }
+    }
+}
