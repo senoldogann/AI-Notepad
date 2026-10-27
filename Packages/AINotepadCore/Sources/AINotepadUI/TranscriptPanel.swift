@@ -72,6 +72,10 @@ public struct TranscriptPanel: View {
     let actions: PanelActions
     /// Kayıt sırasında canlı ses çubukları.
     let levels: AudioLevels
+    /// Kullanıcının kayıt sırasında kendi yazdığı notlar (not bunları öncelik sayar).
+    @Binding var myNotes: String
+    /// "Notlarım" alanı açık.
+    @State private var isNotesOpen: Bool = false
     @State private var question: String = ""
     /// Kullanıcı transkriptin en altında mı (canlı metni izliyor mu).
     @State private var isFollowing: Bool = true
@@ -81,10 +85,11 @@ public struct TranscriptPanel: View {
     @State private var hasUnseenText: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
-    public init(state: LiveViewState, actions: PanelActions, levels: AudioLevels) {
+    public init(state: LiveViewState, actions: PanelActions, levels: AudioLevels, myNotes: Binding<String>) {
         self.state = state
         self.actions = actions
         self.levels = levels
+        self._myNotes = myNotes
     }
 
     public var body: some View {
@@ -101,6 +106,12 @@ public struct TranscriptPanel: View {
                         emptyState
                     }
                 }
+            if isNotesOpen, state.phase != .idle {
+                MyNotesEditor(text: $myNotes) { withAnimation(.smooth(duration: 0.25)) { isNotesOpen = false } }
+                    .padding(.horizontal, DesignTokens.Spacing.m)
+                    .padding(.bottom, DesignTokens.Spacing.s)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if let card = state.assistantCard {
                 AssistantCardView(card: card, onClose: actions.onCloseCard)
                     .padding(.horizontal, DesignTokens.Spacing.m)
@@ -230,6 +241,11 @@ public struct TranscriptPanel: View {
                     .disabled(true)
             }
             IconButton(symbol: "bookmark", help: "Bu anı işaretle (notta öne çıkar)", action: actions.onBookmark)
+            IconButton(
+                symbol: isNotesOpen ? "square.and.pencil.circle.fill" : "square.and.pencil",
+                help: "Notlarım: kendi notunu yaz, not onu öncelik sayar",
+                action: { withAnimation(.smooth(duration: 0.25)) { isNotesOpen.toggle() } }
+            )
             IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
         case .finishing:
             EmptyView()
@@ -768,4 +784,56 @@ func copyToPasteboard(text: String) {
     #else
     UIPasteboard.general.string = text
     #endif
+}
+
+
+/// Kayıt sırasında "Notlarım": kullanıcının kendi notları (madde, başlık, kısaltma). Toplantı bitince not bunları
+/// öncelik sayar, transkriptten tamamlar. Yazılanlar kayıtla birlikte saklanır.
+public struct MyNotesEditor: View {
+    @Binding var text: String
+    let onClose: @MainActor () -> Void
+    @FocusState private var isFocused: Bool
+
+    public init(text: Binding<String>, onClose: @escaping @MainActor () -> Void) {
+        self._text = text
+        self.onClose = onClose
+    }
+
+    public var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.and.pencil").appFont(size: 11, weight: .semibold)
+                Text("NOTLARIM").appFont(size: 11, weight: .semibold).tracking(DesignTokens.labelTracking)
+                Spacer()
+                Text("Not bunları öncelik sayar")
+                    .appFont(size: 11, weight: .regular)
+                Button(action: onClose) {
+                    Image(systemName: "chevron.down").appFont(size: 10, weight: .bold)
+                }
+                .buttonStyle(.hoverPlain)
+                .accessibilityLabel("Notlarımı gizle")
+            }
+            .foregroundStyle(Theme.muted)
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text("Önemli gördüğünü yaz: \"- bütçe cuma\", \"## Riskler\"… Kısa yeter, gerisini not tamamlar.")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted.opacity(0.8))
+                        // TextEditor'ın iç boşluğuyla hizalı.
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .appFont(size: 13, weight: .regular)
+                    .scrollContentBackground(.hidden)
+                    .focused($isFocused)
+                    .frame(minHeight: 70, maxHeight: 140)
+            }
+        }
+        .padding(12)
+        .background(Theme.card, in: shape)
+        .overlay(shape.strokeBorder(isFocused ? Theme.ink.opacity(0.25) : Theme.line))
+        .onAppear { isFocused = true }
+    }
 }

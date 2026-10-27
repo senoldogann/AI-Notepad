@@ -254,7 +254,8 @@ public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvid
     }
     do {
         guard let note = try await writeMeetingNote(
-            segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general, llm: llm,
+            segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general,
+            myNotes: record.myNotes ?? "", llm: llm,
             progressFile: directory.appending(path: noteProgressFileName)
         ) else {
             return record.with(status: .done, failureMessage: nil)

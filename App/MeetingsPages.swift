@@ -924,6 +924,9 @@ private struct SummaryTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            MyNotesCard(notes: record.myNotes ?? "", isLocked: model.isLocked(meetingID: record.id)) { (text: String) -> Void in
+                model.saveMyNotes(meetingID: record.id, text: text)
+            }
             Text(note.summary)
                 .font(appearance.readingFont(size: appearance.textSize + 3, weight: .regular))
                 .lineSpacing(appearance.lineSpacing + 3)
@@ -1160,6 +1163,89 @@ private struct NoMyTasksCard: View {
         .padding(14)
         .background(appearance.accent.color.opacity(0.05), in: shape)
         .overlay(shape.strokeBorder(appearance.accent.color.opacity(0.18)))
+    }
+}
+
+/// "Senin notların": kullanıcının toplantıda yazdıkları (not bunları öncelik saydı). Düzenlenebilir; "Kaydet ve notu
+/// yeniden yaz" notu yeni notlarla baştan yazar. Not yoksa tek satırlık "Kendi notunu ekle".
+private struct MyNotesCard: View {
+    let notes: String
+    let isLocked: Bool
+    let onSave: @MainActor (String) -> Void
+    @State private var isEditing: Bool = false
+    @State private var draft: String = ""
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        if notes.isEmpty, !isEditing {
+            Button {
+                draft = ""
+                withAnimation(.smooth(duration: 0.2)) { isEditing = true }
+            } label: {
+                Label("Kendi notunu ekle — not onu öncelik sayıp yeniden yazılır", systemImage: "square.and.pencil")
+                    .appFont(size: 12, weight: .medium)
+                    .foregroundStyle(Theme.muted)
+            }
+            .buttonStyle(.hoverPlain)
+            .disabled(isLocked)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Label {
+                        Text("SENİN NOTLARIN").tracking(DesignTokens.labelTracking)
+                    } icon: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .appFont(size: 11, weight: .semibold)
+                    .foregroundStyle(appearance.accent.color)
+                    Spacer()
+                    if isEditing {
+                        Button("Vazgeç") { withAnimation(.smooth(duration: 0.2)) { isEditing = false } }
+                            .buttonStyle(.hoverPlain)
+                            .foregroundStyle(Theme.muted)
+                        Button("Kaydet ve notu yeniden yaz") {
+                            onSave(draft)
+                            withAnimation(.smooth(duration: 0.2)) { isEditing = false }
+                        }
+                        .buttonStyle(.pillPrimary)
+                        .controlSize(.small)
+                    } else {
+                        Button("Düzenle", systemImage: "pencil") {
+                            draft = notes
+                            withAnimation(.smooth(duration: 0.2)) { isEditing = true }
+                        }
+                        .buttonStyle(.hoverPlain)
+                        .foregroundStyle(Theme.muted)
+                        .disabled(isLocked)
+                    }
+                }
+                .appFont(size: 12, weight: .medium)
+                if isEditing {
+                    TextEditor(text: $draft)
+                        .appFont(size: 14, weight: .regular)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 90, maxHeight: 220)
+                } else {
+                    Text(notes)
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.ink)
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(appearance.accent.color.opacity(0.04), in: shape)
+            .overlay(alignment: .leading) {
+                // Sol kenarda vurgu çizgisi: bu metin kullanıcının kendi yazdığı.
+                UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
+                    .fill(appearance.accent.color.opacity(0.7))
+                    .frame(width: 3)
+            }
+            .overlay(shape.strokeBorder(Theme.line))
+        }
     }
 }
 

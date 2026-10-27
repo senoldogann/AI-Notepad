@@ -376,6 +376,7 @@ private struct SetupScreen: View {
         // Tüm pencere: solda adımın film gradyanlı paneli, sağda içeriği (bkz. `SetupPage`).
         SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
             .padding(.top, 28)
+            .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: true).ignoresSafeArea() }
     }
 }
 

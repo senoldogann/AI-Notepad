@@ -70,7 +70,8 @@ struct PanelHost: View {
                     onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) },
                     onBookmark: { model.bookmarkNow() }
                 ),
-                levels: model.audioLevels
+                levels: model.audioLevels,
+                myNotes: Binding<String>(get: { model.liveMyNotes }, set: { (text: String) -> Void in model.liveMyNotes = text })
             )
             }
             .animation(.smooth(duration: 0.25), value: model.consentReminderVisible)
