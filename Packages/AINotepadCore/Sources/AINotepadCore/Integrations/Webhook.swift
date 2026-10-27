@@ -219,7 +219,7 @@ private struct TeamsMessage: Encodable {
     let attachments: [TeamsAttachment]
 
     init(markdown: String) {
-        attachments = [TeamsAttachment(content: TeamsCard(body: [TeamsTextBlock(text: markdown)]))]
+        attachments = [TeamsAttachment(content: TeamsCard(body: [TeamsTextBlock(text: teamsCardText(markdown: markdown))]))]
     }
 }
 
@@ -255,11 +255,44 @@ private struct TeamsTextBlock: Encodable {
     let wrap: Bool = true
 }
 
+/// Adaptive Card metni: kart başlık (`#`) ve yapılacak kutusu (`- [ ]`) biçimini tanımaz, ham görünüyordu; başlıklar
+/// kalın satır, kutular madde işareti olur. Saf fonksiyondur.
+func teamsCardText(markdown: String) -> String {
+    markdown
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .map { (line: Substring) -> String in
+            if let heading = String(line).firstMatch(of: /^#{1,6}\s+(.+)$/) {
+                return "**\(heading.1)**"
+            }
+            return String(line).replacing(/^- \[ \]\s/, with: "- ")
+        }
+        .joined(separator: "\n")
+}
+
 private let webhookLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Webhook")
 private let webhookAttempts: Int = 3
 
-/// Gövdeyi JSON olarak gönderir: 408/429/5xx ve ağ hataları 3 deneme (1, 2 sn bekleyerek, uyarı logu); 4xx kesin hata.
-/// Adres gizli olduğu için log ve hatada yalnızca sunucu adı yer alır.
+/// Gövdeyi JSON olarak gönderir. Yalnızca istek sunucuya ulaşmadıysa (bağlantı kurulamadı) ya da 429'da 3 deneme (1, 2 sn
+/// bekleyerek, uyarı logu): zaman aşımı ve 5xx'te sunucu mesajı almış olabilir, yeniden deneme notu kanala iki kez
+/// düşürürdü. Adres gizli olduğu için log ve hatada yalnızca sunucu adı yer alır.
+/// Discord'da girişle oluşturulan webhook'u siler (bağlantı kaldırılınca sunucuda kullanılabilir adres kalmasın).
+/// Zaten silinmişse (404) hata değildir.
+public func deleteDiscordWebhook(url: URL) async throws {
+    let host: String = url.host() ?? "?"
+    var request: URLRequest = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.timeoutInterval = 30
+    do {
+        let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
+        let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) || status == 404 else {
+            throw WebhookError.http(host: host, status: status, body: String(decoding: data.prefix(500), as: UTF8.self))
+        }
+    } catch let error as URLError {
+        throw WebhookError.network(host: host, reason: error.localizedDescription)
+    }
+}
+
 public func sendWebhook(url: URL, payload: Data) async throws {
     let host: String = url.host() ?? "?"
     var request: URLRequest = URLRequest(url: url)
@@ -279,12 +312,14 @@ public func sendWebhook(url: URL, payload: Data) async throws {
                 return
             }
             let error: WebhookError = .http(host: host, status: status, body: String(decoding: data.prefix(500), as: UTF8.self))
-            guard isRetryableLLMStatus(status: status) else {
+            guard status == 429 else {
                 throw error
             }
             lastError = error
-        } catch let error as URLError where error.code != .cancelled {
+        } catch let error as URLError where isSafeToRetryPost(code: error.code) {
             lastError = .network(host: host, reason: error.localizedDescription)
+        } catch let error as URLError where error.code != .cancelled {
+            throw WebhookError.network(host: host, reason: error.localizedDescription)
         }
         webhookLogger.warning("Webhook gönderilemedi, deneme: \(attempt, privacy: .public), sunucu: \(host, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
         if attempt < webhookAttempts {

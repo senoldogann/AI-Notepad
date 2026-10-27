@@ -179,6 +179,9 @@ struct AINotepadApp: App {
             )
         }
         .defaultSize(width: 1180, height: 780)
+        // Açılışta her zaman görünür: son oturumda pencere kapatılmışsa durum geri yükleme onu kapalı açıyordu
+        // (uygulama açılıyor ama yalnızca menü çubuğunda görünüyordu).
+        .defaultLaunchBehavior(.presented)
         // Başlık çubuğu gizli: ElevenLabs gibi kendi kenar çubuğu ve üst çubuğu pencerenin tepesine kadar.
         .windowStyle(.hiddenTitleBar)
         .commands {

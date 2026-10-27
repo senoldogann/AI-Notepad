@@ -926,8 +926,12 @@ private struct MCPClientRow: View {
         FileManager.default.fileExists(atPath: client.applicationPath)
     }
 
-    private var executablePath: String {
-        Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
+    /// Yapılandırmaya yazılacak uygulama yolu; uygulama geçici konumdan çalışıyorsa hata.
+    private func executablePath() throws -> String {
+        guard let path = Bundle.main.executablePath else {
+            throw MCPConfigError.writeFailed(path: Bundle.main.bundlePath, reason: "uygulamanın çalıştırılabilir dosyası bulunamadı")
+        }
+        return try mcpExecutablePath(executablePath: path)
     }
 
     var body: some View {
@@ -990,7 +994,7 @@ private struct MCPClientRow: View {
         }
         do {
             let config: JSONValue = try readMCPConfig(file: client.configFile(home: FileManager.default.homeDirectoryForCurrentUser))
-            isConnected = isMCPServerConnected(config: config, client: client, executablePath: executablePath)
+            isConnected = isMCPServerConnected(config: config, client: client, executablePath: try executablePath())
             errorMessage = nil
         } catch {
             errorMessage = userFacingMessage(error: error)
@@ -999,7 +1003,7 @@ private struct MCPClientRow: View {
 
     private func connect() {
         do {
-            try connectMCPClient(client: client, executablePath: executablePath, home: FileManager.default.homeDirectoryForCurrentUser)
+            try connectMCPClient(client: client, executablePath: try executablePath(), home: FileManager.default.homeDirectoryForCurrentUser)
             justConnected = true
             refresh()
         } catch {
@@ -1134,6 +1138,11 @@ private struct WebhookSettings: View {
             if let connected {
                 connectedRow(channel: connected)
             }
+            Text("Bir kanal bağlanır; yeni bağlantı öncekinin yerini alır (eski bağlantı servis tarafında da kapatılır). Apple Notlar ve klasör ayrıca açılabilir.")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 6)
             setupStatus
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(ChannelCard.allCases) { (card: ChannelCard) in
@@ -1150,9 +1159,22 @@ private struct WebhookSettings: View {
     /// Bağlı kanal: ad, kanal, dene, kendiliğinden gönder, kaldır.
     private func connectedRow(channel: ConnectedChannel) -> some View {
         SettingsRow(title: Text(verbatim: channel.title)) {
-            Label(String(localized: "Bağlı · \(channel.detail)"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+            if model.channelNeedsReconnect {
+                Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            } else {
+                Label(String(localized: "Bağlı · \(channel.detail)"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+            }
         } control: {
             HStack(spacing: 8) {
+                if case .account(let connection) = channel {
+                    if model.channelNeedsReconnect {
+                        Button("Yeniden bağlan") { Task { await signIn(service: connection.service) } }
+                            .buttonStyle(.pillPrimary)
+                    } else {
+                        Button("Kanalı değiştir") { Task { await changeChannel() } }
+                            .disabled(isBusy)
+                    }
+                }
                 Button("Dene") { Task { await test() } }
                     .disabled(setup == .testing)
                 Button("Kaldır", role: .destructive) { disconnect() }
@@ -1176,6 +1198,7 @@ private struct WebhookSettings: View {
             statusPanel {
                 Text("Notlar hangi kanala gitsin?").appFont(size: 13, weight: .medium)
                 Picker("Kanal", selection: $selectedChannelID) {
+                    Text("Kanal seç").tag("")
                     ForEach(options) { (option: ChannelOption) in
                         Text(verbatim: option.name).tag(option.id)
                     }
@@ -1365,7 +1388,8 @@ private struct WebhookSettings: View {
     private func showChannels(signIn: ChannelSignIn) async {
         do {
             let options: [ChannelOption] = try await listChannels(signIn: signIn)
-            selectedChannelID = options.first { ["#genel", "#general"].contains($0.name) }?.id ?? options[0].id
+            // Kanal önceden seçilmez: notlar yanlışlıkla herkesin gördüğü #genel'e gitmesin.
+            selectedChannelID = ""
             setup = .choosing(signIn, options)
         } catch {
             setup = .failed(userFacingMessage(error: error))
@@ -1378,16 +1402,40 @@ private struct WebhookSettings: View {
             return
         }
         let connection: ChannelConnection = ChannelConnection(service: signIn.service, tokens: signIn.tokens, workspace: signIn.workspace, channel: option)
+        Task {
+            do {
+                try await model.connectChannel(connection: connection)
+            } catch {
+                setup = .failed(userFacingMessage(error: error))
+                return
+            }
+            connected = .account(connection)
+            // Kendiliğinden gönderim kullanıcının seçimidir; bağlanınca açılmaz.
+            await test()
+        }
+    }
+
+    /// Kayıtlı oturumla kanalları yeniden listeler (yeniden giriş gerekmez).
+    private func changeChannel() async {
+        setup = .signingIn(connectedService)
         do {
-            try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: connection))
-            try deleteSecret(service: keychainService, account: .webhook)
+            guard let result = try await model.channelOptionsForCurrentConnection() else {
+                setup = .idle
+                return
+            }
+            selectedChannelID = ""
+            setup = .choosing(result.signIn, result.options)
         } catch {
             setup = .failed(userFacingMessage(error: error))
-            return
         }
-        connected = .account(connection)
-        autoSend = true
-        Task { await test() }
+    }
+
+    /// Bağlı hesabın servisi (kanal değiştirirken gösterilir).
+    private var connectedService: ChannelService {
+        if case .account(let connection) = connected {
+            return connection.service
+        }
+        return .slack
     }
 
     private func connectZoom() {
@@ -1409,16 +1457,16 @@ private struct WebhookSettings: View {
 
     /// Webhook adresini Anahtar Zinciri'ne yazar (hesap bağlantısı varsa kalkar) ve deneme mesajı gönderir.
     private func saveWebhook(url: URL) {
-        do {
-            try saveSecret(service: keychainService, account: .webhook, value: url.absoluteString)
-            try deleteSecret(service: keychainService, account: .channel)
-        } catch {
-            setup = .failed(userFacingMessage(error: error))
-            return
+        Task {
+            do {
+                try await model.connectWebhook(url: url)
+            } catch {
+                setup = .failed(userFacingMessage(error: error))
+                return
+            }
+            connected = .webhook(url)
+            await test()
         }
-        connected = .webhook(url)
-        autoSend = true
-        Task { await test() }
     }
 
     private func test() async {
@@ -1431,14 +1479,15 @@ private struct WebhookSettings: View {
     }
 
     private func disconnect() {
-        do {
-            try deleteSecret(service: keychainService, account: .channel)
-            try deleteSecret(service: keychainService, account: .webhook)
-            connected = nil
-            autoSend = false
-            setup = .idle
-        } catch {
-            setup = .failed(userFacingMessage(error: error))
+        Task {
+            do {
+                try await model.disconnectChannel()
+                connected = nil
+                autoSend = false
+                setup = .idle
+            } catch {
+                setup = .failed(userFacingMessage(error: error))
+            }
         }
     }
 
@@ -1713,8 +1762,8 @@ private struct MCPSettings: View {
     @State private var copied: Bool = false
 
     var body: some View {
-        let path: String = Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
-        let config: String = mcpClientConfig(executablePath: path)
+        // Elle kopyalanan yapılandırma da uygulamanın gerçek yolunu gösterir (uygulama paketi her zaman bir çalıştırılabilir içerir).
+        let config: String = mcpClientConfig(executablePath: Bundle.main.executableURL?.path ?? Bundle.main.bundlePath)
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Diğer MCP istemcileri")
             SettingsRow(title: Text("Elle yapılandırma")) {

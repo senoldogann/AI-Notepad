@@ -660,6 +660,8 @@ struct MeetingDetailPage: View {
         Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
         Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
         Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
+        Button("E-postayla gönder", systemImage: "envelope") { emailNote() }
+            .disabled(record.note == nil)
         webhookItem
     }
 
@@ -753,10 +755,29 @@ struct MeetingDetailPage: View {
         return shareText(record: record, note: note, language: nil)
     }
 
+    /// Dışa aktarılan kayıt: seçili dilde paylaşım notu varsa not onunla değişir (PDF, Markdown ve kopya da ekranda
+    /// görünen dilde çıkar; önceden hep Türkçe çıkıyordu).
+    private var shownRecord: MeetingRecord {
+        guard let language = noteLanguage, let shared = record.sharedNotes?[language.rawValue] else {
+            return record
+        }
+        return record.with(note: shared)
+    }
+
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
+        NSPasteboard.general.setString(meetingMarkdown(record: shownRecord), forType: .string)
         export = .copied
+    }
+
+    /// Notu Mail'de yeni ileti olarak açar (konu toplantı adı, gövde seçili dildeki not); alıcıları kullanıcı seçer.
+    private func emailNote() {
+        guard let text = displayedShareText, let service = NSSharingService(named: .composeEmail) else {
+            export = .failed(String(localized: "Mail açılamadı: Mac'te ayarlı bir e-posta hesabı yok."))
+            return
+        }
+        service.subject = shownRecord.note?.title ?? record.title
+        service.perform(withItems: [text])
     }
 
     @ViewBuilder
@@ -814,7 +835,7 @@ struct MeetingDetailPage: View {
 
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
-            try meetingPDF(record: record).write(to: url, options: .atomic)
+            try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
         }
     }
 
@@ -854,7 +875,7 @@ struct MeetingDetailPage: View {
 
     private func exportMarkdown() {
         export = saveExport(fileExtension: "md") { (url: URL) throws -> Void in
-            try Data(meetingMarkdown(record: record).utf8).write(to: url, options: .atomic)
+            try Data(meetingMarkdown(record: shownRecord).utf8).write(to: url, options: .atomic)
         }
     }
 

@@ -55,7 +55,11 @@ public let mcpServerName: String = "ai-notepad"
 public enum MCPConfigError: Error, Equatable {
     /// Dosya JSON nesnesi değil ya da okunamadı.
     case invalidConfig(path: String, reason: String)
+    /// Dosyada yorum satırları var (VS Code buna izin verir); üzerine yazılsa yorumlar kaybolurdu.
+    case hasComments(path: String)
     case writeFailed(path: String, reason: String)
+    /// Uygulama Uygulamalar klasörüne taşınmadan geçici konumdan (App Translocation) çalışıyor: yol yeniden açılışta yok olur.
+    case translocated(path: String)
 }
 
 /// AI-Notepad sunucusunun yapılandırma girdisi: uygulamanın kendisi `--mcp` ile (VS Code `type` ister).
@@ -118,7 +122,17 @@ public func readMCPConfig(file: URL) throws -> JSONValue {
         guard !data.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) else {
             return .object([:])
         }
-        return try JSONDecoder().decode(JSONValue.self, from: data)
+        do {
+            return try JSONDecoder().decode(JSONValue.self, from: data)
+        } catch {
+            let text: String = String(decoding: data, as: UTF8.self)
+            if text.contains("//") || text.contains("/*") {
+                throw MCPConfigError.hasComments(path: file.path)
+            }
+            throw MCPConfigError.invalidConfig(path: file.path, reason: error.localizedDescription)
+        }
+    } catch let error as MCPConfigError {
+        throw error
     } catch {
         throw MCPConfigError.invalidConfig(path: file.path, reason: error.localizedDescription)
     }
@@ -134,6 +148,14 @@ public func writeMCPConfig(config: JSONValue, file: URL) throws {
     } catch {
         throw MCPConfigError.writeFailed(path: file.path, reason: error.localizedDescription)
     }
+}
+
+/// MCP yapılandırmasına yazılacak uygulama yolu; uygulama geçici konumdan çalışıyorsa `translocated`. Saf fonksiyondur.
+public func mcpExecutablePath(executablePath: String) throws -> String {
+    guard !executablePath.contains("/AppTranslocation/") else {
+        throw MCPConfigError.translocated(path: executablePath)
+    }
+    return executablePath
 }
 
 /// Uygulamaya AI-Notepad sunucusunu ekler (okur, birleştirir, yazar). Bozuk dosyanın üzerine yazmaz.

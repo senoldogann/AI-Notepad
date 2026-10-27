@@ -40,6 +40,10 @@ public func userFacingMessage(error: any Error) -> String {
         return channelMessage(error: error)
     case MCPConfigError.invalidConfig(let path, _):
         return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
+    case MCPConfigError.hasComments(let path):
+        return String(localized: "\((path as NSString).lastPathComponent) yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Uygulamanın ayarından AI-Notepad sunucusunu elle ekle (komut: AINotepad --mcp).")
+    case MCPConfigError.translocated:
+        return String(localized: "AI-Notepad geçici bir konumdan çalışıyor. Uygulamayı Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.")
     case MCPConfigError.writeFailed(let path, _):
         return String(localized: "Yapılandırma yazılamadı: \((path as NSString).lastPathComponent). Klasör izinlerini kontrol et.")
     case let urlError as URLError where urlError.code == .appTransportSecurityRequiresSecureConnection:

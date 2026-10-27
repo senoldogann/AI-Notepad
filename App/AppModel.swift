@@ -1045,6 +1045,7 @@ final class AppModel {
                     let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
                     // Düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
                     saveRecord(record: applyingPendingReminders(record: edited), directory: directory)
+                    refreshFolderCopy(meetingID: meetingID)
                 } catch {
                     Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
@@ -1116,6 +1117,7 @@ final class AppModel {
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
                 saveRecord(record: applyingPendingReminders(record: result), directory: directory)
                 processingMeetingIDs.remove(meetingID)
+                refreshFolderCopy(meetingID: meetingID)
             }
         }
     }
@@ -1133,6 +1135,7 @@ final class AppModel {
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             saveRecord(record: record.with(speakerNames: names), directory: directory)
         }
+        refreshFolderCopy(meetingID: meetingID)
         let source: String = voiceSource(meetingID: meetingID, person: person)
         // Ad düzeltildiyse bu kişinin sesi eski addan geri alınır (yoksa sonraki toplantılarda yanlış adla tanınırdı).
         var voices: [RegisteredVoice] = registeredVoices
@@ -1602,39 +1605,139 @@ final class AppModel {
         try webhookURL(text: try await readSecretInBackground(service: keychainService, account: .webhook))
     }
 
-    /// Süren jeton yenilemesi: Slack yenileme jetonu tek kullanımlık, aynı anda iki gönderim iki kez yenilemesin.
-    @ObservationIgnored private var connectionRefresh: Task<ChannelConnection, any Error>?
+    /// Bağlantıyı okuyup gerekirse yenileyen tek görev: aynı anda gelen gönderimler aynı görevi bekler (Slack yenileme
+    /// jetonu tek kullanımlık; iki yenileme ikincisini "oturum bitti"ye düşürüyordu).
+    @ObservationIgnored private var connectionLoad: Task<ChannelConnection?, any Error>?
+    /// Bağlantı her kurulduğunda ya da kaldırıldığında artar: eski bağlantının yenilemesi yenisinin üstüne yazılmaz,
+    /// kaldırılan bağlantı geri gelmez.
+    @ObservationIgnored private var channelGeneration: Int = 0
+    /// Kanal oturumu bitti (yenileme reddedildi): Ayarlar "Yeniden bağlan" gösterir.
+    private(set) var channelNeedsReconnect: Bool = false
 
-    /// Hesapla kurulan kanal bağlantısı (yoksa nil); jetonun süresi bitmek üzereyse yenilenip Anahtar Zinciri'ne yazılır.
-    private func currentChannelConnection() async throws -> ChannelConnection? {
-        if let connectionRefresh {
-            return try await connectionRefresh.value
+    /// Hesapla kurulan kanal bağlantısı (yoksa nil); jetonun süresi bitmek üzereyse (ya da `force`) yenilenip Anahtar
+    /// Zinciri'ne yazılır.
+    private func currentChannelConnection(forceRefresh: Bool) async throws -> ChannelConnection? {
+        if let connectionLoad, !forceRefresh {
+            return try await connectionLoad.value
         }
-        guard let stored = try await optionalSecretInBackground(service: keychainService, account: .channel) else {
-            return nil
-        }
-        let connection: ChannelConnection = try decodeChannelConnection(text: stored)
-        guard needsRefresh(tokens: connection.tokens, now: Date()) else {
-            return connection
-        }
-        let refresh: Task<ChannelConnection, any Error> = Task {
-            let fresh: ChannelConnection = try await refreshedConnection(connection: connection, now: Date())
+        let generation: Int = channelGeneration
+        let load: Task<ChannelConnection?, any Error> = Task { [weak self] () throws -> ChannelConnection? in
+            guard let stored = try await optionalSecretInBackground(service: keychainService, account: .channel) else {
+                return nil
+            }
+            let connection: ChannelConnection = try decodeChannelConnection(text: stored)
+            guard forceRefresh || needsRefresh(tokens: connection.tokens, now: Date()) else {
+                return connection
+            }
+            let fresh: ChannelConnection
+            do {
+                fresh = try await refreshConnectionTokens(connection: connection)
+            } catch ChannelAuthError.expired(let service) {
+                await MainActor.run { self?.channelNeedsReconnect = true }
+                throw ChannelAuthError.expired(service: service)
+            }
+            // Yenileme sürerken bağlantı kaldırıldı ya da değişti: eski bağlantı geri yazılmaz.
+            guard await MainActor.run(body: { self?.channelGeneration == generation }) else {
+                return nil
+            }
             try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: fresh))
             return fresh
         }
-        connectionRefresh = refresh
-        defer { connectionRefresh = nil }
-        return try await refresh.value
+        connectionLoad = load
+        defer {
+            if connectionLoad == load {
+                connectionLoad = nil
+            }
+        }
+        return try await load.value
     }
 
-    /// Notu bağlı kanala gönderir: hesapla kurulan bağlantı (Slack, Teams) varsa ona, yoksa webhook adresine.
+    /// Notu bağlı kanala gönderir: hesapla kurulan bağlantı (Slack, Teams) varsa ona, yoksa webhook adresine. Erişim
+    /// jetonu süresinden önce geri alındıysa (401) bir kez yenileyip yeniden dener.
     private func deliverToChannel(record: MeetingRecord, note: MeetingNote) async throws {
-        if let connection = try await currentChannelConnection() {
-            try await postNote(connection: connection, record: record, note: note)
+        if let connection = try await currentChannelConnection(forceRefresh: false) {
+            do {
+                try await postNote(connection: connection, record: record, note: note)
+            } catch ChannelAuthError.expired {
+                guard let fresh = try await currentChannelConnection(forceRefresh: true) else {
+                    return
+                }
+                try await postNote(connection: fresh, record: record, note: note)
+            }
+            channelNeedsReconnect = false
             return
         }
         let url: URL = try await configuredWebhookURL()
         try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
+    }
+
+    /// Hesapla kurulan bağlantıyı kaydeder; önceki bağlantı (webhook ya da hesap) servis tarafında da kapatılır.
+    func connectChannel(connection: ChannelConnection) async throws {
+        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
+        channelGeneration += 1
+        connectionLoad?.cancel()
+        connectionLoad = nil
+        try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: connection))
+        try deleteSecret(service: keychainService, account: .webhook)
+        channelNeedsReconnect = false
+        await revokeDestinations(connection: previous.connection.flatMap { $0 == connection ? nil : $0 }, webhook: previous.webhook)
+    }
+
+    /// Webhook adresini kaydeder; önceki bağlantı servis tarafında da kapatılır.
+    func connectWebhook(url: URL) async throws {
+        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
+        channelGeneration += 1
+        connectionLoad?.cancel()
+        connectionLoad = nil
+        try saveSecret(service: keychainService, account: .webhook, value: url.absoluteString)
+        try deleteSecret(service: keychainService, account: .channel)
+        channelNeedsReconnect = false
+        await revokeDestinations(connection: previous.connection, webhook: previous.webhook.flatMap { $0 == url ? nil : $0 })
+    }
+
+    /// Kanal bağlantısını kaldırır: Slack jetonu geri alınır, Discord'da girişle oluşturulan webhook silinir.
+    func disconnectChannel() async throws {
+        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
+        channelGeneration += 1
+        connectionLoad?.cancel()
+        connectionLoad = nil
+        try deleteSecret(service: keychainService, account: .channel)
+        try deleteSecret(service: keychainService, account: .webhook)
+        channelNeedsReconnect = false
+        await revokeDestinations(connection: previous.connection, webhook: previous.webhook)
+    }
+
+    /// Kayıtlı hesap bağlantısı ve webhook adresi.
+    private func storedChannelDestinations() async throws -> (connection: ChannelConnection?, webhook: URL?) {
+        let connection: ChannelConnection? = try await optionalSecretInBackground(service: keychainService, account: .channel)
+            .map { (text: String) throws -> ChannelConnection in try decodeChannelConnection(text: text) }
+        let webhook: URL? = try await optionalSecretInBackground(service: keychainService, account: .webhook).flatMap { URL(string: $0) }
+        return (connection, webhook)
+    }
+
+    /// Kaldırılan bağlantıları servis tarafında kapatır. Başarısızlık bağlantının kaldırılmasını engellemez (yerelde
+    /// zaten silindi); neden uyarı olarak loglanır ve kullanıcıya gösterilir.
+    private func revokeDestinations(connection: ChannelConnection?, webhook: URL?) async {
+        do {
+            if let connection {
+                try await revokeChannelConnection(connection: connection)
+            }
+            if let webhook, webhookKind(url: webhook) == .discord {
+                try await deleteDiscordWebhook(url: webhook)
+            }
+        } catch {
+            Self.logger.warning("Eski kanal bağlantısı servis tarafında kapatılamadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Eski bağlantı servis tarafında kapatılamadı: \(userFacingMessage(error: error))"))
+        }
+    }
+
+    /// Kayıtlı Slack/Teams oturumuyla kanalları yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
+    func channelOptionsForCurrentConnection() async throws -> (signIn: ChannelSignIn, options: [ChannelOption])? {
+        guard let connection = try await currentChannelConnection(forceRefresh: false) else {
+            return nil
+        }
+        let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
+        return (signIn, try await listChannels(signIn: signIn))
     }
 
     /// Toplantının notunu webhook'a gönderir; hata varsa kullanıcı metni döner.
@@ -1647,6 +1750,12 @@ final class AppModel {
             try await deliverToChannel(record: record, note: note)
             webhookStates[meetingID] = .sent
             Self.logger.info("Not webhook'a gönderildi, toplantı: \(meetingID, privacy: .public)")
+            // El ile gönderilen not, sonradan yeniden işlenince kendiliğinden ikinci kez gönderilmesin.
+            if let current = meetings.first(where: { $0.id == meetingID }), current.webhookSentAt == nil, !isLocked(meetingID: meetingID) {
+                withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                    saveRecord(record: current.with(webhookSentAt: Date()), directory: directory)
+                }
+            }
             return nil
         } catch {
             Self.logger.error("Not webhook'a gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
@@ -1685,9 +1794,8 @@ final class AppModel {
             return nil
         }
         let source: String = appleNotesScript(html: notesHTML(record: record, note: note))
-        let failure: String? = await Task.detached(priority: .userInitiated) { () -> String? in
-            runAppleScript(source: source)
-        }.value
+        // NSAppleScript yalnızca ana iş parçacığında güvenli.
+        let failure: String? = runAppleScript(source: source)
         if let failure {
             Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .public)")
             return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da AI-Notepad için Notlar'a izin ver.")
@@ -1713,6 +1821,14 @@ final class AppModel {
         } catch {
             return userFacingMessage(error: error)
         }
+    }
+
+    /// Not değişince (düzenleme, yeniden yazma, konuşmacı adı) klasördeki Markdown kopyası güncellenir.
+    private func refreshFolderCopy(meetingID: String) {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.markdownAutoExport), let error = exportToFolder(meetingID: meetingID) else {
+            return
+        }
+        errorMessages = appendUnique(messages: errorMessages, message: error)
     }
 
     /// İşleme bitince açık olan hedeflere kendiliğinden gönderir: webhook, Apple Notlar (bir kez) ve klasör (her
@@ -1749,13 +1865,8 @@ final class AppModel {
             return
         }
         Task {
-            guard await sendToWebhook(meetingID: record.id) == nil,
-                  let current = meetings.first(where: { $0.id == record.id }), !isLocked(meetingID: record.id) else {
-                return
-            }
-            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
-                saveRecord(record: current.with(webhookSentAt: Date()), directory: directory)
-            }
+            // Gönderildi işareti `sendToWebhook` içinde yazılır.
+            _ = await sendToWebhook(meetingID: record.id)
         }
     }
 
@@ -2289,7 +2400,8 @@ func chooseMediaToImport(model: AppModel) {
 }
 
 
-/// AppleScript'i çalıştırır; başarılıysa nil, değilse hata metni (numarasıyla). Arka planda çağrılır.
+/// AppleScript'i çalıştırır; başarılıysa nil, değilse hata metni (numarasıyla). NSAppleScript ana iş parçacığı içindir.
+@MainActor
 private func runAppleScript(source: String) -> String? {
     guard let script = NSAppleScript(source: source) else {
         return "AppleScript derlenemedi"

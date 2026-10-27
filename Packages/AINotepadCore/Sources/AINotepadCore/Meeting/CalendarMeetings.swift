@@ -23,7 +23,10 @@ public struct CalendarMeeting: Sendable, Equatable, Identifiable, Codable {
 }
 
 /// Görüşme servislerinin alan adları; bağlantının ana bilgisayarı bunlardan biri ya da alt alan adı olmalı.
-let meetingHosts: [String] = ["teams.microsoft.com", "teams.live.com", "zoom.us", "meet.google.com", "webex.com"]
+let meetingHosts: [String] = [
+    "teams.microsoft.com", "teams.live.com", "zoom.us", "zoomgov.com", "meet.google.com", "webex.com", "gotomeeting.com", "meet.goto.com",
+    "chime.aws", "whereby.com", "around.co",
+]
 
 /// Konum, not ve adres alanlarındaki ilk görüşme bağlantısı (Teams, Zoom, Google Meet, Webex). Yalnız ana bilgisayarı
 /// servisin alan adı ya da alt alan adı olan `https` bağlantısı kabul edilir: `https://evil.example/?x=zoom.us` ya da

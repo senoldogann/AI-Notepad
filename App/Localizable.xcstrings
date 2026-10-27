@@ -426,6 +426,16 @@
         }
       }
     },
+    "%@ yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Uygulamanın ayarından AI-Notepad sunucusunu elle ekle (komut: AINotepad --mcp).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ contains comments; it wasn't overwritten so they aren't lost. Add the AI-Notepad server by hand in the app's settings (command: AINotepad --mcp)."
+          }
+        }
+      }
+    },
     "%@ · Dinlemeye başlamak için tıkla.": {
       "localizations": {
         "en": {
@@ -783,6 +793,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "AI-Notepad connection test"
+          }
+        }
+      }
+    },
+    "AI-Notepad geçici bir konumdan çalışıyor. Uygulamayı Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad is running from a temporary location. Move it to the Applications folder, reopen it, then connect again."
           }
         }
       }
@@ -1697,6 +1717,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A call may have started"
+          }
+        }
+      }
+    },
+    "Bir kanal bağlanır; yeni bağlantı öncekinin yerini alır (eski bağlantı servis tarafında da kapatılır). Apple Notlar ve klasör ayrıca açılabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One channel is connected at a time; a new connection replaces the previous one (which is also closed on the service side). Apple Notes and the folder can be turned on as well."
           }
         }
       }
@@ -2946,6 +2976,16 @@
         }
       }
     },
+    "E-postayla gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send by email"
+          }
+        }
+      }
+    },
     "Effort": {
       "localizations": {
         "en": {
@@ -3052,6 +3092,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "English"
+          }
+        }
+      }
+    },
+    "Eski bağlantı servis tarafında kapatılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't close the old connection on the service side: %@"
           }
         }
       }
@@ -3759,6 +3809,16 @@
         }
       }
     },
+    "Kanal seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a channel"
+          }
+        }
+      }
+    },
     "Kanala gönder (Slack, Teams, Discord…)": {
       "localizations": {
         "en": {
@@ -3795,6 +3855,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send to channels"
+          }
+        }
+      }
+    },
+    "Kanalı değiştir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change channel"
           }
         }
       }
@@ -5207,6 +5277,16 @@
         }
       }
     },
+    "Mail açılamadı: Mac'te ayarlı bir e-posta hesabı yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't open Mail: no email account is set up on this Mac."
+          }
+        }
+      }
+    },
     "Markdown": {
       "localizations": {
         "en": {
@@ -6002,6 +6082,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "With automatic language, recording starts in this language; within the first minute the spoken language (35 languages) is detected and used. On-device recognition chooses between this language and English."
+          }
+        }
+      }
+    },
+    "Oturumun süresi doldu; yeniden bağlan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session expired; connect again"
           }
         }
       }
@@ -8359,6 +8449,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notes for new meetings are written for this type; you can rewrite a meeting's note with another template later (⋯ menu)."
+          }
+        }
+      }
+    },
+    "Yeniden bağlan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect again"
           }
         }
       }
