@@ -138,12 +138,22 @@ public struct LivingFilmGradient: View {
         self.palette = palette
     }
 
+    /// Görünür alanın dışına kaydırılınca (ör. transkript okunurken kapak yukarıda kaldı) akış durur: ekranda
+    /// olmayan kapak için her karede bulanıklık çizilmez, ses çalarken kareler düşmez.
+    @State private var isOnScreen: Bool = true
+
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduceMotion)) { (context: TimelineViewDefaultContext) in
+        let isPaused: Bool = reduceMotion || !isOnScreen
+        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: isPaused)) { (context: TimelineViewDefaultContext) in
             FilmLayers(seed: seed, palette: palette, time: reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate)
         }
+        .onScrollVisibilityChange(threshold: 0.05) { (visible: Bool) -> Void in isOnScreen = visible }
     }
 }
+
+/// Bulanık bulut katmanı bu kat küçük çizilip büyütülür: bulanıklığın bedeli piksel sayısıyla büyür, bulanık görüntüde
+/// çözünürlük kaybı görünmez (16 kat daha ucuz; akan kapak ses çalarken kareleri düşürmesin).
+let cloudDownscale: CGFloat = 4
 
 /// Katmanlar: bulanık bulutlar → soluklaştırma → gren → kenar kararması.
 private struct FilmLayers: View {
@@ -172,18 +182,25 @@ private struct FilmLayers: View {
         let layout: FilmLayout = filmLayout(seed: seed, palette: palette)
         let colors: (base: Color, clouds: [Color]) = palette.colors
         ZStack {
-            Canvas { (context: inout GraphicsContext, size: CGSize) in
-                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(colors.base))
-                let shortSide: Double = min(size.width, size.height)
-                var large: GraphicsContext = context
-                large.addFilter(.blur(radius: shortSide * (layout.style == .clouds ? 0.26 : 0.1)))
-                drawClouds(context: large, clouds: layout.clouds, size: size, heightScale: layout.style == .clouds ? size.width : size.height)
-                // Bulut dokusu: daha az bulanık küçük tutamlar (düz lekeler yerine dalgalı, bulutumsu yapı).
-                if layout.style == .clouds {
-                    var wisps: GraphicsContext = context
-                    wisps.addFilter(.blur(radius: shortSide * 0.14))
-                    drawClouds(context: wisps, clouds: layout.wisps, size: size, heightScale: size.width)
+            GeometryReader { (geometry: GeometryProxy) in
+                let small: CGSize = CGSize(width: max(1, geometry.size.width / cloudDownscale), height: max(1, geometry.size.height / cloudDownscale))
+                Canvas { (context: inout GraphicsContext, size: CGSize) in
+                    // Bulut konumları ve bulanıklık yarıçapı boyuta göreli: küçük tuvalde aynı görüntü çıkar.
+                    context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(colors.base))
+                    let shortSide: Double = min(size.width, size.height)
+                    var large: GraphicsContext = context
+                    large.addFilter(.blur(radius: shortSide * (layout.style == .clouds ? 0.26 : 0.1)))
+                    drawClouds(context: large, clouds: layout.clouds, size: size, heightScale: layout.style == .clouds ? size.width : size.height)
+                    // Bulut dokusu: daha az bulanık küçük tutamlar (düz lekeler yerine dalgalı, bulutumsu yapı).
+                    if layout.style == .clouds {
+                        var wisps: GraphicsContext = context
+                        wisps.addFilter(.blur(radius: shortSide * 0.14))
+                        drawClouds(context: wisps, clouds: layout.wisps, size: size, heightScale: size.width)
+                    }
                 }
+                .frame(width: small.width, height: small.height)
+                .drawingGroup()
+                .scaleEffect(cloudDownscale, anchor: .topLeading)
             }
             // 90'lar filmi gibi hafif soluk: siyahlar biraz açık.
             Color.white.opacity(0.035).blendMode(.screen)
