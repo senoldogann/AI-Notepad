@@ -462,19 +462,21 @@ private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.islandEnabled) private var islandEnabled: Bool = true
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
-    @AppStorage(SettingsKey.tint) private var tint: String = PanelAppearance.standard.tint.rawValue
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsRow(title: Text("Tema")) {
-                EmptyView()
-            } control: {
-                PillPicker(selection: $theme, options: [
-                    (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
-                ])
-                .fixedSize()
+            Text("Tema")
+                .appFont(size: 14, weight: .medium)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
+                    ThemeSwatch(theme: item, isSelected: theme == item.rawValue, accent: appearance.accent.color) { theme = item.rawValue }
+                }
             }
+            .padding(.bottom, 14)
+            SettingsDivider()
             SettingsRow(title: Text("Yüzey")) {
                 Text("Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.")
             } control: {
@@ -494,14 +496,7 @@ private struct AppearanceSettings: View {
                     }
                 }
             }
-            SettingsRow(title: Text("Zemin tonu")) {
-                Text("Zemine çok hafif bir renk; kartlar ve yazı değişmez.")
-            } control: {
-                PillPicker(selection: $tint, options: [
-                    (ThemeTint.none.rawValue, "Yok"), (ThemeTint.warm.rawValue, "Sıcak"), (ThemeTint.cool.rawValue, "Serin"), (ThemeTint.accent.rawValue, "Vurgu"),
-                ])
-                .fixedSize()
-            }
+
             SettingsRow(title: Text("Vurgu rengi")) {
                 EmptyView()
             } control: {
@@ -579,6 +574,79 @@ private struct AppearanceSettings: View {
                 }
             }
         }
+    }
+}
+
+/// Tema kartı: takımın zemini üstünde küçük bir kart ve iki yazı çizgisi, altında adı; seçili olan vurgu rengiyle
+/// çerçeveli. Sistem teması açık ve koyuyu çapraz bölünmüş gösterir.
+private struct ThemeSwatch: View {
+    let theme: AppTheme
+    let isSelected: Bool
+    let accent: Color
+    let onSelect: @MainActor () -> Void
+
+    var body: some View {
+        let sets: (light: ThemeColorSet, dark: ThemeColorSet) = theme.colorSets
+        Button(action: onSelect) {
+            VStack(spacing: 8) {
+                ZStack {
+                    preview(set: sets.light)
+                    if theme == .system {
+                        preview(set: sets.dark)
+                            .clipShape(DiagonalHalf())
+                    }
+                }
+                .frame(height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSelected ? accent : Theme.line, lineWidth: isSelected ? 2 : 1))
+                Text(themeName(theme: theme))
+                    .appFont(size: 12, weight: isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.hoverPlain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private func preview(set: ThemeColorSet) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color(hex: set.background)
+            VStack(alignment: .leading, spacing: 5) {
+                RoundedRectangle(cornerRadius: 3).fill(Color(hex: set.ink)).frame(width: 34, height: 5)
+                RoundedRectangle(cornerRadius: 3).fill(Color(hex: set.muted)).frame(width: 22, height: 4)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(hex: set.card))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color(hex: set.line)))
+                    .frame(height: 22)
+            }
+            .padding(10)
+        }
+    }
+}
+
+/// Sol üstten sağ alta çapraz bölünmüş sağ-alt yarı.
+private struct DiagonalHalf: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path: Path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Temanın adı.
+private func themeName(theme: AppTheme) -> String {
+    switch theme {
+    case .system: String(localized: "Sistem")
+    case .light: String(localized: "Açık")
+    case .dark: String(localized: "Koyu")
+    case .paper: String(localized: "Kâğıt")
+    case .sand: String(localized: "Kum")
+    case .midnight: String(localized: "Gece")
+    case .graphite: String(localized: "Grafit")
     }
 }
 
@@ -955,6 +1023,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
     case slack
     case teams
     case discord
+    case zoom
     case webhook
 
     var id: String { rawValue }
@@ -964,6 +1033,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "Slack"
         case .teams: "Microsoft Teams"
         case .discord: "Discord"
+        case .zoom: "Zoom Team Chat"
         case .webhook: String(localized: "Webhook adresi")
         }
     }
@@ -973,6 +1043,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "number"
         case .teams: "person.3.fill"
         case .discord: "bubble.left.and.bubble.right.fill"
+        case .zoom: "video.fill"
         case .webhook: "bolt.horizontal.fill"
         }
     }
@@ -980,8 +1051,9 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
     var detail: LocalizedStringKey {
         switch self {
         case .slack: "Kendi adınla, seçtiğin kanala"
-        case .teams: "İş ya da okul hesabınla"
+        case .teams: "İş ya da okul hesabı (kişisel hesaplar desteklenmiyor)"
         case .discord: "Sunucu ve kanalı Discord'da seç"
+        case .zoom: "Kanalda /inc connect yaz, adresi ve anahtarı yapıştır"
         case .webhook: "Zapier, Make, n8n, Teams iş akışı"
         }
     }
@@ -992,7 +1064,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: .slack
         case .teams: .teams
         case .discord: .discord
-        case .webhook: nil
+        case .zoom, .webhook: nil
         }
     }
 }
@@ -1027,6 +1099,8 @@ private enum ChannelSetup: Equatable {
     case choosing(ChannelSignIn, [ChannelOption])
     /// Webhook adresi yapıştırılıyor.
     case pasting
+    /// Zoom adresi ve doğrulama anahtarı yapıştırılıyor.
+    case pastingZoom
     case testing
     case connected(String)
     case failed(String)
@@ -1045,6 +1119,7 @@ private struct WebhookSettings: View {
     @State private var setup: ChannelSetup = .idle
     @State private var selectedChannelID: String = ""
     @State private var manualAddress: String = ""
+    @State private var zoomToken: String = ""
     @State private var notesStatus: String?
     @State private var folderStatus: String?
 
@@ -1122,6 +1197,18 @@ private struct WebhookSettings: View {
                     .buttonStyle(.pillPrimary)
                     .disabled(manualAddress.isEmpty)
             }
+        case .pastingZoom:
+            statusPanel {
+                TextField("Zoom adresi", text: $manualAddress, prompt: Text(verbatim: "https://integrations.zoom.us/chat/webhooks/incomingwebhook/…"))
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Doğrulama anahtarı", text: $zoomToken, prompt: Text("Doğrulama anahtarı"))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+                Button("Vazgeç") { setup = .idle }.buttonStyle(.hoverPlain).foregroundStyle(Theme.muted)
+                Button("Bağla") { connectZoom() }
+                    .buttonStyle(.pillPrimary)
+                    .disabled(manualAddress.isEmpty || zoomToken.isEmpty)
+            }
         case .testing:
             Label("Bağlanıyor ve deneme mesajı gönderiliyor…", systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
         case .connected(let name):
@@ -1146,11 +1233,18 @@ private struct WebhookSettings: View {
     }
 
     private func channelCard(card: ChannelCard) -> some View {
-        destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: card.detail) {
-            Button(card.service == nil ? "Yapıştır" : "Bağlan") { start(card: card) }
-                .buttonStyle(.pillPrimary)
-                .controlSize(.small)
-                .disabled(isBusy)
+        let isConnected: Bool = connected.map { cardIsConnected(card: card, channel: $0) } ?? false
+        return destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: isConnected ? LocalizedStringKey(connected?.detail ?? "") : card.detail) {
+            if isConnected {
+                Label("Bağlı", systemImage: "checkmark.circle.fill")
+                    .appFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.tint)
+            } else {
+                Button(card.service == nil ? "Yapıştır" : "Bağlan") { start(card: card) }
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+                    .disabled(isBusy)
+            }
         }
     }
 
@@ -1158,7 +1252,7 @@ private struct WebhookSettings: View {
     private var isBusy: Bool {
         switch setup {
         case .signingIn, .testing: true
-        case .idle, .choosing, .pasting, .connected, .failed: false
+        case .idle, .choosing, .pasting, .pastingZoom, .connected, .failed: false
         }
     }
 
@@ -1221,6 +1315,12 @@ private struct WebhookSettings: View {
     }
 
     private func start(card: ChannelCard) {
+        if card == .zoom {
+            manualAddress = ""
+            zoomToken = ""
+            setup = .pastingZoom
+            return
+        }
         guard let service = card.service else {
             manualAddress = ""
             setup = .pasting
@@ -1288,6 +1388,15 @@ private struct WebhookSettings: View {
         connected = .account(connection)
         autoSend = true
         Task { await test() }
+    }
+
+    private func connectZoom() {
+        do {
+            saveWebhook(url: try zoomWebhookURL(address: manualAddress, token: zoomToken))
+            zoomToken = ""
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+        }
     }
 
     private func connectWebhook(text: String) {
@@ -1364,12 +1473,29 @@ private struct WebhookSettings: View {
 
 private let channelSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Settings")
 
+/// Kart bağlı kanalı mı gösteriyor: hesap bağlantısında servis, webhook'ta adresin türü eşleşir. Saf fonksiyondur.
+private func cardIsConnected(card: ChannelCard, channel: ConnectedChannel) -> Bool {
+    switch channel {
+    case .account(let connection):
+        return card.service == connection.service
+    case .webhook(let url):
+        switch webhookKind(url: url) {
+        case .slack: return card == .slack
+        case .discord: return card == .discord
+        case .teams: return card == .teams
+        case .zoom: return card == .zoom
+        case .generic: return card == .webhook
+        }
+    }
+}
+
 /// Webhook adresinin arayüzdeki adı. Saf fonksiyondur.
 private func channelName(url: URL) -> String {
     switch webhookKind(url: url) {
     case .slack: "Slack"
     case .discord: "Discord"
     case .teams: "Microsoft Teams"
+    case .zoom: "Zoom Team Chat"
     case .generic: url.host() ?? "Webhook"
     }
 }

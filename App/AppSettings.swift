@@ -93,7 +93,6 @@ enum SettingsKey {
     /// Pencere yüzeyi (dolu, buzlu cam, şeffaf cam), cam opaklığı ve zemin tonu.
     static let surface: String = "appearance.surface"
     static let surfaceOpacity: String = "appearance.surfaceOpacity"
-    static let tint: String = "appearance.tint"
 }
 
 /// Arayüz dili; macOS'ta uygulama dili yeniden başlatınca uygulanır.
@@ -145,26 +144,54 @@ func relaunchApplication() throws {
 }
 
 /// Panelin açık/koyu görünümü.
+/// Tema takımları: Sistem (ElevenLabs açık/koyu, sistemi izler), Açık, Koyu ve kendi renk takımı olan temalar.
 enum AppTheme: String, CaseIterable {
     case system
     case light
     case dark
+    case paper
+    case sand
+    case midnight
+    case graphite
+
+    /// Takımın görünümü koyu mu (Sistem'de nil: sistemi izler). Saf fonksiyondur.
+    var isDark: Bool? {
+        switch self {
+        case .system: nil
+        case .light, .paper, .sand: false
+        case .dark, .midnight, .graphite: true
+        }
+    }
+
+    /// Açık ve koyu görünüm için renk takımları; sabit görünümlü temalarda ikisi de aynıdır. Saf fonksiyondur.
+    var colorSets: (light: ThemeColorSet, dark: ThemeColorSet) {
+        switch self {
+        case .system: (.light, .dark)
+        case .light: (.light, .light)
+        case .dark: (.dark, .dark)
+        case .paper: (.paper, .paper)
+        case .sand: (.sand, .sand)
+        case .midnight: (.midnight, .midnight)
+        case .graphite: (.graphite, .graphite)
+        }
+    }
 }
 
 /// Temanın macOS görünümü; sistem temasında nil (sistemi izler). Saf fonksiyondur.
 func nsAppearance(theme: AppTheme) -> NSAppearance? {
-    switch theme {
-    case .system: nil
-    case .light: NSAppearance(named: .aqua)
-    case .dark: NSAppearance(named: .darkAqua)
+    switch theme.isDark {
+    case .none: nil
+    case .some(false): NSAppearance(named: .aqua)
+    case .some(true): NSAppearance(named: .darkAqua)
     }
 }
 
 /// Temayı uygulamanın tüm pencerelerine birden uygular (pencere bazında atama cam zemini ve adayı eski temada
-/// bırakıyordu).
+/// bırakıyordu) ve renk takımlarını seçer.
 @MainActor
 func applyTheme(theme: AppTheme) {
     NSApplication.shared.appearance = nsAppearance(theme: theme)
+    ThemeStore.shared.set(light: theme.colorSets.light, dark: theme.colorSets.dark)
 }
 
 /// Ayar aralıkları.
@@ -182,7 +209,7 @@ enum SettingsRange {
 func resetAppearanceSettings(defaults: UserDefaults) {
     for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.uiScale, SettingsKey.textSize,
                 SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled, SettingsKey.surface,
-                SettingsKey.surfaceOpacity, SettingsKey.tint] {
+                SettingsKey.surfaceOpacity] {
         defaults.removeObject(forKey: key)
     }
 }
@@ -250,7 +277,6 @@ func registerDefaultSettings() {
         SettingsKey.islandEnabled: true,
         SettingsKey.surface: PanelAppearance.standard.surface.rawValue,
         SettingsKey.surfaceOpacity: PanelAppearance.standard.surfaceOpacity,
-        SettingsKey.tint: PanelAppearance.standard.tint.rawValue,
     ])
 }
 

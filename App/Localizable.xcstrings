@@ -2835,6 +2835,16 @@
         }
       }
     },
+    "Doğrulama anahtarı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verification token"
+          }
+        }
+      }
+    },
     "Duraklat": {
       "localizations": {
         "en": {
@@ -3186,6 +3196,16 @@
         }
       }
     },
+    "Gece": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Midnight"
+          }
+        }
+      }
+    },
     "Genel": {
       "localizations": {
         "en": {
@@ -3212,6 +3232,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Global shortcuts"
+          }
+        }
+      }
+    },
+    "Grafit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphite"
           }
         }
       }
@@ -3745,6 +3775,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending to channel…"
+          }
+        }
+      }
+    },
+    "Kanalda /inc connect yaz, adresi ve anahtarı yapıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type /inc connect in a channel, paste the URL and token"
           }
         }
       }
@@ -4896,6 +4936,16 @@
         }
       }
     },
+    "Kum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sand"
+          }
+        }
+      }
+    },
     "Kurulum": {
       "localizations": {
         "en": {
@@ -4912,6 +4962,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook address from Teams (channel › ⋯ › Workflows) into the \"Webhook address\" card."
+          }
+        }
+      }
+    },
+    "Kâğıt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paper"
           }
         }
       }
@@ -6341,16 +6401,6 @@
         }
       }
     },
-    "Serin": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cool"
-          }
-        }
-      }
-    },
     "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.": {
       "localizations": {
         "en": {
@@ -6909,16 +6959,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
-          }
-        }
-      }
-    },
-    "Sıcak": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Warm"
           }
         }
       }
@@ -8040,16 +8080,6 @@
         }
       }
     },
-    "Vurgu": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accent"
-          }
-        }
-      }
-    },
     "Vurgu rengi": {
       "localizations": {
         "en": {
@@ -8393,16 +8423,6 @@
         }
       }
     },
-    "Yok": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "None"
-          }
-        }
-      }
-    },
     "Yunanca": {
       "localizations": {
         "en": {
@@ -8493,22 +8513,12 @@
         }
       }
     },
-    "Zemin tonu": {
+    "Zoom adresi": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Background tint"
-          }
-        }
-      }
-    },
-    "Zemine çok hafif bir renk; kartlar ve yazı değişmez.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A very light colour wash on the background; cards and text stay the same."
+            "value": "Zoom URL"
           }
         }
       }
@@ -9418,12 +9428,12 @@
         }
       }
     },
-    "İş ya da okul hesabınla": {
+    "İş ya da okul hesabı (kişisel hesaplar desteklenmiyor)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "With your work or school account"
+            "value": "Work or school account (personal accounts aren't supported)"
           }
         }
       }
