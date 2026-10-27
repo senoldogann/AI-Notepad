@@ -77,7 +77,12 @@ struct PanelHost: View {
         case .meeting(let id):
             PanelPageView(model: model, router: router, title: "Toplantı", back: .live, onHide: onHide) {
                 if let record = model.meetings.first(where: { $0.id == id }) {
-                    MeetingDetailPage(model: model, player: player, record: record) { router.page = .live }
+                    MeetingDetailPage(model: model, player: player, record: record) {
+                        router.page = .live
+                    } onRunRecipe: { (recipe: Recipe) -> Void in
+                        model.askArchive(question: recipe.prompt, meetingIDs: [record.id], recipeTitle: recipe.title)
+                        onOpenMainWindow(.ask)
+                    }
                         // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                         .id(record.id)
                 } else {

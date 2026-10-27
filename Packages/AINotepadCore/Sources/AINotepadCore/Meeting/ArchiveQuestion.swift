@@ -376,9 +376,7 @@ public func mentionCandidates(records: [MeetingRecord], query: String, excluding
     return newestFirst(records: records)
         .filter { !excluding.contains($0.id) && $0.status == .done }
         .filter { (record: MeetingRecord) -> Bool in
-            needle.isEmpty || [record.title, record.note?.title ?? ""].contains { (title: String) -> Bool in
-                title.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
-            }
+            needle.isEmpty || [record.title, record.note?.title ?? ""].contains { looselyContains(text: $0, needle: needle) }
         }
         .prefix(limit)
         .map { $0 }

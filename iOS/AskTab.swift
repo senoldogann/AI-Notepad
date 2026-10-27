@@ -20,7 +20,45 @@ final class PhoneAsk {
     }
 
     /// Soruyu arşive sorar; cevap akarak gelir. `meetingIDs` boş değilse yalnız o toplantılara (`@` ile etiketlenenler).
-    func ask(question: String, meetingIDs: [String]) {
+    /// Kullanıcının kaydettiği tarifler.
+    private(set) var userRecipes: [Recipe] = []
+    /// Tariflerin okunamama ya da saklanamama nedeni.
+    private(set) var recipeError: String?
+
+    /// Yerleşik ve kullanıcı tarifleri.
+    var recipes: [Recipe] {
+        builtInRecipes() + userRecipes
+    }
+
+    /// Kayıtlı tarifleri okur.
+    func loadRecipes() {
+        do {
+            userRecipes = try loadUserRecipes(defaults: .standard)
+        } catch {
+            recipeError = userFacingMessage(error: error)
+        }
+    }
+
+    /// Soruyu tarif olarak kaydeder.
+    func saveRecipe(question: String) {
+        store(recipes: userRecipes + [recipeFromQuestion(question: question, id: UUID().uuidString)])
+    }
+
+    /// Kullanıcı tarifini siler.
+    func deleteRecipe(id: String) {
+        store(recipes: userRecipes.filter { $0.id != id })
+    }
+
+    private func store(recipes: [Recipe]) {
+        do {
+            try saveUserRecipes(recipes: recipes, defaults: .standard)
+            userRecipes = recipes
+        } catch {
+            recipeError = userFacingMessage(error: error)
+        }
+    }
+
+    func ask(question: String, meetingIDs: [String], recipeTitle: String?) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnswering else {
             return
@@ -31,7 +69,7 @@ final class PhoneAsk {
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = store.meetings.filter { meetingIDs.contains($0.id) }
         exchanges.append(ArchiveExchange(
-            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, startedAt: Date(), phase: .understanding,
+            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         isAnswering = true
@@ -136,6 +174,8 @@ struct AskTab: View {
                         ForEach(ask.exchanges) { (exchange: ArchiveExchange) in
                             ExchangeView(exchange: exchange) { (passage: ArchivePassage) -> Void in
                                 router.open(meetingID: passage.meetingID)
+                            } onSaveRecipe: { (question: String) -> Void in
+                                ask.saveRecipe(question: question)
                             }
                             .id(exchange.id)
                         }
@@ -161,10 +201,25 @@ struct AskTab: View {
                             question = removingMentionQuery(text: question)
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    } else if recipeQuery(text: question) != nil {
+                        RecipeSuggestions(
+                            recipes: recipeCandidates(recipes: ask.recipes, query: recipeQuery(text: question) ?? ""), highlighted: -1
+                        ) { (recipe: Recipe) -> Void in
+                            guard !ask.isAnswering else {
+                                return
+                            }
+                            ask.ask(question: recipe.prompt, meetingIDs: mentioned.map(\.id), recipeTitle: recipe.title)
+                            question = ""
+                            withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
+                            isFocused = false
+                        } onDelete: { (recipe: Recipe) -> Void in
+                            ask.deleteRecipe(id: recipe.id)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                     composer
                 }
-                .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil)
+                .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil || recipeQuery(text: question) != nil)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             }
@@ -219,7 +274,7 @@ struct AskTab: View {
                     symbol: item.element.symbol, question: LocalizedStringKey(item.element.text), hint: "Tüm toplantılarında arar",
                     palette: [FilmPalette.sunset, .rose, .sunset, .rose][item.offset % 4]
                 ) {
-                    ask.ask(question: String(localized: String.LocalizationValue(item.element.text)), meetingIDs: [])
+                    ask.ask(question: String(localized: String.LocalizationValue(item.element.text)), meetingIDs: [], recipeTitle: nil)
                 }
                 .disabled(store.meetings.isEmpty)
             }
@@ -246,7 +301,7 @@ struct AskTab: View {
             HStack(alignment: .bottom, spacing: 10) {
             TextField(
                 mentioned.isEmpty
-                    ? (ask.exchanges.isEmpty ? "Sor… (@ ile toplantı etiketle)" : "Devam sorusu sor…")
+                    ? (ask.exchanges.isEmpty ? "Sor… (@ toplantı, / tarif)" : "Devam sorusu sor…")
                     : "Etiketlenen toplantılara sor…",
                 text: $question, axis: .vertical
             )
@@ -289,10 +344,10 @@ struct AskTab: View {
     }
 
     private func send() {
-        guard !ask.isAnswering, mentionQuery(text: question) == nil else {
+        guard !ask.isAnswering, mentionQuery(text: question) == nil, recipeQuery(text: question) == nil else {
             return
         }
-        ask.ask(question: question, meetingIDs: mentioned.map(\.id))
+        ask.ask(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)
         question = ""
         // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
         withAnimation(.smooth(duration: 0.2)) { mentioned = [] }

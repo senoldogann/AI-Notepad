@@ -20,6 +20,8 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
     public let question: String
     /// `@` ile seçilen toplantıların başlıkları (soru yalnız onlara soruldu); boşsa tüm arşiv.
     public let scopeTitles: [String]
+    /// Soru bir tariften geldiyse tarifin adı (balonda uzun istem yerine o görünür).
+    public let recipeTitle: String?
     public let startedAt: Date
     public var phase: Phase
     /// Hızlı modelin çıkardığı arama terimleri.
@@ -33,12 +35,13 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
     public var modelName: String?
 
     public init(
-        id: UUID, question: String, scopeTitles: [String], startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
+        id: UUID, question: String, scopeTitles: [String], recipeTitle: String?, startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
         answer: ArchiveAnswer, finishedAt: Date?, modelName: String?
     ) {
         self.id = id
         self.question = question
         self.scopeTitles = scopeTitles
+        self.recipeTitle = recipeTitle
         self.startedAt = startedAt
         self.phase = phase
         self.terms = terms
@@ -78,10 +81,13 @@ public struct ThinkingRing: View {
 public struct ExchangeView: View {
     let exchange: ArchiveExchange
     let onOpen: @MainActor (ArchivePassage) -> Void
+    /// Soruyu tarif olarak kaydeder (tariften gelen soruda gösterilmez).
+    let onSaveRecipe: @MainActor (String) -> Void
 
-    public init(exchange: ArchiveExchange, onOpen: @escaping @MainActor (ArchivePassage) -> Void) {
+    public init(exchange: ArchiveExchange, onOpen: @escaping @MainActor (ArchivePassage) -> Void, onSaveRecipe: @escaping @MainActor (String) -> Void) {
         self.exchange = exchange
         self.onOpen = onOpen
+        self.onSaveRecipe = onSaveRecipe
     }
 
     public var body: some View {
@@ -99,7 +105,13 @@ public struct ExchangeView: View {
             }
             HStack {
                 Spacer(minLength: 80)
-                Text(exchange.question)
+                Group {
+                    if let recipe = exchange.recipeTitle {
+                        Label(recipe, systemImage: "wand.and.stars")
+                    } else {
+                        Text(exchange.question)
+                    }
+                }
                     .appFont(size: 15, weight: .regular)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -133,7 +145,7 @@ public struct ExchangeView: View {
             }
             if ![.understanding, .searching, .writing].contains(exchange.phase) {
                 // Bitince tek sessiz satır: kopyala, kaynaklar ve nasıl cevaplandığı; ayrıntı altta açılır.
-                AnswerFooter(exchange: exchange, onOpen: onOpen)
+                AnswerFooter(exchange: exchange, onOpen: onOpen, onSaveRecipe: onSaveRecipe)
                     .transition(.opacity)
             }
         }
@@ -210,13 +222,31 @@ private enum AnswerDetail: Equatable {
 private struct AnswerFooter: View {
     let exchange: ArchiveExchange
     let onOpen: @MainActor (ArchivePassage) -> Void
+    let onSaveRecipe: @MainActor (String) -> Void
     @State private var detail: AnswerDetail?
+    @State private var isSaved: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 if exchange.phase == .done {
                     CopyAnswerButton(text: exchange.answer.text)
+                    if exchange.recipeTitle == nil {
+                        Button {
+                            onSaveRecipe(exchange.question)
+                            isSaved = true
+                        } label: {
+                            Image(systemName: isSaved ? "wand.and.stars" : "wand.and.stars.inverse")
+                                .appFont(size: 12, weight: .medium)
+                                .foregroundStyle(isSaved ? Theme.ink : Theme.muted)
+                                .frame(width: 28, height: 26)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.hoverPlain)
+                        .disabled(isSaved)
+                        .hoverHint(isSaved ? "Tarif olarak kaydedildi: \"/\" ile çalıştır" : "Tarif olarak kaydet (\"/\" ile yeniden sor)", alignment: .leading, edge: .bottom)
+                        .accessibilityLabel(isSaved ? "Tarif olarak kaydedildi" : "Tarif olarak kaydet")
+                    }
                 }
                 if !exchange.answer.sources.isEmpty {
                     FooterPill(symbol: "text.quote", isOpen: detail == .sources) {
@@ -716,5 +746,72 @@ struct DiagonalLines: Shape {
             x += spacing
         }
         return path
+    }
+}
+
+
+/// "/" ile tarif önerileri: simge, başlık ve (kullanıcınınkilerde) sil; seçili satır soluk dolgulu.
+public struct RecipeSuggestions: View {
+    let recipes: [Recipe]
+    let highlighted: Int
+    let onPick: @MainActor (Recipe) -> Void
+    let onDelete: @MainActor (Recipe) -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    public init(recipes: [Recipe], highlighted: Int, onPick: @escaping @MainActor (Recipe) -> Void, onDelete: @escaping @MainActor (Recipe) -> Void) {
+        self.recipes = recipes
+        self.highlighted = highlighted
+        self.onPick = onPick
+        self.onDelete = onDelete
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Tarifler — @ ile toplantı seçersen yalnız ona uygulanır")
+                .appFont(size: 11, weight: .semibold)
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+            if recipes.isEmpty {
+                Text("Eşleşen tarif yok").appFont(size: 13, weight: .regular).foregroundStyle(Theme.muted).padding(10)
+            }
+            ForEach(Array(recipes.enumerated()), id: \.element.id) { (item: (offset: Int, element: Recipe)) in
+                Button {
+                    onPick(item.element)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: item.element.symbol)
+                            .appFont(size: 12, weight: .semibold)
+                            .foregroundStyle(appearance.accent.color)
+                            .frame(width: 24, height: 24)
+                            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        Text(verbatim: "/" + item.element.title)
+                            .appFont(size: 14, weight: .regular)
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        if !item.element.isBuiltIn {
+                            Text("Senin").appFont(size: 11, weight: .medium).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(item.offset == highlighted ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    if !item.element.isBuiltIn {
+                        Button("Tarifi sil", systemImage: "trash", role: .destructive) { onDelete(item.element) }
+                    }
+                }
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+        .shadow(color: .black.opacity(0.12), radius: 18, y: 6)
     }
 }
