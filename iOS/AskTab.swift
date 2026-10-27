@@ -214,30 +214,13 @@ struct AskTab: View {
             .environment(\.colorScheme, .dark)
             PhoneSectionHeader(title: "Örnek sorular", actionTitle: nil, action: nil)
                 .padding(.top, 4)
-            ForEach(examples, id: \.text) { (example: (symbol: String, text: String)) in
-                Button {
-                    ask.ask(question: String(localized: String.LocalizationValue(example.text)), meetingIDs: [])
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: example.symbol)
-                            .appFont(size: 15, weight: .medium)
-                            .foregroundStyle(Theme.muted)
-                            .frame(width: 22)
-                        Text(LocalizedStringKey(example.text))
-                            .appFont(size: 15, weight: .regular)
-                            .foregroundStyle(Theme.ink)
-                            .multilineTextAlignment(.leading)
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right")
-                            .appFont(size: 11, weight: .semibold)
-                            .foregroundStyle(Theme.muted.opacity(0.7))
-                    }
-                    .padding(15)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+            ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in
+                ExampleQuestionCard(
+                    symbol: item.element.symbol, question: LocalizedStringKey(item.element.text), hint: "Tüm toplantılarında arar",
+                    palette: [FilmPalette.sunset, .rose, .sunset, .rose][item.offset % 4]
+                ) {
+                    ask.ask(question: String(localized: String.LocalizationValue(item.element.text)), meetingIDs: [])
                 }
-                .buttonStyle(PressableCardStyle())
                 .disabled(store.meetings.isEmpty)
             }
         }

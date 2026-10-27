@@ -625,3 +625,96 @@ public struct MentionSuggestions: View {
         .shadow(color: .black.opacity(0.12), radius: 18, y: 6)
     }
 }
+
+/// Örnek soru kartı: solda film gradyanlı simge kutusu, soru ve kısa ipucu; sağa doğru beliren ince çapraz çizgiler ve
+/// ok dairesi. Üzerine gelince kenar vurgu renginde ışır, kart hafifçe yükselir ve ok vurgu rengine döner.
+public struct ExampleQuestionCard: View {
+    let symbol: String
+    let question: LocalizedStringKey
+    let hint: LocalizedStringKey
+    let palette: FilmPalette
+    let onAsk: @MainActor () -> Void
+    @State private var isHovering: Bool = false
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    public init(symbol: String, question: LocalizedStringKey, hint: LocalizedStringKey, palette: FilmPalette, onAsk: @escaping @MainActor () -> Void) {
+        self.symbol = symbol
+        self.question = question
+        self.hint = hint
+        self.palette = palette
+        self.onAsk = onAsk
+    }
+
+    public var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        Button(action: onAsk) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .appFont(size: 16, weight: .semibold)
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background { FilmGradient(seed: "soru-\(symbol)", palette: palette) }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: palette.colors.base.opacity(0.25), radius: 6, y: 3)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(question)
+                        .appFont(size: 15, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(hint)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .appFont(size: 11, weight: .bold)
+                    .foregroundStyle(isHovering ? Color.white : Theme.muted)
+                    .frame(width: 28, height: 28)
+                    .background(isHovering ? appearance.accent.color : Theme.soft, in: Circle())
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .background {
+                ZStack {
+                    shape.fill(Theme.card)
+                    DiagonalLines(spacing: 9)
+                        .stroke(Theme.line, lineWidth: 1)
+                        .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(shape)
+                }
+            }
+            .overlay {
+                shape.strokeBorder(
+                    isHovering
+                        ? AnyShapeStyle(LinearGradient(colors: [appearance.accent.color.opacity(0.7), appearance.accent.color.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        : AnyShapeStyle(Theme.line),
+                    lineWidth: 1
+                )
+            }
+            .shadow(color: .black.opacity(isHovering ? 0.10 : 0.04), radius: isHovering ? 14 : 6, y: isHovering ? 6 : 2)
+            .offset(y: isHovering ? -1.5 : 0)
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { (hovering: Bool) -> Void in isHovering = hovering }
+        .linkPointer(isEnabled: true)
+        .animation(.easeOut(duration: 0.18), value: isHovering)
+    }
+}
+
+/// Çapraz (45°) ince çizgiler: kart dokusu.
+struct DiagonalLines: Shape {
+    let spacing: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path: Path = Path()
+        var x: CGFloat = -rect.height
+        while x < rect.width {
+            path.move(to: CGPoint(x: x, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            x += spacing
+        }
+        return path
+    }
+}

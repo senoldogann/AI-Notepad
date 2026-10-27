@@ -107,6 +107,16 @@
         }
       }
     },
+    "%@ adresinin nasıl alınacağını aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open how to get a %@ address"
+          }
+        }
+      }
+    },
     "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
       "extractionState": "stale",
       "localizations": {
@@ -1239,6 +1249,26 @@
         }
       }
     },
+    "Bağla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
+    "Bağlandı — uygulamayı yeniden aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected — reopen the app"
+          }
+        }
+      }
+    },
     "Bağlantılar": {
       "localizations": {
         "en": {
@@ -1255,6 +1285,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Test connection"
+          }
+        }
+      }
+    },
+    "Bağlayınca Claude, Cursor ya da VS Code toplantılarını listeleyip arar, notları ve transkriptleri okur (yalnızca okur, hiçbir şey değiştirmez). Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Once connected, Claude, Cursor or VS Code can list and search your meetings and read notes and transcripts (read-only, nothing is changed). What it reads is sent to its own AI provider."
+          }
+        }
+      }
+    },
+    "Bağlı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
           }
         }
       }
@@ -1381,12 +1431,12 @@
         }
       }
     },
-    "Bir görevin dairesine dokununca buraya taşınır.": {
+    "Bir görevin dairesine dokununca buraya taşınır; bitirdiklerin burada birikir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap a task's circle to move it here."
+            "value": "Tap a task's circle to move it here; finished tasks collect here."
           }
         }
       }
@@ -1397,6 +1447,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Click a task's circle to move it here."
+          }
+        }
+      }
+    },
+    "Bir görevin dairesine tıklayınca buraya taşınır; bitirdiklerin burada birikir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click a task's circle to move it here; finished tasks collect here."
           }
         }
       }
@@ -1579,6 +1639,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Briefing"
+          }
+        }
+      }
+    },
+    "Bu Mac'te yüklü değil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not installed on this Mac"
           }
         }
       }
@@ -1937,16 +2007,6 @@
         }
       }
     },
-    "Claude Desktop, ChatGPT ve diğerleri": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude Desktop, ChatGPT and others"
-          }
-        }
-      }
-    },
     "Claude Fable 5.1 — en yetenekli, en pahalı": {
       "localizations": {
         "en": {
@@ -2270,6 +2330,16 @@
         }
       }
     },
+    "Diğer MCP istemcileri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other MCP clients"
+          }
+        }
+      }
+    },
     "Diğer diller": {
       "localizations": {
         "en": {
@@ -2502,6 +2572,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No ElevenLabs key saved."
+          }
+        }
+      }
+    },
+    "Elle yapılandırma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual configuration"
           }
         }
       }
@@ -3019,6 +3099,16 @@
         }
       }
     },
+    "Her toplantının notu (önce görevler, sonra kararlar ve özet) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each meeting's note (tasks first, then decisions and summary) is sent there automatically. You can also send it manually from the ⋯ menu on the meeting page."
+          }
+        }
+      }
+    },
     "Herkese günaydın, toplantıya başlayalım.": {
       "localizations": {
         "en": {
@@ -3155,6 +3245,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove?"
+          }
+        }
+      }
+    },
+    "Kanallara gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to channels"
           }
         }
       }
@@ -5371,6 +5471,16 @@
         }
       }
     },
+    "Servisin \"gelen webhook\" adresini al ve aşağıya yapıştır; tür adresten tanınır. Adresin nasıl alınacağı:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get the service's \"incoming webhook\" address and paste it below; the type is recognised from the address. How to get it:"
+          }
+        }
+      }
+    },
     "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.": {
       "localizations": {
         "en": {
@@ -5633,16 +5743,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't capture system audio (%@, code %lld). Check the output device and restart the recording."
-          }
-        }
-      }
-    },
-    "Slack, Microsoft Teams (iş akışı), Discord, Zapier, Make ya da n8n webhook adresi: her toplantının notu (özet, kararlar, görevler) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A Slack, Microsoft Teams (workflow), Discord, Zapier, Make or n8n webhook URL: each meeting's note (summary, decisions, tasks) goes there automatically. You can also send it from the ⋯ menu on the meeting page."
           }
         }
       }
@@ -6070,6 +6170,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start recording an in-person meeting with one tap."
+          }
+        }
+      }
+    },
+    "Tek tıkla bağla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect in one click"
           }
         }
       }
@@ -6627,6 +6737,16 @@
         }
       }
     },
+    "Tüm toplantılarında arar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searches all your meetings"
+          }
+        }
+      }
+    },
     "Tüm yüklü yazı tipleri": {
       "localizations": {
         "en": {
@@ -6796,6 +6916,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies to the whole app; any font installed on your Mac can be chosen."
+          }
+        }
+      }
+    },
+    "Uygulamanın yapılandırması okunamadı (%@); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read the app's configuration (%@); it may be corrupted. Fix the file and try again; it was not overwritten."
           }
         }
       }
@@ -6970,12 +7100,22 @@
         }
       }
     },
-    "Yapay zekâ uygulamalarına bağla (MCP)": {
+    "Yapay zekâ uygulamaları": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connect AI apps (MCP)"
+            "value": "AI apps"
+          }
+        }
+      }
+    },
+    "Yapılandırma yazılamadı: %@. Klasör izinlerini kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't write the configuration: %@. Check the folder permissions."
           }
         }
       }

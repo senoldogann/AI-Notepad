@@ -52,7 +52,12 @@ struct TasksTab: View {
                     ])
                     if shown.isEmpty {
                         if filter == .done {
-                            EmptyStateCard(symbol: "checkmark.circle", title: "Henüz tamamlanan yok", message: "Bir görevin dairesine dokununca buraya taşınır.")
+                            EmptyStateHero(
+                                symbol: "checkmark.circle", title: "Henüz tamamlanan yok",
+                                message: "Bir görevin dairesine dokununca buraya taşınır; bitirdiklerin burada birikir.", palette: .sunset, steps: []
+                            ) {
+                                EmptyView()
+                            }
                         } else if doneCount > 0 {
                             EmptyStateHero(
                                 symbol: "party.popper.fill", title: "Açık görevin kalmadı",
@@ -65,7 +70,7 @@ struct TasksTab: View {
                             EmptyStateHero(
                                 symbol: "checklist", title: "Henüz sana düşen görev yok",
                                 message: "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır.",
-                                palette: .mint,
+                                palette: .sunset,
                                 steps: [
                                     EmptyStateStep(symbol: "mic.fill", title: "Kayıt"),
                                     EmptyStateStep(symbol: "sparkles", title: "Not yazılır"),

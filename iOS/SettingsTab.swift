@@ -105,11 +105,11 @@ private struct KeyRow: View {
                 if isFromMac {
                     Label("Mac'ten", systemImage: "icloud.fill")
                         .appFont(size: 12, weight: .medium)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.tint)
                 } else if isSaved {
                     Label("Kayıtlı", systemImage: "checkmark.circle.fill")
                         .appFont(size: 12, weight: .medium)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.tint)
                 }
             }
             HStack {

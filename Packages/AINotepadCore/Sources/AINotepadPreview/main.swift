@@ -106,7 +106,7 @@ MainActor.assumeIsolated {
             view: EmptyStateHero(
                 symbol: "person.2.fill", title: "Henüz kimse yok",
                 message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle.",
-                palette: .violet,
+                palette: .sunset,
                 steps: [
                     EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
                     EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),
@@ -133,6 +133,30 @@ MainActor.assumeIsolated {
         frame: NSRect(x: 400, y: 80, width: 760, height: 480)
     )
     print("confetti \(confetti)")
+    // Sor sayfasının örnek soru kartları (açık ve koyu).
+    for (name, scheme, x) in [("cards-light", ColorScheme.light, 40.0), ("cards-dark", ColorScheme.dark, 820.0)] {
+        let number: Int = showWindow(
+            view: VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    ExampleQuestionCard(symbol: "checklist", question: "Bana hangi görevler verildi?", hint: "Tüm toplantılarında arar", palette: .sunset) {}
+                    ExampleQuestionCard(symbol: "checkmark.seal", question: "Son toplantılarda alınan kararlar neler?", hint: "Tüm toplantılarında arar", palette: .sunset) {}
+                }
+                HStack(spacing: 12) {
+                    ExampleQuestionCard(symbol: "eurosign.circle", question: "Bütçe hakkında neler konuşuldu?", hint: "Tüm toplantılarında arar", palette: .rose) {}
+                    ExampleQuestionCard(symbol: "person.2", question: "Bu hafta kimlerle neler konuştum?", hint: "Tüm toplantılarında arar", palette: .sunset) {}
+                }
+                EmptyStateHero(symbol: "checkmark.circle", title: "Tamamlanan görev yok", message: "Bir görevin dairesine tıklayınca buraya taşınır; bitirdiklerin burada birikir.", palette: .sunset, steps: []) {
+                    EmptyView()
+                }
+            }
+            .padding(24)
+            .frame(width: 760, height: 640)
+            .background(Theme.background)
+            .environment(\.colorScheme, scheme),
+            frame: NSRect(x: x, y: 60, width: 760, height: 640)
+        )
+        print("\(name) \(number)")
+    }
     // Çıktı bir dosyaya yönlendirildiğinde de hemen görünsün.
     fflush(stdout)
 }

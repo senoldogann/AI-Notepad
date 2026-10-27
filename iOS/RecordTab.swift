@@ -495,7 +495,7 @@ private struct PreparingCard: View {
                 HStack(spacing: 10) {
                     Group {
                         if item.offset < step.rawValue {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
                         } else if item.offset == step.rawValue {
                             ProgressView().controlSize(.small)
                         } else {

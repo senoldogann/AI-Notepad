@@ -730,7 +730,7 @@ struct MeetingDetailPage: View {
         case .saved(let url):
             HStack(spacing: 6) {
                 Label("İndirilenler'e kaydedildi: \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.tint)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Button("Finder'da göster") {
@@ -743,7 +743,7 @@ struct MeetingDetailPage: View {
         case .copied:
             Label("Markdown panoya kopyalandı", systemImage: "checkmark.circle.fill")
                 .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.green)
+                .foregroundStyle(.tint)
         case .failed(let message):
             Text(message)
                 .appFont(size: 11, weight: .regular)
@@ -1387,7 +1387,7 @@ struct TaskCheckbox: View {
         Button(action: onToggle) {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(isDone ? Color.green : Theme.muted)
+                .foregroundStyle(isDone ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 22, height: 22)
         }
