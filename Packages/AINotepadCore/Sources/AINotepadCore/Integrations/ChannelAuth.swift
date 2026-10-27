@@ -23,17 +23,18 @@ public enum ChannelService: String, Sendable, Codable, CaseIterable {
 }
 
 /// Geliştirici portallarında kayıtlı AI-Notepad uygulamalarının istemci kimlikleri (gizli değildir; PKCE kullanılır).
-/// Boşsa o servis henüz kaydedilmemiştir. Saf fonksiyondur.
+/// Saf fonksiyondur.
 public func channelClientID(service: ChannelService) -> String {
     switch service {
-    case .slack: ""
-    case .discord: ""
-    case .teams: ""
+    case .slack: "10430206781088.12428911139412"
+    case .discord: "1564616483030704169"
+    case .teams: "a5dd461b-471e-4b48-9b5f-85843bb84eee"
     }
 }
 
-/// Girişin döndüğü adres şeması (`ainotepad://oauth/<servis>`); portallarda yönlendirme adresi olarak kayıtlıdır.
-public let oauthCallbackScheme: String = "ainotepad"
+/// Girişin döndüğü adres şeması (`com.senoldogan.ainotepad://oauth/<servis>`); portallarda yönlendirme adresi olarak
+/// kayıtlıdır (Slack yalnızca ters alan adı biçimindeki şemayı kabul ediyor).
+public let oauthCallbackScheme: String = "com.senoldogan.ainotepad"
 
 /// Servisin yönlendirme adresi. Saf fonksiyondur.
 public func oauthRedirectURI(service: ChannelService) -> String {
@@ -42,7 +43,7 @@ public func oauthRedirectURI(service: ChannelService) -> String {
 
 /// Kanal girişi ya da gönderimi başarısız. Jetonlar hiçbir zaman hataya girmez.
 public enum ChannelAuthError: Error, Equatable {
-    /// Servisin istemci kimliği uygulamada yok (geliştirici portalında kayıt bekliyor).
+    /// Servisin istemci kimliği uygulamada yok.
     case notConfigured(service: ChannelService)
     /// Kullanıcı girişte izin vermedi ya da kurum yöneticisi onayı gerekiyor.
     case denied(service: ChannelService, reason: String)

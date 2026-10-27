@@ -112,10 +112,10 @@ struct WebhookLiveTests {
         }
         let slack: [String: String] = try query(.slack)
         #expect(slack["user_scope"] == "chat:write,channels:read,groups:read" && slack["scope"] == nil)
-        #expect(slack["redirect_uri"] == "ainotepad://oauth/slack" && slack["code_challenge_method"] == "S256" && slack["state"] == "s1")
+        #expect(slack["redirect_uri"] == "com.senoldogan.ainotepad://oauth/slack" && slack["code_challenge_method"] == "S256" && slack["state"] == "s1")
         #expect(try query(.discord)["scope"] == "webhook.incoming")
         #expect(try query(.teams)["scope"]?.contains("ChannelMessage.Send") == true)
-        let callback: (String) -> URL = { (query: String) -> URL in URL(string: "ainotepad://oauth/slack?\(query)")! }
+        let callback: (String) -> URL = { (query: String) -> URL in URL(string: "com.senoldogan.ainotepad://oauth/slack?\(query)")! }
         #expect(try oauthCallbackCode(service: .slack, url: callback("code=abc&state=s1"), expectedState: "s1") == "abc")
         #expect(throws: ChannelAuthError.stateMismatch(service: .slack)) {
             try oauthCallbackCode(service: .slack, url: callback("code=abc&state=baska"), expectedState: "s1")
