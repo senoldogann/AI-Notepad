@@ -47,6 +47,7 @@ struct AINotepadiOSApp: App {
                 .task {
                     store.reload()
                     ask.loadRecipes()
+                    ask.loadHistory()
                     await store.cloud.start(excluding: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 })) { store.reload() }
                     store.applyRetention(now: Date())
                     #if DEBUG
@@ -257,11 +258,27 @@ final class PhoneStore {
             let directory: URL = try sessionDirectory(id: meetingID)
             let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
             let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
-            try saveMeeting(record: result, directory: directory)
-            upsert(record: result)
+            // Eski not geçmişe girer (⋯ › Önceki sürümler).
+            let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Not yenilendi"), savedAt: Date())
+            try saveMeeting(record: versioned, directory: directory)
+            upsert(record: versioned)
         } catch {
             problems = appendUnique(messages: problems, message: String(localized: "Not yenilenemedi: \(userFacingMessage(error: error))"))
         }
+    }
+
+    /// Notun önceki sürümünü geri yükler (`index`: geçmişte yeniden eskiye sıra); şimdiki not geçmişe girer. Kayıttaki,
+    /// işlenen ya da notu yazılan toplantıda yapılmaz.
+    func restoreNoteVersion(meetingID: String, index: Int) throws {
+        guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing,
+              !regeneratingIDs.contains(meetingID) else {
+            throw StorageError.writeFailed(path: meetingID, reason: "kayıtta ya da işleniyor")
+        }
+        let restored: MeetingRecord = try restoringNoteVersion(
+            record: record, index: index, reason: String(localized: "Önceki sürüm geri yüklendi"), savedAt: Date()
+        )
+        try saveMeeting(record: restored, directory: try sessionDirectory(id: meetingID))
+        upsert(record: restored)
     }
 
     /// Toplantının klasörü (klasör adı toplantı kimliğidir).

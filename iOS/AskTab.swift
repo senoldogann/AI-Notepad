@@ -4,7 +4,8 @@ import os
 import SwiftUI
 
 /// Arşiv sohbeti: soru-cevaplar ve süren cevap. Cevabı Mac'teki `askArchive` yazar (arama terimleri → parçalar → akan
-/// cevap); devam soruları önceki cevapları bağlam alır.
+/// cevap); devam soruları önceki cevapları bağlam alır. Sohbetler her cevaptan sonra bu iPhone'da saklanır (iCloud'a
+/// eşitlenmez) ve geçmişten yeniden açılır.
 @MainActor
 @Observable
 final class PhoneAsk {
@@ -12,6 +13,12 @@ final class PhoneAsk {
 
     private(set) var exchanges: [ArchiveExchange] = []
     private(set) var isAnswering: Bool = false
+    /// Saklanan sohbetler (yeniden eskiye; en fazla `askHistoryLimit`).
+    private(set) var conversations: [AskConversation] = []
+    /// Açık sohbetin kimliği: ilk cevap saklanınca atanır, "Yeni sohbet"te nil.
+    private(set) var currentConversationID: UUID?
+    /// Sohbet geçmişinin okunamama, saklanamama ya da silinememe nedeni.
+    private(set) var historyError: String?
     @ObservationIgnored private let store: PhoneStore
     @ObservationIgnored private var task: Task<Void, Never>?
 
@@ -63,13 +70,11 @@ final class PhoneAsk {
         guard !trimmed.isEmpty, !isAnswering else {
             return
         }
-        let history: [ArchiveTurn] = exchanges.compactMap { (exchange: ArchiveExchange) -> ArchiveTurn? in
-            exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
-        }
+        let history: [ArchiveTurn] = archiveHistory(exchanges: exchanges)
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = store.meetings.filter { meetingIDs.contains($0.id) }
         exchanges.append(ArchiveExchange(
-            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
+            id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         isAnswering = true
@@ -93,6 +98,7 @@ final class PhoneAsk {
                     )
                 }
                 self?.finish(id: id, phase: .done)
+                self?.saveConversation(exchangeID: id)
             } catch is CancellationError {
                 self?.finish(id: id, phase: .stopped)
             } catch let error as URLError where error.code == .cancelled {
@@ -109,13 +115,83 @@ final class PhoneAsk {
         task?.cancel()
     }
 
-    /// Sohbeti temizler (yeni konu: önceki cevaplar bağlam olmaz).
+    /// Sohbeti temizler (yeni konu: önceki cevaplar bağlam olmaz); önceki sohbet geçmişte kalır.
     func clear() {
         task?.cancel()
         exchanges = []
+        currentConversationID = nil
+        isAnswering = false
+    }
+
+    /// Saklanan sohbetleri okur (açılışta); okunamayan dosyalar loglanır ve sayısı gösterilir.
+    func loadHistory() {
+        do {
+            let result: AskHistoryLoadResult = try loadAskConversations(directory: try AppPaths.askHistoryDirectory())
+            conversations = result.conversations
+            for failure in result.failures {
+                Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .public)")
+            }
+            historyError = result.failures.isEmpty ? nil : String(localized: "Sohbet geçmişinden \(result.failures.count) sohbet okunamadı.")
+        } catch {
+            Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .public)")
+            historyError = String(localized: "Sohbet geçmişi okunamadı: \(userFacingMessage(error: error))")
+        }
+    }
+
+    /// Saklanan sohbeti açar; devam soruları onun cevaplarını bağlam alır. Süren cevap durdurulur.
+    func open(conversationID: UUID) {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
+            return
+        }
+        task?.cancel()
+        exchanges = conversation.turns.map { (turn: AskConversationTurn) -> ArchiveExchange in archiveExchange(turn: turn) }
+        currentConversationID = conversationID
+        isAnswering = false
+    }
+
+    /// Sohbeti geçmişten siler; açık sohbetse sohbet boşalır.
+    func delete(conversationID: UUID) {
+        do {
+            try deleteAskConversation(id: conversationID, directory: try AppPaths.askHistoryDirectory())
+            conversations.removeAll { $0.id == conversationID }
+            if currentConversationID == conversationID {
+                clear()
+            }
+        } catch {
+            Self.logger.error("Sohbet silinemedi, sohbet: \(conversationID.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            historyError = String(localized: "Sohbet silinemedi: \(userFacingMessage(error: error))")
+        }
+    }
+
+    /// Bitmiş soruyla açık sohbeti saklar (ilk cevapta yeni sohbet olur); sınırı aşan en eski sohbetler silinir.
+    private func saveConversation(exchangeID: UUID) {
+        // Sohbet bu arada değiştiyse (yeni sohbet, başka sohbet açıldı) cevap bu sohbete ait değildir.
+        guard exchanges.contains(where: { $0.id == exchangeID && $0.phase == .done }) else {
+            return
+        }
+        let id: UUID = currentConversationID ?? UUID()
+        let turns: [AskConversationTurn] = exchanges.compactMap { (exchange: ArchiveExchange) -> AskConversationTurn? in askTurn(exchange: exchange) }
+        let conversation: AskConversation = askConversation(existing: conversations.first { $0.id == id }, id: id, turns: turns, now: Date())
+        do {
+            let directory: URL = try AppPaths.askHistoryDirectory()
+            try saveAskConversation(conversation: conversation, directory: directory)
+            currentConversationID = id
+            conversations = upsertAskConversation(conversations: conversations, conversation: conversation)
+            for old in askConversationsBeyondLimit(conversations: conversations, limit: askHistoryLimit) {
+                try deleteAskConversation(id: old.id, directory: directory)
+                conversations.removeAll { $0.id == old.id }
+            }
+        } catch {
+            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            historyError = String(localized: "Sohbet saklanamadı: \(userFacingMessage(error: error))")
+        }
     }
 
     private func finish(id: UUID, phase: ArchiveExchange.Phase) {
+        // Sohbet bu arada temizlendi ya da değişti: yeni sorunun durumuna dokunulmaz.
+        guard exchanges.contains(where: { $0.id == id }) else {
+            return
+        }
         update(id: id) {
             $0.phase = phase
             $0.finishedAt = Date()
@@ -155,6 +231,8 @@ struct AskTab: View {
     /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; soru gönderilince alandan kalkar.
     @State private var mentioned: [MeetingRecord] = []
     @FocusState private var isFocused: Bool
+    /// Sohbet geçmişi listesi açık (gezinme yığınında).
+    @State private var isShowingHistory: Bool = false
 
     private let examples: [(symbol: String, text: String)] = [
         ("checklist", "Bana hangi görevler verildi?"),
@@ -168,6 +246,7 @@ struct AskTab: View {
             ScrollViewReader { (proxy: ScrollViewProxy) in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
+                        PhoneErrorList(messages: [ask.historyError, ask.recipeError].compactMap { $0 })
                         if ask.exchanges.isEmpty {
                             intro
                         }
@@ -227,6 +306,14 @@ struct AskTab: View {
             .navigationTitle("Sor")
             .navigationBarTitleDisplayMode(ask.exchanges.isEmpty ? .large : .inline)
             .toolbar {
+                if !ask.conversations.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Geçmiş", systemImage: "clock.arrow.circlepath") {
+                            isFocused = false
+                            isShowingHistory = true
+                        }
+                    }
+                }
                 if !ask.exchanges.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Yeni sohbet", systemImage: "square.and.pencil") {
@@ -234,6 +321,13 @@ struct AskTab: View {
                             mentioned = []
                         }
                     }
+                }
+            }
+            .navigationDestination(isPresented: $isShowingHistory) {
+                AskHistoryList(ask: ask) { (id: UUID) -> Void in
+                    ask.open(conversationID: id)
+                    mentioned = []
+                    isShowingHistory = false
                 }
             }
         }
@@ -371,5 +465,45 @@ struct AskTab: View {
         // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
         withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
         isFocused = false
+    }
+}
+
+/// Sohbet geçmişi: yeniden eskiye sohbetler (başlık ve tarih); dokununca açılır, sola kaydırınca silinir.
+private struct AskHistoryList: View {
+    let ask: PhoneAsk
+    let onOpen: @MainActor (UUID) -> Void
+
+    var body: some View {
+        List {
+            ForEach(ask.conversations) { (conversation: AskConversation) in
+                Button {
+                    onOpen(conversation.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(conversation.title)
+                            .appFont(size: 15, weight: ask.currentConversationID == conversation.id ? .semibold : .regular)
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(2)
+                        Text(conversation.updatedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale())))
+                            .appFont(size: 12, weight: .regular)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .padding(.vertical, 2)
+                }
+                .swipeActions {
+                    Button("Sil", role: .destructive) { ask.delete(conversationID: conversation.id) }
+                }
+            }
+        }
+        .overlay {
+            if ask.conversations.isEmpty {
+                Text("Saklanan sohbet yok")
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .navigationTitle("Geçmiş")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

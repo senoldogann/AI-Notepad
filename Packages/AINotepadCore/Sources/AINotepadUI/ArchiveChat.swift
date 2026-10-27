@@ -18,7 +18,9 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
 
     public let id: UUID
     public let question: String
-    /// `@` ile seçilen toplantıların başlıkları (soru yalnız onlara soruldu); boşsa tüm arşiv.
+    /// `@` ile seçilen toplantılar (soru yalnız onlara soruldu); boşsa tüm arşiv.
+    public let scopeMeetingIDs: [String]
+    /// `@` ile seçilen toplantıların başlıkları.
     public let scopeTitles: [String]
     /// Soru bir tariften geldiyse tarifin adı (balonda uzun istem yerine o görünür).
     public let recipeTitle: String?
@@ -35,11 +37,12 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
     public var modelName: String?
 
     public init(
-        id: UUID, question: String, scopeTitles: [String], recipeTitle: String?, startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
+        id: UUID, question: String, scopeMeetingIDs: [String], scopeTitles: [String], recipeTitle: String?, startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
         answer: ArchiveAnswer, finishedAt: Date?, modelName: String?
     ) {
         self.id = id
         self.question = question
+        self.scopeMeetingIDs = scopeMeetingIDs
         self.scopeTitles = scopeTitles
         self.recipeTitle = recipeTitle
         self.startedAt = startedAt
@@ -49,6 +52,41 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
         self.answer = answer
         self.finishedAt = finishedAt
         self.modelName = modelName
+    }
+}
+
+/// Bitmiş soruyu sohbet geçmişine yazılacak tura çevirir (okunan parçalar metinsiz); bitmemiş, durdurulan ya da hatalı
+/// soru nil. Saf fonksiyondur.
+public func askTurn(exchange: ArchiveExchange) -> AskConversationTurn? {
+    guard exchange.phase == .done, let finishedAt = exchange.finishedAt else {
+        return nil
+    }
+    let read: [ArchivePassage] = exchange.passages.map { (passage: ArchivePassage) -> ArchivePassage in
+        ArchivePassage(
+            id: passage.id, meetingID: passage.meetingID, meetingTitle: passage.meetingTitle, meetingDate: passage.meetingDate,
+            kind: passage.kind, startSec: passage.startSec, text: ""
+        )
+    }
+    return AskConversationTurn(
+        id: exchange.id, question: exchange.question, scopeMeetingIDs: exchange.scopeMeetingIDs, scopeTitles: exchange.scopeTitles,
+        recipeTitle: exchange.recipeTitle, startedAt: exchange.startedAt, finishedAt: finishedAt, terms: exchange.terms, readPassages: read,
+        answer: exchange.answer.text, sources: exchange.answer.sources, modelName: exchange.modelName
+    )
+}
+
+/// Saklanan turu sohbette gösterilecek bitmiş soruya çevirir. Saf fonksiyondur.
+public func archiveExchange(turn: AskConversationTurn) -> ArchiveExchange {
+    ArchiveExchange(
+        id: turn.id, question: turn.question, scopeMeetingIDs: turn.scopeMeetingIDs, scopeTitles: turn.scopeTitles, recipeTitle: turn.recipeTitle,
+        startedAt: turn.startedAt, phase: .done, terms: turn.terms, passages: turn.readPassages,
+        answer: ArchiveAnswer(text: turn.answer, sources: turn.sources), finishedAt: turn.finishedAt, modelName: turn.modelName
+    )
+}
+
+/// Devam soruları için bağlam: bitmiş soruların soru, cevap ve kaynakları. Saf fonksiyondur.
+public func archiveHistory(exchanges: [ArchiveExchange]) -> [ArchiveTurn] {
+    exchanges.compactMap { (exchange: ArchiveExchange) -> ArchiveTurn? in
+        exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
     }
 }
 
