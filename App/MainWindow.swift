@@ -184,8 +184,8 @@ struct MainWindowView: View {
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
         .frame(minWidth: 860, minHeight: 580)
-        .background(Theme.background)
-        .containerBackground(Theme.background, for: .window)
+        .background { WindowBackdrop() }
+        .containerBackground(for: .window) { WindowBackdrop() }
         // Başlık çubuğu gizli: içerik pencerenin tepesine kadar sürer (trafik ışıkları kenar çubuğunun üstünde).
         .ignoresSafeArea(.container, edges: .top)
         .modifier(AppearanceEnvironment())
@@ -264,7 +264,7 @@ private struct Sidebar: View {
         .padding(.bottom, 12)
         .frame(width: 228)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Theme.background)
+        .pageBackground()
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
     }
 
@@ -557,7 +557,7 @@ private struct RecordBar: View {
                     center: UnitPoint(x: 0.35, y: 0.35), startRadius: 1, endRadius: 22
                 ))
                 .frame(width: 34, height: 34)
-                .tilt3D(maxAngle: 18)
+                .tilt3D(maxAngle: 8)
             switch model.phase {
             case .idle:
                 Text("Toplantını dinlemeye başla")
@@ -667,7 +667,7 @@ private struct ToolTiles: View {
                     .appFont(size: 18, weight: .regular)
                     .frame(width: 48, height: 48)
                     .cardSurface(cornerRadius: 12)
-                    .tilt3D(maxAngle: 10)
+                    .tilt3D(maxAngle: 5)
                 Text(title).appFont(size: 13, weight: .regular)
             }
             .foregroundStyle(Theme.ink)

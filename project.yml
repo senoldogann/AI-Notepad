@@ -30,6 +30,10 @@ targets:
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
         NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
+        # Kanal girişlerinin (Slack, Discord, Teams) dönüş adresi: com.senoldogan.ainotepad://oauth/<servis>.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.senoldogan.AINotepad.oauth
+            CFBundleURLSchemes: [com.senoldogan.ainotepad]
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig

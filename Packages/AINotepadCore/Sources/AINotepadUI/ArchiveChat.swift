@@ -361,13 +361,14 @@ private struct ReasoningDetails: View {
     }
 }
 
-/// Akan cevap: gelen metin harf harf yumuşakça açılır (parça büyükse daha hızlı yetişir), yazarken sonda imleç.
-/// Markdown (kalın, italik, maddeler) ve tıklanabilir kaynak işaretleri ([1]).
+/// Akan cevap: gelen metin harf harf yumuşakça açılır (parça büyükse daha hızlı yetişir; son harfler mürekkep gibi
+/// soluktan koyulaşır), yazarken sonda imleç. Markdown (kalın, italik, maddeler) ve tıklanabilir kaynak işaretleri ([1]).
 private struct StreamingAnswer: View {
     let exchange: ArchiveExchange
     let onCitation: @MainActor (Int) -> Void
     @State private var shown: Int = 0
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     private var isWriting: Bool {
         exchange.phase == .writing
@@ -376,9 +377,11 @@ private struct StreamingAnswer: View {
     var body: some View {
         let full: String = exchange.answer.text
         let visible: String = String(full.prefix(shown))
-        Text(isWriting || shown < full.count
+        let isRevealing: Bool = isWriting || shown < full.count
+        Text(isRevealing
             ? answerAttributedText(text: visible, accent: appearance.accent.color) + streamingCaret(accent: appearance.accent.color)
             : answerAttributedText(text: visible, accent: appearance.accent.color))
+            .textRenderer(InkRevealRenderer(fadingGlyphs: isRevealing && !reduceMotion ? 18 : 0, exemptTrailingGlyphs: streamingCaretGlyphs))
             .font(appearance.readingFont(size: appearance.textSize + 2, weight: .regular))
             .lineSpacing(appearance.lineSpacing + 3)
             .textSelection(.enabled)
@@ -445,6 +448,45 @@ private func answerAttributedText(text: String, accent: Color) -> AttributedStri
     }
     result += AttributedString(String(rest))
     return result
+}
+
+/// Açılan metnin son harfleri soluktan koyulaşır ve 2 pt aşağıdan yerine oturur (yalnız opaklık ve küçük kayma;
+/// harf başına dalga yok). Sondaki imleç etkilenmez. `fadingGlyphs` 0 iken metin olduğu gibi çizilir.
+struct InkRevealRenderer: TextRenderer {
+    let fadingGlyphs: Int
+    let exemptTrailingGlyphs: Int
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        guard fadingGlyphs > 0 else {
+            for line in layout {
+                context.draw(line)
+            }
+            return
+        }
+        let slices: [Text.Layout.RunSlice] = layout.flatMap { (line: Text.Layout.Line) -> [Text.Layout.RunSlice] in
+            line.flatMap { (run: Text.Layout.Run) -> [Text.Layout.RunSlice] in Array(run) }
+        }
+        let frontier: Int = slices.count - exemptTrailingGlyphs
+        for (index, slice) in slices.enumerated() {
+            let opacity: Double = inkOpacity(distanceFromFrontier: frontier - index, fadingGlyphs: fadingGlyphs)
+            var glyph: GraphicsContext = context
+            glyph.opacity = opacity
+            glyph.translateBy(x: 0, y: (1 - opacity) * 2)
+            glyph.draw(slice)
+        }
+    }
+}
+
+/// İmlecin karakter sayısı (" ▍"): soluklaşmaz.
+private let streamingCaretGlyphs: Int = 2
+
+/// Açılma sınırına uzaklığa göre opaklık: sınırdaki harf 0,15, `fadingGlyphs` geride tam koyu; imleç (sınırın
+/// ötesi) tam koyu. Saf fonksiyondur.
+func inkOpacity(distanceFromFrontier: Int, fadingGlyphs: Int) -> Double {
+    guard distanceFromFrontier > 0, distanceFromFrontier < fadingGlyphs else {
+        return 1
+    }
+    return 0.15 + 0.85 * Double(distanceFromFrontier) / Double(fadingGlyphs)
 }
 
 /// Cevap akarken sondaki imleç. Saf fonksiyondur.

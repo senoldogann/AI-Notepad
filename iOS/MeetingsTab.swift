@@ -12,6 +12,8 @@ struct MeetingsTab: View {
     @State private var query: String = ""
     @State private var pendingDelete: MeetingRecord?
     @State private var deleteError: String?
+    /// Kart, açılan toplantıya büyüyerek geçer (kapanınca kartına döner).
+    @Namespace private var cardTransition: Namespace.ID
 
     var body: some View {
         let sections: [MeetingSection] = meetingSections(
@@ -53,6 +55,7 @@ struct MeetingsTab: View {
                         ForEach(section.meetings, id: \.id) { (record: MeetingRecord) in
                             NavigationLink(value: record.id) {
                                 PhoneMeetingCard(record: record, height: 132)
+                                    .matchedTransitionSource(id: record.id, in: cardTransition)
                             }
                             .buttonStyle(PressableCardStyle())
                             .contextMenu {
@@ -74,6 +77,7 @@ struct MeetingsTab: View {
                     MeetingReadView(record: record, store: store, player: player, isRecording: isRecording) {
                         pendingDelete = record
                     }
+                    .navigationTransition(.zoom(sourceID: id, in: cardTransition))
                 }
             }
             .refreshable { store.reload() }

@@ -36,6 +36,8 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "\(host) webhook'u reddetti (HTTP \(status)). Adresin doğru ve etkin olduğunu kontrol et.")
     case WebhookError.network(let host, _):
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
+    case let error as ChannelAuthError:
+        return channelMessage(error: error)
     case MCPConfigError.invalidConfig(let path, _):
         return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
     case MCPConfigError.writeFailed(let path, _):
@@ -46,6 +48,33 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene.")
     default:
         return String(localized: "Beklenmeyen hata: \(String(describing: type(of: error))).")
+    }
+}
+
+private func channelMessage(error: ChannelAuthError) -> String {
+    switch error {
+    case .notConfigured(let service):
+        String(localized: "\(service.displayName) girişi bu sürümde henüz etkin değil. Şimdilik \"Webhook adresi\" kartıyla bağlayabilirsin.")
+    case .denied(.teams, let reason) where reason.contains("AADSTS90094") || reason.contains("AADSTS65001") || reason.localizedCaseInsensitiveContains("admin"):
+        String(localized: "Kurumunun Microsoft hesabında bu bağlantı için yönetici onayı gerekiyor. BT yöneticine sorabilir ya da Teams'te kanal › ⋯ › İş akışları'ndan aldığın webhook adresini \"Webhook adresi\" kartına yapıştırabilirsin.")
+    case .denied(let service, _):
+        String(localized: "\(service.displayName) girişi tamamlanmadı (izin verilmedi). Yeniden dene.")
+    case .stateMismatch(let service):
+        String(localized: "\(service.displayName) girişi başka bir denemeden döndü; yeniden dene.")
+    case .http(let service, let status, _):
+        String(localized: "\(service.displayName) isteği reddetti (HTTP \(status)). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
+    case .api(.slack, "not_in_channel"), .api(.slack, "channel_not_found"):
+        String(localized: "Slack kanalına yazılamadı: kanalın üyesi değilsin ya da kanal silinmiş. Ayarlar › Bağlantılar'dan başka bir kanal seç.")
+    case .api(let service, let code):
+        String(localized: "\(service.displayName) isteği reddetti (\(code)).")
+    case .network(let service, _):
+        String(localized: "\(service.displayName) adresine ulaşılamadı; internet bağlantını kontrol et.")
+    case .invalidResponse(let service, _):
+        String(localized: "\(service.displayName) yanıtı anlaşılamadı; yeniden dene.")
+    case .expired(let service):
+        String(localized: "\(service.displayName) oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.")
+    case .noChannels(let service):
+        String(localized: "\(service.displayName) hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.")
     }
 }
 
@@ -149,6 +178,7 @@ private func serviceName(account: String) -> String {
     case SecretAccount.elevenlabs.rawValue: "ElevenLabs"
     case SecretAccount.anthropic.rawValue: "Anthropic"
     case SecretAccount.webhook.rawValue: "Webhook"
+    case SecretAccount.channel.rawValue: String(localized: "Kanal bağlantısı")
     default: "LLM"
     }
 }

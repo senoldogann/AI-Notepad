@@ -1602,6 +1602,41 @@ final class AppModel {
         try webhookURL(text: try await readSecretInBackground(service: keychainService, account: .webhook))
     }
 
+    /// Süren jeton yenilemesi: Slack yenileme jetonu tek kullanımlık, aynı anda iki gönderim iki kez yenilemesin.
+    @ObservationIgnored private var connectionRefresh: Task<ChannelConnection, any Error>?
+
+    /// Hesapla kurulan kanal bağlantısı (yoksa nil); jetonun süresi bitmek üzereyse yenilenip Anahtar Zinciri'ne yazılır.
+    private func currentChannelConnection() async throws -> ChannelConnection? {
+        if let connectionRefresh {
+            return try await connectionRefresh.value
+        }
+        guard let stored = try await optionalSecretInBackground(service: keychainService, account: .channel) else {
+            return nil
+        }
+        let connection: ChannelConnection = try decodeChannelConnection(text: stored)
+        guard needsRefresh(tokens: connection.tokens, now: Date()) else {
+            return connection
+        }
+        let refresh: Task<ChannelConnection, any Error> = Task {
+            let fresh: ChannelConnection = try await refreshedConnection(connection: connection, now: Date())
+            try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: fresh))
+            return fresh
+        }
+        connectionRefresh = refresh
+        defer { connectionRefresh = nil }
+        return try await refresh.value
+    }
+
+    /// Notu bağlı kanala gönderir: hesapla kurulan bağlantı (Slack, Teams) varsa ona, yoksa webhook adresine.
+    private func deliverToChannel(record: MeetingRecord, note: MeetingNote) async throws {
+        if let connection = try await currentChannelConnection() {
+            try await postNote(connection: connection, record: record, note: note)
+            return
+        }
+        let url: URL = try await configuredWebhookURL()
+        try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
+    }
+
     /// Toplantının notunu webhook'a gönderir; hata varsa kullanıcı metni döner.
     func sendToWebhook(meetingID: String) async -> String? {
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
@@ -1609,8 +1644,7 @@ final class AppModel {
         }
         webhookStates[meetingID] = .sending
         do {
-            let url: URL = try await configuredWebhookURL()
-            try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
+            try await deliverToChannel(record: record, note: note)
             webhookStates[meetingID] = .sent
             Self.logger.info("Not webhook'a gönderildi, toplantı: \(meetingID, privacy: .public)")
             return nil
@@ -1635,8 +1669,7 @@ final class AppModel {
             decisions: [], tasks: [], glossary: []
         )
         do {
-            let url: URL = try await configuredWebhookURL()
-            try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: sample, note: note))
+            try await deliverToChannel(record: sample, note: note)
             return nil
         } catch {
             Self.logger.error("Webhook denemesi başarısız, hata: \(String(describing: error), privacy: .private)")

@@ -143,7 +143,7 @@ struct PhoneTaskRow: View {
                 Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                     .appFont(size: 22, weight: .regular)
                     .foregroundStyle(isDone ? appearance.accent.color : Theme.muted)
-                    .contentTransition(.symbolEffect(.replace))
+                    .contentTransition(.symbolEffect(.replace.magic(fallback: .replace)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isDone ? "Tamamlanmadı olarak işaretle" : "Tamamlandı olarak işaretle")

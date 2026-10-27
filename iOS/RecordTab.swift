@@ -372,13 +372,15 @@ private struct LiveRecordingView: View {
 private struct RecordingDot: View {
     let isFinishing: Bool
     @State private var isDim: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
+        // Sakin nefes (1,6 sn); hareketi azalt açıkken sabit.
         Circle()
             .fill(isFinishing ? Theme.muted : .red)
             .frame(width: 11, height: 11)
-            .opacity(isDim ? 0.35 : 1)
-            .animation(isFinishing ? .default : .easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isDim)
+            .opacity(isDim && !reduceMotion ? 0.4 : 1)
+            .animation(isFinishing || reduceMotion ? .default : .easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isDim)
             .onAppear { isDim = true }
             .accessibilityHidden(true)
     }

@@ -201,6 +201,46 @@
         }
       }
     },
+    "%@ girişi başka bir denemeden döndü; yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sign-in came back from a different attempt; try again."
+          }
+        }
+      }
+    },
+    "%@ girişi bu sürümde henüz etkin değil. Şimdilik \"Webhook adresi\" kartıyla bağlayabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sign-in isn't available in this version yet. For now you can connect with the \"Webhook address\" card."
+          }
+        }
+      }
+    },
+    "%@ girişi tamamlanmadı (izin verilmedi). Yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sign-in wasn't completed (access not granted). Try again."
+          }
+        }
+      }
+    },
+    "%@ hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No channel you can post to was found in your %@ account. Join a channel first, then connect again."
+          }
+        }
+      }
+    },
     "%@ ile %@ aynı kişi": {
       "localizations": {
         "en": {
@@ -218,6 +258,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ request failed (HTTP %lld). Try again in a moment."
+          }
+        }
+      }
+    },
+    "%@ isteği reddetti (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ rejected the request (%@)."
+          }
+        }
+      }
+    },
+    "%@ isteği reddetti (HTTP %lld). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ rejected the request (HTTP %lld). Try again; if it persists, remove the connection and connect again."
           }
         }
       }
@@ -273,6 +333,16 @@
         }
       }
     },
+    "%@ oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your %@ session expired. Connect again in Settings › Connections."
+          }
+        }
+      }
+    },
     "%@ servisine bağlanılamadı; internet bağlantını kontrol et.": {
       "extractionState": "stale",
       "localizations": {
@@ -320,6 +390,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ rejected the webhook (HTTP %lld). Check that the URL is correct and active."
+          }
+        }
+      }
+    },
+    "%@ yanıtı anlaşılamadı; yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't understand the %@ response; try again."
           }
         }
       }
@@ -797,32 +877,12 @@
         }
       }
     },
-    "Adres yapıştır": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paste address"
-          }
-        }
-      }
-    },
     "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The address isn't encrypted (http), so it was blocked for security. Use an https address."
-          }
-        }
-      }
-    },
-    "Adresi kopyaladığın an buraya bağlanır ve bir deneme mesajı gider.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "As soon as you copy the address it connects here and a test message is sent."
           }
         }
       }
@@ -1348,6 +1408,16 @@
         }
       }
     },
+    "Açılan pencerede %@ hesabınla giriş yap ve izin ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with your %@ account in the window that opens and allow access."
+          }
+        }
+      }
+    },
     "Ağ hatası (%lld); internet bağlantını kontrol et ve tekrar dene.": {
       "extractionState": "stale",
       "localizations": {
@@ -1370,6 +1440,16 @@
       }
     },
     "Bağla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
+    "Bağlan": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2156,6 +2236,16 @@
         }
       }
     },
+    "Buzlu cam": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frosted glass"
+          }
+        }
+      }
+    },
     "Bütçe hakkında neler konuşuldu?": {
       "localizations": {
         "en": {
@@ -2183,6 +2273,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "ANSWER"
+          }
+        }
+      }
+    },
+    "Cam opaklığı: %%%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glass opacity: %lld%%"
+          }
+        }
+      }
+    },
+    "Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a glass surface the desktop shows faintly through the window."
           }
         }
       }
@@ -2610,16 +2720,6 @@
         }
       }
     },
-    "Discord'da kanal ayarları › Entegrasyonlar › Webhook'lar › Yeni Webhook › Webhook URL'sini kopyala.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In Discord: channel settings › Integrations › Webhooks › New Webhook › copy the Webhook URL."
-          }
-        }
-      }
-    },
     "Diğer": {
       "localizations": {
         "en": {
@@ -2688,6 +2788,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap to start listening"
+          }
+        }
+      }
+    },
+    "Dolu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solid"
           }
         }
       }
@@ -3599,6 +3709,46 @@
         }
       }
     },
+    "Kanal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Channel"
+          }
+        }
+      }
+    },
+    "Kanal bağlantısı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Channel connection"
+          }
+        }
+      }
+    },
+    "Kanala gönder (Slack, Teams, Discord…)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to channel (Slack, Teams, Discord…)"
+          }
+        }
+      }
+    },
+    "Kanala gönderiliyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending to channel…"
+          }
+        }
+      }
+    },
     "Kanallara gönder": {
       "localizations": {
         "en": {
@@ -4137,6 +4287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Complete before recording"
+          }
+        }
+      }
+    },
+    "Kendi adınla, seçtiğin kanala": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As you, to the channel you pick"
           }
         }
       }
@@ -4742,6 +4902,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Setup"
+          }
+        }
+      }
+    },
+    "Kurumunun Microsoft hesabında bu bağlantı için yönetici onayı gerekiyor. BT yöneticine sorabilir ya da Teams'te kanal › ⋯ › İş akışları'ndan aldığın webhook adresini \"Webhook adresi\" kartına yapıştırabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook address from Teams (channel › ⋯ › Workflows) into the \"Webhook address\" card."
           }
         }
       }
@@ -5394,6 +5564,16 @@
         }
       }
     },
+    "Not kanala gönderildi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note sent to channel"
+          }
+        }
+      }
+    },
     "Not modeli: %@": {
       "localizations": {
         "en": {
@@ -5422,16 +5602,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't create the note: no LLM key or setting. Add it in Settings, then click \"Refresh note\"."
-          }
-        }
-      }
-    },
-    "Not webhook'a gönderildi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Note sent to webhook"
           }
         }
       }
@@ -5472,6 +5642,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The note, transcript and audio are deleted permanently; this can't be undone."
+          }
+        }
+      }
+    },
+    "Notlar hangi kanala gitsin?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which channel should notes go to?"
           }
         }
       }
@@ -6161,12 +6341,12 @@
         }
       }
     },
-    "Servisinde \"Webhook ile tetikle\" adımını oluştur ve verdiği adresi aşağıya yapıştır.": {
+    "Serin": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create a \"triggered by webhook\" step in your service and paste its address below."
+            "value": "Cool"
           }
         }
       }
@@ -6457,12 +6637,12 @@
         }
       }
     },
-    "Slack'te AI-Notepad hazır açıldı: Create App › Incoming Webhooks › Add New Webhook › kanal seç › Webhook URL'yi kopyala.": {
+    "Slack kanalına yazılamadı: kanalın üyesi değilsin ya da kanal silinmiş. Ayarlar › Bağlantılar'dan başka bir kanal seç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AI-Notepad opened ready in Slack: Create App › Incoming Webhooks › Add New Webhook › pick a channel › copy the Webhook URL."
+            "value": "Couldn't post to the Slack channel: you're not a member or it was deleted. Pick another channel in Settings › Connections."
           }
         }
       }
@@ -6622,6 +6802,16 @@
         }
       }
     },
+    "Sunucu ve kanalı Discord'da seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick the server and channel in Discord"
+          }
+        }
+      }
+    },
     "Suomi": {
       "localizations": {
         "en": {
@@ -6719,6 +6909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Sıcak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warm"
           }
         }
       }
@@ -6994,16 +7194,6 @@
         }
       }
     },
-    "Teams'te kanal › ⋯ › İş akışları › \"Webhook isteği alındığında kanala gönder\" › adresi kopyala.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In Teams: channel › ⋯ › Workflows › \"Post to a channel when a webhook request is received\" › copy the address."
-          }
-        }
-      }
-    },
     "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
@@ -7040,16 +7230,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect in one click"
-          }
-        }
-      }
-    },
-    "Tek tıkla kur": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "One-click setup"
           }
         }
       }
@@ -7860,6 +8040,16 @@
         }
       }
     },
+    "Vurgu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accent"
+          }
+        }
+      }
+    },
     "Vurgu rengi": {
       "localizations": {
         "en": {
@@ -7896,26 +8086,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invalid webhook URL: paste the full address starting with https://."
-          }
-        }
-      }
-    },
-    "Webhook'a gönder (Slack, Teams…)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send to webhook (Slack, Teams…)"
-          }
-        }
-      }
-    },
-    "Webhook'a gönderiliyor…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sending to webhook…"
           }
         }
       }
@@ -8223,6 +8393,16 @@
         }
       }
     },
+    "Yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
     "Yunanca": {
       "localizations": {
         "en": {
@@ -8289,6 +8469,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "In person: the microphone is recording everyone in the room"
+          }
+        }
+      }
+    },
+    "Yüzey": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Surface"
+          }
+        }
+      }
+    },
+    "Zapier, Make, n8n, Teams iş akışı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapier, Make, n8n, Teams workflow"
+          }
+        }
+      }
+    },
+    "Zemin tonu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background tint"
+          }
+        }
+      }
+    },
+    "Zemine çok hafif bir renk; kartlar ve yazı değişmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A very light colour wash on the background; cards and text stay the same."
           }
         }
       }
@@ -9198,6 +9418,16 @@
         }
       }
     },
+    "İş ya da okul hesabınla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With your work or school account"
+          }
+        }
+      }
+    },
     "İşareti kaldır": {
       "localizations": {
         "en": {
@@ -9224,6 +9454,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rewrite with template"
+          }
+        }
+      }
+    },
+    "Şeffaf cam": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear glass"
           }
         }
       }

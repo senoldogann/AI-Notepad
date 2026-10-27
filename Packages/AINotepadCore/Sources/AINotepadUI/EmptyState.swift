@@ -239,6 +239,8 @@ struct EmptyStateOrb: View {
 public struct ConfettiBurst: View {
     let palette: FilmPalette
     @State private var start: Date = Date()
+    /// Patlama bitti: zaman çizelgesi durur (ekranda kalsa da her karede yeniden çizilmez).
+    @State private var isFinished: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     public init(palette: FilmPalette) {
@@ -246,8 +248,8 @@ public struct ConfettiBurst: View {
     }
 
     public var body: some View {
-        if !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 60)) { (context: TimelineViewDefaultContext) in
+        if !reduceMotion && !isFinished {
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: isFinished)) { (context: TimelineViewDefaultContext) in
                 let elapsed: Double = context.date.timeIntervalSince(start)
                 Canvas { (canvas: inout GraphicsContext, size: CGSize) in
                     guard elapsed < 1.8 else {
@@ -271,7 +273,15 @@ public struct ConfettiBurst: View {
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .onAppear { start = Date() }
+            .task {
+                start = Date()
+                do {
+                    try await Task.sleep(for: .seconds(1.9))
+                } catch {
+                    return
+                }
+                isFinished = true
+            }
         }
     }
 }

@@ -90,6 +90,10 @@ enum SettingsKey {
     static let lineSpacing: String = "appearance.lineSpacing"
     static let bottomSpacing: String = "appearance.bottomSpacing"
     static let islandEnabled: String = "appearance.islandEnabled"
+    /// Pencere yüzeyi (dolu, buzlu cam, şeffaf cam), cam opaklığı ve zemin tonu.
+    static let surface: String = "appearance.surface"
+    static let surfaceOpacity: String = "appearance.surfaceOpacity"
+    static let tint: String = "appearance.tint"
 }
 
 /// Arayüz dili; macOS'ta uygulama dili yeniden başlatınca uygulanır.
@@ -171,12 +175,14 @@ enum SettingsRange {
     static let uiScale: ClosedRange<Double> = 0.85...1.3
     static let lineSpacing: ClosedRange<Double> = 0...12
     static let bottomSpacing: ClosedRange<Double> = 0...160
+    static let surfaceOpacity: ClosedRange<Double> = 0.35...0.95
 }
 
 /// Görünüm ayarlarını varsayılana döndürür.
 func resetAppearanceSettings(defaults: UserDefaults) {
     for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.uiScale, SettingsKey.textSize,
-                SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled] {
+                SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled, SettingsKey.surface,
+                SettingsKey.surfaceOpacity, SettingsKey.tint] {
         defaults.removeObject(forKey: key)
     }
 }
@@ -242,6 +248,9 @@ func registerDefaultSettings() {
         SettingsKey.lineSpacing: PanelAppearance.standard.lineSpacing,
         SettingsKey.bottomSpacing: PanelAppearance.standard.bottomSpacing,
         SettingsKey.islandEnabled: true,
+        SettingsKey.surface: PanelAppearance.standard.surface.rawValue,
+        SettingsKey.surfaceOpacity: PanelAppearance.standard.surfaceOpacity,
+        SettingsKey.tint: PanelAppearance.standard.tint.rawValue,
     ])
 }
 
