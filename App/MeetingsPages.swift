@@ -924,8 +924,14 @@ private struct SummaryTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            MyNotesCard(notes: record.myNotes ?? "", isLocked: model.isLocked(meetingID: record.id)) { (text: String) -> Void in
-                model.saveMyNotes(meetingID: record.id, text: text)
+            // Kendi notların ve notu sorarak düzenleme yan yana iki eylem: tek grupta, sıkı aralıkla.
+            VStack(alignment: .leading, spacing: 10) {
+                MyNotesCard(notes: record.myNotes ?? "", isLocked: model.isLocked(meetingID: record.id)) { (text: String) -> Void in
+                    model.saveMyNotes(meetingID: record.id, text: text)
+                }
+                NoteEditBar(isWorking: model.processingMeetingIDs.contains(record.id)) { (instruction: String) -> Void in
+                    model.editNote(meetingID: record.id, instruction: instruction)
+                }
             }
             Text(note.summary)
                 .font(appearance.readingFont(size: appearance.textSize + 3, weight: .regular))
@@ -1163,6 +1169,80 @@ private struct NoMyTasksCard: View {
         .padding(14)
         .background(appearance.accent.color.opacity(0.05), in: shape)
         .overlay(shape.strokeBorder(appearance.accent.color.opacity(0.18)))
+    }
+}
+
+/// Notu sorarak düzenle: tek satır istek ("özeti kısalt", "görevlere tarih ekle") ve hazır öneri hapları; düzenlenirken
+/// parıltılı "Not düzenleniyor…".
+private struct NoteEditBar: View {
+    let isWorking: Bool
+    let onEdit: @MainActor (String) -> Void
+    @State private var instruction: String = ""
+    @FocusState private var isFocused: Bool
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    /// Hazır istekler (kaynak dilde; gösterilirken ve gönderilirken arayüz diline çevrilir).
+    private let suggestions: [String] = ["Özeti kısalt", "Görevlere tarih ekle", "Kararları gerekçeleriyle yaz", "Daha resmi yaz"]
+
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: isWorking ? "sparkles" : "wand.and.stars")
+                    .appFont(size: 12, weight: .semibold)
+                    .foregroundStyle(appearance.accent.color)
+                    .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
+                TextField(isWorking ? "Not düzenleniyor…" : "Notu değiştir: \"özeti kısalt\", \"görevlere tarih ekle\"…", text: $instruction)
+                    .textFieldStyle(.plain)
+                    .appFont(size: 13, weight: .regular)
+                    .focused($isFocused)
+                    .disabled(isWorking)
+                    .onSubmit(send)
+                if !instruction.isEmpty, !isWorking {
+                    Button(action: send) {
+                        Image(systemName: "arrow.up")
+                            .appFont(size: 11, weight: .bold)
+                            .foregroundStyle(Theme.onPrimary)
+                            .frame(width: 24, height: 24)
+                            .background(Theme.primary, in: Circle())
+                    }
+                    .buttonStyle(.hoverCapsule)
+                    .accessibilityLabel("Notu düzenle")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Theme.card, in: shape)
+            .overlay(shape.strokeBorder(isFocused ? appearance.accent.color.opacity(0.45) : Theme.line))
+            if isFocused, instruction.isEmpty, !isWorking {
+                FlowLayout(spacing: 6, lineSpacing: 6) {
+                    ForEach(suggestions, id: \.self) { (suggestion: String) in
+                        Button {
+                            onEdit(String(localized: String.LocalizationValue(suggestion)))
+                        } label: {
+                            Text(LocalizedStringKey(suggestion))
+                                .appFont(size: 12, weight: .medium)
+                                .foregroundStyle(Theme.ink)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Theme.soft, in: Capsule())
+                        }
+                        .buttonStyle(.hoverPlain)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.2), value: isFocused)
+    }
+
+    private func send() {
+        guard !isWorking else {
+            return
+        }
+        onEdit(instruction)
+        instruction = ""
+        isFocused = false
     }
 }
 

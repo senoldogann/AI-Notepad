@@ -2257,6 +2257,16 @@
         }
       }
     },
+    "Daha resmi yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make it more formal"
+          }
+        }
+      }
+    },
     "Danca": {
       "localizations": {
         "en": {
@@ -3026,6 +3036,16 @@
         }
       }
     },
+    "Görevlere tarih ekle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add dates to tasks"
+          }
+        }
+      }
+    },
     "Görevlerim": {
       "localizations": {
         "en": {
@@ -3526,6 +3546,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Decisions and rationale"
+          }
+        }
+      }
+    },
+    "Kararları gerekçeleriyle yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add rationale to decisions"
           }
         }
       }
@@ -5144,6 +5174,36 @@
         }
       }
     },
+    "Not düzenlenemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't edit the note: %@"
+          }
+        }
+      }
+    },
+    "Not düzenlenemedi: LLM anahtarı ya da ayarı yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't edit the note: no LLM key or setting."
+          }
+        }
+      }
+    },
+    "Not düzenleniyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing the note…"
+          }
+        }
+      }
+    },
     "Not eski adlarla yazıldı.": {
       "localizations": {
         "en": {
@@ -5352,6 +5412,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open note"
+          }
+        }
+      }
+    },
+    "Notu değiştir: \"özeti kısalt\", \"görevlere tarih ekle\"…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the note: \"shorten the summary\", \"add dates to tasks\"…"
+          }
+        }
+      }
+    },
+    "Notu düzenle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit note"
           }
         }
       }
@@ -8601,6 +8681,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summary and decisions are below."
+          }
+        }
+      }
+    },
+    "Özeti kısalt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shorten the summary"
           }
         }
       }
