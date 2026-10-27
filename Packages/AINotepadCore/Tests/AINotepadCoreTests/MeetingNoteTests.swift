@@ -120,4 +120,26 @@ extension CloudTests {
         #expect(speakerShares(paragraphs: paragraphs).map(\.key) == [first, SpeakerKey(speaker: .others, person: 2), SpeakerKey(speaker: .me, person: nil)])
         #expect(speakerShares(paragraphs: paragraphs).first?.seconds == 12)
     }
+
+    // Sessizliksiz iki dakikalık konuşma cümle sonlarından ≤30 sn paragraflara bölünür (çalarken vurgu ekrandan kaçmasın).
+    @Test func longFinalSegmentSplitsAtSentenceEnds() {
+        let words: [StoredWord] = (0..<120).map { (index: Int) -> StoredWord in
+            StoredWord(text: index % 10 == 9 ? "sana\(index)." : "sana\(index)", startSec: Double(index), endSec: Double(index) + 0.8)
+        }
+        let segment: StoredSegment = StoredSegment(
+            key: "final-0", speaker: .others, person: 1, startSec: 0, endSec: 119.8,
+            text: words.map(\.text).joined(separator: " "), words: words
+        )
+        let record: MeetingRecord = MeetingRecord(
+            id: "x", title: "T", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [segment], translations: ["final-0": "Merhaba."], speakerNames: [:], note: nil,
+            audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
+        #expect(paragraphs.map(\.startSec) == [0, 30, 60, 90])
+        #expect(paragraphs.first?.id == "final-0")
+        #expect(paragraphs.first?.turkish == "Merhaba.")
+        #expect(paragraphs.allSatisfy { $0.endSec - $0.startSec <= 30 && $0.text.hasSuffix(".") })
+        #expect(paragraphs.flatMap(\.words) == words)
+    }
 }

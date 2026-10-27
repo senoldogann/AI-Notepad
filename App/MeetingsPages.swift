@@ -1969,9 +1969,10 @@ private struct TranscriptSection: View {
         .background {
             PlaybackFollower(player: player, meetingID: record.id, paragraphs: paragraphs) { (id: String?) -> Void in
                 activeID = id
-                // Çalan paragraf değişince ortaya kaydır (şarkı sözü gibi).
+                // Çalan paragraf değişince görünür alanın üst üçte birine kaydır (şarkı sözü gibi); alttaki oynatıcı
+                // paragrafın sonunu örtmesin.
                 if let id, player.isPlaying {
-                    withAnimation(.easeInOut(duration: 0.45)) { proxy.scrollTo(id, anchor: .center) }
+                    withAnimation(.easeInOut(duration: 0.45)) { proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.3)) }
                 }
             }
         }
@@ -2011,10 +2012,17 @@ private struct PlaybackFollower: View {
     }
 }
 
-/// Çalan paragraf: anın içinde kaldığı ilk paragraf ("Diğerleri" önce; aynı anda konuşulduysa). Saf fonksiyondur.
+/// Çalan paragraf: en son başlamış paragraf; bitişinden sonraki kısa sessizlikte (`activeHoldSec`) de vurgulu kalır.
+/// Paragraf arasındaki nefeste vurgu kaybolup yeniden çıkmıyor (titreme), uzun sessizlikte kalkar. Saf fonksiyondur.
 private func activeParagraphID(paragraphs: [TranscriptParagraph], timeSec: Double) -> String? {
-    paragraphs.first { timeSec >= $0.startSec && timeSec < $0.endSec + 0.4 }?.id
+    guard let paragraph = paragraphs.last(where: { $0.startSec <= timeSec }), timeSec < paragraph.endSec + activeHoldSec else {
+        return nil
+    }
+    return paragraph.id
 }
+
+/// Paragraf bittikten sonra vurgunun kaldığı en uzun sessizlik.
+private let activeHoldSec: Double = 3
 
 /// Çalan paragrafın kelime kelime vurgusu: yalnızca bu görünüm konumu okur (saniyede ~30 güncelleme).
 private struct KaraokeParagraph: View {

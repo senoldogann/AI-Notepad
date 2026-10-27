@@ -52,12 +52,20 @@ public func meetingSegments(record: MeetingRecord) -> [StoredSegment] {
         .sorted { (left: StoredSegment, right: StoredSegment) -> Bool in left.startSec < right.startSec })
 }
 
-/// Bölümleri paragraflara toplar: konuşmacı (ya da kişi) değişince ya da paragraf `paragraphMaxSec`'i geçince
-/// yeni paragraf. Saf fonksiyondur.
+/// Okuma paragrafı en fazla bu kadar sürer: çalarken o anki paragraf ekrana bütün sığsın ve vurgu ekrandan kaçmasın.
+let readingParagraphMaxSec: Double = 30
+/// Uzun bölüm, parça en az bu kadar sürdüyse cümle sonunda bölünür.
+let readingPieceMinSec: Double = 8
+
+/// Bölümleri paragraflara toplar: konuşmacı (ya da kişi) değişince ya da paragraf `readingParagraphMaxSec`'i geçecekse
+/// yeni paragraf. Uzun bölümler önce cümle sonlarından parçalanır (bkz. `readingPieces`). Saf fonksiyondur.
 public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph] {
-    let groups: [[StoredSegment]] = meetingSegments(record: record).reduce(into: [[StoredSegment]]()) { (groups: inout [[StoredSegment]], segment: StoredSegment) -> Void in
+    let pieces: [StoredSegment] = meetingSegments(record: record).flatMap { (segment: StoredSegment) -> [StoredSegment] in
+        readingPieces(segment: segment)
+    }
+    let groups: [[StoredSegment]] = pieces.reduce(into: [[StoredSegment]]()) { (groups: inout [[StoredSegment]], segment: StoredSegment) -> Void in
         if let first = groups.last?.first, first.speaker == segment.speaker, first.person == segment.person,
-           segment.startSec - first.startSec < paragraphMaxSec {
+           segment.endSec - first.startSec <= readingParagraphMaxSec {
             groups[groups.count - 1].append(segment)
         } else {
             groups.append([segment])
@@ -75,6 +83,38 @@ public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph]
             words: group.flatMap { (segment: StoredSegment) -> [StoredWord] in
                 segment.words ?? estimatedWords(text: segment.text, startSec: segment.startSec, endSec: segment.endSec)
             }
+        )
+    }
+}
+
+/// Kelimeleri bilinen uzun bölümü parçalara böler: parça `readingPieceMinSec`'i geçtikten sonraki ilk cümle sonunda,
+/// noktalama hiç gelmezse `readingParagraphMaxSec`'te kelime sınırında. Son geçiş 1,5 sn sessizlik olmadan süren
+/// konuşmayı tek bölüm yapar; iki dakikalık tek paragraf çalarken ekrandan taşıyordu. İlk parça bölümün anahtarını
+/// korur (çeviri ona bağlıdır), sonrakiler `anahtar.n` olur. Saf fonksiyondur.
+func readingPieces(segment: StoredSegment) -> [StoredSegment] {
+    guard let words = segment.words, segment.endSec - segment.startSec > readingParagraphMaxSec else {
+        return [segment]
+    }
+    let groups: [[StoredWord]] = words.reduce(into: [[StoredWord]]()) { (groups: inout [[StoredWord]], word: StoredWord) -> Void in
+        guard let current = groups.last, let first = current.first, let previous = current.last else {
+            groups.append([word])
+            return
+        }
+        let endsSentence: Bool = previous.text.last.map { ".?!…".contains($0) } ?? false
+        let elapsed: Double = previous.endSec - first.startSec
+        if (endsSentence && elapsed >= readingPieceMinSec) || word.endSec - first.startSec > readingParagraphMaxSec {
+            groups.append([word])
+        } else {
+            groups[groups.count - 1].append(word)
+        }
+    }
+    return groups.enumerated().compactMap { (item: (offset: Int, element: [StoredWord])) -> StoredSegment? in
+        guard let first = item.element.first, let last = item.element.last else {
+            return nil
+        }
+        return StoredSegment(
+            key: item.offset == 0 ? segment.key : "\(segment.key).\(item.offset)", speaker: segment.speaker, person: segment.person,
+            startSec: first.startSec, endSec: last.endSec, text: item.element.map(\.text).joined(separator: " "), words: item.element
         )
     }
 }

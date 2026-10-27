@@ -233,7 +233,6 @@ private struct Sidebar: View {
             item(title: "Sor", symbol: "sparkle.magnifyingglass", section: .ask, badge: nil)
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
             item(title: "Kişiler", symbol: "person.2", section: .people, badge: nil)
-            item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
             SidebarFolders(model: model, router: router)
             if !model.meetings.isEmpty {
                 Text("Son toplantılar")
@@ -258,6 +257,9 @@ private struct Sidebar: View {
                     .buttonStyle(.hoverPlain)
                 }
             }
+            // Ayarlar en altta, sol köşede (uygulamaların alışılmış yeri).
+            Spacer(minLength: 12)
+            item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
