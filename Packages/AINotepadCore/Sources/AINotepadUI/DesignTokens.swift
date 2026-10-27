@@ -37,7 +37,7 @@ public func personColor(person: Int) -> Color {
     return palette[((person - 1) % palette.count + palette.count) % palette.count]
 }
 
-extension Color {
+public extension Color {
     /// 0xRRGGBB biçiminde sRGB renk.
     init(hex: UInt32) {
         self.init(

@@ -3186,6 +3186,16 @@
         }
       }
     },
+    "Gece": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Midnight"
+          }
+        }
+      }
+    },
     "Genel": {
       "localizations": {
         "en": {
@@ -3212,6 +3222,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Global shortcuts"
+          }
+        }
+      }
+    },
+    "Grafit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphite"
           }
         }
       }
@@ -4896,6 +4916,16 @@
         }
       }
     },
+    "Kum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sand"
+          }
+        }
+      }
+    },
     "Kurulum": {
       "localizations": {
         "en": {
@@ -4912,6 +4942,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook address from Teams (channel › ⋯ › Workflows) into the \"Webhook address\" card."
+          }
+        }
+      }
+    },
+    "Kâğıt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paper"
           }
         }
       }
@@ -6341,16 +6381,6 @@
         }
       }
     },
-    "Serin": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cool"
-          }
-        }
-      }
-    },
     "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.": {
       "localizations": {
         "en": {
@@ -6909,16 +6939,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
-          }
-        }
-      }
-    },
-    "Sıcak": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Warm"
           }
         }
       }
@@ -8040,16 +8060,6 @@
         }
       }
     },
-    "Vurgu": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accent"
-          }
-        }
-      }
-    },
     "Vurgu rengi": {
       "localizations": {
         "en": {
@@ -8393,16 +8403,6 @@
         }
       }
     },
-    "Yok": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "None"
-          }
-        }
-      }
-    },
     "Yunanca": {
       "localizations": {
         "en": {
@@ -8489,26 +8489,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zapier, Make, n8n, Teams workflow"
-          }
-        }
-      }
-    },
-    "Zemin tonu": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Background tint"
-          }
-        }
-      }
-    },
-    "Zemine çok hafif bir renk; kartlar ve yazı değişmez.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A very light colour wash on the background; cards and text stay the same."
           }
         }
       }

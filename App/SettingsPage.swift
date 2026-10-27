@@ -462,19 +462,21 @@ private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.islandEnabled) private var islandEnabled: Bool = true
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
-    @AppStorage(SettingsKey.tint) private var tint: String = PanelAppearance.standard.tint.rawValue
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsRow(title: Text("Tema")) {
-                EmptyView()
-            } control: {
-                PillPicker(selection: $theme, options: [
-                    (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
-                ])
-                .fixedSize()
+            Text("Tema")
+                .appFont(size: 14, weight: .medium)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
+                    ThemeSwatch(theme: item, isSelected: theme == item.rawValue, accent: appearance.accent.color) { theme = item.rawValue }
+                }
             }
+            .padding(.bottom, 14)
+            SettingsDivider()
             SettingsRow(title: Text("Yüzey")) {
                 Text("Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.")
             } control: {
@@ -494,14 +496,7 @@ private struct AppearanceSettings: View {
                     }
                 }
             }
-            SettingsRow(title: Text("Zemin tonu")) {
-                Text("Zemine çok hafif bir renk; kartlar ve yazı değişmez.")
-            } control: {
-                PillPicker(selection: $tint, options: [
-                    (ThemeTint.none.rawValue, "Yok"), (ThemeTint.warm.rawValue, "Sıcak"), (ThemeTint.cool.rawValue, "Serin"), (ThemeTint.accent.rawValue, "Vurgu"),
-                ])
-                .fixedSize()
-            }
+
             SettingsRow(title: Text("Vurgu rengi")) {
                 EmptyView()
             } control: {
@@ -579,6 +574,79 @@ private struct AppearanceSettings: View {
                 }
             }
         }
+    }
+}
+
+/// Tema kartı: takımın zemini üstünde küçük bir kart ve iki yazı çizgisi, altında adı; seçili olan vurgu rengiyle
+/// çerçeveli. Sistem teması açık ve koyuyu çapraz bölünmüş gösterir.
+private struct ThemeSwatch: View {
+    let theme: AppTheme
+    let isSelected: Bool
+    let accent: Color
+    let onSelect: @MainActor () -> Void
+
+    var body: some View {
+        let sets: (light: ThemeColorSet, dark: ThemeColorSet) = theme.colorSets
+        Button(action: onSelect) {
+            VStack(spacing: 8) {
+                ZStack {
+                    preview(set: sets.light)
+                    if theme == .system {
+                        preview(set: sets.dark)
+                            .clipShape(DiagonalHalf())
+                    }
+                }
+                .frame(height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSelected ? accent : Theme.line, lineWidth: isSelected ? 2 : 1))
+                Text(themeName(theme: theme))
+                    .appFont(size: 12, weight: isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.hoverPlain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private func preview(set: ThemeColorSet) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color(hex: set.background)
+            VStack(alignment: .leading, spacing: 5) {
+                RoundedRectangle(cornerRadius: 3).fill(Color(hex: set.ink)).frame(width: 34, height: 5)
+                RoundedRectangle(cornerRadius: 3).fill(Color(hex: set.muted)).frame(width: 22, height: 4)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(hex: set.card))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color(hex: set.line)))
+                    .frame(height: 22)
+            }
+            .padding(10)
+        }
+    }
+}
+
+/// Sol üstten sağ alta çapraz bölünmüş sağ-alt yarı.
+private struct DiagonalHalf: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path: Path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Temanın adı.
+private func themeName(theme: AppTheme) -> String {
+    switch theme {
+    case .system: String(localized: "Sistem")
+    case .light: String(localized: "Açık")
+    case .dark: String(localized: "Koyu")
+    case .paper: String(localized: "Kâğıt")
+    case .sand: String(localized: "Kum")
+    case .midnight: String(localized: "Gece")
+    case .graphite: String(localized: "Grafit")
     }
 }
 

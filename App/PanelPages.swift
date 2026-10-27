@@ -186,7 +186,6 @@ struct AppearanceEnvironment: ViewModifier {
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
-    @AppStorage(SettingsKey.tint) private var tint: String = PanelAppearance.standard.tint.rawValue
 
     func body(content: Content) -> some View {
         let standard: PanelAppearance = .standard
@@ -196,8 +195,7 @@ struct AppearanceEnvironment: ViewModifier {
             textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
             accent: PanelAccent(rawValue: accent) ?? standard.accent,
             surface: WindowSurface(rawValue: surface) ?? standard.surface,
-            surfaceOpacity: min(max(surfaceOpacity, SettingsRange.surfaceOpacity.lowerBound), SettingsRange.surfaceOpacity.upperBound),
-            tint: ThemeTint(rawValue: tint) ?? standard.tint
+            surfaceOpacity: min(max(surfaceOpacity, SettingsRange.surfaceOpacity.lowerBound), SettingsRange.surfaceOpacity.upperBound)
         )
         content
             .environment(\.panelAppearance, appearance)

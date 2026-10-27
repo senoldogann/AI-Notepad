@@ -73,27 +73,6 @@ public enum WindowSurface: String, Sendable, CaseIterable {
     case clear
 }
 
-/// Zemin tonu: zemin ve kenar çubuğuna çok hafif bir renk yıkaması (kartlar beyaz kalır).
-public enum ThemeTint: String, Sendable, CaseIterable {
-    case none
-    /// Kâğıt sıcaklığı (kehribar).
-    case warm
-    /// Grafit serinliği (çelik mavisi).
-    case cool
-    /// Seçili vurgu rengi.
-    case accent
-
-    /// Yıkama rengi; "yok" için nil. Saf fonksiyondur.
-    public func color(accent: PanelAccent) -> Color? {
-        switch self {
-        case .none: nil
-        case .warm: Color(hex: 0xC2763A)
-        case .cool: Color(hex: 0x4F6FA8)
-        case .accent: accent.color
-        }
-    }
-}
-
 /// Panelin kullanıcı tarafından ayarlanan görünümü.
 public struct PanelAppearance: Equatable, Sendable {
     public let fontChoice: AppFontChoice
@@ -108,11 +87,10 @@ public struct PanelAppearance: Equatable, Sendable {
     public let surface: WindowSurface
     /// Cam yüzeyde zemin renginin camın üstündeki opaklığı (0,35–0,95); dolu yüzeyde kullanılmaz.
     public let surfaceOpacity: Double
-    public let tint: ThemeTint
 
     public init(
         fontChoice: AppFontChoice, uiScale: Double, textSize: Double, lineSpacing: Double, bottomSpacing: Double, accent: PanelAccent,
-        surface: WindowSurface, surfaceOpacity: Double, tint: ThemeTint
+        surface: WindowSurface, surfaceOpacity: Double
     ) {
         self.fontChoice = fontChoice
         self.uiScale = uiScale
@@ -122,19 +100,13 @@ public struct PanelAppearance: Equatable, Sendable {
         self.accent = accent
         self.surface = surface
         self.surfaceOpacity = surfaceOpacity
-        self.tint = tint
     }
 
     /// Tasarım belgesindeki varsayılanlar (§4.3).
     public static let standard: PanelAppearance = PanelAppearance(
         fontChoice: .design(.inter), uiScale: 1, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .orange,
-        surface: .solid, surfaceOpacity: 0.7, tint: .none
+        surface: .solid, surfaceOpacity: 0.7
     )
-
-    /// Zemin tonunun rengi; yok ise nil.
-    public var tintColor: Color? {
-        tint.color(accent: accent)
-    }
 
     /// Sistem yazısının tasarımı (yuvarlak, tırnaklı, eş aralıklı); Inter ve yüklü ailede nil. `fontDesign` değiştiricisi
     /// özel yazı tiplerini de sistem yazısına çevirir: Inter ya da yüklü aile seçiliyken verilmemelidir.
@@ -184,10 +156,9 @@ private struct PageBackground: ViewModifier {
     }
 }
 
-/// Pencere zemini: dolu yüzeyde zemin rengi; camda sistem camı üstüne yarı saydam zemin; üstüne varsa zemin tonu.
+/// Pencere zemini: dolu yüzeyde zemin rengi; camda sistem camı üstüne yarı saydam zemin.
 public struct WindowBackdrop: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
-    @Environment(\.colorScheme) private var colorScheme: ColorScheme
 
     public init() {}
 
@@ -202,10 +173,6 @@ public struct WindowBackdrop: View {
             case .clear:
                 Rectangle().fill(.ultraThinMaterial)
                 Theme.background.opacity(appearance.surfaceOpacity * 0.6)
-            }
-            if let tint = appearance.tintColor {
-                // Koyu temada yıkama biraz daha belirgin: siyah zeminde aynı opaklık görünmüyordu.
-                tint.opacity(colorScheme == .dark ? 0.10 : 0.06)
             }
         }
         .ignoresSafeArea()
