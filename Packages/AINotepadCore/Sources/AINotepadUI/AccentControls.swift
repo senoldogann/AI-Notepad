@@ -6,6 +6,8 @@ public struct PillPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: LocalizedStringKey)]
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    /// Seçili kart bölümler arasında kayar (zıplamaz).
+    @Namespace private var selectionSpace: Namespace.ID
 
     public init(selection: Binding<Value>, options: [(value: Value, title: LocalizedStringKey)]) {
         self._selection = selection
@@ -22,6 +24,7 @@ public struct PillPicker<Value: Hashable>: View {
                     Text(item.element.title)
                         .appFont(size: 12, weight: isSelected ? .semibold : .regular)
                         .lineLimit(1)
+                        .contentTransition(.numericText())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
@@ -29,6 +32,7 @@ public struct PillPicker<Value: Hashable>: View {
                         .background {
                             if isSelected {
                                 Capsule().fill(Theme.card).shadow(color: .black.opacity(0.10), radius: 2, y: 1)
+                                    .matchedGeometryEffect(id: "secili", in: selectionSpace)
                             }
                         }
                         .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
@@ -40,7 +44,7 @@ public struct PillPicker<Value: Hashable>: View {
         }
         .padding(2)
         .background(Theme.soft, in: Capsule())
-        .animation(.easeOut(duration: 0.15), value: selection)
+        .animation(.smooth(duration: 0.25), value: selection)
     }
 }
 

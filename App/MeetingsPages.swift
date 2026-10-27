@@ -1662,7 +1662,7 @@ struct TaskCheckbox: View {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(isDone ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
-                .contentTransition(.symbolEffect(.replace))
+                .contentTransition(.symbolEffect(.replace.magic(fallback: .replace)))
                 .frame(width: 22, height: 22)
         }
         .buttonStyle(.hoverPlain)

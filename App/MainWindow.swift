@@ -557,7 +557,7 @@ private struct RecordBar: View {
                     center: UnitPoint(x: 0.35, y: 0.35), startRadius: 1, endRadius: 22
                 ))
                 .frame(width: 34, height: 34)
-                .tilt3D(maxAngle: 18)
+                .tilt3D(maxAngle: 8)
             switch model.phase {
             case .idle:
                 Text("Toplantını dinlemeye başla")
@@ -667,7 +667,7 @@ private struct ToolTiles: View {
                     .appFont(size: 18, weight: .regular)
                     .frame(width: 48, height: 48)
                     .cardSurface(cornerRadius: 12)
-                    .tilt3D(maxAngle: 10)
+                    .tilt3D(maxAngle: 5)
                 Text(title).appFont(size: 13, weight: .regular)
             }
             .foregroundStyle(Theme.ink)
