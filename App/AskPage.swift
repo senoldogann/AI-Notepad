@@ -216,6 +216,10 @@ private struct AskIntro: View {
     let meetings: [MeetingRecord]
     let onAsk: @MainActor (String) -> Void
 
+    /// Kartların sıcak film gradyanları (temanın turuncu ailesi).
+    private let examplePalettes: [FilmPalette] = [.sunset, .rose, .sunset, .rose]
+    private let exampleHint: LocalizedStringKey = "Tüm toplantılarında arar"
+
     private let examples: [(symbol: String, text: String)] = [
         ("checklist", "Bana hangi görevler verildi?"),
         ("checkmark.seal", "Son toplantılarda alınan kararlar neler?"),
@@ -252,30 +256,13 @@ private struct AskIntro: View {
                 .tracking(DesignTokens.labelTracking)
                 .foregroundStyle(Theme.muted)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(examples, id: \.text) { (example: (symbol: String, text: String)) in
-                    Button {
-                        onAsk(String(localized: String.LocalizationValue(example.text)))
-                    } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: example.symbol)
-                                .appFont(size: 14, weight: .medium)
-                                .foregroundStyle(Theme.muted)
-                                .frame(width: 20)
-                            Text(LocalizedStringKey(example.text))
-                                .appFont(size: 14, weight: .regular)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                            Image(systemName: "arrow.up.right")
-                                .appFont(size: 11, weight: .semibold)
-                                .foregroundStyle(Theme.muted.opacity(0.7))
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-                        .cardSurface(cornerRadius: 16)
-                        .contentShape(Rectangle())
+                ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in
+                    ExampleQuestionCard(
+                        symbol: item.element.symbol, question: LocalizedStringKey(item.element.text), hint: exampleHint,
+                        palette: examplePalettes[item.offset % examplePalettes.count]
+                    ) {
+                        onAsk(String(localized: String.LocalizationValue(item.element.text)))
                     }
-                    .buttonStyle(.hoverPlain)
                 }
             }
         }

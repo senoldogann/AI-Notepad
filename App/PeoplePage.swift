@@ -103,7 +103,7 @@ struct PeoplePage: View {
                         EmptyStateHero(
                             symbol: "person.2.fill", title: "Henüz kimse yok",
                             message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle. Sık görüştüğün kişileri şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir.",
-                            palette: .violet,
+                            palette: .sunset,
                             steps: [
                                 EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
                                 EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),

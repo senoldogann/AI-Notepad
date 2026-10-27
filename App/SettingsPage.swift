@@ -15,6 +15,7 @@ private func launchSettingsSection(arguments: [String]) -> SettingsSection {
     case "gorunum": return .appearance
     case "llm": return .llm
     case "anahtarlar": return .keys
+    case "baglantilar": return .connections
     case "kisayollar": return .shortcuts
     default: return .general
     }
@@ -25,6 +26,7 @@ private enum SettingsSection: CaseIterable {
     case appearance
     case llm
     case keys
+    case connections
     case shortcuts
 
     var title: LocalizedStringKey {
@@ -33,6 +35,7 @@ private enum SettingsSection: CaseIterable {
         case .appearance: "Görünüm"
         case .llm: "LLM"
         case .keys: "Anahtarlar"
+        case .connections: "Bağlantılar"
         case .shortcuts: "Kısayollar"
         }
     }
@@ -63,6 +66,7 @@ struct SettingsPage: View {
                     case .appearance: AppearanceSettings()
                     case .llm: LLMSettings(model: model)
                     case .keys: KeySettings(model: model)
+                    case .connections: ConnectionSettings(model: model)
                     case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
                     }
                 }
@@ -71,7 +75,8 @@ struct SettingsPage: View {
                 .padding(.top, 8)
             }
             .animation(.smooth(duration: 0.2), value: section)
-            .frame(maxWidth: 880, alignment: .leading)
+            // Geniş pencerede form satırları ekran boyu uzamasın; kaydırma alanı tam genişlikte.
+            .frame(maxWidth: 720, alignment: .leading)
             .padding(.horizontal, 40)
             .padding(.vertical, 28)
             .frame(maxWidth: .infinity)
@@ -645,7 +650,7 @@ private struct LLMSettings: View {
                 case .running:
                     ProgressView().controlSize(.small)
                 case .succeeded(let reply):
-                    Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.green).lineLimit(1)
+                    Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.tint).lineLimit(1)
                 case .failed(let message):
                     Text(message).foregroundStyle(.red)
                 }
@@ -662,7 +667,6 @@ private struct LLMSettings: View {
                 }
                 .disabled(testResult == .running)
             }
-            MCPSettings()
         }
         // Yazarken her tuşta Keychain denetlenmesin: son değişiklikten 0,6 sn sonra bir kez.
         .task(id: [provider, baseURL, fastModel, smartModel, openAIFastEffort, openAISmartEffort, claudeFastModel, claudeSmartModel, claudeFastEffort, claudeSmartEffort]) {
@@ -778,7 +782,6 @@ private struct KeySettings: View {
                 }
                 .disabled(model.keySync == .working)
             }
-            WebhookSettings(model: model)
             Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
@@ -787,6 +790,132 @@ private struct KeySettings: View {
         }
     }
 }
+
+/// Bağlantılar: yapay zekâ uygulamalarına tek tıkla MCP (Claude, Cursor, VS Code), kanallara not gönderme (webhook) ve
+/// başka MCP istemcileri için elle yapılandırma.
+private struct ConnectionSettings: View {
+    let model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Yapay zekâ uygulamaları")
+            Text("Bağlayınca Claude, Cursor ya da VS Code toplantılarını listeleyip arar, notları ve transkriptleri okur (yalnızca okur, hiçbir şey değiştirmez). Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 8)
+            ForEach(MCPClient.allCases, id: \.self) { (client: MCPClient) in
+                MCPClientRow(client: client)
+            }
+            WebhookSettings(model: model)
+            MCPSettings()
+        }
+    }
+}
+
+/// Bir yapay zekâ uygulaması: simgesi, adı, durumu; yüklüyse "Bağla" ya da (bağlıysa) "Kaldır". Bağlayınca uygulamanın
+/// yapılandırma dosyasına AI-Notepad eklenir (diğer ayarlar korunur); uygulama yeniden açılınca görünür.
+private struct MCPClientRow: View {
+    let client: MCPClient
+    @State private var isConnected: Bool = false
+    @State private var errorMessage: String?
+    @State private var justConnected: Bool = false
+
+    private var isInstalled: Bool {
+        FileManager.default.fileExists(atPath: client.applicationPath)
+    }
+
+    private var executablePath: String {
+        Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: client.applicationPath))
+                    .resizable()
+                    .frame(width: 34, height: 34)
+                    .opacity(isInstalled ? 1 : 0.45)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: client.displayName)
+                        .appFont(size: 15, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                    Group {
+                        if !isInstalled {
+                            Text("Bu Mac'te yüklü değil").foregroundStyle(Theme.muted)
+                        } else if let errorMessage {
+                            Text(errorMessage).foregroundStyle(.red)
+                        } else if isConnected {
+                            Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.tint)
+                        } else {
+                            Text("Tek tıkla bağla").foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .appFont(size: 13, weight: .regular)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                if isInstalled {
+                    if isConnected {
+                        Button("Kaldır", role: .destructive) { disconnect() }
+                    } else {
+                        Button("Bağla", systemImage: "link") { connect() }
+                            .buttonStyle(.pillPrimary)
+                    }
+                }
+            }
+            .padding(.vertical, 14)
+            SettingsDivider()
+        }
+        .animation(.smooth(duration: 0.2), value: isConnected)
+        .task { refresh() }
+    }
+
+    private func refresh() {
+        guard isInstalled else {
+            return
+        }
+        do {
+            let config: JSONValue = try readMCPConfig(file: client.configFile(home: FileManager.default.homeDirectoryForCurrentUser))
+            isConnected = isMCPServerConnected(config: config, client: client, executablePath: executablePath)
+            errorMessage = nil
+        } catch {
+            errorMessage = userFacingMessage(error: error)
+        }
+    }
+
+    private func connect() {
+        do {
+            try connectMCPClient(client: client, executablePath: executablePath, home: FileManager.default.homeDirectoryForCurrentUser)
+            justConnected = true
+            refresh()
+        } catch {
+            errorMessage = userFacingMessage(error: error)
+        }
+    }
+
+    private func disconnect() {
+        do {
+            try disconnectMCPClient(client: client, home: FileManager.default.homeDirectoryForCurrentUser)
+            justConnected = false
+            refresh()
+        } catch {
+            errorMessage = userFacingMessage(error: error)
+        }
+    }
+}
+
+/// Webhook servisi: adı ve adresin nasıl alınacağını anlatan sayfa.
+private let webhookServices: [(name: String, guide: String)] = [
+    ("Slack", "https://api.slack.com/messaging/webhooks"),
+    ("Microsoft Teams", "https://support.microsoft.com/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498"),
+    ("Discord", "https://support.discord.com/hc/articles/228383668-Intro-to-Webhooks"),
+    ("Zapier", "https://zapier.com/apps/webhook/integrations"),
+    ("Make", "https://www.make.com/en/help/tools/webhooks"),
+    ("n8n", "https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/"),
+]
 
 /// Not hazır olunca gönderilen webhook (Slack, Teams, Discord, Zapier, Make, n8n): adres Anahtar Zinciri'nde, kendiliğinden
 /// gönderim ve deneme.
@@ -797,17 +926,42 @@ private struct WebhookSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsGroupHeader(title: "Bağlantılar")
+            SettingsGroupHeader(title: "Kanallara gönder")
+            Text("Servisin \"gelen webhook\" adresini al ve aşağıya yapıştır; tür adresten tanınır. Adresin nasıl alınacağı:")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(webhookServices, id: \.name) { (service: (name: String, guide: String)) in
+                    if let url = URL(string: service.guide) {
+                        Link(destination: url) {
+                            HStack(spacing: 5) {
+                                Text(verbatim: service.name)
+                                Image(systemName: "arrow.up.right").appFont(size: 9, weight: .bold)
+                            }
+                            .appFont(size: 12, weight: .medium)
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(Theme.soft, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .linkPointer(isEnabled: true)
+                        .hoverHint("\(service.name) adresinin nasıl alınacağını aç", alignment: .leading, edge: .bottom)
+                    }
+                }
+            }
+            .padding(.vertical, 10)
             SecretField(title: "Webhook adresi", account: .webhook, onChange: { testState = .idle })
             SettingsRow(title: Text("Not hazır olunca gönder")) {
-                Text("Slack, Microsoft Teams (iş akışı), Discord, Zapier, Make ya da n8n webhook adresi: her toplantının notu (özet, kararlar, görevler) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.")
+                Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.")
                 switch testState {
                 case .idle:
                     EmptyView()
                 case .running:
                     ProgressView().controlSize(.small)
                 case .sent:
-                    Label("Deneme notu gönderildi", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Label("Deneme notu gönderildi", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
                 case .failed(let message):
                     Text(message).foregroundStyle(.red)
                 }
@@ -1052,8 +1206,8 @@ private struct MCPSettings: View {
         let path: String = Bundle.main.executablePath ?? "/Applications/AINotepad.app/Contents/MacOS/AINotepad"
         let config: String = mcpClientConfig(executablePath: path)
         VStack(alignment: .leading, spacing: 0) {
-            SettingsGroupHeader(title: "Yapay zekâ uygulamalarına bağla (MCP)")
-            SettingsRow(title: Text("Claude Desktop, ChatGPT ve diğerleri")) {
+            SettingsGroupHeader(title: "Diğer MCP istemcileri")
+            SettingsRow(title: Text("Elle yapılandırma")) {
                 Text("Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okunan notlar ve transkriptler istemcinin yapay zekâ sağlayıcısına (ör. Anthropic, OpenAI) gönderilir.")
             } control: {
                 Button(copied ? "Kopyalandı" : "Yapılandırmayı kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
@@ -1100,7 +1254,7 @@ struct LocalLLMSetup: View {
             case .missing(let message):
                 Text("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b").foregroundStyle(.orange)
             case .applied(let name):
-                Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }
         } control: {
             HStack(spacing: 8) {

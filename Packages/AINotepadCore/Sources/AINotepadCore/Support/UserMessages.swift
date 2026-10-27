@@ -36,6 +36,10 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "\(host) webhook'u reddetti (HTTP \(status)). Adresin doğru ve etkin olduğunu kontrol et.")
     case WebhookError.network(let host, _):
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
+    case MCPConfigError.invalidConfig(let path, _):
+        return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
+    case MCPConfigError.writeFailed(let path, _):
+        return String(localized: "Yapılandırma yazılamadı: \((path as NSString).lastPathComponent). Klasör izinlerini kontrol et.")
     case let urlError as URLError where urlError.code == .appTransportSecurityRequiresSecureConnection:
         return String(localized: "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.")
     case let urlError as URLError:

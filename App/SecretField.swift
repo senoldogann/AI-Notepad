@@ -19,7 +19,7 @@ struct SecretField: View {
             case .unknown:
                 EmptyView()
             case .saved:
-                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             case .missing:
                 Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
             case .failed(let message):

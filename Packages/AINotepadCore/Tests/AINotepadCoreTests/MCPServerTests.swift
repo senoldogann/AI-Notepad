@@ -53,3 +53,47 @@ import Testing
         #expect(lines[9].contains(#""protocolVersion":"2025-06-18""#))
     }
 }
+
+@Suite struct MCPClientConfigTests {
+    // Tek tıkla bağlama: gerçek dosyada diğer sunucular ve ayarlar korunur; kaldırınca yalnız bizim girdimiz gider.
+    @Test func connectPreservesOtherSettingsAndDisconnects() throws {
+        let home: URL = try temporaryDirectory()
+        let file: URL = MCPClient.claudeDesktop.configFile(home: home)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"globalShortcut":"Ctrl+Space","mcpServers":{"other":{"command":"/bin/other","args":[]}}}"#.utf8).write(to: file)
+        try connectMCPClient(client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", home: home)
+        let connected: JSONValue = try readMCPConfig(file: file)
+        #expect(isMCPServerConnected(config: connected, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        guard case .object(let root) = connected, case .object(let servers) = root["mcpServers"] else {
+            Issue.record("yapılandırma nesne değil")
+            return
+        }
+        #expect(root["globalShortcut"] == .string("Ctrl+Space") && servers["other"] != nil)
+        try disconnectMCPClient(client: .claudeDesktop, home: home)
+        let removed: JSONValue = try readMCPConfig(file: file)
+        #expect(!isMCPServerConnected(config: removed, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        #expect(removed != connected)
+    }
+
+    // VS Code'da sunucular "servers" altında ve "type" ister; dosya yoksa oluşturulur.
+    @Test func vsCodeShapeAndMissingFile() throws {
+        let home: URL = try temporaryDirectory()
+        try connectMCPClient(client: .vsCode, executablePath: "/x/AINotepad", home: home)
+        guard case .object(let root) = try readMCPConfig(file: MCPClient.vsCode.configFile(home: home)),
+              case .object(let servers) = root["servers"], case .object(let entry) = servers[mcpServerName] else {
+            Issue.record("VS Code yapılandırması beklenen biçimde değil")
+            return
+        }
+        #expect(entry["type"] == .string("stdio"))
+    }
+
+    // Bozuk dosyanın üzerine yazılmaz (kullanıcı ayarları kaybolmasın).
+    @Test func brokenConfigIsNotOverwritten() throws {
+        let home: URL = try temporaryDirectory()
+        let file: URL = MCPClient.cursor.configFile(home: home)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{bozuk".utf8).write(to: file)
+        #expect(throws: MCPConfigError.self) { try connectMCPClient(client: .cursor, executablePath: "/x", home: home) }
+        #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self) == "{bozuk")
+    }
+}

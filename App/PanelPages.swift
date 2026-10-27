@@ -290,7 +290,7 @@ private struct ProcessingOverlay: View {
                     HStack(spacing: DesignTokens.Spacing.s) {
                         Group {
                             if item.offset < progress.stepIndex {
-                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
                             } else if item.offset == progress.stepIndex {
                                 ProgressView().controlSize(.small)
                             } else {

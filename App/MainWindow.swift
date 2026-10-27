@@ -206,10 +206,9 @@ struct MainWindowView: View {
             TasksPage(model: model, router: router)
         case .settings:
             // Geniş pencerede form satırları ekran boyu uzamasın.
+            // Genişlik sınırı sayfanın içinde: kaydırma çubuğu pencerenin sağ kenarında kalır.
             SettingsPage(model: model, shortcuts: shortcuts)
                 .scrollContentBackground(.hidden)
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
         case .setup:
             // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
             EmptyView()
@@ -707,7 +706,7 @@ private struct BannerCarousel: View {
     private var slides: [Slide] {
         [
             Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", palette: .sunset),
-            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", palette: .coral),
+            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", palette: .sunset),
             Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", palette: .violet),
         ]
     }
@@ -1066,7 +1065,12 @@ private struct TasksPage: View {
                 }
                 if groups.isEmpty {
                     if showsDone {
-                        EmptyStateCard(symbol: "checkmark.circle", title: "Tamamlanan görev yok", message: "Bir görevin dairesine tıklayınca buraya taşınır.")
+                        EmptyStateHero(
+                            symbol: "checkmark.circle", title: "Tamamlanan görev yok",
+                            message: "Bir görevin dairesine tıklayınca buraya taşınır; bitirdiklerin burada birikir.", palette: .sunset, steps: []
+                        ) {
+                            EmptyView()
+                        }
                     } else if doneCount > 0 {
                         EmptyStateHero(
                             symbol: "party.popper.fill", title: "Açık görevin kalmadı",
@@ -1079,7 +1083,7 @@ private struct TasksPage: View {
                         EmptyStateHero(
                             symbol: "checklist", title: "Henüz sana düşen görev yok",
                             message: "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır, tamamlayınca işaretlersin.",
-                            palette: .mint,
+                            palette: .sunset,
                             steps: [
                                 EmptyStateStep(symbol: "record.circle", title: "Toplantıyı kaydet"),
                                 EmptyStateStep(symbol: "sparkles", title: "Türkçe not yazılır"),
@@ -1191,7 +1195,7 @@ private struct MeetingsSplit: View {
                         } else {
                             EmptyStateHero(
                                 symbol: "doc.text.magnifyingglass", title: "Bir toplantı seç",
-                                message: "Notu, görevleri, konu akışını ve konuşmacılı transkripti burada görürsün.", palette: .ocean, steps: []
+                                message: "Notu, görevleri, konu akışını ve konuşmacılı transkripti burada görürsün.", palette: .sunset, steps: []
                             ) {
                                 EmptyView()
                             }

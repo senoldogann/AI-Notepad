@@ -224,7 +224,7 @@ private struct PermissionRow<Action: View>: View {
                 Text(detail).foregroundStyle(.secondary)
                 Label(status, systemImage: isGranted ? "checkmark.circle.fill" : "circle.dotted")
                     .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(isGranted ? .green : .secondary)
+                    .foregroundStyle(isGranted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
             }
             Spacer()
             action()
