@@ -5,3 +5,6 @@ DerivedData/
 .build/
 *.xcodeproj
 Config/Local.xcconfig
+
+# Ajan çalışma kopyaları
+.claude/worktrees/

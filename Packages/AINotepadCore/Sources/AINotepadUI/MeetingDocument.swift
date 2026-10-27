@@ -102,6 +102,15 @@ public func meetingPDF(record: MeetingRecord) throws -> Data {
     return data as Data
 }
 
+/// Belgeyi Word (DOCX, Office Open XML) verisine çevirir; biçimler (başlık, renk, girinti) korunur.
+public func meetingDOCX(record: MeetingRecord) throws -> Data {
+    let document: NSAttributedString = meetingDocument(record: record)
+    return try document.data(
+        from: NSRange(location: 0, length: document.length),
+        documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML]
+    )
+}
+
 private func taskParagraph(task: NoteTask) -> NSAttributedString {
     let line: NSMutableAttributedString = NSMutableAttributedString()
     line.append(styled(text: "☐  ", style: .listItem))

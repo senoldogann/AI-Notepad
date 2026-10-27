@@ -172,10 +172,27 @@ struct MeetingReadView: View {
                             Label("Markdown olarak paylaş", systemImage: "doc.text")
                         }
                     }
+                    if !(record.finalSegments.isEmpty && record.liveSegments.isEmpty) {
+                        ShareLink(item: transcriptText(record: record)) {
+                            Label("Transkripti paylaş", systemImage: "text.alignleft")
+                        }
+                    }
                     Button(store.regeneratingIDs.contains(record.id) ? "Not yazılıyor…" : "Notu yenile", systemImage: "arrow.clockwise") {
                         Task { await store.regenerateNote(meetingID: record.id) }
                     }
                     .disabled(record.status == .recording || record.status == .processing || store.regeneratingIDs.contains(record.id))
+                    if let versions = record.noteHistory, !versions.isEmpty {
+                        Menu("Önceki sürümler", systemImage: "clock.arrow.circlepath") {
+                            Section("Değişiklikten önceki not") {
+                                ForEach(Array(versions.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteVersion)) in
+                                    Button(noteVersionTitle(version: item.element, locale: interfaceLocale())) {
+                                        restoreVersion(index: item.offset)
+                                    }
+                                }
+                            }
+                        }
+                        .disabled(record.status == .recording || record.status == .processing || store.regeneratingIDs.contains(record.id))
+                    }
                     Button("Sil", systemImage: "trash", role: .destructive, action: onDelete)
                         .disabled(record.status == .recording || record.status == .processing)
                 } label: {
@@ -193,6 +210,16 @@ struct MeetingReadView: View {
             }
         }
         #endif
+    }
+
+    /// Notun önceki sürümünü geri yükler; olmazsa neden sayfada görünür.
+    private func restoreVersion(index: Int) {
+        do {
+            try store.restoreNoteVersion(meetingID: record.id, index: index)
+            errorMessage = nil
+        } catch {
+            errorMessage = String(localized: "Not sürümü geri yüklenemedi: \(userFacingMessage(error: error))")
+        }
     }
 
     private func hero(paragraphs: [TranscriptParagraph]) -> some View {

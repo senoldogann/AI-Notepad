@@ -1,8 +1,8 @@
 import Foundation
 
 /// Arşivden bir parça: bir toplantının notu ya da transkriptinden bir bölüm (soru-cevapta kaynak olarak gösterilir).
-public struct ArchivePassage: Sendable, Equatable, Identifiable {
-    public enum Kind: Sendable, Equatable {
+public struct ArchivePassage: Sendable, Equatable, Identifiable, Codable {
+    public enum Kind: String, Sendable, Equatable, Codable {
         case note
         case transcript
     }

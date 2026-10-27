@@ -102,6 +102,9 @@ targets:
         UIAppFonts: [InterVariable.ttf]
         # Kayıt kilit ekranında ve Dynamic Island'da canlı etkinlik olarak görünür.
         NSSupportsLiveActivities: true
+        # Kayıttan sonra işleme uygulamadan çıkılsa da sürer (BGContinuedProcessingTask); kimlik
+        # `com.senoldogan.AINotepad.process.<UUID>` biçimindedir (bkz. iOS/PhoneRecorder.swift).
+        BGTaskSchedulerPermittedIdentifiers: [com.senoldogan.AINotepad.process.*]
   AINotepadWidgets:
     type: app-extension
     platform: iOS

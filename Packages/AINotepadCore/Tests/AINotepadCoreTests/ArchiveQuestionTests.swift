@@ -143,3 +143,25 @@ private final class ProgressBox: @unchecked Sendable {
         return stored
     }
 }
+
+@Suite struct SkillImportTests {
+    // Depodaki AI-Notepad becerisi tarif olur; ön bilgisi olmayan dosya açık hatayla reddedilir.
+    @Test func skillBecomesRecipe() throws {
+        let text: String = """
+        ---
+        name: weekly-review
+        description: "Haftalık toplantı özeti"
+        ---
+
+        # Haftalık özet
+
+        Son 7 günün toplantılarını özetle.
+        """
+        let recipe: Recipe = try recipeFromSkill(text: text, file: "SKILL.md", id: "s1")
+        #expect(recipe.title == "Weekly Review" && !recipe.isBuiltIn)
+        #expect(recipe.prompt.hasPrefix("Haftalık toplantı özeti") && recipe.prompt.contains("Son 7 günün"))
+        #expect(throws: SkillImportError.missingFrontMatter(file: "x.md")) { try recipeFromSkill(text: "# başlık", file: "x.md", id: "s2") }
+        let bundled: String = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../../../skills/ai-notepad-meetings/SKILL.md"), encoding: .utf8)
+        #expect(try recipeFromSkill(text: bundled, file: "SKILL.md", id: "s3").title == "Ai Notepad Meetings")
+    }
+}

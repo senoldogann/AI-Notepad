@@ -8,7 +8,8 @@ private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 
 // MARK: Liste
 
-/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama ve yeniden eskiye liste.
+/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama, süzgeç ve tarihe göre gruplu (Bugün, Dün,
+/// Bu hafta, aylar) yeniden eskiye liste.
 struct MeetingsListPage: View {
     let model: AppModel
     /// Açık toplantı (satırı vurgulanır).
@@ -26,9 +27,14 @@ struct MeetingsListPage: View {
     @State private var checked: Set<String> = []
     @State private var isConfirmingDelete: Bool = false
     @State private var deleteErrors: [String] = []
+    @State private var listFilter: MeetingListFilter = .all
 
     var body: some View {
-        let visible: [MeetingRecord] = filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query)
+        let visible: [MeetingRecord] = filterMeetings(
+            records: filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query),
+            listFilter: listFilter
+        )
+        let sections: [MeetingSection] = meetingSections(records: visible, now: Date(), calendar: .current, locale: interfaceLocale())
         VStack(spacing: 0) {
             HStack(spacing: DesignTokens.Spacing.s) {
                 if let folder {
@@ -69,6 +75,13 @@ struct MeetingsListPage: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, DesignTokens.Spacing.s)
+            if !model.meetings.isEmpty {
+                PillPicker(selection: $listFilter, options: [
+                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevim olanlar"), (MeetingListFilter.problems, "Hatalı"),
+                ])
+                .padding(.horizontal, DesignTokens.Spacing.m)
+                .padding(.bottom, DesignTokens.Spacing.s)
+            }
             if let error = model.importError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .appFont(size: 12, weight: .regular)
@@ -79,13 +92,27 @@ struct MeetingsListPage: View {
             if model.meetings.isEmpty {
                 EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.")
             } else if visible.isEmpty {
-                EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
+                if listFilter == .all {
+                    EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
+                } else {
+                    EmptyStatePlaceholder(symbol: "line.3.horizontal.decrease", title: "Eşleşen toplantı yok", message: "Süzgeci \"Hepsi\" yap ya da başka bir kelimeyle ara.")
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(visible) { (record: MeetingRecord) in
-                            row(record: record)
-                                .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
+                        ForEach(sections) { (section: MeetingSection) in
+                            Text(interfaceUppercased(text: section.title))
+                                .appFont(size: 11, weight: .semibold)
+                                .tracking(DesignTokens.labelTracking)
+                                .foregroundStyle(Theme.muted)
+                                .padding(.horizontal, DesignTokens.Spacing.m)
+                                .padding(.top, section.id == sections.first?.id ? DesignTokens.Spacing.xs : DesignTokens.Spacing.m)
+                                .padding(.bottom, DesignTokens.Spacing.xs)
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(section.meetings) { (record: MeetingRecord) in
+                                row(record: record)
+                                    .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
+                            }
                         }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.s)
@@ -233,7 +260,7 @@ struct MeetingsListPage: View {
     }
 }
 
-/// Liste satırı: başlık, tarih, durum ve varsa senin görev sayın.
+/// Liste satırı: başlık, tarih, süre, durum ve varsa senin görev sayın.
 struct MeetingRow: View {
     let record: MeetingRecord
     let isProcessing: Bool
@@ -248,6 +275,9 @@ struct MeetingRow: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
+                    if let minutes = meetingDurationMinutes(record: record) {
+                        Text("· " + String(localized: "\(minutes) dk"))
+                    }
                     if let status = statusText(record: record, isProcessing: isProcessing) {
                         Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
                     }
@@ -467,16 +497,8 @@ struct MeetingDetailPage: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
-        switch model.webhookStates[record.id] {
-        case .sending:
-            Label("Kanala gönderiliyor…", systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .sent:
-            Label("Not kanala gönderildi", systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
-        case nil:
-            EmptyView()
-        }
+        sendStatus(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
+        sendStatus(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
                 .appFont(size: 12, weight: .regular)
@@ -630,6 +652,8 @@ struct MeetingDetailPage: View {
                     .buttonStyle(.coverGlass)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
                 moreMenu {
+                    fileExportItems
+                    Divider()
                     webhookItem
                     Divider()
                     manageItems
@@ -640,6 +664,8 @@ struct MeetingDetailPage: View {
                 Spacer(minLength: DesignTokens.Spacing.s)
                 moreMenu {
                     exportItems
+                    Divider()
+                    fileExportItems
                     Divider()
                     manageItems
                 }
@@ -698,15 +724,63 @@ struct MeetingDetailPage: View {
         webhookItem
     }
 
+    /// Dosya olarak dışa aktarma: Word belgesi (seçili not dilinde), transkriptin düz metni ve SRT altyazısı.
+    @ViewBuilder
+    private var fileExportItems: some View {
+        let hasTranscript: Bool = !(record.finalSegments.isEmpty && record.liveSegments.isEmpty)
+        Button("Word (DOCX) olarak kaydet", systemImage: "doc.text") { exportDOCX() }
+        Button("Transkripti metin olarak kaydet (TXT)", systemImage: "text.alignleft") { exportTranscriptText() }
+            .disabled(!hasTranscript)
+        Button("Altyazı olarak kaydet (SRT)", systemImage: "captions.bubble") { exportSRT() }
+            .disabled(!hasTranscript)
+    }
+
     /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
     @ViewBuilder
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
-        Button("Kanala gönder (Slack, Teams, Discord…)", systemImage: "paperplane") {
-            Task { _ = await model.sendToWebhook(meetingID: record.id) }
+        // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
+        Menu("Kanala gönder", systemImage: "paperplane") {
+            if model.destinations.isEmpty {
+                Text("Ayarlar › Bağlantılar'dan kanal ekle")
+            } else {
+                ForEach(model.destinations) { (destination: NoteDestination) in
+                    let sent: Bool = (record.sentDestinationIDs ?? []).contains(destination.id)
+                    Button {
+                        Task { await model.sendNote(meetingID: record.id, destinationIDs: [destination.id]) }
+                    } label: {
+                        Label(
+                            "\(destinationName(destination: destination)) · \(destinationDetail(destination: destination))",
+                            systemImage: sent ? "checkmark" : "paperplane"
+                        )
+                    }
+                }
+                if model.destinations.count > 1 {
+                    Divider()
+                    Button("Hepsine gönder") {
+                        Task { await model.sendNote(meetingID: record.id, destinationIDs: model.destinations.map(\.id)) }
+                    }
+                }
+            }
         }
         .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
+        // Görevleri Linear ya da Jira'da iş olarak açar.
+        Menu("Görevleri gönder", systemImage: "checklist") {
+            if model.taskTrackers.isEmpty {
+                Text("Ayarlar › Bağlantılar › Görev araçları'ndan Linear ya da Jira bağla")
+            } else {
+                ForEach(model.taskTrackers) { (tracker: TaskTracker) in
+                    Button("Bana düşenleri \(tracker.service.displayName)'e gönder") {
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: true) }
+                    }
+                    Button("Tüm görevleri \(tracker.service.displayName)'e gönder") {
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: false) }
+                    }
+                }
+            }
+        }
+        .disabled((record.note?.tasks ?? []).isEmpty || model.trackerStates[record.id] == .sending)
         Button("Apple Notlar'a gönder", systemImage: "note.text") {
             Task {
                 if let error = await model.sendToAppleNotes(meetingID: record.id) {
@@ -765,6 +839,7 @@ struct MeetingDetailPage: View {
             }
         }
         .disabled(isLocked)
+        noteVersionItems
         Button("Yeniden adlandır", systemImage: "pencil") { startRename() }
             .disabled(isLocked)
         Button("Tekrar işle", systemImage: "arrow.clockwise") { model.reprocess(meetingID: record.id) }
@@ -776,6 +851,47 @@ struct MeetingDetailPage: View {
         .disabled(isLocked || record.audioDeleted)
         Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
             .disabled(isLocked)
+    }
+
+    /// Gönderim durumu satırı (kanal ya da görev aracı).
+    @ViewBuilder
+    private func sendStatus(state: WebhookSendState?, sending: LocalizedStringKey, sent: LocalizedStringKey) -> some View {
+        switch state {
+        case .sending:
+            Label(sending, systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .sent:
+            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .done(let summary):
+            Label(summary, systemImage: "checkmark.circle")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// Notun önceki sürümleri: son değişikliği geri al ve sürüm listesi (tarih ve neden); geri yükleme de geri alınabilir.
+    @ViewBuilder
+    private var noteVersionItems: some View {
+        if let versions = record.noteHistory, let latest = versions.first {
+            Button("Geri al (\(latest.reason))", systemImage: "arrow.uturn.backward") {
+                model.restoreNoteVersion(meetingID: record.id, index: 0)
+            }
+            .disabled(isLocked)
+            Menu("Önceki sürümler", systemImage: "clock.arrow.circlepath") {
+                Section("Değişiklikten önceki not") {
+                    ForEach(Array(versions.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteVersion)) in
+                        Button(noteVersionTitle(version: item.element, locale: interfaceLocale())) {
+                            model.restoreNoteVersion(meetingID: record.id, index: item.offset)
+                        }
+                    }
+                }
+            }
+            .disabled(isLocked)
+        }
     }
 
     /// Paylaşılacak metin: seçili dildeki not (paylaşım sürümü henüz yoksa Türkçe); not yoksa nil.
@@ -942,6 +1058,27 @@ struct MeetingDetailPage: View {
     private func exportMarkdown() {
         export = saveExport(fileExtension: "md") { (url: URL) throws -> Void in
             try Data(meetingMarkdown(record: shownRecord).utf8).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu ve transkripti (seçili not dilinde) Word belgesi olarak İndirilenler'e kaydeder.
+    private func exportDOCX() {
+        export = saveExport(fileExtension: "docx") { (url: URL) throws -> Void in
+            try meetingDOCX(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Transkripti düz metin (`[mm:ss] Ad: metin`) olarak İndirilenler'e kaydeder.
+    private func exportTranscriptText() {
+        export = saveExport(fileExtension: "txt") { (url: URL) throws -> Void in
+            try Data(transcriptText(record: record).utf8).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Transkripti SRT altyazısı olarak İndirilenler'e kaydeder (videoya eklenebilir).
+    private func exportSRT() {
+        export = saveExport(fileExtension: "srt") { (url: URL) throws -> Void in
+            try Data(transcriptSRT(record: record).utf8).write(to: url, options: .atomic)
         }
     }
 
