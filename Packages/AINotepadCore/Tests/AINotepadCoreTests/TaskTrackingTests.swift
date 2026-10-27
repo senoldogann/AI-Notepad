@@ -84,6 +84,35 @@ import Testing
 }
 
 extension CloudTests {
+@Suite struct NoteResumeCloudTests {
+    // Uzun not kaldığı yerden sürer: tüm parçalar kayıtlıysa yalnız başlık ve özet istenir; kayıtlı görevler notta
+    // kalır, ilerleme dosyası not bitince silinir.
+    @Test func resumesFromSavedProgress() async throws {
+        let sentence: String = "Käydään läpi budjetti ja markkinoinnin suunnitelma ensi vuodelle, ja sovitaan aikataulusta. "
+        let segments: [StoredSegment] = (0..<300).map { (index: Int) -> StoredSegment in
+            stored("final-\(index)", .others, index % 2 + 1, Double(index * 10), sentence)
+        }
+        let file: URL = try temporaryDirectory().appending(path: "note-progress.json")
+        let parts: Int = noteChunks(segments: segments, maxChars: noteChunkMaxChars).count
+        let saved: ChunkedNoteState = ChunkedNoteState(
+            partSummaries: ["[00:00–50:00] Budjetti ja markkinointisuunnitelma käytiin läpi; aikataulu sovittiin."],
+            decisions: ["Markkinointibudjetti kasvaa 10 %."],
+            tasks: [NoteTask(owner: "Senol", description: "Aikataulun lähettäminen tiimille", dueDate: "perjantai", isMine: true)],
+            glossary: []
+        )
+        let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general)
+        try JSONEncoder().encode(ChunkedNoteProgress(fingerprint: fingerprint, completedParts: parts, state: saved)).write(to: file)
+        let note: MeetingNote = try #require(try await writeMeetingNote(
+            segments: segments, speakerNames: [:], userName: "Senol", template: .general,
+            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
+        ))
+        #expect(parts > 1)
+        #expect(note.tasks.map(\.description) == ["Aikataulun lähettäminen tiimille"])
+        #expect(note.decisions == ["Markkinointibudjetti kasvaa 10 %."])
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+}
+
 @Suite struct HighlightCloudTests {
     // Gerçek model: kullanıcının işaretlediği küçük ayrıntı (kahve makinesi) özette yer alır.
     @Test func bookmarkedDetailReachesSummary() async throws {
@@ -95,7 +124,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20, endSec: nil)]), speakerNames: [:], userName: "Senol",
-            template: .general, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+            template: .general, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()
         #expect(text.contains("kahve"), "\(text)")

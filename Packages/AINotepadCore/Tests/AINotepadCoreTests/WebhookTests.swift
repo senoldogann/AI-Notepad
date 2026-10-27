@@ -36,9 +36,18 @@ private let sampleNote: MeetingNote = MeetingNote(
         let generic: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .generic, record: sampleRecord(), note: sampleNote)) as? [String: Any])
         let meeting: [String: Any] = try #require(generic["meeting"] as? [String: Any])
         #expect(meeting["durationMinutes"] as? Int == 30 && (meeting["tasks"] as? [[String: Any]])?.first?["isMine"] as? Bool == true)
-        let long: MeetingNote = MeetingNote(title: "T", summary: String(repeating: "a", count: 5000), decisions: [], tasks: [], glossary: [])
-        let discord: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .discord, record: sampleRecord(), note: long))
-        #expect((discord["content"]?.count ?? 0) <= 2000)
+        // Discord: uzun notta görevler kesilmez (önce gelir), etiketler kimseyi uyarmaz; Slack'te <!channel> kaçışlanır.
+        let long: MeetingNote = MeetingNote(
+            title: "T", summary: "@everyone " + String(repeating: "a", count: 5000), decisions: [],
+            tasks: [NoteTask(owner: "Senol", description: "Sunumu hazırlamak", dueDate: nil, isMine: true)], glossary: []
+        )
+        let discord: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .discord, record: sampleRecord(), note: long)) as? [String: Any])
+        let content: String = try #require(discord["content"] as? String)
+        #expect(content.count <= 2000 && content.contains("Sunumu hazırlamak"))
+        #expect((discord["allowed_mentions"] as? [String: [String]])?["parse"] == [])
+        let injected: MeetingNote = MeetingNote(title: "T", summary: "<!channel> A & B", decisions: [], tasks: [], glossary: [])
+        let slackInjected: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .slack, record: sampleRecord(), note: injected))
+        #expect(slackInjected["text"]?.contains("&lt;!channel&gt; A &amp; B") == true)
     }
 }
 

@@ -83,14 +83,14 @@ struct AINotepadApp: App {
         }
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
         let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: SettingsKey.displayMode) ?? "") ?? .bilingual
-        let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode)
+        // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
+        let player: MeetingAudioPlayer = MeetingAudioPlayer()
+        _player = State(initialValue: player)
+        let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode, player: player)
         _model = State(initialValue: model)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
         let router: MainWindowRouter = MainWindowRouter()
         _router = State(initialValue: router)
-        // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
-        let player: MeetingAudioPlayer = MeetingAudioPlayer()
-        _player = State(initialValue: player)
         let panel: LivePanelController = LivePanelController(model: model, hideFromCapture: hideFromCapture, mainRouter: router, player: player)
         _panel = State(initialValue: panel)
         let island: IslandController = IslandController(model: model, onTap: { panel.toggle() })

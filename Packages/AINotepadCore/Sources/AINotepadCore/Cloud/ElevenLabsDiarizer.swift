@@ -139,13 +139,13 @@ private func postToElevenLabs(
         operation: {
             let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
             let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
-            switch status {
-            case 200..<300:
+            if (200..<300).contains(status) {
                 result = try parseElevenLabsResponse(data: data)
-            case 400..<500:
+            } else if isPermanentHTTPRejection(status: status) {
                 // Yeniden denemenin anlamı yok; denemeyi bitir, aşağıda fırlat.
                 rejection = .http(service: "elevenlabs", status: status, body: String(decoding: data, as: UTF8.self))
-            default:
+            } else {
+                // 408, 429 ve 5xx geçici: geri çekilerek yeniden denenir (eşzamanlı içe aktarmalarda hız sınırı).
                 throw CloudSTTError.http(service: "elevenlabs", status: status, body: String(decoding: data, as: UTF8.self))
             }
         },

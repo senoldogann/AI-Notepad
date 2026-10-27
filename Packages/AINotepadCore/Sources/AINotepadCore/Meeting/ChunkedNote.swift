@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import os
 
 /// Bu kadar karaktere kadar transkript notu tek istekte yazılır; uzunu parçalara bölünür. Ölçüm (Haiku 5.5): ~23.000
 /// karakterlik toplantıda tüm görevler çıktı, ~47.000'de model görevleri "her aşama için…" diye toplayıp çoğunu yazmadı.
@@ -41,7 +43,7 @@ public struct TaskChange: Sendable, Equatable {
 }
 
 /// Parçalar işlendikçe biriken not.
-public struct ChunkedNoteState: Sendable, Equatable {
+public struct ChunkedNoteState: Sendable, Equatable, Codable {
     /// Parça başına "[mm:ss–mm:ss] özet".
     public let partSummaries: [String]
     public let decisions: [String]
@@ -246,10 +248,64 @@ public func parseNoteOverview(text: String, state: ChunkedNoteState) throws -> M
     return raw.akis.map { note.with(outline: outlineItems(raw: $0)) } ?? note
 }
 
+/// Uzun notun kaldığı yer: yazılan parça sayısı ve birikmiş durum. Parmak izi (transkript, adlar, kullanıcı adı,
+/// şablon) tutmazsa baştan başlanır.
+public struct ChunkedNoteProgress: Sendable, Equatable, Codable {
+    public let fingerprint: String
+    public let completedParts: Int
+    public let state: ChunkedNoteState
+
+    public init(fingerprint: String, completedParts: Int, state: ChunkedNoteState) {
+        self.fingerprint = fingerprint
+        self.completedParts = completedParts
+        self.state = state
+    }
+}
+
+/// Not girdilerinin parmak izi (ilerlemenin aynı not için olduğunu doğrular). Saf fonksiyondur.
+func noteFingerprint(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate) -> String {
+    let names: String = speakerNames.keys.sorted().map { "\($0)=\(speakerNames[$0] ?? "")" }.joined(separator: ",")
+    let text: String = segments.map { "\($0.key)|\($0.person.map(String.init) ?? "")|\($0.text)" }.joined(separator: "\n")
+    let input: String = [text, names, userName, template.kind.rawValue, template.customInstructions].joined(separator: "\u{1F}")
+    return SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
+}
+
+private let noteLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "ChunkedNote")
+
+/// Kayıtlı ilerleme bu not içinse döner; yoksa, başka nota aitse ya da okunamıyorsa (loglanır) nil.
+private func loadedProgress(file: URL, fingerprint: String, partCount: Int) -> ChunkedNoteProgress? {
+    guard FileManager.default.fileExists(atPath: file.path) else {
+        return nil
+    }
+    do {
+        let progress: ChunkedNoteProgress = try JSONDecoder().decode(ChunkedNoteProgress.self, from: Data(contentsOf: file))
+        guard progress.fingerprint == fingerprint, progress.completedParts <= partCount else {
+            noteLogger.info("Not ilerlemesi bu transkripte ait değil, baştan yazılıyor")
+            return nil
+        }
+        return progress
+    } catch {
+        noteLogger.error("Not ilerlemesi okunamadı, baştan yazılıyor, hata: \(String(describing: error), privacy: .public)")
+        return nil
+    }
+}
+
+/// İlerlemeyi atomik yazar; yazılamazsa not yine sürer (yalnızca kaldığı yerden devam edilemez) ve hata loglanır.
+private func saveProgress(progress: ChunkedNoteProgress, file: URL) {
+    do {
+        try JSONEncoder().encode(progress).write(to: file, options: .atomic)
+    } catch {
+        noteLogger.error("Not ilerlemesi yazılamadı, hata: \(String(describing: error), privacy: .public)")
+    }
+}
+
 /// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
 /// parça öncekilerin özetini ve görevlerini görür), sonra başlık ve genel özet. Her istek boş/bozuk yanıtta yeniden
-/// sorulur. Metin yoksa nil.
-public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, llm: LLMProvider) async throws -> MeetingNote? {
+/// sorulur. Uzun notta her parçadan sonra ilerleme `progressFile`'a yazılır: bir parça kalıcı olarak başarısız olursa
+/// "Tekrar işle" yazılan parçaları yeniden ödemeden kaldığı yerden sürer; not bitince dosya silinir. Metin yoksa nil.
+public func writeMeetingNote(
+    segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, llm: LLMProvider, progressFile: URL
+) async throws -> MeetingNote? {
     let totalChars: Int = segments.map(\.text.count).reduce(0, +)
     guard totalChars > noteChunkMaxChars else {
         guard let request = meetingNoteRequest(segments: segments, speakerNames: speakerNames, userName: userName, template: template) else {
@@ -261,8 +317,13 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
         return withNormalizedTasks(note: note, userName: userName)
     }
     let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: noteChunkMaxChars)
-    var state: ChunkedNoteState = .empty
-    for (index, chunk) in chunks.enumerated() {
+    let fingerprint: String = noteFingerprint(segments: segments, speakerNames: speakerNames, userName: userName, template: template)
+    let resumed: ChunkedNoteProgress? = loadedProgress(file: progressFile, fingerprint: fingerprint, partCount: chunks.count)
+    if let resumed {
+        noteLogger.info("Not kaldığı yerden sürüyor, parça: \(resumed.completedParts, privacy: .public)/\(chunks.count, privacy: .public)")
+    }
+    var state: ChunkedNoteState = resumed?.state ?? .empty
+    for (index, chunk) in chunks.enumerated() where index >= resumed?.completedParts ?? 0 {
         let request: LLMRequest = noteChunkRequest(
             chunk: chunk, part: index + 1, partCount: chunks.count, state: state, speakerNames: speakerNames, userName: userName,
             template: template
@@ -277,10 +338,16 @@ public func writeMeetingNote(segments: [StoredSegment], speakerNames: [Int: Stri
             changedTasks: part.changedTasks, glossary: part.glossary
         )
         state = applyNoteChunk(state: state, chunk: normalized, startSec: chunk.first?.startSec ?? 0, endSec: chunk.last?.endSec ?? 0)
+        saveProgress(progress: ChunkedNoteProgress(fingerprint: fingerprint, completedParts: index + 1, state: state), file: progressFile)
     }
     let finalState: ChunkedNoteState = state
     let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: finalState, userName: userName, template: template)) { (text: String) throws -> MeetingNote in
         try parseNoteOverview(text: text, state: finalState)
+    }
+    do {
+        try FileManager.default.removeItem(at: progressFile)
+    } catch {
+        noteLogger.error("Not ilerleme dosyası silinemedi, hata: \(String(describing: error), privacy: .public)")
     }
     return withNormalizedTasks(note: note, userName: userName)
 }

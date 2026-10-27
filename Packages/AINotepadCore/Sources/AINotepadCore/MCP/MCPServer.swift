@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let mcpLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MCP")
 
 /// JSON değeri (MCP isteklerindeki serbest biçimli alanlar için tipli karşılık).
 public indirect enum JSONValue: Sendable, Equatable, Codable {
@@ -211,7 +214,8 @@ private func encodedJSON(value: JSONValue) -> String {
     return String(decoding: (try? encoder.encode(value)) ?? Data("{}".utf8), as: UTF8.self)
 }
 
-/// stdio üzerinden MCP sunucusu: girişten satır satır okur, her yanıtı tek satır olarak yazar; giriş kapanınca biter.
+/// stdio üzerinden MCP sunucusu: girişten satır satır okur, her yanıtı tek satır olarak yazar; giriş ya da çıkış
+/// kapanınca biter.
 public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirectories: [URL], version: String) {
     var buffer: Data = Data()
     while true {
@@ -227,7 +231,13 @@ public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirector
                 continue
             }
             if let response = handleMCPMessage(line: line, loadRecords: { loadMeetings(directories: sessionsDirectories).meetings }, version: version) {
-                output.write(Data((response + "\n").utf8))
+                do {
+                    // Atan `write(contentsOf:)`: istemci boruyu kapatınca süreç ObjC istisnasıyla çökmez, temiz çıkar.
+                    try output.write(contentsOf: Data((response + "\n").utf8))
+                } catch {
+                    mcpLogger.info("MCP istemcisi bağlantıyı kapattı, çıkılıyor: \(String(describing: error), privacy: .public)")
+                    return
+                }
             }
         }
     }

@@ -114,6 +114,10 @@ struct OllamaTests {
         #expect(config.baseURL.absoluteString == "http://localhost:11434/v1")
         #expect(config.apiKey == nil)
         #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "localhost", apiKey: nil, fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil) }
+        // Ağdaki adrese şifresiz http reddedilir (anahtar ve toplantı metni açık giderdi); bu bilgisayar ve https kabul.
+        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "http://192.168.1.10:11434/v1", apiKey: "k", fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil) }
+        #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "http://ollama.local:11434/v1", apiKey: nil, fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil) }
+        #expect((try? openAICompatibleConfig(baseURLText: "http://127.0.0.1:11434/v1", apiKey: nil, fastModel: "a", smartModel: "b", fastEffort: nil, smartEffort: nil)) != nil)
         #expect(throws: LLMError.self) { try openAICompatibleConfig(baseURLText: "https://api.openai.com/v1", apiKey: "k", fastModel: "", smartModel: "b", fastEffort: nil, smartEffort: nil) }
     }
 }

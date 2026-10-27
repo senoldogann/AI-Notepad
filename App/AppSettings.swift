@@ -117,14 +117,19 @@ func storeInterfaceLanguage(language: InterfaceLanguage) {
 /// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
 let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
 
-/// Uygulamayı yeniden başlatır (arayüz dili değişince). Yeni kopya bu kopya kapandıktan sonra açılır: iki kopya aynı
-/// anda çalışırsa yeni kopya kısayolları kaydedemez ve yarıda kalan toplantıları işaretler. Başlatıcı çalıştırılamazsa
-/// hata fırlar (uygulama kapanmaz).
+/// Uygulamayı yeniden başlatır (arayüz dili değişince). Yeni kopya ancak bu kopya gerçekten kapandıktan sonra açılır:
+/// kapanış iptal edilirse (kayıt ya da işleme sürüyor, çıkış koruması) 30 sn bekleyip vazgeçer. İki kopya aynı anda
+/// çalışırsa yeni kopya kısayolları kaydedemez ve süren kaydı "yarıda kaldı" diye işaretlerdi. Başlatıcı
+/// çalıştırılamazsa hata fırlar (uygulama kapanmaz).
 @MainActor
 func relaunchApplication() throws {
     let launcher: Process = Process()
     launcher.executableURL = URL(fileURLWithPath: "/bin/sh")
-    launcher.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", Bundle.main.bundleURL.path]
+    launcher.arguments = [
+        "-c",
+        "i=0; while /bin/kill -0 \"$1\" 2>/dev/null; do i=$((i+1)); [ $i -gt 150 ] && exit 0; sleep 0.2; done; /usr/bin/open -n \"$0\"",
+        Bundle.main.bundleURL.path, String(ProcessInfo.processInfo.processIdentifier),
+    ]
     try launcher.run()
     NSApplication.shared.terminate(nil)
 }
@@ -208,7 +213,8 @@ func registerDefaultSettings() {
         SettingsKey.claudeSmartEffort: LLMEffort.high.rawValue,
         SettingsKey.onboardingCompleted: false,
         SettingsKey.micMuted: false,
-        SettingsKey.voiceRecognition: true,
+        // Ses izi biyometrik veridir: kullanıcı açıkça açmalı.
+        SettingsKey.voiceRecognition: false,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
         SettingsKey.inPersonMode: false,

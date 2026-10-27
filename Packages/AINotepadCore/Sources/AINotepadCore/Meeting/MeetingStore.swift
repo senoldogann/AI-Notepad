@@ -90,7 +90,7 @@ public func loadMeetings(directories: [URL]) -> MeetingLoadResult {
     directories.map { loadMeetings(sessionsDirectory: $0) }.reduce(MeetingLoadResult(meetings: [], failures: [], downloading: [])) { (result: MeetingLoadResult, next: MeetingLoadResult) -> MeetingLoadResult in
         let known: Set<String> = Set(result.meetings.map(\.id))
         return MeetingLoadResult(
-            meetings: result.meetings + next.meetings.filter { !known.contains($0.id) },
+            meetings: newestFirst(records: result.meetings + next.meetings.filter { !known.contains($0.id) }),
             failures: result.failures + next.failures,
             downloading: result.downloading + next.downloading.filter { !known.contains($0) }
         )
@@ -129,7 +129,7 @@ public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
             failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
         }
     }
-    return MeetingLoadResult(meetings: meetings, failures: failures, downloading: downloading)
+    return MeetingLoadResult(meetings: newestFirst(records: meetings), failures: failures, downloading: downloading)
 }
 
 /// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. İnmemişse indirmesi başlatılır ve false döner.
@@ -156,14 +156,31 @@ public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord
         }
 }
 
-/// Saklama süresi dolmuş, işlenmesi bitmiş (`done`) ve sesi henüz silinmemiş toplantıların klasör adları. Başarısız ya
-/// da yarıda kalmış toplantının sesi silinmez: "Tekrar işle" için tek eksiksiz kopya odur. Saf fonksiyondur.
+/// Saklama süresi dolmuş ve sesi henüz silinmemiş toplantıların klasör adları. Bitmiş (`done`) toplantının sesi süre
+/// dolunca, başarısız ya da yarıda kalmış toplantınınki iki kat sürede silinir ("Tekrar işle" için zaman kalır, ama ses
+/// sonsuza dek de kalmaz). Kayıttaki ve işlenen toplantıya dokunulmaz. Saf fonksiyondur.
 public func audioToDelete(records: [MeetingRecord], now: Date, retentionDays: Int) -> [String] {
     records
         .filter { (record: MeetingRecord) -> Bool in
-            record.status == .done && !record.audioDeleted && now.timeIntervalSince(record.startedAt) > Double(retentionDays) * 86_400
+            let days: Int
+            switch record.status {
+            case .done: days = retentionDays
+            case .failed, .interrupted: days = retentionDays * 2
+            case .recording, .processing: return false
+            }
+            return !record.audioDeleted && now.timeIntervalSince(record.startedAt) > Double(days) * 86_400
         }
         .map(\.id)
+}
+
+/// Toplantı klasörünü kalıcı olarak siler (iPhone: Çöp Sepeti yok; silmeden önce onay sorulur). Silinemezse
+/// `deleteFailed`.
+public func deleteMeetingDirectory(directory: URL) throws {
+    do {
+        try FileManager.default.removeItem(at: directory)
+    } catch {
+        throw StorageError.deleteFailed(path: directory.path, reason: error.localizedDescription)
+    }
 }
 
 /// Başlık, not ve transkriptte büyük/küçük harf duyarsız arama; boş sorgu hepsini döndürür. Saf fonksiyondur.
@@ -187,6 +204,13 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
 /// Kaydedilen toplantıyı bellekteki listeye yerleştirir (varsa değiştirir), yeniden eskiye sıralı. Her kayıttan
 /// sonra diskteki tüm toplantıları yeniden okumamak için. Saf fonksiyondur.
 public func upsertMeeting(records: [MeetingRecord], record: MeetingRecord) -> [MeetingRecord] {
-    (records.filter { $0.id != record.id } + [record])
-        .sorted { (left: MeetingRecord, right: MeetingRecord) -> Bool in left.id > right.id }
+    newestFirst(records: records.filter { $0.id != record.id } + [record])
+}
+
+/// Toplantılar en yeni önce: başlangıç anına göre (klasör adı yerel saattir; seyahat ya da yaz saati değişince sırası
+/// bozulurdu), eşitse kimliğe göre. Saf fonksiyondur.
+public func newestFirst(records: [MeetingRecord]) -> [MeetingRecord] {
+    records.sorted { (left: MeetingRecord, right: MeetingRecord) -> Bool in
+        left.startedAt == right.startedAt ? left.id > right.id : left.startedAt > right.startedAt
+    }
 }

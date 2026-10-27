@@ -151,7 +151,7 @@ final class PhoneStore {
     func reload() {
         do {
             let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: cloud.activeLocation))
-            meetings = result.meetings.sorted { $0.startedAt > $1.startedAt }
+            meetings = result.meetings
             problems = result.failures.map { "\($0.folder): \($0.reason)" }
             downloadingCount = result.downloading.count
         } catch {
@@ -161,7 +161,7 @@ final class PhoneStore {
 
     /// Kaydedilen toplantıyı listeye yazar (her kayıtta klasör yeniden okunmaz).
     func upsert(record: MeetingRecord) {
-        meetings = upsertMeeting(records: meetings, record: record).sorted { $0.startedAt > $1.startedAt }
+        meetings = upsertMeeting(records: meetings, record: record)
     }
 
     /// Görevin tamamlandı işaretini değiştirir ve toplantıyı saklar.

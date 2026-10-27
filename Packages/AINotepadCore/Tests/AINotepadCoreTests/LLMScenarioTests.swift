@@ -164,7 +164,7 @@ struct LLMScenarioTests {
         let segments: [StoredSegment] = realisticMeetingSegments(rounds: rounds)
         let provider: LLMProvider = try anthropic(model: .haiku, effort: .medium)
         let started: ContinuousClock.Instant = .now
-        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, llm: provider))
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
         let coverage: TaskCoverage = taskCoverage(tasks: note.tasks, phases: rounds)
         print("SENARYO gerçek yoğunluk \(rounds * 4) dk, \(segments.map(\.text.count).reduce(0, +)) karakter: \(ContinuousClock.now - started), görev \(note.tasks.count), kapsanan iş \(coverage.covered)/\(rounds * 3), eksik: \(coverage.missing.prefix(12))")
         #expect(Double(coverage.covered) >= Double(rounds * 3) * 0.9, "eksik: \(coverage.missing)")

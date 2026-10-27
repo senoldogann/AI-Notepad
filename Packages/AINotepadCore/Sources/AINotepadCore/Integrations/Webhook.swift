@@ -80,10 +80,13 @@ public func webhookMeeting(record: MeetingRecord, note: MeetingNote) -> WebhookM
     )
 }
 
-/// Markdown'ı Slack biçimine çevirir: başlıklar ve `**kalın**` tek yıldızlı kalın, yapılacak kutuları madde işareti.
-/// Saf fonksiyondur.
+/// Markdown'ı Slack biçimine çevirir: `&`, `<`, `>` kaçışlanır (toplantı metnindeki `<!channel>` ya da `<@U…>` kanalı
+/// etiketleyemez), başlıklar ve `**kalın**` tek yıldızlı kalın, yapılacak kutuları madde işareti. Saf fonksiyondur.
 public func slackText(markdown: String) -> String {
     markdown
+        .replacing("&", with: "&amp;")
+        .replacing("<", with: "&lt;")
+        .replacing(">", with: "&gt;")
         .split(separator: "\n", omittingEmptySubsequences: false)
         .map { (line: Substring) -> String in
             let text: String = String(line)
@@ -101,10 +104,32 @@ public func slackText(markdown: String) -> String {
 /// Discord mesaj sınırı (karakter).
 let discordContentLimit: Int = 2000
 
-/// Gönderilecek gövde: servise uygun biçimde notun paylaşım metni (Türkçe), genel webhook'ta ayrıca yapılandırılmış
-/// toplantı. Saf fonksiyondur.
+/// Webhook metni: başlık ve tarih, önce görevler (sana düşenler başta), sonra kararlar, özet ve konu akışı. Kanalda
+/// en çok görevler okunur; Discord sınırında kesilen kısım sondaki özet ve konu akışı olur, görevler değil. Saf
+/// fonksiyondur.
+public func webhookText(record: MeetingRecord, note: MeetingNote) -> String {
+    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: "tr")))
+    var lines: [String] = ["# \(note.title)", "", "_\(date)_", ""]
+    let tasks: [NoteTask] = note.tasks.filter(\.isMine) + note.tasks.filter { !$0.isMine }
+    if !tasks.isEmpty {
+        lines += ["## " + String(localized: "Görevler"), ""] + tasks.map { (task: NoteTask) -> String in
+            "- [ ] **\(task.owner)** — \(task.description)\(task.dueDate.map { " (\($0))" } ?? "")"
+        } + [""]
+    }
+    if !note.decisions.isEmpty {
+        lines += ["## " + String(localized: "Kararlar"), ""] + note.decisions.map { "- \($0)" } + [""]
+    }
+    lines += ["## " + String(localized: "Özet"), "", note.summary, ""]
+    if let outline = note.outline, !outline.isEmpty {
+        lines += ["## " + String(localized: "Konu akışı"), ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] \($0.title) — \($0.summary)" }
+    }
+    return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Gönderilecek gövde: servise uygun biçimde webhook metni (Türkçe), genel webhook'ta ayrıca yapılandırılmış toplantı.
+/// Saf fonksiyondur.
 public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote) throws -> Data {
-    let markdown: String = shareText(record: record, note: note, language: nil)
+    let markdown: String = webhookText(record: record, note: note)
     let encoder: JSONEncoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -113,12 +138,28 @@ public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: Meeti
         return try encoder.encode(["text": slackText(markdown: markdown)])
     case .discord:
         let content: String = markdown.count > discordContentLimit ? String(markdown.prefix(discordContentLimit - 1)) + "…" : markdown
-        return try encoder.encode(["content": content])
+        return try encoder.encode(DiscordMessage(content: content, allowedMentions: DiscordAllowedMentions(parse: [])))
     case .teams:
         return try encoder.encode(TeamsMessage(markdown: markdown))
     case .generic:
         return try encoder.encode(GenericWebhookBody(text: markdown, meeting: webhookMeeting(record: record, note: note)))
     }
+}
+
+/// Discord mesajı; `allowed_mentions.parse` boş: toplantı metnindeki `@everyone`, `@here` ya da kullanıcı etiketleri
+/// kimseyi uyarmaz.
+private struct DiscordMessage: Encodable {
+    let content: String
+    let allowedMentions: DiscordAllowedMentions
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case allowedMentions = "allowed_mentions"
+    }
+}
+
+private struct DiscordAllowedMentions: Encodable {
+    let parse: [String]
 }
 
 private struct GenericWebhookBody: Encodable {

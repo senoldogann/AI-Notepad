@@ -62,6 +62,8 @@ final class PhoneRecorder {
     @ObservationIgnored private var checkpointTask: Task<Void, Never>?
     /// Kilit ekranı ve Dynamic Island'daki canlı etkinlik; izin yoksa nil.
     @ObservationIgnored private var activity: Activity<RecordingActivityAttributes>?
+    /// Süren arka plan görevleri (anahtar: toplantı kimliği): kayıt kapanışı ve işleme uygulama arka plandayken sürsün.
+    @ObservationIgnored private var backgroundTasks: [String: UIBackgroundTaskIdentifier] = [:]
     /// Canlı etkinlik en fazla bu sıklıkta güncellenir (sistem sık güncellemeyi kısar).
     @ObservationIgnored private var lastActivityUpdate: Date = .distantPast
 
@@ -143,6 +145,10 @@ final class PhoneRecorder {
             return
         }
         phase = .finishing
+        // Kapanış (son ses, son konuşmacı etiketleri, bekleyen çeviriler) uygulama arka plana geçse de bitsin.
+        if let id = active?.directory.lastPathComponent {
+            beginBackgroundTask(id: id)
+        }
         levels.stop()
         microphone.stop()
         updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true), force: true)
@@ -162,7 +168,8 @@ final class PhoneRecorder {
     /// Açılışta kayıtta ya da işlemede kalmış (uygulama kapanmış) toplantılar yeniden işlenir; anahtarlar okunamazsa
     /// "yarıda kaldı" olarak saklanır (toplantı sayfasından yeniden işlenebilir).
     func resumeUnfinished() async {
-        let stale: [MeetingRecord] = staleStatusesToInterrupt(records: store.meetings)
+        // Bu oturumda işlenmekte olanlar (sahne yeniden kurulduysa) ikinci kez işlenmez: çift ücret, aynı dosyaya iki yazar.
+        let stale: [MeetingRecord] = staleStatusesToInterrupt(records: store.meetings).filter { processingSteps[$0.id] == nil }
         guard !stale.isEmpty, phase == .idle else {
             return
         }
@@ -280,9 +287,7 @@ final class PhoneRecorder {
     private func process(record: MeetingRecord, directory: URL, keys: ProcessingKeys) {
         saveRecord(record: record, directory: directory)
         processingSteps[record.id] = .convertingAudio
-        let backgroundTask: UIBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "AINotepad.process") {
-            Self.logger.warning("İşleme için arka plan süresi doldu, toplantı: \(record.id, privacy: .public)")
-        }
+        beginBackgroundTask(id: record.id)
         let finalPass: FinalPassPlan = keys.elevenLabs.map { (key: String) -> FinalPassPlan in
             .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: []))
         } ?? .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
@@ -299,8 +304,32 @@ final class PhoneRecorder {
             if result.status == .done {
                 await store.cloud.moveFinishedMeetings { [store] in store.reload() }
             }
-            UIApplication.shared.endBackgroundTask(backgroundTask)
+            endBackgroundTask(id: record.id)
         }
+    }
+
+    // MARK: Arka plan
+
+    /// Toplantı için iOS'tan arka planda çalışma süresi ister (kapanış ve işleme). Zaten varsa yenisi açılmaz. Süre
+    /// dolarsa görev bitirilir (iOS uygulamayı sonlandırmasın); toplantı `processing` kalır ve açılışta kaldığı yerden
+    /// işlenir (`resumeUnfinished`).
+    private func beginBackgroundTask(id: String) {
+        guard backgroundTasks[id] == nil else {
+            return
+        }
+        backgroundTasks[id] = UIApplication.shared.beginBackgroundTask(withName: "AINotepad.\(id)") { [weak self] in
+            MainActor.assumeIsolated {
+                Self.logger.warning("Arka plan süresi doldu, toplantı açılışta işlenecek, toplantı: \(id, privacy: .public)")
+                self?.endBackgroundTask(id: id)
+            }
+        }
+    }
+
+    private func endBackgroundTask(id: String) {
+        guard let task = backgroundTasks.removeValue(forKey: id) else {
+            return
+        }
+        UIApplication.shared.endBackgroundTask(task)
     }
 
     // MARK: Canlı etkinlik

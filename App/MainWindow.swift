@@ -918,7 +918,7 @@ private struct UpcomingMeetings: View {
             if let url = meeting.joinURL {
                 Button("Katıl", systemImage: "video") { NSWorkspace.shared.open(url) }
                     .controlSize(.small)
-                    .hoverHint("Görüşme bağlantısını aç", alignment: .trailing, edge: .bottom)
+                    .hoverHint("Görüşme bağlantısını aç: \(url.host() ?? "")", alignment: .trailing, edge: .bottom)
             }
             if isSoon, !model.isRecording {
                 Button("Dinle", systemImage: "record.circle") { onStartRecording() }

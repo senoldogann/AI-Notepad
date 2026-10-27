@@ -36,6 +36,8 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "\(host) webhook'u reddetti (HTTP \(status)). Adresin doğru ve etkin olduğunu kontrol et.")
     case WebhookError.network(let host, _):
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
+    case let urlError as URLError where urlError.code == .appTransportSecurityRequiresSecureConnection:
+        return String(localized: "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.")
     case let urlError as URLError:
         return String(localized: "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene.")
     default:
