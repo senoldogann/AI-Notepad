@@ -767,6 +767,16 @@
         }
       }
     },
+    "Adın (notta senin görevlerin için)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name (for your tasks in the note)"
+          }
+        }
+      }
+    },
     "Algıla": {
       "localizations": {
         "en": {
@@ -854,6 +864,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keys"
+          }
+        }
+      }
+    },
+    "Anahtarlar bu iPhone'un Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez. Mac'teki anahtarların iCloud ile gelmesi eşitleme sürümünde açılıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keys are stored in this iPhone's Keychain and never sent anywhere. Bringing your Mac's keys over iCloud arrives with the sync release."
           }
         }
       }
@@ -1484,6 +1504,16 @@
         }
       }
     },
+    "Bu bölüm bir sonraki sürümde geliyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This section is coming in the next release."
+          }
+        }
+      }
+    },
     "Bu bölüm yazıya dökülemedi.": {
       "extractionState": "stale",
       "localizations": {
@@ -1683,6 +1713,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live transcript"
+          }
+        }
+      }
+    },
+    "Canlı metin durdu: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text stopped: %@"
           }
         }
       }
@@ -1918,6 +1958,16 @@
         }
       }
     },
+    "Değiştirmek için yenisini yapıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a new one to replace it"
+          }
+        }
+      }
+    },
     "Dil": {
       "localizations": {
         "en": {
@@ -2006,6 +2056,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listening…"
+          }
+        }
+      }
+    },
+    "Dinliyor… Konuşma başlayınca metin burada akar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening… Text appears here once people start talking."
           }
         }
       }
@@ -2282,6 +2342,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monospaced (SF Mono)"
+          }
+        }
+      }
+    },
+    "Eşitleme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
           }
         }
       }
@@ -3001,6 +3071,16 @@
         }
       }
     },
+    "Kayıt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record"
+          }
+        }
+      }
+    },
     "Kayıt başladı: %@": {
       "localizations": {
         "en": {
@@ -3057,6 +3137,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't create the recording folder: %@"
+          }
+        }
+      }
+    },
+    "Kayıt sekmesinden yüz yüze bir toplantıyı kaydet; Mac'teki toplantıların da iCloud eşitlemesiyle burada görünecek.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record an in-person meeting from the Record tab; your Mac's meetings will appear here with iCloud sync."
           }
         }
       }
@@ -3595,6 +3685,16 @@
         }
       }
     },
+    "Konuşmacılar ve son geçiş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speakers and final pass"
+          }
+        }
+      }
+    },
     "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir": {
       "localizations": {
         "en": {
@@ -3988,6 +4088,16 @@
         }
       }
     },
+    "Mikrofon beklenmedik şekilde durdu. Kaydı bitirip yeniden başlat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The microphone stopped unexpectedly. Finish the recording and start again."
+          }
+        }
+      }
+    },
     "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver.": {
       "extractionState": "stale",
       "localizations": {
@@ -4154,6 +4264,16 @@
         }
       }
     },
+    "Not hazır olunca Toplantılar'da görünür. Uygulamayı kapatırsan hazırlık sonraki açılışta sürer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The note appears in Meetings when it's ready. If you close the app, preparation continues the next time you open it."
+          }
+        }
+      }
+    },
     "Not hazır olunca gönder": {
       "localizations": {
         "en": {
@@ -4312,6 +4432,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You'll see the note, tasks and transcript here."
+          }
+        }
+      }
+    },
+    "Odadaki konuşmayı telefon mikrofonuyla yazıya döker, konuşmacıları ayırır ve Türkçeye çevirir; bitince notu yazar. Telefondaki Teams/Zoom görüşmeleri kaydedilemez (iOS izin vermez); onlar için Mac'i kullan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes the room with the phone's microphone, separates speakers and translates into Turkish; writes the note when you finish. Teams/Zoom calls on the phone can't be recorded (iOS doesn't allow it); use your Mac for those."
           }
         }
       }
@@ -4782,6 +4912,16 @@
         }
       }
     },
+    "Ses diske yazılamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio couldn't be written to disk: %@"
+          }
+        }
+      }
+    },
     "Ses dosyaları silindi; metin ve not duruyor.": {
       "localizations": {
         "en": {
@@ -5213,6 +5353,16 @@
         }
       }
     },
+    "Sürüm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
     "TOPLANTILARI": {
       "localizations": {
         "en": {
@@ -5637,6 +5787,16 @@
         }
       }
     },
+    "Toplantılar şimdilik bu iPhone'da saklanır. iCloud ile Mac'le eşitleme bir sonraki sürümlerde açılıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings are stored on this iPhone for now. iCloud sync with your Mac arrives in upcoming releases."
+          }
+        }
+      }
+    },
     "Toplantılarda ara": {
       "localizations": {
         "en": {
@@ -5945,6 +6105,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apply"
+          }
+        }
+      }
+    },
+    "Uygulama": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
           }
         }
       }
@@ -6403,6 +6573,16 @@
         }
       }
     },
+    "Yüz yüze toplantını kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record your in-person meeting"
+          }
+        }
+      }
+    },
     "Yüz yüze: mikrofon odadaki herkesi kaydediyor": {
       "localizations": {
         "en": {
@@ -6651,6 +6831,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Translation model: %@"
+          }
+        }
+      }
+    },
+    "Çeviri ve not": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translation and note"
+          }
+        }
+      }
+    },
+    "Çeviri ve not kapalı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translation and note are off: %@"
           }
         }
       }

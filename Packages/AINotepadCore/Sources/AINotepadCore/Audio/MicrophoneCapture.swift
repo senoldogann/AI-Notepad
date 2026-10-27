@@ -5,7 +5,8 @@ import os
 /// Mikrofonu 16 kHz mono Float parçalar halinde yakalar ("Sen" akışı).
 ///
 /// Giriş cihazı değişirse (ör. AirPods bağlanınca) motor yeni formatla, geri çekilmeli denemelerle
-/// yeniden kurulur; kurulamazsa akış bitirilir ve hata loglanır.
+/// yeniden kurulur; kurulamazsa akış bitirilir ve hata loglanır. iOS'ta önce kayıt için ses oturumu açılır; telefon
+/// çağrısı gibi bir kesinti bitince motor aynı yolla yeniden kurulur.
 @MainActor
 public final class MicrophoneCapture {
     private nonisolated static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MicrophoneCapture")
@@ -13,6 +14,8 @@ public final class MicrophoneCapture {
     private let engine: AVAudioEngine = AVAudioEngine()
     private var continuation: AsyncStream<[Float]>.Continuation?
     private var configurationObserver: (any NSObjectProtocol)?
+    /// iOS: ses oturumu kesintisi (telefon çağrısı, alarm) bitince yeniden kurma.
+    private var interruptionObserver: (any NSObjectProtocol)?
     /// Her yeniden kurma isteğinde artar; eski denemeler yenisi gelince vazgeçer.
     private var restartGeneration: Int = 0
 
@@ -29,6 +32,9 @@ public final class MicrophoneCapture {
         let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
         self.continuation = continuation
         do {
+            #if os(iOS)
+            try activateRecordingSession()
+            #endif
             try startEngine(continuation: continuation)
         } catch {
             continuation.finish()
@@ -44,6 +50,21 @@ public final class MicrophoneCapture {
                 await self?.restartAfterConfigurationChange()
             }
         }
+        #if os(iOS)
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] (notification: Notification) -> Void in
+            let rawType: UInt? = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard rawType.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .ended else {
+                return
+            }
+            Task { @MainActor in
+                await self?.restartAfterConfigurationChange()
+            }
+        }
+        #endif
         return stream
     }
 
@@ -53,10 +74,46 @@ public final class MicrophoneCapture {
             NotificationCenter.default.removeObserver(observer)
         }
         configurationObserver = nil
+        if let observer = interruptionObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        interruptionObserver = nil
+        #if os(iOS)
+        let wasRunning: Bool = continuation != nil
+        #endif
         stopEngine()
         continuation?.finish()
         continuation = nil
+        #if os(iOS)
+        if wasRunning {
+            deactivateRecordingSession()
+        }
+        #endif
     }
+
+    #if os(iOS)
+    /// Kayıt için ses oturumu: odadaki konuşmayı yerleşik mikrofonla alır; kayıt arka planda ve ekran kilitliyken sürer
+    /// (Info.plist'te `audio` arka plan modu). Bluetooth kulaklık yalnızca çalma için (A2DP) kullanılır; kulaklık
+    /// mikrofonu (HFP) sesi 16 kHz dar banda düşürdüğü için seçilmez.
+    private func activateRecordingSession() throws {
+        let session: AVAudioSession = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
+            try session.setActive(true)
+        } catch {
+            throw AudioCaptureError.microphoneStartFailed(code: Int32((error as NSError).code))
+        }
+    }
+
+    /// Kayıt bitince oturum bırakılır; diğer uygulamaların sesi (müzik) kaldığı yerden sürer.
+    private func deactivateRecordingSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            Self.logger.error("Ses oturumu kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+        }
+    }
+    #endif
 
     /// Giriş formatına göre tap kurar ve motoru başlatır.
     private func startEngine(continuation: AsyncStream<[Float]>.Continuation) throws {

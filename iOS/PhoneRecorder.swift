@@ -1,0 +1,429 @@
+import AINotepadCore
+import AINotepadUI
+import Foundation
+import os
+import UIKit
+
+/// Kaydın durumu.
+enum RecorderPhase: Equatable {
+    case idle
+    case starting
+    case recording
+    /// Mikrofon kapandı; Deepgram ve konuşmacı ayırma son bölümleri bitiriyor.
+    case finishing
+}
+
+/// Toplantı sonrası işleme için gereken anahtarlar. Kayıt başında okunur: ekran kilitliyken Anahtar Zinciri okunamaz.
+struct ProcessingKeys: Sendable {
+    /// Son geçiş (konuşmacılar); yoksa son geçiş atlanır ve nedeni toplantıda görünür.
+    let elevenLabs: String?
+    /// Çeviri ve not; yoksa canlı çeviri ve not yapılmaz.
+    let llm: LLMProvider?
+}
+
+/// Süren kayıt.
+private struct ActiveRecording {
+    let directory: URL
+    let startedAt: Date
+    let handle: LiveSessionHandle
+    let keys: ProcessingKeys
+}
+
+/// iPhone kaydı: yüz yüze toplantı (odadaki herkes telefon mikrofonundan gelir ve konuşmacılara ayrılır). Canlı metin
+/// Deepgram, konuşmacılar ve son geçiş ElevenLabs, çeviri ve not Claude ile; işleme Mac'teki `processMeeting`'dir.
+@MainActor
+@Observable
+final class PhoneRecorder {
+    private static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "PhoneRecorder")
+    /// Aynı anda en fazla bu kadar canlı çeviri isteği.
+    private static let maxParallelTranslations: Int = 4
+
+    private(set) var phase: RecorderPhase = .idle
+    private(set) var transcript: [LiveSegment] = []
+    private(set) var translations: [SegmentID: String] = [:]
+    private(set) var lockedLanguage: MeetingLanguage?
+    private(set) var errorMessages: [String] = []
+    private(set) var startedAt: Date?
+    /// İşlenen toplantıların adımı (kimlik → adım).
+    private(set) var processingSteps: [String: ProcessingStep] = [:]
+    /// Son biten kaydın kimliği (hazırlanma kartı bunu izler).
+    private(set) var lastMeetingID: String?
+    var languageMode: LanguageMode = .automatic
+    let levels: AudioLevels = AudioLevels(count: 36, interval: 0.08)
+
+    @ObservationIgnored private let store: PhoneStore
+    @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
+    @ObservationIgnored private var active: ActiveRecording?
+    @ObservationIgnored private var translationQueue: [SegmentID] = []
+    @ObservationIgnored private var translationsInFlight: Int = 0
+    /// Her kayıtta artar: önceki kaydın geç gelen çevirisi yenisine yazılmaz.
+    @ObservationIgnored private var generation: Int = 0
+    @ObservationIgnored private var checkpointTask: Task<Void, Never>?
+
+    init(store: PhoneStore) {
+        self.store = store
+    }
+
+    /// Kaydı başlatır. Deepgram ve ElevenLabs anahtarı yoksa hiçbir şey başlamaz; eksiklerin hepsi bildirilir.
+    func start() async {
+        guard phase == .idle else {
+            return
+        }
+        phase = .starting
+        generation += 1
+        transcript = []
+        translations = [:]
+        translationQueue = []
+        lockedLanguage = nil
+        errorMessages = []
+        let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
+        let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
+        guard case .success(let deepgramKey) = deepgram, case .success(let elevenLabsKey) = elevenLabs else {
+            for case .failure(let error) in [deepgram, elevenLabs] {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            }
+            phase = .idle
+            return
+        }
+        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: elevenLabsKey, llm: await llmProviderReportingFailure())
+        let started: Date = Date()
+        let directory: URL
+        let audio: AsyncStream<[Float]>
+        do {
+            directory = try AppPaths.newSessionDirectory(startedAt: started)
+            let origin: ContinuousClock.Instant = .now
+            audio = clockAlignedStream(audio: try await microphone.start(), origin: origin, sampleRate: 16000, thresholdSec: 0.5)
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            phase = .idle
+            return
+        }
+        levels.start()
+        let levels: AudioLevels = levels
+        let metered: AsyncStream<[Float]> = meteredStream(audio: audio) { (level: Float) -> Void in
+            let now: Date = Date()
+            Task { @MainActor in levels.record(level: level, at: now) }
+        }
+        let handle: LiveSessionHandle = runCloudLiveSession(
+            config: CloudSessionConfig(
+                languageMode: languageMode, recordingDirectory: directory, deepgramKey: deepgramKey, elevenLabsKey: elevenLabsKey,
+                firstDiarizationAfterSec: 15, diarizationIntervalSec: 60, diarizationWindowSec: 120, minDiarizationAudioSec: 5,
+                languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil, automaticStartLanguage: phonePrimaryMeetingLanguage()
+            ),
+            // Yüz yüze: "Sen" akışı yoktur, odadaki herkes "Diğerleri" akışında konuşmacılara ayrılır.
+            meAudio: finishedAudioStream(),
+            othersAudio: metered
+        )
+        let recording: ActiveRecording = ActiveRecording(directory: directory, startedAt: started, handle: handle, keys: keys)
+        active = recording
+        startedAt = started
+        phase = .recording
+        // Uygulama kayıt sırasında kapanırsa toplantı açılışta bulunup işlenir.
+        saveRecord(record: liveRecord(recording: recording, status: .recording, endedAt: nil), directory: directory)
+        startCheckpoints()
+        Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public)")
+        let sessionGeneration: Int = generation
+        Task { [weak self] in
+            for await event in handle.events {
+                self?.handle(event: event, generation: sessionGeneration)
+            }
+            await self?.sessionEnded()
+        }
+    }
+
+    /// Mikrofonu kapatır; oturum kalan bölümleri bitirip kendiliğinden biter.
+    func stop() {
+        guard phase == .recording else {
+            return
+        }
+        phase = .finishing
+        levels.stop()
+        microphone.stop()
+    }
+
+    /// Kayıt sırasında dili değiştirir; o andan sonraki metin yeni dille yazılır.
+    func setLanguage(language: MeetingLanguage) {
+        guard phase == .recording, let handle = active?.handle else {
+            languageMode = .fixed(language)
+            return
+        }
+        Task {
+            await handle.setLanguage(language)
+        }
+    }
+
+    /// Açılışta kayıtta ya da işlemede kalmış (uygulama kapanmış) toplantılar yeniden işlenir; anahtarlar okunamazsa
+    /// "yarıda kaldı" olarak saklanır (toplantı sayfasından yeniden işlenebilir).
+    func resumeUnfinished() async {
+        let stale: [MeetingRecord] = staleStatusesToInterrupt(records: store.meetings)
+        guard !stale.isEmpty, phase == .idle else {
+            return
+        }
+        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: await optionalElevenLabsKey(), llm: await llmProviderReportingFailure())
+        for record in stale {
+            do {
+                let directory: URL = try sessionDirectory(id: record.id)
+                Self.logger.info("Yarıda kalan toplantı yeniden işleniyor, toplantı: \(record.id, privacy: .public)")
+                process(record: record.with(status: .processing, failureMessage: nil), directory: directory, keys: keys)
+            } catch {
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            }
+        }
+    }
+
+    #if DEBUG
+    /// `--ornek-kayit` (yalnız Debug, görsel kontrol): mikrofon ve bulut olmadan örnek bir canlı kayıt gösterir.
+    func showSampleRecording() {
+        let sample: [(text: String, person: Int, turkish: String?, isFinal: Bool)] = [
+            ("Hyvää huomenta kaikille, aloitetaan viikkopalaveri.", 1, "Herkese günaydın, haftalık toplantıya başlayalım.", true),
+            ("Budjetti on nyt valmis ja se lähtee hallitukselle perjantaina.", 1, "Bütçe hazır ve cuma günü yönetim kuruluna gidiyor.", true),
+            ("Hyvä. Kuka hoitaa asiakasesityksen?", 2, "Güzel. Müşteri sunumunu kim üstleniyor?", true),
+            ("Minä voin tehdä sen, kunhan saan luvut tiistaihin mennessä", 3, nil, false),
+        ]
+        transcript = sample.enumerated().map { (item: (offset: Int, element: (text: String, person: Int, turkish: String?, isFinal: Bool))) -> LiveSegment in
+            LiveSegment(
+                id: SegmentID(speaker: .others, index: item.offset), startSec: Double(item.offset * 6), endSec: Double(item.offset * 6 + 5),
+                text: item.element.text, isFinal: item.element.isFinal, failureMessage: nil, person: item.element.person
+            )
+        }
+        translations = Dictionary(uniqueKeysWithValues: sample.enumerated().compactMap { (item: (offset: Int, element: (text: String, person: Int, turkish: String?, isFinal: Bool))) -> (SegmentID, String)? in
+            item.element.turkish.map { (SegmentID(speaker: .others, index: item.offset), $0) }
+        })
+        lockedLanguage = .finnish
+        startedAt = Date().addingTimeInterval(-754)
+        levels.start()
+        for (index, level) in [0.1, 0.4, 0.7, 0.5, 0.9, 0.3, 0.6, 0.2, 0.8, 0.5].enumerated() {
+            levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
+        }
+        phase = .recording
+    }
+    #endif
+
+    // MARK: Oturum olayları
+
+    private func handle(event: LiveSessionEvent, generation eventGeneration: Int) {
+        guard eventGeneration == generation else {
+            return
+        }
+        transcript = applyEvent(transcript: transcript, event: event)
+        switch event {
+        case .segment(let segment):
+            if segment.isFinal, !segment.text.isEmpty {
+                enqueueTranslation(segment: segment)
+            }
+        case .languageLocked(let language):
+            lockedLanguage = language
+        case .captureEnded:
+            if phase == .recording {
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Mikrofon beklenmedik şekilde durdu. Kaydı bitirip yeniden başlat."))
+            }
+        case .recordingFailed(_, let message):
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Ses diske yazılamadı: \(message)"))
+        case .streamFailed(_, let message):
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Canlı metin durdu: \(message)"))
+        case .diarizationFailed(let message):
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
+        case .speakersAssigned:
+            break
+        }
+    }
+
+    /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı saklanıp işlenir.
+    private func sessionEnded() async {
+        let completed: Bool = await finishesWithin(seconds: 10) { [weak self] in
+            while await self?.hasPendingTranslations() == true {
+                do {
+                    try await Task.sleep(for: .milliseconds(200))
+                } catch {
+                    // İptal: bekleme biter.
+                    return
+                }
+            }
+        }
+        if !completed {
+            Self.logger.warning("Kayıt sonunda bekleyen çeviriler süre içinde bitmedi")
+        }
+        checkpointTask?.cancel()
+        checkpointTask = nil
+        microphone.stop()
+        levels.stop()
+        phase = .idle
+        startedAt = nil
+        guard let finished = active else {
+            return
+        }
+        active = nil
+        // Biten kaydın geç çevirisi artık yazılmaz.
+        generation += 1
+        let record: MeetingRecord = liveRecord(recording: finished, status: .processing, endedAt: Date())
+        lastMeetingID = record.id
+        Self.logger.info("Kayıt bitti, toplantı: \(record.id, privacy: .public)")
+        process(record: record, directory: finished.directory, keys: finished.keys)
+    }
+
+    /// Toplantıyı işler (ses, son geçiş, not) ve saklar. Uygulama arka plana geçerse iOS'tan ek süre istenir; süre
+    /// yetmezse toplantı açılışta yeniden işlenir (`resumeUnfinished`).
+    private func process(record: MeetingRecord, directory: URL, keys: ProcessingKeys) {
+        saveRecord(record: record, directory: directory)
+        processingSteps[record.id] = .convertingAudio
+        let backgroundTask: UIBackgroundTaskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "AINotepad.process") {
+            Self.logger.warning("İşleme için arka plan süresi doldu, toplantı: \(record.id, privacy: .public)")
+        }
+        let finalPass: FinalPassPlan = keys.elevenLabs.map { (key: String) -> FinalPassPlan in
+            .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: []))
+        } ?? .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
+        Task {
+            let result: MeetingRecord = await processMeeting(
+                record: record, directory: directory, finalPass: finalPass, llm: keys.llm,
+                languageMode: record.language.map { LanguageMode.fixed($0) } ?? .automatic, userName: phoneUserName(),
+                voiceEmbedder: nil, registry: []
+            ) { (step: ProcessingStep) async -> Void in
+                self.processingSteps[record.id] = step
+            }
+            saveRecord(record: result, directory: directory)
+            processingSteps[record.id] = nil
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+        }
+    }
+
+    // MARK: Çeviri
+
+    /// Kesinleşmiş bölümü Türkçeye çevirmek üzere sıraya alır; Türkçe toplantıda metin olduğu gibi kalır.
+    private func enqueueTranslation(segment: LiveSegment) {
+        if lockedLanguage ?? fixedMeetingLanguage(mode: languageMode) == .turkish {
+            translations[segment.id] = segment.text
+            return
+        }
+        guard active?.keys.llm != nil else {
+            return
+        }
+        translationQueue.append(segment.id)
+        startQueuedTranslations()
+    }
+
+    private func startQueuedTranslations() {
+        guard let provider = active?.keys.llm else {
+            return
+        }
+        while translationsInFlight < Self.maxParallelTranslations, !translationQueue.isEmpty {
+            let id: SegmentID = translationQueue.removeFirst()
+            guard let segment = transcript.first(where: { $0.id == id && $0.isFinal }) else {
+                continue
+            }
+            let context: [String] = translationContext(transcript: transcript, before: id, count: 3)
+            let requestGeneration: Int = generation
+            translationsInFlight += 1
+            Task {
+                do {
+                    let turkish: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context))
+                    if requestGeneration == generation {
+                        translations[id] = turkish
+                    }
+                } catch {
+                    Self.logger.error("Çeviri başarısız, bölüm: \(segmentKey(id: id), privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                    if requestGeneration == generation {
+                        errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
+                    }
+                }
+                translationsInFlight -= 1
+                startQueuedTranslations()
+            }
+        }
+    }
+
+    private func hasPendingTranslations() -> Bool {
+        translationsInFlight > 0 || !translationQueue.isEmpty
+    }
+
+    // MARK: Saklama
+
+    /// Canlı transkript ve çevirilerden toplantı kaydı.
+    private func liveRecord(recording: ActiveRecording, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
+        MeetingRecord(
+            id: recording.directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: recording.startedAt, endedAt: endedAt,
+            language: lockedLanguage, status: status, failureMessage: nil,
+            liveSegments: storedSegments(transcript: transcript), finalSegments: [],
+            translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
+            speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+    }
+
+    /// Kayıt sürerken her 30 sn'de transkript saklanır: uygulama kapanırsa metin toplantıda kalır.
+    private func startCheckpoints() {
+        checkpointTask?.cancel()
+        checkpointTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    // İptal: kayıt bitti.
+                    return
+                }
+                guard let self, self.phase == .recording, let recording = self.active else {
+                    return
+                }
+                self.saveRecord(record: self.liveRecord(recording: recording, status: .recording, endedAt: nil), directory: recording.directory)
+            }
+        }
+    }
+
+    private func saveRecord(record: MeetingRecord, directory: URL) {
+        do {
+            try saveMeeting(record: record, directory: directory)
+            store.upsert(record: record)
+        } catch {
+            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
+        }
+    }
+
+    private func sessionDirectory(id: String) throws -> URL {
+        try AppPaths.sessionsDirectory().appending(path: id, directoryHint: .isDirectory)
+    }
+
+    // MARK: Anahtarlar
+
+    /// Anahtarı okur; sonucu hata dahil döndürür (birden çok eksik birlikte bildirilsin diye).
+    private func secretResult(account: SecretAccount) async -> Result<String, any Error> {
+        do {
+            return .success(try await readSecretInBackground(service: keychainService, account: account))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Claude sağlayıcısı; okunamazsa çeviri ve not kapalı kalır ve neden bildirilir.
+    private func llmProviderReportingFailure() async -> LLMProvider? {
+        do {
+            return try await phoneLLMProvider()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri ve not kapalı: \(userFacingMessage(error: error))"))
+            return nil
+        }
+    }
+
+    /// ElevenLabs anahtarı; okunamazsa nil ve neden bildirilir (son geçiş atlanır).
+    private func optionalElevenLabsKey() async -> String? {
+        do {
+            return try await readSecretInBackground(service: keychainService, account: .elevenlabs)
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            return nil
+        }
+    }
+}
+
+/// Sabit dil seçiliyse o dil; otomatikte nil. Saf fonksiyondur.
+func fixedMeetingLanguage(mode: LanguageMode) -> MeetingLanguage? {
+    guard case .fixed(let language) = mode else {
+        return nil
+    }
+    return language
+}
+
+/// Hemen biten boş ses akışı (yüz yüze kayıtta "Sen" akışı yerine).
+private func finishedAudioStream() -> AsyncStream<[Float]> {
+    let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+    continuation.finish()
+    return stream
+}
