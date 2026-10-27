@@ -83,12 +83,15 @@ struct PeoplePage: View {
                     PersonDetail(person: current, router: router) { (name: String, role: String, email: String) -> Void in
                         // Elle eklenen kişinin adı değişebilir (sesi de taşınır); toplantıdan gelen kişinin adı
                         // toplantılarda verildiği için formda kilitlidir, yalnızca ünvan ve e-posta kaydedilir.
-                        if current.isSaved {
+                        // Toplantılarda adı geçen kişinin adı toplantılarda verildiği için değişmez (değişirse kişi ikiye
+                        // bölünürdü); yalnızca toplantısız, elle eklenen kişinin adı değişir.
+                        if current.isSaved, current.meetings.isEmpty {
                             model.renamePerson(oldName: current.name, name: name, role: role, email: email)
+                            selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                         } else {
                             model.savePerson(name: current.name, role: role, email: email)
+                            selected = current.id
                         }
-                        selected = (current.isSaved ? name : current.name).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                     } onRemove: {
                         model.removePerson(name: current.name)
                         selected = nil
@@ -264,7 +267,7 @@ private struct PersonDetail: View {
     var body: some View {
         if isEditing {
             PersonForm(
-                title: "Kişiyi düzenle", initialName: person.name, lockedName: person.isSaved ? nil : person.name,
+                title: "Kişiyi düzenle", initialName: person.name, lockedName: person.isSaved && person.meetings.isEmpty ? nil : person.name,
                 initialRole: person.role, initialEmail: person.email
             ) { (name: String, role: String, email: String) -> Void in
                 onSave(name, role, email)

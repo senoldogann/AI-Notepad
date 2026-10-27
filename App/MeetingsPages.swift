@@ -489,6 +489,8 @@ struct MeetingDetailPage: View {
                         }
                     }
                     .padding(.trailing, 4)
+                    // Kapak koyu ortamda çizilir; rozetler açık zeminli kalsın (gradyan üstünde soluk ve bulanık görünüyordu).
+                    .environment(\.colorScheme, .light)
                     .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
                 }
                 ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in

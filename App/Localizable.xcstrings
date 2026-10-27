@@ -1922,16 +1922,6 @@
         }
       }
     },
-    "Dosya içe aktar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import file"
-          }
-        }
-      }
-    },
     "Dosya okunamadı: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -4006,6 +3996,36 @@
         }
       }
     },
+    "Ollama isteği reddetti (HTTP %lld). Adresi ve Ollama sürümünü kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama rejected the request (HTTP %lld). Check the address and the Ollama version."
+          }
+        }
+      }
+    },
+    "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read Ollama's response. Update Ollama and try again."
+          }
+        }
+      }
+    },
+    "Ollama'ya ulaşılamadı. Ollama uygulamasının açık olduğunu ve adresin doğru olduğunu kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach Ollama. Check that the Ollama app is running and the address is correct."
+          }
+        }
+      }
+    },
     "OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)": {
       "localizations": {
         "en": {
@@ -4810,6 +4830,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "TRANSCRIPT"
+          }
+        }
+      }
+    },
+    "Takvim izni istenemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't request calendar access: %@"
           }
         }
       }

@@ -327,7 +327,12 @@ final class AppModel {
     /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp Türkçeye çevirir (hızlı model).
     private func enqueueTranslation(segment: LiveSegment) {
         // "Sadece orijinal" görünümünde canlı çeviri yapılmaz (maliyet); toplantı sonu Türkçe not yine üretilir.
-        guard displayMode.needsLiveTranslation, !translationDisabled, let provider = llmProvider else {
+        guard displayMode.needsLiveTranslation else {
+            return
+        }
+        guard !translationDisabled, let provider = llmProvider else {
+            // Çeviri şu an yapılamıyor (anahtar reddedildi ya da sağlayıcı yok): cümle kaybolmasın, "Tekrar dene"de kalsın.
+            failedTranslations.insert(segment.id)
             return
         }
         let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
@@ -410,8 +415,10 @@ final class AppModel {
     func settingsChanged() {
         Task {
             await refreshSetupProblems()
-            if isRecording, !isFinishing, translationDisabled || llmProvider == nil {
-                _ = await refreshLLMProvider()
+            // Kayıt sürerken sağlayıcı her ayar değişiminde yeniden çözülür (model ya da anahtar değişimi hemen geçerli
+            // olsun); çevrilemeyen cümleler yeni sağlayıcıyla yeniden sıraya alınır.
+            if isRecording, !isFinishing, await refreshLLMProvider() {
+                retryTranslations(ids: Array(failedTranslations))
             }
         }
     }
@@ -783,12 +790,20 @@ final class AppModel {
         checkpointTask = nil
         Self.logger.info("Kayıt bitti")
         isPaused = false
+        // Oturum kendiliğinden de bitebilir (ör. ses akışı koptu): yakalama, ses çubukları ve rıza hatırlatması burada da
+        // kapanır; yoksa sonraki kayıt "zaten çalışıyor" hatası alıp karşı tarafı kaydedemezdi. İkinci kez çağrılması
+        // zararsızdır.
+        microphone.stop()
+        systemAudio.stop()
+        audioLevels.stop()
+        consentReminderVisible = false
         guard let finished = session else {
             return
         }
+        // Kayıt, oturum temizlenmeden yazılır: motoru (yerel ya da bulut) kaydın gerçek motorudur, şimdiki ayar değil.
+        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
         session = nil
         activeMeetingID = nil
-        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
         process(record: record, directory: finished.directory)
         lastFinishedMeetingID = record.id
     }
@@ -1102,8 +1117,6 @@ final class AppModel {
 
     /// Bu kayıtta işaretlenen anlar.
     @ObservationIgnored private var liveHighlights: [Highlight] = []
-    /// Son işaret (panelde kısa onay için).
-    var lastBookmarkAt: Date?
 
     /// Kayıtta şu anı işaretler (notta öne çıkar).
     func bookmarkNow() {
@@ -1111,7 +1124,6 @@ final class AppModel {
             return
         }
         liveHighlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt), endSec: nil))
-        lastBookmarkAt = Date()
     }
 
     /// Kaydedilmiş toplantıda bir paragrafın işaretini açar/kapatır.

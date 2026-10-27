@@ -8,6 +8,8 @@ enum EventKitError: Error, Equatable {
     case calendarAccessDenied
     case noReminderList
     case saveFailed(reason: String)
+    /// Takvim izni istenirken sistem hatası.
+    case calendarRequestFailed(reason: String)
 }
 
 /// Apple Takvim ve Anımsatıcılar bağlantısı (EventKit). İzin ilk kullanımda sorulur; tek bir mağaza örneği paylaşılır.
@@ -26,7 +28,7 @@ final class EventKitConnector {
         do {
             granted = try await store.requestFullAccessToEvents()
         } catch {
-            throw EventKitError.saveFailed(reason: error.localizedDescription)
+            throw EventKitError.calendarRequestFailed(reason: error.localizedDescription)
         }
         guard granted else {
             throw EventKitError.calendarAccessDenied
@@ -103,6 +105,8 @@ func eventKitMessage(error: any Error) -> String {
         String(localized: "Anımsatıcılar'da liste yok: Anımsatıcılar uygulamasında bir liste oluştur.")
     case EventKitError.saveFailed(let reason):
         String(localized: "Anımsatıcı kaydedilemedi: \(reason)")
+    case EventKitError.calendarRequestFailed(let reason):
+        String(localized: "Takvim izni istenemedi: \(reason)")
     default:
         userFacingMessage(error: error)
     }

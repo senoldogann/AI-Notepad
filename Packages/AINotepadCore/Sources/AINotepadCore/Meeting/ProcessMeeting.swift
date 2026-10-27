@@ -188,14 +188,19 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
     do {
         let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: othersAudio, languageMode: languageMode)
         // Canlıdaki Türkçeler son geçiş bölümlerine taşınır; geçmişte de Türkçe görünsün.
+        // Önceki son geçişin Türkçeleri ("final-N") yeni bölümlere yazılmaz: yeniden işlemede numaralar başka cümlelere
+        // düşer. Canlı bölümlerin Türkçeleri kalır, yeni bölümlere canlıdan hizalananlar eklenir.
+        let liveTranslations: [String: String] = record.translations.filter { !$0.key.hasPrefix("final-") }
         return record
-            .with(translations: record.translations.merging(
-                alignTranslations(final: result.segments, live: record.liveSegments, translations: record.translations)
-            ) { (existing: String, _: String) -> String in existing })
+            .with(translations: liveTranslations.merging(
+                alignTranslations(final: result.segments, live: record.liveSegments, translations: liveTranslations)
+            ) { (_: String, aligned: String) -> String in aligned })
             .with(finalSegments: result.segments, language: record.language ?? result.language)
             // Yeni son geçiş konuşmacıları baştan numaralar: eski adlar ("Konuşmacı 2 = Aino") başka kişiye düşerdi ve
             // not yanlış kişilere görev yazardı. Adlar yeniden verilir ("Gözden geçir" önerir).
             .with(speakerNames: [:])
+            // Eski ses izleri eski numaralara aittir; yeni numaralarla karışıp yanlış kişiye ad verdirmesin.
+            .with(voiceprints: nil)
             .with(notice: result.notice)
     } catch {
         processLogger.error("Son geçiş başarısız, canlı metinle devam ediliyor, hata: \(String(describing: error), privacy: .private)")
@@ -235,7 +240,9 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
     // İşaretli anlar istemde "★" ile öne çıkar.
     let segments: [StoredSegment] = markingHighlights(segments: meetingSegments(record: record), highlights: record.highlights ?? [])
     guard segments.contains(where: { !$0.text.isEmpty }) else {
-        return record.with(status: .done, failureMessage: nil)
+        // Metni olmayan başarısız toplantı (ör. son geçişi başarısız içe aktarma) "bitti" olmaz: "Tekrar işle" için sesi
+        // saklama süresinde silinmesin.
+        return record.status == .failed ? record : record.with(status: .done, failureMessage: nil)
     }
     guard let llm else {
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
