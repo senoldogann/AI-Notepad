@@ -188,6 +188,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var sentDestinationIDs: [String]?
     /// Görev aracına (Linear, Jira) gönderilen görevler: araç kimliği → görev kimlikleri (`taskKey`).
     public private(set) var sentTaskKeys: [String: [String]]?
+    /// Notun önceki sürümleri (yeniden eskiye, en fazla `noteHistoryLimit`); geri almak için. Eski toplantılarda nil.
+    public private(set) var noteHistory: [NoteVersion]?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -381,6 +383,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         copy.note = newNote
         copy.sharedNotes = nil
         copy.title = newNote.title
+        return copy
+    }
+
+    /// Not geçmişi değişmiş kopya.
+    public func with(noteHistory newHistory: [NoteVersion]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.noteHistory = newHistory
         return copy
     }
 

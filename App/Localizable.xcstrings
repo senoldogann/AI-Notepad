@@ -2266,6 +2266,16 @@
         }
       }
     },
+    "Bu not sürümü artık geçmişte yok; menüyü yeniden açıp tekrar seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This note version is no longer in the history; reopen the menu and choose again."
+          }
+        }
+      }
+    },
     "Bu toplantı için katılımcılara gönderilecek kısa bir takip e-postası taslağı yaz: teşekkür, alınan kararlar, kim neyi ne zamana yapacak ve sonraki adım. Konu satırıyla başla. E-postayı toplantının konuşulduğu dilde yaz.": {
       "localizations": {
         "en": {
@@ -2778,6 +2788,16 @@
         }
       }
     },
+    "Değişiklikten önceki not": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note before the change"
+          }
+        }
+      }
+    },
     "Değiştir": {
       "localizations": {
         "en": {
@@ -3106,6 +3126,16 @@
         }
       }
     },
+    "Düzenlendi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edited: %@"
+          }
+        }
+      }
+    },
     "Düşük": {
       "localizations": {
         "en": {
@@ -3426,6 +3456,16 @@
         }
       }
     },
+    "GEÇMİŞ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HISTORY"
+          }
+        }
+      }
+    },
     "Gece": {
       "localizations": {
         "en": {
@@ -3452,6 +3492,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Back"
+          }
+        }
+      }
+    },
+    "Geri al (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo (%@)"
+          }
+        }
+      }
+    },
+    "Geçmiş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        }
+      }
+    },
+    "Geçmişi gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide history"
           }
         }
       }
@@ -4737,6 +4807,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "As you, to the channel you pick"
+          }
+        }
+      }
+    },
+    "Kendi notlarınla yeniden yazıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewritten with your notes"
           }
         }
       }
@@ -6126,6 +6206,16 @@
         }
       }
     },
+    "Not sürümü geri yüklenemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't restore the note version: %@"
+          }
+        }
+      }
+    },
     "Not yazılır": {
       "localizations": {
         "en": {
@@ -6142,6 +6232,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Writing note…"
+          }
+        }
+      }
+    },
+    "Not yenilendi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note refreshed"
           }
         }
       }
@@ -6778,6 +6878,16 @@
         }
       }
     },
+    "Saklanan sohbet yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved chats"
+          }
+        }
+      }
+    },
     "Sana düşen görev sayısı": {
       "localizations": {
         "en": {
@@ -7233,6 +7343,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Slovak"
+          }
+        }
+      }
+    },
+    "Sohbet geçmişi okunamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read the chat history: %@"
+          }
+        }
+      }
+    },
+    "Sohbet geçmişinden %lld sohbet okunamadı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read %lld chats from the chat history."
+          }
+        }
+      }
+    },
+    "Sohbet saklanamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the chat: %@"
+          }
+        }
+      }
+    },
+    "Sohbet silinemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't delete the chat: %@"
+          }
+        }
+      }
+    },
+    "Sohbeti sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete chat"
           }
         }
       }
@@ -7850,6 +8010,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reprocess"
+          }
+        }
+      }
+    },
+    "Tekrar işlendi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprocessed"
           }
         }
       }
@@ -9675,12 +9845,42 @@
         }
       }
     },
-    "Önceki cevaplar bağlam olmaz": {
+    "Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Earlier answers won't be used as context"
+            "value": "Earlier answers won't be used as context; this chat stays in history"
+          }
+        }
+      }
+    },
+    "Önceki sohbetler: yeniden aç, devam et ya da sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier chats: reopen, continue or delete"
+          }
+        }
+      }
+    },
+    "Önceki sürüm geri yüklendi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier version restored"
+          }
+        }
+      }
+    },
+    "Önceki sürümler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier versions"
           }
         }
       }
@@ -10154,6 +10354,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rewrite with template"
+          }
+        }
+      }
+    },
+    "Şablonla yeniden yazıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rewritten with a template"
           }
         }
       }

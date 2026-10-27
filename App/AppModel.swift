@@ -927,7 +927,9 @@ final class AppModel {
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
             }
-            let saved: MeetingRecord = applyingPendingReminders(record: result)
+            // Tekrar işlemede eski not geçmişe girer (ilk işlemede not yoktur).
+            let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Tekrar işlendi"), savedAt: Date())
+            let saved: MeetingRecord = applyingPendingReminders(record: versioned)
             saveRecord(record: saved, directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
@@ -1027,7 +1029,7 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
-        rewriteNote(record: record)
+        rewriteNote(record: record, reason: String(localized: "Not yenilendi"))
     }
 
     /// Notu kullanıcının isteğine göre düzenler ("özeti kısalt", "görevlere tarih ekle"); düzenlenirken toplantı kilitli,
@@ -1048,8 +1050,11 @@ final class AppModel {
                 }
                 do {
                     let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
-                    // Düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
-                    saveRecord(record: applyingPendingReminders(record: edited), directory: directory)
+                    // Eski not geçmişe girer ("Geri al"); düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
+                    let versioned: MeetingRecord = withNoteVersion(
+                        updated: edited, previous: record, reason: String(localized: "Düzenlendi: \(trimmed)"), savedAt: Date()
+                    )
+                    saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
                     refreshFolderCopy(meetingID: meetingID)
                 } catch {
                     Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
@@ -1064,7 +1069,7 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
-        rewriteNote(record: record.with(myNotes: text))
+        rewriteNote(record: record.with(myNotes: text), reason: String(localized: "Kendi notlarınla yeniden yazıldı"))
     }
 
     /// Notu başka bir şablonla yeniden yazar (şablon toplantıda saklanır).
@@ -1072,7 +1077,7 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
-        rewriteNote(record: record.with(template: template))
+        rewriteNote(record: record.with(template: template), reason: String(localized: "Şablonla yeniden yazıldı"))
     }
 
     /// Notu paylaşım diline çevirir ve saklar; hata varsa kullanıcı metni döner.
@@ -1105,8 +1110,8 @@ final class AppModel {
         }
     }
 
-    /// Notu verilen kayıtla (adlar, şablon) yeniden yazıp kaydeder.
-    private func rewriteNote(record: MeetingRecord) {
+    /// Notu verilen kayıtla (adlar, şablon) yeniden yazıp kaydeder; eski not `reason` ile geçmişe girer.
+    private func rewriteNote(record: MeetingRecord, reason: String) {
         let meetingID: String = record.id
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
@@ -1120,10 +1125,31 @@ final class AppModel {
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
-                saveRecord(record: applyingPendingReminders(record: result), directory: directory)
+                let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: reason, savedAt: Date())
+                saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
                 processingMeetingIDs.remove(meetingID)
                 refreshFolderCopy(meetingID: meetingID)
             }
+        }
+    }
+
+    /// Notun önceki sürümünü geri yükler (`index`: geçmişte yeniden eskiye sıra); şimdiki not geçmişe girer, geri yükleme
+    /// de geri alınabilir.
+    func restoreNoteVersion(meetingID: String, index: Int) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        do {
+            let restored: MeetingRecord = try restoringNoteVersion(
+                record: record, index: index, reason: String(localized: "Önceki sürüm geri yüklendi"), savedAt: Date()
+            )
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: restored, directory: directory)
+            }
+            refreshFolderCopy(meetingID: meetingID)
+        } catch {
+            Self.logger.error("Not sürümü geri yüklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not sürümü geri yüklenemedi: \(userFacingMessage(error: error))"))
         }
     }
 
@@ -1439,8 +1465,12 @@ final class AppModel {
 
     // MARK: Toplantılarıma sor
 
-    /// Arşive sorulan sorular ve cevapları (bu oturumda; yeniden açılınca boş).
+    /// Açık sohbetin soruları ve cevapları.
     var archiveExchanges: [ArchiveExchange] = []
+    /// Saklanan sohbetler (yeniden eskiye; en fazla `askHistoryLimit`).
+    var askConversations: [AskConversation] = []
+    /// Açık sohbetin kimliği: ilk cevap saklanınca atanır, "Yeni sohbet"te nil.
+    var currentConversationID: UUID?
     /// Cevaplanan soru (durdurulabilir).
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
 
@@ -1457,13 +1487,11 @@ final class AppModel {
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
         }
-        let history: [ArchiveTurn] = archiveExchanges.compactMap { (exchange: ArchiveExchange) -> ArchiveTurn? in
-            exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
-        }
+        let history: [ArchiveTurn] = archiveHistory(exchanges: archiveExchanges)
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }
         archiveExchanges.append(ArchiveExchange(
-            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
+            id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         let records: [MeetingRecord] = meetings
@@ -1490,6 +1518,7 @@ final class AppModel {
                     $0.phase = .done
                     $0.finishedAt = Date()
                 }
+                self?.saveConversation(exchangeID: id)
             } catch is CancellationError {
                 self?.updateExchange(id: id) {
                     $0.phase = .stopped
@@ -1548,10 +1577,80 @@ final class AppModel {
         archiveTask?.cancel()
     }
 
-    /// Sohbeti temizler (yeni konu: önceki cevaplar bağlam olmaz).
+    /// Sohbeti temizler (yeni konu: önceki cevaplar bağlam olmaz); önceki sohbet geçmişte kalır.
     func clearArchiveConversation() {
         archiveTask?.cancel()
         archiveExchanges = []
+        currentConversationID = nil
+    }
+
+    /// Saklanan sohbeti açar; devam soruları onun cevaplarını bağlam alır. Süren cevap durdurulur.
+    func openConversation(id: UUID) {
+        guard let conversation = askConversations.first(where: { $0.id == id }) else {
+            return
+        }
+        archiveTask?.cancel()
+        archiveExchanges = conversation.turns.map { (turn: AskConversationTurn) -> ArchiveExchange in archiveExchange(turn: turn) }
+        currentConversationID = id
+    }
+
+    /// Sohbeti geçmişten siler; açık sohbetse sayfa boşalır.
+    func deleteConversation(id: UUID) {
+        do {
+            try deleteAskConversation(id: id, directory: try AppPaths.askHistoryDirectory())
+            askConversations.removeAll { $0.id == id }
+            if currentConversationID == id {
+                clearArchiveConversation()
+            }
+        } catch {
+            Self.logger.error("Sohbet silinemedi, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet silinemedi: \(userFacingMessage(error: error))"))
+        }
+    }
+
+    /// Saklanan sohbetleri okur (açılışta, arka planda); okunamayan dosyalar loglanır ve sayısı gösterilir.
+    func loadAskHistory() {
+        Task {
+            do {
+                let result: AskHistoryLoadResult = try await Task.detached(priority: .utility) { () throws -> AskHistoryLoadResult in
+                    try loadAskConversations(directory: try AppPaths.askHistoryDirectory())
+                }.value
+                askConversations = result.conversations
+                for failure in result.failures {
+                    Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .public)")
+                }
+                if !result.failures.isEmpty {
+                    errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişinden \(result.failures.count) sohbet okunamadı."))
+                }
+            } catch {
+                Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .public)")
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişi okunamadı: \(userFacingMessage(error: error))"))
+            }
+        }
+    }
+
+    /// Bitmiş soruyla açık sohbeti saklar (ilk cevapta yeni sohbet olur); sınırı aşan en eski sohbetler silinir.
+    private func saveConversation(exchangeID: UUID) {
+        // Sohbet bu arada değiştiyse (yeni sohbet, başka sohbet açıldı) cevap bu sohbete ait değildir.
+        guard archiveExchanges.contains(where: { $0.id == exchangeID && $0.phase == .done }) else {
+            return
+        }
+        let id: UUID = currentConversationID ?? UUID()
+        let turns: [AskConversationTurn] = archiveExchanges.compactMap { (exchange: ArchiveExchange) -> AskConversationTurn? in askTurn(exchange: exchange) }
+        let conversation: AskConversation = askConversation(existing: askConversations.first { $0.id == id }, id: id, turns: turns, now: Date())
+        do {
+            let directory: URL = try AppPaths.askHistoryDirectory()
+            try saveAskConversation(conversation: conversation, directory: directory)
+            currentConversationID = id
+            askConversations = upsertAskConversation(conversations: askConversations, conversation: conversation)
+            for old in askConversationsBeyondLimit(conversations: askConversations, limit: askHistoryLimit) {
+                try deleteAskConversation(id: old.id, directory: directory)
+                askConversations.removeAll { $0.id == old.id }
+            }
+        } catch {
+            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet saklanamadı: \(userFacingMessage(error: error))"))
+        }
     }
 
     /// Ajanın adımını soruya yazar.
@@ -2242,6 +2341,7 @@ final class AppModel {
         loadVoices()
         loadPeople()
         loadRecipes()
+        loadAskHistory()
         startCalendarServices()
         // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
         let local: Set<String> = localMeetingIDsReportingFailure()

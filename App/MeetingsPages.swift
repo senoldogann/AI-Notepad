@@ -839,6 +839,7 @@ struct MeetingDetailPage: View {
             }
         }
         .disabled(isLocked)
+        noteVersionItems
         Button("Yeniden adlandır", systemImage: "pencil") { startRename() }
             .disabled(isLocked)
         Button("Tekrar işle", systemImage: "arrow.clockwise") { model.reprocess(meetingID: record.id) }
@@ -869,6 +870,27 @@ struct MeetingDetailPage: View {
             Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
         case nil:
             EmptyView()
+        }
+    }
+
+    /// Notun önceki sürümleri: son değişikliği geri al ve sürüm listesi (tarih ve neden); geri yükleme de geri alınabilir.
+    @ViewBuilder
+    private var noteVersionItems: some View {
+        if let versions = record.noteHistory, let latest = versions.first {
+            Button("Geri al (\(latest.reason))", systemImage: "arrow.uturn.backward") {
+                model.restoreNoteVersion(meetingID: record.id, index: 0)
+            }
+            .disabled(isLocked)
+            Menu("Önceki sürümler", systemImage: "clock.arrow.circlepath") {
+                Section("Değişiklikten önceki not") {
+                    ForEach(Array(versions.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteVersion)) in
+                        Button(noteVersionTitle(version: item.element, locale: interfaceLocale())) {
+                            model.restoreNoteVersion(meetingID: record.id, index: item.offset)
+                        }
+                    }
+                }
+            }
+            .disabled(isLocked)
         }
     }
 

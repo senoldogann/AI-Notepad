@@ -23,6 +23,11 @@ public enum AppPaths {
         try ensureDirectory(url: applicationSupport().appending(path: "Sessions", directoryHint: .isDirectory))
     }
 
+    /// Sor sohbetlerinin geçmişi: `AskHistory` (her sohbet bir JSON dosyası; iCloud'a eşitlenmez).
+    public static func askHistoryDirectory() throws -> URL {
+        try ensureDirectory(url: applicationSupport().appending(path: "AskHistory", directoryHint: .isDirectory))
+    }
+
     /// Yeni bir kayıt oturumu klasörü: `Sessions/<yyyyMMdd-HHmmss>`.
     public static func newSessionDirectory(startedAt: Date) throws -> URL {
         try ensureDirectory(url: sessionsDirectory().appending(path: sessionFolderName(startedAt: startedAt), directoryHint: .isDirectory))

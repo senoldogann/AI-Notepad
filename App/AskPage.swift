@@ -6,7 +6,7 @@ import SwiftUI
 /// Toplantılarıma sor: tüm notlar ve transkriptler arasında sohbet, sade bir LLM akışı gibi: çalışırken tek satır
 /// parıltılı "Düşünüyor…", cevap akarak yumuşakça gelir, altında küçük ve kapalı "Kaynaklar" ve "nasıl cevaplandı"
 /// satırları; metindeki [1] işaretleri toplantıyı açar. Devam soruları önceki cevapları bağlam alır. Boşken film
-/// gradyanlı giriş ve örnek sorular.
+/// gradyanlı giriş ve örnek sorular. Sohbetler saklanır; "Geçmiş" soldaki ince sütunda açılır (yeniden aç, sil).
 struct AskPage: View {
     let model: AppModel
     let router: MainWindowRouter
@@ -16,8 +16,26 @@ struct AskPage: View {
     /// `@` önerilerinde klavyeyle seçili satır.
     @State private var highlighted: Int = 0
     @FocusState private var isFocused: Bool
+    /// Soldaki sohbet geçmişi sütunu açık.
+    @State private var isShowingHistory: Bool = false
 
     var body: some View {
+        HStack(spacing: 0) {
+            if isShowingHistory, !model.askConversations.isEmpty {
+                AskHistoryColumn(model: model) { (id: UUID) -> Void in
+                    model.openConversation(id: id)
+                    mentioned = []
+                    isFocused = true
+                }
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+            chat
+        }
+        .animation(.smooth(duration: 0.25), value: isShowingHistory)
+        .onAppear { isFocused = true }
+    }
+
+    private var chat: some View {
         VStack(spacing: 0) {
             ScrollViewReader { (proxy: ScrollViewProxy) in
                 ScrollView {
@@ -80,19 +98,28 @@ struct AskPage: View {
             .padding(.bottom, 22)
             .frame(maxWidth: 780)
         }
+        .frame(maxWidth: .infinity)
         .overlay(alignment: .topTrailing) {
-            if !model.archiveExchanges.isEmpty {
-                Button("Yeni sohbet", systemImage: "square.and.pencil") {
-                    model.clearArchiveConversation()
-                    mentioned = []
-                    isFocused = true
+            HStack(spacing: 8) {
+                if !model.askConversations.isEmpty {
+                    Button(isShowingHistory ? "Geçmişi gizle" : "Geçmiş", systemImage: "clock.arrow.circlepath") {
+                        isShowingHistory.toggle()
+                    }
+                    .controlSize(.small)
+                    .hoverHint("Önceki sohbetler: yeniden aç, devam et ya da sil", alignment: .trailing, edge: .bottom)
                 }
-                .controlSize(.small)
-                .padding(16)
-                .hoverHint("Önceki cevaplar bağlam olmaz", alignment: .trailing, edge: .bottom)
+                if !model.archiveExchanges.isEmpty {
+                    Button("Yeni sohbet", systemImage: "square.and.pencil") {
+                        model.clearArchiveConversation()
+                        mentioned = []
+                        isFocused = true
+                    }
+                    .controlSize(.small)
+                    .hoverHint("Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır", alignment: .trailing, edge: .bottom)
+                }
             }
+            .padding(16)
         }
-        .onAppear { isFocused = true }
     }
 
     private let bottomID: String = "ask-bottom"
@@ -258,6 +285,107 @@ struct AskPage: View {
         }
         question = removingMentionQuery(text: question)
         return .handled
+    }
+}
+
+/// Sohbet geçmişi: soldaki ince sütunda yeniden eskiye sohbetler (başlık ve tarih); açık sohbet gri hap. Üzerine gelince
+/// çöp simgesi çıkar; ilk tık "Sil" onayına döner, ikinci tık siler (açılır pencere yok).
+private struct AskHistoryColumn: View {
+    let model: AppModel
+    let onOpen: @MainActor (UUID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("GEÇMİŞ")
+                .appFont(size: 11, weight: .semibold)
+                .tracking(DesignTokens.labelTracking)
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 20)
+                .padding(.top, 28)
+                .padding(.bottom, 8)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(model.askConversations) { (conversation: AskConversation) in
+                        AskHistoryRow(conversation: conversation, isSelected: model.currentConversationID == conversation.id) {
+                            onOpen(conversation.id)
+                        } onDelete: {
+                            model.deleteConversation(id: conversation.id)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 16)
+            }
+            .scrollIndicators(.never)
+        }
+        .frame(width: 248)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+    }
+}
+
+/// Geçmişte bir sohbet satırı: başlık (iki satıra kadar) ve son güncelleme tarihi; üzerine gelince silme.
+private struct AskHistoryRow: View {
+    let conversation: AskConversation
+    let isSelected: Bool
+    let onOpen: @MainActor () -> Void
+    let onDelete: @MainActor () -> Void
+    @State private var isHovering: Bool = false
+    @State private var isConfirmingDelete: Bool = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(conversation.title)
+                        .appFont(size: 13, weight: isSelected ? .medium : .regular)
+                        .foregroundStyle(Theme.ink.opacity(isSelected ? 1 : 0.85))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(conversation.updatedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale())))
+                        .appFont(size: 11, weight: .regular)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.muted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if isHovering || isConfirmingDelete {
+                Button {
+                    if isConfirmingDelete {
+                        onDelete()
+                    } else {
+                        isConfirmingDelete = true
+                    }
+                } label: {
+                    Group {
+                        if isConfirmingDelete {
+                            Text("Sil").appFont(size: 11, weight: .semibold).foregroundStyle(.red)
+                        } else {
+                            Image(systemName: "trash").appFont(size: 11, weight: .medium).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .frame(minWidth: 22, minHeight: 22)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.hoverPlain)
+                .accessibilityLabel("Sohbeti sil")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .onHover { (hovering: Bool) -> Void in
+            isHovering = hovering
+            if !hovering {
+                isConfirmingDelete = false
+            }
+        }
+        .contextMenu {
+            Button("Sohbeti sil", systemImage: "trash", role: .destructive, action: onDelete)
+        }
     }
 }
 
