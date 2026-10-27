@@ -15,6 +15,12 @@ struct AINotepadiOSApp: App {
 
     init() {
         registerPhoneDefaults()
+        #if DEBUG
+        // `--karsilama` (yalnız Debug, görsel kontrol): ilk açılış karşılaması yeniden gösterilir.
+        if CommandLine.arguments.contains("--karsilama") {
+            UserDefaults.standard.removeObject(forKey: PhoneSettingsKey.onboardingCompleted)
+        }
+        #endif
         let store: PhoneStore = PhoneStore()
         let recorder: PhoneRecorder = PhoneRecorder(store: store)
         let router: PhoneRouter = PhoneRouter(
@@ -106,6 +112,8 @@ struct RootView: View {
     let ask: PhoneAsk
     @Bindable var router: PhoneRouter
     let player: MeetingAudioPlayer
+    /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
+    @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
 
     var body: some View {
         TabView(selection: $router.tab) {
@@ -127,6 +135,14 @@ struct RootView: View {
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {
             MiniPlayer(player: player, store: store, router: router)
+        }
+        .fullScreenCover(isPresented: Binding<Bool>(get: { !onboardingCompleted }, set: { (_: Bool) -> Void in })) {
+            PhoneOnboarding {
+                onboardingCompleted = true
+                router.tab = .settings
+            } onFinish: {
+                onboardingCompleted = true
+            }
         }
         .onChange(of: recorder.phase) { (_: RecorderPhase, phase: RecorderPhase) in
             // Kayıt başlarken çalma durur (mikrofon ve hoparlör aynı oturumu paylaşamaz).

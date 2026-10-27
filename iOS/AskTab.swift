@@ -114,7 +114,7 @@ struct AskTab: View {
     let store: PhoneStore
     let router: PhoneRouter
     @State private var question: String = ""
-    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; kaldırılana ya da yeni sohbete dek kalır.
+    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; soru gönderilince alandan kalkar.
     @State private var mentioned: [MeetingRecord] = []
     @FocusState private var isFocused: Bool
 
@@ -294,6 +294,8 @@ struct AskTab: View {
         }
         ask.ask(question: question, meetingIDs: mentioned.map(\.id))
         question = ""
+        // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
+        withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
         isFocused = false
     }
 }
