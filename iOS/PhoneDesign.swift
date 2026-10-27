@@ -165,36 +165,6 @@ struct SpeakerStrip: View {
     }
 }
 
-/// Toplantı listesinin tarih grubu.
-struct MeetingSection: Identifiable {
-    let id: String
-    let title: String
-    let meetings: [MeetingRecord]
-}
-
-/// Toplantıları tarihe göre gruplar (en yeni önce): Bugün, Dün, Bu hafta, sonra ay ve yıl. Saf fonksiyondur.
-func meetingSections(records: [MeetingRecord], now: Date, calendar: Calendar, locale: Locale) -> [MeetingSection] {
-    let today: Date = calendar.startOfDay(for: now)
-    let title: (MeetingRecord) -> String = { (record: MeetingRecord) -> String in
-        let day: Date = calendar.startOfDay(for: record.startedAt)
-        let days: Int = calendar.dateComponents([.day], from: day, to: today).day ?? 0
-        switch days {
-        case ..<1: return String(localized: "Bugün")
-        case 1: return String(localized: "Dün")
-        case 2..<7: return String(localized: "Bu hafta")
-        default: return record.startedAt.formatted(Date.FormatStyle().month(.wide).year().locale(locale)).capitalized(with: locale)
-        }
-    }
-    return records.reduce(into: [MeetingSection]()) { (sections: inout [MeetingSection], record: MeetingRecord) -> Void in
-        let name: String = title(record)
-        if let last = sections.last, last.title == name {
-            sections[sections.count - 1] = MeetingSection(id: last.id, title: last.title, meetings: last.meetings + [record])
-        } else {
-            sections.append(MeetingSection(id: name, title: name, meetings: [record]))
-        }
-    }
-}
-
 /// Bitmemiş toplantının durumu (kartta); bitmişse boş. Saf fonksiyondur.
 func meetingStatusText(status: MeetingStatus) -> String? {
     switch status {

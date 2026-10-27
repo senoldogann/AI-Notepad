@@ -172,6 +172,11 @@ struct MeetingReadView: View {
                             Label("Markdown olarak paylaş", systemImage: "doc.text")
                         }
                     }
+                    if !(record.finalSegments.isEmpty && record.liveSegments.isEmpty) {
+                        ShareLink(item: transcriptText(record: record)) {
+                            Label("Transkripti paylaş", systemImage: "text.alignleft")
+                        }
+                    }
                     Button(store.regeneratingIDs.contains(record.id) ? "Not yazılıyor…" : "Notu yenile", systemImage: "arrow.clockwise") {
                         Task { await store.regenerateNote(meetingID: record.id) }
                     }

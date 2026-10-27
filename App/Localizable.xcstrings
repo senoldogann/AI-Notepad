@@ -1117,6 +1117,16 @@
         }
       }
     },
+    "Altyazı olarak kaydet (SRT)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as Subtitles (SRT)"
+          }
+        }
+      }
+    },
     "Alınan kararları gerekçeleri ve kimin önerdiğiyle listele; ertelenen ya da tartışmalı kalan konuları ayrıca yaz.": {
       "localizations": {
         "en": {
@@ -3516,6 +3526,16 @@
         }
       }
     },
+    "Görevim olanlar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My tasks"
+          }
+        }
+      }
+    },
     "Görevler": {
       "localizations": {
         "en": {
@@ -3718,6 +3738,16 @@
         }
       }
     },
+    "Hatalı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
     "Hazır · Deepgram": {
       "localizations": {
         "en": {
@@ -3835,6 +3865,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No meetings yet"
+          }
+        }
+      }
+    },
+    "Hepsi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
           }
         }
       }
@@ -7453,6 +7493,16 @@
         }
       }
     },
+    "Süzgeci \"Hepsi\" yap ya da başka bir kelimeyle ara.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch the filter to \"All\" or search with another word."
+          }
+        }
+      }
+    },
     "TOPLANTILARI": {
       "localizations": {
         "en": {
@@ -8317,12 +8367,32 @@
         }
       }
     },
+    "Transkripti metin olarak kaydet (TXT)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Transcript as Text (TXT)"
+          }
+        }
+      }
+    },
     "Transkripti okuyup ad ve birleştirme önerir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Reads the transcript and suggests names and merges"
+          }
+        }
+      }
+    },
+    "Transkripti paylaş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Transcript"
           }
         }
       }
@@ -8676,6 +8746,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperKit, offline. A ~630 MB model downloads on first use."
+          }
+        }
+      }
+    },
+    "Word (DOCX) olarak kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as Word (DOCX)"
           }
         }
       }

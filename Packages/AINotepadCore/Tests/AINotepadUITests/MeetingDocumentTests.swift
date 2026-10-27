@@ -51,6 +51,18 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
         #expect(try #require(document.string).contains("numero 119"))
     }
 
+    // Word belgesi geri okununca not ve transkript metni yerinde.
+    @Test func docxRoundTripsNoteAndTranscript() throws {
+        let data: Data = try meetingDOCX(record: sampleRecord(paragraphCount: 4))
+        let document: NSAttributedString = try NSAttributedString(
+            data: data, options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil
+        )
+        #expect(document.string.contains("Rapor ve sunum"))
+        #expect(document.string.contains("Slaytları hazırla"))
+        #expect(document.string.contains("Gelecek hafta raporu teslim etmeliyiz."))
+        #expect(document.string.contains("numero 3"))
+    }
+
     /// Görsel kontrol için örnek PDF'i `AINOTEPAD_PDF_SAMPLE` yoluna yazar (yalnızca değişken verilirse).
     @Test @MainActor func writesSampleWhenRequested() throws {
         guard let path = ProcessInfo.processInfo.environment["AINOTEPAD_PDF_SAMPLE"] else {
