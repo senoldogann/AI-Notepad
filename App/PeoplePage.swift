@@ -244,9 +244,9 @@ struct PersonAvatar: View {
         let hash: Int = name.lowercased().unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7FFF_FFFF }
         Text(name.first.map { String($0).uppercased() } ?? "?")
             .appFont(size: size * 0.42, weight: .semibold)
-            .foregroundStyle(.white)
+            .foregroundStyle(personColor(person: hash % DesignTokens.personPalette.count + 1))
             .frame(width: size, height: size)
-            .background(personColor(person: hash % DesignTokens.personPalette.count + 1), in: Circle())
+            .background(Circle().fill(personColor(person: hash % DesignTokens.personPalette.count + 1).opacity(0.15)).background(Circle().fill(Theme.card)))
             .accessibilityHidden(true)
     }
 }

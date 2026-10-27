@@ -18,7 +18,11 @@ public enum DesignTokens {
     /// "Sen" vurgu rengi.
     public static let meColor: Color = Color(hex: 0x3B5BDB)
     /// Kişi renkleri; 7. kişiden itibaren başa döner.
-    public static let personPalette: [Color] = [0x0CA678, 0xF08C00, 0xD6336C, 0x7048E8, 0x1098AD, 0x5C940D].map(Color.init(hex:))
+    /// Konuşmacı renkleri: sade arayüzde bağırmayan, aynı açıklıkta, doygunluğu düşük tonlar (adaçayı, kum, gül
+    /// kurusu, alacakaranlık, arduvaz, zeytin); yalnızca küçük işaretlerde ve soluk zeminlerde kullanılır.
+    public static let personPalette: [Color] = [0x5E8C78, 0xB98552, 0xAD6878, 0x7770A6, 0x5A889E, 0x878A55].map(Color.init(hex:))
+    /// "Sen"in konuşmacı rengi (vurgu rengi seçeneğinden ayrı; aynı sade tonda).
+    public static let meSpeakerColor: Color = Color(hex: 0x5A6EA8)
 
     public static let bodyFont: Font = .system(size: 14)
     public static let labelFont: Font = .system(size: 11, weight: .semibold)

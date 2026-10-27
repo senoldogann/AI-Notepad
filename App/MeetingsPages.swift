@@ -827,15 +827,14 @@ private struct SummaryTab: View {
                     Text("SENİN GÖREVLERİN")
                         .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
-                        .foregroundStyle(appearance.accent.color)
+                        .foregroundStyle(Theme.muted)
                     ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
                         TaskCard(model: model, record: record, task: item.element)
                     }
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(appearance.accent.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(appearance.accent.color.opacity(0.28)))
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             Text(note.summary)
                 .font(appearance.readingFont(size: appearance.textSize + 3, weight: .regular))
@@ -870,7 +869,7 @@ private struct SummaryTab: View {
                             }
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(appearance.accent.color.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                     }
                 }
@@ -952,23 +951,31 @@ private struct SummaryTab: View {
         asideCard(title: "KİM NE KADAR KONUŞTU") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(shares, id: \.key) { (share: SpeakerShare) in
-                    HStack(spacing: 10) {
+                    // Ad ve yüzde üstte, pay çubuğu altta tam genişlikte: dar yan sütunda ad kesilmez.
+                    HStack(alignment: .top, spacing: 10) {
                         SpeakerAvatar(text: avatarText(key: share.key, speakerNames: record.speakerNames), color: speakerColor(key: share.key), size: 24)
-                        Text(speakerName(key: share.key, speakerNames: record.speakerNames))
-                            .appFont(size: 13, weight: .regular)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Capsule()
-                            .fill(Theme.soft)
-                            .frame(width: 56, height: 6)
-                            .overlay(alignment: .leading) {
-                                Capsule().fill(speakerColor(key: share.key)).frame(width: max(3, 56 * share.fraction), height: 6)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(speakerName(key: share.key, speakerNames: record.speakerNames))
+                                    .appFont(size: 13, weight: .regular)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer(minLength: 4)
+                                Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                                    .appFont(size: 12, weight: .regular)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.muted)
+                                    .fixedSize()
                             }
-                        Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
-                            .appFont(size: 12, weight: .regular)
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.muted)
-                            .frame(width: 36, alignment: .trailing)
+                            GeometryReader { (proxy: GeometryProxy) in
+                                Capsule()
+                                    .fill(Theme.soft)
+                                    .overlay(alignment: .leading) {
+                                        Capsule().fill(Theme.ink.opacity(0.55)).frame(width: max(3, proxy.size.width * share.fraction))
+                                    }
+                            }
+                            .frame(height: 4)
+                        }
                     }
                 }
             }
@@ -1379,7 +1386,7 @@ private func speakerNumber(owner: String) -> Int? {
 /// Saf fonksiyondur.
 private func ownerColor(task: NoteTask, speakerNames: [Int: String]) -> Color {
     if task.isMine {
-        return DesignTokens.meColor
+        return DesignTokens.meSpeakerColor
     }
     if let person = speakerNumber(owner: task.owner)
         ?? speakerNames.first(where: { $0.value.caseInsensitiveCompare(task.owner) == .orderedSame })?.key {
@@ -1393,7 +1400,7 @@ private func ownerColor(task: NoteTask, speakerNames: [Int: String]) -> Color {
 private func speakerColor(key: SpeakerKey) -> Color {
     switch (key.speaker, key.person) {
     case (_, .some(let person)): personColor(person: person)
-    case (.me, nil): DesignTokens.meColor
+    case (.me, nil): DesignTokens.meSpeakerColor
     case (.others, nil): Color.gray
     }
 }
@@ -1421,11 +1428,13 @@ private struct SpeakerAvatar: View {
     let size: CGFloat
 
     var body: some View {
+        // Sade rozet: konuşmacı rengi yalnızca soluk zeminde ve yazıda (dolu renkli daireler sayfayı fazla renklendiriyordu).
         Text(text)
-            .appFont(size: size * 0.44, weight: .semibold)
-            .foregroundStyle(.white)
+            .appFont(size: size * 0.42, weight: .semibold)
+            .foregroundStyle(color)
             .frame(width: size, height: size)
-            .background(color, in: Circle())
+            // Opak: kapaktaki gradyanın üstünde de okunur.
+            .background(Circle().fill(color.opacity(0.15)).background(Circle().fill(Theme.card)))
     }
 }
 
@@ -1629,7 +1638,7 @@ private struct SpeakerReviewCard: View {
         }
         .padding(DesignTokens.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12))
         .padding(.vertical, DesignTokens.Spacing.xs)
     }
 
@@ -1869,7 +1878,7 @@ private struct TranscriptSection: View {
                 }
                 .padding(.vertical, continues ? 6 : 12)
                 .padding(.horizontal, 10)
-                .background(isActive ? appearance.accent.color.opacity(0.09) : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(isActive ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .animation(.easeOut(duration: 0.25), value: isActive)
                 .modifier(PlayableTurn(canPlay: canPlay) { onPlay(paragraph.startSec) })
                 .id(paragraph.id)

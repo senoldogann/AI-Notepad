@@ -155,84 +155,172 @@ private struct PanelSurface: ViewModifier {
     }
 }
 
+/// Görünen ipucu: metni, bağlı olduğu düğmenin pencere içindeki çerçevesi, hangi kenarına ve altına mı üstüne mi
+/// çizileceği; hangi pencerenin katmanında çizileceği (`scope`).
+struct ActiveHoverHint: Equatable {
+    let id: UUID
+    let scope: UUID
+    let text: LocalizedStringKey
+    let anchor: CGRect
+    let alignment: HorizontalAlignment
+    let edge: VerticalEdge
+
+    static func == (left: ActiveHoverHint, right: ActiveHoverHint) -> Bool {
+        left.id == right.id && left.scope == right.scope && left.anchor == right.anchor
+    }
+}
+
 /// Aynı anda tek ipucu: yeni ipucu açılınca öncekiler kapanır. Panel uygulamayı öne getirmediği için fare çıkışı
 /// bazen gelmez; tek etkin ipucu ve süre sınırı olmazsa ipuçları birikip üst üste binerdi.
 @MainActor
 @Observable
 final class HoverHintCenter {
     static let shared: HoverHintCenter = HoverHintCenter()
-    /// Görünen ipucunun kimliği; yoksa nil.
-    var activeID: UUID?
+    /// Görünen ipucu; yoksa nil.
+    var active: ActiveHoverHint?
 }
 
 /// İpucu bu kadar süre sonra kendiliğinden kapanır (fare çıkışı gelmese de).
 private let hoverHintLifetime: Duration = .seconds(4)
 
-/// Fare üstüne gelince kısa gecikmeyle açıklama gösterir. Panel uygulamayı öne getirmediği için sistem ipuçları
-/// (`help`) her zaman görünmez; bu ipucu panelin içinde, kardeş görünümlerin üstünde ve opak çizilir. Erişilebilirlik
+private struct HoverHintScopeKey: EnvironmentKey {
+    static let defaultValue: UUID? = nil
+}
+
+extension EnvironmentValues {
+    /// İpuçlarının çizildiği pencere katmanı (`hoverHintLayer`); katman yoksa nil.
+    var hoverHintScope: UUID? {
+        get { self[HoverHintScopeKey.self] }
+        set { self[HoverHintScopeKey.self] = newValue }
+    }
+}
+
+/// Fare üstüne gelince kısa gecikmeyle açıklama gösterir. İpucu düğmenin yanında değil, pencerenin en üst katmanında
+/// (`hoverHintLayer`) çizilir: komşu metnin altında kalmaz, kart ya da kaydırma alanı tarafından kesilmez ve pencere
+/// kenarından taşmaz. Panel uygulamayı öne getirmediği için sistem ipuçları (`help`) her zaman görünmez; erişilebilirlik
 /// için `help` de verilir.
 private struct HoverHint: ViewModifier {
     let text: LocalizedStringKey
     let alignment: HorizontalAlignment
     let edge: VerticalEdge
     @State private var id: UUID = UUID()
+    /// Fare düğmenin üstünde: yalnızca bu sırada düğmenin çerçevesi ölçülür (kaydırırken yüzlerce ipucu sürekli
+    /// ölçülmesin).
+    @State private var isHovering: Bool = false
     @State private var delay: Task<Void, Never>?
+    @Environment(\.hoverHintScope) private var scope: UUID?
     private let center: HoverHintCenter = .shared
-
-    private var isVisible: Bool {
-        center.activeID == id
-    }
 
     func body(content: Content) -> some View {
         content
             .help(text)
             .onHover { (hovering: Bool) -> Void in
-                delay?.cancel()
-                guard hovering else {
+                isHovering = hovering
+                if !hovering {
+                    delay?.cancel()
                     hide()
-                    return
                 }
-                delay = Task {
-                    do {
-                        try await Task.sleep(for: .milliseconds(450))
-                        center.activeID = id
-                        try await Task.sleep(for: hoverHintLifetime)
-                    } catch {
-                        // Fare ayrıldı ya da başka ipucu açıldı.
-                        return
+            }
+            .background {
+                if isHovering {
+                    GeometryReader { (proxy: GeometryProxy) in
+                        Color.clear.onAppear { schedule(anchor: proxy.frame(in: .global)) }
                     }
-                    hide()
                 }
             }
             .onDisappear {
                 delay?.cancel()
                 hide()
             }
-            .overlay(alignment: Alignment(horizontal: alignment, vertical: edge == .bottom ? .bottom : .top)) {
-                if isVisible {
-                    Text(text)
-                        .appFont(size: 11, weight: .medium)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(white: 0.12), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12)))
-                        .fixedSize()
-                        .offset(y: edge == .bottom ? 28 : -28)
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                }
+    }
+
+    /// Kısa gecikmeyle ipucunu düğmenin yanında açar; süre dolunca kapatır.
+    private func schedule(anchor: CGRect) {
+        delay?.cancel()
+        guard let scope else {
+            return
+        }
+        delay = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(450))
+                center.active = ActiveHoverHint(id: id, scope: scope, text: text, anchor: anchor, alignment: alignment, edge: edge)
+                try await Task.sleep(for: hoverHintLifetime)
+            } catch {
+                // Fare ayrıldı ya da başka ipucu açıldı.
+                return
             }
-            // Görünürken kardeşlerinin üstünde çizilir (alttaki düğme ya da satır ipucunu örtmesin).
-            .zIndex(isVisible ? 1 : 0)
-            .animation(.easeOut(duration: 0.12), value: isVisible)
+            hide()
+        }
     }
 
     private func hide() {
-        if center.activeID == id {
-            center.activeID = nil
+        if center.active?.id == id {
+            center.active = nil
         }
     }
+}
+
+/// Pencerenin ipucu katmanı: bu penceredeki etkin ipucunu düğmesinin altında (ya da üstünde) çizer; pencere kenarına
+/// taşacaksa içeri kaydırır, aşağıya sığmıyorsa üste alır.
+private struct HoverHintLayer: ViewModifier {
+    @State private var scope: UUID = UUID()
+    @State private var bubbleSize: CGSize = .zero
+    private let center: HoverHintCenter = .shared
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.hoverHintScope, scope)
+            .overlay(alignment: .topLeading) {
+                GeometryReader { (proxy: GeometryProxy) in
+                    if let hint = center.active, hint.scope == scope {
+                        let origin: CGPoint = hoverHintOrigin(
+                            anchor: hint.anchor.offsetBy(dx: -proxy.frame(in: .global).minX, dy: -proxy.frame(in: .global).minY),
+                            bubble: bubbleSize, bounds: proxy.size, alignment: hint.alignment, edge: hint.edge
+                        )
+                        Text(hint.text)
+                            .appFont(size: 11, weight: .medium)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: 300, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+                            .fixedSize()
+                            .onGeometryChange(for: CGSize.self) { (bubble: GeometryProxy) -> CGSize in
+                                bubble.size
+                            } action: { (size: CGSize) -> Void in
+                                bubbleSize = size
+                            }
+                            .offset(x: origin.x, y: origin.y)
+                            // Boyut ölçülene dek görünmez (ilk karede yanlış yerde çizilmesin).
+                            .opacity(bubbleSize == .zero ? 0 : 1)
+                            .transition(.opacity)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .animation(.easeOut(duration: 0.12), value: center.active)
+            }
+    }
+}
+
+/// İpucu kutusunun sol üst köşesi: düğmenin seçilen kenarına hizalı, altında 6 pt (`edge` üstse üstünde); pencere
+/// sınırına 8 pt kala içeri kaydırılır, aşağıya sığmıyorsa üste alınır. Saf fonksiyondur.
+func hoverHintOrigin(anchor: CGRect, bubble: CGSize, bounds: CGSize, alignment: HorizontalAlignment, edge: VerticalEdge) -> CGPoint {
+    let margin: CGFloat = 8
+    let x: CGFloat = switch alignment {
+    case .trailing: anchor.maxX - bubble.width
+    case .center: anchor.midX - bubble.width / 2
+    default: anchor.minX
+    }
+    let below: CGFloat = anchor.maxY + 6
+    let above: CGFloat = anchor.minY - 6 - bubble.height
+    let preferred: CGFloat = edge == .bottom ? (below + bubble.height > bounds.height - margin ? above : below) : (above < margin ? below : above)
+    return CGPoint(
+        x: min(max(margin, x), max(margin, bounds.width - bubble.width - margin)),
+        y: min(max(margin, preferred), max(margin, bounds.height - bubble.height - margin))
+    )
 }
 
 public extension View {
@@ -245,5 +333,10 @@ public extension View {
     /// çizileceği (panel kenarındaki düğmelerde taşmasın diye).
     func hoverHint(_ text: LocalizedStringKey, alignment: HorizontalAlignment, edge: VerticalEdge) -> some View {
         modifier(HoverHint(text: text, alignment: alignment, edge: edge))
+    }
+
+    /// Pencerenin kök görünümüne: içindeki ipuçları bu katmanda, her şeyin üstünde çizilir.
+    func hoverHintLayer() -> some View {
+        modifier(HoverHintLayer())
     }
 }
