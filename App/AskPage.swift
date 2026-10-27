@@ -11,7 +11,7 @@ struct AskPage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var question: String = ""
-    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; kaldırılana ya da yeni sohbete dek kalır.
+    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; soru gönderilince alandan kalkar.
     @State private var mentioned: [MeetingRecord] = []
     /// `@` önerilerinde klavyeyle seçili satır.
     @State private var highlighted: Int = 0
@@ -167,6 +167,8 @@ struct AskPage: View {
         }
         model.askArchive(question: question, meetingIDs: mentioned.map(\.id))
         question = ""
+        // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
+        withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
     }
 
     /// `@` önerileri (en fazla 6).

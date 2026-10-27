@@ -12,14 +12,53 @@ private enum OnboardingStep: Int, CaseIterable {
     case keys
     case ready
 
+    /// Sağdaki başlık.
     var title: LocalizedStringKey {
         switch self {
-        case .welcome: "Toplantıları anla, hiçbir şeyi kaçırma"
+        case .welcome: "Hoş geldin"
         case .permissions: "İzinler"
         case .profile: "Sen ve motor"
         case .keys: "Anahtarlar"
         case .ready: "Hazırsın"
         }
+    }
+
+    /// Soldaki film gradyanlı panelin başlığı.
+    var panelTitle: LocalizedStringKey {
+        switch self {
+        case .welcome: "Toplantılarını dinler, notunu yazar"
+        case .permissions: "İki ses, tek kayıt"
+        case .profile: "Sana göre ayarlanır"
+        case .keys: "Anahtarlar yalnız sende"
+        case .ready: "Bir kısayol uzağında"
+        }
+    }
+
+    /// Panelin kısa tanıtımı.
+    var panelSubtitle: LocalizedStringKey {
+        switch self {
+        case .welcome: "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin."
+        case .permissions: "Mikrofon senin sesin, sistem sesi karşı taraf. İkisi ayrı kaydedilir, konuşmacılar ayrılır."
+        case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
+        case .keys: "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider."
+        case .ready: "Kaydı kısayolla başlat; toplantı bitince notun ve görevlerin hazır."
+        }
+    }
+
+    /// Paneldeki simgeler.
+    var symbols: [String] {
+        switch self {
+        case .welcome: ["captions.bubble.fill", "waveform", "checklist"]
+        case .permissions: ["mic.fill", "speaker.wave.2.fill"]
+        case .profile: ["person.fill", "cloud.fill", "laptopcomputer"]
+        case .keys: ["key.fill", "lock.fill"]
+        case .ready: ["command", "record.circle.fill", "sparkles"]
+        }
+    }
+
+    /// Panelin film gradyanı (temanın sıcak ailesi).
+    var palette: FilmPalette {
+        rawValue.isMultiple(of: 2) ? .sunset : .rose
     }
 }
 
@@ -32,53 +71,63 @@ struct SetupPage: View {
     @State private var step: OnboardingStep = .welcome
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
-            HStack(spacing: 6) {
-                ForEach(OnboardingStep.allCases, id: \.self) { (item: OnboardingStep) in
-                    Capsule()
-                        .fill(item.rawValue <= step.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.25)))
-                        .frame(width: item == step ? 22 : 8, height: 6)
+        GeometryReader { (geometry: GeometryProxy) in
+            HStack(spacing: 32) {
+                OnboardingPanel(
+                    palette: step.palette, seed: "kurulum-\(step.rawValue)", symbols: step.symbols, title: step.panelTitle,
+                    subtitle: step.panelSubtitle, stepIndex: step.rawValue, stepCount: OnboardingStep.allCases.count
+                )
+                .frame(width: min(440, geometry.size.width * 0.42))
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(step.title)
+                        .appFont(size: 30, weight: .regular)
+                        .tracking(-0.6)
+                        .id("baslik-\(step.rawValue)")
+                        .transition(.opacity)
+                    ScrollView {
+                        Group {
+                            switch step {
+                            case .welcome: WelcomeStep()
+                            case .permissions: PermissionsStep(model: model)
+                            case .profile: ProfileStep(model: model)
+                            case .keys: KeysStep(model: model)
+                            case .ready: ReadyStep(shortcuts: shortcuts)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .id(step)
+                        .transition(.opacity.combined(with: .offset(x: 18)))
+                    }
+                    .scrollIndicators(.hidden)
+                    HStack(spacing: 12) {
+                        if step != .welcome {
+                            Button("Geri", systemImage: "chevron.left") { move(by: -1) }
+                                .buttonStyle(.hoverPlain)
+                                .foregroundStyle(Theme.muted)
+                        }
+                        Spacer()
+                        if step == .ready {
+                            Button("Başla") { onFinish() }
+                                .buttonStyle(.pillPrimary)
+                                .keyboardShortcut(.defaultAction)
+                        } else {
+                            Button("Atla") { onFinish() }
+                                .buttonStyle(.hoverPlain)
+                                .foregroundStyle(Theme.muted)
+                            Button("İleri") { move(by: 1) }
+                                .buttonStyle(.pillPrimary)
+                                .keyboardShortcut(.defaultAction)
+                        }
+                    }
+                    .controlSize(.large)
                 }
+                .padding(.vertical, 8)
+                .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Adım \(step.rawValue + 1) / \(OnboardingStep.allCases.count)")
-            Text(step.title)
-                .appFont(size: 20, weight: .semibold)
-            Group {
-                switch step {
-                case .welcome: WelcomeStep()
-                case .permissions: PermissionsStep(model: model)
-                case .profile: ProfileStep(model: model)
-                case .keys: KeysStep(model: model)
-                case .ready: ReadyStep(shortcuts: shortcuts)
-                }
-            }
-            // Adımlar kart gibi 3D dönerek geçer.
-            .id(step)
-            .transition(.flip3D)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            HStack {
-                if step != .welcome {
-                    Button("Geri") { move(by: -1) }
-                }
-                Spacer()
-                if step == .ready {
-                    Button("Başla") { onFinish() }
-                        .buttonStyle(.pillPrimary)
-                        .keyboardShortcut(.defaultAction)
-                } else {
-                    Button("Atla") { onFinish() }
-                        .buttonStyle(.hoverPlain)
-                        .foregroundStyle(.secondary)
-                    Button("İleri") { move(by: 1) }
-                        .buttonStyle(.pillPrimary)
-                        .keyboardShortcut(.defaultAction)
-                }
-            }
-            .controlSize(.large)
+            .padding(28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(DesignTokens.Spacing.xl)
-        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: step)
+        .animation(.smooth(duration: 0.4), value: step)
     }
 
     private func move(by offset: Int) {
@@ -88,27 +137,16 @@ struct SetupPage: View {
 
 private struct WelcomeStep: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
-            Text("AI-Notepad, Teams ve Zoom toplantılarını canlı olarak yazıya döker ve Türkçeye çevirir.")
-            FeatureRow(symbol: "captions.bubble", text: "Fince, İngilizce ve 33 dilde daha konuşmalar canlı metin ve Türkçe çeviri olarak panelde.")
-            FeatureRow(symbol: "sparkles", text: "\"Ne kaçırdım?\" ile son dakikaların Türkçe özeti; toplantı hakkında Türkçe soru.")
-            FeatureRow(symbol: "doc.text", text: "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.")
-            FeatureRow(symbol: "eye.slash", text: "Panel ve ada ekran paylaşımlarında gizlenebilir.")
-        }
-        .appFont(size: 14, weight: .regular)
-    }
-}
-
-private struct FeatureRow: View {
-    let symbol: String
-    let text: LocalizedStringKey
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.m) {
-            Image(systemName: symbol)
-                .foregroundStyle(.tint)
-                .frame(width: 22)
-            Text(text).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Birkaç adımda hazırsın; her adım atlanabilir, hepsi sonra Ayarlar'dan değişir.")
+                .appFont(size: 14, weight: .regular)
+                .foregroundStyle(Theme.muted)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "Fince, İngilizce ve 33 dil daha; Türkçesi altında akar.", palette: .sunset)
+                FeatureTile(symbol: "sparkles", title: "Ne kaçırdım?", text: "Son dakikaların Türkçe özeti, toplantıya soru.", palette: .rose)
+                FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar, özet ve sözlük.", palette: .rose)
+                FeatureTile(symbol: "eye.slash.fill", title: "Ekran paylaşımında gizli", text: "Panel ve ada paylaşılan ekranda görünmez.", palette: .sunset)
+            }
         }
     }
 }
@@ -120,7 +158,7 @@ private struct PermissionsStep: View {
     @State private var systemAudio: ProbeState = .idle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xl) {
+        VStack(alignment: .leading, spacing: 12) {
             PermissionRow(
                 symbol: "mic",
                 title: "Mikrofon",
@@ -214,21 +252,26 @@ private struct PermissionRow<Action: View>: View {
     @ViewBuilder let action: () -> Action
 
     var body: some View {
-        HStack(alignment: .top, spacing: DesignTokens.Spacing.m) {
+        HStack(alignment: .center, spacing: 14) {
             Image(systemName: symbol)
-                .appFont(size: 18, weight: .regular)
+                .appFont(size: 17, weight: .medium)
                 .foregroundStyle(.tint)
-                .frame(width: 26)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).appFont(size: 13, weight: .semibold)
-                Text(detail).foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).appFont(size: 14, weight: .semibold)
+                Text(detail).appFont(size: 13, weight: .regular).foregroundStyle(Theme.muted)
                 Label(status, systemImage: isGranted ? "checkmark.circle.fill" : "circle.dotted")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(isGranted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .appFont(size: 11, weight: .medium)
+                    .foregroundStyle(isGranted ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 8)
             action()
         }
+        .padding(14)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -247,25 +290,41 @@ private struct ProfileStep: View {
     @AppStorage(SettingsKey.userName) private var userName: String = ""
 
     var body: some View {
-        Form {
-            TextField("Adın", text: $userName, prompt: Text("ör. Doğan"))
-            Picker("Canlı metin", selection: Binding<LiveEngine>(
-                get: { model.liveEngine },
-                set: { (engine: LiveEngine) -> Void in Task { await model.selectEngine(engine: engine) } }
-            )) {
-                Text("Deepgram (bulut, en hızlı)").tag(LiveEngine.deepgram)
-                Text("Mac'te (WhisperKit, internetsiz)").tag(LiveEngine.whisperKit)
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Adın").appFont(size: 13, weight: .semibold)
+                TextField("Adın", text: $userName, prompt: Text("ör. Doğan"))
+                    .textFieldStyle(.plain)
+                    .appFont(size: 16, weight: .regular)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line))
+                Text("Notta sana düşen görevler bu adla ayrılır.")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
             }
-            .pickerStyle(.radioGroup)
-            Text(model.liveEngine == .deepgram
-                ? "Deepgram ve ElevenLabs anahtarı gerekir. Konuşmacılar canlı ayrılır."
-                : "İlk açılışta model (~630 MB) indirilir ve hazırlanır; birkaç dakika sürebilir.")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Canlı metin").appFont(size: 13, weight: .semibold)
+                HStack(alignment: .top, spacing: 12) {
+                    ChoiceCard(
+                        symbol: "cloud.fill", title: "Bulut (en hızlı)",
+                        text: "Deepgram ve ElevenLabs; konuşmacılar canlı ayrılır. İki anahtar gerekir.",
+                        isSelected: model.liveEngine == .deepgram
+                    ) {
+                        Task { await model.selectEngine(engine: .deepgram) }
+                    }
+                    ChoiceCard(
+                        symbol: "laptopcomputer", title: "Bu Mac'te",
+                        text: "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.",
+                        isSelected: model.liveEngine == .whisperKit
+                    ) {
+                        Task { await model.selectEngine(engine: .whisperKit) }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .scrollDisabled(true)
     }
 }
 
@@ -274,7 +333,7 @@ private struct KeysStep: View {
     let model: AppModel
 
     var body: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 0) {
             if model.liveEngine == .deepgram {
                 SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
                 SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
@@ -282,11 +341,11 @@ private struct KeysStep: View {
             SecretField(title: "Anthropic (Claude)", account: .anthropic, onChange: model.settingsChanged)
             LocalLLMSetup(model: model)
             Text("Çeviri, özet ve not için Claude kullanılır; anahtarsız istersen Mac'teki Ollama'yı seç. OpenAI ve OpenCode Go Ayarlar › LLM'de.")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.secondary)
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }
 
@@ -295,21 +354,33 @@ private struct ReadyStep: View {
     let shortcuts: ShortcutController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
-                HStack {
-                    Text(keyBindingDisplay(binding: shortcuts.currentBinding(action: action)))
-                        .monospaced()
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Theme.soft, in: RoundedRectangle(cornerRadius: 6))
-                    Text(action.title)
+                HStack(spacing: 14) {
+                    HStack(spacing: 4) {
+                        ForEach(Array(keyBindingDisplay(binding: shortcuts.currentBinding(action: action)).map(String.init).enumerated()), id: \.offset) { (key: (offset: Int, element: String)) in
+                            Text(verbatim: key.element)
+                                .appFont(size: 15, weight: .medium)
+                                .frame(minWidth: 30, minHeight: 30)
+                                .padding(.horizontal, 4)
+                                .background(Theme.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+                                .shadow(color: .black.opacity(0.08), radius: 0, y: 2)
+                        }
+                    }
+                    Text(action.title).appFont(size: 14, weight: .regular)
+                    Spacer(minLength: 0)
                 }
             }
-            Text("Kaydı Ana sayfadaki \"Kaydı başlat\" düğmesiyle, kısayolla ya da menüden başlat. Kayıt sırasında cam panel canlı metni gösterir; toplantı bitince toplantının sayfası açılır: görevlerin en üstte.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            FeatureTile(
+                symbol: "rectangle.on.rectangle", title: "Kayıt sırasında cam panel",
+                text: "Canlı metin ve Türkçesi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.", palette: .sunset
+            )
+            .padding(.top, 6)
+            FeatureTile(
+                symbol: "checklist", title: "Bitince toplantının sayfası",
+                text: "En üstte senin görevlerin; özet, kararlar, konuşmacılı transkript ve çalma.", palette: .rose
+            )
         }
-        .appFont(size: 14, weight: .regular)
     }
 }
