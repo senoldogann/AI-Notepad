@@ -737,7 +737,7 @@ struct IconButton: View {
 func blockColor(block: SpeakerBlock) -> Color {
     switch (block.speaker, block.person) {
     case (_, .some(let person)): personColor(person: person)
-    case (.me, nil): DesignTokens.meColor
+    case (.me, nil): DesignTokens.meSpeakerColor
     case (.others, nil): .secondary
     }
 }

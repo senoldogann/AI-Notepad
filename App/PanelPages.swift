@@ -193,6 +193,8 @@ struct AppearanceEnvironment: ViewModifier {
             .fontDesign(appearance.fontDesign.design)
             // Yazı tipi belirtilmemiş metinler ve sistem denetimleri de seçili aile ve ölçekte.
             .font(appearance.font(size: 13, weight: .regular))
+            // İpuçları pencerenin en üst katmanında (metnin altında kalmasın, kesilmesin).
+            .hoverHintLayer()
             // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
             .buttonStyle(.pill)
             // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.

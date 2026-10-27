@@ -533,6 +533,31 @@ private struct RecordBar: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
+        VStack(spacing: 12) {
+            bar
+            // Seçenekler çubuğun altında, ortalı ve gerekirse alt satıra geçer: dar pencerede, İngilizcede ya da büyük
+            // arayüz boyutunda çubuğun dışına taşıp kesilmez.
+            if model.phase == .idle {
+                FlowLayout(spacing: 8, lineSpacing: 8) {
+                    languageChip
+                    chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
+                        .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
+                    if !model.isInPerson {
+                        chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
+                            model.toggleMicrophone()
+                        }
+                    }
+                    chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
+                        model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 720)
+    }
+
+    private var bar: some View {
         HStack(spacing: 10) {
             Circle()
                 .fill(RadialGradient(
@@ -543,41 +568,29 @@ private struct RecordBar: View {
                 .tilt3D(maxAngle: 18)
             switch model.phase {
             case .idle:
-                // Sığmazsa yarım kesilmek yerine hiç gösterilmez (seçenek çipleri öncelikli).
-                ViewThatFits(in: .horizontal) {
-                    Text("Toplantını dinlemeye başla")
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                        .fixedSize()
-                    Color.clear.frame(width: 0, height: 0)
-                }
-                .layoutPriority(1)
+                Text("Toplantını dinlemeye başla")
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
                 Spacer(minLength: 6)
-                languageChip
-                chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
-                    .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
-                if !model.isInPerson {
-                    chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
-                        model.toggleMicrophone()
-                    }
-                }
-                chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
-                    model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
-                }
                 Button("Başlat", systemImage: "record.circle", action: onStartRecording)
                     .buttonStyle(.pillPrimary)
                     .disabled(!model.isReadyToRecord || model.isStarting)
+                    .fixedSize()
             case .recording:
                 Text(model.isPaused ? "Kayıt duraklatıldı" : "Kayıt sürüyor — konuşmalar canlı panelde")
                     .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
                 Spacer(minLength: 6)
                 Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
                     .buttonStyle(.pill)
+                    .fixedSize()
                 Button("Bitir", systemImage: "stop.fill") { model.stopRecording() }
                     .buttonStyle(.pillPrimary)
+                    .fixedSize()
             case .finishing:
                 Text("Kalan metin ve konuşmacılar tamamlanıyor.")
                     .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
                 Spacer(minLength: 6)
                 ProgressView().controlSize(.small)
             }
@@ -587,7 +600,6 @@ private struct RecordBar: View {
         .padding(.leading, 10)
         .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .frame(maxWidth: 720)
         .background(Theme.card, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.line))
         .shadow(color: .black.opacity(0.05), radius: 14, y: 6)
