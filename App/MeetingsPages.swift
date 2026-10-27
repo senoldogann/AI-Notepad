@@ -1396,27 +1396,20 @@ private struct NoMyTasksCard: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark")
-                .appFont(size: 15, weight: .bold)
-                .foregroundStyle(.white)
-                .frame(width: 38, height: 38)
-                .background { CoverBackground(seed: seed) }
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Bu toplantıda sana düşen görev yok")
-                    .appFont(size: 14, weight: .semibold)
-                    .foregroundStyle(Theme.ink)
-                Text(hasOtherTasks ? "Başkalarına düşen görevler ve kararlar aşağıda." : "Özet ve kararlar aşağıda.")
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-            }
+        // Olmayan bir şey için dikkat çeken kart yok: tek, sakin satır.
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+            Text("Bu toplantıda sana düşen görev yok")
+                .appFont(size: 13, weight: .medium)
+                .foregroundStyle(Theme.ink)
+            Text(hasOtherTasks ? "· başkalarına düşenler aşağıda" : "· özet ve kararlar aşağıda")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .background(appearance.accent.color.opacity(0.05), in: shape)
-        .overlay(shape.strokeBorder(appearance.accent.color.opacity(0.18)))
+        .padding(.vertical, 4)
     }
 }
 

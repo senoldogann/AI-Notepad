@@ -211,10 +211,6 @@ struct EmptyStateOrb: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(palette.colors.base.opacity(0.22))
-                .frame(width: 150, height: 150)
-                .blur(radius: 34)
             Group {
                 if isAnimated {
                     LivingFilmGradient(seed: "bos-\(symbol)", palette: palette)
@@ -222,13 +218,12 @@ struct EmptyStateOrb: View {
                     FilmGradient(seed: "bos-\(symbol)", palette: palette)
                 }
             }
-            .frame(width: 116, height: 116)
-            .clipShape(Circle())
-            .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1))
             Image(systemName: symbol)
-                .font(.system(size: 38, weight: .medium))
+                .font(.system(size: 26, weight: .regular))
                 .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
         .accessibilityHidden(true)
     }
