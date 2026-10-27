@@ -8,7 +8,8 @@ private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 
 // MARK: Liste
 
-/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama ve yeniden eskiye liste.
+/// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama, süzgeç ve tarihe göre gruplu (Bugün, Dün,
+/// Bu hafta, aylar) yeniden eskiye liste.
 struct MeetingsListPage: View {
     let model: AppModel
     /// Açık toplantı (satırı vurgulanır).
@@ -26,9 +27,14 @@ struct MeetingsListPage: View {
     @State private var checked: Set<String> = []
     @State private var isConfirmingDelete: Bool = false
     @State private var deleteErrors: [String] = []
+    @State private var listFilter: MeetingListFilter = .all
 
     var body: some View {
-        let visible: [MeetingRecord] = filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query)
+        let visible: [MeetingRecord] = filterMeetings(
+            records: filterMeetings(records: meetingsInFolder(records: model.meetings, folder: folder), query: query),
+            listFilter: listFilter
+        )
+        let sections: [MeetingSection] = meetingSections(records: visible, now: Date(), calendar: .current, locale: interfaceLocale())
         VStack(spacing: 0) {
             HStack(spacing: DesignTokens.Spacing.s) {
                 if let folder {
@@ -69,6 +75,13 @@ struct MeetingsListPage: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, DesignTokens.Spacing.s)
+            if !model.meetings.isEmpty {
+                PillPicker(selection: $listFilter, options: [
+                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevim olanlar"), (MeetingListFilter.problems, "Hatalı"),
+                ])
+                .padding(.horizontal, DesignTokens.Spacing.m)
+                .padding(.bottom, DesignTokens.Spacing.s)
+            }
             if let error = model.importError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .appFont(size: 12, weight: .regular)
@@ -79,13 +92,27 @@ struct MeetingsListPage: View {
             if model.meetings.isEmpty {
                 EmptyStatePlaceholder(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca ya da bir ses/video dosyasını buraya sürükleyince toplantılar burada görünür.")
             } else if visible.isEmpty {
-                EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
+                if listFilter == .all {
+                    EmptyStatePlaceholder(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: "Başlıkta, notta ya da metinde başka bir kelimeyle ara.")
+                } else {
+                    EmptyStatePlaceholder(symbol: "line.3.horizontal.decrease", title: "Eşleşen toplantı yok", message: "Süzgeci \"Hepsi\" yap ya da başka bir kelimeyle ara.")
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(visible) { (record: MeetingRecord) in
-                            row(record: record)
-                                .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
+                        ForEach(sections) { (section: MeetingSection) in
+                            Text(interfaceUppercased(text: section.title))
+                                .appFont(size: 11, weight: .semibold)
+                                .tracking(DesignTokens.labelTracking)
+                                .foregroundStyle(Theme.muted)
+                                .padding(.horizontal, DesignTokens.Spacing.m)
+                                .padding(.top, section.id == sections.first?.id ? DesignTokens.Spacing.xs : DesignTokens.Spacing.m)
+                                .padding(.bottom, DesignTokens.Spacing.xs)
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(section.meetings) { (record: MeetingRecord) in
+                                row(record: record)
+                                    .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
+                            }
                         }
                     }
                     .padding(.horizontal, DesignTokens.Spacing.s)
@@ -233,7 +260,7 @@ struct MeetingsListPage: View {
     }
 }
 
-/// Liste satırı: başlık, tarih, durum ve varsa senin görev sayın.
+/// Liste satırı: başlık, tarih, süre, durum ve varsa senin görev sayın.
 struct MeetingRow: View {
     let record: MeetingRecord
     let isProcessing: Bool
@@ -248,6 +275,9 @@ struct MeetingRow: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
+                    if let minutes = meetingDurationMinutes(record: record) {
+                        Text("· " + String(localized: "\(minutes) dk"))
+                    }
                     if let status = statusText(record: record, isProcessing: isProcessing) {
                         Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
                     }
@@ -630,6 +660,8 @@ struct MeetingDetailPage: View {
                     .buttonStyle(.coverGlass)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
                 moreMenu {
+                    fileExportItems
+                    Divider()
                     webhookItem
                     Divider()
                     manageItems
@@ -640,6 +672,8 @@ struct MeetingDetailPage: View {
                 Spacer(minLength: DesignTokens.Spacing.s)
                 moreMenu {
                     exportItems
+                    Divider()
+                    fileExportItems
                     Divider()
                     manageItems
                 }
@@ -696,6 +730,17 @@ struct MeetingDetailPage: View {
         Button("E-postayla gönder", systemImage: "envelope") { emailNote() }
             .disabled(record.note == nil)
         webhookItem
+    }
+
+    /// Dosya olarak dışa aktarma: Word belgesi (seçili not dilinde), transkriptin düz metni ve SRT altyazısı.
+    @ViewBuilder
+    private var fileExportItems: some View {
+        let hasTranscript: Bool = !(record.finalSegments.isEmpty && record.liveSegments.isEmpty)
+        Button("Word (DOCX) olarak kaydet", systemImage: "doc.text") { exportDOCX() }
+        Button("Transkripti metin olarak kaydet (TXT)", systemImage: "text.alignleft") { exportTranscriptText() }
+            .disabled(!hasTranscript)
+        Button("Altyazı olarak kaydet (SRT)", systemImage: "captions.bubble") { exportSRT() }
+            .disabled(!hasTranscript)
     }
 
     /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
@@ -942,6 +987,27 @@ struct MeetingDetailPage: View {
     private func exportMarkdown() {
         export = saveExport(fileExtension: "md") { (url: URL) throws -> Void in
             try Data(meetingMarkdown(record: shownRecord).utf8).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu ve transkripti (seçili not dilinde) Word belgesi olarak İndirilenler'e kaydeder.
+    private func exportDOCX() {
+        export = saveExport(fileExtension: "docx") { (url: URL) throws -> Void in
+            try meetingDOCX(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Transkripti düz metin (`[mm:ss] Ad: metin`) olarak İndirilenler'e kaydeder.
+    private func exportTranscriptText() {
+        export = saveExport(fileExtension: "txt") { (url: URL) throws -> Void in
+            try Data(transcriptText(record: record).utf8).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Transkripti SRT altyazısı olarak İndirilenler'e kaydeder (videoya eklenebilir).
+    private func exportSRT() {
+        export = saveExport(fileExtension: "srt") { (url: URL) throws -> Void in
+            try Data(transcriptSRT(record: record).utf8).write(to: url, options: .atomic)
         }
     }
 
