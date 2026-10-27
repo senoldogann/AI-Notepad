@@ -27,6 +27,22 @@
       },
       "shouldTranslate": false
     },
+    "NSAppleEventsUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad writes your meeting note to Apple Notes when you ask it to."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
+          }
+        }
+      }
+    },
     "NSAudioCaptureUsageDescription": {
       "extractionState": "stale",
       "localizations": {

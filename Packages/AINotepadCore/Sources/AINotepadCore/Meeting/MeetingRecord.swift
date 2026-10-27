@@ -173,6 +173,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var template: NoteTemplate?
     /// Notun paylaşım dillerindeki sürümleri (dil kodu → not); not yeniden yazılınca silinir.
     public private(set) var sharedNotes: [String: MeetingNote]?
+    /// Not Apple Notlar'a kendiliğinden gönderildi (tekrar işlemede yinelenmesin).
+    public private(set) var notesSentAt: Date?
     /// Kullanıcının toplantıda (ya da sonradan) kendi yazdığı notlar; not bunları öncelik sayar. Eski toplantılarda nil.
     public private(set) var myNotes: String?
 
@@ -198,6 +200,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.engine = engine
         self.notice = notice
         self.meNeedsFinalPass = meNeedsFinalPass
+    }
+
+    /// Apple Notlar'a gönderildi işaretli kopya.
+    public func with(notesSentAt newDate: Date) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.notesSentAt = newDate
+        return copy
     }
 
     /// Kendi notları değişmiş kopya (boş metin nil olur).

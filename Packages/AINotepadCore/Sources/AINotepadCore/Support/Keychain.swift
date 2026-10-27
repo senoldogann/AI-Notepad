@@ -141,6 +141,18 @@ public func deleteSyncedSecret(service: String, account: SecretAccount) throws {
     }
 }
 
+/// Bu cihazdaki (eşitlenmeyen) öğe var mı. Değeri okumaz.
+public func localSecretExists(service: String, account: SecretAccount) throws -> Bool {
+    try exists(query: baseQuery(service: service, account: account), operation: "SecItemCopyMatching(local)")
+}
+
+/// Anahtar değişince eşitlenen kopya da güncellenir (iPhone eskimiş anahtarla kalmasın); kopya yoksa bir şey yapmaz.
+public func updateSyncedSecretIfShared(service: String, account: SecretAccount, value: String) throws {
+    if try syncedSecretExists(service: service, account: account) {
+        try saveSyncedSecret(service: service, account: account, value: value)
+    }
+}
+
 /// Eşitlenen kopya var mı. Değeri okumaz.
 public func syncedSecretExists(service: String, account: SecretAccount) throws -> Bool {
     try exists(query: syncedQuery(service: service, account: account), operation: "SecItemCopyMatching(synced)")

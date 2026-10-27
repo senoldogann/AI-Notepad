@@ -66,6 +66,12 @@ enum SettingsKey {
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
     static let inPersonMode: String = "inPersonMode"
+    /// Her not hazır olunca Apple Notlar'a gönder.
+    static let appleNotesAutoSend: String = "destinations.appleNotes"
+    /// Notların Markdown olarak yazılacağı klasör (Obsidian, iCloud Drive…); seçilmediyse boş.
+    static let markdownFolder: String = "destinations.markdownFolder"
+    /// Her not hazır olunca klasöre yaz.
+    static let markdownAutoExport: String = "destinations.markdownAuto"
     /// Kullanıcının tanıma sözlüğü (satır başına bir ad ya da terim).
     static let customVocabulary: String = "customVocabulary"
     /// Kullanıcının oluşturduğu klasörler (boş olanlar da listede kalsın).
@@ -218,6 +224,9 @@ func registerDefaultSettings() {
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
         SettingsKey.inPersonMode: false,
+        SettingsKey.appleNotesAutoSend: false,
+        SettingsKey.markdownFolder: "",
+        SettingsKey.markdownAutoExport: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
         SettingsKey.webhookAutoSend: false,

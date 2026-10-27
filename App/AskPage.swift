@@ -60,12 +60,12 @@ struct AskPage: View {
                 }
             }
             VStack(spacing: 8) {
-                if mentionQuery(text: question) != nil {
+                if isMentioning {
                     MentionSuggestions(candidates: suggestions, highlighted: highlighted) { (record: MeetingRecord) -> Void in
                         pick(record: record)
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
-                } else if recipeQuery(text: question) != nil {
+                } else if isPickingRecipe {
                     RecipeSuggestions(recipes: recipeMatches, highlighted: highlighted) { (recipe: Recipe) -> Void in
                         run(recipe: recipe)
                     } onDelete: { (recipe: Recipe) -> Void in
@@ -75,7 +75,7 @@ struct AskPage: View {
                 }
                 composer
             }
-            .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil || recipeQuery(text: question) != nil)
+            .animation(.smooth(duration: 0.2), value: isMentioning || isPickingRecipe)
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
             .frame(maxWidth: 780)
@@ -171,13 +171,25 @@ struct AskPage: View {
     }
 
     private func send() {
-        guard !model.isAnsweringArchive, mentionQuery(text: question) == nil, recipeQuery(text: question) == nil else {
+        // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
+        guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe,
+              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
         model.askArchive(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)
         question = ""
         // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
         withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
+    }
+
+    /// `@` önerileri açık: sondaki `@` bahsine eşleşen toplantı var.
+    private var isMentioning: Bool {
+        mentionQuery(text: question) != nil && !suggestions.isEmpty
+    }
+
+    /// "/" önerileri açık: eşleşen tarif var.
+    private var isPickingRecipe: Bool {
+        recipeQuery(text: question) != nil && !recipeMatches.isEmpty
     }
 
     /// "/" ile eşleşen tarifler.
@@ -210,7 +222,7 @@ struct AskPage: View {
     }
 
     private func moveHighlight(by step: Int) -> KeyPress.Result {
-        let count: Int = mentionQuery(text: question) != nil ? suggestions.count : (recipeQuery(text: question) != nil ? recipeMatches.count : 0)
+        let count: Int = isMentioning ? suggestions.count : (isPickingRecipe ? recipeMatches.count : 0)
         guard count > 0 else {
             return .ignored
         }
@@ -220,13 +232,13 @@ struct AskPage: View {
 
     /// Öneriler açıkken Return seçili toplantıyı ekler (soru gönderilmez).
     private func pickHighlighted() -> KeyPress.Result {
-        if recipeQuery(text: question) != nil {
+        if isPickingRecipe {
             if recipeMatches.indices.contains(highlighted) {
                 run(recipe: recipeMatches[highlighted])
             }
             return .handled
         }
-        guard mentionQuery(text: question) != nil else {
+        guard isMentioning else {
             return .ignored
         }
         if suggestions.indices.contains(highlighted) {
@@ -237,11 +249,11 @@ struct AskPage: View {
 
     /// Escape önerileri kapatır: yazılan "@…" silinir.
     private func dismissSuggestions() -> KeyPress.Result {
-        if recipeQuery(text: question) != nil {
+        if isPickingRecipe {
             question = ""
             return .handled
         }
-        guard mentionQuery(text: question) != nil else {
+        guard isMentioning else {
             return .ignored
         }
         question = removingMentionQuery(text: question)

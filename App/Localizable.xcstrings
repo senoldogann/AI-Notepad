@@ -14,6 +14,16 @@
         }
       }
     },
+    "\"AI-Notepad\" klasörüne, hesap gerekmez": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Into an \"AI-Notepad\" folder, no account needed"
+          }
+        }
+      }
+    },
     "\"Başlat\"a bas; konuşmalar burada canlı yazıya dökülür, bitince toplantının notu hazırlanır.": {
       "localizations": {
         "en": {
@@ -97,16 +107,6 @@
         }
       }
     },
-    "%@ adresinin nasıl alınacağını aç": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open how to get a %@ address"
-          }
-        }
-      }
-    },
     "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
       "extractionState": "stale",
       "localizations": {
@@ -136,6 +136,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Play from %@"
+          }
+        }
+      }
+    },
+    "%@ bağlandı; deneme mesajı gönderildi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ connected; a test message was sent."
           }
         }
       }
@@ -577,6 +587,16 @@
         }
       }
     },
+    "%lld toplantı taşınamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings couldn't be moved: %@"
+          }
+        }
+      }
+    },
     "%lld toplantıdan %lld parça okundu · %@ sn": {
       "localizations": {
         "en": {
@@ -777,12 +797,32 @@
         }
       }
     },
+    "Adres yapıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste address"
+          }
+        }
+      }
+    },
     "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The address isn't encrypted (http), so it was blocked for security. Use an https address."
+          }
+        }
+      }
+    },
+    "Adresi kopyaladığın an buraya bağlanır ve bir deneme mesajı gider.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As soon as you copy the address it connects here and a test message is sent."
           }
         }
       }
@@ -1078,6 +1118,36 @@
         }
       }
     },
+    "Apple Notlar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Notes"
+          }
+        }
+      }
+    },
+    "Apple Notlar'a gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to Apple Notes"
+          }
+        }
+      }
+    },
+    "Apple Notlar'a yazılamadı: %@. Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da AI-Notepad için Notlar'a izin ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't write to Apple Notes: %@. Allow Notes for AI-Notepad in System Settings › Privacy & Security › Automation."
+          }
+        }
+      }
+    },
     "Aranan": {
       "localizations": {
         "en": {
@@ -1339,6 +1409,16 @@
         }
       }
     },
+    "Bağlanıyor ve deneme mesajı gönderiliyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting and sending a test message…"
+          }
+        }
+      }
+    },
     "Bağlayınca Claude, Cursor ya da VS Code toplantılarını listeleyip arar, notları ve transkriptleri okur (yalnızca okur, hiçbir şey değiştirmez). Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.": {
       "localizations": {
         "en": {
@@ -1355,6 +1435,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected"
+          }
+        }
+      }
+    },
+    "Bağlı · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %@"
           }
         }
       }
@@ -1611,22 +1701,22 @@
         }
       }
     },
-    "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantılar bu iPhone'a taşınır.": {
+    "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu iPhone'da kalır; Mac'tekiler etkilenmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your Mac (it must be on there too). Recording and processing happen on this iPhone. Turning it off moves the meetings in iCloud to this iPhone."
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your Mac (it must be on there too). Recording and processing happen on this iPhone. Turning it off keeps a copy of the iCloud meetings on this iPhone; the Mac's aren't affected."
           }
         }
       }
     },
-    "Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantılar bu Mac'e geri taşınır.": {
+    "Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu Mac'te kalır; iPhone'dakiler etkilenmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off moves the meetings in iCloud back to this Mac."
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off keeps a copy of the iCloud meetings on this Mac; the iPhone's aren't affected."
           }
         }
       }
@@ -2338,16 +2428,6 @@
         }
       }
     },
-    "Deneme notu gönderildi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Test note sent"
-          }
-        }
-      }
-    },
     "Deneniyor…": {
       "localizations": {
         "en": {
@@ -2384,6 +2464,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask a follow-up…"
+          }
+        }
+      }
+    },
+    "Değiştir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change"
           }
         }
       }
@@ -2516,6 +2606,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listening… speech appears here once it starts"
+          }
+        }
+      }
+    },
+    "Discord'da kanal ayarları › Entegrasyonlar › Webhook'lar › Yeni Webhook › Webhook URL'sini kopyala.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Discord: channel settings › Integrations › Webhooks › New Webhook › copy the Webhook URL."
           }
         }
       }
@@ -3339,12 +3439,12 @@
         }
       }
     },
-    "Her toplantının notu (önce görevler, sonra kararlar ve özet) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.": {
+    "Her toplantının notu (önce görevler, sonra kararlar ve özet) seçtiğin yere kendiliğinden gider; toplantı sayfasındaki ⋯ menüsünden elle de gönderilir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Each meeting's note (tasks first, then decisions and summary) is sent there automatically. You can also send it manually from the ⋯ menu on the meeting page."
+            "value": "Each meeting's note (tasks first, then decisions and summary) goes to the places you choose automatically; you can also send it from the ⋯ menu on the meeting page."
           }
         }
       }
@@ -4211,6 +4311,16 @@
         }
       }
     },
+    "Klasör (Obsidian, iCloud)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder (Obsidian, iCloud)"
+          }
+        }
+      }
+    },
     "Klasör adı": {
       "localizations": {
         "en": {
@@ -4227,6 +4337,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove from folder"
+          }
+        }
+      }
+    },
+    "Klasöre Markdown kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Markdown to folder"
           }
         }
       }
@@ -4248,6 +4368,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Move to folder"
+          }
+        }
+      }
+    },
+    "Klasöre yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write to folder"
           }
         }
       }
@@ -4857,6 +4987,16 @@
         }
       }
     },
+    "Markdown dosyası olarak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As Markdown files"
+          }
+        }
+      }
+    },
     "Markdown olarak kaydet": {
       "localizations": {
         "en": {
@@ -5336,6 +5476,16 @@
         }
       }
     },
+    "Notlar'daki \"AI-Notepad\" klasörüne yazıldı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Written to the \"AI-Notepad\" folder in Notes."
+          }
+        }
+      }
+    },
     "Notlarım": {
       "localizations": {
         "en": {
@@ -5362,6 +5512,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide my notes"
+          }
+        }
+      }
+    },
+    "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder where notes are written as Markdown (e.g. an Obsidian vault)"
           }
         }
       }
@@ -6001,12 +6161,12 @@
         }
       }
     },
-    "Servisin \"gelen webhook\" adresini al ve aşağıya yapıştır; tür adresten tanınır. Adresin nasıl alınacağı:": {
+    "Servisinde \"Webhook ile tetikle\" adımını oluştur ve verdiği adresi aşağıya yapıştır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get the service's \"incoming webhook\" address and paste it below; the type is recognised from the address. How to get it:"
+            "value": "Create a \"triggered by webhook\" step in your service and paste its address below."
           }
         }
       }
@@ -6195,12 +6355,32 @@
         }
       }
     },
+    "Seçili klasöre Markdown olarak yazıldı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Written to the chosen folder as Markdown."
+          }
+        }
+      }
+    },
     "Seçimi kaldır": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Deselect all"
+          }
+        }
+      }
+    },
+    "Seç…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose…"
           }
         }
       }
@@ -6273,6 +6453,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't capture system audio (%@, code %lld). Check the output device and restart the recording."
+          }
+        }
+      }
+    },
+    "Slack'te AI-Notepad hazır açıldı: Create App › Incoming Webhooks › Add New Webhook › kanal seç › Webhook URL'yi kopyala.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad opened ready in Slack: Create App › Incoming Webhooks › Add New Webhook › pick a channel › copy the Webhook URL."
           }
         }
       }
@@ -6358,6 +6548,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "No final pass: %@ The live transcript was used."
+          }
+        }
+      }
+    },
+    "Son not Notlar'a yazıldı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest note was written to Notes."
+          }
+        }
+      }
+    },
+    "Son not klasöre yazıldı.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest note was written to the folder."
           }
         }
       }
@@ -6784,6 +6994,16 @@
         }
       }
     },
+    "Teams'te kanal › ⋯ › İş akışları › \"Webhook isteği alındığında kanala gönder\" › adresi kopyala.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Teams: channel › ⋯ › Workflows › \"Post to a channel when a webhook request is received\" › copy the address."
+          }
+        }
+      }
+    },
     "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
@@ -6820,6 +7040,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect in one click"
+          }
+        }
+      }
+    },
+    "Tek tıkla kur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-click setup"
           }
         }
       }
@@ -8501,6 +8731,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "SUMMARY"
+          }
+        }
+      }
+    },
+    "Önce Ayarlar › Bağlantılar'dan bir klasör seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First choose a folder in Settings › Connections."
           }
         }
       }

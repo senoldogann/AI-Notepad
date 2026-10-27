@@ -17,7 +17,7 @@ struct PhoneSettingsTab: View {
                     Toggle("iCloud ile eşitle", isOn: Binding<Bool>(
                         get: { store.cloud.location == .iCloud },
                         set: { (enabled: Bool) -> Void in
-                            Task { await store.cloud.setEnabled(enabled) { store.reload() } }
+                            Task { await store.cloud.setEnabled(enabled, excluding: []) { store.reload() } }
                         }
                     ))
                     .disabled(store.cloud.state == .working)
@@ -37,7 +37,7 @@ struct PhoneSettingsTab: View {
                 } header: {
                     Text("Eşitleme")
                 } footer: {
-                    Text("Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantılar bu iPhone'a taşınır.")
+                    Text("Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu iPhone'da kalır; Mac'tekiler etkilenmez.")
                 }
                 Section {
                     KeyRow(account: .deepgram, title: "Deepgram", purpose: "Canlı metin")
@@ -149,7 +149,9 @@ private struct KeyRow: View {
 
     private func delete() {
         do {
+            // Hem bu iPhone'daki hem Mac'ten gelen kopya silinir (yoksa Mac'inki "Kayıtlı" kalırdı).
             try deleteSecret(service: keychainService, account: account)
+            try deleteSyncedSecret(service: keychainService, account: account)
             refresh()
         } catch {
             errorMessage = userFacingMessage(error: error)
@@ -158,8 +160,11 @@ private struct KeyRow: View {
 
     private func refresh() {
         do {
-            isFromMac = try syncedSecretExists(service: keychainService, account: account)
-            isSaved = try secretExists(service: keychainService, account: account)
+            // "Mac'ten" yalnızca kullanılan kopya Mac'inkiyse (burada girilen öncelikli).
+            let hasLocal: Bool = try localSecretExists(service: keychainService, account: account)
+            let hasSynced: Bool = try syncedSecretExists(service: keychainService, account: account)
+            isFromMac = !hasLocal && hasSynced
+            isSaved = hasLocal || isFromMac
         } catch {
             errorMessage = userFacingMessage(error: error)
         }

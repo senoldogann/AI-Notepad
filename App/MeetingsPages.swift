@@ -298,6 +298,8 @@ private enum ExportStatus: Equatable {
     case none
     case saved(URL)
     case copied
+    /// Başka bir hedefe gönderildi (Apple Notlar, klasör): kısa onay metni.
+    case done(String)
     case failed(String)
     /// "Toplantıyı sil"e basıldı: satır içi onay bekleniyor (ayrı uyarı penceresi yok).
     case confirmDelete
@@ -670,6 +672,24 @@ struct MeetingDetailPage: View {
             Task { _ = await model.sendToWebhook(meetingID: record.id) }
         }
         .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
+        Button("Apple Notlar'a gönder", systemImage: "note.text") {
+            Task {
+                if let error = await model.sendToAppleNotes(meetingID: record.id) {
+                    export = .failed(error)
+                } else {
+                    export = .done(String(localized: "Notlar'daki \"AI-Notepad\" klasörüne yazıldı."))
+                }
+            }
+        }
+        .disabled(record.note == nil)
+        Button("Klasöre Markdown kaydet", systemImage: "folder") {
+            if let error = model.exportToFolder(meetingID: record.id) {
+                export = .failed(error)
+            } else {
+                export = .done(String(localized: "Seçili klasöre Markdown olarak yazıldı."))
+            }
+        }
+        .disabled(record.note == nil)
     }
 
     /// Yönetim: yeniden işleme ve silme (kilitliyken kapalı); silme satır içinde onay ister.
@@ -763,6 +783,10 @@ struct MeetingDetailPage: View {
             .appFont(size: 11, weight: .regular)
         case .copied:
             Label("Markdown panoya kopyalandı", systemImage: "checkmark.circle.fill")
+                .appFont(size: 11, weight: .regular)
+                .foregroundStyle(.tint)
+        case .done(let message):
+            Label(message, systemImage: "checkmark.circle.fill")
                 .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.tint)
         case .failed(let message):
@@ -1290,6 +1314,9 @@ private struct MyNotesCard: View {
                         }
                         .buttonStyle(.pillPrimary)
                         .controlSize(.small)
+                        // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
+                        .disabled(isLocked)
+                        .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
                     } else {
                         Button("Düzenle", systemImage: "pencil") {
                             draft = notes
