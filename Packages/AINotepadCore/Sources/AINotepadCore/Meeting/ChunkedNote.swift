@@ -303,7 +303,7 @@ private func saveProgress(progress: ChunkedNoteProgress, file: URL) {
     }
 }
 
-/// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
+/// Toplantı notunu yazar: kısa transkript tek istekte; uzunu sağlayıcının parça boyutunda (`noteLimits`) sırayla (her
 /// parça öncekilerin özetini ve görevlerini görür), sonra başlık ve genel özet. Her istek boş/bozuk yanıtta yeniden
 /// sorulur. Uzun notta her parçadan sonra ilerleme `progressFile`'a yazılır: bir parça kalıcı olarak başarısız olursa
 /// "Tekrar işle" yazılan parçaları yeniden ödemeden kaldığı yerden sürer; not bitince dosya silinir. Metin yoksa nil.
@@ -312,7 +312,8 @@ public func writeMeetingNote(
     progressFile: URL
 ) async throws -> MeetingNote? {
     let totalChars: Int = segments.map(\.text.count).reduce(0, +)
-    guard totalChars > noteChunkMaxChars else {
+    let limits: NoteLimits = noteLimits(provider: llm)
+    guard totalChars > limits.chunkChars else {
         guard let request = meetingNoteRequest(segments: segments, speakerNames: speakerNames, userName: userName, template: template, myNotes: myNotes) else {
             return nil
         }
@@ -321,16 +322,21 @@ public func writeMeetingNote(
         }
         return withNormalizedTasks(note: note, userName: userName)
     }
-    let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: noteChunkMaxChars)
-    let fingerprint: String = noteFingerprint(segments: segments, speakerNames: speakerNames, userName: userName + "\u{1F}" + myNotes, template: template)
+    let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: limits.chunkChars)
+    // Parça boyutu da parmak izine girer: sağlayıcı değişince parçalar farklıdır, kalınan yer geçersizdir.
+    let fingerprint: String = noteFingerprint(
+        segments: segments, speakerNames: speakerNames, userName: userName + "\u{1F}" + myNotes + "\u{1F}\(limits.chunkChars)", template: template
+    )
     let resumed: ChunkedNoteProgress? = loadedProgress(file: progressFile, fingerprint: fingerprint, partCount: chunks.count)
     if let resumed {
         noteLogger.info("Not kaldığı yerden sürüyor, parça: \(resumed.completedParts, privacy: .public)/\(chunks.count, privacy: .public)")
     }
     var state: ChunkedNoteState = resumed?.state ?? .empty
     for (index, chunk) in chunks.enumerated() where index >= resumed?.completedParts ?? 0 {
+        // Küçük bağlamlı modelde önceki parçaların özetleri kısaltılır (görev numaraları değişmez).
+        let promptState: ChunkedNoteState = limits.summaryChars.map { condensedNoteState(state: state, maxChars: $0) } ?? state
         let request: LLMRequest = noteChunkRequest(
-            chunk: chunk, part: index + 1, partCount: chunks.count, state: state, speakerNames: speakerNames, userName: userName,
+            chunk: chunk, part: index + 1, partCount: chunks.count, state: promptState, speakerNames: speakerNames, userName: userName,
             template: template, myNotes: myNotes
         )
         let part: NoteChunk = try await requestStructured(provider: llm, request: request) { (text: String) throws -> NoteChunk in
@@ -346,7 +352,8 @@ public func writeMeetingNote(
         saveProgress(progress: ChunkedNoteProgress(fingerprint: fingerprint, completedParts: index + 1, state: state), file: progressFile)
     }
     let finalState: ChunkedNoteState = state
-    let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: finalState, userName: userName, template: template, myNotes: myNotes)) { (text: String) throws -> MeetingNote in
+    let overviewState: ChunkedNoteState = limits.summaryChars.map { condensedNoteState(state: finalState, maxChars: $0) } ?? finalState
+    let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: overviewState, userName: userName, template: template, myNotes: myNotes)) { (text: String) throws -> MeetingNote in
         try parseNoteOverview(text: text, state: finalState)
     }
     do {
