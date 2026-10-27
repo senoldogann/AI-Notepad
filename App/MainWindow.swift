@@ -661,7 +661,7 @@ private struct ToolTiles: View {
             tile(title: "Kaydı başlat", symbol: "waveform", isEnabled: model.phase == .idle && model.isReadyToRecord) { onStartRecording() }
             tile(title: "Canlı panel", symbol: "rectangle.on.rectangle", isEnabled: true) { onShowPanel() }
             tile(title: "Toplantılar", symbol: "list.bullet.rectangle", isEnabled: true) { router.section = .meetings }
-            tile(title: "Dosya içe aktar", symbol: "square.and.arrow.down.on.square", isEnabled: true) {
+            tile(title: "İçe aktar", symbol: "square.and.arrow.down.on.square", isEnabled: true) {
                 router.section = .meetings
                 chooseMediaToImport(model: model)
             }

@@ -20,6 +20,12 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Bu bölüm yazıya dökülemedi.")
     case TranscriptionError.diarizationFailed:
         return String(localized: "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)")
+    case OllamaError.unreachable:
+        return String(localized: "Ollama'ya ulaşılamadı. Ollama uygulamasının açık olduğunu ve adresin doğru olduğunu kontrol et.")
+    case OllamaError.http(_, let status, _):
+        return String(localized: "Ollama isteği reddetti (HTTP \(status)). Adresi ve Ollama sürümünü kontrol et.")
+    case OllamaError.malformed:
+        return String(localized: "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.")
     case let urlError as URLError:
         return String(localized: "Ağ hatası (\(urlError.code.rawValue)); internet bağlantını kontrol et ve tekrar dene.")
     default:
