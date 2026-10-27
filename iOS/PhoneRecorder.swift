@@ -1,6 +1,7 @@
 import ActivityKit
 import AINotepadCore
 import AINotepadUI
+import BackgroundTasks
 import Foundation
 import os
 import UIKit
@@ -72,6 +73,10 @@ final class PhoneRecorder {
     @ObservationIgnored private var activity: Activity<RecordingActivityAttributes>?
     /// Süren arka plan görevleri (anahtar: toplantı kimliği): kayıt kapanışı ve işleme uygulama arka plandayken sürsün.
     @ObservationIgnored private var backgroundTasks: [String: UIBackgroundTaskIdentifier] = [:]
+    /// Sistemin ilerleme arayüzüyle süren işleme görevleri (anahtar: toplantı kimliği).
+    @ObservationIgnored private var continuedTasks: [String: BGContinuedProcessingTask] = [:]
+    /// Süren işlemeler (anahtar: toplantı kimliği): sistem görevi sona erince iptal edilir.
+    @ObservationIgnored private var processingTasks: [String: Task<Void, Never>] = [:]
     /// Canlı etkinlik en fazla bu sıklıkta güncellenir (sistem sık güncellemeyi kısar).
     @ObservationIgnored private var lastActivityUpdate: Date = .distantPast
 
@@ -163,8 +168,11 @@ final class PhoneRecorder {
         }
         phase = .finishing
         // Kapanış (son ses, son konuşmacı etiketleri, bekleyen çeviriler) uygulama arka plana geçse de bitsin.
-        if let id = active?.directory.lastPathComponent {
+        if let recording = active {
+            let id: String = recording.directory.lastPathComponent
             beginBackgroundTask(id: id)
+            // Sistem görevi kullanıcının "Bitir" anında istenir: istek yalnızca uygulama öndeyken kabul edilir.
+            submitContinuedProcessing(id: id, subtitle: continuedProcessingSubtitle(title: String(localized: "Toplantı"), startedAt: recording.startedAt))
         }
         levels.stop()
         microphone.stop()
@@ -218,6 +226,7 @@ final class PhoneRecorder {
                 let directory: URL = try store.sessionDirectory(id: record.id)
                 Self.logger.info("Yarıda kalan toplantı yeniden işleniyor, toplantı: \(record.id, privacy: .public)")
                 process(record: record.with(status: .processing, failureMessage: nil), directory: directory, keys: keys)
+                submitContinuedProcessing(id: record.id, subtitle: continuedProcessingSubtitle(title: record.title, startedAt: record.startedAt))
             } catch {
                 errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             }
@@ -327,25 +336,42 @@ final class PhoneRecorder {
         process(record: record, directory: finished.directory, keys: finished.keys)
     }
 
-    /// Toplantıyı işler (ses, son geçiş, not) ve saklar. Uygulama arka plana geçerse iOS'tan ek süre istenir; süre
-    /// yetmezse toplantı açılışta yeniden işlenir (`resumeUnfinished`).
+    /// Toplantıyı işler (ses, son geçiş, not) ve saklar. Uygulama arka plana geçerse iOS'tan ek süre istenir ve varsa
+    /// sürdürülen işleme görevinin ilerlemesi güncellenir; süre yetmezse toplantı açılışta yeniden işlenir
+    /// (`resumeUnfinished`). Aynı toplantı aynı anda iki kez işlenmez (çift ücret, aynı dosyaya iki yazar).
     private func process(record: MeetingRecord, directory: URL, keys: ProcessingKeys) {
+        guard processingSteps[record.id] == nil else {
+            Self.logger.warning("Toplantı zaten işleniyor, ikinci işleme başlatılmadı, toplantı: \(record.id, privacy: .public)")
+            return
+        }
         saveRecord(record: record, directory: directory)
         processingSteps[record.id] = .convertingAudio
         beginBackgroundTask(id: record.id)
         let finalPass: FinalPassPlan = keys.elevenLabs.map { (key: String) -> FinalPassPlan in
             .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: []))
         } ?? .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
-        Task {
+        processingTasks[record.id] = Task {
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: finalPass, llm: keys.llm,
                 languageMode: record.language.map { LanguageMode.fixed($0) } ?? .automatic, userName: phoneUserName(),
                 voiceEmbedder: nil, registry: []
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
+                self.continuedTasks[record.id]?.progress.completedUnitCount = continuedProcessingCompletedUnits(step: step)
+            }
+            processingTasks[record.id] = nil
+            guard !Task.isCancelled else {
+                // Sistem görevi sona erdi: yarım sonuç saklanmaz; toplantı diskte `processing` kalır ve açılışta
+                // kaldığı yerden işlenir (`resumeUnfinished`).
+                Self.logger.warning("İşleme iptal edildi, toplantı açılışta yeniden işlenecek, toplantı: \(record.id, privacy: .public)")
+                processingSteps[record.id] = nil
+                endBackgroundTask(id: record.id)
+                return
             }
             saveRecord(record: result, directory: directory)
             processingSteps[record.id] = nil
+            // iCloud'a taşıma sistem görevine bağlanmaz (yarıda iptal edilmesin); arka plan süresiyle sürer.
+            finishContinuedTask(meetingID: record.id, success: result.status == .done)
             if result.status == .done {
                 await store.cloud.moveFinishedMeetings(excluding: busyMeetingIDs.union([store.playingMeetingID].compactMap { $0 })) { [store] in store.reload() }
             }
@@ -375,6 +401,89 @@ final class PhoneRecorder {
             return
         }
         UIApplication.shared.endBackgroundTask(task)
+    }
+
+    // MARK: Sürdürülen işleme
+
+    /// Toplantının işlenmesi için iOS'tan sürdürülen işleme görevi ister: uygulamadan çıkılsa da işleme sistemin
+    /// ilerleme arayüzüyle sürer. İstek reddedilirse (desteklenmiyor, kullanıcı arka plan çalışmasını kapattı, uygulama
+    /// önde değil, sistem yoğun) uyarı loglanır ve işleme arka plan süresiyle (`beginBackgroundTask`) sürer; süre
+    /// yetmezse açılışta yeniden işlenir.
+    private func submitContinuedProcessing(id: String, subtitle: String) {
+        let identifier: String = continuedProcessingIdentifier(suffix: UUID().uuidString)
+        // Joker kalıbın (`<önek>.*`) kendisine işleyici kaydedilemez; her istek kendi tekil kimliğiyle kaydedilir.
+        // Sürdürülen işleme görevleri açılış bittikten sonra da kaydedilebilir. İşleyici ana kuyrukta (ana aktörde)
+        // çalışır.
+        let registered: Bool = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { [weak self] (task: BGTask) -> Void in
+            guard let self else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self.attachContinuedTask(task: task, meetingID: id)
+        }
+        guard registered else {
+            Self.logger.warning("Sürdürülen işleme görevi kaydedilemedi, işleme arka plan süresiyle sürecek, toplantı: \(id, privacy: .public), görev: \(identifier, privacy: .public)")
+            return
+        }
+        let request: BGContinuedProcessingTaskRequest = BGContinuedProcessingTaskRequest(
+            identifier: identifier, title: String(localized: "Not hazırlanıyor"), subtitle: subtitle
+        )
+        // Sistem yoğunsa istek sıraya girer; işleme o arada uygulamada sürer, görev başlayınca ona bağlanır.
+        request.strategy = .queue
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            Self.logger.info("Sürdürülen işleme görevi istendi, toplantı: \(id, privacy: .public), görev: \(identifier, privacy: .public)")
+        } catch {
+            Self.logger.warning("Sürdürülen işleme görevi reddedildi, işleme arka plan süresiyle sürecek, toplantı: \(id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Sistem görevi başladı: toplantının işlenmesine bağlanır (ilerleme, süre dolunca iptal). İşleme görev başlamadan
+    /// bittiyse görev hemen tamamlanır.
+    private func attachContinuedTask(task: BGTask, meetingID: String) {
+        guard let continued = task as? BGContinuedProcessingTask else {
+            Self.logger.error("Beklenmeyen arka plan görevi türü, görev: \(task.identifier, privacy: .public)")
+            task.setTaskCompleted(success: false)
+            return
+        }
+        // Kapanış (mikrofon kapandı, oturum bitiyor) ya da işleme sürüyor.
+        let running: Bool = processingSteps[meetingID] != nil || active?.directory.lastPathComponent == meetingID
+        guard running else {
+            let success: Bool = store.meetings.first { (record: MeetingRecord) -> Bool in record.id == meetingID }?.status == .done
+            Self.logger.info("İşleme sistem görevi başlamadan bitti, toplantı: \(meetingID, privacy: .public)")
+            continued.setTaskCompleted(success: success)
+            return
+        }
+        continued.progress.totalUnitCount = continuedProcessingTotalUnits
+        continued.progress.completedUnitCount = continuedProcessingCompletedUnits(step: processingSteps[meetingID])
+        // Sistem işleyiciyi hangi kuyrukta çağıracağını belirtmez: ana aktöre geçilir.
+        continued.expirationHandler = { @Sendable [weak self] () -> Void in
+            Task { @MainActor in
+                self?.expireContinuedTask(meetingID: meetingID)
+            }
+        }
+        continuedTasks[meetingID] = continued
+        Self.logger.info("Sürdürülen işleme görevi başladı, toplantı: \(meetingID, privacy: .public)")
+    }
+
+    /// Sistem görevinin süresi doldu ya da kullanıcı onu sistem arayüzünden durdurdu: işleme iptal edilir, toplantı
+    /// `processing` kalır ve açılışta yeniden işlenir (`resumeUnfinished`).
+    private func expireContinuedTask(meetingID: String) {
+        guard let task = continuedTasks.removeValue(forKey: meetingID) else {
+            return
+        }
+        Self.logger.warning("Sürdürülen işleme sona erdi, işleme iptal ediliyor, toplantı: \(meetingID, privacy: .public)")
+        processingTasks[meetingID]?.cancel()
+        task.setTaskCompleted(success: false)
+    }
+
+    /// İşleme bitti: varsa sistem görevi tamamlanır.
+    private func finishContinuedTask(meetingID: String, success: Bool) {
+        guard let task = continuedTasks.removeValue(forKey: meetingID) else {
+            return
+        }
+        task.progress.completedUnitCount = continuedProcessingTotalUnits
+        task.setTaskCompleted(success: success)
     }
 
     // MARK: Canlı etkinlik
@@ -587,6 +696,28 @@ private func finishedAudioStream() -> AsyncStream<[Float]> {
     let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     continuation.finish()
     return stream
+}
+
+/// Sürdürülen işleme görevlerinin kimlik öneki; Info.plist'teki `BGTaskSchedulerPermittedIdentifiers` joker kalıbı
+/// (`<önek>.*`, project.yml) ile aynı olmalı.
+private let continuedProcessingIdentifierPrefix: String = "com.senoldogan.AINotepad.process"
+
+/// Sürdürülen işleme görevinin tekil kimliği. Saf fonksiyondur.
+private func continuedProcessingIdentifier(suffix: String) -> String {
+    "\(continuedProcessingIdentifierPrefix).\(suffix)"
+}
+
+/// Sistem ilerlemesinin toplam birimi: işleme adımları (ses, son geçiş, not).
+private let continuedProcessingTotalUnits: Int64 = Int64(ProcessingStep.allCases.count)
+
+/// Adım başladığında tamamlanmış birim (önceki adımlar); işleme başlamadıysa 0. Saf fonksiyondur.
+private func continuedProcessingCompletedUnits(step: ProcessingStep?) -> Int64 {
+    Int64(step?.rawValue ?? 0)
+}
+
+/// Sistem görevinin alt başlığı: toplantının adı ve başlangıç saati ("Toplantı · 14:30"). Saf fonksiyondur.
+private func continuedProcessingSubtitle(title: String, startedAt: Date) -> String {
+    "\(title) · \(startedAt.formatted(date: .omitted, time: .shortened))"
 }
 
 /// Canlı etkinliğin eskimiş sayılma süresi: kayıt 30 sn'de bir tazeler; uygulama kapanırsa kilit ekranında saymayı
