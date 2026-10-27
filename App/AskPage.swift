@@ -408,27 +408,32 @@ private struct AskIntro: View {
     var body: some View {
         let minutes: Int = meetings.compactMap { meetingDurationMinutes(record: $0) }.reduce(0, +)
         VStack(alignment: .leading, spacing: 22) {
-            // Doküman gibi sade giriş: başlık, kısa açıklama ve arşivin büyüklüğü.
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Toplantılarına sor")
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.5)
-                    .foregroundStyle(Theme.ink)
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
-                    .appFont(size: 14, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("\(meetings.count) toplantı · \(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+            GradientBanner(palette: .violet, seed: "ask") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .appFont(size: 22, weight: .medium)
+                        .foregroundStyle(.white.opacity(0.9))
+                    Text("Toplantılarına sor")
+                        .appFont(size: 34, weight: .regular)
+                        .tracking(-0.6)
+                        .foregroundStyle(.white)
+                    Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(.white.opacity(0.82))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        IntroStat(text: Text("\(meetings.count) toplantı"))
+                        IntroStat(text: Text("\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"))
+                    }
+                    .padding(.top, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 24)
             Text("ÖRNEK SORULAR")
                 .appFont(size: 11, weight: .semibold)
                 .tracking(DesignTokens.labelTracking)
                 .foregroundStyle(Theme.muted)
-            VStack(spacing: 8) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in
                     ExampleQuestionCard(
                         symbol: item.element.symbol, question: LocalizedStringKey(item.element.text), hint: exampleHint,
@@ -442,3 +447,17 @@ private struct AskIntro: View {
     }
 }
 
+/// Giriş bannerındaki küçük cam etiket.
+private struct IntroStat: View {
+    let text: Text
+
+    var body: some View {
+        text
+            .appFont(size: 12, weight: .medium)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.white.opacity(0.16), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.22)))
+    }
+}

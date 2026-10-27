@@ -60,11 +60,12 @@ struct TasksTab: View {
                             }
                         } else if doneCount > 0 {
                             EmptyStateHero(
-                                symbol: "checkmark", title: "Açık görevin kalmadı",
+                                symbol: "party.popper.fill", title: "Açık görevin kalmadı",
                                 message: "Hepsi tamamlandı. Yeni toplantılarda sana düşen işler buraya gelir.", palette: .sunset, steps: []
                             ) {
                                 EmptyView()
                             }
+                            .overlay { ConfettiBurst(palette: .sunset) }
                         } else {
                             EmptyStateHero(
                                 symbol: "checklist", title: "Henüz sana düşen görev yok",
