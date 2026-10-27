@@ -7,6 +7,7 @@ Tasarım: `docs/superpowers/specs/`. Planlar: `docs/superpowers/plans/`.
 
 - `Packages/AINotepadCore/` — tüm mantık (Swift paketi). Testler buradadır.
 - `App/` — yalnızca SwiftUI/AppKit arayüzü ve yaşam döngüsü.
+- `iOS/` — iPhone uygulaması (SwiftUI); aynı paketi kullanır.
 - `project.yml` — XcodeGen tanımı; `AINotepad.xcodeproj` üretilir, repoya girmez.
 - İmzalama: `Config/Local.xcconfig.example` dosyasını `Config/Local.xcconfig` olarak kopyalayıp `DEVELOPMENT_TEAM` yaz.
 
@@ -17,6 +18,10 @@ xcodegen generate
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug \
   -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64' build -quiet
 swift test --package-path Packages/AINotepadCore                              # hızlı testler
+xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debug \
+  -derivedDataPath .build/xcode-ios -destination 'platform=iOS Simulator,name=iPhone 17' build -quiet   # iPhone uygulaması
+(cd Packages/AINotepadCore && xcodebuild test -scheme AINotepadCore-Package \
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet)                # çekirdek testleri iOS'ta
 AINOTEPAD_MODEL_TESTS=1 swift test --package-path Packages/AINotepadCore      # + gerçek WhisperKit modeli (~630 MB indirir)
 AINOTEPAD_CLOUD_TESTS=1 AINOTEPAD_SCENARIO_TESTS=1 swift test --package-path Packages/AINotepadCore --filter LLMScenarioTests  # pahalı: uzun toplantı × her model × max effort
 scripts/make-test-fixtures.sh                                                 # test seslerini yeniden üretir

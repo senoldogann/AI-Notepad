@@ -1,3 +1,5 @@
+// Sistem sesi yakalama (Core Audio süreç musluğu) yalnızca macOS'ta var; iPhone başka uygulamaların sesini yakalayamaz.
+#if os(macOS)
 import AVFoundation
 import CoreAudio
 import Foundation
@@ -343,3 +345,4 @@ private func tapFormat(tapID: AudioObjectID) throws -> AudioStreamBasicDescripti
     try check(status: AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &description), operation: "TapFormat")
     return description
 }
+#endif

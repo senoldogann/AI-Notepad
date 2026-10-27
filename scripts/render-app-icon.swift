@@ -3,15 +3,18 @@
 // 824'lük yuvarlak köşeli gövde, çevresinde saydam pay ve hafif gölge. Tam kare (kenara taşan) simgeyi macOS 26
 // standart şekil saymaz, küçültüp gri bir çerçeveye koyar (Dock'ta logo görünmez olur). Açılış ekranındaki işaret
 // (`AppMark`) aynı ölçüleri kullanır.
-// Kullanım: swift scripts/render-app-icon.swift <çıktı.png>
+// Kullanım: swift scripts/render-app-icon.swift <çıktı.png> <mac|ios>
+// ios: iPhone simgesi kenara kadar kare çizilir (iOS köşeleri kendi maskesiyle yuvarlar).
 import AppKit
 import CoreGraphics
 import Foundation
 
 let canvas: CGFloat = 1024
-/// Gövde: Apple ızgarasında 824×824, her yanda 100 pt saydam pay; köşe yarıçapı gövdenin ~%22,4'ü.
-let body: CGRect = CGRect(x: 100, y: 100, width: 824, height: 824)
-let cornerRadius: CGFloat = 185
+let isIOS: Bool = CommandLine.arguments[2] == "ios"
+/// Gövde: Apple'ın macOS ızgarasında 824×824, her yanda 100 pt saydam pay; köşe yarıçapı gövdenin ~%22,4'ü. iOS'ta tam
+/// kare.
+let body: CGRect = isIOS ? CGRect(x: 0, y: 0, width: 1024, height: 1024) : CGRect(x: 100, y: 100, width: 824, height: 824)
+let cornerRadius: CGFloat = isIOS ? 0 : 185
 let size: CGFloat = body.width
 let unit: CGFloat = size / 100
 let outputPath: String = CommandLine.arguments[1]

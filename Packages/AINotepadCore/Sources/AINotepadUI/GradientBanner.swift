@@ -51,7 +51,7 @@ private struct BannerPrimaryBody: View {
             .scaleEffect(configuration.isPressed ? 0.96 : (isHovering ? 1.03 : 1))
             .opacity(isEnabled ? 1 : 0.5)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
-            .pointerStyle(isEnabled ? .link : nil)
+            .linkPointer(isEnabled: isEnabled)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }

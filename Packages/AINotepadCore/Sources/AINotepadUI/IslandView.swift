@@ -80,7 +80,7 @@ public struct IslandView: View {
         .background(.black, in: islandShape)
         .contentShape(islandShape)
         .onTapGesture { onTap() }
-        .pointerStyle(.link)
+        .linkPointer(isEnabled: true)
         .contextMenu {
             Button("Kaydı durdur", systemImage: "stop.circle") { onStop() }
                 .disabled(!state.isRecording)

@@ -56,7 +56,7 @@ private struct CoverGlassBody: View {
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .opacity(isEnabled ? 1 : 0.45)
             .onHover { (hovering: Bool) -> Void in isHovering = hovering }
-            .pointerStyle(isEnabled ? .link : nil)
+            .linkPointer(isEnabled: isEnabled)
             .animation(.easeOut(duration: 0.12), value: isHovering)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }

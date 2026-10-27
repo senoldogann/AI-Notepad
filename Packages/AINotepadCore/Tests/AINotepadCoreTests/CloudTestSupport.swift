@@ -18,6 +18,7 @@ struct CloudKeyError: Error {
 /// Kullanıcının `security add-generic-password` ile kaydettiği anahtarı okur.
 /// `security` aracı öğeyi kendisi oluşturduğu için Keychain izin penceresi çıkmaz.
 func cloudKey(account: SecretAccount) throws -> String {
+    #if os(macOS)
     let process: Process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
     process.arguments = ["find-generic-password", "-s", keychainService, "-a", account.rawValue, "-w"]
@@ -31,4 +32,8 @@ func cloudKey(account: SecretAccount) throws -> String {
     }
     let data: Data = output.fileHandleForReading.readDataToEndOfFile()
     return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    #else
+    // iOS simülatöründe Mac'in Anahtar Zinciri okunamaz: bulut testleri Mac'te çalıştırılır.
+    throw CloudKeyError(account: account.rawValue, exitCode: -1)
+    #endif
 }

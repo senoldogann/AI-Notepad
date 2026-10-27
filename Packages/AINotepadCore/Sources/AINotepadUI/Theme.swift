@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 /// ElevenLabs tarzı tasarım değerleri (elevenlabs.io stil dosyalarından): süt beyazı ("eggshell") zemin, beyaz kartlar,
@@ -27,18 +31,22 @@ public enum Theme {
 
     /// Açık ve koyu görünüm için iki renkli dinamik renk.
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        #if os(macOS)
         Color(nsColor: NSColor(name: nil) { (appearance: NSAppearance) -> NSColor in
             let isDark: Bool = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            return srgb(hex: isDark ? dark : light)
+            return NSColor(srgbRed: red(hex: isDark ? dark : light), green: green(hex: isDark ? dark : light), blue: blue(hex: isDark ? dark : light), alpha: 1)
         })
+        #else
+        Color(uiColor: UIColor { (traits: UITraitCollection) -> UIColor in
+            let hex: UInt32 = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: red(hex: hex), green: green(hex: hex), blue: blue(hex: hex), alpha: 1)
+        })
+        #endif
     }
 
-    private static func srgb(hex: UInt32) -> NSColor {
-        NSColor(
-            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255, alpha: 1
-        )
-    }
+    private static func red(hex: UInt32) -> CGFloat { CGFloat((hex >> 16) & 0xFF) / 255 }
+    private static func green(hex: UInt32) -> CGFloat { CGFloat((hex >> 8) & 0xFF) / 255 }
+    private static func blue(hex: UInt32) -> CGFloat { CGFloat(hex & 0xFF) / 255 }
 }
 
 /// Seçili yazı tipi ailesinde (varsayılan Inter) verilen boyut ve ağırlık.
@@ -53,6 +61,16 @@ private struct AppFont: ViewModifier {
 }
 
 public extension View {
+    /// Mac'te tıklanabilir öğede el imleci (iPhone'da imleç yok, değişmez).
+    @ViewBuilder
+    func linkPointer(isEnabled: Bool) -> some View {
+        #if os(macOS)
+        pointerStyle(isEnabled ? .link : nil)
+        #else
+        self
+        #endif
+    }
+
     /// Ayarlar › Görünüm'deki yazı tipi ailesinde (varsayılan Inter) yazı.
     func appFont(size: CGFloat, weight: Font.Weight) -> some View {
         modifier(AppFont(size: size, weight: weight))
