@@ -184,6 +184,10 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var notesSentAt: Date?
     /// Kullanıcının toplantıda (ya da sonradan) kendi yazdığı notlar; not bunları öncelik sayar. Eski toplantılarda nil.
     public private(set) var myNotes: String?
+    /// Notun gönderildiği hedeflerin kimlikleri (`NoteDestination.id`); kendiliğinden gönderim aynı hedefe yinelenmez.
+    public private(set) var sentDestinationIDs: [String]?
+    /// Görev aracına (Linear, Jira) gönderilen görevler: araç kimliği → görev kimlikleri (`taskKey`).
+    public private(set) var sentTaskKeys: [String: [String]]?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -210,6 +214,25 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     }
 
     /// Apple Notlar'a gönderildi işaretli kopya.
+    /// Hedefe gönderildi işaretli kopya (yinelenmez).
+    public func markingSent(destinationID: String) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        let current: [String] = sentDestinationIDs ?? []
+        copy.sentDestinationIDs = current.contains(destinationID) ? current : current + [destinationID]
+        return copy
+    }
+
+    /// Görev araca gönderildi işaretli kopya.
+    public func markingTaskSent(trackerID: String, task: NoteTask) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        var all: [String: [String]] = sentTaskKeys ?? [:]
+        let key: String = taskKey(task: task)
+        let keys: [String] = all[trackerID] ?? []
+        all[trackerID] = keys.contains(key) ? keys : keys + [key]
+        copy.sentTaskKeys = all
+        return copy
+    }
+
     public func with(notesSentAt newDate: Date) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.notesSentAt = newDate

@@ -10,8 +10,12 @@ public enum SecretAccount: String, Sendable, CaseIterable {
     case openai
     /// Not hazır olunca gönderilen webhook adresi (Slack, Teams, Discord, Zapier, Make, n8n); adreste gizli anahtar var.
     case webhook
-    /// Hesapla kurulan kanal bağlantısı (Slack ya da Teams jetonları ve seçilen kanal; JSON, bkz. `ChannelConnection`).
+    /// Eski sürümün tek kanal bağlantısı (Slack ya da Teams); açılışta `destinations`'a taşınır.
     case channel
+    /// Notun gönderildiği hedefler (hesap bağlantıları, webhook adresleri, Notion; JSON, bkz. `NoteDestination`).
+    case destinations
+    /// Görev araçları (Linear, Jira; JSON, bkz. `TaskTracker`).
+    case taskTrackers
 }
 
 /// Uygulamanın Keychain servis adı.

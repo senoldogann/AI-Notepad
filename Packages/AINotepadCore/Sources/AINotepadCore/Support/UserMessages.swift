@@ -38,6 +38,16 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
     case let error as ChannelAuthError:
         return channelMessage(error: error)
+    case let error as MCPRemoteError:
+        return mcpRemoteMessage(error: error)
+    case DestinationError.notFound:
+        return String(localized: "Bu bağlantı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.")
+    case DestinationError.notAnAccount:
+        return String(localized: "Bu bağlantıda kanal seçilmez.")
+    case TaskTrackerError.unfinished(let service, let summary):
+        return String(localized: "\(service) görevleri bitiremedi: \(summary)")
+    case TaskTrackerError.invalidArguments(let service, let tool):
+        return String(localized: "\(service) için geçersiz istek üretildi (\(tool)); yeniden dene.")
     case MCPConfigError.invalidConfig(let path, _):
         return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
     case MCPConfigError.hasComments(let path):
@@ -79,6 +89,27 @@ private func channelMessage(error: ChannelAuthError) -> String {
         String(localized: "\(service.displayName) oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.")
     case .noChannels(let service):
         String(localized: "\(service.displayName) hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.")
+    }
+}
+
+private func mcpRemoteMessage(error: MCPRemoteError) -> String {
+    switch error {
+    case .noAuthorizationMetadata(let server), .noDynamicRegistration(let server):
+        String(localized: "\(server) tek tıkla girişi desteklemiyor.")
+    case .http(let server, let status, _):
+        String(localized: "\(server) isteği reddetti (HTTP \(status)). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
+    case .network(let server, _):
+        String(localized: "\(server) adresine ulaşılamadı; internet bağlantını kontrol et.")
+    case .invalidResponse(let server, _), .rpc(let server, _, _):
+        String(localized: "\(server) yanıtı anlaşılamadı; yeniden dene.")
+    case .toolFailed(let server, let tool, let message):
+        String(localized: "\(server) işlemi yapamadı (\(tool)): \(message)")
+    case .toolMissing(let server, let tool):
+        String(localized: "\(server) beklenen aracı (\(tool)) artık sunmuyor; uygulamayı güncelle.")
+    case .expired(let server):
+        String(localized: "\(server) oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.")
+    case .denied(let server, let reason):
+        String(localized: "\(server) girişi tamamlanmadı: \(reason)")
     }
 }
 

@@ -467,16 +467,8 @@ struct MeetingDetailPage: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
-        switch model.webhookStates[record.id] {
-        case .sending:
-            Label("Kanala gönderiliyor…", systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .sent:
-            Label("Not kanala gönderildi", systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
-        case nil:
-            EmptyView()
-        }
+        sendStatus(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
+        sendStatus(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
                 .appFont(size: 12, weight: .regular)
@@ -703,10 +695,47 @@ struct MeetingDetailPage: View {
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
-        Button("Kanala gönder (Slack, Teams, Discord…)", systemImage: "paperplane") {
-            Task { _ = await model.sendToWebhook(meetingID: record.id) }
+        // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
+        Menu("Kanala gönder", systemImage: "paperplane") {
+            if model.destinations.isEmpty {
+                Text("Ayarlar › Bağlantılar'dan kanal ekle")
+            } else {
+                ForEach(model.destinations) { (destination: NoteDestination) in
+                    let sent: Bool = (record.sentDestinationIDs ?? []).contains(destination.id)
+                    Button {
+                        Task { await model.sendNote(meetingID: record.id, destinationIDs: [destination.id]) }
+                    } label: {
+                        Label(
+                            "\(destinationName(destination: destination)) · \(destinationDetail(destination: destination))",
+                            systemImage: sent ? "checkmark" : "paperplane"
+                        )
+                    }
+                }
+                if model.destinations.count > 1 {
+                    Divider()
+                    Button("Hepsine gönder") {
+                        Task { await model.sendNote(meetingID: record.id, destinationIDs: model.destinations.map(\.id)) }
+                    }
+                }
+            }
         }
         .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
+        // Görevleri Linear ya da Jira'da iş olarak açar.
+        Menu("Görevleri gönder", systemImage: "checklist") {
+            if model.taskTrackers.isEmpty {
+                Text("Ayarlar › Bağlantılar › Görev araçları'ndan Linear ya da Jira bağla")
+            } else {
+                ForEach(model.taskTrackers) { (tracker: TaskTracker) in
+                    Button("Bana düşenleri \(tracker.service.displayName)'e gönder") {
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: true) }
+                    }
+                    Button("Tüm görevleri \(tracker.service.displayName)'e gönder") {
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: false) }
+                    }
+                }
+            }
+        }
+        .disabled((record.note?.tasks ?? []).isEmpty || model.trackerStates[record.id] == .sending)
         Button("Apple Notlar'a gönder", systemImage: "note.text") {
             Task {
                 if let error = await model.sendToAppleNotes(meetingID: record.id) {
@@ -776,6 +805,26 @@ struct MeetingDetailPage: View {
         .disabled(isLocked || record.audioDeleted)
         Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
             .disabled(isLocked)
+    }
+
+    /// Gönderim durumu satırı (kanal ya da görev aracı).
+    @ViewBuilder
+    private func sendStatus(state: WebhookSendState?, sending: LocalizedStringKey, sent: LocalizedStringKey) -> some View {
+        switch state {
+        case .sending:
+            Label(sending, systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .sent:
+            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .done(let summary):
+            Label(summary, systemImage: "checkmark.circle")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+        case nil:
+            EmptyView()
+        }
     }
 
     /// Paylaşılacak metin: seçili dildeki not (paylaşım sürümü henüz yoksa Türkçe); not yoksa nil.

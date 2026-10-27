@@ -1612,178 +1612,147 @@ final class AppModel {
         return nil
     }
 
-    // MARK: Webhook
+    // MARK: Not hedefleri (kanallar, webhook, Notion)
 
-    /// Toplantı başına webhook gönderiminin durumu (toplantı sayfasında görünür).
+    /// Toplantı başına gönderimin durumu (toplantı sayfasında görünür).
     var webhookStates: [String: WebhookSendState] = [:]
+    /// Bağlı not hedefleri (Ayarlar › Bağlantılar); birden çok olabilir.
+    private(set) var destinations: [NoteDestination] = []
+    /// Görev araçları (Linear, Jira).
+    private(set) var taskTrackers: [TaskTracker] = []
+    /// Toplantı başına görev gönderiminin durumu.
+    var trackerStates: [String: WebhookSendState] = [:]
 
-    /// Ayarlardaki webhook adresi (Anahtar Zinciri); yoksa ya da geçersizse hata.
-    private func configuredWebhookURL() async throws -> URL {
-        try webhookURL(text: try await readSecretInBackground(service: keychainService, account: .webhook))
+    /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
+    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: keychainService, account: .destinations) {
+        (connection: ChannelConnection) async throws -> ChannelConnection in
+        try await refreshConnectionTokens(connection: connection)
+    }
+    /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
+    @ObservationIgnored private var autoSendRunning: Bool = false
+
+    /// Hedefleri ve görev araçlarını yükler; eski sürümün tek bağlantısı (hesap ya da webhook) bir kez hedeflere taşınır.
+    func loadDestinations() async {
+        do {
+            try await migrateLegacyChannelIfNeeded()
+            destinations = try await destinationVault.all()
+            taskTrackers = try await Task.detached { try loadTaskTrackers(service: keychainService) }.value
+        } catch {
+            Self.logger.error("Hedefler okunamadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bağlantılar okunamadı: \(userFacingMessage(error: error))"))
+        }
     }
 
-    /// Bağlantıyı okuyup gerekirse yenileyen tek görev: aynı anda gelen gönderimler aynı görevi bekler (Slack yenileme
-    /// jetonu tek kullanımlık; iki yenileme ikincisini "oturum bitti"ye düşürüyordu).
-    @ObservationIgnored private var connectionLoad: Task<ChannelConnection?, any Error>?
-    /// Bağlantı her kurulduğunda ya da kaldırıldığında artar: eski bağlantının yenilemesi yenisinin üstüne yazılmaz,
-    /// kaldırılan bağlantı geri gelmez.
-    @ObservationIgnored private var channelGeneration: Int = 0
-    /// Kanal oturumu bitti (yenileme reddedildi): Ayarlar "Yeniden bağlan" gösterir.
-    private(set) var channelNeedsReconnect: Bool = false
-
-    /// Hesapla kurulan kanal bağlantısı (yoksa nil); jetonun süresi bitmek üzereyse (ya da `force`) yenilenip Anahtar
-    /// Zinciri'ne yazılır.
-    private func currentChannelConnection(forceRefresh: Bool) async throws -> ChannelConnection? {
-        if let connectionLoad, !forceRefresh {
-            return try await connectionLoad.value
-        }
-        let generation: Int = channelGeneration
-        let load: Task<ChannelConnection?, any Error> = Task { [weak self] () throws -> ChannelConnection? in
-            guard let stored = try await optionalSecretInBackground(service: keychainService, account: .channel) else {
-                return nil
-            }
-            let connection: ChannelConnection = try decodeChannelConnection(text: stored)
-            guard forceRefresh || needsRefresh(tokens: connection.tokens, now: Date()) else {
-                return connection
-            }
-            let fresh: ChannelConnection
-            do {
-                fresh = try await refreshConnectionTokens(connection: connection)
-            } catch ChannelAuthError.expired(let service) {
-                await MainActor.run { self?.channelNeedsReconnect = true }
-                throw ChannelAuthError.expired(service: service)
-            }
-            // Yenileme sürerken bağlantı kaldırıldı ya da değişti: eski bağlantı geri yazılmaz.
-            guard await MainActor.run(body: { self?.channelGeneration == generation }) else {
-                return nil
-            }
-            try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: fresh))
-            return fresh
-        }
-        connectionLoad = load
-        defer {
-            if connectionLoad == load {
-                connectionLoad = nil
-            }
-        }
-        return try await load.value
-    }
-
-    /// Notu bağlı kanala gönderir: hesapla kurulan bağlantı (Slack, Teams) varsa ona, yoksa webhook adresine. Erişim
-    /// jetonu süresinden önce geri alındıysa (401) bir kez yenileyip yeniden dener.
-    private func deliverToChannel(record: MeetingRecord, note: MeetingNote) async throws {
-        if let connection = try await currentChannelConnection(forceRefresh: false) {
-            do {
-                try await postNote(connection: connection, record: record, note: note)
-            } catch ChannelAuthError.expired {
-                guard let fresh = try await currentChannelConnection(forceRefresh: true) else {
-                    return
-                }
-                try await postNote(connection: fresh, record: record, note: note)
-            }
-            channelNeedsReconnect = false
+    private func migrateLegacyChannelIfNeeded() async throws {
+        guard try await destinationVault.all().isEmpty else {
             return
         }
-        let url: URL = try await configuredWebhookURL()
-        try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
-    }
-
-    /// Hesapla kurulan bağlantıyı kaydeder; önceki bağlantı (webhook ya da hesap) servis tarafında da kapatılır.
-    func connectChannel(connection: ChannelConnection) async throws {
-        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
-        channelGeneration += 1
-        connectionLoad?.cancel()
-        connectionLoad = nil
-        try saveSecret(service: keychainService, account: .channel, value: try encodeChannelConnection(connection: connection))
-        try deleteSecret(service: keychainService, account: .webhook)
-        channelNeedsReconnect = false
-        await revokeDestinations(connection: previous.connection.flatMap { $0 == connection ? nil : $0 }, webhook: previous.webhook)
-    }
-
-    /// Webhook adresini kaydeder; önceki bağlantı servis tarafında da kapatılır.
-    func connectWebhook(url: URL) async throws {
-        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
-        channelGeneration += 1
-        connectionLoad?.cancel()
-        connectionLoad = nil
-        try saveSecret(service: keychainService, account: .webhook, value: url.absoluteString)
-        try deleteSecret(service: keychainService, account: .channel)
-        channelNeedsReconnect = false
-        await revokeDestinations(connection: previous.connection, webhook: previous.webhook.flatMap { $0 == url ? nil : $0 })
-    }
-
-    /// Kanal bağlantısını kaldırır: Slack jetonu geri alınır, Discord'da girişle oluşturulan webhook silinir.
-    func disconnectChannel() async throws {
-        let previous: (connection: ChannelConnection?, webhook: URL?) = try await storedChannelDestinations()
-        channelGeneration += 1
-        connectionLoad?.cancel()
-        connectionLoad = nil
-        try deleteSecret(service: keychainService, account: .channel)
-        try deleteSecret(service: keychainService, account: .webhook)
-        channelNeedsReconnect = false
-        await revokeDestinations(connection: previous.connection, webhook: previous.webhook)
-    }
-
-    /// Kayıtlı hesap bağlantısı ve webhook adresi.
-    private func storedChannelDestinations() async throws -> (connection: ChannelConnection?, webhook: URL?) {
         let connection: ChannelConnection? = try await optionalSecretInBackground(service: keychainService, account: .channel)
             .map { (text: String) throws -> ChannelConnection in try decodeChannelConnection(text: text) }
         let webhook: URL? = try await optionalSecretInBackground(service: keychainService, account: .webhook).flatMap { URL(string: $0) }
-        return (connection, webhook)
+        let migrated: [NoteDestination] = migratedDestinations(
+            connection: connection, webhook: webhook, autoSend: UserDefaults.standard.bool(forKey: SettingsKey.webhookAutoSend), now: Date()
+        ) { UUID().uuidString }
+        guard !migrated.isEmpty else {
+            return
+        }
+        for destination in migrated {
+            try await destinationVault.upsert(destination)
+        }
+        try deleteSecret(service: keychainService, account: .channel)
+        try deleteSecret(service: keychainService, account: .webhook)
+        Self.logger.info("Eski kanal bağlantısı hedeflere taşındı, sayı: \(migrated.count, privacy: .public)")
     }
 
-    /// Kaldırılan bağlantıları servis tarafında kapatır. Başarısızlık bağlantının kaldırılmasını engellemez (yerelde
-    /// zaten silindi); neden uyarı olarak loglanır ve kullanıcıya gösterilir.
-    private func revokeDestinations(connection: ChannelConnection?, webhook: URL?) async {
+    /// Yeni hedef ekler (kendiliğinden gönderim kapalı başlar; kullanıcı açar).
+    @discardableResult
+    func addDestination(target: DestinationTarget) async throws -> NoteDestination {
+        let destination: NoteDestination = NoteDestination(id: UUID().uuidString, target: target, autoSend: false, createdAt: Date(), needsReconnect: false)
+        try await destinationVault.upsert(destination)
+        destinations = try await destinationVault.all()
+        return destination
+    }
+
+    /// Hedefin bağlantısını değiştirir (kanalı değiştir, yeniden bağlan); kimliği ve ayarı korunur.
+    func replaceDestinationTarget(id: String, target: DestinationTarget) async throws {
+        guard let current = destinations.first(where: { $0.id == id }) else {
+            throw DestinationError.notFound(id: id)
+        }
+        try await destinationVault.upsert(current.with(target: target).with(needsReconnect: false))
+        destinations = try await destinationVault.all()
+    }
+
+    func setAutoSend(destinationID: String, enabled: Bool) async {
+        guard let current = destinations.first(where: { $0.id == destinationID }) else {
+            return
+        }
         do {
-            if let connection {
-                try await revokeChannelConnection(connection: connection)
-            }
-            if let webhook, webhookKind(url: webhook) == .discord {
-                try await deleteDiscordWebhook(url: webhook)
+            try await destinationVault.upsert(current.with(autoSend: enabled))
+            destinations = try await destinationVault.all()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Hedefi kaldırır; servis tarafında da kapatılır (Slack jetonu geri alınır, Discord webhook'u silinir). Servis
+    /// tarafı kapatılamazsa hedef yine kaldırılır, neden gösterilir.
+    func removeDestination(id: String) async {
+        do {
+            let removed: NoteDestination = try await destinationVault.remove(id: id)
+            destinations = try await destinationVault.all()
+            do {
+                try await revokeDestination(destination: removed)
+            } catch {
+                Self.logger.warning("Hedef servis tarafında kapatılamadı, hata: \(String(describing: error), privacy: .private)")
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Eski bağlantı servis tarafında kapatılamadı: \(userFacingMessage(error: error))"))
             }
         } catch {
-            Self.logger.warning("Eski kanal bağlantısı servis tarafında kapatılamadı, hata: \(String(describing: error), privacy: .private)")
-            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Eski bağlantı servis tarafında kapatılamadı: \(userFacingMessage(error: error))"))
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
     }
 
-    /// Kayıtlı Slack/Teams oturumuyla kanalları yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
-    func channelOptionsForCurrentConnection() async throws -> (signIn: ChannelSignIn, options: [ChannelOption])? {
-        guard let connection = try await currentChannelConnection(forceRefresh: false) else {
-            return nil
-        }
+    /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
+    func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
+        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID, force: false)
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
         return (signIn, try await listChannels(signIn: signIn))
     }
 
-    /// Toplantının notunu webhook'a gönderir; hata varsa kullanıcı metni döner.
-    func sendToWebhook(meetingID: String) async -> String? {
-        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
+    /// Notu bir hedefe gönderir; başarılıysa toplantıya işlenir (kendiliğinden gönderim yinelemez). Hata metni döner.
+    func sendNote(meetingID: String, destinationID: String) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
+              let destination = destinations.first(where: { $0.id == destinationID }) else {
             return nil
         }
-        webhookStates[meetingID] = .sending
         do {
-            try await deliverToChannel(record: record, note: note)
-            webhookStates[meetingID] = .sent
-            Self.logger.info("Not webhook'a gönderildi, toplantı: \(meetingID, privacy: .public)")
-            // El ile gönderilen not, sonradan yeniden işlenince kendiliğinden ikinci kez gönderilmesin.
-            if let current = meetings.first(where: { $0.id == meetingID }), current.webhookSentAt == nil, !isLocked(meetingID: meetingID) {
-                withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-                    saveRecord(record: current.with(webhookSentAt: Date()), directory: directory)
-                }
-            }
+            try await deliverNote(vault: destinationVault, destination: destination, record: record, note: note)
+            markSent(meetingID: meetingID, destinationID: destinationID)
+            Self.logger.info("Not hedefe gönderildi, toplantı: \(meetingID, privacy: .public), hedef: \(destinationName(destination: destination), privacy: .public)")
             return nil
         } catch {
-            Self.logger.error("Not webhook'a gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            let message: String = userFacingMessage(error: error)
-            webhookStates[meetingID] = .failed(message)
-            return message
+            Self.logger.error("Not hedefe gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
         }
     }
 
-    /// Ayarlardaki "Dene": örnek bir not gönderir.
-    func sendTestWebhook() async -> String? {
+    /// Notu verilen hedeflere sırayla gönderir; toplantı sayfasındaki durum güncellenir.
+    func sendNote(meetingID: String, destinationIDs: [String]) async {
+        webhookStates[meetingID] = .sending
+        var failures: [String] = []
+        for id in destinationIDs {
+            if let failure = await sendNote(meetingID: meetingID, destinationID: id) {
+                failures.append(failure)
+            }
+        }
+        await refreshDestinationList()
+        webhookStates[meetingID] = failures.isEmpty ? .sent : .failed(failures.joined(separator: "\n"))
+    }
+
+    /// Ayarlardaki "Dene": örnek notu hedefe gönderir.
+    func sendTestNote(destinationID: String) async -> String? {
+        guard let destination = destinations.first(where: { $0.id == destinationID }) else {
+            return nil
+        }
         let sample: MeetingRecord = MeetingRecord(
             id: "deneme", title: "AI-Notepad", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
             liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud,
@@ -1795,11 +1764,134 @@ final class AppModel {
             decisions: [], tasks: [], glossary: []
         )
         do {
-            try await deliverToChannel(record: sample, note: note)
+            try await deliverNote(vault: destinationVault, destination: destination, record: sample, note: note)
+            await refreshDestinationList()
             return nil
         } catch {
-            Self.logger.error("Webhook denemesi başarısız, hata: \(String(describing: error), privacy: .private)")
+            Self.logger.error("Hedef denemesi başarısız, hata: \(String(describing: error), privacy: .private)")
+            await refreshDestinationList()
             return userFacingMessage(error: error)
+        }
+    }
+
+    private func refreshDestinationList() async {
+        do {
+            destinations = try await destinationVault.all()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Gönderildi işareti: toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markSent(meetingID: String, destinationID: String) {
+        guard let current = meetings.first(where: { $0.id == meetingID }) else {
+            return
+        }
+        guard !isLocked(meetingID: meetingID) else {
+            pendingSentMarks[meetingID, default: []].insert(destinationID)
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: current.markingSent(destinationID: destinationID), directory: directory)
+        }
+    }
+
+    /// İşleme sürerken gönderilen hedefler; işleme bitince kayda işlenir.
+    @ObservationIgnored private var pendingSentMarks: [String: Set<String>] = [:]
+
+    /// Bekleyen kendiliğinden gönderimleri yapar: işleme bitince, açılışta ve saatte bir. Ağ yokken kaçanlar böylece
+    /// sonra gider; her (toplantı, hedef) bir kez gönderilir.
+    func processPendingAutoSends() async {
+        guard !autoSendRunning else {
+            return
+        }
+        autoSendRunning = true
+        defer { autoSendRunning = false }
+        await refreshDestinationList()
+        let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
+            .filter { !(pendingSentMarks[$0.meetingID] ?? []).contains($0.destinationID) && !isLocked(meetingID: $0.meetingID) }
+        for item in pending {
+            if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
+                errorMessages = appendUnique(messages: errorMessages, message: failure)
+            }
+        }
+        if !pending.isEmpty {
+            await refreshDestinationList()
+        }
+    }
+
+    /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler.
+    func connectNotion() async throws {
+        let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        }
+        try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
+    }
+
+    // MARK: Görev araçları (Linear, Jira)
+
+    /// Linear ya da Jira'ya tek tıkla bağlanır (tarayıcıda izin; uygulama kaydı ya da API anahtarı gerekmez).
+    func connectTracker(service: MCPService) async throws {
+        let connection: MCPConnection = try await signInToMCP(service: service) { (url: URL) async -> Void in
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        }
+        let tracker: TaskTracker = TaskTracker(id: UUID().uuidString, service: service, connection: connection, target: "")
+        try saveTrackers(taskTrackers.filter { $0.service != service } + [tracker])
+    }
+
+    func removeTracker(id: String) {
+        do {
+            try saveTrackers(taskTrackers.filter { $0.id != id })
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    func setTrackerTarget(id: String, target: String) {
+        do {
+            try saveTrackers(taskTrackers.map { $0.id == id ? $0.with(target: target.trimmingCharacters(in: .whitespacesAndNewlines)) : $0 })
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    private func saveTrackers(_ trackers: [TaskTracker]) throws {
+        try saveTaskTrackers(trackers: trackers, service: keychainService)
+        taskTrackers = trackers
+    }
+
+    /// Toplantının görevlerini araçta iş olarak açar (`onlyMine`: yalnız sana düşenler); daha önce gönderilenler
+    /// yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
+    func sendTasks(meetingID: String, trackerID: String, onlyMine: Bool) async {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
+              let tracker = taskTrackers.first(where: { $0.id == trackerID }) else {
+            return
+        }
+        let sent: [String] = record.sentTaskKeys?[trackerID] ?? []
+        let tasks: [NoteTask] = note.tasks.filter { (onlyMine ? $0.isMine : true) && !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
+        guard !tasks.isEmpty else {
+            trackerStates[meetingID] = .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış)."))
+            return
+        }
+        trackerStates[meetingID] = .sending
+        do {
+            let llm: LLMProvider = try await resolveLLMProvider()
+            let result: (summary: String, connection: MCPConnection) = try await sendTasksToTracker(tracker: tracker, tasks: tasks, meetingTitle: note.title, llm: llm)
+            if result.connection != tracker.connection {
+                try saveTrackers(taskTrackers.map { $0.id == trackerID ? $0.with(connection: result.connection) : $0 })
+            }
+            if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
+                let marked: MeetingRecord = tasks.reduce(current) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in
+                    result.markingTaskSent(trackerID: trackerID, task: task)
+                }
+                withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                    saveRecord(record: marked, directory: directory)
+                }
+            }
+            trackerStates[meetingID] = .done(result.summary)
+        } catch {
+            Self.logger.error("Görevler araca gönderilemedi, araç: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            trackerStates[meetingID] = .failed(String(localized: "\(tracker.service.displayName): \(userFacingMessage(error: error))"))
         }
     }
 
@@ -1851,7 +1943,7 @@ final class AppModel {
     /// İşleme bitince açık olan hedeflere kendiliğinden gönderir: webhook, Apple Notlar (bir kez) ve klasör (her
     /// seferinde güncellenir). Hata panelde görünür; gönderilenler toplantıya işlenir.
     private func autoSendToDestinations(record: MeetingRecord) {
-        autoSendToWebhookIfEnabled(record: record)
+        Task { await processPendingAutoSends() }
         guard record.note != nil else {
             return
         }
@@ -1875,25 +1967,15 @@ final class AppModel {
         }
     }
 
-    /// İşleme bitince: ayar açıksa ve not daha önce gönderilmediyse webhook'a kendiliğinden gönderir; başarılıysa
-    /// toplantıya işlenir (tekrar işlemede yeniden gönderilmez).
-    private func autoSendToWebhookIfEnabled(record: MeetingRecord) {
-        guard UserDefaults.standard.bool(forKey: SettingsKey.webhookAutoSend), record.note != nil, record.webhookSentAt == nil else {
-            return
-        }
-        Task {
-            // Gönderildi işareti `sendToWebhook` içinde yazılır.
-            _ = await sendToWebhook(meetingID: record.id)
-        }
-    }
-
     /// İşleme sürerken Anımsatıcılar'a eklenen görevler; işleme bitince kayda işlenir.
     @ObservationIgnored private var pendingReminded: [String: [NoteTask]] = [:]
 
     /// İşleme sonucuna bekleyen Anımsatıcılar işaretlerini uygular ve bekleyenleri temizler.
     private func applyingPendingReminders(record: MeetingRecord) -> MeetingRecord {
         let tasks: [NoteTask] = pendingReminded.removeValue(forKey: record.id) ?? []
-        return tasks.reduce(record) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
+        let sent: Set<String> = pendingSentMarks.removeValue(forKey: record.id) ?? []
+        let withSent: MeetingRecord = sent.sorted().reduce(record) { (result: MeetingRecord, id: String) -> MeetingRecord in result.markingSent(destinationID: id) }
+        return tasks.reduce(withSent) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
     }
 
     // MARK: Sesinden tanıma
@@ -2153,6 +2235,10 @@ final class AppModel {
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
     func performStartupMaintenance() {
         reloadMeetings()
+        Task {
+            await loadDestinations()
+            await processPendingAutoSends()
+        }
         loadVoices()
         loadPeople()
         loadRecipes()
@@ -2202,6 +2288,7 @@ final class AppModel {
                     return
                 }
                 self?.applyRetention()
+                await self?.processPendingAutoSends()
             }
         }
     }
@@ -2374,6 +2461,8 @@ private func fixedLanguage(mode: LanguageMode) -> MeetingLanguage? {
 enum WebhookSendState: Equatable {
     case sending
     case sent
+    /// Bitti, kısa özetle (ör. açılan Linear işleri).
+    case done(String)
     case failed(String)
 }
 

@@ -1,0 +1,558 @@
+import CryptoKit
+import Foundation
+import os
+
+/// Uzak MCP sunucusuna bağlantı (Streamable HTTP): sunucu adresi, dinamik kayıtla alınan istemci kimliği ve OAuth
+/// jetonları. Anahtar Zinciri'nde saklanır (jetonlar içerir).
+public struct MCPConnection: Sendable, Equatable, Codable {
+    public let serverURL: URL
+    /// Dinamik istemci kaydıyla (RFC 7591) sunucudan alınan istemci kimliği; uygulamaya gömülü değildir.
+    public let clientID: String
+    /// Jetonun alındığı yetkilendirme sunucusunun jeton adresi (yenileme için).
+    public let tokenEndpoint: URL
+    public let tokens: OAuthTokens
+
+    public init(serverURL: URL, clientID: String, tokenEndpoint: URL, tokens: OAuthTokens) {
+        self.serverURL = serverURL
+        self.clientID = clientID
+        self.tokenEndpoint = tokenEndpoint
+        self.tokens = tokens
+    }
+
+    public func with(tokens newTokens: OAuthTokens) -> MCPConnection {
+        MCPConnection(serverURL: serverURL, clientID: clientID, tokenEndpoint: tokenEndpoint, tokens: newTokens)
+    }
+}
+
+/// Bilinen uzak MCP sunucuları (resmi, uygulama kaydı gerektirmeyen OAuth'lu).
+public enum MCPService: String, Sendable, Codable, CaseIterable {
+    case notion
+    case linear
+    case atlassian
+
+    public var displayName: String {
+        switch self {
+        case .notion: "Notion"
+        case .linear: "Linear"
+        case .atlassian: "Jira"
+        }
+    }
+
+    public var serverURL: URL {
+        switch self {
+        // Sabit, geçerli adresler.
+        case .notion: URL(string: "https://mcp.notion.com/mcp")!
+        case .linear: URL(string: "https://mcp.linear.app/mcp")!
+        // v2: Atlassian'ın önerdiği adres; kimliksiz istekte OAuth keşif bilgisini (RFC 9728) verir.
+        case .atlassian: URL(string: "https://mcp.atlassian.com/v2/mcp")!
+        }
+    }
+}
+
+/// Uzak MCP hataları. Jetonlar hiçbir zaman hataya girmez.
+public enum MCPRemoteError: Error, Equatable {
+    /// Sunucu kimlik doğrulama istiyor ama yetkilendirme bilgisini (RFC 9728) vermedi.
+    case noAuthorizationMetadata(server: String)
+    /// Yetkilendirme sunucusu dinamik istemci kaydını desteklemiyor.
+    case noDynamicRegistration(server: String)
+    case http(server: String, status: Int, body: String)
+    case network(server: String, reason: String)
+    case invalidResponse(server: String, reason: String)
+    /// JSON-RPC hata yanıtı.
+    case rpc(server: String, code: Int, message: String)
+    /// Araç çağrısı hata döndü (`isError`).
+    case toolFailed(server: String, tool: String, message: String)
+    /// Beklenen araç sunucuda yok (araç adları değişmiş olabilir).
+    case toolMissing(server: String, tool: String)
+    /// Oturum bitti ya da geri alındı: yeniden bağlanmak gerekir.
+    case expired(server: String)
+    /// Kullanıcı tarayıcıda izin vermedi ya da dönüş başka bir girişe ait.
+    case denied(server: String, reason: String)
+}
+
+private let mcpRemoteLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MCPRemote")
+private let mcpProtocolVersion: String = "2025-06-18"
+
+// MARK: OAuth keşfi ve dinamik kayıt
+
+/// Yetkilendirme sunucusunun bilgileri (RFC 8414).
+public struct AuthorizationServerMetadata: Sendable, Equatable, Decodable {
+    public let issuer: String?
+    public let authorizationEndpoint: URL
+    public let tokenEndpoint: URL
+    public let registrationEndpoint: URL?
+
+    enum CodingKeys: String, CodingKey {
+        case issuer
+        case authorizationEndpoint = "authorization_endpoint"
+        case tokenEndpoint = "token_endpoint"
+        case registrationEndpoint = "registration_endpoint"
+    }
+}
+
+private struct ProtectedResourceMetadata: Decodable {
+    let authorizationServers: [URL]
+
+    enum CodingKeys: String, CodingKey {
+        case authorizationServers = "authorization_servers"
+    }
+}
+
+/// `WWW-Authenticate` başlığındaki `resource_metadata` adresi (RFC 9728). Saf fonksiyondur.
+func resourceMetadataURL(wwwAuthenticate: String) -> URL? {
+    guard let match = wwwAuthenticate.firstMatch(of: /resource_metadata="([^"]+)"/) else {
+        return nil
+    }
+    return URL(string: String(match.1))
+}
+
+/// Korunan kaynağın iyi bilinen bilgi adresi: `https://host/.well-known/oauth-protected-resource/<yol>`. Saf fonksiyondur.
+func wellKnownResourceMetadataURL(server: URL) -> URL? {
+    var components: URLComponents = URLComponents()
+    components.scheme = server.scheme
+    components.host = server.host()
+    components.port = server.port
+    let path: String = server.path()
+    components.path = "/.well-known/oauth-protected-resource" + (path == "/" ? "" : path)
+    return components.url
+}
+
+/// Yetkilendirme sunucusunun iyi bilinen bilgi adresleri (önce RFC 8414, sonra OpenID). Saf fonksiyondur.
+func authorizationMetadataURLs(issuer: URL) -> [URL] {
+    var components: URLComponents = URLComponents()
+    components.scheme = issuer.scheme
+    components.host = issuer.host()
+    components.port = issuer.port
+    let path: String = issuer.path() == "/" ? "" : issuer.path()
+    return ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"].compactMap { (prefix: String) -> URL? in
+        components.path = prefix + path
+        return components.url
+    }
+}
+
+private func getJSON<Value: Decodable>(_ type: Value.Type, url: URL, server: String) async throws -> Value {
+    var request: URLRequest = URLRequest(url: url)
+    request.timeoutInterval = 20
+    request.setValue("application/json", forHTTPHeaderField: "accept")
+    request.setValue(mcpProtocolVersion, forHTTPHeaderField: "mcp-protocol-version")
+    let (data, response): (Data, URLResponse)
+    do {
+        (data, response) = try await URLSession.shared.data(for: request)
+    } catch let error as URLError {
+        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+    }
+    let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+        throw MCPRemoteError.http(server: server, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
+    }
+    do {
+        return try JSONDecoder().decode(type, from: data)
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "\(Value.self): \(error.localizedDescription)")
+    }
+}
+
+/// Sunucunun yetkilendirme sunucusunu bulur: kimliksiz bir istekle 401 ve `resource_metadata` alınır (yoksa iyi
+/// bilinen adres denenir), oradan yetkilendirme sunucusunun bilgileri okunur.
+public func discoverAuthorization(server: URL) async throws -> AuthorizationServerMetadata {
+    let name: String = server.host() ?? server.absoluteString
+    var probe: URLRequest = URLRequest(url: server)
+    probe.httpMethod = "POST"
+    probe.timeoutInterval = 20
+    probe.setValue("application/json", forHTTPHeaderField: "content-type")
+    probe.setValue("application/json, text/event-stream", forHTTPHeaderField: "accept")
+    probe.setValue(mcpProtocolVersion, forHTTPHeaderField: "mcp-protocol-version")
+    probe.httpBody = try JSONEncoder().encode(JSONRPCRequest(id: 1, method: "initialize", params: initializeParams()))
+    let response: URLResponse
+    do {
+        (_, response) = try await URLSession.shared.data(for: probe)
+    } catch let error as URLError {
+        throw MCPRemoteError.network(server: name, reason: error.localizedDescription)
+    }
+    let header: String = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "WWW-Authenticate") ?? ""
+    guard let metadataURL = resourceMetadataURL(wwwAuthenticate: header) ?? wellKnownResourceMetadataURL(server: server) else {
+        throw MCPRemoteError.noAuthorizationMetadata(server: name)
+    }
+    let resource: ProtectedResourceMetadata = try await getJSON(ProtectedResourceMetadata.self, url: metadataURL, server: name)
+    guard let issuer = resource.authorizationServers.first else {
+        throw MCPRemoteError.noAuthorizationMetadata(server: name)
+    }
+    var lastError: MCPRemoteError = .noAuthorizationMetadata(server: name)
+    for candidate in authorizationMetadataURLs(issuer: issuer) {
+        do {
+            return try await getJSON(AuthorizationServerMetadata.self, url: candidate, server: name)
+        } catch let error as MCPRemoteError {
+            lastError = error
+        }
+    }
+    throw lastError
+}
+
+private struct RegistrationRequest: Encodable {
+    let clientName: String
+    let redirectURIs: [String]
+    let grantTypes: [String]
+    let responseTypes: [String]
+    let tokenEndpointAuthMethod: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientName = "client_name"
+        case redirectURIs = "redirect_uris"
+        case grantTypes = "grant_types"
+        case responseTypes = "response_types"
+        case tokenEndpointAuthMethod = "token_endpoint_auth_method"
+    }
+}
+
+private struct RegistrationResponse: Decodable {
+    let clientID: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientID = "client_id"
+    }
+}
+
+/// Dinamik istemci kaydı (RFC 7591): gizli anahtarsız (PKCE) yerel uygulama olarak kaydolur, istemci kimliği döner.
+public func registerClient(metadata: AuthorizationServerMetadata, redirectURI: String, server: String) async throws -> String {
+    guard let endpoint = metadata.registrationEndpoint else {
+        throw MCPRemoteError.noDynamicRegistration(server: server)
+    }
+    var request: URLRequest = URLRequest(url: endpoint)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 20
+    request.setValue("application/json", forHTTPHeaderField: "content-type")
+    request.httpBody = try JSONEncoder().encode(RegistrationRequest(
+        clientName: "AI-Notepad", redirectURIs: [redirectURI], grantTypes: ["authorization_code", "refresh_token"],
+        responseTypes: ["code"], tokenEndpointAuthMethod: "none"
+    ))
+    let (data, response): (Data, URLResponse)
+    do {
+        (data, response) = try await URLSession.shared.data(for: request)
+    } catch let error as URLError {
+        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+    }
+    let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+        throw MCPRemoteError.http(server: server, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
+    }
+    do {
+        return try JSONDecoder().decode(RegistrationResponse.self, from: data).clientID
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "kayıt yanıtı: \(error.localizedDescription)")
+    }
+}
+
+/// Sunucunun giriş adresi: PKCE S256, `state` ve hedef kaynak (RFC 8707 `resource`). Saf fonksiyondur.
+public func mcpAuthorizeURL(metadata: AuthorizationServerMetadata, clientID: String, redirectURI: String, pkce: PKCEPair, state: String, resource: URL) -> URL? {
+    guard var components = URLComponents(url: metadata.authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+        return nil
+    }
+    components.queryItems = (components.queryItems ?? []) + [
+        URLQueryItem(name: "response_type", value: "code"),
+        URLQueryItem(name: "client_id", value: clientID),
+        URLQueryItem(name: "redirect_uri", value: redirectURI),
+        URLQueryItem(name: "state", value: state),
+        URLQueryItem(name: "code_challenge", value: pkce.challenge),
+        URLQueryItem(name: "code_challenge_method", value: "S256"),
+        URLQueryItem(name: "resource", value: resource.absoluteString),
+    ]
+    return components.url
+}
+
+private struct MCPTokenResponse: Decodable {
+    let accessToken: String
+    let refreshToken: String?
+    let expiresIn: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
+    }
+}
+
+/// Jeton isteği (kod ya da yenileme); 400 `invalid_grant` oturumun bittiğini gösterir.
+private func mcpTokens(endpoint: URL, fields: [(String, String)], previousRefresh: String, server: String) async throws -> OAuthTokens {
+    var request: URLRequest = URLRequest(url: endpoint)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 30
+    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
+    request.setValue("application/json", forHTTPHeaderField: "accept")
+    request.httpBody = formBody(fields: fields)
+    let (data, response): (Data, URLResponse)
+    do {
+        (data, response) = try await URLSession.shared.data(for: request)
+    } catch let error as URLError {
+        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+    }
+    let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+    let body: String = String(decoding: data.prefix(400), as: UTF8.self)
+    if status == 400 || status == 401, body.contains("invalid_grant") || body.contains("invalid_token") {
+        throw MCPRemoteError.expired(server: server)
+    }
+    guard (200..<300).contains(status) else {
+        throw MCPRemoteError.http(server: server, status: status, body: body)
+    }
+    let decoded: MCPTokenResponse
+    do {
+        decoded = try JSONDecoder().decode(MCPTokenResponse.self, from: data)
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "jeton yanıtı: \(error.localizedDescription)")
+    }
+    // Süre verilmeyen jeton süresizdir: sunucu reddederse (401) oturum açılırken yenilenir.
+    return OAuthTokens(
+        accessToken: decoded.accessToken, refreshToken: decoded.refreshToken ?? previousRefresh,
+        expiresAt: decoded.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) } ?? Date.distantFuture
+    )
+}
+
+/// Giriş kodunu jetonlara çevirir.
+public func exchangeMCPCode(metadata: AuthorizationServerMetadata, clientID: String, code: String, verifier: String, redirectURI: String, resource: URL) async throws -> OAuthTokens {
+    try await mcpTokens(endpoint: metadata.tokenEndpoint, fields: [
+        ("grant_type", "authorization_code"), ("code", code), ("redirect_uri", redirectURI), ("client_id", clientID),
+        ("code_verifier", verifier), ("resource", resource.absoluteString),
+    ], previousRefresh: "", server: resource.host() ?? resource.absoluteString)
+}
+
+/// Erişim jetonunu yeniler; yenileme jetonu yoksa `expired`.
+public func refreshMCPConnection(connection: MCPConnection) async throws -> MCPConnection {
+    let server: String = connection.serverURL.host() ?? connection.serverURL.absoluteString
+    guard !connection.tokens.refreshToken.isEmpty else {
+        throw MCPRemoteError.expired(server: server)
+    }
+    let tokens: OAuthTokens = try await mcpTokens(endpoint: connection.tokenEndpoint, fields: [
+        ("grant_type", "refresh_token"), ("refresh_token", connection.tokens.refreshToken), ("client_id", connection.clientID),
+        ("resource", connection.serverURL.absoluteString),
+    ], previousRefresh: connection.tokens.refreshToken, server: server)
+    return connection.with(tokens: tokens)
+}
+
+// MARK: JSON-RPC (Streamable HTTP)
+
+private struct JSONRPCRequest: Encodable {
+    let jsonrpc: String = "2.0"
+    let id: Int
+    let method: String
+    let params: JSONValue
+}
+
+private struct JSONRPCNotification: Encodable {
+    let jsonrpc: String = "2.0"
+    let method: String
+}
+
+private struct JSONRPCError: Decodable {
+    let code: Int
+    let message: String
+}
+
+private struct JSONRPCResponse: Decodable {
+    let id: Int?
+    let result: JSONValue?
+    let error: JSONRPCError?
+}
+
+private func initializeParams() -> JSONValue {
+    .object([
+        "protocolVersion": .string(mcpProtocolVersion),
+        "capabilities": .object([:]),
+        "clientInfo": .object(["name": .string("AI-Notepad"), "version": .string("1.0")]),
+    ])
+}
+
+/// Yanıt gövdesinden verilen kimlikli JSON-RPC yanıtı: düz JSON ya da SSE (`data:` satırları). Saf fonksiyondur.
+func jsonRPCResponse(body: String, contentType: String, id: Int, server: String) throws -> JSONValue {
+    let candidates: [String] = contentType.contains("text/event-stream")
+        // Swift'te "\r\n" tek karakterdir: satırlar her tür satır sonuna göre bölünür.
+        ? body.split(whereSeparator: \.isNewline).compactMap { (line: Substring) -> String? in
+            // Satırlar "\r\n" ile de bitebilir (ör. uvicorn): satır sonu karakterleri de atılır.
+            line.hasPrefix("data:") ? String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        }
+        : [body]
+    for candidate in candidates {
+        let decoded: JSONRPCResponse
+        do {
+            decoded = try JSONDecoder().decode(JSONRPCResponse.self, from: Data(candidate.utf8))
+        } catch {
+            // Akışta JSON-RPC yanıtı olmayan satır (ör. boş olay): sonrakine bakılır.
+            continue
+        }
+        guard decoded.id == id else {
+            // Akıştaki başka mesaj (bildirim, ilerleme): sonraki satıra bakılır.
+            continue
+        }
+        if let error = decoded.error {
+            throw MCPRemoteError.rpc(server: server, code: error.code, message: error.message)
+        }
+        return decoded.result ?? .null
+    }
+    throw MCPRemoteError.invalidResponse(server: server, reason: "yanıtta \(id) kimlikli sonuç yok")
+}
+
+/// Uzak MCP oturumu: başlatır, araçları listeler ve çağırır. Her işlem kısa ömürlü bir oturumla yapılır (uygulama
+/// sürekli bağlı kalmaz).
+public struct MCPRemoteSession: Sendable {
+    public let serverURL: URL
+    private let accessToken: String
+    private let sessionID: String?
+
+    private var serverName: String { serverURL.host() ?? serverURL.absoluteString }
+
+    /// Oturumu açar (`initialize` + `notifications/initialized`). 401 `expired`.
+    public static func open(serverURL: URL, accessToken: String) async throws -> MCPRemoteSession {
+        let bare: MCPRemoteSession = MCPRemoteSession(serverURL: serverURL, accessToken: accessToken, sessionID: nil)
+        let (_, sessionID): (JSONValue, String?) = try await bare.call(id: 1, method: "initialize", params: initializeParams())
+        let session: MCPRemoteSession = MCPRemoteSession(serverURL: serverURL, accessToken: accessToken, sessionID: sessionID)
+        try await session.notify(method: "notifications/initialized")
+        return session
+    }
+
+    private init(serverURL: URL, accessToken: String, sessionID: String?) {
+        self.serverURL = serverURL
+        self.accessToken = accessToken
+        self.sessionID = sessionID
+    }
+
+    private func request(body: Data) -> URLRequest {
+        var request: URLRequest = URLRequest(url: serverURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "accept")
+        request.setValue(mcpProtocolVersion, forHTTPHeaderField: "mcp-protocol-version")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
+        if let sessionID {
+            request.setValue(sessionID, forHTTPHeaderField: "mcp-session-id")
+        }
+        request.httpBody = body
+        return request
+    }
+
+    private func call(id: Int, method: String, params: JSONValue) async throws -> (JSONValue, String?) {
+        let body: Data = try JSONEncoder().encode(JSONRPCRequest(id: id, method: method, params: params))
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request(body: body))
+        } catch let error as URLError {
+            throw MCPRemoteError.network(server: serverName, reason: error.localizedDescription)
+        }
+        let http: HTTPURLResponse? = response as? HTTPURLResponse
+        let status: Int = http?.statusCode ?? 0
+        if status == 401 {
+            throw MCPRemoteError.expired(server: serverName)
+        }
+        guard (200..<300).contains(status) else {
+            throw MCPRemoteError.http(server: serverName, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
+        }
+        let result: JSONValue = try jsonRPCResponse(
+            body: String(decoding: data, as: UTF8.self), contentType: http?.value(forHTTPHeaderField: "content-type") ?? "",
+            id: id, server: serverName
+        )
+        return (result, http?.value(forHTTPHeaderField: "mcp-session-id") ?? sessionID)
+    }
+
+    private func notify(method: String) async throws {
+        let body: Data = try JSONEncoder().encode(JSONRPCNotification(method: method))
+        do {
+            let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request(body: body))
+            let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else {
+                throw MCPRemoteError.http(server: serverName, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
+            }
+        } catch let error as URLError {
+            throw MCPRemoteError.network(server: serverName, reason: error.localizedDescription)
+        }
+    }
+
+    /// Sunucunun araçları (ad, açıklama, girdi şeması).
+    public func listTools() async throws -> [MCPRemoteTool] {
+        var tools: [MCPRemoteTool] = []
+        var cursor: String?
+        var id: Int = 2
+        repeat {
+            let params: JSONValue = cursor.map { JSONValue.object(["cursor": .string($0)]) } ?? .object([:])
+            let (result, _): (JSONValue, String?) = try await call(id: id, method: "tools/list", params: params)
+            guard case .object(let object) = result, case .array(let items) = object["tools"] ?? .array([]) else {
+                throw MCPRemoteError.invalidResponse(server: serverName, reason: "tools/list biçimi")
+            }
+            tools += items.compactMap(MCPRemoteTool.init(json:))
+            if case .string(let next) = object["nextCursor"] {
+                cursor = next
+            } else {
+                cursor = nil
+            }
+            id += 1
+        } while cursor != nil && id < 12
+        return tools
+    }
+
+    /// Aracı çağırır; sonucun metin içeriği döner. Araç hata bildirirse `toolFailed`.
+    public func callTool(name: String, arguments: JSONValue) async throws -> String {
+        let (result, _): (JSONValue, String?) = try await call(id: 100, method: "tools/call", params: .object(["name": .string(name), "arguments": arguments]))
+        let text: String = toolResultText(result: result)
+        if case .object(let object) = result, object["isError"] == .bool(true) {
+            throw MCPRemoteError.toolFailed(server: serverName, tool: name, message: String(text.prefix(400)))
+        }
+        return text
+    }
+}
+
+/// Sunucudaki bir araç.
+public struct MCPRemoteTool: Sendable, Equatable {
+    public let name: String
+    public let description: String
+    public let inputSchema: JSONValue
+
+    init?(json: JSONValue) {
+        guard case .object(let object) = json, case .string(let name) = object["name"] else {
+            return nil
+        }
+        self.name = name
+        if case .string(let description) = object["description"] {
+            self.description = description
+        } else {
+            self.description = ""
+        }
+        inputSchema = object["inputSchema"] ?? .object([:])
+    }
+}
+
+/// Araç sonucunun metin parçaları (birleştirilmiş). Saf fonksiyondur.
+func toolResultText(result: JSONValue) -> String {
+    guard case .object(let object) = result, case .array(let content) = object["content"] ?? .array([]) else {
+        return ""
+    }
+    return content.compactMap { (item: JSONValue) -> String? in
+        guard case .object(let part) = item, case .string(let text) = part["text"] else {
+            return nil
+        }
+        return text
+    }
+    .joined(separator: "\n")
+}
+
+/// JSON değerini kısa metne çevirir (istem ve log için). Saf fonksiyondur.
+public func jsonText(value: JSONValue) -> String {
+    let encoder: JSONEncoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    do {
+        return String(decoding: try encoder.encode(value), as: UTF8.self)
+    } catch {
+        // JSONValue her zaman kodlanabilir; buraya düşülmesi bir programlama hatasıdır.
+        mcpRemoteLogger.fault("JSON değeri kodlanamadı, hata: \(String(describing: error), privacy: .public)")
+        return ""
+    }
+}
+
+/// Bağlantıyla oturum açar; jeton süresi bitmek üzereyse önce yenilenir. Yenilenen bağlantı da döner (çağıran saklar).
+public func openMCPSession(connection: MCPConnection) async throws -> (session: MCPRemoteSession, connection: MCPConnection) {
+    let current: MCPConnection = needsRefresh(tokens: connection.tokens, now: Date()) ? try await refreshMCPConnection(connection: connection) : connection
+    do {
+        return (try await MCPRemoteSession.open(serverURL: current.serverURL, accessToken: current.tokens.accessToken), current)
+    } catch MCPRemoteError.expired {
+        // Jeton süresinden önce geri alınmış olabilir: bir kez yenileyip yeniden denenir.
+        let fresh: MCPConnection = try await refreshMCPConnection(connection: current)
+        mcpRemoteLogger.info("MCP jetonu erken yenilendi, sunucu: \(current.serverURL.host() ?? "?", privacy: .public)")
+        return (try await MCPRemoteSession.open(serverURL: fresh.serverURL, accessToken: fresh.tokens.accessToken), fresh)
+    }
+}

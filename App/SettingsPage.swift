@@ -404,6 +404,8 @@ private func secretAccountTitle(account: SecretAccount) -> String {
     case .openai: String(localized: "OpenAI uyumlu")
     case .webhook: "Webhook"
     case .channel: String(localized: "Kanal bağlantısı")
+    case .destinations: String(localized: "Kanal bağlantıları")
+    case .taskTrackers: String(localized: "Görev araçları")
     }
 }
 
@@ -917,6 +919,7 @@ private struct ConnectionSettings: View {
                 MCPClientRow(client: client)
             }
             WebhookSettings(model: model)
+            TaskTrackerSettings(model: model)
             MCPSettings()
         }
     }
@@ -1030,11 +1033,12 @@ private struct MCPClientRow: View {
     }
 }
 
-/// Kanal kartı: hesapla tek tıkla bağlanan servisler ve adresle bağlanan her şey (Zapier, Make, n8n, Teams iş akışı).
+/// Eklenebilen hedef kartı: hesapla tek tıkla bağlanan servisler, Notion ve adresle bağlanan her şey.
 private enum ChannelCard: String, CaseIterable, Identifiable {
     case slack
     case teams
     case discord
+    case notion
     case zoom
     case webhook
 
@@ -1045,6 +1049,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "Slack"
         case .teams: "Microsoft Teams"
         case .discord: "Discord"
+        case .notion: "Notion"
         case .zoom: "Zoom Team Chat"
         case .webhook: String(localized: "Webhook adresi")
         }
@@ -1055,6 +1060,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "number"
         case .teams: "person.3.fill"
         case .discord: "bubble.left.and.bubble.right.fill"
+        case .notion: "doc.richtext.fill"
         case .zoom: "video.fill"
         case .webhook: "bolt.horizontal.fill"
         }
@@ -1065,39 +1071,35 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "Kendi adınla, seçtiğin kanala"
         case .teams: "İş ya da okul hesabı (kişisel hesaplar desteklenmiyor)"
         case .discord: "Sunucu ve kanalı Discord'da seç"
+        case .notion: "Her toplantı için yeni sayfa"
         case .zoom: "Kanalda /inc connect yaz, adresi ve anahtarı yapıştır"
         case .webhook: "Zapier, Make, n8n, Teams iş akışı"
         }
     }
 
-    /// Hesapla girişin servisi; adres kartında nil.
+    /// Hesapla girişin servisi (Slack, Teams, Discord); diğerlerinde nil.
     var service: ChannelService? {
         switch self {
         case .slack: .slack
         case .teams: .teams
         case .discord: .discord
-        case .zoom, .webhook: nil
-        }
-    }
-}
-
-/// Bağlı kanal: hesapla kurulan bağlantı ya da webhook adresi.
-private enum ConnectedChannel: Equatable {
-    case account(ChannelConnection)
-    case webhook(URL)
-
-    var title: String {
-        switch self {
-        case .account(let connection): connection.service.displayName
-        case .webhook(let url): channelName(url: url)
+        case .notion, .zoom, .webhook: nil
         }
     }
 
-    /// Kanal ve çalışma alanı ya da sunucu adı (adresin gizli kısmı gösterilmez).
-    var detail: String {
-        switch self {
-        case .account(let connection): [connection.channel.name, connection.workspace].filter { !$0.isEmpty }.joined(separator: " · ")
-        case .webhook(let url): url.host() ?? ""
+    /// Bu karttan eklenmiş hedef mi. Saf fonksiyondur.
+    func matches(destination: NoteDestination) -> Bool {
+        switch destination.target {
+        case .account(let connection): service == connection.service
+        case .notion: self == .notion
+        case .webhook(let url):
+            switch webhookKind(url: url) {
+            case .slack: self == .slack
+            case .discord: self == .discord
+            case .teams: self == .teams
+            case .zoom: self == .zoom
+            case .generic: self == .webhook
+            }
         }
     }
 }
@@ -1106,28 +1108,27 @@ private enum ConnectedChannel: Equatable {
 private enum ChannelSetup: Equatable {
     case idle
     /// Tarayıcıda giriş bekleniyor.
-    case signingIn(ChannelService)
-    /// Giriş tamam; yazılacak kanal seçiliyor.
-    case choosing(ChannelSignIn, [ChannelOption])
+    case signingIn(String)
+    /// Giriş tamam; yazılacak kanal seçiliyor (`replacing`: kanalı değiştirilen hedef).
+    case choosing(ChannelSignIn, [ChannelOption], replacing: String?)
     /// Webhook adresi yapıştırılıyor.
     case pasting
     /// Zoom adresi ve doğrulama anahtarı yapıştırılıyor.
     case pastingZoom
-    case testing
-    case connected(String)
+    case working(String)
+    case done(String)
     case failed(String)
 }
 
-/// Kanallara gönder: bağlı kanal (ad, kanal, dene, kendiliğinden gönder, kaldır), hesapla tek tıkla giriş (Slack,
-/// Teams, Discord) ya da webhook adresi, Apple Notlar ve klasöre (Obsidian, iCloud Drive) yazma.
+/// Kanallara gönder: bağlı hedefler (her birinin kendiliğinden gönderimi, dene, kanalı değiştir, yeniden bağlan,
+/// kaldır), yeni hedef ekleme kartları (Slack, Teams, Discord, Notion, Zoom, webhook), Apple Notlar ve klasör. Birden
+/// çok hedef aynı anda bağlı olabilir.
 private struct WebhookSettings: View {
     let model: AppModel
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
-    @AppStorage(SettingsKey.webhookAutoSend) private var autoSend: Bool = false
     @AppStorage(SettingsKey.appleNotesAutoSend) private var notesAutoSend: Bool = false
     @AppStorage(SettingsKey.markdownFolder) private var markdownFolder: String = ""
     @AppStorage(SettingsKey.markdownAutoExport) private var markdownAuto: Bool = false
-    @State private var connected: ConnectedChannel?
     @State private var setup: ChannelSetup = .idle
     @State private var selectedChannelID: String = ""
     @State private var manualAddress: String = ""
@@ -1138,19 +1139,14 @@ private struct WebhookSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Kanallara gönder")
-            Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) seçtiğin yere kendiliğinden gider; toplantı sayfasındaki ⋯ menüsünden elle de gönderilir.")
+            Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) bağladığın yerlere gider; her hedefte kendiliğinden gönderimi ayrı açabilirsin. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilir. Ağ yokken kaçan gönderimler sonra kendiliğinden gider.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 12)
-            if let connected {
-                connectedRow(channel: connected)
+            ForEach(model.destinations) { (destination: NoteDestination) in
+                destinationRow(destination: destination)
             }
-            Text("Bir kanal bağlanır; yeni bağlantı öncekinin yerini alır (eski bağlantı servis tarafında da kapatılır). Apple Notlar ve klasör ayrıca açılabilir.")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, 6)
             setupStatus
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(ChannelCard.allCases) { (card: ChannelCard) in
@@ -1161,32 +1157,41 @@ private struct WebhookSettings: View {
             }
             .padding(.vertical, 6)
         }
-        .task { await refreshConnected() }
+        .task { await model.loadDestinations() }
     }
 
-    /// Bağlı kanal: ad, kanal, dene, kendiliğinden gönder, kaldır.
-    private func connectedRow(channel: ConnectedChannel) -> some View {
-        SettingsRow(title: Text(verbatim: channel.title)) {
-            if model.channelNeedsReconnect {
+    /// Bağlı hedef: ad, kanal, kendiliğinden gönderim, dene, kanalı değiştir ya da yeniden bağlan, kaldır.
+    private func destinationRow(destination: NoteDestination) -> some View {
+        SettingsRow(title: Text(verbatim: destinationName(destination: destination))) {
+            if destination.needsReconnect {
                 Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             } else {
-                Label(String(localized: "Bağlı · \(channel.detail)"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+                Label(String(localized: "Bağlı · \(destinationDetail(destination: destination))"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }
         } control: {
             HStack(spacing: 8) {
-                if case .account(let connection) = channel {
-                    if model.channelNeedsReconnect {
-                        Button("Yeniden bağlan") { Task { await signIn(service: connection.service) } }
+                if case .account(let connection) = destination.target {
+                    if destination.needsReconnect {
+                        Button("Yeniden bağlan") { Task { await signIn(service: connection.service, replacing: destination.id) } }
                             .buttonStyle(.pillPrimary)
                     } else {
-                        Button("Kanalı değiştir") { Task { await changeChannel() } }
+                        Button("Kanalı değiştir") { Task { await changeChannel(destinationID: destination.id, service: connection.service) } }
                             .disabled(isBusy)
                     }
                 }
-                Button("Dene") { Task { await test() } }
-                    .disabled(setup == .testing)
-                Button("Kaldır", role: .destructive) { disconnect() }
-                Toggle("Not hazır olunca gönder", isOn: $autoSend).settingsToggle()
+                if case .notion = destination.target, destination.needsReconnect {
+                    Button("Yeniden bağlan") { Task { await reconnectNotion(destinationID: destination.id) } }
+                        .buttonStyle(.pillPrimary)
+                }
+                Button("Dene") { Task { await test(destinationID: destination.id) } }
+                    .disabled(isBusy)
+                Button("Kaldır", role: .destructive) { Task { await model.removeDestination(id: destination.id) } }
+                Toggle("Kendiliğinden gönder", isOn: Binding<Bool>(
+                    get: { destination.autoSend },
+                    set: { (enabled: Bool) -> Void in Task { await model.setAutoSend(destinationID: destination.id, enabled: enabled) } }
+                ))
+                .settingsToggle()
+                .hoverHint("Not hazır olunca kendiliğinden gönder", alignment: .trailing, edge: .bottom)
             }
         }
     }
@@ -1196,13 +1201,13 @@ private struct WebhookSettings: View {
         switch setup {
         case .idle:
             EmptyView()
-        case .signingIn(let service):
+        case .signingIn(let name):
             statusPanel {
                 ProgressView().controlSize(.small)
-                Text("Açılan pencerede \(service.displayName) hesabınla giriş yap ve izin ver.").appFont(size: 13, weight: .regular)
+                Text("Açılan pencerede \(name) hesabınla giriş yap ve izin ver.").appFont(size: 13, weight: .regular)
                 Spacer()
             }
-        case .choosing(let signIn, let options):
+        case .choosing(let signIn, let options, let replacing):
             statusPanel {
                 Text("Notlar hangi kanala gitsin?").appFont(size: 13, weight: .medium)
                 Picker("Kanal", selection: $selectedChannelID) {
@@ -1215,7 +1220,7 @@ private struct WebhookSettings: View {
                 .frame(maxWidth: 280)
                 Spacer()
                 Button("Vazgeç") { setup = .idle }.buttonStyle(.hoverPlain).foregroundStyle(Theme.muted)
-                Button("Bağla") { choose(signIn: signIn, options: options) }
+                Button("Bağla") { choose(signIn: signIn, options: options, replacing: replacing) }
                     .buttonStyle(.pillPrimary)
                     .disabled(!options.contains { $0.id == selectedChannelID })
             }
@@ -1224,7 +1229,7 @@ private struct WebhookSettings: View {
                 TextField("Webhook adresi", text: $manualAddress, prompt: Text(verbatim: "https://hooks.zapier.com/…"))
                     .textFieldStyle(.roundedBorder)
                 Button("Vazgeç") { setup = .idle }.buttonStyle(.hoverPlain).foregroundStyle(Theme.muted)
-                Button("Bağla") { connectWebhook(text: manualAddress) }
+                Button("Bağla") { connectWebhook() }
                     .buttonStyle(.pillPrimary)
                     .disabled(manualAddress.isEmpty)
             }
@@ -1240,10 +1245,10 @@ private struct WebhookSettings: View {
                     .buttonStyle(.pillPrimary)
                     .disabled(manualAddress.isEmpty || zoomToken.isEmpty)
             }
-        case .testing:
-            Label("Bağlanıyor ve deneme mesajı gönderiliyor…", systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
-        case .connected(let name):
-            Label(String(localized: "\(name) bağlandı; deneme mesajı gönderildi."), systemImage: "checkmark.circle.fill")
+        case .working(let message):
+            Label(message, systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
+        case .done(let message):
+            Label(message, systemImage: "checkmark.circle.fill")
                 .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
         case .failed(let message):
             Text(message)
@@ -1264,14 +1269,15 @@ private struct WebhookSettings: View {
     }
 
     private func channelCard(card: ChannelCard) -> some View {
-        let isConnected: Bool = connected.map { cardIsConnected(card: card, channel: $0) } ?? false
-        return destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: isConnected ? LocalizedStringKey(connected?.detail ?? "") : card.detail) {
-            if isConnected {
-                Label("Bağlı", systemImage: "checkmark.circle.fill")
-                    .appFont(size: 12, weight: .semibold)
-                    .foregroundStyle(.tint)
-            } else {
-                Button(card.service == nil ? "Yapıştır" : "Bağlan") { start(card: card) }
+        let count: Int = model.destinations.filter { card.matches(destination: $0) }.count
+        return destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: card.detail) {
+            HStack(spacing: 6) {
+                if count > 0 {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel(Text("Bağlı"))
+                }
+                Button(count > 0 ? "Ekle" : (card.service == nil && card != .notion ? "Yapıştır" : "Bağlan")) { start(card: card) }
                     .buttonStyle(.pillPrimary)
                     .controlSize(.small)
                     .disabled(isBusy)
@@ -1279,11 +1285,11 @@ private struct WebhookSettings: View {
         }
     }
 
-    /// Giriş ya da deneme sürüyor: ikinci bir kurulum başlamasın.
+    /// Giriş, gönderim ya da deneme sürüyor: ikinci bir kurulum başlamasın.
     private var isBusy: Bool {
         switch setup {
-        case .signingIn, .testing: true
-        case .idle, .choosing, .pasting, .pastingZoom, .connected, .failed: false
+        case .signingIn, .working: true
+        case .idle, .choosing, .pasting, .pastingZoom, .done, .failed: false
         }
     }
 
@@ -1346,23 +1352,25 @@ private struct WebhookSettings: View {
     }
 
     private func start(card: ChannelCard) {
-        if card == .zoom {
-            manualAddress = ""
-            zoomToken = ""
+        manualAddress = ""
+        zoomToken = ""
+        switch card {
+        case .zoom:
             setup = .pastingZoom
-            return
-        }
-        guard let service = card.service else {
-            manualAddress = ""
+        case .webhook:
             setup = .pasting
-            return
+        case .notion:
+            Task { await connectNotion() }
+        case .slack, .teams, .discord:
+            if let service = card.service {
+                Task { await signIn(service: service, replacing: nil) }
+            }
         }
-        Task { await signIn(service: service) }
     }
 
-    /// Tarayıcıda giriş (PKCE); Discord'da kanal orada seçilir ve bağlanır, Slack ve Teams'te kanal listesi gelir.
-    /// Kullanıcı pencereyi kapatırsa sessizce vazgeçilir.
-    private func signIn(service: ChannelService) async {
+    /// Tarayıcıda giriş (PKCE); Discord'da kanal orada seçilir ve eklenir, Slack ve Teams'te kanal listesi gelir.
+    /// `replacing` verilirse (yeniden bağlan) yeni bağlantı o hedefin yerine geçer. Pencere kapatılırsa vazgeçilir.
+    private func signIn(service: ChannelService, replacing: String?) async {
         let clientID: String = channelClientID(service: service)
         guard !clientID.isEmpty else {
             setup = .failed(userFacingMessage(error: ChannelAuthError.notConfigured(service: service)))
@@ -1370,7 +1378,7 @@ private struct WebhookSettings: View {
         }
         let pkce: PKCEPair = makePKCEPair()
         let state: String = makeOAuthState()
-        setup = .signingIn(service)
+        setup = .signingIn(service.displayName)
         do {
             let callback: URL = try await webAuthenticationSession.authenticate(
                 using: channelAuthorizeURL(service: service, clientID: clientID, pkce: pkce, state: state),
@@ -1379,11 +1387,13 @@ private struct WebhookSettings: View {
             let code: String = try oauthCallbackCode(service: service, url: callback, expectedState: state)
             switch service {
             case .discord:
-                saveWebhook(url: try await exchangeDiscordCode(code: code, verifier: pkce.verifier, clientID: clientID))
+                let url: URL = try await exchangeDiscordCode(code: code, verifier: pkce.verifier, clientID: clientID)
+                let destination: NoteDestination = try await model.addDestination(target: .webhook(url))
+                await test(destinationID: destination.id)
             case .slack:
-                await showChannels(signIn: try await exchangeSlackCode(code: code, verifier: pkce.verifier, clientID: clientID))
+                await showChannels(signIn: try await exchangeSlackCode(code: code, verifier: pkce.verifier, clientID: clientID), replacing: replacing)
             case .teams:
-                await showChannels(signIn: try await exchangeTeamsCode(code: code, verifier: pkce.verifier, clientID: clientID))
+                await showChannels(signIn: try await exchangeTeamsCode(code: code, verifier: pkce.verifier, clientID: clientID), replacing: replacing)
             }
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
             setup = .idle
@@ -1393,121 +1403,111 @@ private struct WebhookSettings: View {
         }
     }
 
-    private func showChannels(signIn: ChannelSignIn) async {
+    private func showChannels(signIn: ChannelSignIn, replacing: String?) async {
         do {
             let options: [ChannelOption] = try await listChannels(signIn: signIn)
             // Kanal önceden seçilmez: notlar yanlışlıkla herkesin gördüğü #genel'e gitmesin.
             selectedChannelID = ""
-            setup = .choosing(signIn, options)
+            setup = .choosing(signIn, options, replacing: replacing)
         } catch {
             setup = .failed(userFacingMessage(error: error))
         }
     }
 
-    /// Seçilen kanalla bağlantıyı Anahtar Zinciri'ne yazar (webhook adresi varsa kalkar) ve deneme mesajı gönderir.
-    private func choose(signIn: ChannelSignIn, options: [ChannelOption]) {
+    /// Seçilen kanalla bağlantıyı yeni hedef olarak ekler (ya da değiştirilen hedefin yerine koyar) ve dener.
+    private func choose(signIn: ChannelSignIn, options: [ChannelOption], replacing: String?) {
         guard let option = options.first(where: { $0.id == selectedChannelID }) else {
             return
         }
         let connection: ChannelConnection = ChannelConnection(service: signIn.service, tokens: signIn.tokens, workspace: signIn.workspace, channel: option)
         Task {
             do {
-                try await model.connectChannel(connection: connection)
+                if let replacing {
+                    try await model.replaceDestinationTarget(id: replacing, target: .account(connection))
+                    await test(destinationID: replacing)
+                } else {
+                    let destination: NoteDestination = try await model.addDestination(target: .account(connection))
+                    await test(destinationID: destination.id)
+                }
             } catch {
                 setup = .failed(userFacingMessage(error: error))
-                return
             }
-            connected = .account(connection)
-            // Kendiliğinden gönderim kullanıcının seçimidir; bağlanınca açılmaz.
-            await test()
         }
     }
 
     /// Kayıtlı oturumla kanalları yeniden listeler (yeniden giriş gerekmez).
-    private func changeChannel() async {
-        setup = .signingIn(connectedService)
+    private func changeChannel(destinationID: String, service: ChannelService) async {
+        setup = .signingIn(service.displayName)
         do {
-            guard let result = try await model.channelOptionsForCurrentConnection() else {
-                setup = .idle
-                return
-            }
+            let result: (signIn: ChannelSignIn, options: [ChannelOption]) = try await model.channelOptions(destinationID: destinationID)
             selectedChannelID = ""
-            setup = .choosing(result.signIn, result.options)
+            setup = .choosing(result.signIn, result.options, replacing: destinationID)
         } catch {
             setup = .failed(userFacingMessage(error: error))
         }
     }
 
-    /// Bağlı hesabın servisi (kanal değiştirirken gösterilir).
-    private var connectedService: ChannelService {
-        if case .account(let connection) = connected {
-            return connection.service
+    private func connectNotion() async {
+        setup = .signingIn("Notion")
+        do {
+            try await model.connectNotion()
+            setup = .done(String(localized: "Notion bağlandı; notlar özel sayfalarına yeni sayfa olarak gider."))
+        } catch is CancellationError {
+            setup = .idle
+        } catch {
+            channelSettingsLogger.error("Notion girişi başarısız, hata: \(String(describing: error), privacy: .private)")
+            setup = .failed(userFacingMessage(error: error))
         }
-        return .slack
+    }
+
+    /// Notion oturumu bitti: yeni bağlantı kurulur, eski hedef kaldırılır (ayarı korunur).
+    private func reconnectNotion(destinationID: String) async {
+        let autoSend: Bool = model.destinations.first { $0.id == destinationID }?.autoSend ?? false
+        await connectNotion()
+        guard case .done = setup else {
+            return
+        }
+        await model.removeDestination(id: destinationID)
+        if autoSend, let added = model.destinations.last(where: { if case .notion = $0.target { true } else { false } }) {
+            await model.setAutoSend(destinationID: added.id, enabled: true)
+        }
+    }
+
+    private func connectWebhook() {
+        do {
+            addWebhook(url: try webhookURL(text: manualAddress))
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+        }
     }
 
     private func connectZoom() {
         do {
-            saveWebhook(url: try zoomWebhookURL(address: manualAddress, token: zoomToken))
+            addWebhook(url: try zoomWebhookURL(address: manualAddress, token: zoomToken))
             zoomToken = ""
         } catch {
             setup = .failed(userFacingMessage(error: error))
         }
     }
 
-    private func connectWebhook(text: String) {
-        do {
-            saveWebhook(url: try webhookURL(text: text))
-        } catch {
-            setup = .failed(userFacingMessage(error: error))
-        }
-    }
-
-    /// Webhook adresini Anahtar Zinciri'ne yazar (hesap bağlantısı varsa kalkar) ve deneme mesajı gönderir.
-    private func saveWebhook(url: URL) {
+    private func addWebhook(url: URL) {
         Task {
             do {
-                try await model.connectWebhook(url: url)
+                let destination: NoteDestination = try await model.addDestination(target: .webhook(url))
+                await test(destinationID: destination.id)
             } catch {
                 setup = .failed(userFacingMessage(error: error))
-                return
             }
-            connected = .webhook(url)
-            await test()
         }
     }
 
-    private func test() async {
-        setup = .testing
-        if let error = await model.sendTestWebhook() {
+    private func test(destinationID: String) async {
+        let name: String = model.destinations.first { $0.id == destinationID }.map { destinationName(destination: $0) } ?? ""
+        setup = .working(String(localized: "Deneme mesajı gönderiliyor…"))
+        if let error = await model.sendTestNote(destinationID: destinationID) {
             setup = .failed(error)
         } else {
-            setup = .connected(connected?.title ?? "")
-        }
-    }
-
-    private func disconnect() {
-        Task {
-            do {
-                try await model.disconnectChannel()
-                connected = nil
-                autoSend = false
-                setup = .idle
-            } catch {
-                setup = .failed(userFacingMessage(error: error))
-            }
-        }
-    }
-
-    private func refreshConnected() async {
-        do {
-            if let stored = try await optionalSecretInBackground(service: keychainService, account: .channel) {
-                connected = .account(try decodeChannelConnection(text: stored))
-            } else {
-                connected = try await optionalSecretInBackground(service: keychainService, account: .webhook).flatMap { URL(string: $0) }.map { ConnectedChannel.webhook($0) }
-            }
-        } catch {
-            setup = .failed(userFacingMessage(error: error))
+            setup = .done(String(localized: "\(name) bağlandı; deneme mesajı gönderildi."))
         }
     }
 
@@ -1528,34 +1528,79 @@ private struct WebhookSettings: View {
     }
 }
 
-private let channelSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Settings")
+/// Görev araçları: Linear ve Jira'ya tek tıkla bağlanma (MCP, tarayıcıda izin; API anahtarı gerekmez), görevlerin
+/// açılacağı takım ya da proje, kaldırma.
+private struct TaskTrackerSettings: View {
+    let model: AppModel
+    @State private var status: String?
+    @State private var connecting: MCPService?
 
-/// Kart bağlı kanalı mı gösteriyor: hesap bağlantısında servis, webhook'ta adresin türü eşleşir. Saf fonksiyondur.
-private func cardIsConnected(card: ChannelCard, channel: ConnectedChannel) -> Bool {
-    switch channel {
-    case .account(let connection):
-        return card.service == connection.service
-    case .webhook(let url):
-        switch webhookKind(url: url) {
-        case .slack: return card == .slack
-        case .discord: return card == .discord
-        case .teams: return card == .teams
-        case .zoom: return card == .zoom
-        case .generic: return card == .webhook
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsGroupHeader(title: "Görev araçları")
+            Text("Toplantıdaki görevleri tek tıkla Linear ya da Jira'da iş olarak açar (toplantı sayfası › ⋯ › Görevleri gönder). Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar.")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 12)
+            ForEach([MCPService.linear, MCPService.atlassian], id: \.self) { (service: MCPService) in
+                trackerRow(service: service)
+            }
+            if let status {
+                Text(status)
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func trackerRow(service: MCPService) -> some View {
+        if let tracker = model.taskTrackers.first(where: { $0.service == service }) {
+            SettingsRow(title: Text(verbatim: service.displayName)) {
+                Label("Bağlı", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+            } control: {
+                HStack(spacing: 8) {
+                    TextField(
+                        service == .atlassian ? "Proje (boş: ilki)" : "Takım (boş: ilki)",
+                        text: Binding<String>(get: { tracker.target }, set: { (value: String) -> Void in model.setTrackerTarget(id: tracker.id, target: value) })
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    Button("Kaldır", role: .destructive) { model.removeTracker(id: tracker.id) }
+                }
+            }
+        } else {
+            SettingsRow(title: Text(verbatim: service.displayName)) {
+                Text(service == .linear ? "Takımındaki işler" : "Jira projesindeki işler")
+            } control: {
+                Button(connecting == service ? "Tarayıcıda izin ver…" : "Bağlan") { connect(service: service) }
+                    .buttonStyle(.pillPrimary)
+                    .disabled(connecting != nil)
+            }
+        }
+    }
+
+    private func connect(service: MCPService) {
+        connecting = service
+        status = nil
+        Task {
+            defer { connecting = nil }
+            do {
+                try await model.connectTracker(service: service)
+                status = String(localized: "\(service.displayName) bağlandı.")
+            } catch is CancellationError {
+                status = nil
+            } catch {
+                status = userFacingMessage(error: error)
+            }
         }
     }
 }
 
-/// Webhook adresinin arayüzdeki adı. Saf fonksiyondur.
-private func channelName(url: URL) -> String {
-    switch webhookKind(url: url) {
-    case .slack: "Slack"
-    case .discord: "Discord"
-    case .teams: "Microsoft Teams"
-    case .zoom: "Zoom Team Chat"
-    case .generic: url.host() ?? "Webhook"
-    }
-}
+private let channelSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Settings")
 
 /// Kısayolları değiştirme.
 private struct ShortcutSettings: View {
