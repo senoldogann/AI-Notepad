@@ -13,6 +13,8 @@ public struct LiveSessionConfig: Sendable {
     public let minPartialSpeechSec: Double
     /// Otomatik modda dilin kilitlendiği toplantı süresi.
     public let languageLockAfterSec: Double
+    /// Otomatik modda aday diller (ilki ana toplantı dili; bkz. `automaticCandidates`).
+    public let candidateLanguages: [MeetingLanguage]
 
     public init(
         languageMode: LanguageMode,
@@ -20,7 +22,8 @@ public struct LiveSessionConfig: Sendable {
         recordingDirectory: URL,
         partialIntervalSec: Double,
         minPartialSpeechSec: Double,
-        languageLockAfterSec: Double
+        languageLockAfterSec: Double,
+        candidateLanguages: [MeetingLanguage]
     ) {
         self.languageMode = languageMode
         self.segmenter = segmenter
@@ -28,6 +31,7 @@ public struct LiveSessionConfig: Sendable {
         self.partialIntervalSec = partialIntervalSec
         self.minPartialSpeechSec = minPartialSpeechSec
         self.languageLockAfterSec = languageLockAfterSec
+        self.candidateLanguages = candidateLanguages
     }
 }
 
@@ -290,9 +294,11 @@ private func processJob(
             language = locked
         } else if job.isFinal {
             let logProbs: [String: Float] = try await engine.detectLanguage(samples: job.samples)
-            votes = addVote(votes: votes, logProbs: logProbs)
-            language = resolveSegmentLanguage(detected: pickLanguage(logProbs: logProbs), votes: votes)
-        } else if let leading = leadingLanguage(votes: votes) {
+            votes = addVote(votes: votes, logProbs: logProbs, candidates: config.candidateLanguages)
+            language = resolveSegmentLanguage(
+                detected: pickLanguage(logProbs: logProbs, candidates: config.candidateLanguages), votes: votes, candidates: config.candidateLanguages
+            )
+        } else if let leading = leadingLanguage(votes: votes, candidates: config.candidateLanguages) {
             language = leading
         } else {
             // Henüz hiç dil oyu yok: geçici metin üretilemez.
@@ -303,7 +309,7 @@ private func processJob(
         events.yield(.segment(LiveSegment(id: job.id, startSec: job.startSec, endSec: job.endSec, text: text, isFinal: job.isFinal, failureMessage: nil, person: nil)))
 
         guard state.locked == nil, job.isFinal, !(await languageRequest.hasPending()),
-              let lockedNow = lockedLanguage(votes: votes, elapsedSec: job.endSec, lockAfterSec: config.languageLockAfterSec)
+              let lockedNow = lockedLanguage(votes: votes, elapsedSec: job.endSec, lockAfterSec: config.languageLockAfterSec, candidates: config.candidateLanguages)
         else {
             return WorkerState(votes: votes, locked: state.locked, finalized: finalized)
         }

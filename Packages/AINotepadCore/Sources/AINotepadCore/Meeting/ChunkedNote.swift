@@ -102,7 +102,7 @@ public func noteChunkRequest(
     return LLMRequest(
         tier: .smart,
         system: """
-        Fince ya da İngilizce uzun bir toplantının transkriptini parça parça okuyup Türkçe toplantı notu çıkarıyorsun. Şu an
+        Uzun bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptini parça parça okuyup Türkçe toplantı notu çıkarıyorsun. Şu an
         \(partCount) parçanın \(part). parçasındasın. Önceki parçaların özetleri ve şimdiye kadar çıkan numaralı görevler bağlam
         olarak verilir; bu parçayı onlarla bağdaştırarak oku (önceden geçen kişi, konu ve işlere yapılan atıflar).
         Kullanıcının adı \(user); transkriptte "Sen" odur. Yalnızca bu parçadan yaz:
@@ -111,7 +111,7 @@ public func noteChunkRequest(
         - yeniGorevler: bu parçada verilen yeni işler. Listede aynı iş (aynı kişi, aynı konu) zaten varsa yeniden yazma;
           başka bir konunun benzer işi yenidir.
         - degisenGorevler: listedeki bir görev bu parçada değiştiyse (tarih, kapsam) ya da iptal edildiyse numarasıyla yaz.
-        - sozluk: bu parçada geçen önemli Fince/İngilizce terimler ve Türkçe anlamları.
+        - sozluk: bu parçada geçen önemli yabancı dildeki terimler ve Türkçe anlamları.
         \(noteRules(user: user, template: template))
         \(transcriptIsDataNote)
         """,

@@ -332,6 +332,11 @@ final class AppModel {
         guard displayMode.needsLiveTranslation else {
             return
         }
+        // Türkçe toplantıda çeviri gerekmez: cümle olduğu gibi Türkçesidir (LLM'e gitmez, maliyet yok).
+        if (lockedLanguage ?? fixedLanguage(mode: languageMode)) == .turkish {
+            translations[segment.id] = segment.text
+            return
+        }
         guard !translationDisabled, let provider = llmProvider else {
             // Çeviri şu an yapılamıyor (anahtar reddedildi ya da sağlayıcı yok): cümle kaybolmasın, "Tekrar dene"de kalsın.
             failedTranslations.insert(segment.id)
@@ -639,7 +644,8 @@ final class AppModel {
                     minDiarizationAudioSec: 5,
                     languageConfidence: 0.8,
                     keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30),
-                    voiceEmbedder: voiceEmbedderIfEnabled()
+                    voiceEmbedder: voiceEmbedderIfEnabled(),
+                    automaticStartLanguage: primaryMeetingLanguage()
                 ),
                 meAudio: meteredMe,
                 othersAudio: meteredOthers
@@ -652,7 +658,8 @@ final class AppModel {
                     recordingDirectory: directory,
                     partialIntervalSec: 1.5,
                     minPartialSpeechSec: 1.0,
-                    languageLockAfterSec: 30
+                    languageLockAfterSec: 30,
+                    candidateLanguages: automaticCandidates(primary: primaryMeetingLanguage())
                 ),
                 engine: engine,
                 meAudio: meteredMe,
@@ -945,7 +952,10 @@ final class AppModel {
         switch record.engine ?? .cloud {
         case .local:
             do {
-                return .run(LocalFinalTranscriber(modelsDirectory: try AppPaths.modelsDirectory(), modelName: liveWhisperModel))
+                return .run(LocalFinalTranscriber(
+                    modelsDirectory: try AppPaths.modelsDirectory(), modelName: liveWhisperModel,
+                    candidateLanguages: automaticCandidates(primary: primaryMeetingLanguage())
+                ))
             } catch {
                 return .skip(reason: userFacingMessage(error: error))
             }
@@ -1877,6 +1887,14 @@ struct ArchiveExchange: Identifiable, Equatable {
     var finishedAt: Date?
     /// Cevabı yazan model.
     var modelName: String?
+}
+
+/// Sabit dil seçiliyse o dil; otomatikte nil. Saf fonksiyondur.
+private func fixedLanguage(mode: LanguageMode) -> MeetingLanguage? {
+    guard case .fixed(let language) = mode else {
+        return nil
+    }
+    return language
 }
 
 /// Sırası bekleyen canlı çeviri.

@@ -90,7 +90,7 @@ private struct WelcomeStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
             Text("AI-Notepad, Teams ve Zoom toplantılarını canlı olarak yazıya döker ve Türkçeye çevirir.")
-            FeatureRow(symbol: "captions.bubble", text: "Fince ve İngilizce konuşmalar canlı metin ve Türkçe çeviri olarak panelde.")
+            FeatureRow(symbol: "captions.bubble", text: "Fince, İngilizce ve 33 dilde daha konuşmalar canlı metin ve Türkçe çeviri olarak panelde.")
             FeatureRow(symbol: "sparkles", text: "\"Ne kaçırdım?\" ile son dakikaların Türkçe özeti; toplantı hakkında Türkçe soru.")
             FeatureRow(symbol: "doc.text", text: "Toplantı bitince özet, kararlar, sana düşen görevler ve sözlük.")
             FeatureRow(symbol: "eye.slash", text: "Panel ve ada ekran paylaşımlarında gizlenebilir.")

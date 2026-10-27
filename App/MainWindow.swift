@@ -608,10 +608,9 @@ private struct RecordBar: View {
     private var languageChip: some View {
         Menu {
             Button("Otomatik") { model.languageMode = .automatic }
-            Button("Fince") { model.languageMode = .fixed(.finnish) }
-            Button("İngilizce") { model.languageMode = .fixed(.english) }
+            LanguageMenuItems { (language: MeetingLanguage) -> Void in model.languageMode = .fixed(language) }
         } label: {
-            Text(languageTitle)
+            languageTitle
                 .appFont(size: 12, weight: .medium)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -623,11 +622,10 @@ private struct RecordBar: View {
         .fixedSize()
     }
 
-    private var languageTitle: LocalizedStringKey {
+    private var languageTitle: Text {
         switch model.languageMode {
-        case .automatic: "Otomatik dil"
-        case .fixed(.finnish): "Fince"
-        case .fixed(.english): "İngilizce"
+        case .automatic: Text("Otomatik dil")
+        case .fixed(let language): Text(verbatim: meetingLanguageName(language: language))
         }
     }
 

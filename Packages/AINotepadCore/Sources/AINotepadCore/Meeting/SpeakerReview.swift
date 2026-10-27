@@ -119,7 +119,7 @@ public func speakerReviewRequest(segments: [StoredSegment], speakerNames: [Int: 
     return LLMRequest(
         tier: .smart,
         system: """
-        Fince ya da İngilizce bir toplantının transkriptinde otomatik konuşmacı ayırmayı gözden geçiriyorsun. "Sen" kullanıcıdır \
+        Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinde otomatik konuşmacı ayırmayı gözden geçiriyorsun. "Sen" kullanıcıdır \
         (\(user)); "Konuşmacı N" etiketleri sesten otomatik verilmiştir ve yanılabilir. Türkçe olarak:
         1. adlar: hangi numaranın kim olduğu transkriptte açıkça anlaşılıyorsa (kendini tanıtma, adıyla hitap edilip o kişinin \
         cevap vermesi, imza gibi) ad öner. Yalnızca adı henüz verilmemiş ya da verilen adın yanlış olduğu açık olan numaralar için.

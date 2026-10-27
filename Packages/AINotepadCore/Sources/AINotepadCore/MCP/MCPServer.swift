@@ -65,10 +65,10 @@ let mcpTools: [MCPTool] = [
     ),
     MCPTool(
         name: "search_meetings",
-        description: "Notlarda ve Fince/İngilizce transkriptlerde sözcük araması; eşleşen parçaları toplantı ve zamanıyla döndürür. Search notes and transcripts; use Finnish/English/Turkish keywords.",
+        description: "Notlarda ve transkriptlerde (toplantının dilinde; çoğunlukla Fince/İngilizce) sözcük araması; eşleşen parçaları toplantı ve zamanıyla döndürür. Search notes and transcripts; use keywords in the meeting's language and Turkish.",
         schema: .object([
             "type": .string("object"),
-            "properties": .object(["query": .object(["type": .string("string"), "description": .string("Aranacak sözcükler (Fince, İngilizce ya da Türkçe)")])]),
+            "properties": .object(["query": .object(["type": .string("string"), "description": .string("Aranacak sözcükler (toplantının dilinde ya da Türkçe)")])]),
             "required": .array([.string("query")]),
         ])
     ),
@@ -115,7 +115,7 @@ public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], v
             "protocolVersion": .string(requested),
             "capabilities": .object(["tools": .object([:])]),
             "serverInfo": .object(["name": .string("ai-notepad"), "version": .string(version)]),
-            "instructions": .string("AI-Notepad toplantı arşivi (Fince/İngilizce toplantılar, Türkçe notlar). Önce list_meetings ya da search_meetings, sonra get_meeting kullan."),
+            "instructions": .string("AI-Notepad toplantı arşivi (çoğunlukla Fince/İngilizce toplantılar, Türkçe notlar). Önce list_meetings ya da search_meetings, sonra get_meeting kullan."),
         ]))
     case "ping":
         return mcpResult(id: id, result: .object([:]))

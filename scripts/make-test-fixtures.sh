@@ -19,6 +19,11 @@ make_fixture "Satu" "fi-meeting" \
 make_fixture "Samantha" "en-meeting" \
   "Good morning everyone. [[slnc 900]] Next week we need to submit the report. [[slnc 900]] Who could take responsibility for the presentation?"
 
+make_fixture "Alva" "sv-meeting" \
+  "God morgon allihopa. [[slnc 900]] Nästa vecka måste vi lämna in rapporten om budgeten. [[slnc 900]] Vem kan ta ansvar för presentationen till styrelsen?"
+make_fixture "Anna" "de-meeting" \
+  "Guten Morgen zusammen. [[slnc 900]] Nächste Woche müssen wir den Bericht über das Budget abgeben. [[slnc 900]] Wer übernimmt die Präsentation für den Vorstand?"
+
 # Çok konuşmacılı Fince diyalog: yüklü ilk üç fi_FI sesi sırayla konuşur.
 FI_VOICES=()
 while IFS= read -r voice; do FI_VOICES+=("$voice"); done < <(say -v '?' | sed -nE 's/^(.*[^ ]) +fi_FI .*/\1/p' | head -3)

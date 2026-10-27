@@ -183,7 +183,7 @@ private struct AskIntro: View {
                         .appFont(size: 34, weight: .regular)
                         .tracking(-0.6)
                         .foregroundStyle(.white)
-                    Text("Notların ve Fince/İngilizce transkriptlerin arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                    Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                         .appFont(size: 14, weight: .regular)
                         .foregroundStyle(.white.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)

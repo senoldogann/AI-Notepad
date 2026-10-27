@@ -22,6 +22,8 @@ public struct CloudSessionConfig: Sendable {
     public let keyterms: [String]
     /// Ses izi (geri dönen konuşmacıyı tanımak için); kapalıysa nil.
     public let voiceEmbedder: (any VoiceEmbedder)?
+    /// Otomatik modda Deepgram'ın başladığı dil (ana toplantı dili); ilk konuşmacı ayırma penceresi asıl dili bulur.
+    public let automaticStartLanguage: MeetingLanguage
 
     public init(
         languageMode: LanguageMode,
@@ -34,7 +36,8 @@ public struct CloudSessionConfig: Sendable {
         minDiarizationAudioSec: Double,
         languageConfidence: Double,
         keyterms: [String],
-        voiceEmbedder: (any VoiceEmbedder)?
+        voiceEmbedder: (any VoiceEmbedder)?,
+        automaticStartLanguage: MeetingLanguage
     ) {
         self.languageMode = languageMode
         self.recordingDirectory = recordingDirectory
@@ -47,12 +50,13 @@ public struct CloudSessionConfig: Sendable {
         self.languageConfidence = languageConfidence
         self.keyterms = keyterms
         self.voiceEmbedder = voiceEmbedder
+        self.automaticStartLanguage = automaticStartLanguage
     }
 }
 
 /// Bulut canlı oturumu: iki ses akışını kaydeder, Deepgram ile canlı yazıya döker ve "Diğerleri"ni
-/// ElevenLabs ile belirli aralıklarla konuşmacılara ayırır. Otomatik modda Fince başlar; ilk güvenilir
-/// dil sonucu İngilizce ise iki akış İngilizceye geçer.
+/// ElevenLabs ile belirli aralıklarla konuşmacılara ayırır. Otomatik modda ana toplantı diliyle başlar; ilk güvenilir
+/// dil sonucu desteklenen başka bir dilse iki akış o dile geçer.
 ///
 /// İki giriş akışı bitince Deepgram akışları boşalır, son bir ayırma penceresi çalışır ve olay akışı biter.
 /// Kullanıcı kayıt sırasında dili değiştirirse iki akış o andan itibaren yeni dile geçer ve dil kilitlenir.
@@ -64,7 +68,7 @@ public func runCloudLiveSession(
     let (events, sink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
         AsyncStream.makeStream(of: LiveSessionEvent.self)
     let state: CloudSessionState = CloudSessionState(windowSamples: Int(config.diarizationWindowSec * Double(cloudSampleRate)))
-    let startLanguage: MeetingLanguage = initialLanguage(languageMode: config.languageMode)
+    let startLanguage: MeetingLanguage = initialLanguage(languageMode: config.languageMode, automaticStart: config.automaticStartLanguage)
     let (meForward, meInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     let (othersForward, othersInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
     let meStream: DeepgramStream = startDeepgramStream(apiKey: config.deepgramKey, language: startLanguage, keyterms: config.keyterms, audio: meForward)
@@ -130,11 +134,11 @@ private let cloudSampleRate: Int = 16000
 private let stopLabelingDeadlineSec: Double = 20
 private let cloudLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "CloudLiveSession")
 
-/// Deepgram'ın başlangıç dili: sabit dil ya da otomatik modda Fince.
-private func initialLanguage(languageMode: LanguageMode) -> MeetingLanguage {
+/// Deepgram'ın başlangıç dili: sabit dil ya da otomatik modda ana toplantı dili.
+private func initialLanguage(languageMode: LanguageMode, automaticStart: MeetingLanguage) -> MeetingLanguage {
     switch languageMode {
     case .fixed(let language): language
-    case .automatic: .finnish
+    case .automatic: automaticStart
     }
 }
 
@@ -374,7 +378,7 @@ private func runDiarizationWindow(
     if case .automatic = config.languageMode, !(await state.isStopping()),
        let detected = confidentLanguage(result: result, minimumProbability: config.languageConfidence),
        await state.lockIfUnlocked(language: detected, events: events) {
-        if detected != initialLanguage(languageMode: config.languageMode) {
+        if detected != initialLanguage(languageMode: config.languageMode, automaticStart: config.automaticStartLanguage) {
             await switchStreams(streams: streams, state: state)
         }
     }
@@ -433,7 +437,7 @@ private let gapMinWords: Int = 3
 /// Doldurulan bölümlerin numaraları Deepgram'ınkilerle çakışmasın diye buradan başlar.
 private let gapIndexBase: Int = 1_000_000
 
-/// Dil olasılığı eşiği geçiyorsa ve Fince/İngilizce ise dili döndürür. Saf fonksiyondur.
+/// Dil olasılığı eşiği geçiyorsa ve desteklenen bir dilse dili döndürür. Saf fonksiyondur.
 func confidentLanguage(result: DiarizationResult, minimumProbability: Double) -> MeetingLanguage? {
     guard let code = result.languageCode, let probability = result.languageProbability, probability >= minimumProbability else {
         return nil

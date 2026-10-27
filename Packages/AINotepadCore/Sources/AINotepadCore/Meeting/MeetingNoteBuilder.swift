@@ -26,9 +26,9 @@ func noteRules(user: String, template: NoteTemplate) -> String {
     let focus: String = templateInstructions(template: template)
     return """
     Kurallar:
-    - Çıktının tamamı Türkçe: özet, kararlar, görev açıklamaları ve tarihler Türkçe cümlelerdir, içinde Fince/İngilizce
+    - Çıktının tamamı Türkçe: özet, kararlar, görev açıklamaları ve tarihler Türkçe cümlelerdir, içinde yabancı dilde
       kelime bırakma (ör. "Vaiheen 3 yhteenvedon gönderilmesi" değil "3. aşamanın özetini göndermek"; "5. marraskuuta" değil
-      "5 Kasım"). Fince/İngilizce yalnızca sözlükteki terim alanında kalır.
+      "5 Kasım"). Yabancı dildeki sözcükler yalnızca sözlükteki terim alanında kalır.
     - Kullanıcıya ("Sen") düşen görevlerde sahip "\(user)" ve benimMi true; diğerlerinde sahip konuşan kişinin adı ya da
       etiketi ve benimMi false.
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
@@ -62,9 +62,9 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
     return LLMRequest(
         tier: .smart,
         system: """
-        Fince ya da İngilizce bir toplantının transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
+        Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
         transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman)
-        ve toplantıda geçen önemli Fince/İngilizce terimlerin Türkçe anlamlarını yaz. akis alanına konuların sırasını yaz:
+        ve toplantıda geçen önemli yabancı dildeki terimlerin Türkçe anlamlarını yaz (toplantı Türkçeyse sözlük boş kalabilir). akis alanına konuların sırasını yaz:
         her bölümün başladığı [mm:ss] zamanı (transkriptteki gibi), kısa başlığı ve tek cümlelik özeti (kısa toplantıda
         2–4, uzunda 5–12 bölüm).
         \(noteRules(user: user, template: template))

@@ -15,7 +15,8 @@ extension ModelTests {
             recordingDirectory: directory,
             partialIntervalSec: 1.5,
             minPartialSpeechSec: 1.0,
-            languageLockAfterSec: 5
+            languageLockAfterSec: 5,
+            candidateLanguages: [.finnish, .english]
         )
 
         var events: [LiveSessionEvent] = []
@@ -51,7 +52,7 @@ extension ModelTests {
         let english: [Float] = try loadFixture(name: "en-meeting")
         let config: LiveSessionConfig = LiveSessionConfig(
             languageMode: .fixed(.finnish), segmenter: .live, recordingDirectory: try temporaryDirectory(),
-            partialIntervalSec: 1000, minPartialSpeechSec: 1.0, languageLockAfterSec: 5
+            partialIntervalSec: 1000, minPartialSpeechSec: 1.0, languageLockAfterSec: 5, candidateLanguages: [.finnish, .english]
         )
         let (others, othersInput): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
         let handle: LiveSessionHandle = runLiveSession(

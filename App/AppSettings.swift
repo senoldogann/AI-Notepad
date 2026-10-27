@@ -58,6 +58,8 @@ enum SettingsKey {
     static let calendarEnabled: String = "calendar.enabled"
     static let meetingReminders: String = "calendar.reminders"
     static let micSuggestions: String = "calendar.micSuggestions"
+    /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
+    static let primaryMeetingLanguage: String = "language.primary"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
@@ -210,6 +212,7 @@ func registerDefaultSettings() {
         SettingsKey.inPersonMode: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
+        SettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
         SettingsKey.autoRecord: false,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
         SettingsKey.customTemplate: "",
@@ -326,3 +329,13 @@ func templateTitle(kind: NoteTemplateKind) -> LocalizedStringKey {
     }
 }
 
+
+/// Ayarlardaki ana toplantı dili; kayıtlı değer tanınmıyorsa Fince (varsayılan) ve hata loglanır.
+func primaryMeetingLanguage() -> MeetingLanguage {
+    let stored: String = UserDefaults.standard.string(forKey: SettingsKey.primaryMeetingLanguage) ?? MeetingLanguage.finnish.rawValue
+    guard let language = MeetingLanguage(rawValue: stored) else {
+        settingsLogger.error("Ana toplantı dili tanınmadı, değer: \(stored, privacy: .public)")
+        return .finnish
+    }
+    return language
+}

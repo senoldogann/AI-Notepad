@@ -234,15 +234,18 @@ private struct MenuContent: View {
         if model.isRecording {
             // Kayıt sırasında: otomatik algılama yanılırsa dil buradan değişir (o andan itibaren uygulanır).
             Menu("Dili değiştir", systemImage: "globe") {
-                Button("🇫🇮 Fince") { model.setLanguage(language: .finnish) }
-                Button("🇬🇧 İngilizce") { model.setLanguage(language: .english) }
+                LanguageMenuItems { (language: MeetingLanguage) -> Void in model.setLanguage(language: language) }
             }
             .disabled(model.isFinishing)
         } else {
-            Picker("Dil", systemImage: "globe", selection: $model.languageMode) {
-                Text("Otomatik").tag(LanguageMode.automatic)
-                Text("Fince").tag(LanguageMode.fixed(.finnish))
-                Text("İngilizce").tag(LanguageMode.fixed(.english))
+            Menu {
+                Button("Otomatik") { model.languageMode = .automatic }
+                LanguageMenuItems { (language: MeetingLanguage) -> Void in model.languageMode = .fixed(language) }
+            } label: {
+                switch model.languageMode {
+                case .automatic: Label("Dil: Otomatik", systemImage: "globe")
+                case .fixed(let language): Label(String(localized: "Dil: \(meetingLanguageName(language: language))"), systemImage: "globe")
+                }
             }
         }
 

@@ -69,10 +69,13 @@ private let localPassLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepa
 public struct LocalFinalTranscriber: FinalTranscriber {
     private let modelsDirectory: URL
     private let modelName: String
+    /// Otomatik modda aday diller (ilki ana toplantı dili).
+    private let candidateLanguages: [MeetingLanguage]
 
-    public init(modelsDirectory: URL, modelName: String) {
+    public init(modelsDirectory: URL, modelName: String, candidateLanguages: [MeetingLanguage]) {
         self.modelsDirectory = modelsDirectory
         self.modelName = modelName
+        self.candidateLanguages = candidateLanguages
     }
 
     public func transcribeFinal(audioURL: URL, languageMode: LanguageMode) async throws -> FinalPassResult {
@@ -101,8 +104,8 @@ public struct LocalFinalTranscriber: FinalTranscriber {
         return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language, notice: notice)
     }
 
-    /// Sabit dil ya da otomatikte konuşmanın ortasından alınan 30 sn'lik örnekle algılanan dil (Fince/İngilizce
-    /// dışında Fince).
+    /// Sabit dil ya da otomatikte konuşmanın ortasından alınan 30 sn'lik örnekle aday diller arasında algılanan dil
+    /// (adaylardan hiçbiri değilse ana toplantı dili).
     private func meetingLanguage(languageMode: LanguageMode, samples: [Float], engine: WhisperKitEngine) async throws -> MeetingLanguage {
         if case .fixed(let language) = languageMode {
             return language
@@ -110,7 +113,8 @@ public struct LocalFinalTranscriber: FinalTranscriber {
         let window: Int = 16000 * 30
         let start: Int = max(0, samples.count / 2 - window / 2)
         let probe: [Float] = Array(samples[start..<min(samples.count, start + window)])
-        return pickLanguage(logProbs: try await engine.detectLanguage(samples: probe)) ?? .finnish
+        return pickLanguage(logProbs: try await engine.detectLanguage(samples: probe), candidates: candidateLanguages)
+            ?? candidateLanguages.first ?? .finnish
     }
 
     private func diarize(samples: [Float]) async throws -> [SpeakerTurn] {

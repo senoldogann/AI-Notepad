@@ -747,6 +747,16 @@
         }
       }
     },
+    "Almanca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "German"
+          }
+        }
+      }
+    },
     "Alt boşluk: %lld pt": {
       "localizations": {
         "en": {
@@ -773,6 +783,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
+          }
+        }
+      }
+    },
+    "Ana toplantı dili": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main meeting language"
           }
         }
       }
@@ -914,6 +934,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Searching…"
+          }
+        }
+      }
+    },
+    "Arapça": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arabic"
           }
         }
       }
@@ -1516,6 +1546,16 @@
         }
       }
     },
+    "Bulgarca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulgarian"
+          }
+        }
+      }
+    },
     "Bulut konuşma tanıma": {
       "localizations": {
         "en": {
@@ -1697,6 +1737,16 @@
         }
       }
     },
+    "Danca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danish"
+          }
+        }
+      }
+    },
     "Deepgram": {
       "localizations": {
         "en": {
@@ -1805,6 +1855,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Detecting language…"
+          }
+        }
+      }
+    },
+    "Dil: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language: %@"
           }
         }
       }
@@ -2106,12 +2166,32 @@
         }
       }
     },
+    "Endonezce": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indonesian"
+          }
+        }
+      }
+    },
     "English": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "English"
+          }
+        }
+      }
+    },
+    "Estonca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estonian"
           }
         }
       }
@@ -2146,22 +2226,32 @@
         }
       }
     },
+    "Farsça": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persian"
+          }
+        }
+      }
+    },
+    "Felemenkçe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dutch"
+          }
+        }
+      }
+    },
     "Fince": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Finnish"
-          }
-        }
-      }
-    },
-    "Fince ve İngilizce konuşmalar canlı metin ve Türkçe çeviri olarak panelde.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Finnish and English speech appears in the panel as live text with a Turkish translation."
           }
         }
       }
@@ -2176,12 +2266,32 @@
         }
       }
     },
+    "Fince, İngilizce ve 33 dilde daha konuşmalar canlı metin ve Türkçe çeviri olarak panelde.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations in Finnish, English and 33 more languages appear in the panel as live text with Turkish translation."
+          }
+        }
+      }
+    },
     "Finder'da göster": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show in Finder"
+          }
+        }
+      }
+    },
+    "Fransızca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "French"
           }
         }
       }
@@ -2489,12 +2599,32 @@
         }
       }
     },
+    "Hintçe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hindi"
+          }
+        }
+      }
+    },
     "Hyvää huomenta kaikille, aloitetaan palaveri.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Hyvää huomenta kaikille, aloitetaan palaveri."
+          }
+        }
+      }
+    },
+    "Hırvatça": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Croatian"
           }
         }
       }
@@ -2515,6 +2645,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inter (default)"
+          }
+        }
+      }
+    },
+    "Japonca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Japanese"
           }
         }
       }
@@ -3406,6 +3546,16 @@
         }
       }
     },
+    "Korece": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korean"
+          }
+        }
+      }
+    },
     "Koyu": {
       "localizations": {
         "en": {
@@ -3557,6 +3707,36 @@
         }
       }
     },
+    "Lehçe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polish"
+          }
+        }
+      }
+    },
+    "Letonca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latvian"
+          }
+        }
+      }
+    },
+    "Litvanca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lithuanian"
+          }
+        }
+      }
+    },
     "Mac'te (WhisperKit, internetsiz)": {
       "localizations": {
         "en": {
@@ -3573,6 +3753,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "On this Mac, no keys (Ollama)"
+          }
+        }
+      }
+    },
+    "Macarca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hungarian"
           }
         }
       }
@@ -3834,6 +4024,16 @@
         }
       }
     },
+    "Norveççe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norwegian"
+          }
+        }
+      }
+    },
     "Not eski adlarla yazıldı.": {
       "localizations": {
         "en": {
@@ -3916,12 +4116,12 @@
         }
       }
     },
-    "Notların ve Fince/İngilizce transkriptlerin arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
+    "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Searches your notes and Finnish/English transcripts, answers in Turkish and shows which meeting each fact came from."
+            "value": "Searches your notes and transcripts (in whatever language was spoken), answers in Turkish and shows which meeting each fact came from."
           }
         }
       }
@@ -4076,6 +4276,16 @@
         }
       }
     },
+    "Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With automatic language, recording starts in this language; within the first minute the spoken language (35 languages) is detected and used. On-device recognition chooses between this language and English."
+          }
+        }
+      }
+    },
     "Oynat": {
       "localizations": {
         "en": {
@@ -4198,6 +4408,16 @@
         }
       }
     },
+    "Portekizce": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portuguese"
+          }
+        }
+      }
+    },
     "Reddedildi: Sistem Ayarları'ndan aç": {
       "localizations": {
         "en": {
@@ -4224,6 +4444,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colors"
+          }
+        }
+      }
+    },
+    "Rumence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Romanian"
+          }
+        }
+      }
+    },
+    "Rusça": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Russian"
           }
         }
       }
@@ -4637,6 +4877,16 @@
         }
       }
     },
+    "Slovakça": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slovak"
+          }
+        }
+      }
+    },
     "Son %lld dakikada konuşma yok.": {
       "localizations": {
         "en": {
@@ -4970,6 +5220,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Due: %@"
+          }
+        }
+      }
+    },
+    "Tayca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thai"
           }
         }
       }
@@ -5519,6 +5779,16 @@
         }
       }
     },
+    "Ukraynaca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ukrainian"
+          }
+        }
+      }
+    },
     "Unut": {
       "localizations": {
         "en": {
@@ -5596,6 +5866,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Vietnamca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vietnamese"
           }
         }
       }
@@ -5883,6 +6163,16 @@
         }
       }
     },
+    "Yunanca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Greek"
+          }
+        }
+      }
+    },
     "Yuvarlak (SF Rounded)": {
       "localizations": {
         "en": {
@@ -6134,6 +6424,16 @@
         }
       }
     },
+    "Çekçe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Czech"
+          }
+        }
+      }
+    },
     "Çeviri alınamadı · Tekrar dene": {
       "extractionState": "stale",
       "localizations": {
@@ -6201,6 +6501,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Translation: %@"
+          }
+        }
+      }
+    },
+    "Çince": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chinese"
           }
         }
       }
@@ -6438,6 +6748,16 @@
         }
       }
     },
+    "İbranice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hebrew"
+          }
+        }
+      }
+    },
     "İki dil (orijinal + Türkçe)": {
       "localizations": {
         "en": {
@@ -6484,6 +6804,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "English"
+          }
+        }
+      }
+    },
+    "İspanyolca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spanish"
+          }
+        }
+      }
+    },
+    "İsveççe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swedish"
+          }
+        }
+      }
+    },
+    "İtalyanca": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Italian"
           }
         }
       }
@@ -6634,26 +6984,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merge with"
-          }
-        }
-      }
-    },
-    "🇫🇮 Fince": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "🇫🇮 Finnish"
-          }
-        }
-      }
-    },
-    "🇬🇧 İngilizce": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "🇬🇧 English"
           }
         }
       }

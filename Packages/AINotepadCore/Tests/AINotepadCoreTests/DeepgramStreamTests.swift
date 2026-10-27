@@ -70,6 +70,20 @@ extension CloudTests {
         #expect(joined.contains("raportti") || joined.contains("raportin"), "metin: \(joined)")
     }
 
+    // Yeni diller: sabit dilde Deepgram canlı metni o dilde yazar (anahtar terimlerle de).
+    @Test(arguments: [(MeetingLanguage.swedish, "sv-meeting", ["rapporten", "budgeten"]), (MeetingLanguage.german, "de-meeting", ["bericht", "budget"])])
+    func streamsOtherLanguages(language: MeetingLanguage, fixture: String, words: [String]) async throws {
+        let key: String = try cloudKey(account: .deepgram)
+        let audio: AsyncStream<[Float]> = chunkedStream(samples: try loadFixture(name: fixture), chunkSize: 3200)
+        var finals: [String] = []
+        for await event in startDeepgramStream(apiKey: key, language: language, keyterms: ["Aino"], audio: audio).events {
+            if case .final(let text, _, _) = event { finals.append(text) }
+            if case .failed(let message) = event { Issue.record("hata: \(message)") }
+        }
+        let joined: String = finals.joined(separator: " ").lowercased()
+        #expect(words.allSatisfy { joined.contains($0) }, "metin: \(joined)")
+    }
+
     @Test func invalidKeyFailsWithStatus() async throws {
         let audio: AsyncStream<[Float]> = chunkedStream(samples: silence(seconds: 1), chunkSize: 3200)
         var events: [StreamingEvent] = []

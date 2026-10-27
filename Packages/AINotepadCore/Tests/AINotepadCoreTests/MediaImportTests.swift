@@ -51,6 +51,25 @@ extension CloudTests {
         #expect(result.note != nil)
         #expect(result.language == .finnish)
     }
+
+    // İsveççe dosya: dil İsveççe algılanır, not Türkçe yazılır (rapor ve bütçe Türkçe geçer).
+    @Test func swedishFileBecomesTurkishNote() async throws {
+        let fixture: URL = try #require(Bundle.module.url(forResource: "sv-meeting", withExtension: "wav", subdirectory: "Fixtures"))
+        let directory: URL = try temporaryDirectory()
+        let duration: Double = try await importMediaAudio(source: fixture, destination: directory.appending(path: "others.m4a"))
+        let record: MeetingRecord = importedMeetingRecord(id: "import-sv", source: fixture, startedAt: Date(), durationSec: duration, engine: .cloud, template: .general)
+        let result: MeetingRecord = await processMeeting(
+            record: record, directory: directory,
+            finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: [])),
+            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), languageMode: .automatic, userName: "Doğan",
+            voiceEmbedder: nil, registry: [], onStep: { (_: ProcessingStep) async -> Void in }
+        )
+        #expect(result.status == .done, "\(result.failureMessage ?? "")")
+        #expect(result.language == .swedish)
+        let note: MeetingNote = try #require(result.note)
+        let text: String = (note.summary + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
+        #expect(["rapor", "bütçe", "sunum"].contains { text.contains($0) }, "not: \(text)")
+    }
 }
 }
 
