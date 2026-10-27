@@ -440,13 +440,26 @@ struct TranscriptVersion: Equatable {
 /// Transkriptin en altındaki işaret.
 private let transcriptBottomID: String = "transkript-sonu"
 
-/// Toplantı dili seçenekleri (panel ve ada menüsü).
-struct LanguageMenuItems: View {
+/// Seçicilerde öne çıkan toplantı dilleri; diğerleri "Diğer diller" alt menüsünde.
+public let featuredMeetingLanguages: [MeetingLanguage] = [.finnish, .english, .swedish, .turkish]
+
+/// Toplantı dili seçenekleri (panel, ada, menü çubuğu ve ana sayfa): öne çıkanlar, sonra alt menüde diğer diller.
+public struct LanguageMenuItems: View {
     let onSetLanguage: @MainActor (MeetingLanguage) -> Void
 
-    var body: some View {
-        Button("🇫🇮 Fince") { onSetLanguage(.finnish) }
-        Button("🇬🇧 İngilizce") { onSetLanguage(.english) }
+    public init(onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void) {
+        self.onSetLanguage = onSetLanguage
+    }
+
+    public var body: some View {
+        ForEach(featuredMeetingLanguages, id: \.self) { (language: MeetingLanguage) in
+            Button(languageName(language: language)) { onSetLanguage(language) }
+        }
+        Menu("Diğer diller") {
+            ForEach(MeetingLanguage.allCases.filter { !featuredMeetingLanguages.contains($0) }, id: \.self) { (language: MeetingLanguage) in
+                Button(languageName(language: language)) { onSetLanguage(language) }
+            }
+        }
     }
 }
 

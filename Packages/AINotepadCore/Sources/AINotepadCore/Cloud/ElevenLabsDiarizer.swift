@@ -49,18 +49,18 @@ public func parseElevenLabsResponse(data: Data) throws -> DiarizationResult {
 public func elevenLabsLanguageCode(languageMode: LanguageMode) -> String? {
     switch languageMode {
     case .automatic: nil
-    case .fixed(.finnish): "fin"
-    case .fixed(.english): "eng"
+    case .fixed(let language): language.elevenLabsCode
     }
 }
 
-/// ElevenLabs dil kodunu toplantı diline çevirir; Fince/İngilizce dışında nil.
+/// ElevenLabs dil kodunu (ISO 639-3; Çince için "zho" da gelebilir) toplantı diline çevirir; desteklenmeyen dilde nil.
+/// Saf fonksiyondur.
 public func meetingLanguage(elevenLabsCode: String) -> MeetingLanguage? {
-    switch elevenLabsCode {
-    case "fin": .finnish
-    case "eng": .english
-    default: nil
+    let code: String = elevenLabsCode.lowercased()
+    if code == "zho" {
+        return .chinese
     }
+    return MeetingLanguage.allCases.first { $0.elevenLabsCode == code } ?? MeetingLanguage(rawValue: code)
 }
 
 private let elevenLabsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "ElevenLabs")

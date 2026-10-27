@@ -146,11 +146,44 @@ public func paragraphLabel(paragraph: TranscriptParagraph, speakerNames: [Int: S
     return speakerLabel(speaker: paragraph.speaker, person: paragraph.person)
 }
 
-/// Toplantı dilinin Türkçe adı. Saf fonksiyondur.
+/// Toplantı dilinin arayüz dilindeki adı. Saf fonksiyondur.
 public func meetingLanguageName(language: MeetingLanguage) -> String {
     switch language {
     case .finnish: String(localized: "Fince")
     case .english: String(localized: "İngilizce")
+    case .swedish: String(localized: "İsveççe")
+    case .norwegian: String(localized: "Norveççe")
+    case .danish: String(localized: "Danca")
+    case .estonian: String(localized: "Estonca")
+    case .german: String(localized: "Almanca")
+    case .dutch: String(localized: "Felemenkçe")
+    case .french: String(localized: "Fransızca")
+    case .spanish: String(localized: "İspanyolca")
+    case .portuguese: String(localized: "Portekizce")
+    case .italian: String(localized: "İtalyanca")
+    case .polish: String(localized: "Lehçe")
+    case .czech: String(localized: "Çekçe")
+    case .slovak: String(localized: "Slovakça")
+    case .hungarian: String(localized: "Macarca")
+    case .romanian: String(localized: "Rumence")
+    case .bulgarian: String(localized: "Bulgarca")
+    case .croatian: String(localized: "Hırvatça")
+    case .greek: String(localized: "Yunanca")
+    case .latvian: String(localized: "Letonca")
+    case .lithuanian: String(localized: "Litvanca")
+    case .russian: String(localized: "Rusça")
+    case .ukrainian: String(localized: "Ukraynaca")
+    case .turkish: String(localized: "Türkçe")
+    case .arabic: String(localized: "Arapça")
+    case .hebrew: String(localized: "İbranice")
+    case .persian: String(localized: "Farsça")
+    case .hindi: String(localized: "Hintçe")
+    case .chinese: String(localized: "Çince")
+    case .japanese: String(localized: "Japonca")
+    case .korean: String(localized: "Korece")
+    case .indonesian: String(localized: "Endonezce")
+    case .vietnamese: String(localized: "Vietnamca")
+    case .thai: String(localized: "Tayca")
     }
 }
 

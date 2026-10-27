@@ -15,8 +15,5 @@ public func languageText(locked: MeetingLanguage?, mode: LanguageMode, isRecordi
 
 /// Bayraklı dil adı.
 public func languageName(language: MeetingLanguage) -> String {
-    switch language {
-    case .finnish: "🇫🇮 " + meetingLanguageName(language: language)
-    case .english: "🇬🇧 " + meetingLanguageName(language: language)
-    }
+    language.flag + " " + meetingLanguageName(language: language)
 }

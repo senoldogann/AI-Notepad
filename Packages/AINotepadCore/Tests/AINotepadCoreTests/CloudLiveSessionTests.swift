@@ -35,7 +35,8 @@ func cloudConfig(
         languageConfidence: 0.8,
         keyterms: ["Aino", "raportti"],
         // Gerçek ses izi (SpeakerKit): pencereler canlıdaki gibi izle eşlenir.
-        voiceEmbedder: SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory())
+        voiceEmbedder: SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory()),
+        automaticStartLanguage: .finnish
     )
 }
 
@@ -122,6 +123,23 @@ extension CloudTests {
         #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
     }
 
+    // Fince ve İngilizce dışındaki dil: otomatik mod Fince başlar, ilk pencere İsveççeyi bulup akışları İsveççeye geçirir.
+    @Test func swedishMeetingSwitchesLanguage() async throws {
+        let swedish: [Float] = try loadFixture(name: "sv-meeting")
+        let others: [Float] = swedish + swedish
+        let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 5, diarizationIntervalSec: 1000, minDiarizationAudioSec: 3, elevenLabsKey: try cloudKey(account: .elevenlabs))
+        let events: [LiveSessionEvent] = await collect(events: runCloudLiveSession(
+            config: config,
+            meAudio: pacedStream(samples: silence(seconds: Double(others.count) / 16000)),
+            othersAudio: pacedStream(samples: others)
+        ).events)
+
+        #expect(events.contains(.languageLocked(.swedish)))
+        let text: String = finalOthersText(events: events)
+        #expect(text.contains("presentationen") || text.contains("styrelsen"), "metin: \(text)")
+        #expect(failures(events: events).isEmpty, "hatalar: \(failures(events: events))")
+    }
+
     // Geçersiz anahtar her pencerede aynı hatayı üretmemeli: bir kez bildirilir, ayırma durur.
     @Test func invalidElevenLabsKeyReportsOnce() async throws {
         let config: CloudSessionConfig = try cloudConfig(directory: try temporaryDirectory(), firstDiarizationAfterSec: 2, diarizationIntervalSec: 3, minDiarizationAudioSec: 1, elevenLabsKey: "gecersiz")
@@ -158,7 +176,8 @@ extension CloudTests {
         let config: CloudSessionConfig = CloudSessionConfig(
             languageMode: .fixed(.finnish), recordingDirectory: base.recordingDirectory, deepgramKey: base.deepgramKey,
             elevenLabsKey: base.elevenLabsKey, firstDiarizationAfterSec: 1000, diarizationIntervalSec: 1000,
-            diarizationWindowSec: 120, minDiarizationAudioSec: 1000, languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil
+            diarizationWindowSec: 120, minDiarizationAudioSec: 1000, languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil,
+            automaticStartLanguage: .finnish
         )
         let handle: LiveSessionHandle = runCloudLiveSession(
             config: config,

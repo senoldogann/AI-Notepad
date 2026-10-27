@@ -137,6 +137,7 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.customVocabulary) private var vocabulary: String = ""
     @AppStorage(SettingsKey.meetingReminders) private var meetingReminders: Bool = true
     @AppStorage(SettingsKey.micSuggestions) private var micSuggestions: Bool = true
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
     @AppStorage(SettingsKey.autoRecord) private var autoRecord: Bool = false
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
     @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
@@ -193,6 +194,13 @@ private struct GeneralSettings: View {
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
                 .disabled(model.isRecording)
+            }
+            SettingsRow(title: Text("Ana toplantı dili")) {
+                Text("Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.")
+            } control: {
+                SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
+                    (language.rawValue, Text(verbatim: languageName(language: language)))
+                })
             }
             SettingsRow(title: Text("Adın")) {
                 Text("Toplantı notunda sana düşen görevleri ayırmak için kullanılır.")

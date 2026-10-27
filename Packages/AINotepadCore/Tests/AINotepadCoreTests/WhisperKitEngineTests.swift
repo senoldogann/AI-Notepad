@@ -8,13 +8,13 @@ extension ModelTests {
     @Test func detectsFinnish() async throws {
         let engine: WhisperKitEngine = try await sharedTestEngine.value
         let logProbs: [String: Float] = try await engine.detectLanguage(samples: loadFixture(name: "fi-meeting"))
-        #expect(pickLanguage(logProbs: logProbs) == .finnish)
+        #expect(pickLanguage(logProbs: logProbs, candidates: [.finnish, .english]) == .finnish)
     }
 
     @Test func detectsEnglish() async throws {
         let engine: WhisperKitEngine = try await sharedTestEngine.value
         let logProbs: [String: Float] = try await engine.detectLanguage(samples: loadFixture(name: "en-meeting"))
-        #expect(pickLanguage(logProbs: logProbs) == .english)
+        #expect(pickLanguage(logProbs: logProbs, candidates: [.finnish, .english]) == .english)
     }
 
     @Test func transcribesFinnishKeywords() async throws {

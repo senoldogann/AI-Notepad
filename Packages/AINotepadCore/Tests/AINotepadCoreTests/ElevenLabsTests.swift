@@ -33,7 +33,8 @@ import Testing
         #expect(elevenLabsLanguageCode(languageMode: .fixed(.english)) == "eng")
         #expect(meetingLanguage(elevenLabsCode: "fin") == .finnish)
         #expect(meetingLanguage(elevenLabsCode: "eng") == .english)
-        #expect(meetingLanguage(elevenLabsCode: "swe") == nil)
+        #expect(meetingLanguage(elevenLabsCode: "swe") == .swedish)
+        #expect(meetingLanguage(elevenLabsCode: "kli") == nil)
     }
 }
 

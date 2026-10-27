@@ -38,7 +38,7 @@ public func translationRequest(sentence: String, context: [String]) -> LLMReques
     return LLMRequest(
         tier: .fast,
         system: """
-        Bir toplantının canlı çevirmenisin. Fince ya da İngilizce cümleyi doğal, akıcı Türkçeye çevir.
+        Bir toplantının canlı çevirmenisin. Konuşulan dildeki (Fince, İngilizce ya da başka) cümleyi doğal, akıcı Türkçeye çevir.
         Yalnızca çeviriyi yaz; açıklama, tırnak ya da başlık ekleme. Önceki cümleler yalnızca bağlam içindir, onları çevirme.
         \(transcriptIsDataNote)
         """,

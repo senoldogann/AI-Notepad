@@ -1,62 +1,72 @@
 import Foundation
 
-/// Otomatik dil algılamada biriken oylar (olasılık toplamları).
+/// Otomatik dil algılamada (Mac'te, Whisper) biriken oylar: aday dil başına olasılık toplamı.
 public struct LanguageVotes: Sendable, Equatable {
-    public let finnish: Double
-    public let english: Double
+    public let scores: [MeetingLanguage: Double]
 
-    public init(finnish: Double, english: Double) {
-        self.finnish = finnish
-        self.english = english
+    public init(scores: [MeetingLanguage: Double]) {
+        self.scores = scores
     }
 
-    public static let empty: LanguageVotes = LanguageVotes(finnish: 0, english: 0)
+    public static let empty: LanguageVotes = LanguageVotes(scores: [:])
 }
 
-/// Whisper'ın dil log olasılıklarından Fince ile İngilizce arasında seçim yapar.
-/// Diğer diller yok sayılır; ikisi de yoksa nil (bu bölüm dil oyu vermez).
-/// WhisperKit yalnızca en olası dili döndürdüğü için kısa ya da gürültülü bölümlerde
-/// sonuç "et" gibi başka bir dil olabilir. Eşitlikte Fince seçilir.
-public func pickLanguage(logProbs: [String: Float]) -> MeetingLanguage? {
-    let finnish: Float? = logProbs[MeetingLanguage.finnish.rawValue]
-    let english: Float? = logProbs[MeetingLanguage.english.rawValue]
-    switch (finnish, english) {
-    case (nil, nil):
-        return nil
-    case (.some, nil):
-        return .finnish
-    case (nil, .some):
-        return .english
-    case (.some(let fi), .some(let en)):
-        return en > fi ? .english : .finnish
-    }
+/// Whisper'ın dil log olasılıklarından aday diller arasında en olasıyı seçer. Adaylar dışındaki diller yok sayılır
+/// (kısa ya da gürültülü bölümde Fince "et" Estonca çıkabilir; yalnızca kullanıcının toplantı dilleri arasında
+/// seçilir). Adaylardan hiçbiri yoksa nil (bu bölüm dil oyu vermez). Eşitlikte aday sırasında önce gelen. Saf
+/// fonksiyondur.
+public func pickLanguage(logProbs: [String: Float], candidates: [MeetingLanguage]) -> MeetingLanguage? {
+    candidates
+        .compactMap { (language: MeetingLanguage) -> (language: MeetingLanguage, score: Float)? in
+            logProbs[language.rawValue].map { (language: language, score: $0) }
+        }
+        .reduce(nil) { (best: (language: MeetingLanguage, score: Float)?, item: (language: MeetingLanguage, score: Float)) -> (language: MeetingLanguage, score: Float)? in
+            guard let best, best.score >= item.score else {
+                return item
+            }
+            return best
+        }?
+        .language
 }
 
-/// Bir bölümün Fince/İngilizce olasılıklarını (log → olasılık) oylara ekler; ikisi de yoksa oylar değişmez.
-public func addVote(votes: LanguageVotes, logProbs: [String: Float]) -> LanguageVotes {
-    let finnish: Double = logProbs[MeetingLanguage.finnish.rawValue].map { (value: Float) -> Double in exp(Double(value)) } ?? 0
-    let english: Double = logProbs[MeetingLanguage.english.rawValue].map { (value: Float) -> Double in exp(Double(value)) } ?? 0
-    return LanguageVotes(finnish: votes.finnish + finnish, english: votes.english + english)
+/// Bir bölümün aday dillerdeki olasılıklarını (log → olasılık) oylara ekler; adaylardan hiçbiri yoksa oylar değişmez.
+/// Saf fonksiyondur.
+public func addVote(votes: LanguageVotes, logProbs: [String: Float], candidates: [MeetingLanguage]) -> LanguageVotes {
+    LanguageVotes(scores: candidates.reduce(into: votes.scores) { (scores: inout [MeetingLanguage: Double], language: MeetingLanguage) -> Void in
+        if let logProb = logProbs[language.rawValue] {
+            scores[language, default: 0] += exp(Double(logProb))
+        }
+    })
 }
 
-/// Dil kilitlenmeden önce bir bölümün hangi dilde yazıya döküleceği:
-/// bölümün kendi algılaması, yoksa öndeki dil, o da yoksa Fince (kullanıcının ana toplantı dili).
-public func resolveSegmentLanguage(detected: MeetingLanguage?, votes: LanguageVotes) -> MeetingLanguage {
-    detected ?? leadingLanguage(votes: votes) ?? .finnish
+/// Dil kilitlenmeden önce bir bölümün hangi dilde yazıya döküleceği: bölümün kendi algılaması, yoksa öndeki dil, o da
+/// yoksa ilk aday (kullanıcının ana toplantı dili). Saf fonksiyondur.
+public func resolveSegmentLanguage(detected: MeetingLanguage?, votes: LanguageVotes, candidates: [MeetingLanguage]) -> MeetingLanguage {
+    detected ?? leadingLanguage(votes: votes, candidates: candidates) ?? candidates.first ?? .finnish
 }
 
-/// Kilit süresi dolduysa ve oy varsa çoğunluk dilini döndürür; aksi halde nil.
-public func lockedLanguage(votes: LanguageVotes, elapsedSec: Double, lockAfterSec: Double) -> MeetingLanguage? {
+/// Kilit süresi dolduysa ve oy varsa çoğunluk dilini döndürür; aksi halde nil. Saf fonksiyondur.
+public func lockedLanguage(votes: LanguageVotes, elapsedSec: Double, lockAfterSec: Double, candidates: [MeetingLanguage]) -> MeetingLanguage? {
     guard elapsedSec >= lockAfterSec else {
         return nil
     }
-    return leadingLanguage(votes: votes)
+    return leadingLanguage(votes: votes, candidates: candidates)
 }
 
-/// Şu an önde olan dil; hiç oy yoksa nil. Eşitlikte Fince.
-public func leadingLanguage(votes: LanguageVotes) -> MeetingLanguage? {
-    guard votes.finnish > 0 || votes.english > 0 else {
-        return nil
-    }
-    return votes.english > votes.finnish ? .english : .finnish
+/// Şu an önde olan dil; hiç oy yoksa nil. Eşitlikte aday sırasında önce gelen. Saf fonksiyondur.
+public func leadingLanguage(votes: LanguageVotes, candidates: [MeetingLanguage]) -> MeetingLanguage? {
+    candidates
+        .filter { (votes.scores[$0] ?? 0) > 0 }
+        .reduce(nil) { (best: MeetingLanguage?, language: MeetingLanguage) -> MeetingLanguage? in
+            guard let best, (votes.scores[best] ?? 0) >= (votes.scores[language] ?? 0) else {
+                return language
+            }
+            return best
+        }
+}
+
+/// Otomatik algılamanın aday dilleri: ana toplantı dili önce, sonra İngilizce (en sık ikinci dil); ana dil İngilizceyse
+/// ikinci aday Fince (uygulamanın asıl kullanım yeri). Saf fonksiyondur.
+public func automaticCandidates(primary: MeetingLanguage) -> [MeetingLanguage] {
+    primary == .english ? [.english, .finnish] : [primary, .english]
 }
