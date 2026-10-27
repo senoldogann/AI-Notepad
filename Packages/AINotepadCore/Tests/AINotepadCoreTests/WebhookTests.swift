@@ -85,14 +85,8 @@ struct WebhookLiveTests {
 }
 
 @Suite struct DestinationTests {
-    // Slack kurulum bağlantısı manifestli; panodan yalnız bilinen kanal adresleri alınır; Notlar betiği kaçışlı;
-    // klasöre yazılan dosya adı güvenli ve dosya gerçekten yazılır.
-    @Test func setupClipboardNotesAndFolder() throws {
-        let slack: URLComponents = try #require(URLComponents(url: slackSetupURL(), resolvingAgainstBaseURL: false))
-        #expect(slack.host == "api.slack.com" && slack.queryItems?.first { $0.name == "manifest_json" }?.value?.contains("incoming-webhook") == true)
-        #expect(channelWebhookFromClipboard(text: " https://hooks.slack.com/services/T/B/x \n")?.host() == "hooks.slack.com")
-        #expect(channelWebhookFromClipboard(text: "https://hooks.zapier.com/hooks/catch/1/x") == nil)
-        #expect(channelWebhookFromClipboard(text: "merhaba") == nil)
+    // Notlar betiği kaçışlı; klasöre yazılan dosya adı güvenli ve dosya gerçekten yazılır.
+    @Test func notesAndFolder() throws {
         let note: MeetingNote = MeetingNote(title: "Bütçe \"Q4\" <taslak>", summary: "A & B", decisions: ["Karar"], tasks: [], glossary: [])
         let html: String = notesHTML(record: sampleRecord(), note: note)
         #expect(html.contains("&lt;taslak&gt;") && html.contains("A &amp; B"))
@@ -102,5 +96,60 @@ struct WebhookLiveTests {
         let folder: URL = try temporaryDirectory()
         let file: URL = try exportMarkdown(record: record, folder: folder)
         #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("# Plan: Q4/2026?"))
+    }
+}
+
+@Suite struct ChannelAuthTests {
+    // RFC 7636 ek B örneği; giriş adresleri PKCE ve servise özgü izinlerle; dönüşte hata, state ve kod denetlenir.
+    @Test func pkceAuthorizeAndCallback() throws {
+        #expect(pkceChallenge(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+        let pkce: PKCEPair = makePKCEPair()
+        #expect(pkce.verifier.count == 43 && pkce.challenge == pkceChallenge(verifier: pkce.verifier))
+        let query: (ChannelService) throws -> [String: String] = { (service: ChannelService) throws -> [String: String] in
+            let url: URL = channelAuthorizeURL(service: service, clientID: "kimlik", pkce: pkce, state: "s1")
+            let items: [URLQueryItem] = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+            return Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
+        }
+        let slack: [String: String] = try query(.slack)
+        #expect(slack["user_scope"] == "chat:write,channels:read,groups:read" && slack["scope"] == nil)
+        #expect(slack["redirect_uri"] == "ainotepad://oauth/slack" && slack["code_challenge_method"] == "S256" && slack["state"] == "s1")
+        #expect(try query(.discord)["scope"] == "webhook.incoming")
+        #expect(try query(.teams)["scope"]?.contains("ChannelMessage.Send") == true)
+        let callback: (String) -> URL = { (query: String) -> URL in URL(string: "ainotepad://oauth/slack?\(query)")! }
+        #expect(try oauthCallbackCode(service: .slack, url: callback("code=abc&state=s1"), expectedState: "s1") == "abc")
+        #expect(throws: ChannelAuthError.stateMismatch(service: .slack)) {
+            try oauthCallbackCode(service: .slack, url: callback("code=abc&state=baska"), expectedState: "s1")
+        }
+        #expect(throws: ChannelAuthError.denied(service: .slack, reason: "access_denied")) {
+            try oauthCallbackCode(service: .slack, url: callback("error=access_denied&state=s1"), expectedState: "s1")
+        }
+        #expect(String(decoding: formBody(fields: [("a", "x y&z"), ("redirect_uri", "ainotepad://oauth/slack")]), as: UTF8.self)
+            == "a=x%20y%26z&redirect_uri=ainotepad%3A%2F%2Foauth%2Fslack")
+        #expect(graphPathComponent(id: "19:abc@thread.tacv2") == "19:abc@thread.tacv2")
+        #expect(graphPathComponent(id: "a/b?c") == "a%2Fb%3Fc")
+    }
+
+    // Slack jetonu ilk girişte `authed_user` içinde, yenilemede üst düzeyde gelir; oturum hataları yeniden bağlanmaya
+    // yönlendirir; bağlantı Anahtar Zinciri metnine çevrilip geri okunur.
+    @Test func slackTokensAndConnectionStorage() throws {
+        let now: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        let first: SlackTokenResponse = try JSONDecoder().decode(SlackTokenResponse.self, from: Data(#"""
+        {"ok":true,"authed_user":{"id":"U1","access_token":"xoxe.xoxp-1","refresh_token":"xoxe-1-r","expires_in":43200,"token_type":"user"},"team":{"id":"T1","name":"Ekip"}}
+        """#.utf8))
+        #expect(try slackTokens(response: first, now: now) == OAuthTokens(accessToken: "xoxe.xoxp-1", refreshToken: "xoxe-1-r", expiresAt: now.addingTimeInterval(43200)))
+        let refreshed: SlackTokenResponse = try JSONDecoder().decode(SlackTokenResponse.self, from: Data(#"""
+        {"ok":true,"access_token":"xoxe.xoxp-2","refresh_token":"xoxe-1-r2","expires_in":43200,"token_type":"user"}
+        """#.utf8))
+        #expect(try slackTokens(response: refreshed, now: now).refreshToken == "xoxe-1-r2")
+        let failed: SlackTokenResponse = try JSONDecoder().decode(SlackTokenResponse.self, from: Data(#"{"ok":false,"error":"invalid_refresh_token"}"#.utf8))
+        #expect(throws: ChannelAuthError.expired(service: .slack)) { try slackTokens(response: failed, now: now) }
+        #expect(slackAPIError(code: "not_in_channel") == .api(service: .slack, error: "not_in_channel"))
+        let connection: ChannelConnection = ChannelConnection(
+            service: .teams, tokens: OAuthTokens(accessToken: "a", refreshToken: "r", expiresAt: now), workspace: "",
+            channel: ChannelOption(id: "19:x@thread.tacv2", teamID: "t", name: "Takım › Genel")
+        )
+        #expect(try decodeChannelConnection(text: try encodeChannelConnection(connection: connection)) == connection)
+        #expect(needsRefresh(tokens: connection.tokens, now: now.addingTimeInterval(-60)))
+        #expect(!needsRefresh(tokens: connection.tokens, now: now.addingTimeInterval(-600)))
     }
 }

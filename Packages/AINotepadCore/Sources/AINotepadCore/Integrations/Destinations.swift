@@ -1,38 +1,5 @@
 import Foundation
 
-/// Slack'te AI-Notepad uygulamasını önceden doldurulmuş olarak oluşturan bağlantı: ad, açıklama ve "incoming-webhook"
-/// izni hazır gelir; kullanıcı çalışma alanını ve kanalı seçer, Slack webhook adresini verir. Saf fonksiyondur.
-public func slackSetupURL() -> URL {
-    let manifest: String = """
-    {"display_information":{"name":"AI-Notepad","description":"Toplantı notları: görevler, kararlar ve özet.","background_color":"#d9552c"},\
-    "oauth_config":{"scopes":{"bot":["incoming-webhook"]}},\
-    "settings":{"org_deploy_enabled":false,"socket_mode_enabled":false,"token_rotation_enabled":false}}
-    """
-    var components: URLComponents = URLComponents()
-    components.scheme = "https"
-    components.host = "api.slack.com"
-    components.path = "/apps"
-    components.queryItems = [URLQueryItem(name: "new_app", value: "1"), URLQueryItem(name: "manifest_json", value: manifest)]
-    // Sabit, geçerli bileşenlerden kurulur; nil olamaz.
-    return components.url!
-}
-
-/// Panodaki metin bilinen bir kanalın (Slack, Discord, Teams) webhook adresiyse adres; değilse nil (genel adreslerde
-/// kullanıcı açıkça yapıştırır, pano yanlışlıkla başka bir bağlantıyı almasın). Saf fonksiyondur.
-public func channelWebhookFromClipboard(text: String) -> URL? {
-    let url: URL
-    do {
-        url = try webhookURL(text: text)
-    } catch {
-        // Panoda başka bir metin var: kanal adresi değil (hata değil).
-        return nil
-    }
-    guard url.scheme == "https", webhookKind(url: url) != .generic else {
-        return nil
-    }
-    return url
-}
-
 /// Notun Apple Notlar'a yazılacak HTML gövdesi: başlık, tarih, senin görevlerin, özet, kararlar, diğer görevler;
 /// metin kaçışlı. Saf fonksiyondur.
 public func notesHTML(record: MeetingRecord, note: MeetingNote) -> String {

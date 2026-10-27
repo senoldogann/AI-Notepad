@@ -452,9 +452,9 @@ struct MeetingDetailPage: View {
         }
         switch model.webhookStates[record.id] {
         case .sending:
-            Label("Webhook'a gönderiliyor…", systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+            Label("Kanala gönderiliyor…", systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
         case .sent:
-            Label("Not webhook'a gönderildi", systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+            Label("Not kanala gönderildi", systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
         case nil:
@@ -668,7 +668,7 @@ struct MeetingDetailPage: View {
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
-        Button("Webhook'a gönder (Slack, Teams…)", systemImage: "paperplane") {
+        Button("Kanala gönder (Slack, Teams, Discord…)", systemImage: "paperplane") {
             Task { _ = await model.sendToWebhook(meetingID: record.id) }
         }
         .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
