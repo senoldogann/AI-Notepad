@@ -2236,6 +2236,16 @@
         }
       }
     },
+    "Buzlu cam": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frosted glass"
+          }
+        }
+      }
+    },
     "Bütçe hakkında neler konuşuldu?": {
       "localizations": {
         "en": {
@@ -2263,6 +2273,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "ANSWER"
+          }
+        }
+      }
+    },
+    "Cam opaklığı: %%%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glass opacity: %lld%%"
+          }
+        }
+      }
+    },
+    "Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a glass surface the desktop shows faintly through the window."
           }
         }
       }
@@ -2758,6 +2788,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap to start listening"
+          }
+        }
+      }
+    },
+    "Dolu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solid"
           }
         }
       }
@@ -6301,6 +6341,16 @@
         }
       }
     },
+    "Serin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cool"
+          }
+        }
+      }
+    },
     "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.": {
       "localizations": {
         "en": {
@@ -6859,6 +6909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Sıcak": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warm"
           }
         }
       }
@@ -7980,6 +8040,16 @@
         }
       }
     },
+    "Vurgu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accent"
+          }
+        }
+      }
+    },
     "Vurgu rengi": {
       "localizations": {
         "en": {
@@ -8323,6 +8393,16 @@
         }
       }
     },
+    "Yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
     "Yunanca": {
       "localizations": {
         "en": {
@@ -8393,12 +8473,42 @@
         }
       }
     },
+    "Yüzey": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Surface"
+          }
+        }
+      }
+    },
     "Zapier, Make, n8n, Teams iş akışı": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Zapier, Make, n8n, Teams workflow"
+          }
+        }
+      }
+    },
+    "Zemin tonu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background tint"
+          }
+        }
+      }
+    },
+    "Zemine çok hafif bir renk; kartlar ve yazı değişmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A very light colour wash on the background; cards and text stay the same."
           }
         }
       }
@@ -9344,6 +9454,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rewrite with template"
+          }
+        }
+      }
+    },
+    "Şeffaf cam": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear glass"
           }
         }
       }

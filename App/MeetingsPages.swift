@@ -186,7 +186,7 @@ struct MeetingsListPage: View {
         }
         .controlSize(.small)
         .padding(DesignTokens.Spacing.m)
-        .background(Theme.background)
+        .pageBackground()
         .overlay(alignment: .top) { Divider() }
     }
 

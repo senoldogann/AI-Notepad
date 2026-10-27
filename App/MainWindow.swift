@@ -184,8 +184,8 @@ struct MainWindowView: View {
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
         .frame(minWidth: 860, minHeight: 580)
-        .background(Theme.background)
-        .containerBackground(Theme.background, for: .window)
+        .background { WindowBackdrop() }
+        .containerBackground(for: .window) { WindowBackdrop() }
         // Başlık çubuğu gizli: içerik pencerenin tepesine kadar sürer (trafik ışıkları kenar çubuğunun üstünde).
         .ignoresSafeArea(.container, edges: .top)
         .modifier(AppearanceEnvironment())
@@ -264,7 +264,7 @@ private struct Sidebar: View {
         .padding(.bottom, 12)
         .frame(width: 228)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Theme.background)
+        .pageBackground()
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
     }
 

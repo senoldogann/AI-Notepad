@@ -184,6 +184,9 @@ struct AppearanceEnvironment: ViewModifier {
     @AppStorage(SettingsKey.textSize) private var textSize: Double = PanelAppearance.standard.textSize
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
+    @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
+    @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
+    @AppStorage(SettingsKey.tint) private var tint: String = PanelAppearance.standard.tint.rawValue
 
     func body(content: Content) -> some View {
         let standard: PanelAppearance = .standard
@@ -191,12 +194,15 @@ struct AppearanceEnvironment: ViewModifier {
             fontChoice: AppFontChoice.parse(storage: fontDesign) ?? standard.fontChoice,
             uiScale: min(max(uiScale, SettingsRange.uiScale.lowerBound), SettingsRange.uiScale.upperBound),
             textSize: textSize, lineSpacing: lineSpacing, bottomSpacing: bottomSpacing,
-            accent: PanelAccent(rawValue: accent) ?? standard.accent
+            accent: PanelAccent(rawValue: accent) ?? standard.accent,
+            surface: WindowSurface(rawValue: surface) ?? standard.surface,
+            surfaceOpacity: min(max(surfaceOpacity, SettingsRange.surfaceOpacity.lowerBound), SettingsRange.surfaceOpacity.upperBound),
+            tint: ThemeTint(rawValue: tint) ?? standard.tint
         )
         content
             .environment(\.panelAppearance, appearance)
             .tint(appearance.accent.color)
-            .fontDesign(appearance.fontDesign.design)
+            .fontDesign(appearance.systemFontDesign)
             // Yazı tipi belirtilmemiş metinler ve sistem denetimleri de seçili aile ve ölçekte.
             .font(appearance.font(size: 13, weight: .regular))
             // İpuçları pencerenin en üst katmanında (metnin altında kalmasın, kesilmesin).
@@ -313,7 +319,7 @@ private struct ProcessingOverlay: View {
             ProgressView(value: Double(progress.stepIndex) + 0.5, total: Double(steps.count))
                 .tint(appearance.accent.color)
             // Seçilen yazı tipi tasarımı yazı tipini ayrıca belirtmeyen tüm metinlere de uygulanır.
-            .fontDesign(appearance.fontDesign.design)
+            .fontDesign(appearance.systemFontDesign)
             if !isCompact {
                 Text("Bitince toplantının sayfası açılır; görevlerin en üstte.")
                     .appFont(size: 11, weight: .regular)

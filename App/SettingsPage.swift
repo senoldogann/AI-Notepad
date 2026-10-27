@@ -460,6 +460,9 @@ private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.lineSpacing) private var lineSpacing: Double = PanelAppearance.standard.lineSpacing
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     @AppStorage(SettingsKey.islandEnabled) private var islandEnabled: Bool = true
+    @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
+    @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
+    @AppStorage(SettingsKey.tint) private var tint: String = PanelAppearance.standard.tint.rawValue
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -469,6 +472,33 @@ private struct AppearanceSettings: View {
             } control: {
                 PillPicker(selection: $theme, options: [
                     (AppTheme.system.rawValue, "Sistem"), (AppTheme.light.rawValue, "Açık"), (AppTheme.dark.rawValue, "Koyu"),
+                ])
+                .fixedSize()
+            }
+            SettingsRow(title: Text("Yüzey")) {
+                Text("Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.")
+            } control: {
+                PillPicker(selection: $surface, options: [
+                    (WindowSurface.solid.rawValue, "Dolu"), (WindowSurface.frosted.rawValue, "Buzlu cam"), (WindowSurface.clear.rawValue, "Şeffaf cam"),
+                ])
+                .fixedSize()
+            }
+            if surface != WindowSurface.solid.rawValue {
+                SettingsRow(title: Text("Cam opaklığı: %\(Int((surfaceOpacity * 100).rounded()))")) {
+                    EmptyView()
+                } control: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "circle.dotted").foregroundStyle(Theme.muted)
+                        Slider(value: $surfaceOpacity, in: SettingsRange.surfaceOpacity, step: 0.05).frame(width: 200)
+                        Image(systemName: "circle.fill").foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+            SettingsRow(title: Text("Zemin tonu")) {
+                Text("Zemine çok hafif bir renk; kartlar ve yazı değişmez.")
+            } control: {
+                PillPicker(selection: $tint, options: [
+                    (ThemeTint.none.rawValue, "Yok"), (ThemeTint.warm.rawValue, "Sıcak"), (ThemeTint.cool.rawValue, "Serin"), (ThemeTint.accent.rawValue, "Vurgu"),
                 ])
                 .fixedSize()
             }
