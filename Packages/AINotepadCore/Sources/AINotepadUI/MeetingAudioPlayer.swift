@@ -139,7 +139,9 @@ public final class MeetingAudioPlayer {
     /// Konumu çalarken saniyede ~30 kez günceller; tüm kayıtlar bitince durur.
     private func startTicker() {
         ticker?.cancel()
-        ticker = Task { [weak self] in
+        // Kullanıcı öncelikli: makine yoğunken (derleme, dışa aktarma) konum güncellemesi arka plan işlerinin
+        // arkasında kalmasın.
+        ticker = Task(priority: .userInitiated) { [weak self] in
             while !Task.isCancelled {
                 // Önce beklenir: kayıtlar 50 ms sonra başlar (`play(atTime:)`); hemen bakılırsa "çalmıyor" görünür.
                 do {
