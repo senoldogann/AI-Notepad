@@ -58,6 +58,22 @@ extension CloudTests {
         #expect(answer.sources.contains { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
     }
 
+    // Gerçek model: "@" ile seçilen toplantıya soru; arama terimi istenmez (toplantı sığar), tüm kaynaklar o toplantıdan.
+    @Test func mentionedMeetingAnswersFromItOnly() async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let events: ProgressBox = ProgressBox()
+        let answer: ArchiveAnswer = try await askAboutMeetings(
+            question: "Bu toplantıda neler konuşuldu?", history: [], records: archive().filter { $0.id == "a" }, userName: "Senol", llm: provider,
+            maxChars: 60_000, now: Date(timeIntervalSince1970: 1_792_000_000)
+        ) { (progress: ArchiveProgress) -> Void in
+            events.append(progress)
+        }
+        #expect(!answer.sources.isEmpty && answer.sources.allSatisfy { $0.meetingID == "a" }, "\(answer.sources.map(\.id))")
+        #expect(events.values.contains { if case .searchTerms(let terms) = $0 { return terms.isEmpty } else { return false } })
+        let text: String = answer.text.lowercased()
+        #expect(text.contains("kahve") || text.contains("mikko"), "\(answer.text)")
+    }
+
     // Gerçek model: devam sorusu ("bunu") önceki konuşmadan anlaşılır; adımlar sırayla bildirilir ve cevap parça parça akar.
     @Test func followUpStreamsWithSteps() async throws {
         let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))

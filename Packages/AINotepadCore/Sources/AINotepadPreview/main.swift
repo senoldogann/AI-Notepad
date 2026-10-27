@@ -87,13 +87,52 @@ MainActor.assumeIsolated {
         auxiliaryTopRight: CGRect(x: 852, y: 950, width: 660, height: 32)
     )
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
+    // Örnek ses seviyeleri: konuşma sürüyor gibi.
+    let levels: AudioLevels = AudioLevels(count: 14, interval: 0)
+    levels.start()
+    for (index, level) in [0.2, 0.6, 0.35, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.65, 0.45, 0.85, 0.55, 0.75].enumerated() {
+        levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
+    }
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(phase: .recording), layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
+            view: IslandView(state: sampleState(phase: .recording), levels: levels, layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")
     }
+    // Boş sayfa sahneleri (Kişiler, tüm görevler bitti) açık ve koyu.
+    for (name, scheme, y) in [("empty-light", ColorScheme.light, 120.0), ("empty-dark", ColorScheme.dark, 120.0)] {
+        let number: Int = showWindow(
+            view: EmptyStateHero(
+                symbol: "person.2.fill", title: "Henüz kimse yok",
+                message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle.",
+                palette: .violet,
+                steps: [
+                    EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
+                    EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),
+                    EmptyStateStep(symbol: "person.crop.circle.badge.checkmark", title: "Kişi burada toplanır"),
+                ]
+            ) {
+                Button("Kişi ekle", systemImage: "person.badge.plus") {}
+                    .buttonStyle(.pillPrimary)
+            }
+            .frame(width: 760, height: 600)
+            .background(Theme.background)
+            .environment(\.colorScheme, scheme),
+            frame: NSRect(x: scheme == .light ? 40 : 820, y: y, width: 760, height: 600)
+        )
+        print("\(name) \(number)")
+    }
+    let confetti: Int = showWindow(
+        view: EmptyStateHero(symbol: "party.popper.fill", title: "Açık görevin kalmadı", message: "Hepsi tamamlandı.", palette: .sunset, steps: []) {
+            EmptyView()
+        }
+        .overlay { ConfettiBurst(palette: .sunset) }
+        .frame(width: 760, height: 480)
+        .background(Theme.background),
+        frame: NSRect(x: 400, y: 80, width: 760, height: 480)
+    )
+    print("confetti \(confetti)")
     // Çıktı bir dosyaya yönlendirildiğinde de hemen görünsün.
     fflush(stdout)
 }

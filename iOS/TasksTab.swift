@@ -51,11 +51,33 @@ struct TasksTab: View {
                         (TaskFilter.done, "Tamamlanan · \(doneCount)"),
                     ])
                     if shown.isEmpty {
-                        EmptyStateCard(
-                            symbol: "checklist",
-                            title: filter == .open ? "Açık görevin yok" : "Henüz tamamlanan yok",
-                            message: "Toplantı notlarında senin adına yazılan işler burada toplanır."
-                        )
+                        if filter == .done {
+                            EmptyStateCard(symbol: "checkmark.circle", title: "Henüz tamamlanan yok", message: "Bir görevin dairesine dokununca buraya taşınır.")
+                        } else if doneCount > 0 {
+                            EmptyStateHero(
+                                symbol: "party.popper.fill", title: "Açık görevin kalmadı",
+                                message: "Hepsi tamamlandı. Yeni toplantılarda sana düşen işler buraya gelir.", palette: .sunset, steps: []
+                            ) {
+                                EmptyView()
+                            }
+                            .overlay { ConfettiBurst(palette: .sunset) }
+                        } else {
+                            EmptyStateHero(
+                                symbol: "checklist", title: "Henüz sana düşen görev yok",
+                                message: "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır.",
+                                palette: .mint,
+                                steps: [
+                                    EmptyStateStep(symbol: "mic.fill", title: "Kayıt"),
+                                    EmptyStateStep(symbol: "sparkles", title: "Not yazılır"),
+                                    EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
+                                ]
+                            ) {
+                                if phoneUserName().isEmpty {
+                                    Button("Adını yaz (görevlerin tanınsın)", systemImage: "person.text.rectangle") { router.tab = .settings }
+                                        .buttonStyle(.pillPrimary)
+                                }
+                            }
+                        }
                     }
                     ForEach(groups, id: \.record.id) { (group: (record: MeetingRecord, tasks: [NoteTask])) in
                         VStack(alignment: .leading, spacing: 8) {

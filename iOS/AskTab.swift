@@ -19,8 +19,8 @@ final class PhoneAsk {
         self.store = store
     }
 
-    /// Soruyu arşive sorar; cevap akarak gelir.
-    func ask(question: String) {
+    /// Soruyu arşive sorar; cevap akarak gelir. `meetingIDs` boş değilse yalnız o toplantılara (`@` ile etiketlenenler).
+    func ask(question: String, meetingIDs: [String]) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnswering else {
             return
@@ -29,9 +29,10 @@ final class PhoneAsk {
             exchange.phase == .done ? ArchiveTurn(question: exchange.question, answer: exchange.answer.text, sources: exchange.answer.sources) : nil
         }
         let id: UUID = UUID()
+        let scoped: [MeetingRecord] = store.meetings.filter { meetingIDs.contains($0.id) }
         exchanges.append(ArchiveExchange(
-            id: id, question: trimmed, startedAt: Date(), phase: .understanding, terms: [], passages: [],
-            answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
+            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, startedAt: Date(), phase: .understanding,
+            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         isAnswering = true
         let records: [MeetingRecord] = store.meetings
@@ -39,10 +40,19 @@ final class PhoneAsk {
             do {
                 let provider: LLMProvider = try await phoneLLMProvider()
                 self?.update(id: id) { $0.modelName = llmModelDisplayName(provider: provider, tier: .smart) }
-                _ = try await askArchive(
-                    question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: 60_000, now: Date()
-                ) { [weak self] (progress: ArchiveProgress) -> Void in
+                let onProgress: ArchiveProgressHandler = { [weak self] (progress: ArchiveProgress) -> Void in
                     await self?.apply(progress: progress, id: id)
+                }
+                if scoped.isEmpty {
+                    _ = try await askArchive(
+                        question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        now: Date(), onProgress: onProgress
+                    )
+                } else {
+                    _ = try await askAboutMeetings(
+                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        now: Date(), onProgress: onProgress
+                    )
                 }
                 self?.finish(id: id, phase: .done)
             } catch is CancellationError {
@@ -104,6 +114,8 @@ struct AskTab: View {
     let store: PhoneStore
     let router: PhoneRouter
     @State private var question: String = ""
+    /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; kaldırılana ya da yeni sohbete dek kalır.
+    @State private var mentioned: [MeetingRecord] = []
     @FocusState private var isFocused: Bool
 
     private let examples: [(symbol: String, text: String)] = [
@@ -139,9 +151,22 @@ struct AskTab: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                composer
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+                VStack(spacing: 8) {
+                    if mentionQuery(text: question) != nil {
+                        MentionSuggestions(
+                            candidates: mentionCandidates(records: store.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 5),
+                            highlighted: -1
+                        ) { (record: MeetingRecord) -> Void in
+                            withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
+                            question = removingMentionQuery(text: question)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                    composer
+                }
+                .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             }
             .background(Theme.background)
             .navigationTitle("Sor")
@@ -151,6 +176,7 @@ struct AskTab: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Yeni sohbet", systemImage: "square.and.pencil") {
                             ask.clear()
+                            mentioned = []
                         }
                     }
                 }
@@ -190,7 +216,7 @@ struct AskTab: View {
                 .padding(.top, 4)
             ForEach(examples, id: \.text) { (example: (symbol: String, text: String)) in
                 Button {
-                    ask.ask(question: String(localized: String.LocalizationValue(example.text)))
+                    ask.ask(question: String(localized: String.LocalizationValue(example.text)), meetingIDs: [])
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: example.symbol)
@@ -220,8 +246,27 @@ struct AskTab: View {
     private var composer: some View {
         let isEmpty: Bool = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 24, style: .continuous)
-        return HStack(alignment: .bottom, spacing: 10) {
-            TextField(ask.exchanges.isEmpty ? "Toplantılarına bir şey sor…" : "Devam sorusu sor…", text: $question, axis: .vertical)
+        return VStack(alignment: .leading, spacing: 6) {
+            if !mentioned.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(mentioned, id: \.id) { (record: MeetingRecord) in
+                            RemovableMentionChip(title: record.note?.title ?? record.title) {
+                                withAnimation(.smooth(duration: 0.2)) { mentioned.removeAll { $0.id == record.id } }
+                            }
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .padding(.top, 6)
+            }
+            HStack(alignment: .bottom, spacing: 10) {
+            TextField(
+                mentioned.isEmpty
+                    ? (ask.exchanges.isEmpty ? "Sor… (@ ile toplantı etiketle)" : "Devam sorusu sor…")
+                    : "Etiketlenen toplantılara sor…",
+                text: $question, axis: .vertical
+            )
                 .appFont(size: 16, weight: .regular)
                 .lineLimit(1...5)
                 .focused($isFocused)
@@ -244,6 +289,7 @@ struct AskTab: View {
             .buttonStyle(.plain)
             .disabled(isEmpty && !ask.isAnswering)
             .accessibilityLabel(ask.isAnswering ? "Durdur" : "Sor")
+            }
         }
         .padding(.leading, 16)
         .padding(.trailing, 6)
@@ -260,10 +306,10 @@ struct AskTab: View {
     }
 
     private func send() {
-        guard !ask.isAnswering else {
+        guard !ask.isAnswering, mentionQuery(text: question) == nil else {
             return
         }
-        ask.ask(question: question)
+        ask.ask(question: question, meetingIDs: mentioned.map(\.id))
         question = ""
         isFocused = false
     }

@@ -27,10 +27,19 @@ struct MeetingsTab: View {
                             .foregroundStyle(Theme.muted)
                     }
                     if store.meetings.isEmpty {
-                        EmptyStateCard(
-                            symbol: "list.bullet.rectangle", title: "Henüz toplantı yok",
-                            message: "Kayıt sekmesinden yüz yüze bir toplantıyı kaydet; Mac'teki toplantıların da iCloud eşitlemesiyle burada görünecek."
-                        )
+                        EmptyStateHero(
+                            symbol: "waveform", title: "Henüz toplantı yok",
+                            message: "Kayıt sekmesinden yüz yüze bir toplantıyı kaydet; Mac'teki toplantıların da iCloud eşitlemesiyle burada görünür.",
+                            palette: .sunset,
+                            steps: [
+                                EmptyStateStep(symbol: "mic.fill", title: "Kayıt"),
+                                EmptyStateStep(symbol: "sparkles", title: "Not yazılır"),
+                                EmptyStateStep(symbol: "icloud", title: "Mac'le eşitlenir"),
+                            ]
+                        ) {
+                            Button("Kaydı başlat", systemImage: "mic.fill") { router.tab = .record }
+                                .buttonStyle(.pillPrimary)
+                        }
                     } else if sections.isEmpty {
                         EmptyStateCard(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: nil)
                     }

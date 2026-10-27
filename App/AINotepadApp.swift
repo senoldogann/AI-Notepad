@@ -140,7 +140,7 @@ struct AINotepadApp: App {
                 }
                 // "--soru <metin>": Sor bölümünde soruyu sorar (görsel kontrol için).
                 if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
-                    model.askArchive(question: CommandLine.arguments[index + 1])
+                    model.askArchive(question: CommandLine.arguments[index + 1], meetingIDs: [])
                 }
                 let section: MainSection? = launchSection(arguments: CommandLine.arguments)
                 let page: PanelPage? = launchPage(arguments: CommandLine.arguments)

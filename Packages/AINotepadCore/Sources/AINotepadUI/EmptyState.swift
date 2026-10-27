@@ -85,3 +85,192 @@ private struct EmptyStateIcon: View {
             .accessibilityHidden(true)
     }
 }
+
+/// Boş sayfanın yol gösteren adımı (ör. "Toplantıyı aç" → "Konuşmacıya ad ver").
+public struct EmptyStateStep {
+    let symbol: String
+    let title: LocalizedStringKey
+
+    public init(symbol: String, title: LocalizedStringKey) {
+        self.symbol = symbol
+        self.title = title
+    }
+}
+
+/// Boş sayfanın sahnesi: ElevenLabs film gradyanlı küre (sakin akış) ve simge; altında başlık, açıklama, yol gösteren
+/// adımlar ve eylemler. Sahne yumuşakça belirir. "Hareketi azalt" açıksa gradyan durgundur.
+public struct EmptyStateHero<Actions: View>: View {
+    let symbol: String
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+    let palette: FilmPalette
+    let steps: [EmptyStateStep]
+    let actions: Actions
+    @State private var isShown: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
+
+    public init(
+        symbol: String, title: LocalizedStringKey, message: LocalizedStringKey, palette: FilmPalette, steps: [EmptyStateStep],
+        @ViewBuilder actions: () -> Actions
+    ) {
+        self.symbol = symbol
+        self.title = title
+        self.message = message
+        self.palette = palette
+        self.steps = steps
+        self.actions = actions()
+    }
+
+    public var body: some View {
+        VStack(spacing: 22) {
+            EmptyStateOrb(symbol: symbol, palette: palette, isAnimated: !reduceMotion)
+                .frame(width: 180, height: 170)
+                .scaleEffect(isShown ? 1 : 0.94)
+                .opacity(isShown ? 1 : 0)
+            VStack(spacing: 8) {
+                Text(title)
+                    .appFont(size: 24, weight: .regular)
+                    .tracking(-0.5)
+                    .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.center)
+                Text(message)
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: 460)
+            .offset(y: isShown ? 0 : 12)
+            .opacity(isShown ? 1 : 0)
+            if !steps.isEmpty {
+                EmptyStateSteps(steps: steps, palette: palette)
+                    .offset(y: isShown ? 0 : 12)
+                    .opacity(isShown ? 1 : 0)
+            }
+            actions
+                .offset(y: isShown ? 0 : 12)
+                .opacity(isShown ? 1 : 0)
+        }
+        .padding(.vertical, 28)
+        .padding(.horizontal, DesignTokens.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .onAppear {
+            withAnimation(reduceMotion ? .none : .easeOut(duration: 0.5)) { isShown = true }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Adımlar: numaralı küçük daireler ve aralarında ince kesik çizgi; sırayla belirir.
+private struct EmptyStateSteps: View {
+    let steps: [EmptyStateStep]
+    let palette: FilmPalette
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { (item: (offset: Int, element: EmptyStateStep)) in
+                if item.offset > 0 {
+                    Rectangle()
+                        .fill(Theme.line)
+                        .frame(minWidth: 12, maxWidth: 34)
+                        .frame(height: 1)
+                        .padding(.top, 17)
+                }
+                VStack(spacing: 8) {
+                    Image(systemName: item.element.symbol)
+                        .appFont(size: 14, weight: .medium)
+                        .foregroundStyle(palette.colors.base)
+                        .frame(width: 34, height: 34)
+                        .background(palette.colors.base.opacity(0.12), in: Circle())
+                    Text(item.element.title)
+                        .appFont(size: 12, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 110)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Sahnenin küresi: ElevenLabs kapakları gibi yavaşça akan film gradyanı (paletin bulutları, grenli doku) daire
+/// içinde, arkasında aynı renklerin yumuşak parıltısı; ortada beyaz simge. Hareket yalnızca gradyanın sakin akışıdır.
+struct EmptyStateOrb: View {
+    let symbol: String
+    let palette: FilmPalette
+    let isAnimated: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(palette.colors.base.opacity(0.22))
+                .frame(width: 150, height: 150)
+                .blur(radius: 34)
+            Group {
+                if isAnimated {
+                    LivingFilmGradient(seed: "bos-\(symbol)", palette: palette)
+                } else {
+                    FilmGradient(seed: "bos-\(symbol)", palette: palette)
+                }
+            }
+            .frame(width: 116, height: 116)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+            Image(systemName: symbol)
+                .font(.system(size: 38, weight: .medium))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Bir kez, kısa ve sakin konfeti (tüm görevler bitince): paletin renklerinde az sayıda parça yukarı çıkıp düşer.
+/// "Hareketi azalt" açıksa çizilmez.
+public struct ConfettiBurst: View {
+    let palette: FilmPalette
+    @State private var start: Date = Date()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
+
+    public init(palette: FilmPalette) {
+        self.palette = palette
+    }
+
+    public var body: some View {
+        if !reduceMotion {
+            TimelineView(.animation(minimumInterval: 1.0 / 60)) { (context: TimelineViewDefaultContext) in
+                let elapsed: Double = context.date.timeIntervalSince(start)
+                Canvas { (canvas: inout GraphicsContext, size: CGSize) in
+                    guard elapsed < 1.8 else {
+                        return
+                    }
+                    let colors: [Color] = [palette.colors.base] + palette.colors.clouds
+                    for index in 0..<24 {
+                        let seed: Double = Double(index) * 12.9898
+                        let angle: Double = -Double.pi / 2 + (fract(sin(seed) * 43758.5453) - 0.5) * 2.2
+                        let speed: Double = 180 + fract(sin(seed * 1.7) * 9123.17) * 160
+                        let x: Double = size.width / 2 + cos(angle) * speed * elapsed
+                        let y: Double = size.height * 0.45 + sin(angle) * speed * elapsed + 420 * elapsed * elapsed
+                        let opacity: Double = max(0, 0.85 - elapsed / 1.8)
+                        var piece: GraphicsContext = canvas
+                        piece.translateBy(x: x, y: y)
+                        piece.rotate(by: .radians(elapsed * (4 + Double(index % 5))))
+                        piece.opacity = opacity
+                        piece.fill(Path(roundedRect: CGRect(x: -4, y: -2, width: 8, height: 4), cornerRadius: 1), with: .color(colors[index % colors.count]))
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear { start = Date() }
+        }
+    }
+}
+
+/// Sayının kesirli kısmı (konfeti için sözde rastgele). Saf fonksiyondur.
+private func fract(_ value: Double) -> Double {
+    value - value.rounded(.down)
+}
