@@ -83,3 +83,24 @@ struct WebhookLiveTests {
         }
     }
 }
+
+@Suite struct DestinationTests {
+    // Slack kurulum bağlantısı manifestli; panodan yalnız bilinen kanal adresleri alınır; Notlar betiği kaçışlı;
+    // klasöre yazılan dosya adı güvenli ve dosya gerçekten yazılır.
+    @Test func setupClipboardNotesAndFolder() throws {
+        let slack: URLComponents = try #require(URLComponents(url: slackSetupURL(), resolvingAgainstBaseURL: false))
+        #expect(slack.host == "api.slack.com" && slack.queryItems?.first { $0.name == "manifest_json" }?.value?.contains("incoming-webhook") == true)
+        #expect(channelWebhookFromClipboard(text: " https://hooks.slack.com/services/T/B/x \n")?.host() == "hooks.slack.com")
+        #expect(channelWebhookFromClipboard(text: "https://hooks.zapier.com/hooks/catch/1/x") == nil)
+        #expect(channelWebhookFromClipboard(text: "merhaba") == nil)
+        let note: MeetingNote = MeetingNote(title: "Bütçe \"Q4\" <taslak>", summary: "A & B", decisions: ["Karar"], tasks: [], glossary: [])
+        let html: String = notesHTML(record: sampleRecord(), note: note)
+        #expect(html.contains("&lt;taslak&gt;") && html.contains("A &amp; B"))
+        #expect(appleNotesScript(html: html).contains("{body:\"<h1>Bütçe \\\"Q4\\\""))
+        let record: MeetingRecord = sampleRecord().with(note: MeetingNote(title: "Plan: Q4/2026?", summary: "Özet", decisions: [], tasks: [], glossary: []))
+        #expect(markdownFileName(record: record).hasSuffix(" Plan  Q4 2026.md"))
+        let folder: URL = try temporaryDirectory()
+        let file: URL = try exportMarkdown(record: record, folder: folder)
+        #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("# Plan: Q4/2026?"))
+    }
+}

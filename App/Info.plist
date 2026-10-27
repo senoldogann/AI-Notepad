@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

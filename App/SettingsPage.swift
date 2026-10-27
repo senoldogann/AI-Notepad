@@ -917,79 +917,346 @@ private struct MCPClientRow: View {
     }
 }
 
-/// Webhook servisi: adı ve adresin nasıl alınacağını anlatan sayfa.
-private let webhookServices: [(name: String, guide: String)] = [
-    ("Slack", "https://api.slack.com/messaging/webhooks"),
-    ("Microsoft Teams", "https://support.microsoft.com/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498"),
-    ("Discord", "https://support.discord.com/hc/articles/228383668-Intro-to-Webhooks"),
-    ("Zapier", "https://zapier.com/apps/webhook/integrations"),
-    ("Make", "https://www.make.com/en/help/tools/webhooks"),
-    ("n8n", "https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/"),
-]
+/// Kanal: webhook'la bağlanan servis ve kurulum yolu.
+private enum Channel: String, CaseIterable, Identifiable {
+    case slack
+    case teams
+    case discord
+    case automation
 
-/// Not hazır olunca gönderilen webhook (Slack, Teams, Discord, Zapier, Make, n8n): adres Anahtar Zinciri'nde, kendiliğinden
-/// gönderim ve deneme.
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .slack: "Slack"
+        case .teams: "Microsoft Teams"
+        case .discord: "Discord"
+        case .automation: "Zapier · Make · n8n"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .slack: "number"
+        case .teams: "person.3.fill"
+        case .discord: "bubble.left.and.bubble.right.fill"
+        case .automation: "bolt.horizontal.fill"
+        }
+    }
+
+    /// Kurulumu açan sayfa: Slack'te AI-Notepad uygulaması hazır gelir; diğerlerinde adresin nasıl alınacağı.
+    var setupURL: URL {
+        switch self {
+        case .slack: slackSetupURL()
+        case .teams: URL(string: "https://support.microsoft.com/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498")!
+        case .discord: URL(string: "https://support.discord.com/hc/articles/228383668-Intro-to-Webhooks")!
+        case .automation: URL(string: "https://zapier.com/apps/webhook/integrations")!
+        }
+    }
+
+    /// Açılan sayfada yapılacaklar (kısa).
+    var steps: LocalizedStringKey {
+        switch self {
+        case .slack: "Slack'te AI-Notepad hazır açıldı: Create App › Incoming Webhooks › Add New Webhook › kanal seç › Webhook URL'yi kopyala."
+        case .teams: "Teams'te kanal › ⋯ › İş akışları › \"Webhook isteği alındığında kanala gönder\" › adresi kopyala."
+        case .discord: "Discord'da kanal ayarları › Entegrasyonlar › Webhook'lar › Yeni Webhook › Webhook URL'sini kopyala."
+        case .automation: "Servisinde \"Webhook ile tetikle\" adımını oluştur ve verdiği adresi aşağıya yapıştır."
+        }
+    }
+
+    /// Adresi panodan kendiliğinden yakalanır mı (bilinen kanal adresi); genel servislerde kullanıcı yapıştırır.
+    var detectsClipboard: Bool {
+        self != .automation
+    }
+}
+
+/// Kanal kurulumunun durumu.
+private enum ChannelSetup: Equatable {
+    case idle
+    /// Kurulum sayfası açıldı; adres kopyalanınca panodan yakalanacak.
+    case waiting(Channel)
+    case testing
+    case connected(String)
+    case failed(String)
+}
+
+/// Kanallara gönder: bağlı kanal (tür, sunucu, dene, kendiliğinden gönder, kaldır) ve tek tıkla kurulum kartları
+/// (Slack, Teams, Discord, otomasyon), Apple Notlar ve klasöre (Obsidian, iCloud Drive) yazma.
 private struct WebhookSettings: View {
     let model: AppModel
     @AppStorage(SettingsKey.webhookAutoSend) private var autoSend: Bool = false
-    @State private var testState: WebhookTestState = .idle
+    @AppStorage(SettingsKey.appleNotesAutoSend) private var notesAutoSend: Bool = false
+    @AppStorage(SettingsKey.markdownFolder) private var markdownFolder: String = ""
+    @AppStorage(SettingsKey.markdownAutoExport) private var markdownAuto: Bool = false
+    @State private var connected: URL?
+    @State private var setup: ChannelSetup = .idle
+    @State private var watcher: Task<Void, Never>?
+    @State private var manualAddress: String = ""
+    @State private var notesStatus: String?
+    @State private var folderStatus: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Kanallara gönder")
-            Text("Servisin \"gelen webhook\" adresini al ve aşağıya yapıştır; tür adresten tanınır. Adresin nasıl alınacağı:")
+            Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) seçtiğin yere kendiliğinden gider; toplantı sayfasındaki ⋯ menüsünden elle de gönderilir.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            FlowLayout(spacing: 8, lineSpacing: 8) {
-                ForEach(webhookServices, id: \.name) { (service: (name: String, guide: String)) in
-                    if let url = URL(string: service.guide) {
-                        Link(destination: url) {
-                            HStack(spacing: 5) {
-                                Text(verbatim: service.name)
-                                Image(systemName: "arrow.up.right").appFont(size: 9, weight: .bold)
-                            }
-                            .appFont(size: 12, weight: .medium)
-                            .foregroundStyle(Theme.ink)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(Theme.soft, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .linkPointer(isEnabled: true)
-                        .hoverHint("\(service.name) adresinin nasıl alınacağını aç", alignment: .leading, edge: .bottom)
-                    }
-                }
+                .padding(.bottom, 12)
+            if let connected {
+                connectedRow(url: connected)
             }
-            .padding(.vertical, 10)
-            SecretField(title: "Webhook adresi", account: .webhook, onChange: { testState = .idle })
-            SettingsRow(title: Text("Not hazır olunca gönder")) {
-                Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) oraya kendiliğinden gider. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilebilir.")
-                switch testState {
-                case .idle:
-                    EmptyView()
-                case .running:
-                    ProgressView().controlSize(.small)
-                case .sent:
-                    Label("Deneme notu gönderildi", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-                case .failed(let message):
-                    Text(message).foregroundStyle(.red)
+            setupStatus
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(Channel.allCases) { (channel: Channel) in
+                    channelCard(channel: channel)
                 }
-            } control: {
+                appleNotesCard
+                folderCard
+            }
+            .padding(.vertical, 6)
+            if case .waiting(.automation) = setup {
                 HStack(spacing: 8) {
-                    Button("Dene") {
-                        testState = .running
+                    TextField("Webhook adresi", text: $manualAddress, prompt: Text("https://hooks.zapier.com/…"))
+                        .textFieldStyle(.roundedBorder)
+                    Button("Bağla") { connect(text: manualAddress) }
+                        .buttonStyle(.pillPrimary)
+                        .disabled(manualAddress.isEmpty)
+                }
+                .padding(.top, 8)
+            }
+        }
+        .task { await refreshConnected() }
+        .onDisappear { watcher?.cancel() }
+    }
+
+    /// Bağlı kanal: tür ve sunucu (adresin gizli kısmı gösterilmez), dene, kendiliğinden gönder, kaldır.
+    private func connectedRow(url: URL) -> some View {
+        SettingsRow(title: Text(verbatim: channelName(url: url))) {
+            Label(String(localized: "Bağlı · \(url.host() ?? "")"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+        } control: {
+            HStack(spacing: 8) {
+                Button("Dene") { Task { await test() } }
+                    .disabled(setup == .testing)
+                Button("Kaldır", role: .destructive) { disconnect() }
+                Toggle("Not hazır olunca gönder", isOn: $autoSend).settingsToggle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var setupStatus: some View {
+        switch setup {
+        case .idle:
+            EmptyView()
+        case .waiting(let channel):
+            HStack(alignment: .top, spacing: 10) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(channel.steps).appFont(size: 13, weight: .regular)
+                    if channel.detectsClipboard {
+                        Text("Adresi kopyaladığın an buraya bağlanır ve bir deneme mesajı gider.")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                Spacer()
+                Button("Vazgeç") { cancelWaiting() }.buttonStyle(.hoverPlain).foregroundStyle(Theme.muted)
+            }
+            .padding(12)
+            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.bottom, 8)
+        case .testing:
+            Label("Bağlanıyor ve deneme mesajı gönderiliyor…", systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
+        case .connected(let name):
+            Label(String(localized: "\(name) bağlandı; deneme mesajı gönderildi."), systemImage: "checkmark.circle.fill")
+                .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
+        case .failed(let message):
+            Text(message).appFont(size: 13, weight: .regular).foregroundStyle(.red).padding(.bottom, 8)
+        }
+    }
+
+    private func channelCard(channel: Channel) -> some View {
+        destinationCard(symbol: channel.symbol, title: Text(verbatim: channel.name), detail: channel.detectsClipboard ? "Tek tıkla kur" : "Adres yapıştır") {
+            Button("Bağla") { start(channel: channel) }
+                .buttonStyle(.pillPrimary)
+                .controlSize(.small)
+        }
+    }
+
+    private var appleNotesCard: some View {
+        destinationCard(symbol: "note.text", title: Text("Apple Notlar"), detail: notesStatus.map { LocalizedStringKey($0) } ?? "\"AI-Notepad\" klasörüne, hesap gerekmez") {
+            Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
+                .settingsToggle()
+                .onChange(of: notesAutoSend) { (_: Bool, enabled: Bool) in
+                    // İlk açılışta izin penceresi çıksın ve doğru çalıştığı görülsün: son not gönderilir.
+                    if enabled, let latest = model.meetings.first(where: { $0.note != nil }) {
                         Task {
-                            let error: String? = await model.sendTestWebhook()
-                            testState = error.map { WebhookTestState.failed($0) } ?? .sent
+                            let error: String? = await model.sendToAppleNotes(meetingID: latest.id)
+                            notesStatus = error ?? String(localized: "Son not Notlar'a yazıldı.")
+                            if error != nil {
+                                notesAutoSend = false
+                            }
                         }
                     }
-                    .disabled(testState == .running)
-                    Toggle("Not hazır olunca gönder", isOn: $autoSend)
-                        .settingsToggle()
+                }
+        }
+    }
+
+    private var folderCard: some View {
+        destinationCard(
+            symbol: "folder.fill", title: Text("Klasör (Obsidian, iCloud)"),
+            detail: folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))
+        ) {
+            if markdownFolder.isEmpty {
+                Button("Seç…") { chooseFolder() }
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+            } else {
+                HStack(spacing: 6) {
+                    Button("Değiştir") { chooseFolder() }.controlSize(.small)
+                    Toggle("Klasöre yaz", isOn: $markdownAuto).settingsToggle()
                 }
             }
         }
+    }
+
+    private func destinationCard(symbol: String, title: Text, detail: LocalizedStringKey, @ViewBuilder action: () -> some View) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .appFont(size: 14, weight: .semibold)
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background { FilmGradient(seed: "kanal-\(symbol)", palette: .sunset) }
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
+                Text(detail).appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted).lineLimit(2)
+            }
+            Spacer(minLength: 6)
+            action()
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+    }
+
+    /// Kurulumu başlatır: sayfayı açar; bilinen kanalda panoyu izler (en fazla 10 dk).
+    private func start(channel: Channel) {
+        watcher?.cancel()
+        manualAddress = ""
+        setup = .waiting(channel)
+        NSWorkspace.shared.open(channel.setupURL)
+        guard channel.detectsClipboard else {
+            return
+        }
+        let startCount: Int = NSPasteboard.general.changeCount
+        watcher = Task {
+            var lastCount: Int = startCount
+            for _ in 0..<1200 {
+                do {
+                    try await Task.sleep(for: .milliseconds(500))
+                } catch {
+                    return
+                }
+                let pasteboard: NSPasteboard = NSPasteboard.general
+                guard pasteboard.changeCount != lastCount else {
+                    continue
+                }
+                lastCount = pasteboard.changeCount
+                // İçerik okunmadan önce yalnızca bağlantı olup olmadığına bakılır (macOS pano iznini gereksiz sormaz).
+                let patterns: Set<PartialKeyPath<NSPasteboard.DetectedValues>>
+                do {
+                    patterns = try await pasteboard.detectedPatterns(for: [\NSPasteboard.DetectedValues.probableWebURL])
+                } catch {
+                    // Pano içeriği bağlantı değil ya da algılanamadı: sonraki değişikliği bekle.
+                    continue
+                }
+                guard patterns.contains(\NSPasteboard.DetectedValues.probableWebURL), let text = pasteboard.string(forType: .string),
+                      channelWebhookFromClipboard(text: text) != nil else {
+                    continue
+                }
+                connect(text: text)
+                return
+            }
+            setup = .idle
+        }
+    }
+
+    private func cancelWaiting() {
+        watcher?.cancel()
+        setup = .idle
+    }
+
+    /// Adresi doğrular, Anahtar Zinciri'ne kaydeder, kendiliğinden gönderimi açar ve deneme mesajı gönderir.
+    private func connect(text: String) {
+        watcher?.cancel()
+        let url: URL
+        do {
+            url = try webhookURL(text: text)
+            try saveSecret(service: keychainService, account: .webhook, value: url.absoluteString)
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+            return
+        }
+        connected = url
+        autoSend = true
+        Task { await test() }
+    }
+
+    private func test() async {
+        setup = .testing
+        if let error = await model.sendTestWebhook() {
+            setup = .failed(error)
+        } else {
+            setup = .connected(connected.map { channelName(url: $0) } ?? "")
+        }
+    }
+
+    private func disconnect() {
+        do {
+            try deleteSecret(service: keychainService, account: .webhook)
+            connected = nil
+            autoSend = false
+            setup = .idle
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+        }
+    }
+
+    private func refreshConnected() async {
+        do {
+            connected = try await optionalSecretInBackground(service: keychainService, account: .webhook).flatMap { URL(string: $0) }
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+        }
+    }
+
+    private func chooseFolder() {
+        let panel: NSOpenPanel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = String(localized: "Seç")
+        panel.message = String(localized: "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)")
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+        markdownFolder = url.path
+        markdownAuto = true
+        folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
+            ?? String(localized: "Son not klasöre yazıldı.")
+    }
+}
+
+/// Webhook adresinin arayüzdeki adı. Saf fonksiyondur.
+private func channelName(url: URL) -> String {
+    switch webhookKind(url: url) {
+    case .slack: "Slack"
+    case .discord: "Discord"
+    case .teams: "Microsoft Teams"
+    case .generic: url.host() ?? "Webhook"
     }
 }
 

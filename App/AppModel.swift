@@ -927,7 +927,7 @@ final class AppModel {
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
-            autoSendToWebhookIfEnabled(record: saved)
+            autoSendToDestinations(record: saved)
             if saved.status == .done {
                 await cloud.moveFinishedMeetings { [weak self] in self?.reloadMeetings() }
             }
@@ -1643,6 +1643,71 @@ final class AppModel {
         }
     }
 
+    // MARK: Apple Notlar ve klasör
+
+    /// Notu Apple Notlar'da "AI-Notepad" klasörüne yazar (ilk seferde macOS izin sorar); hata varsa kullanıcı metni döner.
+    func sendToAppleNotes(meetingID: String) async -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
+            return nil
+        }
+        let source: String = appleNotesScript(html: notesHTML(record: record, note: note))
+        let failure: String? = await Task.detached(priority: .userInitiated) { () -> String? in
+            runAppleScript(source: source)
+        }.value
+        if let failure {
+            Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .public)")
+            return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da AI-Notepad için Notlar'a izin ver.")
+        }
+        Self.logger.info("Not Apple Notlar'a yazıldı, toplantı: \(meetingID, privacy: .public)")
+        return nil
+    }
+
+    /// Notu seçili klasöre Markdown olarak yazar (aynı toplantı aynı dosyaya); klasör seçilmediyse ya da yazılamazsa
+    /// kullanıcı metni döner.
+    func exportToFolder(meetingID: String) -> String? {
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return nil
+        }
+        let path: String = UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? ""
+        guard !path.isEmpty else {
+            return String(localized: "Önce Ayarlar › Bağlantılar'dan bir klasör seç.")
+        }
+        do {
+            let file: URL = try exportMarkdown(record: record, folder: URL(fileURLWithPath: path, isDirectory: true))
+            Self.logger.info("Not klasöre yazıldı, dosya: \(file.lastPathComponent, privacy: .private)")
+            return nil
+        } catch {
+            return userFacingMessage(error: error)
+        }
+    }
+
+    /// İşleme bitince açık olan hedeflere kendiliğinden gönderir: webhook, Apple Notlar (bir kez) ve klasör (her
+    /// seferinde güncellenir). Hata panelde görünür; gönderilenler toplantıya işlenir.
+    private func autoSendToDestinations(record: MeetingRecord) {
+        autoSendToWebhookIfEnabled(record: record)
+        guard record.note != nil else {
+            return
+        }
+        if UserDefaults.standard.bool(forKey: SettingsKey.markdownAutoExport), let error = exportToFolder(meetingID: record.id) {
+            errorMessages = appendUnique(messages: errorMessages, message: error)
+        }
+        guard UserDefaults.standard.bool(forKey: SettingsKey.appleNotesAutoSend), record.notesSentAt == nil else {
+            return
+        }
+        Task {
+            if let error = await sendToAppleNotes(meetingID: record.id) {
+                errorMessages = appendUnique(messages: errorMessages, message: error)
+                return
+            }
+            guard let current = meetings.first(where: { $0.id == record.id }), !isLocked(meetingID: record.id) else {
+                return
+            }
+            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                saveRecord(record: current.with(notesSentAt: Date()), directory: directory)
+            }
+        }
+    }
+
     /// İşleme bitince: ayar açıksa ve not daha önce gönderilmediyse webhook'a kendiliğinden gönderir; başarılıysa
     /// toplantıya işlenir (tekrar işlemede yeniden gönderilmez).
     private func autoSendToWebhookIfEnabled(record: MeetingRecord) {
@@ -2166,4 +2231,20 @@ func chooseMediaToImport(model: AppModel) {
         return
     }
     model.importMedia(urls: panel.urls)
+}
+
+
+/// AppleScript'i çalıştırır; başarılıysa nil, değilse hata metni (numarasıyla). Arka planda çağrılır.
+private func runAppleScript(source: String) -> String? {
+    guard let script = NSAppleScript(source: source) else {
+        return "AppleScript derlenemedi"
+    }
+    var error: NSDictionary?
+    script.executeAndReturnError(&error)
+    guard let error else {
+        return nil
+    }
+    let number: Int = (error[NSAppleScript.errorNumber] as? Int) ?? 0
+    let message: String = (error[NSAppleScript.errorMessage] as? String) ?? ""
+    return "\(message) (\(number))"
 }

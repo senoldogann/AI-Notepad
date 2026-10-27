@@ -28,6 +28,7 @@ targets:
         ATSApplicationFontsPath: "."
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
+        NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
         NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
     configFiles:
       Debug: Config/Signing.xcconfig
