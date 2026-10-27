@@ -14,9 +14,10 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
         )
         let body: [String: Any] = try jsonObject(openAIRequestBody(request: request, model: openAIModel(config: sampleConfig, tier: request.tier), effort: .high))
         #expect(body["model"] as? String == "akilli")
-        // Effort seçiliyse akıl yürütme de sınırdan harcar: en az 64.000; effort yoksa isteğin sınırı.
+        // Effort seçiliyse akıl yürütme de sınırdan harcar: en az 64.000; effort yoksa da en az 4096 (varsayılan düşünme).
         #expect(body["max_completion_tokens"] as? Int == 64000)
-        #expect(openAIMaxTokens(requested: 512, effort: nil) == 512)
+        #expect(openAIMaxTokens(requested: 512, effort: nil) == 4096)
+        #expect(openAIMaxTokens(requested: 16000, effort: nil) == 16000)
         #expect(body["temperature"] == nil)
         #expect(body["effort"] == nil)
         #expect(body["reasoning_effort"] as? String == "high")

@@ -103,6 +103,8 @@ final class AppModel {
     var upcomingMeetings: [CalendarMeeting] = []
     /// Takvim ya da bildirim hatası (Ayarlar ve Ana sayfada gösterilir).
     var calendarError: String?
+    /// Bildirim izni yok: toplantı hatırlatmaları kapalı (takvim yine çalışır); Ayarlar'da görünür.
+    var notificationProblem: String?
     /// Bu kaydın bağlandığı takvim toplantısı.
     @ObservationIgnored private var linkedMeeting: CalendarMeeting?
     var transcript: [LiveSegment] = []
@@ -374,6 +376,11 @@ final class AppModel {
             guard generation == recordingGeneration else {
                 return
             }
+            // Kayıt sonunda süre dolunca iptal edilen çeviri hata değildir (panelde "Çeviri: …" hatası çıkmasın).
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                failedTranslations.insert(segment.id)
+                return
+            }
             if case LLMError.http(let status, _, _, _) = error, status == 401 || status == 403 {
                 translationDisabled = true
             }
@@ -385,6 +392,10 @@ final class AppModel {
 
     /// Başarısız çevirileri yeniden dener; anahtar sonradan düzeltilmiş olabileceği için sağlayıcı yeniden çözülür.
     func retryTranslations(ids: [SegmentID]) {
+        // Kayıt bittikten sonra çevrilen cümle toplantıya yazılmaz (kayıt çoktan saklandı ve işlendi): yalnızca kayıtta.
+        guard isRecording, !isFinishing else {
+            return
+        }
         Task {
             guard await refreshLLMProvider() else {
                 return
@@ -887,7 +898,7 @@ final class AppModel {
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
             }
-            saveRecord(record: result, directory: directory)
+            saveRecord(record: applyingPendingReminders(record: result), directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
@@ -1035,7 +1046,7 @@ final class AppModel {
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, llm: llm, userName: userName)
-                saveRecord(record: result, directory: directory)
+                saveRecord(record: applyingPendingReminders(record: result), directory: directory)
                 processingMeetingIDs.remove(meetingID)
             }
         }
@@ -1049,13 +1060,23 @@ final class AppModel {
         }
         var names: [Int: String] = record.speakerNames
         let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous: String? = names[person]
         names[person] = trimmed.isEmpty ? nil : trimmed
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             saveRecord(record: record.with(speakerNames: names), directory: directory)
         }
+        let source: String = voiceSource(meetingID: meetingID, person: person)
+        // Ad düzeltildiyse bu kişinin sesi eski addan geri alınır (yoksa sonraki toplantılarda yanlış adla tanınırdı).
+        var voices: [RegisteredVoice] = registeredVoices
+        if let previous, previous.caseInsensitiveCompare(trimmed) != .orderedSame {
+            voices = unregistering(voices: voices, name: previous, source: source, now: Date())
+        }
         // Adı verilen kişinin sesi hatırlanır: sonraki toplantılarda (ve "Tekrar işle"de) ad kendiliğinden gelir.
         if !trimmed.isEmpty, UserDefaults.standard.bool(forKey: SettingsKey.voiceRecognition), let voice = record.voiceprints?[person] {
-            storeVoices(voices: registering(voices: registeredVoices, name: trimmed, voiceprint: voice, now: Date()))
+            voices = registering(voices: voices, name: trimmed, voiceprint: voice, source: source, now: Date())
+        }
+        if voices != registeredVoices {
+            storeVoices(voices: voices)
         }
     }
 
@@ -1246,12 +1267,22 @@ final class AppModel {
     func enableCalendar() async {
         do {
             try await eventKit.requestCalendarAccess()
-            try await notifier.requestAuthorization()
             UserDefaults.standard.set(true, forKey: SettingsKey.calendarEnabled)
             calendarError = nil
         } catch {
             UserDefaults.standard.set(false, forKey: SettingsKey.calendarEnabled)
-            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+            calendarError = eventKitMessage(error: error)
+            startCalendarServices()
+            return
+        }
+        // Bildirim izni yalnızca hatırlatmalar için gerekir: reddedilse de takvim (bugünün toplantıları, brifing,
+        // kendiliğinden kayıt) açık kalır; hatırlatmalar kapanır ve neden görünür.
+        do {
+            try await notifier.requestAuthorization()
+            notificationProblem = nil
+        } catch {
+            UserDefaults.standard.set(false, forKey: SettingsKey.meetingReminders)
+            notificationProblem = notificationMessage(error: error)
         }
         startCalendarServices()
     }
@@ -1435,13 +1466,25 @@ final class AppModel {
             Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             return eventKitMessage(error: error)
         }
-        // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir.
+        // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir. Toplantı bu arada işlenmeye başladıysa işaret
+        // işleme bitince yazılır (yoksa "Anımsatıcılara ekle" yeniden görünür ve görev iki kez eklenirdi).
         if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
             withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
                 saveRecord(record: markingReminded(record: current, task: task), directory: directory)
             }
+        } else {
+            pendingReminded[meetingID, default: []].append(task)
         }
         return nil
+    }
+
+    /// İşleme sürerken Anımsatıcılar'a eklenen görevler; işleme bitince kayda işlenir.
+    @ObservationIgnored private var pendingReminded: [String: [NoteTask]] = [:]
+
+    /// İşleme sonucuna bekleyen Anımsatıcılar işaretlerini uygular ve bekleyenleri temizler.
+    private func applyingPendingReminders(record: MeetingRecord) -> MeetingRecord {
+        let tasks: [NoteTask] = pendingReminded.removeValue(forKey: record.id) ?? []
+        return tasks.reduce(record) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
     }
 
     // MARK: Sesinden tanıma
@@ -1530,7 +1573,7 @@ final class AppModel {
         }
         storeVoices(voices: registeredVoices.map { (voice: RegisteredVoice) -> RegisteredVoice in
             voice.name.caseInsensitiveCompare(oldName) == .orderedSame
-                ? RegisteredVoice(name: trimmed, voiceprint: voice.voiceprint, updatedAt: voice.updatedAt)
+                ? RegisteredVoice(name: trimmed, voiceprint: voice.voiceprint, updatedAt: voice.updatedAt, contributions: voice.contributions)
                 : voice
         })
     }

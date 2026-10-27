@@ -9,6 +9,11 @@ public func taskKey(task: NoteTask) -> String {
     return simplify(task.owner) + "|" + simplify(task.description)
 }
 
+public extension NoteTask {
+    /// Görevin toplantı içindeki kimliği (`taskKey`); listelerde satır kimliği olarak kullanılır.
+    var trackingKey: String { taskKey(task: self) }
+}
+
 /// Görev tamamlandı mı. Saf fonksiyondur.
 public func isTaskDone(record: MeetingRecord, task: NoteTask) -> Bool {
     (record.completedTasks ?? []).contains(taskKey(task: task))

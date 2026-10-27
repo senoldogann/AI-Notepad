@@ -195,7 +195,8 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
             .with(translations: liveTranslations.merging(
                 alignTranslations(final: result.segments, live: record.liveSegments, translations: liveTranslations)
             ) { (_: String, aligned: String) -> String in aligned })
-            .with(finalSegments: result.segments, language: record.language ?? result.language)
+            // Önceki "Sen" son geçişi korunur: bu tekrar işlemede "Sen" geçişi başarısız olursa iyi metin kaybolmasın.
+            .with(finalSegments: result.segments + record.finalSegments.filter { $0.speaker == .me }, language: record.language ?? result.language)
             // Yeni son geçiş konuşmacıları baştan numaralar: eski adlar ("Konuşmacı 2 = Aino") başka kişiye düşerdi ve
             // not yanlış kişilere görev yazardı. Adlar yeniden verilir ("Gözden geçir" önerir).
             .with(speakerNames: [:])
@@ -254,6 +255,15 @@ public func regenerateNote(record: MeetingRecord, llm: LLMProvider?, userName: S
         // Görevler yeniden yazıldı: tamamlandı ve Anımsatıcılar işaretleri benzer yeni görevlere taşınır.
         return withCarriedTaskMarks(old: record, new: record.with(note: note)).with(status: .done, failureMessage: nil)
     } catch {
+        // Notu olan toplantıda (yenileme) geçici hata toplantıyı "Hata"ya çevirmez: eski not kalır, hata mesajı sayfada
+        // görünür ve sonraki başarılı yenilemede silinir.
+        if record.note != nil {
+            processLogger.error("Not yenilenemedi, eski not korunuyor, hata: \(String(describing: error), privacy: .private)")
+            return record.with(
+                status: .done,
+                failureMessage: String(localized: "Not yenilenemedi: \(userFacingMessage(error: error)) Önceki not gösteriliyor.")
+            )
+        }
         return failed(record: record, step: String(localized: "Not oluşturulamadı"), error: error)
     }
 }

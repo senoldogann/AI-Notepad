@@ -155,32 +155,73 @@ public func meetingVoiceprints(samples: [Float], segments: [StoredSegment], embe
     return voices
 }
 
-/// Kayıtlı (adlandırılmış) bir ses.
+/// Kayıtlı (adlandırılmış) bir ses. İz, her kaynağın (toplantı ve kişi numarası) izinin birleşimidir; kaynaklar ayrı
+/// saklandığı için yanlış verilen ad düzeltilince o toplantının katkısı tam olarak geri alınabilir. Kaynakları
+/// saklanmayan eski kayıtlarda iz tek parçadır (`legacyVoiceSource`).
 public struct RegisteredVoice: Sendable, Equatable, Codable {
     public let name: String
     public let voiceprint: Voiceprint
     public let updatedAt: Date
+    /// Kaynak ("toplantı#kişi") → o kaynağın izi; eski kayıtlarda nil.
+    public let contributions: [String: Voiceprint]?
 
-    public init(name: String, voiceprint: Voiceprint, updatedAt: Date) {
+    public init(name: String, voiceprint: Voiceprint, updatedAt: Date, contributions: [String: Voiceprint]?) {
         self.name = name
         self.voiceprint = voiceprint
         self.updatedAt = updatedAt
+        self.contributions = contributions
     }
 }
 
-/// Adı verilen kişinin izini kayıtlı seslere ekler: aynı ad (büyük/küçük harf duyarsız) varsa izler birleşir.
-/// Saf fonksiyondur.
-public func registering(voices: [RegisteredVoice], name: String, voiceprint: Voiceprint, now: Date) -> [RegisteredVoice] {
+/// Kaynakları saklanmayan eski izin kaynak adı.
+let legacyVoiceSource: String = "eski"
+
+/// Bir toplantıdaki kişinin ses kaynağı adı. Saf fonksiyondur.
+public func voiceSource(meetingID: String, person: Int) -> String {
+    "\(meetingID)#\(person)"
+}
+
+/// Kaynak izlerinin süre ağırlıklı birleşimi (anahtar sırasıyla, her seferinde aynı); kaynak yoksa nil. Saf fonksiyondur.
+func combinedVoiceprint(contributions: [String: Voiceprint]) -> Voiceprint? {
+    contributions.keys.sorted().compactMap { contributions[$0] }.reduce(nil) { (result: Voiceprint?, voice: Voiceprint) -> Voiceprint? in
+        result.map { mergedVoiceprint($0, voice) } ?? voice
+    }
+}
+
+/// Adı verilen kişinin izini kayıtlı seslere ekler: aynı ad (büyük/küçük harf duyarsız) varsa kaynak eklenir ya da
+/// (aynı kaynak yeniden adlandırılınca) yenilenir, iz kaynaklardan yeniden hesaplanır. Saf fonksiyondur.
+public func registering(voices: [RegisteredVoice], name: String, voiceprint: Voiceprint, source: String, now: Date) -> [RegisteredVoice] {
     let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
         return voices
     }
-    if let index = voices.firstIndex(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-        var updated: [RegisteredVoice] = voices
-        updated[index] = RegisteredVoice(name: voices[index].name, voiceprint: mergedVoiceprint(voices[index].voiceprint, voiceprint), updatedAt: now)
-        return updated
+    guard let index = voices.firstIndex(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+        return voices + [RegisteredVoice(name: trimmed, voiceprint: voiceprint, updatedAt: now, contributions: [source: voiceprint])]
     }
-    return voices + [RegisteredVoice(name: trimmed, voiceprint: voiceprint, updatedAt: now)]
+    let existing: RegisteredVoice = voices[index]
+    var contributions: [String: Voiceprint] = existing.contributions ?? [legacyVoiceSource: existing.voiceprint]
+    contributions[source] = voiceprint
+    var updated: [RegisteredVoice] = voices
+    updated[index] = RegisteredVoice(
+        name: existing.name, voiceprint: combinedVoiceprint(contributions: contributions) ?? voiceprint, updatedAt: now, contributions: contributions
+    )
+    return updated
+}
+
+/// Bir kaynağın katkısını adın sesinden çıkarır (ad yanlış verilmişti): iz kalan kaynaklardan yeniden hesaplanır,
+/// kaynak kalmazsa ses silinir. Kaynakları saklanmayan eski seste ya da kaynak yoksa değişmez. Saf fonksiyondur.
+public func unregistering(voices: [RegisteredVoice], name: String, source: String, now: Date) -> [RegisteredVoice] {
+    guard let index = voices.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }),
+          var contributions = voices[index].contributions, contributions[source] != nil else {
+        return voices
+    }
+    contributions[source] = nil
+    guard let combined = combinedVoiceprint(contributions: contributions) else {
+        return voices.enumerated().filter { $0.offset != index }.map(\.element)
+    }
+    var updated: [RegisteredVoice] = voices
+    updated[index] = RegisteredVoice(name: voices[index].name, voiceprint: combined, updatedAt: now, contributions: contributions)
+    return updated
 }
 
 /// Toplantıdaki kişilere kayıtlı seslerden ad: yalnızca yeterli konuşması olan ve emin olunan eşleşmeler; bir ad en

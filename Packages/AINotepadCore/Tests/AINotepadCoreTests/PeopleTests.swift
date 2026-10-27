@@ -18,7 +18,7 @@ import Testing
             liveSegments: [], finalSegments: [stored("final-0", .others, 3, 0, "Terve"), stored("final-1", .others, 4, 5, "Joo")],
             translations: [:], speakerNames: [3: "AINO", 4: "aino"], note: note("Mikko"), audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
-        let voice: RegisteredVoice = RegisteredVoice(name: "Aino", voiceprint: Voiceprint(embedding: [1], seconds: 30), updatedAt: Date())
+        let voice: RegisteredVoice = RegisteredVoice(name: "Aino", voiceprint: Voiceprint(embedding: [1], seconds: 30), updatedAt: Date(), contributions: nil)
         let people: [PersonSummary] = peopleDirectory(records: [older, newer], voices: [voice], book: .empty, userName: "senol")
         #expect(people.map(\.name) == ["AINO"])
         #expect(people.first?.meetings.map(\.meetingID) == ["2", "1"])

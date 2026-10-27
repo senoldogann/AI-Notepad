@@ -3896,6 +3896,16 @@
         }
       }
     },
+    "Not yenilenemedi: %@ Önceki not gösteriliyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't refresh the note: %@ The previous note is shown."
+          }
+        }
+      }
+    },
     "Not şablonu": {
       "localizations": {
         "en": {

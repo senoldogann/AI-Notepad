@@ -830,7 +830,8 @@ private struct SummaryTab: View {
                         .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(Theme.muted)
-                    ForEach(Array(mine.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
+                    // Görev kimliğiyle: liste değişince (ör. tamamlanınca) satır durumu (Anımsatıcılar hatası) başka göreve geçmesin.
+                    ForEach(Array(mine.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
                         TaskCard(model: model, record: record, task: item.element)
                     }
                 }
@@ -913,7 +914,7 @@ private struct SummaryTab: View {
             if !others.isEmpty {
                 section(title: "DİĞER GÖREVLER", symbol: "checklist") {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(others.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
+                        ForEach(Array(others.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
                             TaskCard(model: model, record: record, task: item.element)
                         }
                     }
@@ -1132,7 +1133,7 @@ private struct SharedNoteSection: View {
                 content(shared: shared)
             } else if let error {
                 VStack(alignment: .leading, spacing: 8) {
-                    EmptyStateCard(symbol: "exclamationmark.triangle", title: "Çeviri yapılamadı", message: LocalizedStringKey(error))
+                    EmptyStateCard(symbol: "exclamationmark.triangle", title: "Çeviri yapılamadı", message: "\(error)")
                     Button("Yeniden dene", systemImage: "arrow.clockwise") {
                         self.error = nil
                         attempt += 1
@@ -1150,7 +1151,8 @@ private struct SharedNoteSection: View {
         }
         // Not yeniden yazılınca ya da kilit kalkınca yeniden denenir (aksi halde bekleme göstergesi takılı kalırdı).
         .task(id: "\(language.rawValue)-\(attempt)-\(record.sharedNotes?[language.rawValue] == nil)-\(note.summary.hashValue)-\(model.isLocked(meetingID: record.id))") {
-            guard record.sharedNotes?[language.rawValue] == nil, error == nil else {
+            // Toplantı işlenirken çevrilmez: sonuç zaten saklanamaz (istek boşa gider); kilit kalkınca görev yeniden çalışır.
+            guard record.sharedNotes?[language.rawValue] == nil, error == nil, !model.isLocked(meetingID: record.id) else {
                 return
             }
             error = await model.generateSharedNote(meetingID: record.id, language: language)

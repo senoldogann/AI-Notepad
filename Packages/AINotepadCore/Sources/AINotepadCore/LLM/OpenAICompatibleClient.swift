@@ -55,11 +55,15 @@ private func openAIRequestFields(request: LLMRequest, model: String, effort: LLM
 }
 
 /// Gönderilecek `max_completion_tokens`: effort seçildiyse model akıl yürütür ve bu tokenlar da sınırdan harcanır,
-/// sınır en az `reasoningTokenFloor`; effort yoksa (akıl yürütmeyen modeller daha büyük sınırı 400 ile reddedebilir)
-/// isteğin sınırı. Saf fonksiyondur.
+/// sınır en az `reasoningTokenFloor`. Effort gönderilmese de bazı modeller (ör. gpt-5 ailesi) varsayılan olarak akıl
+/// yürütür; kısa isteklerin 1024'lük sınırı düşünmeye harcanıp cevap kesiliyordu. Bu yüzden sınır en az
+/// `unspecifiedEffortTokenFloor` (akıl yürütmeyen güncel modellerin çıktı sınırının altında). Saf fonksiyondur.
 public func openAIMaxTokens(requested: Int, effort: LLMEffort?) -> Int {
-    effort == nil ? requested : max(requested, reasoningTokenFloor)
+    effort == nil ? max(requested, unspecifiedEffortTokenFloor) : max(requested, reasoningTokenFloor)
 }
+
+/// Effort gönderilmediğinde çıktı sınırının alt değeri.
+let unspecifiedEffortTokenFloor: Int = 4096
 
 /// İstek başlıkları; anahtar yoksa (Ollama) yetkilendirme başlığı gönderilmez. Saf fonksiyondur.
 public func openAIHeaders(apiKey: String?) -> [String: String] {

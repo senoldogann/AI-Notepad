@@ -153,15 +153,22 @@ func othersSegment(index: Int, start: Double, end: Double) -> LiveSegment {
     @Test func recognizedNamesAreConfidentAndUnique() {
         let now: Date = Date(timeIntervalSince1970: 0)
         let registry: [RegisteredVoice] = registering(
-            voices: registering(voices: [], name: "Aino", voiceprint: voice([1, 0, 0], seconds: 100), now: now),
-            name: " aino ", voiceprint: voice([1, 0.1, 0], seconds: 100), now: now
-        ) + [RegisteredVoice(name: "Mikko", voiceprint: voice([0, 1, 0], seconds: 100), updatedAt: now)]
+            voices: registering(voices: [], name: "Aino", voiceprint: voice([1, 0, 0], seconds: 100), source: "a#1", now: now),
+            name: " aino ", voiceprint: voice([1, 0.1, 0], seconds: 100), source: "b#2", now: now
+        ) + [RegisteredVoice(name: "Mikko", voiceprint: voice([0, 1, 0], seconds: 100), updatedAt: now, contributions: nil)]
         #expect(registry.map(\.name) == ["Aino", "Mikko"])
         let names: [Int: String] = recognizedNames(
             voiceprints: [1: voice([1, 0.05, 0], seconds: 200), 2: voice([0.9, 0.1, 0], seconds: 40), 3: voice([0.7, 0.7, 0], seconds: 200), 4: voice([0, 1, 0], seconds: 5)],
             registry: registry
         )
         #expect(names == [1: "Aino"])
+        // Yanlış verilen ad düzeltilince o toplantının katkısı tam geri alınır; son katkı gidince ses silinir; aynı
+        // kaynak yeniden adlandırılınca iki kez sayılmaz.
+        let undone: [RegisteredVoice] = unregistering(voices: registry, name: "Aino", source: "b#2", now: now)
+        #expect(undone.first?.voiceprint == voice([1, 0, 0], seconds: 100))
+        #expect(unregistering(voices: undone, name: "aino", source: "a#1", now: now).map(\.name) == ["Mikko"])
+        #expect(registering(voices: undone, name: "Aino", voiceprint: voice([1, 0, 0], seconds: 100), source: "a#1", now: now).first?.voiceprint.seconds == 100)
+        #expect(unregistering(voices: registry, name: "Mikko", source: "a#1", now: now) == registry)
     }
 
     // Etiketin izi yalnızca ona ait (konuşmasının çoğu o etiket olan) SpeakerKit konuşmacılarından gelir; ikiye

@@ -330,7 +330,7 @@ private func deviceUID(deviceID: AudioObjectID) throws -> String {
     var size: UInt32 = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
     try check(status: AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid), operation: "DeviceUID")
     guard let value = uid?.takeRetainedValue() else {
-        throw AudioCaptureError.coreAudio(operation: "DeviceUID boş", status: 0)
+        throw AudioCaptureError.coreAudio(operation: "kAudioDevicePropertyDeviceUID (empty)", status: 0)
     }
     return value as String
 }

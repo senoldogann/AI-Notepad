@@ -232,6 +232,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     }
 
     /// Yalnızca durumu (ve hata mesajını) değişmiş kopya.
+    /// Bitiş zamanı değişmiş kopya.
+    public func with(endedAt newEndedAt: Date) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.endedAt = newEndedAt
+        return copy
+    }
+
     public func with(status newStatus: MeetingStatus, failureMessage newFailure: String?) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.status = newStatus

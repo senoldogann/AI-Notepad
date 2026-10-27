@@ -69,7 +69,7 @@ private func meeting(turns: [(person: Int, voice: String, text: String)], direct
         let embedder: SpeakerKitVoiceEmbedder = SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory())
         let firstVoices: [Int: Voiceprint] = try await meetingVoiceprints(samples: first.samples, segments: first.segments, embedder: embedder, windowSec: 120)
         #expect(Set(firstVoices.keys) == [1, 2])
-        let registry: [RegisteredVoice] = registering(voices: [], name: "Aino", voiceprint: try #require(firstVoices[1]), now: Date())
+        let registry: [RegisteredVoice] = registering(voices: [], name: "Aino", voiceprint: try #require(firstVoices[1]), source: "ilk#1", now: Date())
 
         // İkinci toplantı: sıra ters, kişi numaraları farklı.
         let second = try meeting(turns: (0..<10).map { (index: Int) in (person: index % 2 == 0 ? 1 : 2, voice: voices[index % 2 == 0 ? 1 : 0], text: lines[(index + 1) % 4]) }, directory: directory)

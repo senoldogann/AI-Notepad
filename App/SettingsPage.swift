@@ -240,6 +240,9 @@ private struct GeneralSettings: View {
             if calendarEnabled {
                 SettingsRow(title: Text("Toplantıdan 1 dk önce hatırlat")) {
                     Text("Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.")
+                    if let problem = model.notificationProblem {
+                        Text(problem).foregroundStyle(.orange)
+                    }
                 } control: {
                     Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
                         .settingsToggle()
@@ -515,6 +518,8 @@ private struct LLMSettings: View {
     @AppStorage(SettingsKey.claudeFastEffort) private var claudeFastEffort: String = LLMEffort.low.rawValue
     @AppStorage(SettingsKey.claudeSmartEffort) private var claudeSmartEffort: String = LLMEffort.medium.rawValue
     @State private var testResult: ConnectionTest = .idle
+    /// Süren bağlantı denemesi: ayar değişince iptal edilir (eski ayarın sonucu yeni ayarın yanında görünmesin).
+    @State private var testTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -596,7 +601,13 @@ private struct LLMSettings: View {
             } control: {
                 Button("Bağlantıyı dene") {
                     testResult = .running
-                    Task { testResult = await testConnection() }
+                    testTask?.cancel()
+                    testTask = Task {
+                        let result: ConnectionTest = await testConnection()
+                        if !Task.isCancelled {
+                            testResult = result
+                        }
+                    }
                 }
                 .disabled(testResult == .running)
             }
@@ -610,6 +621,7 @@ private struct LLMSettings: View {
                 // Yeni bir değişiklik geldi; bu bekleme iptal edildi.
                 return
             }
+            testTask?.cancel()
             testResult = .idle
             model.settingsChanged()
         }
