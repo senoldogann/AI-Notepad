@@ -287,17 +287,9 @@ private struct ExchangeView: View {
                 EmptyView()
             }
             if ![.understanding, .searching, .writing].contains(exchange.phase) {
-                // Bitince: küçük, kapalı satırlar (kaynaklar, nasıl cevaplandı) ve kopyala.
-                VStack(alignment: .leading, spacing: 6) {
-                    if !exchange.answer.sources.isEmpty {
-                        SourcesDisclosure(sources: exchange.answer.sources, onOpen: onOpen)
-                    }
-                    ReasoningDisclosure(exchange: exchange)
-                    if exchange.phase == .done {
-                        AnswerActions(exchange: exchange)
-                    }
-                }
-                .transition(.opacity)
+                // Bitince tek sessiz satır: kopyala, kaynaklar ve nasıl cevaplandığı; ayrıntı altta açılır.
+                AnswerFooter(exchange: exchange, onOpen: onOpen)
+                    .transition(.opacity)
             }
         }
     }
@@ -362,11 +354,100 @@ private struct ShimmerText: View {
     }
 }
 
-/// Bitince küçük, kapalı satır: "8 toplantıdan 42 parça okundu · 6,0 sn"; açılınca arama terimleri, okunan toplantılar
-/// ve model küçük yazıyla.
-private struct ReasoningDisclosure: View {
+/// Cevabın altındaki satırda açılabilen ayrıntı.
+private enum AnswerDetail: Equatable {
+    case sources
+    case reasoning
+}
+
+/// Bitmiş cevabın altı: kopyala simgesi, "Kaynaklar" ve "8 toplantıdan 42 parça okundu · 6,0 sn" hapları. Bir hapa
+/// tıklanınca ayrıntısı altta ince bir kartta açılır (aynı anda biri).
+private struct AnswerFooter: View {
     let exchange: ArchiveExchange
-    @State private var isExpanded: Bool = false
+    let onOpen: @MainActor (ArchivePassage) -> Void
+    @State private var detail: AnswerDetail?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if exchange.phase == .done {
+                    CopyAnswerButton(text: exchange.answer.text)
+                }
+                if !exchange.answer.sources.isEmpty {
+                    FooterPill(symbol: "text.quote", isOpen: detail == .sources) {
+                        HStack(spacing: 5) {
+                            Text("Kaynaklar")
+                            Text(verbatim: "\(exchange.answer.sources.count)").fontWeight(.semibold)
+                        }
+                    } onToggle: {
+                        toggle(detail: .sources)
+                    }
+                }
+                FooterPill(symbol: "magnifyingglass", isOpen: detail == .reasoning) {
+                    Text(reasoningSummary(exchange: exchange))
+                } onToggle: {
+                    toggle(detail: .reasoning)
+                }
+            }
+            switch detail {
+            case .sources:
+                SourcesList(sources: exchange.answer.sources, onOpen: onOpen)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            case .reasoning:
+                ReasoningDetails(exchange: exchange)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            case nil:
+                EmptyView()
+            }
+        }
+    }
+
+    private func toggle(detail selected: AnswerDetail) {
+        withAnimation(.smooth(duration: 0.22)) {
+            detail = detail == selected ? nil : selected
+        }
+    }
+}
+
+/// "8 toplantıdan 42 parça okundu · 6,0 sn".
+private func reasoningSummary(exchange: ArchiveExchange) -> String {
+    let meetings: Int = Set(exchange.passages.map(\.meetingTitle)).count
+    let seconds: Double = (exchange.finishedAt ?? Date()).timeIntervalSince(exchange.startedAt)
+    let duration: String = seconds.formatted(.number.precision(.fractionLength(1)).locale(interfaceLocale()))
+    return String(localized: "\(meetings) toplantıdan \(exchange.passages.count) parça okundu · \(duration) sn")
+}
+
+/// Cevap altındaki küçük, soluk hap: simge, metin ve dönen ok; açıkken hafif dolgulu.
+private struct FooterPill<Label: View>: View {
+    let symbol: String
+    let isOpen: Bool
+    @ViewBuilder let label: () -> Label
+    let onToggle: @MainActor () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .appFont(size: 10, weight: .semibold)
+                label()
+                Image(systemName: "chevron.down")
+                    .appFont(size: 8, weight: .bold)
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(isOpen ? Theme.ink : Theme.muted)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(isOpen ? Theme.selected : Theme.soft, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.hoverPlain)
+    }
+}
+
+/// Nasıl cevaplandı: arama terimleri, okunan toplantılar ve model, ince kartta küçük yazıyla.
+private struct ReasoningDetails: View {
+    let exchange: ArchiveExchange
 
     var body: some View {
         let titles: [String] = exchange.passages.reduce(into: [String]()) { (result: inout [String], passage: ArchivePassage) -> Void in
@@ -375,60 +456,33 @@ private struct ReasoningDisclosure: View {
             }
         }
         VStack(alignment: .leading, spacing: 6) {
-            DisclosureLine(title: Text(summary(meetings: titles.count)), isExpanded: $isExpanded)
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    if !exchange.terms.isEmpty {
-                        detail(label: "Aranan", value: exchange.terms.joined(separator: ", "))
-                    }
-                    if !titles.isEmpty {
-                        detail(label: "Okunan", value: titles.joined(separator: " · "))
-                    }
-                    if let model = exchange.modelName {
-                        detail(label: "Model", value: model)
-                    }
-                }
-                .padding(.leading, 18)
-                .transition(.opacity)
+            if !exchange.terms.isEmpty {
+                row(label: "Aranan", value: exchange.terms.joined(separator: ", "))
+            }
+            if !titles.isEmpty {
+                row(label: "Okunan", value: titles.joined(separator: " · "))
+            }
+            if let model = exchange.modelName {
+                row(label: "Model", value: model)
             }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.soft.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func summary(meetings: Int) -> String {
-        let seconds: Double = (exchange.finishedAt ?? Date()).timeIntervalSince(exchange.startedAt)
-        let duration: String = seconds.formatted(.number.precision(.fractionLength(1)).locale(interfaceLocale()))
-        return String(localized: "\(meetings) toplantıdan \(exchange.passages.count) parça okundu · \(duration) sn")
-    }
-
-    private func detail(label: LocalizedStringKey, value: String) -> some View {
-        (Text(label).foregroundStyle(Theme.muted) + Text(verbatim: "  ") + Text(value).foregroundStyle(Theme.ink.opacity(0.7)))
-            .appFont(size: 11, weight: .regular)
-            .lineSpacing(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
-    }
-}
-
-/// Küçük açılır satır: soluk metin ve dönen ok.
-private struct DisclosureLine: View {
-    let title: Text
-    @Binding var isExpanded: Bool
-
-    var body: some View {
-        Button {
-            withAnimation(.smooth(duration: 0.25)) { isExpanded.toggle() }
-        } label: {
-            HStack(spacing: 5) {
-                title
-                Image(systemName: "chevron.right")
-                    .appFont(size: 9, weight: .semibold)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-            }
-            .appFont(size: 12, weight: .regular)
-            .foregroundStyle(Theme.muted)
-            .contentShape(Rectangle())
+    private func row(label: LocalizedStringKey, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .appFont(size: 11, weight: .medium)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 58, alignment: .leading)
+            Text(value)
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.ink.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
         }
-        .buttonStyle(.hoverPlain)
     }
 }
 
@@ -525,50 +579,51 @@ private func streamingCaret(accent: Color) -> AttributedString {
     return cursor
 }
 
-/// Kaynaklar: varsayılan kapalı küçük satır ("Kaynaklar · 7"); açılınca numaralı, ince satırlar (numara metindeki
-/// [n]; toplantı, tarih, not ya da zaman). Tıklayınca toplantı açılır.
-private struct SourcesDisclosure: View {
+/// Kaynaklar: numaralı ince satırlar (numara metindeki [n]; toplantı, tarih, not ya da zaman), ince kartta. Tıklayınca
+/// toplantı açılır.
+private struct SourcesList: View {
     let sources: [ArchivePassage]
     let onOpen: @MainActor (ArchivePassage) -> Void
-    @State private var isExpanded: Bool = false
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            DisclosureLine(title: Text("Kaynaklar · \(sources.count)"), isExpanded: $isExpanded)
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(sources.enumerated()), id: \.element.id) { (item: (offset: Int, element: ArchivePassage)) in
-                        Button {
-                            onOpen(item.element)
-                        } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(verbatim: "\(item.offset + 1)")
-                                    .appFont(size: 10, weight: .semibold)
-                                    .monospacedDigit()
-                                    .foregroundStyle(appearance.accent.color)
-                                    .frame(width: 14, alignment: .trailing)
-                                Text(item.element.meetingTitle)
-                                    .appFont(size: 12, weight: .regular)
-                                    .foregroundStyle(Theme.ink.opacity(0.85))
-                                    .lineLimit(1)
-                                Text(sourceDetail(source: item.element))
-                                    .appFont(size: 11, weight: .regular)
-                                    .foregroundStyle(Theme.muted)
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            }
-                            .padding(.vertical, 3)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.hoverPlain)
-                        .hoverHint("Toplantıyı aç", alignment: .leading, edge: .bottom)
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(sources.enumerated()), id: \.element.id) { (item: (offset: Int, element: ArchivePassage)) in
+                Button {
+                    onOpen(item.element)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(verbatim: "\(item.offset + 1)")
+                            .appFont(size: 10, weight: .semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(appearance.accent.color)
+                            .frame(width: 14, alignment: .trailing)
+                        Text(item.element.meetingTitle)
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(Theme.ink.opacity(0.85))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(sourceDetail(source: item.element))
+                            .appFont(size: 11, weight: .regular)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                            .fixedSize()
+                        Image(systemName: "arrow.up.right")
+                            .appFont(size: 9, weight: .semibold)
+                            .foregroundStyle(Theme.muted.opacity(0.8))
                     }
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 6)
+                    .contentShape(Rectangle())
                 }
-                .padding(.leading, 4)
-                .transition(.opacity)
+                .buttonStyle(.hoverPlain)
+                .hoverHint("Toplantıyı aç", alignment: .leading, edge: .bottom)
             }
         }
+        .padding(6)
+        .frame(maxWidth: 560, alignment: .leading)
+        .background(Theme.soft.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// "26 Eki · not" ya da "26 Eki · 04:12".
@@ -579,24 +634,27 @@ private struct SourcesDisclosure: View {
     }
 }
 
-/// Bitmiş cevabın altındaki eylemler: kopyala.
-private struct AnswerActions: View {
-    let exchange: ArchiveExchange
+/// Cevabı kopyalar; yalnız simge (sohbet uygulamalarındaki gibi), kısa süre onay işareti gösterir.
+private struct CopyAnswerButton: View {
+    let text: String
     @State private var copied: Bool = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(exchange.answer.text, forType: .string)
-                copied = true
-            } label: {
-                Label(copied ? "Kopyalandı" : "Kopyala", systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-            }
-            .buttonStyle(.hoverPlain)
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .appFont(size: 12, weight: .medium)
+                .foregroundStyle(copied ? Theme.ink : Theme.muted)
+                .frame(width: 28, height: 26)
+                .contentShape(Rectangle())
+                .contentTransition(.symbolEffect(.replace))
         }
+        .buttonStyle(.hoverPlain)
+        .hoverHint(copied ? "Kopyalandı" : "Kopyala", alignment: .leading, edge: .bottom)
+        .accessibilityLabel(copied ? "Kopyalandı" : "Kopyala")
         .task(id: copied) {
             guard copied else {
                 return

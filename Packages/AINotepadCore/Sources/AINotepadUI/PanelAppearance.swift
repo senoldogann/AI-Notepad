@@ -197,8 +197,8 @@ extension EnvironmentValues {
 
 /// Fare üstüne gelince kısa gecikmeyle açıklama gösterir. İpucu düğmenin yanında değil, pencerenin en üst katmanında
 /// (`hoverHintLayer`) çizilir: komşu metnin altında kalmaz, kart ya da kaydırma alanı tarafından kesilmez ve pencere
-/// kenarından taşmaz. Panel uygulamayı öne getirmediği için sistem ipuçları (`help`) her zaman görünmez; erişilebilirlik
-/// için `help` de verilir.
+/// kenarından taşmaz. Katman varken sistem ipucu (`help`) verilmez (iki ipucu üst üste çıkardı); metin erişilebilirlik
+/// ipucu olarak kalır. Katmanı olmayan pencerede yalnız sistem ipucu kullanılır.
 private struct HoverHint: ViewModifier {
     let text: LocalizedStringKey
     let alignment: HorizontalAlignment
@@ -212,8 +212,13 @@ private struct HoverHint: ViewModifier {
     private let center: HoverHintCenter = .shared
 
     func body(content: Content) -> some View {
-        content
-            .help(text)
+        Group {
+            if scope == nil {
+                content.help(text)
+            } else {
+                content.accessibilityHint(Text(text))
+            }
+        }
             .onHover { (hovering: Bool) -> Void in
                 isHovering = hovering
                 if !hovering {
@@ -265,6 +270,8 @@ private struct HoverHint: ViewModifier {
 private struct HoverHintLayer: ViewModifier {
     @State private var scope: UUID = UUID()
     @State private var bubbleSize: CGSize = .zero
+    /// Etkin ipucu metninin tek satırdaki genişliği.
+    @State private var textWidth: CGFloat = 0
     private let center: HoverHintCenter = .shared
 
     func body(content: Content) -> some View {
@@ -277,12 +284,24 @@ private struct HoverHintLayer: ViewModifier {
                             anchor: hint.anchor.offsetBy(dx: -proxy.frame(in: .global).minX, dy: -proxy.frame(in: .global).minY),
                             bubble: bubbleSize, bounds: proxy.size, alignment: hint.alignment, edge: hint.edge
                         )
+                        // Metin önce tek satır ölçülür; en fazla 300 pt genişlikte kırılır ve kutu yüksekliği satırlara uyar.
                         Text(hint.text)
                             .appFont(size: 11, weight: .medium)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
-                            .frame(maxWidth: 300, alignment: .leading)
+                            .frame(width: min(ceil(textWidth) + 1, 300), alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
+                            .background {
+                                Text(hint.text)
+                                    .appFont(size: 11, weight: .medium)
+                                    .fixedSize()
+                                    .hidden()
+                                    .onGeometryChange(for: CGFloat.self) { (label: GeometryProxy) -> CGFloat in
+                                        label.size.width
+                                    } action: { (width: CGFloat) -> Void in
+                                        textWidth = width
+                                    }
+                            }
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5)
                             .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -295,7 +314,7 @@ private struct HoverHintLayer: ViewModifier {
                             }
                             .offset(x: origin.x, y: origin.y)
                             // Boyut ölçülene dek görünmez (ilk karede yanlış yerde çizilmesin).
-                            .opacity(bubbleSize == .zero ? 0 : 1)
+                            .opacity(bubbleSize == .zero || textWidth == 0 ? 0 : 1)
                             .transition(.opacity)
                             .allowsHitTesting(false)
                     }
