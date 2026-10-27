@@ -2835,6 +2835,16 @@
         }
       }
     },
+    "Doğrulama anahtarı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verification token"
+          }
+        }
+      }
+    },
     "Duraklat": {
       "localizations": {
         "en": {
@@ -3765,6 +3775,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending to channel…"
+          }
+        }
+      }
+    },
+    "Kanalda /inc connect yaz, adresi ve anahtarı yapıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type /inc connect in a channel, paste the URL and token"
           }
         }
       }
@@ -8493,6 +8513,16 @@
         }
       }
     },
+    "Zoom adresi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom URL"
+          }
+        }
+      }
+    },
     "dosyada ses yok": {
       "localizations": {
         "en": {
@@ -9398,12 +9428,12 @@
         }
       }
     },
-    "İş ya da okul hesabınla": {
+    "İş ya da okul hesabı (kişisel hesaplar desteklenmiyor)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "With your work or school account"
+            "value": "Work or school account (personal accounts aren't supported)"
           }
         }
       }

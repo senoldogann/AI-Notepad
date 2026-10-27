@@ -153,3 +153,17 @@ struct WebhookLiveTests {
         #expect(!needsRefresh(tokens: connection.tokens, now: now.addingTimeInterval(-600)))
     }
 }
+
+@Suite struct ZoomWebhookTests {
+    // Zoom adresi tam biçimle, anahtar parçada; tür tanınır; anahtarsız ya da başka adres reddedilir.
+    @Test func zoomAddressAndPayload() throws {
+        let url: URL = try zoomWebhookURL(address: " https://integrations.zoom.us/chat/webhooks/incomingwebhook/abc123 ", token: " gizli ")
+        #expect(webhookKind(url: url) == .zoom)
+        #expect(url.query() == "format=full" && url.fragment() == "gizli")
+        #expect(throws: WebhookError.invalidURL) { try zoomWebhookURL(address: "https://integrations.zoom.us/chat/webhooks/incomingwebhook/abc", token: " ") }
+        #expect(throws: WebhookError.invalidURL) { try zoomWebhookURL(address: "https://hooks.slack.com/services/x", token: "t") }
+        let note: MeetingNote = MeetingNote(title: "Plan", summary: "Özet", decisions: [], tasks: [], glossary: [])
+        let json: String = String(decoding: try webhookPayload(kind: .zoom, record: sampleRecord(), note: note), as: UTF8.self)
+        #expect(json.contains(#""head":{"text":"Plan"}"#) && json.contains(#""type":"message""#))
+    }
+}

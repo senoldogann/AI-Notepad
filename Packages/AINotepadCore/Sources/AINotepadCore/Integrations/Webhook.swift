@@ -7,6 +7,9 @@ public enum WebhookKind: Sendable, Equatable {
     case slack
     case discord
     case teams
+    /// Zoom Team Chat "Incoming Webhook" uygulaması: adres + doğrulama anahtarı (adresin `#` sonrası parçasında saklanır,
+    /// istekte `authorization` başlığı olarak gider; parça sunucuya gönderilmez).
+    case zoom
     case generic
 }
 
@@ -29,6 +32,9 @@ public func webhookKind(url: URL) -> WebhookKind {
     // Teams kanal webhook'ları artık Power Automate iş akışlarıyla (logic.azure.com, powerplatform.com) gelir.
     if host.hasSuffix(".webhook.office.com") || host.hasSuffix(".logic.azure.com") || host.hasSuffix(".powerplatform.com") {
         return .teams
+    }
+    if host == "integrations.zoom.us" && url.path().hasPrefix("/chat/webhooks/incomingwebhook") {
+        return .zoom
     }
     return .generic
 }
@@ -141,6 +147,8 @@ public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: Meeti
         return try encoder.encode(DiscordMessage(content: content, allowedMentions: DiscordAllowedMentions(parse: [])))
     case .teams:
         return try encoder.encode(TeamsMessage(markdown: markdown))
+    case .zoom:
+        return try encoder.encode(ZoomMessage(title: note.title, markdown: markdown))
     case .generic:
         return try encoder.encode(GenericWebhookBody(text: markdown, meeting: webhookMeeting(record: record, note: note)))
     }
@@ -160,6 +168,44 @@ private struct DiscordMessage: Encodable {
 
 private struct DiscordAllowedMentions: Encodable {
     let parse: [String]
+}
+
+/// Zoom Team Chat mesajı (`?format=full`): başlık ve tek metin bölümü.
+private struct ZoomMessage: Encodable {
+    struct Content: Encodable {
+        let head: Head
+        let body: [Section]
+    }
+
+    struct Head: Encodable {
+        let text: String
+    }
+
+    struct Section: Encodable {
+        let type: String
+        let text: String
+    }
+
+    let content: Content
+
+    init(title: String, markdown: String) {
+        content = Content(head: Head(text: title), body: [Section(type: "message", text: markdown)])
+    }
+}
+
+/// Zoom webhook adresi: yapıştırılan adres `format=full` ile, doğrulama anahtarı `#` sonrası parçada. Adres Zoom'un
+/// gelen webhook adresi değilse ya da anahtar boşsa `invalidURL`. Saf fonksiyondur.
+public func zoomWebhookURL(address: String, token: String) throws -> URL {
+    let trimmedToken: String = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard var components = URLComponents(url: try webhookURL(text: address), resolvingAgainstBaseURL: false), !trimmedToken.isEmpty else {
+        throw WebhookError.invalidURL
+    }
+    components.queryItems = (components.queryItems ?? []).filter { $0.name != "format" } + [URLQueryItem(name: "format", value: "full")]
+    components.fragment = trimmedToken
+    guard let url = components.url, webhookKind(url: url) == .zoom else {
+        throw WebhookError.invalidURL
+    }
+    return url
 }
 
 private struct GenericWebhookBody: Encodable {
@@ -220,6 +266,9 @@ public func sendWebhook(url: URL, payload: Data) async throws {
     request.httpMethod = "POST"
     request.timeoutInterval = 30
     request.setValue("application/json", forHTTPHeaderField: "content-type")
+    if webhookKind(url: url) == .zoom, let token = url.fragment(percentEncoded: false) {
+        request.setValue(token, forHTTPHeaderField: "authorization")
+    }
     request.httpBody = payload
     var lastError: WebhookError = .network(host: host, reason: "deneme yapılmadı")
     for attempt in 1...webhookAttempts {

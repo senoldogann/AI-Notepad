@@ -1023,6 +1023,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
     case slack
     case teams
     case discord
+    case zoom
     case webhook
 
     var id: String { rawValue }
@@ -1032,6 +1033,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "Slack"
         case .teams: "Microsoft Teams"
         case .discord: "Discord"
+        case .zoom: "Zoom Team Chat"
         case .webhook: String(localized: "Webhook adresi")
         }
     }
@@ -1041,6 +1043,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: "number"
         case .teams: "person.3.fill"
         case .discord: "bubble.left.and.bubble.right.fill"
+        case .zoom: "video.fill"
         case .webhook: "bolt.horizontal.fill"
         }
     }
@@ -1048,8 +1051,9 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
     var detail: LocalizedStringKey {
         switch self {
         case .slack: "Kendi adınla, seçtiğin kanala"
-        case .teams: "İş ya da okul hesabınla"
+        case .teams: "İş ya da okul hesabı (kişisel hesaplar desteklenmiyor)"
         case .discord: "Sunucu ve kanalı Discord'da seç"
+        case .zoom: "Kanalda /inc connect yaz, adresi ve anahtarı yapıştır"
         case .webhook: "Zapier, Make, n8n, Teams iş akışı"
         }
     }
@@ -1060,7 +1064,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .slack: .slack
         case .teams: .teams
         case .discord: .discord
-        case .webhook: nil
+        case .zoom, .webhook: nil
         }
     }
 }
@@ -1095,6 +1099,8 @@ private enum ChannelSetup: Equatable {
     case choosing(ChannelSignIn, [ChannelOption])
     /// Webhook adresi yapıştırılıyor.
     case pasting
+    /// Zoom adresi ve doğrulama anahtarı yapıştırılıyor.
+    case pastingZoom
     case testing
     case connected(String)
     case failed(String)
@@ -1113,6 +1119,7 @@ private struct WebhookSettings: View {
     @State private var setup: ChannelSetup = .idle
     @State private var selectedChannelID: String = ""
     @State private var manualAddress: String = ""
+    @State private var zoomToken: String = ""
     @State private var notesStatus: String?
     @State private var folderStatus: String?
 
@@ -1190,6 +1197,18 @@ private struct WebhookSettings: View {
                     .buttonStyle(.pillPrimary)
                     .disabled(manualAddress.isEmpty)
             }
+        case .pastingZoom:
+            statusPanel {
+                TextField("Zoom adresi", text: $manualAddress, prompt: Text(verbatim: "https://integrations.zoom.us/chat/webhooks/incomingwebhook/…"))
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Doğrulama anahtarı", text: $zoomToken, prompt: Text("Doğrulama anahtarı"))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+                Button("Vazgeç") { setup = .idle }.buttonStyle(.hoverPlain).foregroundStyle(Theme.muted)
+                Button("Bağla") { connectZoom() }
+                    .buttonStyle(.pillPrimary)
+                    .disabled(manualAddress.isEmpty || zoomToken.isEmpty)
+            }
         case .testing:
             Label("Bağlanıyor ve deneme mesajı gönderiliyor…", systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
         case .connected(let name):
@@ -1214,11 +1233,18 @@ private struct WebhookSettings: View {
     }
 
     private func channelCard(card: ChannelCard) -> some View {
-        destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: card.detail) {
-            Button(card.service == nil ? "Yapıştır" : "Bağlan") { start(card: card) }
-                .buttonStyle(.pillPrimary)
-                .controlSize(.small)
-                .disabled(isBusy)
+        let isConnected: Bool = connected.map { cardIsConnected(card: card, channel: $0) } ?? false
+        return destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: isConnected ? LocalizedStringKey(connected?.detail ?? "") : card.detail) {
+            if isConnected {
+                Label("Bağlı", systemImage: "checkmark.circle.fill")
+                    .appFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.tint)
+            } else {
+                Button(card.service == nil ? "Yapıştır" : "Bağlan") { start(card: card) }
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+                    .disabled(isBusy)
+            }
         }
     }
 
@@ -1226,7 +1252,7 @@ private struct WebhookSettings: View {
     private var isBusy: Bool {
         switch setup {
         case .signingIn, .testing: true
-        case .idle, .choosing, .pasting, .connected, .failed: false
+        case .idle, .choosing, .pasting, .pastingZoom, .connected, .failed: false
         }
     }
 
@@ -1289,6 +1315,12 @@ private struct WebhookSettings: View {
     }
 
     private func start(card: ChannelCard) {
+        if card == .zoom {
+            manualAddress = ""
+            zoomToken = ""
+            setup = .pastingZoom
+            return
+        }
         guard let service = card.service else {
             manualAddress = ""
             setup = .pasting
@@ -1356,6 +1388,15 @@ private struct WebhookSettings: View {
         connected = .account(connection)
         autoSend = true
         Task { await test() }
+    }
+
+    private func connectZoom() {
+        do {
+            saveWebhook(url: try zoomWebhookURL(address: manualAddress, token: zoomToken))
+            zoomToken = ""
+        } catch {
+            setup = .failed(userFacingMessage(error: error))
+        }
     }
 
     private func connectWebhook(text: String) {
@@ -1432,12 +1473,29 @@ private struct WebhookSettings: View {
 
 private let channelSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Settings")
 
+/// Kart bağlı kanalı mı gösteriyor: hesap bağlantısında servis, webhook'ta adresin türü eşleşir. Saf fonksiyondur.
+private func cardIsConnected(card: ChannelCard, channel: ConnectedChannel) -> Bool {
+    switch channel {
+    case .account(let connection):
+        return card.service == connection.service
+    case .webhook(let url):
+        switch webhookKind(url: url) {
+        case .slack: return card == .slack
+        case .discord: return card == .discord
+        case .teams: return card == .teams
+        case .zoom: return card == .zoom
+        case .generic: return card == .webhook
+        }
+    }
+}
+
 /// Webhook adresinin arayüzdeki adı. Saf fonksiyondur.
 private func channelName(url: URL) -> String {
     switch webhookKind(url: url) {
     case .slack: "Slack"
     case .discord: "Discord"
     case .teams: "Microsoft Teams"
+    case .zoom: "Zoom Team Chat"
     case .generic: url.host() ?? "Webhook"
     }
 }
