@@ -532,7 +532,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Read %2$lld passages from %1$lld meetings · %3$@ s"
+            "value": "%lld meetings, %lld passages read · %@ s"
           }
         }
       }
