@@ -1,5 +1,6 @@
 import AINotepadCore
 import AINotepadUI
+import AppIntents
 import SwiftUI
 
 /// iPhone uygulaması: sekmeler (Kayıt, Toplantılar, Sor, Görevler, Ayarlar). Mac'le aynı çekirdeği ve görünümü
@@ -9,16 +10,22 @@ struct AINotepadiOSApp: App {
     @State private var store: PhoneStore
     @State private var recorder: PhoneRecorder
     @State private var ask: PhoneAsk
-    @State private var router: PhoneRouter = PhoneRouter(
-        tab: launchTab(arguments: CommandLine.arguments), meetingsPath: launchMeetingPath(arguments: CommandLine.arguments)
-    )
+    @State private var router: PhoneRouter
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
 
     init() {
         let store: PhoneStore = PhoneStore()
+        let recorder: PhoneRecorder = PhoneRecorder(store: store)
+        let router: PhoneRouter = PhoneRouter(
+            tab: launchTab(arguments: CommandLine.arguments), meetingsPath: launchMeetingPath(arguments: CommandLine.arguments)
+        )
         _store = State(initialValue: store)
-        _recorder = State(initialValue: PhoneRecorder(store: store))
+        _recorder = State(initialValue: recorder)
+        _router = State(initialValue: router)
         _ask = State(initialValue: PhoneAsk(store: store))
+        // Kısayollar, Denetim Merkezi ve canlı etkinlikteki niyetler kaydediciye ve gezinmeye buradan ulaşır.
+        AppDependencyManager.shared.add(dependency: recorder)
+        AppDependencyManager.shared.add(dependency: router)
     }
 
     var body: some Scene {

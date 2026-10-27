@@ -1,3 +1,4 @@
+import ActivityKit
 import AINotepadCore
 import AINotepadUI
 import Foundation
@@ -59,6 +60,10 @@ final class PhoneRecorder {
     /// Her kayıtta artar: önceki kaydın geç gelen çevirisi yenisine yazılmaz.
     @ObservationIgnored private var generation: Int = 0
     @ObservationIgnored private var checkpointTask: Task<Void, Never>?
+    /// Kilit ekranı ve Dynamic Island'daki canlı etkinlik; izin yoksa nil.
+    @ObservationIgnored private var activity: Activity<RecordingActivityAttributes>?
+    /// Canlı etkinlik en fazla bu sıklıkta güncellenir (sistem sık güncellemeyi kısar).
+    @ObservationIgnored private var lastActivityUpdate: Date = .distantPast
 
     init(store: PhoneStore) {
         self.store = store
@@ -121,6 +126,7 @@ final class PhoneRecorder {
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta bulunup işlenir.
         saveRecord(record: liveRecord(recording: recording, status: .recording, endedAt: nil), directory: directory)
         startCheckpoints()
+        startActivity(startedAt: started)
         Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public)")
         let sessionGeneration: Int = generation
         Task { [weak self] in
@@ -139,6 +145,7 @@ final class PhoneRecorder {
         phase = .finishing
         levels.stop()
         microphone.stop()
+        updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true), force: true)
     }
 
     /// Kayıt sırasında dili değiştirir; o andan sonraki metin yeni dille yazılır.
@@ -196,6 +203,8 @@ final class PhoneRecorder {
             levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
         }
         phase = .recording
+        startActivity(startedAt: startedAt ?? Date())
+        updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: sample[2].text, speaker: speakerLabel(speaker: .others, person: 2), isFinishing: false), force: true)
     }
     #endif
 
@@ -210,6 +219,10 @@ final class PhoneRecorder {
         case .segment(let segment):
             if segment.isFinal, !segment.text.isEmpty {
                 enqueueTranslation(segment: segment)
+                updateActivity(state: RecordingActivityAttributes.ContentState(
+                    lastLine: segment.text, speaker: segment.person.map { speakerLabel(speaker: segment.id.speaker, person: $0) } ?? "",
+                    isFinishing: phase == .finishing
+                ), force: false)
             }
         case .languageLocked(let language):
             lockedLanguage = language
@@ -247,6 +260,7 @@ final class PhoneRecorder {
         checkpointTask = nil
         microphone.stop()
         levels.stop()
+        endActivity()
         phase = .idle
         startedAt = nil
         guard let finished = active else {
@@ -286,6 +300,64 @@ final class PhoneRecorder {
                 await store.cloud.moveFinishedMeetings { [store] in store.reload() }
             }
             UIApplication.shared.endBackgroundTask(backgroundTask)
+        }
+    }
+
+    // MARK: Canlı etkinlik
+
+    /// Canlı etkinlikteki son satır: son kesinleşen cümle ve konuşmacısı.
+    private var activityLine: (text: String, speaker: String) {
+        guard let last = transcript.last(where: { $0.isFinal && !$0.text.isEmpty }) else {
+            return ("", "")
+        }
+        return (last.text, last.person.map { speakerLabel(speaker: last.id.speaker, person: $0) } ?? "")
+    }
+
+    /// Kilit ekranı ve Dynamic Island'da kaydı gösterir. Kullanıcı canlı etkinlikleri kapattıysa gösterilmez (loglanır);
+    /// kayıt etkilenmez.
+    private func startActivity(startedAt: Date) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            Self.logger.info("Canlı etkinlikler kapalı; kayıt kilit ekranında gösterilmiyor")
+            return
+        }
+        do {
+            activity = try Activity.request(
+                attributes: RecordingActivityAttributes(startedAt: startedAt),
+                content: ActivityContent(state: RecordingActivityAttributes.ContentState(lastLine: "", speaker: "", isFinishing: false), staleDate: nil),
+                pushType: nil
+            )
+            lastActivityUpdate = .distantPast
+        } catch {
+            Self.logger.error("Canlı etkinlik başlatılamadı, hata: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Canlı etkinliği günceller; `force` değilse en fazla 2 sn'de bir (sistem sık güncellemeyi kısar).
+    private func updateActivity(state: RecordingActivityAttributes.ContentState, force: Bool) {
+        guard let activity, force || Date().timeIntervalSince(lastActivityUpdate) >= 2 else {
+            return
+        }
+        lastActivityUpdate = Date()
+        let id: String = activity.id
+        Task.detached {
+            // Etkinlik görev içinde kimliğiyle bulunur (ana aktörden başka göreve geçirilmez).
+            for running in Activity<RecordingActivityAttributes>.activities where running.id == id {
+                await running.update(ActivityContent(state: state, staleDate: nil))
+            }
+        }
+    }
+
+    /// Kayıt bitti: canlı etkinlik kalkar.
+    private func endActivity() {
+        guard let activity else {
+            return
+        }
+        self.activity = nil
+        let id: String = activity.id
+        Task.detached {
+            for running in Activity<RecordingActivityAttributes>.activities where running.id == id {
+                await running.end(nil, dismissalPolicy: .immediate)
+            }
         }
     }
 

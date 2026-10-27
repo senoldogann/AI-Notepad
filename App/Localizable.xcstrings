@@ -657,6 +657,16 @@
         }
       }
     },
+    "AI-Notepad'i açar ve yüz yüze toplantıyı kaydetmeye başlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens AI-Notepad and starts recording an in-person meeting."
+          }
+        }
+      }
+    },
     "AI-Notepad, Teams ve Zoom toplantılarını canlı olarak yazıya döker ve Türkçeye çevirir.": {
       "localizations": {
         "en": {
@@ -2120,6 +2130,16 @@
         }
       }
     },
+    "Dinliyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening…"
+          }
+        }
+      }
+    },
     "Dinliyor… Konuşma başlayınca metin burada akar.": {
       "localizations": {
         "en": {
@@ -3016,6 +3036,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save: %@"
+          }
+        }
+      }
+    },
+    "Kaydediliyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording"
           }
         }
       }
@@ -5503,6 +5533,16 @@
         }
       }
     },
+    "Süren AI-Notepad kaydını bitirir; not hazırlanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishes the current AI-Notepad recording; the note is prepared."
+          }
+        }
+      }
+    },
     "Sürüm": {
       "localizations": {
         "en": {
@@ -5700,6 +5740,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "When Teams, Zoom or another app turns on the microphone (and you're not recording), suggests starting to listen; at most once every 10 minutes."
+          }
+        }
+      }
+    },
+    "Tek dokunuşla yüz yüze toplantıyı kaydetmeye başla.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording an in-person meeting with one tap."
           }
         }
       }
@@ -6073,6 +6123,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open meeting"
+          }
+        }
+      }
+    },
+    "Toplantıyı kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record meeting"
           }
         }
       }
