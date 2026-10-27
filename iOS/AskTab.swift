@@ -192,18 +192,18 @@ struct AskTab: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
-                    if mentionQuery(text: question) != nil {
+                    if isMentioning {
                         MentionSuggestions(
-                            candidates: mentionCandidates(records: store.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 5),
+                            candidates: mentionMatches,
                             highlighted: -1
                         ) { (record: MeetingRecord) -> Void in
                             withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
                             question = removingMentionQuery(text: question)
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    } else if recipeQuery(text: question) != nil {
+                    } else if isPickingRecipe {
                         RecipeSuggestions(
-                            recipes: recipeCandidates(recipes: ask.recipes, query: recipeQuery(text: question) ?? ""), highlighted: -1
+                            recipes: recipeMatches, highlighted: -1
                         ) { (recipe: Recipe) -> Void in
                             guard !ask.isAnswering else {
                                 return
@@ -219,7 +219,7 @@ struct AskTab: View {
                     }
                     composer
                 }
-                .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil || recipeQuery(text: question) != nil)
+                .animation(.smooth(duration: 0.2), value: isMentioning || isPickingRecipe)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             }
@@ -343,8 +343,27 @@ struct AskTab: View {
         .shadow(color: .black.opacity(0.08), radius: 14, y: 4)
     }
 
+    private var mentionMatches: [MeetingRecord] {
+        mentionCandidates(records: store.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 5)
+    }
+
+    private var recipeMatches: [Recipe] {
+        recipeCandidates(recipes: ask.recipes, query: recipeQuery(text: question) ?? "")
+    }
+
+    /// `@` önerileri açık: eşleşen toplantı var.
+    private var isMentioning: Bool {
+        mentionQuery(text: question) != nil && !mentionMatches.isEmpty
+    }
+
+    /// "/" önerileri açık: eşleşen tarif var.
+    private var isPickingRecipe: Bool {
+        recipeQuery(text: question) != nil && !recipeMatches.isEmpty
+    }
+
     private func send() {
-        guard !ask.isAnswering, mentionQuery(text: question) == nil, recipeQuery(text: question) == nil else {
+        // Öneri seçilirken gönderilmez; eşleşen öneri yoksa soru olduğu gibi gider.
+        guard !ask.isAnswering, !isMentioning, !isPickingRecipe, !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
         ask.ask(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)

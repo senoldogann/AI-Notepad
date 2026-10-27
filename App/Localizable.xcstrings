@@ -587,6 +587,16 @@
         }
       }
     },
+    "%lld toplantı taşınamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings couldn't be moved: %@"
+          }
+        }
+      }
+    },
     "%lld toplantıdan %lld parça okundu · %@ sn": {
       "localizations": {
         "en": {
@@ -1691,22 +1701,22 @@
         }
       }
     },
-    "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantılar bu iPhone'a taşınır.": {
+    "Biten toplantılar iCloud Drive'a taşınır ve Mac'teki AI-Notepad'de de görünür (Mac'te de açık olmalı). Kayıt ve işleme bu iPhone'da yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu iPhone'da kalır; Mac'tekiler etkilenmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your Mac (it must be on there too). Recording and processing happen on this iPhone. Turning it off moves the meetings in iCloud to this iPhone."
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your Mac (it must be on there too). Recording and processing happen on this iPhone. Turning it off keeps a copy of the iCloud meetings on this iPhone; the Mac's aren't affected."
           }
         }
       }
     },
-    "Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantılar bu Mac'e geri taşınır.": {
+    "Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu Mac'te kalır; iPhone'dakiler etkilenmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off moves the meetings in iCloud back to this Mac."
+            "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off keeps a copy of the iCloud meetings on this Mac; the iPhone's aren't affected."
           }
         }
       }

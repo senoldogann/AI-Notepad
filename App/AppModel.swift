@@ -929,7 +929,7 @@ final class AppModel {
             allowSleep(meetingID: record.id)
             autoSendToDestinations(record: saved)
             if saved.status == .done {
-                await cloud.moveFinishedMeetings { [weak self] in self?.reloadMeetings() }
+                await cloud.moveFinishedMeetings(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
             }
         }
     }
@@ -1043,7 +1043,8 @@ final class AppModel {
                 }
                 do {
                     let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
-                    saveRecord(record: edited, directory: directory)
+                    // Düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
+                    saveRecord(record: applyingPendingReminders(record: edited), directory: directory)
                 } catch {
                     Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
@@ -1995,7 +1996,9 @@ final class AppModel {
         loadPeople()
         loadRecipes()
         startCalendarServices()
-        for record in staleStatusesToInterrupt(records: meetings) {
+        // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
+        let local: Set<String> = localMeetingIDsReportingFailure()
+        for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) }) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                 saveRecord(record: record, directory: directory)
             }
@@ -2007,10 +2010,22 @@ final class AppModel {
         Task { await refreshSharedKeys() }
     }
 
+    /// Yerel toplantı kimlikleri; okunamazsa boş (o turda hiçbir toplantıya dokunulmaz) ve neden gösterilir.
+    private func localMeetingIDsReportingFailure() -> Set<String> {
+        do {
+            return try AppPaths.localMeetingIDs()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            return []
+        }
+    }
+
     /// Saklama süresi (Ayarlar) dolan toplantıların sesini siler; kilitli toplantılar atlanır.
     func applyRetention() {
         let days: Int = clampedSetting(key: SettingsKey.audioRetentionDays, range: SettingsRange.audioRetentionDays)
-        for id in audioToDelete(records: meetings, now: Date(), retentionDays: days) where !isLocked(meetingID: id) {
+        // Yalnızca bu cihazdaki toplantılar: diğer cihazın sesi onun saklama süresine göre silinir.
+        let local: Set<String> = localMeetingIDsReportingFailure()
+        for id in audioToDelete(records: meetings.filter { local.contains($0.id) }, now: Date(), retentionDays: days) where !isLocked(meetingID: id) {
             deleteAudio(meetingID: id)
         }
     }
@@ -2070,7 +2085,7 @@ final class AppModel {
     /// Açılışta iCloud seçiliyse eşitlemeyi başlatır; iCloud kullanılamıyorsa neden listede de görünür.
     func startCloudSyncIfEnabled() {
         Task {
-            await cloud.start { [weak self] in self?.reloadMeetings() }
+            await cloud.start(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
             if case .failed(let message) = cloud.state {
                 meetingLoadFailures.append(MeetingLoadFailure(folder: "iCloud", reason: message))
             }
@@ -2079,7 +2094,12 @@ final class AppModel {
 
     /// iCloud eşitlemesini açar ya da kapatır (bkz. `CloudSyncController.setEnabled`).
     func setCloudSync(enabled: Bool) async {
-        await cloud.setEnabled(enabled) { [weak self] in self?.reloadMeetings() }
+        await cloud.setEnabled(enabled, excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
+    }
+
+    /// iCloud'a taşınmayacak toplantılar: kayıtta, işlenen ya da düzenlenen ve çalınan (dosyaları kullanımda).
+    private var cloudMoveExclusions: Set<String> {
+        processingMeetingIDs.union([activeMeetingID, player.meetingID].compactMap { $0 })
     }
 
     // MARK: Anahtar eşitleme
@@ -2091,6 +2111,8 @@ final class AppModel {
         do {
             for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
                 guard let value = try await optionalSecretInBackground(service: keychainService, account: account) else {
+                    // Bu Mac'te artık olmayan anahtarın iPhone kopyası da kalkar.
+                    try await Task.detached { try deleteSyncedSecret(service: keychainService, account: account) }.value
                     continue
                 }
                 try await Task.detached { try saveSyncedSecret(service: keychainService, account: account, value: value) }.value

@@ -76,6 +76,8 @@ private func currentStatus(account: SecretAccount) async -> SecretStatus {
 private func save(account: SecretAccount, value: String) -> SecretStatus {
     do {
         try saveSecret(service: keychainService, account: account, value: value)
+        // iPhone'a gönderilmiş kopya da yenilenir: telefon eski anahtarla kalmasın.
+        try updateSyncedSecretIfShared(service: keychainService, account: account, value: value)
         return .saved
     } catch {
         return .failed(String(localized: "Kaydedilemedi: \(userFacingMessage(error: error))"))
@@ -85,6 +87,8 @@ private func save(account: SecretAccount, value: String) -> SecretStatus {
 private func remove(account: SecretAccount) -> SecretStatus {
     do {
         try deleteSecret(service: keychainService, account: account)
+        // Kaldırılan anahtar iPhone'dan da kalkar.
+        try deleteSyncedSecret(service: keychainService, account: account)
         return .missing
     } catch {
         return .failed(String(localized: "Kaldırılamadı: \(userFacingMessage(error: error))"))

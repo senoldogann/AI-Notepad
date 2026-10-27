@@ -158,3 +158,37 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(try loadUserRecipes(defaults: defaults) == [mine])
     }
 }
+
+@Suite struct CloudMoveTests {
+    private func makeMeeting(root: URL, id: String, status: MeetingStatus) throws {
+        let folder: URL = root.appending(path: id, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try saveMeeting(record: record(id: id, startedAt: Date(), status: status, audioDeleted: false), directory: folder)
+    }
+
+    // iCloud kapatılınca toplantılar kopyalanır: iCloud'dakiler yerinde kalır (diğer cihaz kaybetmez), yerelde olan atlanır.
+    @Test func turningOffCopiesAndKeepsCloud() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        try makeMeeting(root: cloud, id: "a", status: .done)
+        try makeMeeting(root: cloud, id: "b", status: .done)
+        try makeMeeting(root: local, id: "a", status: .done)
+        let result: CloudMoveResult = try copyAllMeetingsToLocal(cloudSessions: cloud, localSessions: local)
+        #expect(result.moved == ["b"] && result.failures.isEmpty)
+        #expect(Set(loadMeetings(sessionsDirectory: cloud).meetings.map(\.id)) == ["a", "b"])
+        #expect(Set(loadMeetings(sessionsDirectory: local).meetings.map(\.id)) == ["a", "b"])
+    }
+
+    // Taşımada kullanımdaki, bitmemiş ve iCloud'da zaten olan toplantılara dokunulmaz (hata da sayılmaz).
+    @Test func moveSkipsBusyUnfinishedAndExisting() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        try makeMeeting(root: local, id: "kullanimda", status: .done)
+        try makeMeeting(root: local, id: "isleniyor", status: .processing)
+        try makeMeeting(root: local, id: "zaten", status: .done)
+        try makeMeeting(root: cloud, id: "zaten", status: .done)
+        let result: CloudMoveResult = moveFinishedMeetingsToCloud(localSessions: local, cloudSessions: cloud, excluding: ["kullanimda"])
+        #expect(result.moved.isEmpty && result.failures.isEmpty)
+        #expect(loadMeetings(sessionsDirectory: local).meetings.count == 3)
+    }
+}

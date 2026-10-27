@@ -44,7 +44,7 @@ struct AINotepadiOSApp: App {
                 .task {
                     store.reload()
                     ask.loadRecipes()
-                    await store.cloud.start { store.reload() }
+                    await store.cloud.start(excluding: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 })) { store.reload() }
                     store.applyRetention(now: Date())
                     #if DEBUG
                     if CommandLine.arguments.contains("--ornek-kayit") {
@@ -210,7 +210,15 @@ final class PhoneStore {
     /// nedeni sorunlarda görünür, bir sonraki açılışta yeniden denenir.
     func applyRetention(now: Date) {
         let days: Int = min(365, max(7, UserDefaults.standard.integer(forKey: PhoneSettingsKey.audioRetentionDays)))
-        for id in audioToDelete(records: meetings, now: now, retentionDays: days) {
+        // Yalnızca bu iPhone'daki toplantılar: Mac'in sesi Mac'in saklama süresine göre silinir.
+        let local: Set<String>
+        do {
+            local = try AppPaths.localMeetingIDs()
+        } catch {
+            problems = appendUnique(messages: problems, message: userFacingMessage(error: error))
+            return
+        }
+        for id in audioToDelete(records: meetings.filter { local.contains($0.id) }, now: now, retentionDays: days) {
             guard let record = meetings.first(where: { $0.id == id }) else {
                 continue
             }

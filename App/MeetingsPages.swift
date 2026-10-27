@@ -1314,6 +1314,9 @@ private struct MyNotesCard: View {
                         }
                         .buttonStyle(.pillPrimary)
                         .controlSize(.small)
+                        // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
+                        .disabled(isLocked)
+                        .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
                     } else {
                         Button("Düzenle", systemImage: "pencil") {
                             draft = notes

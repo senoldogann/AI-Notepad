@@ -66,21 +66,37 @@ public extension AppPaths {
     }
 }
 
-/// Yerel klasördeki bitmiş (`done`) toplantıları iCloud'a taşır; taşınanların kimliklerini döndürür. Kayıtta, işlemede,
-/// yarıda kalmış ya da başarısız toplantı yerelde kalır (sesi yeniden işlenebilsin). Bir toplantı taşınamazsa hata
-/// fırlatılır; o ana kadar taşınanlar iCloud'da kalır. Ana iş parçacığında çağrılmaz.
-public func moveFinishedMeetingsToCloud(localSessions: URL, cloudSessions: URL) throws -> [String] {
-    try loadMeetings(sessionsDirectory: localSessions).meetings
-        .filter { $0.status == .done }
-        .map { (record: MeetingRecord) -> String in
-            _ = try moveMeetingToCloud(directory: localSessions.appending(path: record.id, directoryHint: .isDirectory), cloudSessions: cloudSessions)
-            return record.id
-        }
+/// Taşıma ya da kopyalamanın sonucu: işlenen toplantılar ve işlenemeyenler (biri diğerlerini engellemez).
+public struct CloudMoveResult: Sendable, Equatable {
+    public let moved: [String]
+    public let failures: [MeetingLoadFailure]
 }
 
-/// iCloud'daki tüm toplantıları yerel klasöre geri indirip taşır (iCloud eşitlemesi kapatılınca); taşınanların
-/// kimliklerini döndürür. Ana iş parçacığında çağrılmaz.
-public func moveAllMeetingsToLocal(cloudSessions: URL, localSessions: URL) throws -> [String] {
+/// Yerel klasördeki bitmiş (`done`) toplantıları iCloud'a taşır. Kayıtta, işlemede, yarıda kalmış ya da başarısız
+/// toplantı yerelde kalır (sesi yeniden işlenebilsin); `excluding` (düzenlenen, çalan, kilitli) toplantılara dokunulmaz.
+/// iCloud'da aynı kimlik zaten varsa (ör. eşitleme kapatılıp açıldı) yerel kopya kalır, liste yereli gösterir. Her
+/// toplantı ayrı denenir. Ana iş parçacığında çağrılmaz.
+public func moveFinishedMeetingsToCloud(localSessions: URL, cloudSessions: URL, excluding: Set<String>) -> CloudMoveResult {
+    var moved: [String] = []
+    var failures: [MeetingLoadFailure] = []
+    for record in loadMeetings(sessionsDirectory: localSessions).meetings where record.status == .done && !excluding.contains(record.id) {
+        guard !FileManager.default.fileExists(atPath: cloudSessions.appending(path: record.id, directoryHint: .isDirectory).path) else {
+            continue
+        }
+        do {
+            _ = try moveMeetingToCloud(directory: localSessions.appending(path: record.id, directoryHint: .isDirectory), cloudSessions: cloudSessions)
+            moved.append(record.id)
+        } catch {
+            failures.append(MeetingLoadFailure(folder: record.id, reason: userFacingMessage(error: error)))
+        }
+    }
+    return CloudMoveResult(moved: moved, failures: failures)
+}
+
+/// iCloud'daki toplantıları bu cihaza kopyalar (iCloud eşitlemesi kapatılınca): iCloud'dakiler yerinde kalır, böylece
+/// diğer cihaz kendi toplantılarını kaybetmez. Bu cihazda zaten olanlar atlanır. Okuma dosya koordinatörüyle yapılır;
+/// inmemiş dosyalar okunurken iner. Ana iş parçacığında çağrılmaz.
+public func copyAllMeetingsToLocal(cloudSessions: URL, localSessions: URL) throws -> CloudMoveResult {
     let folders: [URL]
     do {
         folders = try FileManager.default.contentsOfDirectory(at: cloudSessions, includingPropertiesForKeys: nil)
@@ -88,10 +104,30 @@ public func moveAllMeetingsToLocal(cloudSessions: URL, localSessions: URL) throw
     } catch {
         throw StorageError.readFailed(path: cloudSessions.path, reason: error.localizedDescription)
     }
-    return try folders.map { (folder: URL) -> String in
-        _ = try moveMeetingToLocal(directory: folder, localSessions: localSessions)
-        return folder.lastPathComponent
+    var copied: [String] = []
+    var failures: [MeetingLoadFailure] = []
+    for folder in folders {
+        let destination: URL = localSessions.appending(path: folder.lastPathComponent, directoryHint: .isDirectory)
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            continue
+        }
+        var coordinationError: NSError?
+        var copyError: (any Error)?
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: folder, options: [], error: &coordinationError) { (url: URL) -> Void in
+            do {
+                try FileManager.default.copyItem(at: url, to: destination)
+            } catch {
+                copyError = error
+            }
+        }
+        if let error = coordinationError ?? copyError {
+            failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: error.localizedDescription))
+        } else {
+            copied.append(folder.lastPathComponent)
+        }
     }
+    cloudLogger.info("iCloud'daki toplantılar bu cihaza kopyalandı, sayı: \(copied.count, privacy: .public), başarısız: \(failures.count, privacy: .public)")
+    return CloudMoveResult(moved: copied, failures: failures)
 }
 
 /// iCloud'daki toplantı klasörünü bu cihaza taşır (gerekirse indirir); yeni yolu döndürür. Hedefte aynı adlı klasör
@@ -129,7 +165,8 @@ private func moveUbiquitous(from source: URL, to destination: URL, makeUbiquitou
 /// Değişince `onChange` çağrılır; çağıran toplantıları yeniden okur. Dış sisteme (iCloud) bağlandığı için sınıftır.
 @MainActor
 public final class ICloudMeetingWatcher {
-    private let query: NSMetadataQuery = NSMetadataQuery()
+    /// Her başlatmada yeni sorgu: durdurulmuş `NSMetadataQuery` yeniden başlatılamaz.
+    private var query: NSMetadataQuery?
     private var observers: [any NSObjectProtocol] = []
     /// Art arda gelen bildirimler birleştirilir (bir eşitleme turunda onlarca güncelleme gelir).
     private var pending: Task<Void, Never>?
@@ -141,6 +178,8 @@ public final class ICloudMeetingWatcher {
         guard observers.isEmpty else {
             return
         }
+        let query: NSMetadataQuery = NSMetadataQuery()
+        self.query = query
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
         query.predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, meetingFileName)
         for name in [Notification.Name.NSMetadataQueryDidFinishGathering, .NSMetadataQueryDidUpdate] {
@@ -150,12 +189,15 @@ public final class ICloudMeetingWatcher {
                 }
             })
         }
-        query.start()
+        if !query.start() {
+            cloudLogger.error("iCloud değişiklik izleme başlatılamadı")
+        }
     }
 
     /// İzlemeyi durdurur.
     public func stop() {
-        query.stop()
+        query?.stop()
+        query = nil
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers = []
         pending?.cancel()
@@ -176,18 +218,18 @@ public final class ICloudMeetingWatcher {
     }
 }
 
-/// Yerel klasördeki bitmiş toplantıları arka planda iCloud'a taşır (iCloud seçilince ve her toplantı bitince);
-/// taşınanların kimliklerini döndürür. iCloud kullanılamıyorsa `iCloudUnavailable`.
-public func moveFinishedMeetingsToCloudInBackground() async throws -> [String] {
+/// Yerel klasördeki bitmiş toplantıları arka planda iCloud'a taşır (bkz. `moveFinishedMeetingsToCloud`). iCloud
+/// kullanılamıyorsa `iCloudUnavailable`.
+public func moveFinishedMeetingsToCloudInBackground(excluding: Set<String>) async throws -> CloudMoveResult {
     try await Task.detached(priority: .utility) {
-        try moveFinishedMeetingsToCloud(localSessions: try AppPaths.sessionsDirectory(), cloudSessions: try AppPaths.cloudSessionsDirectory())
+        moveFinishedMeetingsToCloud(localSessions: try AppPaths.sessionsDirectory(), cloudSessions: try AppPaths.cloudSessionsDirectory(), excluding: excluding)
     }.value
 }
 
-/// iCloud'daki tüm toplantıları arka planda bu cihaza geri taşır (iCloud eşitlemesi kapatılınca).
-public func moveAllMeetingsToLocalInBackground() async throws -> [String] {
+/// iCloud'daki toplantıları arka planda bu cihaza kopyalar (bkz. `copyAllMeetingsToLocal`).
+public func copyAllMeetingsToLocalInBackground() async throws -> CloudMoveResult {
     try await Task.detached(priority: .userInitiated) {
-        try moveAllMeetingsToLocal(cloudSessions: try AppPaths.cloudSessionsDirectory(), localSessions: try AppPaths.sessionsDirectory())
+        try copyAllMeetingsToLocal(cloudSessions: try AppPaths.cloudSessionsDirectory(), localSessions: try AppPaths.sessionsDirectory())
     }.value
 }
 
@@ -224,8 +266,9 @@ public enum SyncWorkState: Equatable, Sendable {
 }
 
 /// iCloud eşitlemesinin durumu ve akışı (Mac ve iPhone ortak): açılışta kapsayıcıyı arka planda hazırlar ve
-/// değişiklikleri izler; açınca bitmiş toplantıları iCloud'a, kapatınca iCloud'dakileri bu cihaza taşır; her toplantı
-/// bitince bekleyenleri taşır. Toplantılar değişince verilen `onChange` çağrılır (uygulama listeyi yeniden okur).
+/// değişiklikleri izler; açınca bitmiş toplantıları iCloud'a taşır, kapatınca iCloud'dakileri bu cihaza kopyalar
+/// (diğer cihazınkiler iCloud'da kalır); her toplantı bitince bekleyenleri taşır. Taşımalar sırayla yapılır: kapatma,
+/// süren taşımanın bitmesini bekler. Toplantılar değişince verilen `onChange` çağrılır (uygulama listeyi yeniden okur).
 @MainActor
 @Observable
 public final class CloudSyncController {
@@ -236,6 +279,8 @@ public final class CloudSyncController {
     /// Kapsayıcı hazırlandı (ilk çözüm yavaştır; hazır olana dek yalnız yerel okunur).
     public private(set) var isReady: Bool = false
     @ObservationIgnored private let watcher: ICloudMeetingWatcher = ICloudMeetingWatcher()
+    /// Süren taşıma (kapatma bunu bekler; iki taşıma üst üste binmez).
+    @ObservationIgnored private var currentMove: Task<Void, Never>?
 
     public init() {}
 
@@ -245,7 +290,7 @@ public final class CloudSyncController {
     }
 
     /// Açılışta: iCloud seçiliyse kapsayıcıyı hazırlar, izlemeye başlar, listeyi yeniletir ve bekleyen toplantıları taşır.
-    public func start(onChange: @escaping @MainActor () -> Void) async {
+    public func start(excluding: Set<String>, onChange: @escaping @MainActor () -> Void) async {
         guard location == .iCloud else {
             return
         }
@@ -257,30 +302,32 @@ public final class CloudSyncController {
             return
         }
         becomeReady(onChange: onChange)
-        await moveFinishedMeetings(onChange: onChange)
+        await moveFinishedMeetings(excluding: excluding, onChange: onChange)
     }
 
     /// iCloud eşitlemesini açar ya da kapatır; başarısız olursa ayar değişmez ve neden `state`'te görünür.
-    public func setEnabled(_ enabled: Bool, onChange: @escaping @MainActor () -> Void) async {
+    public func setEnabled(_ enabled: Bool, excluding: Set<String>, onChange: @escaping @MainActor () -> Void) async {
         guard state != .working, enabled != (location == .iCloud) else {
             return
         }
         state = .working
+        await currentMove?.value
         do {
             if enabled {
                 try await prepareCloudStorage()
                 save(location: .iCloud)
                 becomeReady(onChange: onChange)
-                let moved: [String] = try await moveFinishedMeetingsToCloudInBackground()
-                cloudLogger.info("iCloud eşitlemesi açıldı, taşınan: \(moved.count, privacy: .public)")
+                let result: CloudMoveResult = try await moveFinishedMeetingsToCloudInBackground(excluding: excluding)
+                cloudLogger.info("iCloud eşitlemesi açıldı, taşınan: \(result.moved.count, privacy: .public)")
+                state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
             } else {
-                let moved: [String] = try await moveAllMeetingsToLocalInBackground()
+                let result: CloudMoveResult = try await copyAllMeetingsToLocalInBackground()
                 watcher.stop()
                 isReady = false
                 save(location: .local)
-                cloudLogger.info("iCloud eşitlemesi kapatıldı, geri taşınan: \(moved.count, privacy: .public)")
+                cloudLogger.info("iCloud eşitlemesi kapatıldı, kopyalanan: \(result.moved.count, privacy: .public)")
+                state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
             }
-            state = .idle
         } catch {
             cloudLogger.error("iCloud eşitlemesi değiştirilemedi, hata: \(String(describing: error), privacy: .public)")
             state = .failed(userFacingMessage(error: error))
@@ -288,21 +335,35 @@ public final class CloudSyncController {
         onChange()
     }
 
-    /// iCloud açık ve hazırsa yerelde bekleyen bitmiş toplantıları taşır (her toplantı bitince).
-    public func moveFinishedMeetings(onChange: @MainActor () -> Void) async {
+    /// iCloud açık ve hazırsa yerelde bekleyen bitmiş toplantıları taşır (her toplantı bitince); `excluding`
+    /// toplantılara (düzenlenen, çalan) dokunulmaz. Önceki taşıma bitmeden yenisi başlamaz.
+    public func moveFinishedMeetings(excluding: Set<String>, onChange: @escaping @MainActor () -> Void) async {
         guard activeLocation == .iCloud else {
             return
         }
-        do {
-            let moved: [String] = try await moveFinishedMeetingsToCloudInBackground()
-            if !moved.isEmpty {
-                cloudLogger.info("Toplantılar iCloud'a taşındı, sayı: \(moved.count, privacy: .public)")
-                onChange()
+        let previous: Task<Void, Never>? = currentMove
+        let move: Task<Void, Never> = Task {
+            await previous?.value
+            // Bekleme sırasında eşitleme kapatılmış olabilir.
+            guard self.activeLocation == .iCloud else {
+                return
             }
-        } catch {
-            cloudLogger.error("Toplantı iCloud'a taşınamadı, hata: \(String(describing: error), privacy: .public)")
-            state = .failed(userFacingMessage(error: error))
+            do {
+                let result: CloudMoveResult = try await moveFinishedMeetingsToCloudInBackground(excluding: excluding)
+                if !result.moved.isEmpty {
+                    cloudLogger.info("Toplantılar iCloud'a taşındı, sayı: \(result.moved.count, privacy: .public)")
+                    onChange()
+                }
+                if !result.failures.isEmpty {
+                    self.state = .failed(failureSummary(failures: result.failures))
+                }
+            } catch {
+                cloudLogger.error("Toplantı iCloud'a taşınamadı, hata: \(String(describing: error), privacy: .public)")
+                self.state = .failed(userFacingMessage(error: error))
+            }
         }
+        currentMove = move
+        await move.value
     }
 
     private func becomeReady(onChange: @escaping @MainActor () -> Void) {
@@ -314,5 +375,24 @@ public final class CloudSyncController {
     private func save(location newLocation: StorageLocation) {
         location = newLocation
         UserDefaults.standard.set(newLocation.rawValue, forKey: storageLocationKey)
+    }
+}
+
+/// Taşınamayan toplantıların özeti (ayarlarda gösterilir). Saf fonksiyondur.
+func failureSummary(failures: [MeetingLoadFailure]) -> String {
+    String(localized: "\(failures.count) toplantı taşınamadı: \(failures.first?.reason ?? "")")
+}
+
+public extension AppPaths {
+    /// Bu cihazın yerel klasöründeki toplantıların kimlikleri (iCloud'daki başka cihazınkiler değil). Açılıştaki
+    /// "yarıda kaldı" işaretleme, yeniden işleme ve ses saklama yalnızca bunlara uygulanır: diğer cihazın işlediği ya
+    /// da sesini sakladığı toplantıya dokunulmaz.
+    static func localMeetingIDs() throws -> Set<String> {
+        let sessions: URL = try sessionsDirectory()
+        do {
+            return Set(try FileManager.default.contentsOfDirectory(at: sessions, includingPropertiesForKeys: nil).map(\.lastPathComponent))
+        } catch {
+            throw StorageError.readFailed(path: sessions.path, reason: error.localizedDescription)
+        }
     }
 }

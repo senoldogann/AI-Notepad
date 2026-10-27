@@ -163,6 +163,11 @@ final class PhoneRecorder {
         updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true), force: true)
     }
 
+    /// Kullanımdaki toplantılar (kayıtta ya da işleniyor): iCloud'a taşınmaz.
+    var busyMeetingIDs: Set<String> {
+        Set(processingSteps.keys).union([active?.directory.lastPathComponent].compactMap { $0 })
+    }
+
     /// Şu anı işaretler: notta öne çıkar (söz bittikten sonra basılır; aralığı `Highlight` belirler).
     func markMoment() {
         guard phase == .recording, let startedAt else {
@@ -185,8 +190,17 @@ final class PhoneRecorder {
     /// Açılışta kayıtta ya da işlemede kalmış (uygulama kapanmış) toplantılar yeniden işlenir; anahtarlar okunamazsa
     /// "yarıda kaldı" olarak saklanır (toplantı sayfasından yeniden işlenebilir).
     func resumeUnfinished() async {
+        endStaleActivities()
         // Bu oturumda işlenmekte olanlar (sahne yeniden kurulduysa) ikinci kez işlenmez: çift ücret, aynı dosyaya iki yazar.
-        let stale: [MeetingRecord] = staleStatusesToInterrupt(records: store.meetings).filter { processingSteps[$0.id] == nil }
+        // Yalnızca bu iPhone'da kaydedilenler: iCloud'daki Mac toplantısı Mac'te işlenir.
+        let local: Set<String>
+        do {
+            local = try AppPaths.localMeetingIDs()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            return
+        }
+        let stale: [MeetingRecord] = staleStatusesToInterrupt(records: store.meetings.filter { local.contains($0.id) }).filter { processingSteps[$0.id] == nil }
         guard !stale.isEmpty, phase == .idle else {
             return
         }
@@ -322,7 +336,7 @@ final class PhoneRecorder {
             saveRecord(record: result, directory: directory)
             processingSteps[record.id] = nil
             if result.status == .done {
-                await store.cloud.moveFinishedMeetings { [store] in store.reload() }
+                await store.cloud.moveFinishedMeetings(excluding: busyMeetingIDs) { [store] in store.reload() }
             }
             endBackgroundTask(id: record.id)
         }
@@ -392,6 +406,18 @@ final class PhoneRecorder {
             // Etkinlik görev içinde kimliğiyle bulunur (ana aktörden başka göreve geçirilmez).
             for running in Activity<RecordingActivityAttributes>.activities where running.id == id {
                 await running.update(ActivityContent(state: state, staleDate: nil))
+            }
+        }
+    }
+
+    /// Uygulama kayıt sırasında kapandıysa kilit ekranında kalan canlı etkinlik kaldırılır (kayıt yokken çağrılır).
+    private func endStaleActivities() {
+        guard phase == .idle, activity == nil else {
+            return
+        }
+        Task.detached {
+            for stale in Activity<RecordingActivityAttributes>.activities {
+                await stale.end(nil, dismissalPolicy: .immediate)
             }
         }
     }

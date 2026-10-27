@@ -403,7 +403,7 @@ private struct CloudSyncRow: View {
 
     var body: some View {
         SettingsRow(title: Text("iCloud ile eşitle")) {
-            Text("Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantılar bu Mac'e geri taşınır.")
+            Text("Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantıların bir kopyası bu Mac'te kalır; iPhone'dakiler etkilenmez.")
             switch model.cloud.state {
             case .working:
                 Text("Toplantılar taşınıyor…").foregroundStyle(Theme.ink)
