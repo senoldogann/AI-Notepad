@@ -221,6 +221,14 @@ private struct LiveRecordingView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     header
+                    if recorder.micInterrupted {
+                        Label("Mikrofon kesildi (arama ya da alarm). Kesinti bitince kayıt kendiliğinden sürer.", systemImage: "mic.slash.fill")
+                            .appFont(size: 14, weight: .medium)
+                            .foregroundStyle(.orange)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
                     if recorder.consentReminderVisible {
                         ConsentCard { withAnimation(.smooth(duration: 0.25)) { recorder.consentReminderVisible = false } }
                             .transition(.opacity.combined(with: .move(edge: .top)))

@@ -241,11 +241,37 @@ public func prepareCloudStorage() async throws {
     }.value
 }
 
-/// Toplantı dosyasındaki iCloud çakışmalarını çözer: son yazılan sürüm kalır, diğer sürümler kaldırılır ve loglanır.
-/// Çakışma yoksa bir şey yapmaz.
+/// Çakışan sürümlerin kullanıcı işaretlerini birleştirir: son yazılan sürüm temeldir, diğer cihazda tamamlanan ya da
+/// Anımsatıcılar'a eklenen görevler kaybolmaz (ör. iPhone'da işaretlenen görev, Mac notu yeniden yazarken). Saf
+/// fonksiyondur.
+public func mergedConflictRecord(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
+    let union: ([String]?, [[String]?]) -> [String] = { (base: [String]?, extra: [[String]?]) -> [String] in
+        extra.reduce(base ?? []) { (result: [String], keys: [String]?) -> [String] in result + (keys ?? []).filter { !result.contains($0) } }
+    }
+    let completed: [String] = union(current.completedTasks, others.map(\.completedTasks))
+    let reminded: [String] = union(current.remindedTasks, others.map(\.remindedTasks))
+    return current.with(completedTasks: completed).with(remindedTasks: reminded)
+}
+
+/// Toplantı dosyasındaki iCloud çakışmalarını çözer: son yazılan sürüm kalır, diğer sürümlerdeki görev işaretleri ona
+/// eklenir (bkz. `mergedConflictRecord`), diğer sürümler kaldırılır ve loglanır. Çakışma yoksa bir şey yapmaz.
 public func resolveCloudConflicts(file: URL) throws {
     guard let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: file), !conflicts.isEmpty else {
         return
+    }
+    do {
+        let current: MeetingRecord = try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: file))
+        let others: [MeetingRecord] = try conflicts.map { (version: NSFileVersion) throws -> MeetingRecord in
+            try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: version.url))
+        }
+        let merged: MeetingRecord = mergedConflictRecord(current: current, others: others)
+        if merged != current {
+            try saveMeeting(record: merged, directory: file.deletingLastPathComponent())
+        }
+    } catch let error as StorageError {
+        throw error
+    } catch {
+        throw StorageError.readFailed(path: file.path, reason: error.localizedDescription)
     }
     for version in conflicts {
         version.isResolved = true

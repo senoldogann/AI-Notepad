@@ -5367,6 +5367,16 @@
         }
       }
     },
+    "Markdown olarak paylaş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share as Markdown"
+          }
+        }
+      }
+    },
     "Markdown panoya kopyalandı": {
       "localizations": {
         "en": {
@@ -5475,6 +5485,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No microphone permission. Allow AI-Notepad in System Settings › Privacy & Security › Microphone."
+          }
+        }
+      }
+    },
+    "Mikrofon kesildi (arama ya da alarm). Kesinti bitince kayıt kendiliğinden sürer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The microphone was interrupted (call or alarm). Recording resumes by itself when it ends."
           }
         }
       }
@@ -5792,6 +5812,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Note is written"
+          }
+        }
+      }
+    },
+    "Not yazılıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing note…"
+          }
+        }
+      }
+    },
+    "Not yenilenemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't refresh the note: %@"
           }
         }
       }
@@ -6590,6 +6630,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't convert audio"
+          }
+        }
+      }
+    },
+    "Ses iCloud'dan iniyor; birazdan yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio is downloading from iCloud; try again in a moment."
           }
         }
       }

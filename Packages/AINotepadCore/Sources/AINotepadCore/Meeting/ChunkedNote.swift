@@ -358,7 +358,7 @@ public func writeMeetingNote(
 }
 
 /// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`). Saf fonksiyondur.
-private func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
+func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
     let normalized: MeetingNote = MeetingNote(
         title: note.title, summary: note.summary, decisions: note.decisions,
         tasks: note.tasks.map { normalizedTask(task: $0, userName: userName) }

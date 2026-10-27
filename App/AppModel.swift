@@ -2184,9 +2184,9 @@ final class AppModel {
     /// Saklama süresi (Ayarlar) dolan toplantıların sesini siler; kilitli toplantılar atlanır.
     func applyRetention() {
         let days: Int = clampedSetting(key: SettingsKey.audioRetentionDays, range: SettingsRange.audioRetentionDays)
-        // Yalnızca bu cihazdaki toplantılar: diğer cihazın sesi onun saklama süresine göre silinir.
-        let local: Set<String> = localMeetingIDsReportingFailure()
-        for id in audioToDelete(records: meetings.filter { local.contains($0.id) }, now: Date(), retentionDays: days) where !isLocked(meetingID: id) {
+        // iCloud'daki toplantılar da: eşitleme açıkken biten her toplantı iCloud'a taşınır, yalnız yerelde silinseydi
+        // hiçbir cihaz sesi silmezdi. Çalan toplantının sesi kalır.
+        for id in audioToDelete(records: meetings.filter { $0.id != player.meetingID }, now: Date(), retentionDays: days) where !isLocked(meetingID: id) {
             deleteAudio(meetingID: id)
         }
     }

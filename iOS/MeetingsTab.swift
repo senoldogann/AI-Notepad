@@ -130,8 +130,10 @@ struct MeetingReadView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     hero(paragraphs: paragraphs)
-                    if let errorMessage {
-                        PhoneErrorList(messages: [errorMessage])
+                    // Çalma hatası (dosya açılamadı, ses oturumu) da burada görünür.
+                    let messages: [String] = [errorMessage, player.errorMessage].compactMap { $0 }
+                    if !messages.isEmpty {
+                        PhoneErrorList(messages: messages)
                     }
                     if let failure = record.failureMessage ?? record.notice {
                         Label(failure, systemImage: "info.circle")
@@ -166,7 +168,14 @@ struct MeetingReadView: View {
                         ShareLink(item: shareText(record: record, note: note, language: nil)) {
                             Label("Notu paylaş", systemImage: "square.and.arrow.up")
                         }
+                        ShareLink(item: meetingMarkdown(record: record)) {
+                            Label("Markdown olarak paylaş", systemImage: "doc.text")
+                        }
                     }
+                    Button(store.regeneratingIDs.contains(record.id) ? "Not yazılıyor…" : "Notu yenile", systemImage: "arrow.clockwise") {
+                        Task { await store.regenerateNote(meetingID: record.id) }
+                    }
+                    .disabled(record.status == .recording || record.status == .processing || store.regeneratingIDs.contains(record.id))
                     Button("Sil", systemImage: "trash", role: .destructive, action: onDelete)
                         .disabled(record.status == .recording || record.status == .processing)
                 } label: {
@@ -267,6 +276,11 @@ struct MeetingReadView: View {
             return
         }
         do {
+            // Mac'te kaydedilen toplantının sesi iCloud'dan henüz inmemiş olabilir: indirme başlatılır.
+            if try startDownloadingCloudAudio(directory: try store.sessionDirectory(id: record.id)) {
+                errorMessage = String(localized: "Ses iCloud'dan iniyor; birazdan yeniden dene.")
+                return
+            }
             let urls: [URL] = try store.audioURLs(record: record)
             guard !urls.isEmpty else {
                 errorMessage = String(localized: "Bu toplantının ses kaydı yok.")

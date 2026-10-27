@@ -12,6 +12,8 @@ enum PhoneSettingsKey {
     static let audioRetentionDays: String = "audioRetentionDays"
     /// İlk açılış karşılaması bitti ya da atlandı.
     static let onboardingCompleted: String = "onboardingCompleted"
+    /// Tema takımı (Mac'teki ayarla aynı ad; bkz. `AppTheme`).
+    static let theme: String = "appearance.theme"
 }
 
 /// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).
