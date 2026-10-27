@@ -103,13 +103,33 @@ extension CloudTests {
         let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general)
         try JSONEncoder().encode(ChunkedNoteProgress(fingerprint: fingerprint, completedParts: parts, state: saved)).write(to: file)
         let note: MeetingNote = try #require(try await writeMeetingNote(
-            segments: segments, speakerNames: [:], userName: "Senol", template: .general,
+            segments: segments, speakerNames: [:], userName: "Senol", template: .general, myNotes: "",
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
         ))
         #expect(parts > 1)
         #expect(note.tasks.map(\.description) == ["Aikataulun lähettäminen tiimille"])
         #expect(note.decisions == ["Markkinointibudjetti kasvaa 10 %."])
         #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+}
+
+@Suite struct MyNotesCloudTests {
+    // Gerçek model: kullanıcının kendi notundaki madde (park yeri) nota girer; notundaki iş görev olur.
+    @Test func myNotesShapeTheNote() async throws {
+        let segments: [StoredSegment] = [
+            stored("final-0", .others, 1, 0, "Huomenta. Käydään läpi ensi vuoden budjetti, se kasvaa kymmenen prosenttia."),
+            stored("final-1", .others, 2, 8, "Markkinointi saa suurimman osan lisäyksestä."),
+            stored("final-2", .others, 1, 16, "Ai niin, parkkipaikat vähenevät ensi kuussa remontin takia."),
+            stored("final-3", .others, 2, 22, "Selvä. Seuraava palaveri on perjantaina."),
+        ]
+        let note: MeetingNote = try #require(try await writeMeetingNote(
+            segments: segments, speakerNames: [:], userName: "Senol", template: .general,
+            myNotes: "## Bana önemli\n- park yeri azalıyor → kiralık yer sor", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
+            progressFile: try temporaryDirectory().appending(path: "note-progress.json")
+        ))
+        let text: String = (note.summary + " " + note.decisions.joined(separator: " ") + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
+        #expect(text.contains("park"), "\(note)")
+        #expect(note.tasks.contains { $0.isMine && $0.description.lowercased().contains("park") }, "\(note.tasks)")
     }
 }
 
@@ -124,7 +144,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20, endSec: nil)]), speakerNames: [:], userName: "Senol",
-            template: .general, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
+            template: .general, myNotes: "", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()
         #expect(text.contains("kahve"), "\(text)")

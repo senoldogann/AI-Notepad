@@ -173,6 +173,8 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var template: NoteTemplate?
     /// Notun paylaşım dillerindeki sürümleri (dil kodu → not); not yeniden yazılınca silinir.
     public private(set) var sharedNotes: [String: MeetingNote]?
+    /// Kullanıcının toplantıda (ya da sonradan) kendi yazdığı notlar; not bunları öncelik sayar. Eski toplantılarda nil.
+    public private(set) var myNotes: String?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -196,6 +198,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.engine = engine
         self.notice = notice
         self.meNeedsFinalPass = meNeedsFinalPass
+    }
+
+    /// Kendi notları değişmiş kopya (boş metin nil olur).
+    public func with(myNotes newNotes: String) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.myNotes = newNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : newNotes
+        return copy
     }
 
     /// Tamamlanan görevleri değişmiş kopya.

@@ -687,6 +687,7 @@ final class AppModel {
         }
         isRecording = true
         liveHighlights = []
+        liveMyNotes = ""
         recordingTemplate = defaultNoteTemplate()
         consentReminderVisible = UserDefaults.standard.bool(forKey: SettingsKey.consentReminder)
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
@@ -870,6 +871,7 @@ final class AppModel {
         // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
         .with(template: recordingTemplate)
         .with(highlights: liveHighlights)
+        .with(myNotes: liveMyNotes)
         return linkedMeeting.map { base.with(attendees: $0.attendees).with(calendarEventID: $0.id) } ?? base
     }
 
@@ -1021,6 +1023,14 @@ final class AppModel {
         rewriteNote(record: record)
     }
 
+    /// Kendi notlarını saklar ve notu onlarla yeniden yazar.
+    func saveMyNotes(meetingID: String, text: String) {
+        guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        rewriteNote(record: record.with(myNotes: text))
+    }
+
     /// Notu başka bir şablonla yeniden yazar (şablon toplantıda saklanır).
     func regenerateNote(meetingID: String, template: NoteTemplate) {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
@@ -1166,6 +1176,8 @@ final class AppModel {
 
     /// Bu kayıtta işaretlenen anlar.
     @ObservationIgnored private var liveHighlights: [Highlight] = []
+    /// Kullanıcının kayıt sırasında yazdığı notlar (panelde "Notlarım"); kayıtla saklanır.
+    var liveMyNotes: String = ""
 
     /// Kayıtta şu anı işaretler (notta öne çıkar).
     func bookmarkNow() {

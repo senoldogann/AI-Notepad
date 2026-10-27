@@ -3500,6 +3500,16 @@
         }
       }
     },
+    "Kaydet ve notu yeniden yaz": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save and rewrite the note"
+          }
+        }
+      }
+    },
     "Kaydettiğini katılımcılara söyle": {
       "localizations": {
         "en": {
@@ -3917,6 +3927,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Complete before recording"
+          }
+        }
+      }
+    },
+    "Kendi notunu ekle — not onu öncelik sayıp yeniden yazılır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add your own notes — the note is rewritten around them"
           }
         }
       }
@@ -4984,6 +5004,16 @@
         }
       }
     },
+    "NOTLARIM": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MY NOTES"
+          }
+        }
+      }
+    },
     "Ne kaçırdım?": {
       "localizations": {
         "en": {
@@ -5000,6 +5030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Norwegian"
+          }
+        }
+      }
+    },
+    "Not bunları öncelik sayar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The note prioritises these"
           }
         }
       }
@@ -5142,6 +5182,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "The note, transcript and audio are deleted permanently; this can't be undone."
+          }
+        }
+      }
+    },
+    "Notlarım": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My notes"
+          }
+        }
+      }
+    },
+    "Notlarım: kendi notunu yaz, not onu öncelik sayar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My notes: write your own; the note prioritises them"
+          }
+        }
+      }
+    },
+    "Notlarımı gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide my notes"
           }
         }
       }
@@ -5564,6 +5634,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "YOUR TASKS"
+          }
+        }
+      }
+    },
+    "SENİN NOTLARIN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR NOTES"
           }
         }
       }
@@ -8151,6 +8231,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Earlier answers won't be used as context"
+          }
+        }
+      }
+    },
+    "Önemli gördüğünü kısaca yaz; toplantı bitince not bunları öncelik sayar, gerisini transkriptten tamamlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jot down what matters; when the meeting ends the note prioritises these and fills in the rest from the transcript."
+          }
+        }
+      }
+    },
+    "Önemli gördüğünü yaz: \"- bütçe cuma\", \"## Riskler\"… Kısa yeter, gerisini not tamamlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jot what matters: \"- budget Friday\", \"## Risks\"… Short is fine; the note fills in the rest."
           }
         }
       }

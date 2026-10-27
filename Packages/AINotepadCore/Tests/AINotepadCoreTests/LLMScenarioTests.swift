@@ -123,7 +123,7 @@ struct LLMScenarioTests {
     // toplantının notunu eksiksiz yazmalı.
     @Test(arguments: ClaudeModel.allCases)
     func oneHourNoteAtHighestOfferedEffort(model: ClaudeModel) async throws {
-        let request: LLMRequest = try #require(meetingNoteRequest(segments: longMeetingSegments(rounds: 15), speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general))
+        let request: LLMRequest = try #require(meetingNoteRequest(segments: longMeetingSegments(rounds: 15), speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, myNotes: ""))
         let started: ContinuousClock.Instant = .now
         // Uygulamayla aynı yol: boş/bozuk not yeniden istenir.
         let note: MeetingNote = try await requestStructured(provider: try anthropic(model: model, effort: .high), request: request) { (text: String) throws -> MeetingNote in
@@ -164,7 +164,7 @@ struct LLMScenarioTests {
         let segments: [StoredSegment] = realisticMeetingSegments(rounds: rounds)
         let provider: LLMProvider = try anthropic(model: .haiku, effort: .medium)
         let started: ContinuousClock.Instant = .now
-        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, myNotes: "", llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
         let coverage: TaskCoverage = taskCoverage(tasks: note.tasks, phases: rounds)
         print("SENARYO gerçek yoğunluk \(rounds * 4) dk, \(segments.map(\.text.count).reduce(0, +)) karakter: \(ContinuousClock.now - started), görev \(note.tasks.count), kapsanan iş \(coverage.covered)/\(rounds * 3), eksik: \(coverage.missing.prefix(12))")
         #expect(Double(coverage.covered) >= Double(rounds * 3) * 0.9, "eksik: \(coverage.missing)")
@@ -186,7 +186,7 @@ struct LLMScenarioTests {
         let provider: LLMProvider = .openAICompatible(OpenAICompatibleConfig(
             baseURL: URL(string: "http://localhost:11434/v1")!, apiKey: nil, fastModel: model, smartModel: model, fastEffort: .high, smartEffort: .high
         ))
-        let request: LLMRequest = try #require(meetingNoteRequest(segments: longMeetingSegments(rounds: 15), speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general))
+        let request: LLMRequest = try #require(meetingNoteRequest(segments: longMeetingSegments(rounds: 15), speakerNames: [1: "Aino", 2: "Mikko"], userName: "Doğan", template: .general, myNotes: ""))
         let note: MeetingNote = try await requestStructured(provider: provider, request: request) { (text: String) throws -> MeetingNote in
             try parseMeetingNote(text: text)
         }

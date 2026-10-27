@@ -210,6 +210,7 @@ struct PressableCardStyle: ButtonStyle {
 private struct LiveRecordingView: View {
     let recorder: PhoneRecorder
     @State private var markedAt: Date?
+    @State private var isNotesOpen: Bool = false
 
     private var blocks: [SpeakerBlock] {
         groupBySpeaker(transcript: recorder.transcript.filter { !$0.text.isEmpty })
@@ -256,6 +257,11 @@ private struct LiveRecordingView: View {
         }
         .safeAreaInset(edge: .bottom) { controls }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isNotesOpen) {
+            PhoneMyNotesSheet(text: Binding<String>(get: { recorder.myNotes }, set: { (text: String) -> Void in recorder.myNotes = text }))
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private let bottomID: String = "son"
@@ -317,6 +323,17 @@ private struct LiveRecordingView: View {
                 }
                 .buttonStyle(PressableCardStyle())
                 .accessibilityLabel("Bu anı işaretle")
+                Button {
+                    isNotesOpen = true
+                } label: {
+                    Image(systemName: recorder.myNotes.isEmpty ? "square.and.pencil" : "square.and.pencil.circle.fill")
+                        .appFont(size: 19, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 56, height: 56)
+                        .background(Theme.soft, in: Circle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityLabel("Notlarım")
                 .sensoryFeedback(.impact(weight: .light), trigger: recorder.highlights.count)
                 Button {
                     recorder.stop()
@@ -516,5 +533,32 @@ private struct PreparingCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.line))
+    }
+}
+
+
+/// Kayıt sırasında "Notlarım": kendi notların (madde, başlık); not bunları öncelik sayıp transkriptten tamamlar.
+private struct PhoneMyNotesSheet: View {
+    @Binding var text: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Notlarım", systemImage: "square.and.pencil")
+                .appFont(size: 17, weight: .semibold)
+            Text("Önemli gördüğünü kısaca yaz; toplantı bitince not bunları öncelik sayar, gerisini transkriptten tamamlar.")
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+            TextEditor(text: $text)
+                .appFont(size: 16, weight: .regular)
+                .scrollContentBackground(.hidden)
+                .focused($isFocused)
+                .padding(10)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        }
+        .padding(20)
+        .background(Theme.background)
+        .onAppear { isFocused = true }
     }
 }
