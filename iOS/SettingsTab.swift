@@ -7,6 +7,8 @@ struct PhoneSettingsTab: View {
     let store: PhoneStore
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
+    @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
+    @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
 
     var body: some View {
         NavigationStack {
@@ -45,6 +47,21 @@ struct PhoneSettingsTab: View {
                     Text("Anahtarlar")
                 } footer: {
                     Text("Mac'te Ayarlar › Anahtarlar › \"iPhone'a gönder\" dersen anahtarlar iCloud Anahtar Zinciri ile buraya gelir. Burada girdiğin anahtar yalnız bu iPhone'da saklanır ve öncelik onundur.")
+                }
+                Section {
+                    Toggle("Kayıt başlarken haber vermeyi hatırlat", isOn: $consentReminder)
+                    Picker("Sesleri sakla", selection: $retentionDays) {
+                        ForEach([7, 14, 30, 60, 90, 180, 365], id: \.self) { (days: Int) in
+                            Text("\(days) gün").tag(days)
+                        }
+                    }
+                    .onChange(of: retentionDays) { (_: Int, _: Int) in
+                        store.applyRetention(now: Date())
+                    }
+                } header: {
+                    Text("Kayıt")
+                } footer: {
+                    Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.")
                 }
                 Section("Toplantı") {
                     Picker("Ana toplantı dili", selection: $primaryLanguage) {

@@ -111,7 +111,7 @@ public struct IslandView: View {
                     Circle()
                         .fill(line.person.map { personColor(person: $0) } ?? Color.white.opacity(0.6))
                         .frame(width: 6, height: 6)
-                    Text(speakerLabel(speaker: line.speaker, person: line.person).uppercased(with: interfaceLocale()))
+                    Text(interfaceUppercased(text: speakerLabel(speaker: line.speaker, person: line.person)))
                         .appFont(size: 11, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(.white.opacity(0.6))

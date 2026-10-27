@@ -247,6 +247,12 @@ public func interfaceLocale() -> Locale {
     return Locale(components: components)
 }
 
+/// Arayüz dilinde büyük harf ("ekim" → Türkçede "EKİM"). Yalnız dil kodu kullanılır: bölgeli yerel ayar
+/// (`tr@rg=fizzzz`) Türkçe büyük harf kuralını uygulamıyor ve "EKIM" yazıyordu. Saf fonksiyondur.
+public func interfaceUppercased(text: String) -> String {
+    text.uppercased(with: Locale(identifier: interfaceLocale().language.languageCode?.identifier ?? "tr"))
+}
+
 /// Toplantının süresi (dakika, en az 1); henüz bitmediyse nil. Saf fonksiyondur.
 public func meetingDurationMinutes(record: MeetingRecord) -> Int? {
     record.endedAt.map { (endedAt: Date) -> Int in max(1, Int((endedAt.timeIntervalSince(record.startedAt) / 60).rounded())) }
