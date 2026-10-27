@@ -372,7 +372,8 @@ struct MeetingDetailPage: View {
                             } else {
                                 SummaryTab(
                                     model: model, note: note, record: record, paragraphs: paragraphs, canPlay: !playableAudio.isEmpty,
-                                    onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                                    onPlay: { (startSec: Double) -> Void in play(from: startSec) },
+                                    onClip: { (paragraph: TranscriptParagraph) -> Void in exportClip(paragraph: paragraph) }
                                 )
                             }
                         } else {
@@ -392,7 +393,8 @@ struct MeetingDetailPage: View {
                             canPlay: !playableAudio.isEmpty,
                             onPlay: { (startSec: Double) -> Void in play(from: startSec) },
                             canEdit: !isLocked,
-                            onToggleHighlight: { (paragraph: TranscriptParagraph) -> Void in model.toggleHighlight(meetingID: record.id, paragraph: paragraph) }
+                            onToggleHighlight: { (paragraph: TranscriptParagraph) -> Void in model.toggleHighlight(meetingID: record.id, paragraph: paragraph) },
+                            onClip: { (paragraph: TranscriptParagraph) -> Void in exportClip(paragraph: paragraph) }
                         )
                         .frame(maxWidth: 820, alignment: .leading)
                     }
@@ -771,6 +773,27 @@ struct MeetingDetailPage: View {
         }
     }
 
+    /// Paragrafın sesini (iki kayıt karışık) M4A klip olarak İndirilenler'e kaydeder: paylaşılabilir an.
+    private func exportClip(paragraph: TranscriptParagraph) {
+        let sources: [URL] = playableAudio
+        guard !sources.isEmpty else {
+            return
+        }
+        let title: String = "\(record.note?.title ?? record.title) \(timestamp(seconds: paragraph.startSec).replacingOccurrences(of: ":", with: "."))"
+        Task {
+            do {
+                let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                let url: URL = exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
+                let range: (start: Double, end: Double) = clipRange(startSec: paragraph.startSec, endSec: paragraph.endSec)
+                try await exportAudioClip(sources: sources, startSec: range.start, endSec: range.end, destination: url)
+                export = .saved(url)
+            } catch {
+                meetingsLogger.error("Klip kaydedilemedi, hata: \(String(describing: error), privacy: .private)")
+                export = .failed(userFacingMessage(error: error))
+            }
+        }
+    }
+
     /// Paylaşılabilir tek dosyalık web sayfası (seçili not dilinde) İndirilenler'e.
     private func exportHTML() {
         guard let note = record.note else {
@@ -833,6 +856,8 @@ private struct SummaryTab: View {
     /// Ses var: konu akışındaki zamana tıklayınca oradan çalar.
     let canPlay: Bool
     let onPlay: @MainActor (Double) -> Void
+    /// İşaretlenen anı ses klibi olarak kaydeder.
+    let onClip: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -912,6 +937,10 @@ private struct SummaryTab: View {
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .contextMenu {
+                                Button("Klip olarak kaydet (ses)", systemImage: "waveform") { onClip(paragraph) }
+                                    .disabled(!canPlay)
+                            }
                         }
                     }
                 }
@@ -1847,6 +1876,8 @@ private struct TranscriptSection: View {
     /// İşaret eklenip kaldırılabilir (kayıtta/işlemede değil).
     let canEdit: Bool
     let onToggleHighlight: @MainActor (TranscriptParagraph) -> Void
+    /// Paragrafın sesini klip olarak kaydeder (sağ tık).
+    let onClip: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     /// Çalan paragraf: konum her güncellendiğinde değil, yalnızca paragraf değişince yazılır (tüm transkript saniyede
@@ -1924,6 +1955,14 @@ private struct TranscriptSection: View {
                 .background(isActive ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .animation(.easeOut(duration: 0.25), value: isActive)
                 .modifier(PlayableTurn(canPlay: canPlay) { onPlay(paragraph.startSec) })
+                .contextMenu {
+                    Button("Klip olarak kaydet (ses)", systemImage: "waveform") { onClip(paragraph) }
+                        .disabled(!canPlay)
+                    Button("Metni kopyala", systemImage: "doc.on.doc") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(paragraph.text, forType: .string)
+                    }
+                }
                 .id(paragraph.id)
             }
         }

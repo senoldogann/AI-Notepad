@@ -26,6 +26,10 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Ollama isteği reddetti (HTTP \(status)). Adresi ve Ollama sürümünü kontrol et.")
     case OllamaError.malformed:
         return String(localized: "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.")
+    case AudioClipError.noAudio:
+        return String(localized: "Bu an için ses yok (kayıt silinmiş ya da bu bölümde ses kaydedilmemiş).")
+    case AudioClipError.exportFailed(_, let reason):
+        return String(localized: "Klip kaydedilemedi: \(reason)")
     case WebhookError.invalidURL:
         return String(localized: "Webhook adresi geçersiz: https:// ile başlayan tam adresi yapıştır.")
     case WebhookError.http(let host, let status, _):
