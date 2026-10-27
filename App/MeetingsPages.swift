@@ -1997,44 +1997,6 @@ private struct Playhead: View {
     }
 }
 
-/// Oynatıcının konumunu izleyen görünmez görünüm: konum her güncellendiğinde yalnızca bu küçük görünüm yeniden
-/// hesaplanır; çalan paragraf değişince `onChange` çağrılır.
-private struct PlaybackFollower: View {
-    let player: MeetingAudioPlayer
-    let meetingID: String
-    let paragraphs: [TranscriptParagraph]
-    let onChange: @MainActor (String?) -> Void
-
-    var body: some View {
-        let active: String? = player.meetingID == meetingID ? activeParagraphID(paragraphs: paragraphs, timeSec: player.currentTime) : nil
-        Color.clear
-            .onChange(of: active, initial: true) { (_: String?, id: String?) in onChange(id) }
-    }
-}
-
-/// Çalan paragraf: en son başlamış paragraf; bitişinden sonraki kısa sessizlikte (`activeHoldSec`) de vurgulu kalır.
-/// Paragraf arasındaki nefeste vurgu kaybolup yeniden çıkmıyor (titreme), uzun sessizlikte kalkar. Saf fonksiyondur.
-private func activeParagraphID(paragraphs: [TranscriptParagraph], timeSec: Double) -> String? {
-    guard let paragraph = paragraphs.last(where: { $0.startSec <= timeSec }), timeSec < paragraph.endSec + activeHoldSec else {
-        return nil
-    }
-    return paragraph.id
-}
-
-/// Paragraf bittikten sonra vurgunun kaldığı en uzun sessizlik.
-private let activeHoldSec: Double = 3
-
-/// Çalan paragrafın kelime kelime vurgusu: yalnızca bu görünüm konumu okur (saniyede ~30 güncelleme).
-private struct KaraokeParagraph: View {
-    let words: [StoredWord]
-    let player: MeetingAudioPlayer
-    let accent: Color
-
-    var body: some View {
-        Text(karaokeText(words: words, activeIndex: activeWordIndex(words: words, timeSec: player.currentTime), accent: accent))
-    }
-}
-
 /// Çalan toplantının oynatıcısı (ana pencerenin ve panelin altında): sayfa değişse de ses sürer ve oynatıcı görünür.
 /// Toplantı silinir ya da sesi silinirse (saklama süresi) çalma durur.
 struct PlayerDock: View {

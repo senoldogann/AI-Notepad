@@ -14,6 +14,13 @@ public extension NoteTask {
     var trackingKey: String { taskKey(task: self) }
 }
 
+/// Toplantılardan kullanıcıya düşen görevler (verilen sırada). Saf fonksiyondur.
+public func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
+    meetings.flatMap { (record: MeetingRecord) -> [(record: MeetingRecord, task: NoteTask)] in
+        (record.note?.tasks ?? []).filter(\.isMine).map { (record: record, task: $0) }
+    }
+}
+
 /// Görev tamamlandı mı. Saf fonksiyondur.
 public func isTaskDone(record: MeetingRecord, task: NoteTask) -> Bool {
     (record.completedTasks ?? []).contains(taskKey(task: task))
