@@ -1933,33 +1933,6 @@ private func finishedStream() -> AsyncStream<[Float]> {
     return stream
 }
 
-/// Arşive sorulan bir soru ve durumu.
-struct ArchiveExchange: Identifiable, Equatable {
-    /// Ajanın adımı: soruyu anlama (arama terimleri) → arşivde arama → cevabı yazma → bitti.
-    enum Phase: Equatable {
-        case understanding
-        case searching
-        case writing
-        case done
-        case stopped
-        case failed(String)
-    }
-
-    let id: UUID
-    let question: String
-    let startedAt: Date
-    var phase: Phase
-    /// Hızlı modelin çıkardığı arama terimleri.
-    var terms: [String]
-    /// Okunan parçalar.
-    var passages: [ArchivePassage]
-    /// Akan (ya da bitmiş) cevap.
-    var answer: ArchiveAnswer
-    var finishedAt: Date?
-    /// Cevabı yazan model.
-    var modelName: String?
-}
-
 /// Sabit dil seçiliyse o dil; otomatikte nil. Saf fonksiyondur.
 private func fixedLanguage(mode: LanguageMode) -> MeetingLanguage? {
     guard case .fixed(let language) = mode else {

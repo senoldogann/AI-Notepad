@@ -2,24 +2,6 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Henüz dolmamış sekme (aşama 3).
-struct ComingSoonTab: View {
-    let title: LocalizedStringKey
-    let symbol: String
-
-    var body: some View {
-        NavigationStack {
-            VStack {
-                EmptyStateCard(symbol: symbol, title: title, message: "Bu bölüm bir sonraki sürümde geliyor.")
-                    .padding(16)
-                Spacer()
-            }
-            .background(Theme.background)
-            .navigationTitle(title)
-        }
-    }
-}
-
 /// Ayarlar: bulut anahtarları, toplantı dili, ad ve sürüm (iCloud eşitleme aşama 4'te).
 struct PhoneSettingsTab: View {
     let store: PhoneStore

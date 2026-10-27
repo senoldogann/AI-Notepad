@@ -930,13 +930,6 @@ private struct UpcomingMeetings: View {
     }
 }
 
-/// Toplantılardan kullanıcıya düşen görevler (verilen sırada). Saf fonksiyondur.
-func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task: NoteTask)] {
-    meetings.flatMap { (record: MeetingRecord) -> [(record: MeetingRecord, task: NoteTask)] in
-        (record.note?.tasks ?? []).filter(\.isMine).map { (record: record, task: $0) }
-    }
-}
-
 /// Görev satırı: tamamlandı kutusu, iş, tarih ve toplantı adı (tıklayınca toplantı açılır), Anımsatıcılar'a ekleme.
 private struct TaskLine: View {
     let model: AppModel

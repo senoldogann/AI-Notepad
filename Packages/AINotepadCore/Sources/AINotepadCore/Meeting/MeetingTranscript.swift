@@ -35,6 +35,18 @@ public func activeWordIndex(words: [StoredWord], timeSec: Double) -> Int? {
     words.lastIndex { (word: StoredWord) -> Bool in word.startSec <= timeSec }
 }
 
+/// Çalan paragraf: en son başlamış paragraf; bitişinden sonraki kısa sessizlikte (`activeHoldSec`) de vurgulu kalır.
+/// Paragraf arasındaki nefeste vurgu kaybolup yeniden çıkmıyor (titreme), uzun sessizlikte kalkar. Saf fonksiyondur.
+public func activeParagraphID(paragraphs: [TranscriptParagraph], timeSec: Double) -> String? {
+    guard let paragraph = paragraphs.last(where: { $0.startSec <= timeSec }), timeSec < paragraph.endSec + activeHoldSec else {
+        return nil
+    }
+    return paragraph.id
+}
+
+/// Paragraf bittikten sonra vurgunun kaldığı en uzun sessizlik.
+let activeHoldSec: Double = 3
+
 /// Bir paragraf bu süreyi geçince sonraki bölüm yeni paragraf başlatır (uzun konuşma tek duvar olmasın).
 let paragraphMaxSec: Double = 60
 

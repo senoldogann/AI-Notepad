@@ -13,4 +13,6 @@ public enum AudioCaptureError: Error, Equatable {
     /// Bir Core Audio çağrısı `noErr` dışında bir durum döndürdü.
     case coreAudio(operation: String, status: Int32)
     case recorderFailed(path: String, reason: String)
+    /// iOS'ta çalma için ses oturumu açılamadı.
+    case playbackSessionFailed(code: Int32)
 }

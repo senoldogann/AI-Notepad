@@ -7,34 +7,36 @@ import os
 private let playerLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "AudioPlayer")
 
 /// Toplantı sesinin bir konuşmacı kaydı (`me` / `others`): işlenmişse `.m4a`, işleme sürerken `.caf`; yoksa nil.
-func meetingAudioURL(directory: URL, speaker: Speaker) -> URL? {
+public func meetingAudioURL(directory: URL, speaker: Speaker) -> URL? {
     ["m4a", "caf"]
         .map { (ext: String) -> URL in directory.appending(path: "\(speaker.rawValue).\(ext)") }
         .first { FileManager.default.fileExists(atPath: $0.path) }
 }
 
 /// Seçilebilen çalma hızları (sırayla döner).
-let playbackRates: [Float] = [1, 1.25, 1.5, 2, 0.75]
+public let playbackRates: [Float] = [1, 1.25, 1.5, 2, 0.75]
 
 /// Toplantı oynatıcısı: "Sen" ve "Diğerleri" kayıtlarını aynı zaman çizgisinde birlikte çalar (kayıtlar başlangıca
 /// hizalı), duraklatır, sarar, hız değiştirir. Konum saniyede ~30 kez güncellenir (kelime vurgusu akıcı geçsin).
 @MainActor
 @Observable
-final class MeetingAudioPlayer {
+public final class MeetingAudioPlayer {
     /// Çalan toplantı; çalar boşsa nil.
-    private(set) var meetingID: String?
-    private(set) var isPlaying: Bool = false
-    private(set) var currentTime: Double = 0
-    private(set) var duration: Double = 0
-    private(set) var rate: Float = 1
-    private(set) var errorMessage: String?
+    public private(set) var meetingID: String?
+    public private(set) var isPlaying: Bool = false
+    public private(set) var currentTime: Double = 0
+    public private(set) var duration: Double = 0
+    public private(set) var rate: Float = 1
+    public private(set) var errorMessage: String?
 
     @ObservationIgnored private var players: [AVAudioPlayer] = []
     @ObservationIgnored private var loadedURLs: [URL] = []
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
+    public init() {}
+
     /// Kayıtları (gerekirse) açar ve `startSec`'ten biraz önce birlikte çalmaya başlar (cümlenin başı kaçmasın).
-    func play(meetingID: String, urls: [URL], startSec: Double) {
+    public func play(meetingID: String, urls: [URL], startSec: Double) {
         if loadedURLs != urls || self.meetingID != meetingID {
             stop()
             do {
@@ -55,10 +57,21 @@ final class MeetingAudioPlayer {
             duration = players.map(\.duration).max() ?? 0
         }
         errorMessage = nil
+        #if os(iOS)
+        do {
+            // Sessiz modda da çalar; konuşma için ayarlı oturum.
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            playerLogger.error("Çalma oturumu açılamadı, hata: \(String(describing: error), privacy: .public)")
+            errorMessage = userFacingMessage(error: AudioCaptureError.playbackSessionFailed(code: Int32((error as NSError).code)))
+            return
+        }
+        #endif
         start(at: max(0, startSec - 0.3))
     }
 
-    func togglePause() {
+    public func togglePause() {
         if isPlaying {
             players.forEach { $0.pause() }
             isPlaying = false
@@ -69,7 +82,7 @@ final class MeetingAudioPlayer {
     }
 
     /// Konuma gider; çalıyorsa oradan sürer.
-    func seek(to seconds: Double) {
+    public func seek(to seconds: Double) {
         let target: Double = min(max(0, seconds), duration)
         if isPlaying {
             start(at: target)
@@ -80,19 +93,19 @@ final class MeetingAudioPlayer {
     }
 
     /// İleri/geri sarar (ör. ±10 sn).
-    func skip(by seconds: Double) {
+    public func skip(by seconds: Double) {
         seek(to: currentTime + seconds)
     }
 
     /// Hızı sıradaki değere geçirir.
-    func cycleRate() {
+    public func cycleRate() {
         let index: Int = playbackRates.firstIndex(of: rate) ?? 0
         rate = playbackRates[(index + 1) % playbackRates.count]
         players.forEach { $0.rate = rate }
     }
 
     /// Çalmayı bitirir ve dosyaları bırakır (toplantı değişince ya da ses silinince).
-    func stop() {
+    public func stop() {
         ticker?.cancel()
         ticker = nil
         players.forEach { $0.stop() }

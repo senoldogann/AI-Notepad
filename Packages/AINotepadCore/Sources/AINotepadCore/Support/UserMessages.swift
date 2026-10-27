@@ -64,6 +64,8 @@ private func audioMessage(error: AudioCaptureError) -> String {
         String(localized: "Ses biçimi dönüştürülemedi. Çıkış/giriş cihazını değiştirip kaydı yeniden başlat.")
     case .recorderFailed(let path, _):
         String(localized: "Ses dosyası işlenemedi: \((path as NSString).lastPathComponent). Disk alanını kontrol et.")
+    case .playbackSessionFailed(let code):
+        String(localized: "Ses çalınamadı (kod \(Int(code))). Başka bir uygulama sesi kullanıyor olabilir; biraz sonra yeniden dene.")
     }
 }
 
