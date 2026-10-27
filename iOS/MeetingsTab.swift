@@ -54,7 +54,9 @@ struct MeetingsTab: View {
                             .padding(.top, 10)
                         ForEach(section.meetings, id: \.id) { (record: MeetingRecord) in
                             NavigationLink(value: record.id) {
-                                PhoneMeetingCard(record: record, height: 132)
+                                PhoneMeetingRow(record: record)
+                                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
                                     .matchedTransitionSource(id: record.id, in: cardTransition)
                             }
                             .buttonStyle(PressableCardStyle())

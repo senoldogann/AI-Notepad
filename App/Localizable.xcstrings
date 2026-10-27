@@ -587,6 +587,16 @@
         }
       }
     },
+    "%@, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
     "%@: ": {
       "localizations": {
         "en": {
@@ -803,6 +813,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld meetings couldn't be moved: %@"
+          }
+        }
+      }
+    },
+    "%lld toplantı · %lld sa %lld dk konuşma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings · %lld h %lld min of conversation"
           }
         }
       }
@@ -3802,6 +3822,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review"
+          }
+        }
+      }
+    },
+    "Günaydın": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good morning"
           }
         }
       }
@@ -9664,6 +9694,16 @@
         }
       }
     },
+    "· başkalarına düşenler aşağıda": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· others' tasks are below"
+          }
+        }
+      }
+    },
     "· dinleniyor": {
       "localizations": {
         "en": {
@@ -9680,6 +9720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "· paused"
+          }
+        }
+      }
+    },
+    "· özet ve kararlar aşağıda": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· summary and decisions are below"
           }
         }
       }
@@ -10274,6 +10324,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Italian"
+          }
+        }
+      }
+    },
+    "İyi akşamlar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good evening"
+          }
+        }
+      }
+    },
+    "İyi geceler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good night"
+          }
+        }
+      }
+    },
+    "İyi günler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good afternoon"
           }
         }
       }

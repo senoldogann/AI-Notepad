@@ -1335,11 +1335,11 @@ private struct WebhookSettings: View {
     private func destinationCard(symbol: String, title: Text, detail: LocalizedStringKey, @ViewBuilder action: () -> some View) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .appFont(size: 14, weight: .semibold)
-                .foregroundStyle(.white)
+                .appFont(size: 14, weight: .medium)
+                .foregroundStyle(Theme.ink)
                 .frame(width: 34, height: 34)
-                .background { FilmGradient(seed: "kanal-\(symbol)", palette: .sunset) }
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
             VStack(alignment: .leading, spacing: 2) {
                 title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
                 Text(detail).appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted).lineLimit(2)

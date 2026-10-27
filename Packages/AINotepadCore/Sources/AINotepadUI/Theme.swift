@@ -204,3 +204,15 @@ public extension View {
             .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
     }
 }
+
+/// Günün saatine göre selam ve ad ("Günaydın, Senol"); ad yoksa yalnız selam. Saf fonksiyondur.
+public func greeting(name: String, hour: Int) -> String {
+    let base: String = switch hour {
+    case 5..<12: String(localized: "Günaydın")
+    case 12..<18: String(localized: "İyi günler")
+    case 18..<23: String(localized: "İyi akşamlar")
+    default: String(localized: "İyi geceler")
+    }
+    let trimmed: String = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? base : "\(base), \(trimmed)"
+}
