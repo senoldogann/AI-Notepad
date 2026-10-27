@@ -832,11 +832,21 @@ private struct MCPClientRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: client.applicationPath))
-                    .resizable()
-                    .frame(width: 34, height: 34)
-                    .opacity(isInstalled ? 1 : 0.45)
-                    .accessibilityHidden(true)
+                Group {
+                    if isInstalled {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: client.applicationPath))
+                            .resizable()
+                    } else {
+                        // Yüklü olmayan uygulamada sistem genel belge simgesi verir: yerine sade, soluk simge.
+                        Image(systemName: "app.dashed")
+                            .appFont(size: 18, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 34, height: 34)
+                            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    }
+                }
+                .frame(width: 34, height: 34)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: client.displayName)
                         .appFont(size: 15, weight: .medium)
