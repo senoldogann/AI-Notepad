@@ -1025,6 +1025,33 @@ final class AppModel {
         rewriteNote(record: record)
     }
 
+    /// Notu kullanıcının isteğine göre düzenler ("özeti kısalt", "görevlere tarih ekle"); düzenlenirken toplantı kilitli,
+    /// hata olursa not değişmez ve neden gösterilir.
+    func editNote(meetingID: String, instruction: String) {
+        let trimmed: String = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let record = meetings.first(where: { $0.id == meetingID }), record.note != nil, !isLocked(meetingID: meetingID) else {
+            return
+        }
+        let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            processingMeetingIDs.insert(meetingID)
+            Task {
+                defer { processingMeetingIDs.remove(meetingID) }
+                guard let llm = await optionalLLMProvider() else {
+                    errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: LLM anahtarı ya da ayarı yok."))
+                    return
+                }
+                do {
+                    let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
+                    saveRecord(record: edited, directory: directory)
+                } catch {
+                    Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                    errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
+                }
+            }
+        }
+    }
+
     /// Kendi notlarını saklar ve notu onlarla yeniden yazar.
     func saveMyNotes(meetingID: String, text: String) {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {

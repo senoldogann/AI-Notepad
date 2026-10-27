@@ -133,6 +133,31 @@ extension CloudTests {
     }
 }
 
+@Suite struct NoteEditCloudTests {
+    // Gerçek model: "özeti tek cümleye indir" yalnız özeti kısaltır; görev (ve tamamlandı işareti) korunur.
+    @Test func editShortensSummaryKeepsTasks() async throws {
+        let task: NoteTask = NoteTask(owner: "Senol", description: "Sunumu hazırlamak", dueDate: "Perşembe", isMine: true)
+        let note: MeetingNote = MeetingNote(
+            title: "Bütçe toplantısı",
+            summary: "Ekip gelecek yılın bütçesini konuştu. Pazarlama bütçesi yüzde on artacak. Satış ekibine iki kişi alınacak. Sunum perşembe hazırlanacak ve cuma yönetime sunulacak.",
+            decisions: ["Pazarlama bütçesi %10 artacak.", "Satışa iki kişi alınacak."], tasks: [task], glossary: []
+        )
+        let record: MeetingRecord = MeetingRecord(
+            id: "e1", title: "Toplantı", startedAt: Date(), endedAt: nil, language: .finnish, status: .done, failureMessage: nil, liveSegments: [],
+            finalSegments: [stored("final-0", .others, 1, 0, "Budjetti kasvaa kymmenen prosenttia ja myyntiin palkataan kaksi.")],
+            translations: [:], speakerNames: [:], note: note, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        ).with(completedTasks: [taskKey(task: task)])
+        let edited: MeetingRecord = try await editMeetingNote(
+            record: record, instruction: "Özeti tek cümleye indir.", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
+            userName: "Senol"
+        )
+        let newNote: MeetingNote = try #require(edited.note)
+        #expect(newNote.summary.count < note.summary.count, "\(newNote.summary)")
+        #expect(newNote.tasks.contains { $0.isMine && $0.description.lowercased().contains("sunum") }, "\(newNote.tasks)")
+        #expect(newNote.tasks.contains { isTaskDone(record: edited, task: $0) })
+    }
+}
+
 @Suite struct HighlightCloudTests {
     // Gerçek model: kullanıcının işaretlediği küçük ayrıntı (kahve makinesi) özette yer alır.
     @Test func bookmarkedDetailReachesSummary() async throws {
