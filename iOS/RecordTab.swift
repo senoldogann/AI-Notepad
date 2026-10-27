@@ -40,9 +40,9 @@ private struct RecordHome: View {
                         .appFont(size: 12, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(Theme.muted)
-                    Text(greeting(name: UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? "", hour: Calendar.current.component(.hour, from: Date())))
+                    Text("Bugün hangi toplantıyı dinleyelim?")
                         .appFont(size: 30, weight: .regular)
-                        .tracking(-0.6)
+                        .tracking(-0.8)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 8)
@@ -64,21 +64,24 @@ private struct RecordHome: View {
                 if !store.meetings.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         PhoneSectionHeader(title: "Son toplantılar", actionTitle: "Tümünü gör") { router.tab = .meetings }
-                        VStack(spacing: 0) {
-                            ForEach(Array(store.meetings.prefix(5).enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
-                                if item.offset > 0 {
-                                    Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 62)
+                        ScrollView(.horizontal) {
+                            LazyHStack(spacing: 12) {
+                                ForEach(store.meetings.prefix(6), id: \.id) { (record: MeetingRecord) in
+                                    Button {
+                                        router.open(meetingID: record.id)
+                                    } label: {
+                                        PhoneMeetingCard(record: record, height: 150)
+                                            .frame(width: 250)
+                                    }
+                                    .buttonStyle(PressableCardStyle())
                                 }
-                                Button {
-                                    router.open(meetingID: item.element.id)
-                                } label: {
-                                    PhoneMeetingRow(record: item.element)
-                                }
-                                .buttonStyle(.plain)
                             }
+                            .scrollTargetLayout()
                         }
-                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+                        .scrollTargetBehavior(.viewAligned)
+                        .scrollIndicators(.hidden)
+                        .contentMargins(.horizontal, 20, for: .scrollContent)
+                        .padding(.horizontal, -20)
                     }
                 }
                 Label("Telefondaki Teams/Zoom görüşmeleri kaydedilemez (iOS izin vermez); onlar için Mac'i kullan.", systemImage: "info.circle")
@@ -102,10 +105,10 @@ func longDayTitle(date: Date, locale: Locale) -> String {
     return formatter.string(from: date)
 }
 
-/// Kayıt kartı: sade kart üstünde dil seçimi, vurgu renkli büyük kayıt düğmesi ve kısa açıklama.
+/// Kayıt kartı: yavaşça akan film gradyanı üstünde dil seçimi, büyük cam kayıt düğmesi (nefes alan halka) ve kısa açıklama.
 private struct RecordHeroCard: View {
     let recorder: PhoneRecorder
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
         VStack(spacing: 18) {
@@ -118,32 +121,34 @@ private struct RecordHeroCard: View {
                         Text(languageText(locked: nil, mode: recorder.languageMode, isRecording: false))
                         Image(systemName: "chevron.down").appFont(size: 10, weight: .bold)
                     }
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.ink)
+                    .appFont(size: 13, weight: .semibold)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(Theme.soft, in: Capsule())
+                    .background(.white.opacity(0.18), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.28)))
                 }
                 Spacer()
-                Label("Yüz yüze", systemImage: "person.2")
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+                GlassChip(text: String(localized: "Yüz yüze"), systemImage: "person.2.fill")
             }
             Button {
                 Task { await recorder.start() }
             } label: {
                 ZStack {
+                    BreathingRing(isActive: !reduceMotion && recorder.phase == .idle)
                     Circle()
-                        .fill(appearance.accent.color)
-                        .frame(width: 88, height: 88)
+                        .fill(.white)
+                        .frame(width: 104, height: 104)
+                        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
                     if recorder.phase == .starting {
-                        ProgressView().controlSize(.large).tint(.white)
+                        ProgressView().controlSize(.large).tint(.black)
                     } else {
                         Image(systemName: "mic.fill")
-                            .appFont(size: 32, weight: .medium)
-                            .foregroundStyle(.white)
+                            .appFont(size: 38, weight: .medium)
+                            .foregroundStyle(Color(red: 0.91, green: 0.36, blue: 0.11))
                     }
                 }
+                .frame(width: 150, height: 150)
                 .contentShape(Circle())
             }
             .buttonStyle(PressableCardStyle())
@@ -151,21 +156,45 @@ private struct RecordHeroCard: View {
             .accessibilityLabel("Kaydı başlat")
             VStack(spacing: 4) {
                 Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
-                    .appFont(size: 17, weight: .semibold)
-                    .foregroundStyle(Theme.ink)
+                    .appFont(size: 20, weight: .semibold)
+                    .tracking(-0.3)
                 Text("Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
                     .appFont(size: 13, weight: .regular)
-                    .foregroundStyle(Theme.muted)
+                    .opacity(0.85)
                     .multilineTextAlignment(.center)
             }
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 1)
         }
         .padding(20)
+        .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.line))
+        .background { LivingFilmGradient(seed: "kayit", palette: .sunset) }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.10)))
+        .environment(\.colorScheme, .dark)
     }
 }
 
+/// Kayıt düğmesinin çevresinde yavaşça nefes alan beyaz halka.
+private struct BreathingRing: View {
+    let isActive: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isActive)) { (context: TimelineViewDefaultContext) in
+            let phase: Double = isActive ? (sin(context.date.timeIntervalSinceReferenceDate * 1.6) + 1) / 2 : 0.5
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.10 + phase * 0.08))
+                    .frame(width: 128 + phase * 18, height: 128 + phase * 18)
+                Circle()
+                    .strokeBorder(.white.opacity(0.35 - phase * 0.2), lineWidth: 1)
+                    .frame(width: 140 + phase * 10, height: 140 + phase * 10)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
 
 /// Basınca hafifçe küçülen kart/düğme.
 struct PressableCardStyle: ButtonStyle {

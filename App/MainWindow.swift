@@ -241,8 +241,7 @@ private struct Sidebar: View {
             ScrollView {
             VStack(alignment: .leading, spacing: 2) {
             SidebarFolders(model: model, router: router)
-            // Ana sayfa ve Toplantılar zaten listeyi gösterir: orada tekrar edilmez.
-            if !model.meetings.isEmpty && router.section != .meetings && router.section != .home {
+            if !model.meetings.isEmpty {
                 Text("Son toplantılar")
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
@@ -459,12 +458,12 @@ private struct HomePage: View {
                 if router.quitWarning {
                     QuitWarning(model: model, router: router)
                 }
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(spacing: 20) {
                     heading
                     RecordBar(model: model, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 40)
+                .padding(.top, 36)
+                ToolTiles(model: model, router: router, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
                 if !model.setupProblems.isEmpty {
                     problems
                 }
@@ -477,12 +476,13 @@ private struct HomePage: View {
                     router.selectedMeetingID = id
                     router.section = .meetings
                 }
+                BannerCarousel(model: model, router: router)
                 HomeTasks(model: model, router: router)
-                RecentMeetingList(model: model, router: router)
+                RecentMeetingCards(model: model, router: router)
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
-            .frame(maxWidth: 860)
+            .frame(maxWidth: 940)
             .frame(maxWidth: .infinity)
             .animation(.smooth(duration: 0.3), value: router.quitWarning)
             .animation(.smooth(duration: 0.3), value: model.phase)
@@ -510,14 +510,10 @@ private struct HomePage: View {
             Text("Bitiriliyor…")
                 .appFont(size: 34, weight: .regular)
         case .idle:
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date().formatted(Date.FormatStyle().weekday(.wide).day().month(.wide).locale(interfaceLocale())))
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.muted)
-                Text(greeting(name: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", hour: Calendar.current.component(.hour, from: Date())))
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.5)
-            }
+            Text("Bugün hangi toplantıyı dinleyelim?")
+                .appFont(size: 34, weight: .regular)
+                .tracking(-0.6)
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -549,7 +545,7 @@ private struct RecordBar: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 12) {
             bar
             // Seçenekler çubuğun altında, ortalı ve gerekirse alt satıra geçer: dar pencerede, İngilizcede ya da büyük
             // arayüz boyutunda çubuğun dışına taşıp kesilmez.
@@ -568,20 +564,20 @@ private struct RecordBar: View {
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: 720)
     }
 
     private var bar: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.phase == .recording ? "waveform" : "mic")
-                .appFont(size: 14, weight: .medium)
-                .foregroundStyle(model.phase == .recording ? appearance.accent.color : Theme.ink)
-                .symbolEffect(.variableColor.iterative, isActive: model.phase == .recording && !model.isPaused)
-                .frame(width: 32, height: 32)
-                .background(Theme.soft, in: Circle())
+            Circle()
+                .fill(RadialGradient(
+                    colors: [appearance.accent.color.mix(with: .white, by: 0.45), appearance.accent.color, appearance.accent.color.mix(with: .black, by: 0.55)],
+                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 1, endRadius: 22
+                ))
+                .frame(width: 34, height: 34)
+                .tilt3D(maxAngle: 8)
             switch model.phase {
             case .idle:
                 Text("Toplantını dinlemeye başla")
@@ -616,8 +612,9 @@ private struct RecordBar: View {
         .padding(.leading, 10)
         .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        .background(Theme.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.line))
+        .shadow(color: .black.opacity(0.05), radius: 14, y: 6)
     }
 
     private var languageChip: some View {
@@ -662,7 +659,147 @@ private struct RecordBar: View {
     }
 }
 
+/// Araç kutucukları: beyaz, çerçeveli kare simgeler ve altında adı (ElevenLabs araç satırı).
+private struct ToolTiles: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let onStartRecording: @MainActor () -> Void
+    let onShowPanel: @MainActor () -> Void
 
+    var body: some View {
+        // Dar pencerede kutucuklar kesilmesin: sığmazsa aralık daralır, yine sığmazsa iki satıra iner.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 28) { tiles }
+            HStack(alignment: .top, spacing: 8) { tiles }
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(92), spacing: 12), count: 3), spacing: 14) { tiles }
+        }
+    }
+
+    @ViewBuilder
+    private var tiles: some View {
+        Group {
+            tile(title: "Kaydı başlat", symbol: "waveform", isEnabled: model.phase == .idle && model.isReadyToRecord) { onStartRecording() }
+            tile(title: "Canlı panel", symbol: "rectangle.on.rectangle", isEnabled: true) { onShowPanel() }
+            tile(title: "Toplantılar", symbol: "list.bullet.rectangle", isEnabled: true) { router.section = .meetings }
+            tile(title: "İçe aktar", symbol: "square.and.arrow.down.on.square", isEnabled: true) {
+                router.section = .meetings
+                chooseMediaToImport(model: model)
+            }
+            tile(title: "Görevlerim", symbol: "checkmark.circle", isEnabled: true) { router.section = .tasks }
+            tile(title: "Ayarlar", symbol: "gearshape", isEnabled: true) { router.section = .settings }
+        }
+    }
+
+    private func tile(title: LocalizedStringKey, symbol: String, isEnabled: Bool, action: @escaping @MainActor () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .appFont(size: 18, weight: .regular)
+                    .frame(width: 48, height: 48)
+                    .cardSurface(cornerRadius: 12)
+                    .tilt3D(maxAngle: 5)
+                Text(title).appFont(size: 13, weight: .regular)
+            }
+            .foregroundStyle(Theme.ink)
+            .frame(width: 92)
+        }
+        .buttonStyle(.hoverPlain)
+        .disabled(!isEnabled)
+    }
+}
+
+/// Banner karuseli: üç slayt (yenilikler ve ipuçları), kendiliğinden ilerler, fare üstündeyken durur; noktalar.
+private struct BannerCarousel: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
+    @State private var index: Int = 0
+    @State private var isHovering: Bool = false
+
+    private struct Slide {
+        let title: LocalizedStringKey
+        let primary: LocalizedStringKey
+        let secondary: LocalizedStringKey
+        let palette: FilmPalette
+    }
+
+    private var slides: [Slide] {
+        [
+            Slide(title: "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz", primary: "Son toplantıyı aç", secondary: "Toplantılar", palette: .sunset),
+            Slide(title: "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz", primary: "Ayarlar", secondary: "Ana sayfa", palette: .sunset),
+            Slide(title: "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir", primary: "Toplantılar", secondary: "Görevlerim", palette: .violet),
+        ]
+    }
+
+    var body: some View {
+        let slide: Slide = slides[index]
+        VStack(spacing: 10) {
+            GradientBanner(palette: slide.palette, seed: "banner-\(index)") {
+                VStack(spacing: 14) {
+                    Text(slide.title)
+                        .appFont(size: 24, weight: .regular)
+                        .tracking(-0.3)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 560)
+                    HStack(spacing: 18) {
+                        Button(slide.primary) { act(primary: true) }
+                            .buttonStyle(.bannerPrimary)
+                        Button(slide.secondary) { act(primary: false) }
+                            .buttonStyle(.hoverPlain)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .id(index)
+                .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+            .onHover { (hovering: Bool) -> Void in isHovering = hovering }
+            HStack(spacing: 6) {
+                ForEach(slides.indices, id: \.self) { (position: Int) in
+                    Button {
+                        index = position
+                    } label: {
+                        Circle()
+                            .fill(position == index ? Theme.ink : Theme.line)
+                            .frame(width: 6, height: 6)
+                            .padding(3)
+                    }
+                    .buttonStyle(.hoverCapsule)
+                }
+            }
+        }
+        .animation(.smooth(duration: 0.5), value: index)
+        .task {
+            // Kendiliğinden ilerler; fare üstündeyken ya da "Hareketi azalt" açıkken durur.
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(7))
+                } catch {
+                    return
+                }
+                if !isHovering && !reduceMotion {
+                    index = (index + 1) % slides.count
+                }
+            }
+        }
+    }
+
+    private func act(primary: Bool) {
+        switch (index, primary) {
+        case (0, true):
+            router.selectedMeetingID = model.meetings.first?.id
+            router.section = .meetings
+        case (0, false), (2, true):
+            router.section = .meetings
+        case (1, true):
+            router.section = .settings
+        case (2, false):
+            router.section = .tasks
+        default:
+            router.section = .home
+        }
+    }
+}
 
 /// Son toplantılarda sana düşen görevler (en yeni toplantıdan başlayarak).
 private struct HomeTasks: View {
@@ -850,17 +987,17 @@ private struct TaskLine: View {
 }
 
 /// Son toplantılar: gradyan kapaklı kartlar (renk toplantıya göre sabit), başlık ve bilgi kapağın üstünde.
-private struct RecentMeetingList: View {
+private struct RecentMeetingCards: View {
     let model: AppModel
     let router: MainWindowRouter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             HStack {
                 Text("Son toplantılar").appFont(size: 15, weight: .medium)
                 Spacer(minLength: 0)
                 if !model.meetings.isEmpty {
-                    Button("Tümü ›") { router.section = .meetings }
+                    Button("Tümünü gör ›") { router.section = .meetings }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(Theme.muted)
                 }
@@ -868,67 +1005,57 @@ private struct RecentMeetingList: View {
             if model.meetings.isEmpty {
                 EmptyStateCard(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantıların ve notların burada görünür.")
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(model.meetings.prefix(8).enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
-                        if item.offset > 0 {
-                            Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 56)
-                        }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
+                    ForEach(model.meetings.prefix(6)) { (record: MeetingRecord) in
                         Button {
-                            router.selectedMeetingID = item.element.id
+                            router.selectedMeetingID = record.id
                             router.section = .meetings
                         } label: {
-                            RecentMeetingRow(record: item.element, isProcessing: model.processingMeetingIDs.contains(item.element.id))
+                            MeetingCover(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
                         }
                         .buttonStyle(.hoverPlain)
                     }
                 }
-                .padding(.vertical, 4)
-                .cardSurface(cornerRadius: 14)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Son toplantı satırı: toplantıya özgü küçük renk kimliği, başlık, tarih · süre · konuşmacı, sağda görev sayısı ya da
-/// durum.
-private struct RecentMeetingRow: View {
+/// Toplantı kartı: toplantıya göre sabit renkli gradyan kapak, altta başlık, tarih ve görev sayısı.
+private struct MeetingCover: View {
     let record: MeetingRecord
     let isProcessing: Bool
 
     var body: some View {
         let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
-        HStack(spacing: 12) {
+        ZStack(alignment: .bottomLeading) {
             CoverBackground(seed: record.id)
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.note?.title ?? record.title)
                     .appFont(size: 14, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                Text(meta)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text(coverSubtitle(mine: mine))
                     .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
+                    .opacity(0.8)
             }
-            Spacer(minLength: 8)
-            if isProcessing || record.status == .processing {
-                Text("İşleniyor").appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
-            } else if record.status == .failed {
-                Text("Hata").appFont(size: 12, weight: .medium).foregroundStyle(.red)
-            } else if mine > 0 {
-                Text("\(mine) görev").appFont(size: 12, weight: .medium).foregroundStyle(Theme.ink)
-            }
+            .foregroundStyle(.white)
+            .padding(12)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
+        .frame(height: 128)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .tilt3D(maxAngle: 4)
     }
 
-    private var meta: String {
+    private func coverSubtitle(mine: Int) -> String {
         let date: String = record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))
-        return ([date] + (meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? [])).joined(separator: " · ")
+        if isProcessing || record.status == .processing {
+            return date + " · " + String(localized: "İşleniyor")
+        }
+        if record.status == .failed {
+            return date + " · " + String(localized: "Hata")
+        }
+        return mine > 0 ? date + " · " + String(localized: "\(mine) görev") : date
     }
 }
 
@@ -967,11 +1094,12 @@ private struct TasksPage: View {
                         }
                     } else if doneCount > 0 {
                         EmptyStateHero(
-                            symbol: "checkmark", title: "Açık görevin kalmadı",
+                            symbol: "party.popper.fill", title: "Açık görevin kalmadı",
                             message: "Hepsi tamamlandı. Yeni toplantılarda sana düşen işler buraya gelir.", palette: .sunset, steps: []
                         ) {
                             EmptyView()
                         }
+                        .overlay { ConfettiBurst(palette: .sunset) }
                     } else {
                         EmptyStateHero(
                             symbol: "checklist", title: "Henüz sana düşen görev yok",
@@ -1227,4 +1355,3 @@ private struct ErrorBanner: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
-
