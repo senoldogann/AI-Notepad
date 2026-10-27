@@ -24,13 +24,15 @@ struct AskPage: View {
                     VStack(alignment: .leading, spacing: 34) {
                         if model.archiveExchanges.isEmpty {
                             AskIntro(meetings: model.meetings) { (example: String) -> Void in
-                                model.askArchive(question: example, meetingIDs: [])
+                                model.askArchive(question: example, meetingIDs: [], recipeTitle: nil)
                             }
                         }
                         ForEach(model.archiveExchanges) { (exchange: ArchiveExchange) in
                             ExchangeView(exchange: exchange) { (passage: ArchivePassage) -> Void in
                                 router.selectedMeetingID = passage.meetingID
                                 router.section = .meetings
+                            } onSaveRecipe: { (question: String) -> Void in
+                                model.saveRecipe(question: question)
                             }
                             .id(exchange.id)
                             .transition(.opacity.combined(with: .offset(y: 12)))
@@ -63,10 +65,17 @@ struct AskPage: View {
                         pick(record: record)
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else if recipeQuery(text: question) != nil {
+                    RecipeSuggestions(recipes: recipeMatches, highlighted: highlighted) { (recipe: Recipe) -> Void in
+                        run(recipe: recipe)
+                    } onDelete: { (recipe: Recipe) -> Void in
+                        model.deleteRecipe(id: recipe.id)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
                 composer
             }
-            .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil)
+            .animation(.smooth(duration: 0.2), value: mentionQuery(text: question) != nil || recipeQuery(text: question) != nil)
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
             .frame(maxWidth: 780)
@@ -105,7 +114,7 @@ struct AskPage: View {
             HStack(alignment: .bottom, spacing: 10) {
                 TextField(
                     mentioned.isEmpty
-                        ? (model.archiveExchanges.isEmpty ? "Toplantılarına bir şey sor… (@ ile toplantı etiketle)" : "Devam sorusu sor…")
+                        ? (model.archiveExchanges.isEmpty ? "Toplantılarına bir şey sor… (@ toplantı, / tarif)" : "Devam sorusu sor…")
                         : "Etiketlenen toplantılara sor…",
                     text: $question, axis: .vertical
                 )
@@ -162,12 +171,28 @@ struct AskPage: View {
     }
 
     private func send() {
-        guard !model.isAnsweringArchive, mentionQuery(text: question) == nil else {
+        guard !model.isAnsweringArchive, mentionQuery(text: question) == nil, recipeQuery(text: question) == nil else {
             return
         }
-        model.askArchive(question: question, meetingIDs: mentioned.map(\.id))
+        model.askArchive(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)
         question = ""
         // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
+        withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
+    }
+
+    /// "/" ile eşleşen tarifler.
+    private var recipeMatches: [Recipe] {
+        recipeCandidates(recipes: model.recipes, query: recipeQuery(text: question) ?? "")
+    }
+
+    /// Tarifi çalıştırır: etiketli toplantılar varsa onlara, yoksa tüm arşive.
+    private func run(recipe: Recipe) {
+        guard !model.isAnsweringArchive else {
+            return
+        }
+        model.askArchive(question: recipe.prompt, meetingIDs: mentioned.map(\.id), recipeTitle: recipe.title)
+        question = ""
+        highlighted = 0
         withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
     }
 
@@ -185,15 +210,22 @@ struct AskPage: View {
     }
 
     private func moveHighlight(by step: Int) -> KeyPress.Result {
-        guard mentionQuery(text: question) != nil, !suggestions.isEmpty else {
+        let count: Int = mentionQuery(text: question) != nil ? suggestions.count : (recipeQuery(text: question) != nil ? recipeMatches.count : 0)
+        guard count > 0 else {
             return .ignored
         }
-        highlighted = (highlighted + step + suggestions.count) % suggestions.count
+        highlighted = (highlighted + step + count) % count
         return .handled
     }
 
     /// Öneriler açıkken Return seçili toplantıyı ekler (soru gönderilmez).
     private func pickHighlighted() -> KeyPress.Result {
+        if recipeQuery(text: question) != nil {
+            if recipeMatches.indices.contains(highlighted) {
+                run(recipe: recipeMatches[highlighted])
+            }
+            return .handled
+        }
         guard mentionQuery(text: question) != nil else {
             return .ignored
         }
@@ -205,6 +237,10 @@ struct AskPage: View {
 
     /// Escape önerileri kapatır: yazılan "@…" silinir.
     private func dismissSuggestions() -> KeyPress.Result {
+        if recipeQuery(text: question) != nil {
+            question = ""
+            return .handled
+        }
         guard mentionQuery(text: question) != nil else {
             return .ignored
         }

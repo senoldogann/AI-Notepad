@@ -133,6 +133,17 @@ MainActor.assumeIsolated {
         frame: NSRect(x: 400, y: 80, width: 760, height: 480)
     )
     print("confetti \(confetti)")
+    let recipes: Int = showWindow(
+        view: RecipeSuggestions(
+            recipes: builtInRecipes() + [recipeFromQuestion(question: "Satış ekibinin bu çeyrekteki hedefleri ve engelleri neler?", id: "r1")],
+            highlighted: 0, onPick: { _ in }, onDelete: { _ in }
+        )
+        .padding(16)
+        .frame(width: 520, height: 420)
+        .background(Theme.background),
+        frame: NSRect(x: 1000, y: 300, width: 520, height: 420)
+    )
+    print("recipes \(recipes)")
     for (name, scheme, x) in [("notes-light", ColorScheme.light, 40.0), ("notes-dark", ColorScheme.dark, 520.0)] {
         let number: Int = showWindow(
             view: VStack(spacing: 10) {

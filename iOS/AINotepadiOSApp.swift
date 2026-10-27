@@ -43,6 +43,7 @@ struct AINotepadiOSApp: App {
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
                     store.reload()
+                    ask.loadRecipes()
                     await store.cloud.start { store.reload() }
                     store.applyRetention(now: Date())
                     #if DEBUG
@@ -51,7 +52,7 @@ struct AINotepadiOSApp: App {
                         return
                     }
                     if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
-                        ask.ask(question: CommandLine.arguments[index + 1], meetingIDs: [])
+                        ask.ask(question: CommandLine.arguments[index + 1], meetingIDs: [], recipeTitle: nil)
                     }
                     #endif
                     await recorder.resumeUnfinished()

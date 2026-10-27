@@ -126,6 +126,8 @@ final class AppModel {
     /// Kaydedilmiş toplantılar (yeniden eskiye) ve okunamayanlar.
     var meetings: [MeetingRecord] = []
     var meetingLoadFailures: [MeetingLoadFailure] = []
+    /// Kullanıcının kaydettiği tarifler (bkz. `recipes`).
+    private(set) var userRecipes: [Recipe] = []
     /// iCloud eşitlemesi (Ayarlar › Genel › iCloud ile eşitle).
     let cloud: CloudSyncController = CloudSyncController()
     /// iCloud'dan henüz inmemiş toplantı sayısı.
@@ -1402,7 +1404,7 @@ final class AppModel {
     /// Tüm toplantılara soru sorar; ajanın adımları (terimler, okunan parçalar) ve akan cevap listede güncellenir.
     /// Önceki cevaplar devam soruları için bağlamdır.
     /// Arşive sorar; `meetingIDs` boş değilse soru yalnız o toplantılara sorulur (`@` ile etiketlenenler).
-    func askArchive(question: String, meetingIDs: [String]) {
+    func askArchive(question: String, meetingIDs: [String], recipeTitle: String?) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
@@ -1413,7 +1415,7 @@ final class AppModel {
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }
         archiveExchanges.append(ArchiveExchange(
-            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, startedAt: Date(), phase: .understanding,
+            id: id, question: trimmed, scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
         ))
         let records: [MeetingRecord] = meetings
@@ -1457,6 +1459,39 @@ final class AppModel {
                     $0.finishedAt = Date()
                 }
             }
+        }
+    }
+
+    /// Tarifler: yerleşikler ve kullanıcının kaydettikleri.
+    var recipes: [Recipe] {
+        builtInRecipes() + userRecipes
+    }
+
+    /// Soruyu tarif olarak kaydeder ("/" ile yeniden sorulur).
+    func saveRecipe(question: String) {
+        storeUserRecipes(userRecipes + [recipeFromQuestion(question: question, id: UUID().uuidString)])
+    }
+
+    /// Kullanıcı tarifini siler.
+    func deleteRecipe(id: String) {
+        storeUserRecipes(userRecipes.filter { $0.id != id })
+    }
+
+    private func storeUserRecipes(_ recipes: [Recipe]) {
+        do {
+            try saveUserRecipes(recipes: recipes, defaults: .standard)
+            userRecipes = recipes
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Kayıtlı kullanıcı tariflerini okur (açılışta); okunamazsa neden gösterilir, yerleşikler çalışır.
+    func loadRecipes() {
+        do {
+            userRecipes = try loadUserRecipes(defaults: .standard)
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
     }
 
@@ -1866,6 +1901,7 @@ final class AppModel {
         reloadMeetings()
         loadVoices()
         loadPeople()
+        loadRecipes()
         startCalendarServices()
         for record in staleStatusesToInterrupt(records: meetings) {
             withSessionDirectory(id: record.id) { (directory: URL) -> Void in

@@ -450,7 +450,7 @@ private struct HomePage: View {
                 UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
                     // Brifing yeni bir konu: önceki sohbet bağlam olmasın.
                     model.clearArchiveConversation()
-                    model.askArchive(question: briefingQuestion(meeting: meeting), meetingIDs: [])
+                    model.askArchive(question: briefingQuestion(meeting: meeting), meetingIDs: [], recipeTitle: nil)
                     router.section = .ask
                 } onOpenMeeting: { (id: String) -> Void in
                     router.selectedMeetingID = id
@@ -1164,7 +1164,12 @@ private struct MeetingsSplit: View {
             .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
             ZStack {
                 if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
-                    MeetingDetailPage(model: model, player: player, record: record) { router.selectedMeetingID = nil }
+                    MeetingDetailPage(model: model, player: player, record: record) {
+                        router.selectedMeetingID = nil
+                    } onRunRecipe: { (recipe: Recipe) -> Void in
+                        model.askArchive(question: recipe.prompt, meetingIDs: [record.id], recipeTitle: recipe.title)
+                        router.section = .ask
+                    }
                         // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                         .id(record.id)
                         .transition(.opacity)

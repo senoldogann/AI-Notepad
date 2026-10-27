@@ -311,6 +311,8 @@ struct MeetingDetailPage: View {
     let record: MeetingRecord
     /// Toplantı silinince (sayfa artık gösterilemez) çağrılır.
     let onDeleted: @MainActor () -> Void
+    /// Tarifi bu toplantıya uygular (Sor sayfasında açılır).
+    let onRunRecipe: @MainActor (Recipe) -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
     /// Özetin gösterildiği dil: nil Türkçe not, değilse paylaşım sürümü.
@@ -558,6 +560,19 @@ struct MeetingDetailPage: View {
                     .buttonStyle(.coverGlass)
                     .disabled(isLocked)
                     .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
+                Menu {
+                    ForEach(model.recipes) { (recipe: Recipe) in
+                        Button(recipe.title, systemImage: recipe.symbol) { onRunRecipe(recipe) }
+                    }
+                } label: {
+                    Label("Tarif", systemImage: "wand.and.stars")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.coverGlass)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(record.note == nil)
+                .hoverHint("Bu toplantıya tarif uygula: takip e-postası, aksiyonlar, proje planı…", alignment: .leading, edge: .bottom)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 if let text = displayedShareText {
                     ShareLink(item: text, subject: Text(record.note?.title ?? record.title)) {
@@ -634,6 +649,12 @@ struct MeetingDetailPage: View {
     private var exportItems: some View {
         Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
             .disabled(isLocked)
+        Menu("Tarif uygula", systemImage: "wand.and.stars") {
+            ForEach(model.recipes) { (recipe: Recipe) in
+                Button(recipe.title, systemImage: recipe.symbol) { onRunRecipe(recipe) }
+            }
+        }
+        .disabled(record.note == nil)
         Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
         Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
         Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }

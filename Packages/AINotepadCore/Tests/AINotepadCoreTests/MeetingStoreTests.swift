@@ -142,3 +142,19 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(mentionCandidates(records: [old, new], query: "budjetti", excluding: [], limit: 5).isEmpty)
     }
 }
+
+@Suite struct RecipeTests {
+    // "/" tarif araması: yalnızca baştaki "/"; başlıkta aksan ve büyük/küçük harf duyarsız; kullanıcı tarifi saklanır.
+    @Test func recipeQueryCandidatesAndStorage() throws {
+        #expect(recipeQuery(text: "/takip") == "takip")
+        #expect(recipeQuery(text: "Merhaba /takip") == nil)
+        let mine: Recipe = recipeFromQuestion(question: "Satış ekibinin bu çeyrekteki hedefleri ve engelleri neler?", id: "r1")
+        #expect(mine.title == "Satış ekibinin bu çeyrekteki hedefleri ve…" && !mine.isBuiltIn)
+        let all: [Recipe] = builtInRecipes() + [mine]
+        #expect(recipeCandidates(recipes: all, query: "SATIS").map(\.id) == ["r1"])
+        #expect(recipeCandidates(recipes: all, query: "").count == all.count)
+        let defaults: UserDefaults = try #require(UserDefaults(suiteName: "tarif-testi-\(UUID().uuidString)"))
+        try saveUserRecipes(recipes: all, defaults: defaults)
+        #expect(try loadUserRecipes(defaults: defaults) == [mine])
+    }
+}

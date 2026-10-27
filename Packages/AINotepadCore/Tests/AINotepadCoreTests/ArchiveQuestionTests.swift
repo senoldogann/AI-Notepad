@@ -74,6 +74,19 @@ extension CloudTests {
         #expect(text.contains("kahve") || text.contains("mikko"), "\(answer.text)")
     }
 
+    // Gerçek model: "Takip e-postası" tarifi seçilen toplantıya; konu satırıyla başlayan, işi üstleneni (Mikko) anan taslak.
+    @Test func followUpEmailRecipe() async throws {
+        let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))
+        let recipe: Recipe = try #require(builtInRecipes().first { $0.id == "takip-epostasi" })
+        let answer: ArchiveAnswer = try await askAboutMeetings(
+            question: recipe.prompt, history: [], records: archive().filter { $0.id == "a" }, userName: "Senol", llm: provider,
+            maxChars: 60_000, now: Date(timeIntervalSince1970: 1_792_000_000)
+        ) { (_: ArchiveProgress) -> Void in }
+        let text: String = answer.text.lowercased()
+        #expect(text.contains("mikko"), "\(answer.text)")
+        #expect(text.contains("aihe") || text.contains("subject") || text.contains("konu"), "\(answer.text)")
+    }
+
     // Gerçek model: devam sorusu ("bunu") önceki konuşmadan anlaşılır; adımlar sırayla bildirilir ve cevap parça parça akar.
     @Test func followUpStreamsWithSteps() async throws {
         let provider: LLMProvider = .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic)))

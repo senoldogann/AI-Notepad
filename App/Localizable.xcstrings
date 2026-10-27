@@ -867,6 +867,16 @@
         }
       }
     },
+    "Aksiyonları listele": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List actions"
+          }
+        }
+      }
+    },
     "Algıla": {
       "localizations": {
         "en": {
@@ -893,6 +903,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bottom spacing: %lld pt"
+          }
+        }
+      }
+    },
+    "Alınan kararları gerekçeleri ve kimin önerdiğiyle listele; ertelenen ya da tartışmalı kalan konuları ayrıca yaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List the decisions with their rationale and who proposed them; note postponed or disputed topics separately."
           }
         }
       }
@@ -1886,6 +1906,16 @@
         }
       }
     },
+    "Bu toplantı için katılımcılara gönderilecek kısa bir takip e-postası taslağı yaz: teşekkür, alınan kararlar, kim neyi ne zamana yapacak ve sonraki adım. Konu satırıyla başla. E-postayı toplantının konuşulduğu dilde yaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draft a short follow-up email to the participants of this meeting: thanks, decisions made, who does what by when, and the next step. Start with a subject line. Write the email in the language the meeting was held in."
+          }
+        }
+      }
+    },
     "Bu toplantıda sana düşen görev yok": {
       "localizations": {
         "en": {
@@ -1926,6 +1956,16 @@
         }
       }
     },
+    "Bu toplantıya tarif uygula: takip e-postası, aksiyonlar, proje planı…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply a recipe to this meeting: follow-up email, actions, project plan…"
+          }
+        }
+      }
+    },
     "Bu yapılandırmayı istemcinin MCP ayarlarına (Claude Desktop: Ayarlar › Geliştirici › Yapılandırmayı düzenle) ekle. İstemci toplantılarını listeler, arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okunan notlar ve transkriptler istemcinin yapay zekâ sağlayıcısına (ör. Anthropic, OpenAI) gönderilir.": {
       "localizations": {
         "en": {
@@ -1962,6 +2002,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Which meeting shall we listen to today?"
+          }
+        }
+      }
+    },
+    "Bugün ve yarın için hazırlan: son toplantılarda verdiğim sözler ve bana düşen açık işler, bekleyen kararlar ve takip etmem gereken kişiler. Kısa maddeler halinde, önceliğe göre.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare me for today and tomorrow: promises I made in recent meetings, my open tasks, pending decisions and people I should follow up with. Short bullets, by priority."
+          }
+        }
+      }
+    },
+    "Bugüne hazırlan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prep my day"
           }
         }
       }
@@ -2816,6 +2876,16 @@
         }
       }
     },
+    "Eşleşen tarif yok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching recipe"
+          }
+        }
+      }
+    },
     "Eşleşen toplantı yok": {
       "localizations": {
         "en": {
@@ -3446,6 +3516,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Decisions"
+          }
+        }
+      }
+    },
+    "Kararlar ve gerekçeleri": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decisions and rationale"
           }
         }
       }
@@ -4402,6 +4482,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fix speaker"
+          }
+        }
+      }
+    },
+    "Konuşulanlardan bir proje planı taslağı çıkar: hedef, kapsam, aşamalar ve tarihleri, sorumlular, riskler ve açık sorular.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draft a project plan from what was discussed: goal, scope, phases and dates, owners, risks and open questions."
           }
         }
       }
@@ -5568,6 +5658,16 @@
         }
       }
     },
+    "Proje planı taslağı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draft a project plan"
+          }
+        }
+      }
+    },
     "Reddedildi: Sistem Ayarları'ndan aç": {
       "localizations": {
         "en": {
@@ -5594,6 +5694,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colors"
+          }
+        }
+      }
+    },
+    "Riskler ve açık sorular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risks and open questions"
           }
         }
       }
@@ -5776,6 +5886,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Asked of you"
+          }
+        }
+      }
+    },
+    "Senin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yours"
           }
         }
       }
@@ -6202,12 +6322,12 @@
         }
       }
     },
-    "Sor… (@ ile toplantı etiketle)": {
+    "Sor… (@ toplantı, / tarif)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask… (@ to tag a meeting)"
+            "value": "Ask… (@ meeting, / recipe)"
           }
         }
       }
@@ -6330,6 +6450,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "TRANSCRIPT"
+          }
+        }
+      }
+    },
+    "Takip e-postası": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow-up email"
           }
         }
       }
@@ -6470,6 +6600,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Known voices"
+          }
+        }
+      }
+    },
+    "Tarif": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipe"
+          }
+        }
+      }
+    },
+    "Tarif olarak kaydedildi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved as recipe"
+          }
+        }
+      }
+    },
+    "Tarif olarak kaydedildi: \"/\" ile çalıştır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved as a recipe: run it with \"/\""
+          }
+        }
+      }
+    },
+    "Tarif olarak kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as recipe"
+          }
+        }
+      }
+    },
+    "Tarif olarak kaydet (\"/\" ile yeniden sor)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as recipe (ask again with \"/\")"
+          }
+        }
+      }
+    },
+    "Tarif uygula": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply recipe"
+          }
+        }
+      }
+    },
+    "Tarifi sil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete recipe"
+          }
+        }
+      }
+    },
+    "Tarifler — @ ile toplantı seçersen yalnız ona uygulanır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipes — tag a meeting with @ to apply it only there"
           }
         }
       }
@@ -6867,6 +7077,16 @@
         }
       }
     },
+    "Toplantılarda dile getirilen riskleri, kaygıları ve yanıtsız kalan soruları listele; her biri için kimin gündeme getirdiğini yaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List the risks, concerns and unanswered questions raised in the meetings, with who raised each."
+          }
+        }
+      }
+    },
     "Toplantılarıma sor": {
       "localizations": {
         "en": {
@@ -6887,12 +7107,12 @@
         }
       }
     },
-    "Toplantılarına bir şey sor… (@ ile toplantı etiketle)": {
+    "Toplantılarına bir şey sor… (@ toplantı, / tarif)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask your meetings… (@ to tag a meeting)"
+            "value": "Ask your meetings… (@ meeting, / recipe)"
           }
         }
       }
@@ -7053,6 +7273,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Press keys…"
+          }
+        }
+      }
+    },
+    "Tüm aksiyonları kişiye göre grupla: kim, ne, ne zamana. Bana düşenleri en üste koy; tarihi belirsiz olanları ayrıca belirt.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group all actions by person: who, what, by when. Put mine at the top; flag those without a date."
           }
         }
       }
