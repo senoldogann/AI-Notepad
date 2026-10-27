@@ -517,6 +517,26 @@
         }
       }
     },
+    "%lld toplantı okunuyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading %lld meetings…"
+          }
+        }
+      }
+    },
+    "%lld toplantıdan %lld parça okundu · %@ sn": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read %2$lld passages from %1$lld meetings · %3$@ s"
+          }
+        }
+      }
+    },
     "1 dk sonra: %@": {
       "localizations": {
         "en": {
@@ -878,12 +898,12 @@
         }
       }
     },
-    "Arama terimleri": {
+    "Aranan": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Search terms"
+            "value": "Searched"
           }
         }
       }
@@ -938,12 +958,12 @@
         }
       }
     },
-    "Arşivi tarıyor": {
+    "Arşiv taranıyor…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Searching the archive"
+            "value": "Searching the archive…"
           }
         }
       }
@@ -1607,26 +1627,6 @@
         }
       }
     },
-    "Cevabı yazıyor": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Writing the answer"
-          }
-        }
-      }
-    },
-    "Cevap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answer"
-          }
-        }
-      }
-    },
     "Cevap hazırlanıyor": {
       "localizations": {
         "en": {
@@ -2022,6 +2022,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Low"
+          }
+        }
+      }
+    },
+    "Düşünüyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking…"
           }
         }
       }
@@ -2529,16 +2539,6 @@
         }
       }
     },
-    "KAYNAKLAR": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "SOURCES"
-          }
-        }
-      }
-    },
     "KONTROL ET": {
       "localizations": {
         "en": {
@@ -2777,6 +2777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Processing the full recording and preparing the note…"
+          }
+        }
+      }
+    },
+    "Kaynaklar · %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sources · %lld"
           }
         }
       }
@@ -3824,16 +3834,6 @@
         }
       }
     },
-    "Nasıl cevapladım · %lld toplantı, %lld parça · %@ sn": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How I answered · %lld meetings, %lld passages · %@ s"
-          }
-        }
-      }
-    },
     "Ne kaçırdım?": {
       "localizations": {
         "en": {
@@ -3986,12 +3986,12 @@
         }
       }
     },
-    "Okunan toplantılar": {
+    "Okunan": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meetings read"
+            "value": "Read"
           }
         }
       }
@@ -4708,16 +4708,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask"
-          }
-        }
-      }
-    },
-    "Soruyu anlıyor": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Understanding the question"
           }
         }
       }
@@ -6050,16 +6040,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "meetings"
-          }
-        }
-      }
-    },
-    "ve %lld toplantı daha": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "and %lld more meetings"
           }
         }
       }
