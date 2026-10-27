@@ -152,6 +152,11 @@ struct MainWindowView: View {
                     Sidebar(model: model, router: router)
                     VStack(spacing: 0) {
                         TopBar(router: router, onShowPanel: onShowPanel)
+                        // Ana penceredeki eylemlerin hataları (not düzenleme, tarif, ses silme…) burada görünür; önceden
+                        // yalnızca canlı panelde çıkıyordu.
+                        if !model.errorMessages.isEmpty {
+                            ErrorBanner(messages: model.errorMessages) { model.dismissErrors() }
+                        }
                         detail
                             .id(router.section)
                             .transition(.opacity)
@@ -184,7 +189,7 @@ struct MainWindowView: View {
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
         .frame(minWidth: 860, minHeight: 580)
-        .background { WindowBackdrop() }
+        // Cam tek katman: pencere zemini (ikinci bir arka plan opaklığı iki kat gösteriyordu).
         .containerBackground(for: .window) { WindowBackdrop() }
         // Başlık çubuğu gizli: içerik pencerenin tepesine kadar sürer (trafik ışıkları kenar çubuğunun üstünde).
         .ignoresSafeArea(.container, edges: .top)
@@ -207,7 +212,7 @@ struct MainWindowView: View {
         case .settings:
             // Geniş pencerede form satırları ekran boyu uzamasın.
             // Genişlik sınırı sayfanın içinde: kaydırma çubuğu pencerenin sağ kenarında kalır.
-            SettingsPage(model: model, shortcuts: shortcuts)
+            SettingsPage(model: model, shortcuts: shortcuts) { router.section = .setup }
                 .scrollContentBackground(.hidden)
         case .setup:
             // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
@@ -223,7 +228,7 @@ private struct Sidebar: View {
 
     var body: some View {
         // Yalnızca açık (tamamlanmamış) görevler sayılır.
-        let myTaskCount: Int = myTasks(meetings: Array(model.meetings.prefix(10))).filter { !isTaskDone(record: $0.record, task: $0.task) }.count
+        let myTaskCount: Int = myTasks(meetings: model.meetings).filter { !isTaskDone(record: $0.record, task: $0.task) }.count
         VStack(alignment: .leading, spacing: 2) {
             // Trafik ışıklarına yer.
             Color.clear.frame(height: 40)
@@ -232,6 +237,9 @@ private struct Sidebar: View {
             item(title: "Sor", symbol: "sparkle.magnifyingglass", section: .ask, badge: nil)
             item(title: "Görevlerim", symbol: "checkmark.circle", section: .tasks, badge: myTaskCount > 0 ? myTaskCount : nil)
             item(title: "Kişiler", symbol: "person.2", section: .people, badge: nil)
+            // Klasörler ve son toplantılar kayar: alçak pencerede ya da büyük arayüz ölçeğinde Ayarlar alttan taşmasın.
+            ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
             SidebarFolders(model: model, router: router)
             if !model.meetings.isEmpty {
                 Text("Son toplantılar")
@@ -256,6 +264,9 @@ private struct Sidebar: View {
                     .buttonStyle(.hoverPlain)
                 }
             }
+            }
+            }
+            .scrollIndicators(.never)
             // Ayarlar en altta, sol köşede (uygulamaların alışılmış yeri).
             Spacer(minLength: 12)
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
@@ -339,10 +350,15 @@ private struct TopBar: View {
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSearching ? Theme.ink.opacity(0.35) : Theme.line))
             .background {
-                // ⌘K aramaya odaklanır.
+                // ⌘K ve ⌘F aramaya odaklanır.
                 Button("") { isSearching = true }
                     .keyboardShortcut("k", modifiers: .command)
                     .opacity(0)
+                    .accessibilityHidden(true)
+                Button("") { isSearching = true }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .opacity(0)
+                    .accessibilityHidden(true)
             }
             Spacer(minLength: DesignTokens.Spacing.m)
             Button("Canlı panel", systemImage: "rectangle.on.rectangle") { onShowPanel() }
@@ -374,7 +390,11 @@ private struct SetupScreen: View {
 
     var body: some View {
         // Tüm pencere: solda adımın film gradyanlı paneli, sağda içeriği (bkz. `SetupPage`).
-        SetupPage(model: model, shortcuts: shortcuts) { router.section = .home }
+        SetupPage(model: model, shortcuts: shortcuts) {
+            // Kurulum ancak bitince tamamlanmış sayılır: yarıda kapatılırsa bir sonraki açılışta yeniden gelir.
+            UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
+            router.section = .home
+        }
             .padding(.top, 28)
             .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: true).ignoresSafeArea() }
     }
@@ -647,7 +667,17 @@ private struct ToolTiles: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
+        // Dar pencerede kutucuklar kesilmesin: sığmazsa aralık daralır, yine sığmazsa iki satıra iner.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 28) { tiles }
+            HStack(alignment: .top, spacing: 8) { tiles }
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(92), spacing: 12), count: 3), spacing: 14) { tiles }
+        }
+    }
+
+    @ViewBuilder
+    private var tiles: some View {
+        Group {
             tile(title: "Kaydı başlat", symbol: "waveform", isEnabled: model.phase == .idle && model.isReadyToRecord) { onStartRecording() }
             tile(title: "Canlı panel", symbol: "rectangle.on.rectangle", isEnabled: true) { onShowPanel() }
             tile(title: "Toplantılar", symbol: "list.bullet.rectangle", isEnabled: true) { router.section = .meetings }
@@ -1286,5 +1316,42 @@ private struct SidebarFolders: View {
                     }
             }
         }
+    }
+}
+
+/// Ana penceredeki hata şeridi: son hatalar, kapatma düğmesi. Metin seçilebilir (destek için kopyalanabilsin).
+private struct ErrorBanner: View {
+    let messages: [String]
+    let onDismiss: @MainActor () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(messages.suffix(3).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+                    Text(item.element)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 8)
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .appFont(size: 11, weight: .semibold)
+                    .foregroundStyle(Theme.muted)
+            }
+            .buttonStyle(.hoverPlain)
+            .accessibilityLabel(Text("Hataları kapat"))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.10))
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

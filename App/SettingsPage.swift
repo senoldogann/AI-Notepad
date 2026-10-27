@@ -48,6 +48,8 @@ private enum SettingsSection: CaseIterable {
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
+    /// Karşılama ve kurulum ekranını yeniden açar.
+    let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
     var body: some View {
@@ -64,7 +66,7 @@ struct SettingsPage: View {
                     .padding(.top, 20)
                 Group {
                     switch section {
-                    case .general: GeneralSettings(model: model)
+                    case .general: GeneralSettings(model: model, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
                     case .llm: LLMSettings(model: model)
                     case .keys: KeySettings(model: model)
@@ -135,6 +137,7 @@ private struct SettingsTabs: View {
 /// Motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
+    let onShowSetup: @MainActor () -> Void
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
     @AppStorage(SettingsKey.audioRetentionDays) private var retentionDays: Int = 30
@@ -208,6 +211,11 @@ private struct GeneralSettings: View {
                 SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
                     (language.rawValue, Text(verbatim: languageName(language: language)))
                 })
+            }
+            SettingsRow(title: Text("Kurulum")) {
+                Text("İzinler, anahtarlar ve kısayollar adım adım.")
+            } control: {
+                Button("Kurulumu yeniden aç") { onShowSetup() }
             }
             SettingsRow(title: Text("Adın")) {
                 Text("Toplantı notunda sana düşen görevleri ayırmak için kullanılır.")

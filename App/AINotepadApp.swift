@@ -78,6 +78,8 @@ struct AINotepadApp: App {
 
     init() {
         registerDefaultSettings()
+        // Tema ilk kareden önce: Gece/Grafit kullanıcısı açılışta önce açık renkleri görmesin.
+        applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
         if migrateSmartEffort(defaults: .standard) {
             appLogger.info("Not effort'u high'a taşındı (xhigh/max notu kesiyordu)")
         }
@@ -131,7 +133,6 @@ struct AINotepadApp: App {
                 shortcuts.registerAll()
                 // Kurulum yalnızca ilk açılışta bir kez (tam pencere); sonra ayarlar Ayarlar'dan değişir.
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
-                    UserDefaults.standard.set(true, forKey: SettingsKey.onboardingCompleted)
                     router.section = .setup
                 }
                 // "--riza": kayıt başlatmadan rıza hatırlatmasını gösterir (görsel kontrol için).
@@ -189,7 +190,26 @@ struct AINotepadApp: App {
                 Button("Ayarlar…") { openMainWindow(router: router, section: .settings) }
                     .keyboardShortcut(",", modifiers: .command)
             }
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button(model.phase == .idle ? "Kaydı başlat" : "Kaydı bitir") {
+                    Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(model.phase == .idle && !model.isReadyToRecord)
+            }
+            // Bölümler arası geçiş (⌘1–5), Mac uygulamalarının alışılmış kısayolları.
+            CommandMenu("Git") {
+                Button("Ana sayfa") { openMainWindow(router: router, section: .home) }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Toplantılar") { openMainWindow(router: router, section: .meetings) }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Sor") { openMainWindow(router: router, section: .ask) }
+                    .keyboardShortcut("3", modifiers: .command)
+                Button("Görevlerim") { openMainWindow(router: router, section: .tasks) }
+                    .keyboardShortcut("4", modifiers: .command)
+                Button("Kişiler") { openMainWindow(router: router, section: .people) }
+                    .keyboardShortcut("5", modifiers: .command)
+            }
         }
         MenuBarExtra {
             MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router)

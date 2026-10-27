@@ -105,10 +105,6 @@ struct MeetingsListPage: View {
         }
         .animation(.smooth(duration: 0.25), value: isSelecting)
         .animation(.smooth(duration: 0.25), value: isConfirmingDelete)
-        .onAppear {
-            model.reloadMeetings()
-            model.applyRetention()
-        }
     }
 
     /// Satır: seç modunda işaret kutusu ve tıklayınca işaretleme (kayıttaki/işlenen toplantı seçilemez); değilse açma.
@@ -138,6 +134,21 @@ struct MeetingsListPage: View {
                 MeetingRow(record: record, isProcessing: isProcessing, isSelected: record.id == selectedID)
             }
             .buttonStyle(.hoverPlain)
+            .contextMenu {
+                Button("Aç", systemImage: "arrow.up.right") { onOpen(record.id) }
+                Button("Markdown olarak kopyala", systemImage: "doc.on.doc") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
+                }
+                Divider()
+                // Çöp Sepeti'ne taşır: Finder'dan geri alınabilir.
+                Button("Çöp Sepeti'ne taşı", systemImage: "trash", role: .destructive) {
+                    if let error = model.deleteMeeting(meetingID: record.id) {
+                        deleteErrors = [error]
+                    }
+                }
+                .disabled(model.isLocked(meetingID: record.id))
+            }
         }
     }
 
@@ -303,6 +314,8 @@ private enum ExportStatus: Equatable {
     case failed(String)
     /// "Toplantıyı sil"e basıldı: satır içi onay bekleniyor (ayrı uyarı penceresi yok).
     case confirmDelete
+    /// "Sesi sil"e basıldı: ses kalıcı silinir, satır içi onay bekleniyor.
+    case confirmDeleteAudio
 }
 
 /// Seçili toplantının sayfası: önce sana düşen görevler, sonra özet, kararlar, diğer görevler, sözlük,
@@ -319,6 +332,10 @@ struct MeetingDetailPage: View {
     @State private var tab: MeetingTab = .summary
     /// Özetin gösterildiği dil: nil Türkçe not, değilse paylaşım sürümü.
     @State private var noteLanguage: ShareLanguage?
+    /// Başlık düzenleniyor (çift tıklama ya da "Yeniden adlandır").
+    @State private var isRenaming: Bool = false
+    @State private var draftTitle: String = ""
+    @FocusState private var titleFocused: Bool
 
     private var isProcessing: Bool {
         model.processingMeetingIDs.contains(record.id)
@@ -487,12 +504,28 @@ struct MeetingDetailPage: View {
                 .tracking(0.6)
                 .textCase(.uppercase)
                 .opacity(0.85)
-            Text(record.note?.title ?? record.title)
-                .appFont(size: 30, weight: .regular)
-                .tracking(-0.6)
-                .lineLimit(3)
-                .textSelection(.enabled)
-                .padding(.top, 8)
+            Group {
+                if isRenaming {
+                    TextField("Toplantı adı", text: $draftTitle)
+                        .textFieldStyle(.plain)
+                        .focused($titleFocused)
+                        .onSubmit { finishRename() }
+                        .onExitCommand { isRenaming = false }
+                        .onChange(of: titleFocused) { (_: Bool, focused: Bool) in
+                            if !focused {
+                                finishRename()
+                            }
+                        }
+                } else {
+                    Text(record.note?.title ?? record.title)
+                        .lineLimit(3)
+                        .onTapGesture(count: 2) { startRename() }
+                        .hoverHint("Yeniden adlandırmak için çift tıkla", alignment: .leading, edge: .bottom)
+                }
+            }
+            .appFont(size: 30, weight: .regular)
+            .tracking(-0.6)
+            .padding(.top, 8)
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
                 let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
@@ -732,12 +765,13 @@ struct MeetingDetailPage: View {
             }
         }
         .disabled(isLocked)
+        Button("Yeniden adlandır", systemImage: "pencil") { startRename() }
+            .disabled(isLocked)
         Button("Tekrar işle", systemImage: "arrow.clockwise") { model.reprocess(meetingID: record.id) }
             .disabled(isLocked || record.audioDeleted)
         Divider()
         Button("Sesi sil", systemImage: "speaker.slash", role: .destructive) {
-            player.stop()
-            model.deleteAudio(meetingID: record.id)
+            export = .confirmDeleteAudio
         }
         .disabled(isLocked || record.audioDeleted)
         Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
@@ -753,6 +787,25 @@ struct MeetingDetailPage: View {
             return shareText(record: record, note: shared, language: language)
         }
         return shareText(record: record, note: note, language: nil)
+    }
+
+    private func startRename() {
+        guard !isLocked else {
+            return
+        }
+        draftTitle = record.note?.title ?? record.title
+        isRenaming = true
+        titleFocused = true
+    }
+
+    private func finishRename() {
+        guard isRenaming else {
+            return
+        }
+        isRenaming = false
+        if draftTitle != (record.note?.title ?? record.title) {
+            model.renameMeeting(meetingID: record.id, title: draftTitle)
+        }
     }
 
     /// Dışa aktarılan kayıt: seçili dilde paylaşım notu varsa not onunla değişir (PDF, Markdown ve kopya da ekranda
@@ -814,6 +867,19 @@ struct MeetingDetailPage: View {
             Text(message)
                 .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.red)
+        case .confirmDeleteAudio:
+            HStack(spacing: DesignTokens.Spacing.s) {
+                Label("Ses kalıcı olarak silinsin mi? Metin ve not kalır; geri alınamaz.", systemImage: "speaker.slash")
+                    .foregroundStyle(.red)
+                Button("Sesi sil", role: .destructive) {
+                    player.stop()
+                    model.deleteAudio(meetingID: record.id)
+                    export = .none
+                }
+                Button("Vazgeç") { export = .none }
+            }
+            .appFont(size: 11, weight: .regular)
+            .controlSize(.small)
         case .confirmDelete:
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")

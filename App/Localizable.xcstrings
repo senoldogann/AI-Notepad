@@ -1378,6 +1378,16 @@
         }
       }
     },
+    "Aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
     "Açık": {
       "localizations": {
         "en": {
@@ -3276,6 +3286,16 @@
         }
       }
     },
+    "Git": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go"
+          }
+        }
+      }
+    },
     "Global kısayollar": {
       "localizations": {
         "en": {
@@ -3474,6 +3494,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "There is an error"
+          }
+        }
+      }
+    },
+    "Hataları kapat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss errors"
           }
         }
       }
@@ -5026,6 +5056,16 @@
         }
       }
     },
+    "Kurulumu yeniden aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open setup again"
+          }
+        }
+      }
+    },
     "Kurumunun Microsoft hesabında bu bağlantı için yönetici onayı gerekiyor. BT yöneticine sorabilir ya da Teams'te kanal › ⋯ › İş akışları'ndan aldığın webhook adresini \"Webhook adresi\" kartına yapıştırabilirsin.": {
       "localizations": {
         "en": {
@@ -6554,6 +6594,16 @@
         }
       }
     },
+    "Ses kalıcı olarak silinsin mi? Metin ve not kalır; geri alınamaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the audio permanently? The transcript and note stay; this can't be undone."
+          }
+        }
+      }
+    },
     "Ses kaydı hazırlanıyor": {
       "localizations": {
         "en": {
@@ -7420,6 +7470,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Move the meeting (text, note and audio) to the Trash?"
+          }
+        }
+      }
+    },
+    "Toplantı adı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting name"
           }
         }
       }
@@ -8453,6 +8513,26 @@
         }
       }
     },
+    "Yeniden adlandır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        }
+      }
+    },
+    "Yeniden adlandırmak için çift tıkla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Double-click to rename"
+          }
+        }
+      }
+    },
     "Yeniden bağlan": {
       "localizations": {
         "en": {
@@ -9035,6 +9115,16 @@
         }
       }
     },
+    "Çöp Sepeti'ne taşı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Trash"
+          }
+        }
+      }
+    },
     "Çık": {
       "localizations": {
         "en": {
@@ -9464,6 +9554,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Permissions"
+          }
+        }
+      }
+    },
+    "İzinler, anahtarlar ve kısayollar adım adım.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions, keys and shortcuts step by step."
           }
         }
       }

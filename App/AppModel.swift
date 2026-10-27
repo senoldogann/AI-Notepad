@@ -111,6 +111,11 @@ final class AppModel {
     /// Kullanıcının kayıt sırasında yaptığı konuşmacı düzeltmeleri (otomatik ayırmanın üstüne uygulanır).
     var speakerCorrections: SpeakerCorrections = .none
     var errorMessages: [String] = []
+
+    /// Hata şeridini kapatır (ana pencere ve panel aynı listeyi gösterir).
+    func dismissErrors() {
+        errorMessages = []
+    }
     var recordingStartedAt: Date?
     /// Global kısayol kaydedilemediyse menüde gösterilen hata.
     var shortcutError: String?
@@ -1120,6 +1125,18 @@ final class AppModel {
                 refreshFolderCopy(meetingID: meetingID)
             }
         }
+    }
+
+    /// Toplantının adını değiştirir (not başlığı da); boş ad yok sayılır.
+    func renameMeeting(meetingID: String, title: String) {
+        let trimmed: String = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
+            return
+        }
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            saveRecord(record: record.with(title: trimmed), directory: directory)
+        }
+        refreshFolderCopy(meetingID: meetingID)
     }
 
     /// "Konuşmacı 2 = Aino": adı kaydeder; boş ad etiketi geri getirir.

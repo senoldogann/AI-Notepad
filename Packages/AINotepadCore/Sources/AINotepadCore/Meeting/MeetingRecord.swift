@@ -106,6 +106,13 @@ public struct MeetingNote: Sendable, Equatable, Codable {
         copy.outline = newOutline
         return copy
     }
+
+    /// Başlığı değişmiş kopya (konu akışı korunur).
+    public func with(title newTitle: String) -> MeetingNote {
+        var copy: MeetingNote = MeetingNote(title: newTitle, summary: summary, decisions: decisions, tasks: tasks, glossary: glossary)
+        copy.outline = outline
+        return copy
+    }
 }
 
 /// Konu akışında bir bölüm: başladığı an (saniye), başlık ve tek cümlelik özet.
@@ -285,6 +292,14 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(liveSegments newSegments: [StoredSegment]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.liveSegments = newSegments
+        return copy
+    }
+
+    /// Adı değişmiş kopya: listede not başlığı görünür, ikisi birlikte değişir.
+    public func with(title newTitle: String) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.title = newTitle
+        copy.note = note?.with(title: newTitle)
         return copy
     }
 

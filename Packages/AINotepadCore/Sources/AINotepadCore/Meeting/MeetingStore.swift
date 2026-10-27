@@ -190,8 +190,11 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
         return records
     }
     return records.filter { (record: MeetingRecord) -> Bool in
-        let haystack: [String] = [record.title, record.note?.summary ?? ""]
+        // Listede görünen başlık notun başlığıdır; görevler, konuşmacı adları ve kendi notların da aranır.
+        let haystack: [String] = [record.title, record.note?.title ?? "", record.note?.summary ?? "", record.myNotes ?? ""]
             + (record.note?.decisions ?? [])
+            + (record.note?.tasks ?? []).flatMap { [$0.owner, $0.description] }
+            + Array(record.speakerNames.values)
             + (record.liveSegments + record.finalSegments).map(\.text)
             + Array(record.translations.values)
         // Yerel ayardan bağımsız: Türkçe yerel ayarda "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
