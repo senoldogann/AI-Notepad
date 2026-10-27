@@ -375,6 +375,49 @@ private struct GeneralSettings: View {
             .onChange(of: retentionDays) { (_: Int, _: Int) in
                 model.applyRetention()
             }
+            CloudSyncRow(model: model)
+        }
+    }
+}
+
+/// Anahtar hesabının arayüz adı. Saf fonksiyondur.
+private func secretAccountTitle(account: SecretAccount) -> String {
+    switch account {
+    case .deepgram: "Deepgram"
+    case .elevenlabs: "ElevenLabs"
+    case .anthropic: "Anthropic"
+    case .openai: String(localized: "OpenAI uyumlu")
+    case .webhook: "Webhook"
+    }
+}
+
+/// iCloud ile eşitle: biten toplantılar iCloud Drive'a taşınır, iPhone uygulamasıyla ortak görünür; kapatınca geri
+/// bu Mac'e taşınır. İş sürerken ve hata olunca durum satırda görünür.
+private struct CloudSyncRow: View {
+    let model: AppModel
+
+    var body: some View {
+        SettingsRow(title: Text("iCloud ile eşitle")) {
+            Text("Biten toplantılar iCloud Drive'a taşınır ve iPhone'daki AI-Notepad'de de görünür; iPhone'da kaydedilenler buraya gelir. Kayıt ve işleme her zaman bu Mac'te yapılır. Kapatınca iCloud'daki toplantılar bu Mac'e geri taşınır.")
+            switch model.cloud.state {
+            case .working:
+                Text("Toplantılar taşınıyor…").foregroundStyle(Theme.ink)
+            case .failed(let message):
+                Text(message).foregroundStyle(.red)
+            case .idle:
+                if model.cloudDownloadingCount > 0 {
+                    Text("\(model.cloudDownloadingCount) toplantı iCloud'dan iniyor…").foregroundStyle(Theme.ink)
+                }
+            }
+        } control: {
+            Toggle("iCloud ile eşitle", isOn: Binding<Bool>(
+                get: { model.cloud.location == .iCloud },
+                set: { (enabled: Bool) -> Void in
+                    Task { await model.setCloudSync(enabled: enabled) }
+                }
+            ))
+            .settingsToggle()
+            .disabled(model.cloud.state == .working || model.isBusy)
         }
     }
 }
@@ -713,6 +756,28 @@ private struct KeySettings: View {
         VStack(alignment: .leading, spacing: 0) {
             SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
             SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
+            SettingsRow(title: Text("iPhone'da da kullan")) {
+                Text("Deepgram, ElevenLabs ve LLM anahtarlarının bir kopyası iCloud Anahtar Zinciri ile iPhone'daki AI-Notepad'e gider; telefonda yeniden girmen gerekmez. Bu Mac'teki anahtarlar değişmez.")
+                switch model.keySync {
+                case .working:
+                    Text("Kopyalanıyor…").foregroundStyle(Theme.ink)
+                case .failed(let message):
+                    Text(message).foregroundStyle(.red)
+                case .idle:
+                    if !model.sharedKeyAccounts.isEmpty {
+                        Text("iPhone'da kullanılıyor: \(model.sharedKeyAccounts.map(secretAccountTitle).joined(separator: ", "))").foregroundStyle(Theme.ink)
+                    }
+                }
+            } control: {
+                HStack(spacing: 8) {
+                    if !model.sharedKeyAccounts.isEmpty {
+                        Button("Kaldır", role: .destructive) { Task { await model.stopSharingKeys() } }
+                            .hoverHint("Kopyalar iCloud'dan silinir; iPhone'da anahtarlar yeniden girilmeli", alignment: .trailing, edge: .bottom)
+                    }
+                    Button(model.sharedKeyAccounts.isEmpty ? "iPhone'a gönder" : "Güncelle") { Task { await model.shareKeysWithIPhone() } }
+                }
+                .disabled(model.keySync == .working)
+            }
             WebhookSettings(model: model)
             Text("Anahtarlar macOS Anahtar Zinciri'nde saklanır ve hiçbir zaman gösterilmez. Terminal'den eklediysen ilk kullanımda çıkan izin penceresinde \"Her Zaman İzin Ver\"i seç.")
                 .appFont(size: 13, weight: .regular)

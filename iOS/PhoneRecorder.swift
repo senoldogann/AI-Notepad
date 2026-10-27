@@ -162,7 +162,7 @@ final class PhoneRecorder {
         let keys: ProcessingKeys = ProcessingKeys(elevenLabs: await optionalElevenLabsKey(), llm: await llmProviderReportingFailure())
         for record in stale {
             do {
-                let directory: URL = try sessionDirectory(id: record.id)
+                let directory: URL = try store.sessionDirectory(id: record.id)
                 Self.logger.info("Yarıda kalan toplantı yeniden işleniyor, toplantı: \(record.id, privacy: .public)")
                 process(record: record.with(status: .processing, failureMessage: nil), directory: directory, keys: keys)
             } catch {
@@ -282,6 +282,9 @@ final class PhoneRecorder {
             }
             saveRecord(record: result, directory: directory)
             processingSteps[record.id] = nil
+            if result.status == .done {
+                await store.cloud.moveFinishedMeetings { [store] in store.reload() }
+            }
             UIApplication.shared.endBackgroundTask(backgroundTask)
         }
     }
@@ -375,10 +378,6 @@ final class PhoneRecorder {
             Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
         }
-    }
-
-    private func sessionDirectory(id: String) throws -> URL {
-        try AppPaths.sessionsDirectory().appending(path: id, directoryHint: .isDirectory)
     }
 
     // MARK: Anahtarlar

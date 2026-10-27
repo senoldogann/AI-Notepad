@@ -18,6 +18,8 @@ public struct MeetingLoadFailure: Sendable, Equatable {
 public struct MeetingLoadResult: Sendable, Equatable {
     public let meetings: [MeetingRecord]
     public let failures: [MeetingLoadFailure]
+    /// iCloud'dan henüz inmemiş toplantı klasörleri (indirme başlatıldı; inince değişiklik bildirimiyle yeniden okunur).
+    public let downloading: [String]
 }
 
 private func meetingEncoder() -> JSONEncoder {
@@ -33,12 +35,26 @@ private func meetingDecoder() -> JSONDecoder {
     return decoder
 }
 
-/// Toplantıyı klasöründeki `meeting.json`'a atomik yazar.
+/// Toplantıyı klasöründeki `meeting.json`'a atomik yazar. Yazma dosya koordinatörüyle yapılır: klasör iCloud'daysa
+/// eşitleme süreciyle çakışmaz (yerelde de zararsızdır).
 public func saveMeeting(record: MeetingRecord, directory: URL) throws {
     let file: URL = directory.appending(path: meetingFileName)
+    let data: Data
     do {
-        try meetingEncoder().encode(record).write(to: file, options: .atomic)
+        data = try meetingEncoder().encode(record)
     } catch {
+        throw StorageError.writeFailed(path: file.path, reason: error.localizedDescription)
+    }
+    var coordinationError: NSError?
+    var writeError: (any Error)?
+    NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: file, options: .forReplacing, error: &coordinationError) { (url: URL) -> Void in
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            writeError = error
+        }
+    }
+    if let error = coordinationError ?? writeError {
         throw StorageError.writeFailed(path: file.path, reason: error.localizedDescription)
     }
 }
@@ -68,32 +84,62 @@ public func deleteAudioFiles(directory: URL) throws {
     }
 }
 
+/// Klasörlerdeki tüm toplantılar (verilen sırayla; her klasörde yeniden eskiye). Aynı toplantı iki klasörde varsa ilk
+/// klasördeki kullanılır (yereldeki: kayıt ya da işleme orada sürer).
+public func loadMeetings(directories: [URL]) -> MeetingLoadResult {
+    directories.map { loadMeetings(sessionsDirectory: $0) }.reduce(MeetingLoadResult(meetings: [], failures: [], downloading: [])) { (result: MeetingLoadResult, next: MeetingLoadResult) -> MeetingLoadResult in
+        let known: Set<String> = Set(result.meetings.map(\.id))
+        return MeetingLoadResult(
+            meetings: result.meetings + next.meetings.filter { !known.contains($0.id) },
+            failures: result.failures + next.failures,
+            downloading: result.downloading + next.downloading.filter { !known.contains($0) }
+        )
+    }
+}
+
 /// `Sessions` altındaki tüm `meeting.json`'ları okur (yeniden eskiye). `meeting.json`'u olmayan klasörler atlanır.
+/// iCloud'dan henüz inmemiş dosyanın indirmesi başlatılır ve `downloading`'e yazılır (okuma beklemez, arayüz donmaz).
 public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
     // Henüz hiç kayıt yapılmadıysa klasör yoktur: boş liste doğru sonuçtur.
     guard FileManager.default.fileExists(atPath: sessionsDirectory.path) else {
-        return MeetingLoadResult(meetings: [], failures: [])
+        return MeetingLoadResult(meetings: [], failures: [], downloading: [])
     }
     let folders: [URL]
     do {
         folders = try FileManager.default.contentsOfDirectory(at: sessionsDirectory, includingPropertiesForKeys: nil)
     } catch {
-        return MeetingLoadResult(meetings: [], failures: [MeetingLoadFailure(folder: sessionsDirectory.lastPathComponent, reason: String(describing: error))])
+        return MeetingLoadResult(meetings: [], failures: [MeetingLoadFailure(folder: sessionsDirectory.lastPathComponent, reason: String(describing: error))], downloading: [])
     }
     var meetings: [MeetingRecord] = []
     var failures: [MeetingLoadFailure] = []
+    var downloading: [String] = []
     for folder in folders.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
         let file: URL = folder.appending(path: meetingFileName)
         guard FileManager.default.fileExists(atPath: file.path) else {
             continue
         }
         do {
+            guard try isDownloaded(file: file) else {
+                downloading.append(folder.lastPathComponent)
+                continue
+            }
+            try resolveCloudConflicts(file: file)
             meetings.append(try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: file)))
         } catch {
             failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
         }
     }
-    return MeetingLoadResult(meetings: meetings, failures: failures)
+    return MeetingLoadResult(meetings: meetings, failures: failures, downloading: downloading)
+}
+
+/// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. İnmemişse indirmesi başlatılır ve false döner.
+public func isDownloaded(file: URL) throws -> Bool {
+    let values: URLResourceValues = try file.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
+    guard values.isUbiquitousItem == true, values.ubiquitousItemDownloadingStatus != .current else {
+        return true
+    }
+    try FileManager.default.startDownloadingUbiquitousItem(at: file)
+    return false
 }
 
 /// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Saf fonksiyondur.

@@ -36,7 +36,7 @@ import Testing
         let output: Pipe = Pipe()
         input.fileHandleForWriting.write(Data((requests.joined(separator: "\n") + "\n").utf8))
         try input.fileHandleForWriting.close()
-        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectory: sessions, version: "test")
+        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectories: [sessions], version: "test")
         try output.fileHandleForWriting.close()
         let lines: [String] = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n").map(String.init)
         // Bildirime yanıt yok: 10 yanıt.

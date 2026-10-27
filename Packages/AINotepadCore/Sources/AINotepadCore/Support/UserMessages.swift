@@ -123,6 +123,12 @@ private func storageMessage(error: StorageError) -> String {
         String(localized: "Dosya silinemedi: \((path as NSString).lastPathComponent).")
     case .directoryUnavailable(let path, _):
         String(localized: "Klasöre erişilemedi: \((path as NSString).lastPathComponent).")
+    case .iCloudUnavailable:
+        String(localized: "iCloud kullanılamıyor. Ayarlar'da iCloud'a giriş yapıp iCloud Drive'ı aç.")
+    case .alreadyExists(let path):
+        String(localized: "Aynı toplantı hedefte zaten var: \((path as NSString).lastPathComponent). İki kopyayı karşılaştırıp birini sil.")
+    case .moveFailed(let path, _):
+        String(localized: "Toplantı taşınamadı: \((path as NSString).lastPathComponent). İnternet bağlantısını kontrol edip yeniden dene.")
     }
 }
 

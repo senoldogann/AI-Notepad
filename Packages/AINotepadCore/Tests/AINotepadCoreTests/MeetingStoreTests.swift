@@ -36,6 +36,22 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(result.failures.map(\.folder) == ["20261026-110000"])
     }
 
+    // iCloud açıkken liste yerel + iCloud klasörünün birleşimidir; aynı toplantı ikisinde varsa yereldeki (işlemesi
+    // orada süren) kullanılır.
+    @Test func loadingMergesDirectoriesPreferringFirst() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        for (root, id, title) in [(local, "20261027-090000", "Yerel"), (cloud, "20261027-090000", "Eski"), (cloud, "20261026-080000", "iCloud")] {
+            let folder: URL = root.appending(path: id, directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try saveMeeting(record: record(id: id, startedAt: Date(), status: .done, audioDeleted: false).with(folder: title), directory: folder)
+        }
+        let result: MeetingLoadResult = loadMeetings(directories: [local, cloud])
+        #expect(result.meetings.map(\.folder) == ["Yerel", "iCloud"])
+        #expect(result.failures.isEmpty)
+        #expect(result.downloading.isEmpty)
+    }
+
     @Test func recoveryMarksStaleRecordingsInterrupted() {
         let records: [MeetingRecord] = [
             record(id: "a", startedAt: Date(), status: .recording, audioDeleted: false),
