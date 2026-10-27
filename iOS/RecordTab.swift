@@ -8,13 +8,14 @@ struct RecordTab: View {
     let recorder: PhoneRecorder
     let store: PhoneStore
     let router: PhoneRouter
+    let calendar: PhoneCalendar
 
     var body: some View {
         NavigationStack {
             Group {
                 switch recorder.phase {
                 case .idle, .starting:
-                    RecordHome(recorder: recorder, store: store, router: router)
+                    RecordHome(recorder: recorder, store: store, router: router, calendar: calendar)
                 case .recording, .finishing:
                     LiveRecordingView(recorder: recorder)
                 }
@@ -30,6 +31,7 @@ private struct RecordHome: View {
     let recorder: PhoneRecorder
     let store: PhoneStore
     let router: PhoneRouter
+    let calendar: PhoneCalendar
 
     var body: some View {
         let openTasks: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: store.meetings).filter { !isTaskDone(record: $0.record, task: $0.task) }
@@ -51,6 +53,7 @@ private struct RecordHome: View {
                 if let id = recorder.lastMeetingID, let step = recorder.processingSteps[id] {
                     PreparingCard(step: step)
                 }
+                UpcomingCalendarSection(calendar: calendar, router: router)
                 if !openTasks.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         PhoneSectionHeader(title: "Sana düşen görevler", actionTitle: "Tümü") { router.tab = .tasks }

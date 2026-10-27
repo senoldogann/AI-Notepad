@@ -29,6 +29,8 @@ private struct ActiveRecording {
     let startedAt: Date
     let handle: LiveSessionHandle
     let keys: ProcessingKeys
+    /// Kaydın bağlandığı takvim etkinliği (başlık ve katılımcılar kayda geçer); yoksa nil.
+    let linkedMeeting: CalendarMeeting?
 }
 
 /// iPhone kaydı: yüz yüze toplantı (odadaki herkes telefon mikrofonundan gelir ve konuşmacılara ayrılır). Canlı metin
@@ -79,6 +81,8 @@ final class PhoneRecorder {
     @ObservationIgnored private var processingTasks: [String: Task<Void, Never>] = [:]
     /// Canlı etkinlik en fazla bu sıklıkta güncellenir (sistem sık güncellemeyi kısar).
     @ObservationIgnored private var lastActivityUpdate: Date = .distantPast
+    /// Kayıt başlarken takvimde süren toplantı (takvim açıksa; uygulama bağlar); başlık ve katılımcılar kayda geçer.
+    @ObservationIgnored var currentCalendarMeeting: (@MainActor () -> CalendarMeeting?)?
 
     init(store: PhoneStore) {
         self.store = store
@@ -109,6 +113,8 @@ final class PhoneRecorder {
         }
         let keys: ProcessingKeys = ProcessingKeys(elevenLabs: elevenLabsKey, llm: await llmProviderReportingFailure())
         let started: Date = Date()
+        // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
+        let linkedMeeting: CalendarMeeting? = currentCalendarMeeting?()
         let directory: URL
         let audio: AsyncStream<[Float]>
         do {
@@ -133,13 +139,14 @@ final class PhoneRecorder {
             config: CloudSessionConfig(
                 languageMode: languageMode, recordingDirectory: directory, deepgramKey: deepgramKey, elevenLabsKey: elevenLabsKey,
                 firstDiarizationAfterSec: 15, diarizationIntervalSec: 60, diarizationWindowSec: 120, minDiarizationAudioSec: 5,
-                languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil, automaticStartLanguage: phonePrimaryMeetingLanguage()
+                languageConfidence: 0.8, keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: [], limit: 30),
+                voiceEmbedder: nil, automaticStartLanguage: phonePrimaryMeetingLanguage()
             ),
             // Yüz yüze: "Sen" akışı yoktur, odadaki herkes "Diğerleri" akışında konuşmacılara ayrılır.
             meAudio: finishedAudioStream(),
             othersAudio: metered
         )
-        let recording: ActiveRecording = ActiveRecording(directory: directory, startedAt: started, handle: handle, keys: keys)
+        let recording: ActiveRecording = ActiveRecording(directory: directory, startedAt: started, handle: handle, keys: keys, linkedMeeting: linkedMeeting)
         active = recording
         startedAt = started
         phase = .recording
@@ -172,7 +179,7 @@ final class PhoneRecorder {
             let id: String = recording.directory.lastPathComponent
             beginBackgroundTask(id: id)
             // Sistem görevi kullanıcının "Bitir" anında istenir: istek yalnızca uygulama öndeyken kabul edilir.
-            submitContinuedProcessing(id: id, subtitle: continuedProcessingSubtitle(title: String(localized: "Toplantı"), startedAt: recording.startedAt))
+            submitContinuedProcessing(id: id, subtitle: continuedProcessingSubtitle(title: recording.linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: recording.startedAt))
         }
         levels.stop()
         microphone.stop()
@@ -609,8 +616,8 @@ final class PhoneRecorder {
 
     /// Canlı transkript ve çevirilerden toplantı kaydı.
     private func liveRecord(recording: ActiveRecording, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
-        MeetingRecord(
-            id: recording.directory.lastPathComponent, title: String(localized: "Toplantı"), startedAt: recording.startedAt, endedAt: endedAt,
+        let base: MeetingRecord = MeetingRecord(
+            id: recording.directory.lastPathComponent, title: recording.linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: recording.startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: transcript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
@@ -618,6 +625,8 @@ final class PhoneRecorder {
         )
         .with(highlights: highlights)
         .with(myNotes: myNotes)
+        // Mac'teki gibi: takvim etkinliğine bağlı kayıt katılımcıları ve etkinlik kimliğini taşır.
+        return recording.linkedMeeting.map { base.with(attendees: $0.attendees).with(calendarEventID: $0.id) } ?? base
     }
 
     /// Kayıt sürerken her 30 sn'de transkript saklanır: uygulama kapanırsa metin toplantıda kalır.

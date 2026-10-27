@@ -5,6 +5,7 @@ import SwiftUI
 /// Ayarlar: bulut anahtarları, toplantı dili, ad ve sürüm (iCloud eşitleme aşama 4'te).
 struct PhoneSettingsTab: View {
     let store: PhoneStore
+    let calendar: PhoneCalendar
     /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
     let excludedFromMoves: Set<String>
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
@@ -75,6 +76,7 @@ struct PhoneSettingsTab: View {
                 } footer: {
                     Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.")
                 }
+                CalendarSettingsSection(calendar: calendar)
                 Section("Toplantı") {
                     Picker("Ana toplantı dili", selection: $primaryLanguage) {
                         ForEach(MeetingLanguage.allCases, id: \.rawValue) { (language: MeetingLanguage) in
@@ -91,6 +93,54 @@ struct PhoneSettingsTab: View {
                 }
             }
             .navigationTitle("Ayarlar")
+        }
+    }
+}
+
+/// Takvim: varsayılan kapalı; açılınca iOS izni sorar. İzin yoksa nedeni ve iPhone Ayarları'na giden düğme görünür.
+private struct CalendarSettingsSection: View {
+    let calendar: PhoneCalendar
+    @AppStorage(PhoneSettingsKey.calendarEnabled) private var isEnabled: Bool = false
+    /// İzin isteniyor (iOS sorusu açık).
+    @State private var isRequesting: Bool = false
+    @Environment(\.openURL) private var openURL: OpenURLAction
+
+    var body: some View {
+        Section {
+            Toggle("Takvimi kullan", isOn: Binding<Bool>(
+                get: { isEnabled },
+                set: { (enabled: Bool) -> Void in
+                    guard enabled else {
+                        calendar.disable()
+                        return
+                    }
+                    isRequesting = true
+                    Task {
+                        await calendar.enable()
+                        isRequesting = false
+                    }
+                }
+            ))
+            .disabled(isRequesting)
+            switch calendar.state {
+            case .denied:
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Takvime erişim izni yok. iPhone Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e tam erişim ver.", systemImage: "calendar.badge.exclamationmark")
+                        .foregroundStyle(.orange)
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        Button("Ayarlar'ı aç") { openURL(url) }
+                    }
+                }
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            case .off, .on:
+                EmptyView()
+            }
+        } header: {
+            Text("Takvim")
+        } footer: {
+            Text("Kayıt ekranında sıradaki toplantılar görünür; süren bir toplantıda başlattığın kayıt onun adını ve katılımcılarını alır (adlar tanımaya da yardım eder).")
         }
     }
 }

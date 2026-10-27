@@ -64,6 +64,8 @@ targets:
       - path: App/Localizable.xcstrings
       - path: App/Fonts/InterVariable.ttf
         buildPhase: resources
+      # Takvim bağlantısı (EventKit) Mac'le aynı.
+      - path: App/EventKitConnector.swift
     dependencies:
       - package: AINotepadCore
         product: AINotepadCore
@@ -100,6 +102,8 @@ targets:
         # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
         UIBackgroundModes: [audio]
         UIAppFonts: [InterVariable.ttf]
+        # Takvim yalnızca Ayarlar'da açılınca okunur (sıradaki toplantılar, kaydı süren etkinliğe bağlama).
+        NSCalendarsFullAccessUsageDescription: "AI-Notepad sıradaki toplantılarını gösterir ve kaydı süren toplantının adı ve katılımcılarıyla kaydeder."
         # Kayıt kilit ekranında ve Dynamic Island'da canlı etkinlik olarak görünür.
         NSSupportsLiveActivities: true
         # Kayıttan sonra işleme uygulamadan çıkılsa da sürer (BGContinuedProcessingTask); kimlik
