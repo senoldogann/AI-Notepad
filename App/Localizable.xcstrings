@@ -397,6 +397,16 @@
         }
       }
     },
+    "%lld an işaretlendi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld moments marked"
+          }
+        }
+      }
+    },
     "%lld dk": {
       "localizations": {
         "en": {
@@ -1250,6 +1260,16 @@
         }
       }
     },
+    "Başlatılıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting…"
+          }
+        }
+      }
+    },
     "Başlıkta, notta ya da metinde başka bir kelimeyle ara.": {
       "localizations": {
         "en": {
@@ -1492,6 +1512,16 @@
         }
       }
     },
+    "Bitiriliyor… Son cümleler ve konuşmacılar tamamlanıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing… completing the last sentences and speakers."
+          }
+        }
+      }
+    },
     "Bitti": {
       "localizations": {
         "en": {
@@ -1554,6 +1584,16 @@
         }
       }
     },
+    "Bu anı işaretle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark this moment"
+          }
+        }
+      }
+    },
     "Bu anı işaretle (notta öne çıkar)": {
       "localizations": {
         "en": {
@@ -1592,6 +1632,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assign this part to"
+          }
+        }
+      }
+    },
+    "Bu hafta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This week"
           }
         }
       }
@@ -1682,6 +1732,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add this configuration to the client's MCP settings (Claude Desktop: Settings › Developer › Edit Config). The client lists, searches and reads your meetings, notes and transcripts; it only reads and never changes anything. Notes and transcripts it reads are sent to the client's AI provider (e.g. Anthropic, OpenAI)."
+          }
+        }
+      }
+    },
+    "Bugün": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
           }
         }
       }
@@ -2212,6 +2272,16 @@
         }
       }
     },
+    "Dokun, dinlemeye başlasın": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to start listening"
+          }
+        }
+      }
+    },
     "Dosya okunamadı: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -2282,6 +2352,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stopped"
+          }
+        }
+      }
+    },
+    "Dün": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday"
           }
         }
       }
@@ -3090,6 +3170,16 @@
         }
       }
     },
+    "Kaydettiğini katılımcılara söyle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell participants you're recording"
+          }
+        }
+      }
+    },
     "Kaydı Ana sayfadaki \"Kaydı başlat\" düğmesiyle, kısayolla ya da menüden başlat. Kayıt sırasında cam panel canlı metni gösterir; toplantı bitince toplantının sayfası açılır: görevlerin en üstte.": {
       "localizations": {
         "en": {
@@ -3441,6 +3531,16 @@
         }
       }
     },
+    "Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telling participants before recording is a legal requirement in most places. When the period ends, audio files are deleted and the text and note remain; audio of interrupted or failed meetings is kept twice as long."
+          }
+        }
+      }
+    },
     "Kayıttan önce tamamlanmalı": {
       "localizations": {
         "en": {
@@ -3497,6 +3597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your template: describe what the note should emphasise"
+          }
+        }
+      }
+    },
+    "Kim ne kadar konuştu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who spoke how much"
           }
         }
       }
@@ -4546,6 +4656,16 @@
         }
       }
     },
+    "Not, transkript ve ses kalıcı olarak silinir; geri alınamaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The note, transcript and audio are deleted permanently; this can't be undone."
+          }
+        }
+      }
+    },
     "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
       "localizations": {
         "en": {
@@ -4586,6 +4706,16 @@
         }
       }
     },
+    "Notu paylaş": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share note"
+          }
+        }
+      }
+    },
     "Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde": {
       "localizations": {
         "en": {
@@ -4616,12 +4746,12 @@
         }
       }
     },
-    "Odadaki konuşmayı telefon mikrofonuyla yazıya döker, konuşmacıları ayırır ve Türkçeye çevirir; bitince notu yazar. Telefondaki Teams/Zoom görüşmeleri kaydedilemez (iOS izin vermez); onlar için Mac'i kullan.": {
+    "Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transcribes the room with the phone's microphone, separates speakers and translates into Turkish; writes the note when you finish. Teams/Zoom calls on the phone can't be recorded (iOS doesn't allow it); use your Mac for those."
+            "value": "Everyone in the room is separated into speakers with live Turkish; the note is written when you finish."
           }
         }
       }
@@ -5784,6 +5914,16 @@
         }
       }
     },
+    "Telefondaki Teams/Zoom görüşmeleri kaydedilemez (iOS izin vermez); onlar için Mac'i kullan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teams/Zoom calls on the phone can't be recorded (iOS doesn't allow it); use your Mac for those."
+          }
+        }
+      }
+    },
     "Tema": {
       "localizations": {
         "en": {
@@ -5973,6 +6113,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't delete the meeting: %@"
+          }
+        }
+      }
+    },
+    "Toplantı silinsin mi?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this meeting?"
           }
         }
       }
@@ -6294,6 +6444,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merge all: %@ →"
+          }
+        }
+      }
+    },
+    "Tümünü gör": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See all"
           }
         }
       }
@@ -6843,16 +7003,6 @@
         }
       }
     },
-    "Yüz yüze toplantını kaydet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Record your in-person meeting"
-          }
-        }
-      }
-    },
     "Yüz yüze: mikrofon odadaki herkesi kaydediyor": {
       "localizations": {
         "en": {
@@ -7060,6 +7210,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "duration"
+          }
+        }
+      }
+    },
+    "tamamlandı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "done"
           }
         }
       }
@@ -7371,6 +7531,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "e.g. Product manager, Acme"
+          }
+        }
+      }
+    },
+    "Örnek sorular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Example questions"
           }
         }
       }

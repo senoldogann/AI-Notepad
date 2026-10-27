@@ -50,6 +50,10 @@ final class PhoneRecorder {
     /// Son biten kaydın kimliği (hazırlanma kartı bunu izler).
     private(set) var lastMeetingID: String?
     var languageMode: LanguageMode = .automatic
+    /// Kayıtta işaretlenen anlar (not onları öne çıkarır).
+    private(set) var highlights: [Highlight] = []
+    /// "Katılımcılara haber ver" kartı bu kayıtta görünür (ayar açıksa kayıt başında açılır, kapatılabilir).
+    var consentReminderVisible: Bool = false
     let levels: AudioLevels = AudioLevels(count: 36, interval: 0.08)
 
     @ObservationIgnored private let store: PhoneStore
@@ -83,6 +87,7 @@ final class PhoneRecorder {
         translationQueue = []
         lockedLanguage = nil
         errorMessages = []
+        highlights = []
         let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
         let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
         guard case .success(let deepgramKey) = deepgram, case .success(let elevenLabsKey) = elevenLabs else {
@@ -129,6 +134,7 @@ final class PhoneRecorder {
         saveRecord(record: liveRecord(recording: recording, status: .recording, endedAt: nil), directory: directory)
         startCheckpoints()
         startActivity(startedAt: started)
+        consentReminderVisible = UserDefaults.standard.bool(forKey: PhoneSettingsKey.consentReminder)
         Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public)")
         let sessionGeneration: Int = generation
         Task { [weak self] in
@@ -152,6 +158,14 @@ final class PhoneRecorder {
         levels.stop()
         microphone.stop()
         updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true), force: true)
+    }
+
+    /// Şu anı işaretler: notta öne çıkar (söz bittikten sonra basılır; aralığı `Highlight` belirler).
+    func markMoment() {
+        guard phase == .recording, let startedAt else {
+            return
+        }
+        highlights.append(Highlight(startSec: Date().timeIntervalSince(startedAt), endSec: nil))
     }
 
     /// Kayıt sırasında dili değiştirir; o andan sonraki metin yeni dille yazılır.
@@ -210,6 +224,7 @@ final class PhoneRecorder {
             levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
         }
         phase = .recording
+        consentReminderVisible = true
         startActivity(startedAt: startedAt ?? Date())
         updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: sample[2].text, speaker: speakerLabel(speaker: .others, person: 2), isFinishing: false), force: true)
     }
@@ -269,14 +284,16 @@ final class PhoneRecorder {
         levels.stop()
         endActivity()
         phase = .idle
-        startedAt = nil
+        consentReminderVisible = false
         guard let finished = active else {
+            startedAt = nil
             return
         }
         active = nil
         // Biten kaydın geç çevirisi artık yazılmaz.
         generation += 1
         let record: MeetingRecord = liveRecord(recording: finished, status: .processing, endedAt: Date())
+        startedAt = nil
         lastMeetingID = record.id
         Self.logger.info("Kayıt bitti, toplantı: \(record.id, privacy: .public)")
         process(record: record, directory: finished.directory, keys: finished.keys)
@@ -450,6 +467,7 @@ final class PhoneRecorder {
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
+        .with(highlights: highlights)
     }
 
     /// Kayıt sürerken her 30 sn'de transkript saklanır: uygulama kapanırsa metin toplantıda kalır.

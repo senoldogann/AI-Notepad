@@ -145,6 +145,7 @@ struct AskTab: View {
             }
             .background(Theme.background)
             .navigationTitle("Sor")
+            .navigationBarTitleDisplayMode(ask.exchanges.isEmpty ? .large : .inline)
             .toolbar {
                 if !ask.exchanges.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -160,10 +161,33 @@ struct AskTab: View {
     private let bottomID: String = "ask-bottom"
 
     private var intro: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
-                .appFont(size: 15, weight: .regular)
-                .foregroundStyle(Theme.muted)
+        let minutes: Int = store.meetings.compactMap { meetingDurationMinutes(record: $0) }.reduce(0, +)
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .appFont(size: 20, weight: .medium)
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("Toplantılarına sor")
+                    .appFont(size: 28, weight: .regular)
+                    .tracking(-0.5)
+                    .foregroundStyle(.white)
+                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    GlassChip(text: String(localized: "\(store.meetings.count) toplantı"), systemImage: nil)
+                    GlassChip(text: String(localized: "\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"), systemImage: nil)
+                }
+                .padding(.top, 2)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { LivingFilmGradient(seed: "ask", palette: .violet) }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .environment(\.colorScheme, .dark)
+            PhoneSectionHeader(title: "Örnek sorular", actionTitle: nil, action: nil)
+                .padding(.top, 4)
             ForEach(examples, id: \.text) { (example: (symbol: String, text: String)) in
                 Button {
                     ask.ask(question: String(localized: String.LocalizationValue(example.text)))
@@ -175,17 +199,19 @@ struct AskTab: View {
                             .frame(width: 22)
                         Text(LocalizedStringKey(example.text))
                             .appFont(size: 15, weight: .regular)
+                            .foregroundStyle(Theme.ink)
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right")
                             .appFont(size: 11, weight: .semibold)
                             .foregroundStyle(Theme.muted.opacity(0.7))
                     }
-                    .padding(14)
+                    .padding(15)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableCardStyle())
                 .disabled(store.meetings.isEmpty)
             }
         }

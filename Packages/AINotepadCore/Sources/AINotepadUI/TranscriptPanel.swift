@@ -596,7 +596,7 @@ struct BlockView: View {
     }
 
     private var speakerLabelText: some View {
-        Text(speakerLabel(speaker: block.speaker, person: block.person).uppercased(with: interfaceLocale()))
+        Text(interfaceUppercased(text: speakerLabel(speaker: block.speaker, person: block.person)))
             .appFont(size: 11, weight: .semibold)
             .tracking(DesignTokens.labelTracking)
             .foregroundStyle(.secondary)
@@ -686,7 +686,7 @@ struct AssistantCardView: View {
 
     private var title: String {
         switch card {
-        case .loading(let title): title.uppercased(with: interfaceLocale())
+        case .loading(let title): interfaceUppercased(text: title)
         case .summary: String(localized: "NE KAÇIRDIM?")
         case .answer: String(localized: "CEVAP")
         case .failed: String(localized: "HATA")

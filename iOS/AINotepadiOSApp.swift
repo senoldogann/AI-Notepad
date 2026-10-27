@@ -14,6 +14,7 @@ struct AINotepadiOSApp: App {
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
 
     init() {
+        registerPhoneDefaults()
         let store: PhoneStore = PhoneStore()
         let recorder: PhoneRecorder = PhoneRecorder(store: store)
         let router: PhoneRouter = PhoneRouter(
@@ -37,6 +38,7 @@ struct AINotepadiOSApp: App {
                 .task {
                     store.reload()
                     await store.cloud.start { store.reload() }
+                    store.applyRetention(now: Date())
                     #if DEBUG
                     if CommandLine.arguments.contains("--ornek-kayit") {
                         recorder.showSampleRecording()
@@ -108,7 +110,7 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $router.tab) {
             Tab("Kayıt", systemImage: "record.circle", value: PhoneTab.record) {
-                RecordTab(recorder: recorder)
+                RecordTab(recorder: recorder, store: store, router: router)
             }
             Tab("Toplantılar", systemImage: "list.bullet.rectangle", value: PhoneTab.meetings) {
                 MeetingsTab(store: store, router: router, player: player, isRecording: recorder.phase != .idle)
@@ -175,6 +177,35 @@ final class PhoneStore {
             upsert(record: updated)
         } catch {
             problems = appendUnique(messages: problems, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
+        }
+    }
+
+    /// Toplantıyı kalıcı olarak siler (onay arayüzde sorulur). Kayıttaki ya da işlenen toplantı silinmez.
+    func deleteMeeting(id: String) throws {
+        guard let record = meetings.first(where: { $0.id == id }), record.status != .recording, record.status != .processing else {
+            throw StorageError.deleteFailed(path: id, reason: "kayıtta ya da işleniyor")
+        }
+        try deleteMeetingDirectory(directory: try sessionDirectory(id: id))
+        meetings.removeAll { $0.id == id }
+    }
+
+    /// Saklama süresi (Ayarlar) dolan toplantıların sesini ve ses izlerini siler; metin ve not kalır. Silinemeyenin
+    /// nedeni sorunlarda görünür, bir sonraki açılışta yeniden denenir.
+    func applyRetention(now: Date) {
+        let days: Int = min(365, max(7, UserDefaults.standard.integer(forKey: PhoneSettingsKey.audioRetentionDays)))
+        for id in audioToDelete(records: meetings, now: now, retentionDays: days) {
+            guard let record = meetings.first(where: { $0.id == id }) else {
+                continue
+            }
+            do {
+                let directory: URL = try sessionDirectory(id: id)
+                try deleteAudioFiles(directory: directory)
+                let updated: MeetingRecord = record.withAudioDeleted().with(voiceprints: nil)
+                try saveMeeting(record: updated, directory: directory)
+                upsert(record: updated)
+            } catch {
+                problems = appendUnique(messages: problems, message: userFacingMessage(error: error))
+            }
         }
     }
 

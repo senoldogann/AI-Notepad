@@ -6,6 +6,19 @@ import os
 enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     static let userName: String = "userName"
+    /// Kayıt başında "katılımcılara haber ver" kartı.
+    static let consentReminder: String = "consentReminder"
+    /// Ses dosyalarının saklama süresi (gün).
+    static let audioRetentionDays: String = "audioRetentionDays"
+}
+
+/// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).
+func registerPhoneDefaults() {
+    UserDefaults.standard.register(defaults: [
+        PhoneSettingsKey.consentReminder: true,
+        PhoneSettingsKey.audioRetentionDays: 30,
+        PhoneSettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
+    ])
 }
 
 private let phoneSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "PhoneSettings")

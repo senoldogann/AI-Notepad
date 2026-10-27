@@ -2,7 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Toplantılar: film gradyanlı kartlar (en yeni önce) ve arama; dokununca toplantının notu ve transkripti.
+/// Toplantılar: tarihe göre gruplanmış film gradyanlı kartlar ve arama; uzun basınca silme. Dokununca toplantı sayfası.
 struct MeetingsTab: View {
     let store: PhoneStore
     @Bindable var router: PhoneRouter
@@ -10,83 +10,86 @@ struct MeetingsTab: View {
     /// Kayıt sürüyorsa çalma kapalıdır (mikrofon ve hoparlör aynı ses oturumunu paylaşamaz).
     let isRecording: Bool
     @State private var query: String = ""
+    @State private var pendingDelete: MeetingRecord?
+    @State private var deleteError: String?
 
     var body: some View {
+        let sections: [MeetingSection] = meetingSections(
+            records: filterMeetings(records: store.meetings, query: query), now: Date(), calendar: .current, locale: interfaceLocale()
+        )
         NavigationStack(path: $router.meetingsPath) {
             ScrollView {
-                LazyVStack(spacing: 14) {
-                    ForEach(store.problems, id: \.self) { (problem: String) in
-                        Label(problem, systemImage: "exclamationmark.triangle")
-                            .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(.orange)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    PhoneErrorList(messages: store.problems + [deleteError].compactMap { $0 })
+                    if store.downloadingCount > 0 {
+                        Label("\(store.downloadingCount) toplantı iCloud'dan iniyor…", systemImage: "icloud.and.arrow.down")
+                            .appFont(size: 13, weight: .regular)
+                            .foregroundStyle(Theme.muted)
                     }
                     if store.meetings.isEmpty {
                         EmptyStateCard(
                             symbol: "list.bullet.rectangle", title: "Henüz toplantı yok",
                             message: "Kayıt sekmesinden yüz yüze bir toplantıyı kaydet; Mac'teki toplantıların da iCloud eşitlemesiyle burada görünecek."
                         )
+                    } else if sections.isEmpty {
+                        EmptyStateCard(symbol: "magnifyingglass", title: "Eşleşen toplantı yok", message: nil)
                     }
-                    ForEach(filterMeetings(records: store.meetings, query: query), id: \.id) { (record: MeetingRecord) in
-                        NavigationLink(value: record.id) {
-                            MeetingCard(record: record)
+                    ForEach(sections) { (section: MeetingSection) in
+                        Text(section.title)
+                            .appFont(size: 13, weight: .semibold)
+                            .tracking(DesignTokens.labelTracking)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Theme.muted)
+                            .padding(.top, 10)
+                        ForEach(section.meetings, id: \.id) { (record: MeetingRecord) in
+                            NavigationLink(value: record.id) {
+                                PhoneMeetingCard(record: record, height: 132)
+                            }
+                            .buttonStyle(PressableCardStyle())
+                            .contextMenu {
+                                Button("Sil", systemImage: "trash", role: .destructive) { pendingDelete = record }
+                                    .disabled(record.status == .recording || record.status == .processing)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
+            .scrollIndicators(.hidden)
             .background(Theme.background)
             .navigationTitle("Toplantılar")
             .searchable(text: $query, prompt: "Toplantılarda ara")
             .navigationDestination(for: String.self) { (id: String) in
                 if let record = store.meetings.first(where: { $0.id == id }) {
-                    MeetingReadView(record: record, store: store, player: player, isRecording: isRecording)
+                    MeetingReadView(record: record, store: store, player: player, isRecording: isRecording) {
+                        pendingDelete = record
+                    }
                 }
             }
             .refreshable { store.reload() }
+            .confirmationDialog(
+                "Toplantı silinsin mi?", isPresented: Binding<Bool>(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                titleVisibility: .visible, presenting: pendingDelete
+            ) { (record: MeetingRecord) in
+                Button("Sil", role: .destructive) { delete(record: record) }
+            } message: { (_: MeetingRecord) in
+                Text("Not, transkript ve ses kalıcı olarak silinir; geri alınamaz.")
+            }
         }
     }
-}
 
-/// Toplantı kartı: kapak gradyanı üstünde başlık, tarih, süre ve durum.
-private struct MeetingCard: View {
-    let record: MeetingRecord
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Spacer(minLength: 0)
-            Text(record.note?.title ?? record.title)
-                .appFont(size: 17, weight: .semibold)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-            Text(cardSubtitle)
-                .appFont(size: 12, weight: .regular)
-                .opacity(0.85)
+    private func delete(record: MeetingRecord) {
+        if player.meetingID == record.id {
+            player.stop()
         }
-        .foregroundStyle(.white)
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .bottomLeading)
-        .background { CoverBackground(seed: record.id) }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var cardSubtitle: String {
-        let date: String = record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))
-        let minutes: [String] = meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? []
-        return ([date] + minutes + statusText(status: record.status)).joined(separator: " · ")
-    }
-}
-
-/// Bitmemiş toplantının durumu (kartta); bitmişse boş. Saf fonksiyondur.
-private func statusText(status: MeetingStatus) -> [String] {
-    switch status {
-    case .recording: [String(localized: "Kayıtta")]
-    case .processing: [String(localized: "Hazırlanıyor")]
-    case .failed: [String(localized: "Hata")]
-    case .interrupted: [String(localized: "Yarıda kaldı")]
-    case .done: []
+        do {
+            try store.deleteMeeting(id: record.id)
+            deleteError = nil
+            router.meetingsPath.removeAll { $0 == record.id }
+        } catch {
+            deleteError = String(localized: "Toplantı silinemedi: \(userFacingMessage(error: error))")
+        }
     }
 }
 
@@ -96,83 +99,110 @@ private enum MeetingPane: Hashable {
     case transcript
 }
 
-/// Toplantı sayfası: kapak (tarih, başlık, süre, "Dinle"), Özet (görevler, özet, kararlar, konu akışı) ve Transkript
-/// (konuşmacılı paragraflar; çalarken o anki kelime vurgulanır, dokununca oradan çalar).
+/// Toplantı sayfası: kapak (tarih, başlık, çipler, konuşmacı şeridi, Dinle, paylaş), Özet (görevler, özet, bir bakışta,
+/// konuşma payları, kararlar, konu akışı, diğer görevler, sözlük) ve Transkript (konuşmacılı paragraflar; çalarken o
+/// anki kelime vurgulanır, dokununca oradan çalar). Sağ üstte paylaş ve sil.
 struct MeetingReadView: View {
     let record: MeetingRecord
     let store: PhoneStore
     let player: MeetingAudioPlayer
     let isRecording: Bool
+    let onDelete: @MainActor () -> Void
     @State private var pane: MeetingPane = .summary
     @State private var errorMessage: String?
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
+        let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
         ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    hero
+                    hero(paragraphs: paragraphs)
                     if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .appFont(size: 13, weight: .regular)
-                            .foregroundStyle(.orange)
+                        PhoneErrorList(messages: [errorMessage])
                     }
                     if let failure = record.failureMessage ?? record.notice {
-                        Text(failure)
+                        Label(failure, systemImage: "info.circle")
                             .appFont(size: 13, weight: .regular)
                             .foregroundStyle(Theme.muted)
                     }
-                    Picker("Görünüm", selection: $pane) {
-                        Text("Özet").tag(MeetingPane.summary)
-                        Text("Transkript").tag(MeetingPane.transcript)
-                    }
-                    .pickerStyle(.segmented)
+                    PillTabs(selection: $pane, options: [(MeetingPane.summary, "Özet"), (MeetingPane.transcript, "Transkript")])
                     switch pane {
                     case .summary:
-                        MeetingSummary(record: record, store: store, canPlay: canPlay) { (startSec: Double) -> Void in
+                        MeetingSummary(record: record, paragraphs: paragraphs, store: store, canPlay: canPlay) { (startSec: Double) -> Void in
                             play(from: startSec)
                         }
+                        .transition(.opacity)
                     case .transcript:
-                        TranscriptList(record: record, player: player, canPlay: canPlay, proxy: proxy) { (startSec: Double) -> Void in
+                        TranscriptList(record: record, paragraphs: paragraphs, player: player, canPlay: canPlay, proxy: proxy) { (startSec: Double) -> Void in
                             play(from: startSec)
                         }
+                        .transition(.opacity)
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
             }
+            .scrollIndicators(.hidden)
         }
         .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if let note = record.note {
+                        ShareLink(item: shareText(record: record, note: note, language: nil)) {
+                            Label("Notu paylaş", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    Button("Sil", systemImage: "trash", role: .destructive, action: onDelete)
+                        .disabled(record.status == .recording || record.status == .processing)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("Diğer")
+            }
+        }
         #if DEBUG
         .task {
             // `--cal <sn>` (yalnız Debug, görsel kontrol): transkripti açıp o saniyeden çalar.
             if let index = CommandLine.arguments.firstIndex(of: "--cal"), CommandLine.arguments.indices.contains(index + 1),
                let startSec = Double(CommandLine.arguments[index + 1]), player.meetingID == nil {
-                pane = .transcript
                 play(from: startSec)
             }
         }
         #endif
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(interfaceLocale())).uppercased(with: interfaceLocale()))
-                .appFont(size: 11, weight: .medium)
+    private func hero(paragraphs: [TranscriptParagraph]) -> some View {
+        let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+        let totalSec: Double = paragraphs.map(\.endSec).max() ?? 0
+        let isPlayingThis: Bool = player.meetingID == record.id && player.isPlaying
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(interfaceUppercased(text: record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(interfaceLocale()))))
+                .appFont(size: 11, weight: .semibold)
                 .tracking(0.6)
-                .opacity(0.85)
+                .opacity(0.88)
             Text(record.note?.title ?? record.title)
-                .appFont(size: 26, weight: .regular)
-                .tracking(-0.4)
+                .appFont(size: 27, weight: .regular)
+                .tracking(-0.5)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 1)
+            HStack(spacing: 6) {
                 if let minutes = meetingDurationMinutes(record: record) {
-                    HeroChip(text: String(localized: "\(minutes) dk"))
+                    GlassChip(text: String(localized: "\(minutes) dk"), systemImage: "clock")
                 }
                 if let language = record.language {
-                    HeroChip(text: languageName(language: language))
+                    GlassChip(text: languageName(language: language), systemImage: nil)
                 }
-                Spacer(minLength: 0)
+                if !shares.isEmpty {
+                    GlassChip(text: String(localized: "\(shares.count) konuşmacı"), systemImage: "person.2")
+                }
+            }
+            if totalSec > 0, !shares.isEmpty {
+                SpeakerStrip(spans: speakerSpans(paragraphs: paragraphs), totalSec: totalSec)
+                    .padding(.top, 4)
+            }
+            HStack(spacing: 10) {
                 if canPlay {
                     Button {
                         if player.meetingID == record.id {
@@ -181,24 +211,37 @@ struct MeetingReadView: View {
                             play(from: 0)
                         }
                     } label: {
-                        Label(player.meetingID == record.id && player.isPlaying ? "Duraklat" : "Dinle",
-                              systemImage: player.meetingID == record.id && player.isPlaying ? "pause.fill" : "play.fill")
-                            .appFont(size: 14, weight: .semibold)
+                        Label(isPlayingThis ? "Duraklat" : "Dinle", systemImage: isPlayingThis ? "pause.fill" : "play.fill")
+                            .appFont(size: 15, weight: .semibold)
                             .foregroundStyle(.black)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
                             .background(.white, in: Capsule())
+                            .contentTransition(.symbolEffect(.replace))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableCardStyle())
+                }
+                Spacer()
+                if let note = record.note {
+                    ShareLink(item: shareText(record: record, note: note, language: nil)) {
+                        Image(systemName: "square.and.arrow.up")
+                            .appFont(size: 15, weight: .semibold)
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.white.opacity(0.18), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.28)))
+                    }
+                    .accessibilityLabel("Notu paylaş")
                 }
             }
             .padding(.top, 4)
         }
         .foregroundStyle(.white)
         .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .bottomLeading)
+        .frame(maxWidth: .infinity, minHeight: 230, alignment: .bottomLeading)
         .background { LivingCoverBackground(seed: record.id) }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .environment(\.colorScheme, .dark)
     }
 
     /// Ses varsa ve kayıt sürmüyorsa çalınabilir.
@@ -217,6 +260,7 @@ struct MeetingReadView: View {
                 return
             }
             errorMessage = nil
+            withAnimation(.smooth(duration: 0.25)) { pane = .transcript }
             player.play(meetingID: record.id, urls: urls, startSec: startSec)
         } catch {
             errorMessage = userFacingMessage(error: error)
@@ -224,23 +268,11 @@ struct MeetingReadView: View {
     }
 }
 
-/// Kapak üstündeki küçük cam etiket.
-private struct HeroChip: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .appFont(size: 12, weight: .medium)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.white.opacity(0.16), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.22)))
-    }
-}
-
-/// Özet: senin görevlerin (işaretlenebilir), özet, kararlar, konu akışı (dokununca oradan çalar), diğer görevler.
+/// Özet: senin görevlerin (işaretlenebilir), özet, bir bakışta, kim ne kadar konuştu, kararlar, konu akışı (dokununca
+/// oradan çalar), diğer görevler, sözlük.
 private struct MeetingSummary: View {
     let record: MeetingRecord
+    let paragraphs: [TranscriptParagraph]
     let store: PhoneStore
     let canPlay: Bool
     let onPlay: @MainActor (Double) -> Void
@@ -248,64 +280,89 @@ private struct MeetingSummary: View {
 
     var body: some View {
         if let note = record.note {
-            VStack(alignment: .leading, spacing: 22) {
-                let mine: [NoteTask] = note.tasks.filter(\.isMine)
-                if !mine.isEmpty {
-                    section(title: "SENİN GÖREVLERİN") {
+            let mine: [NoteTask] = note.tasks.filter(\.isMine)
+            let others: [NoteTask] = note.tasks.filter { !$0.isMine }
+            let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+            VStack(alignment: .leading, spacing: 26) {
+                if mine.isEmpty {
+                    Label("Bu toplantıda sana düşen görev yok", systemImage: "checkmark.circle")
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.soft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    section(title: "Senin görevlerin") {
                         ForEach(mine, id: \.trackingKey) { (task: NoteTask) in
                             PhoneTaskRow(record: record, task: task, showsMeeting: false) {
-                                store.toggleTask(meetingID: record.id, task: task)
+                                withAnimation(.smooth(duration: 0.25)) { store.toggleTask(meetingID: record.id, task: task) }
                             }
                         }
                     }
                 }
                 Text(note.summary)
-                    .appFont(size: 17, weight: .regular)
-                    .lineSpacing(5)
+                    .font(appearance.readingFont(size: 18, weight: .regular))
+                    .lineSpacing(6)
                     .textSelection(.enabled)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    PhoneStatTile(value: meetingDurationMinutes(record: record).map { String(localized: "\($0) dk") } ?? "–", label: "süre")
+                    PhoneStatTile(value: "\(shares.count)", label: "konuşmacı")
+                    PhoneStatTile(value: "\(note.decisions.count)", label: "karar")
+                    PhoneStatTile(value: "\(mine.count)", label: "senin görevin")
+                }
+                if shares.count > 1 {
+                    section(title: "Kim ne kadar konuştu") {
+                        ForEach(Array(shares.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                            ShareRow(share: item.element, speakerNames: record.speakerNames)
+                        }
+                    }
+                }
                 if !note.decisions.isEmpty {
-                    section(title: "KARARLAR") {
+                    section(title: "Kararlar") {
                         ForEach(Array(note.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(verbatim: "•").foregroundStyle(Theme.muted)
-                                Text(item.element).appFont(size: 15, weight: .regular)
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(verbatim: "\(item.offset + 1)")
+                                    .appFont(size: 13, weight: .semibold)
+                                    .monospacedDigit()
+                                    .foregroundStyle(appearance.accent.color)
+                                    .frame(width: 18, alignment: .trailing)
+                                Text(item.element)
+                                    .appFont(size: 16, weight: .regular)
+                                    .lineSpacing(3)
                             }
                         }
                     }
                 }
                 if let outline = note.outline, !outline.isEmpty {
-                    section(title: "KONU AKIŞI") {
-                        ForEach(Array(outline.enumerated()), id: \.offset) { (item: (offset: Int, element: OutlineItem)) in
-                            Button {
-                                onPlay(item.element.startSec)
-                            } label: {
-                                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                    Text(timestamp(seconds: item.element.startSec))
-                                        .appFont(size: 12, weight: .medium)
-                                        .monospacedDigit()
-                                        .foregroundStyle(canPlay ? appearance.accent.color : Theme.muted)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.element.title).appFont(size: 15, weight: .medium)
-                                        Text(item.element.summary)
-                                            .appFont(size: 13, weight: .regular)
-                                            .foregroundStyle(Theme.muted)
-                                    }
-                                    .multilineTextAlignment(.leading)
+                    section(title: "Konu akışı") {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(outline.enumerated()), id: \.offset) { (item: (offset: Int, element: OutlineItem)) in
+                                OutlineRow(item: item.element, isLast: item.offset == outline.count - 1, canPlay: canPlay) {
+                                    onPlay(item.element.startSec)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .disabled(!canPlay)
                         }
                     }
                 }
-                let others: [NoteTask] = note.tasks.filter { !$0.isMine }
                 if !others.isEmpty {
-                    section(title: "DİĞER GÖREVLER") {
+                    section(title: "Diğer görevler") {
                         ForEach(others, id: \.trackingKey) { (task: NoteTask) in
                             PhoneTaskRow(record: record, task: task, showsMeeting: false) {
-                                store.toggleTask(meetingID: record.id, task: task)
+                                withAnimation(.smooth(duration: 0.25)) { store.toggleTask(meetingID: record.id, task: task) }
+                            }
+                        }
+                    }
+                }
+                if !note.glossary.isEmpty {
+                    section(title: "Sözlük") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(note.glossary.enumerated()), id: \.offset) { (item: (offset: Int, element: GlossaryEntry)) in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.element.term).appFont(size: 15, weight: .semibold)
+                                    Text(item.element.meaning)
+                                        .appFont(size: 14, weight: .regular)
+                                        .foregroundStyle(Theme.muted)
+                                }
                             }
                         }
                     }
@@ -317,20 +374,94 @@ private struct MeetingSummary: View {
     }
 
     private func section(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
+        VStack(alignment: .leading, spacing: 12) {
+            PhoneSectionHeader(title: title, actionTitle: nil, action: nil)
             content()
         }
     }
 }
 
-/// Transkript: konuşmacılı paragraflar (≤30 sn). Çalan paragraf hafif dolgulu ve kelime kelime vurgulu; görünür alanın
-/// üst üçte birine kayar. Paragrafa dokununca oradan çalar.
+/// Konuşma payı satırı: rozet, ad, yüzde ve kişinin renginde ince çubuk.
+private struct ShareRow: View {
+    let share: SpeakerShare
+    let speakerNames: [Int: String]
+
+    var body: some View {
+        let color: Color = share.key.person.map { personColor(person: $0) } ?? DesignTokens.meSpeakerColor
+        HStack(spacing: 10) {
+            SpeakerBadge(speaker: share.key.speaker, person: share.key.person, size: 26)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(share.key.person.flatMap { speakerNames[$0] } ?? speakerLabel(speaker: share.key.speaker, person: share.key.person))
+                        .appFont(size: 14, weight: .medium)
+                    Spacer()
+                    Text(verbatim: "%\(Int((share.fraction * 100).rounded()))")
+                        .appFont(size: 13, weight: .medium)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.muted)
+                }
+                GeometryReader { (proxy: GeometryProxy) in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.soft)
+                        Capsule().fill(color).frame(width: proxy.size.width * share.fraction)
+                    }
+                }
+                .frame(height: 5)
+            }
+        }
+    }
+}
+
+/// Konu akışı satırı: solda saat ve ince dikey çizgi (zaman çizelgesi), sağda başlık ve tek cümle; dokununca çalar.
+private struct OutlineRow: View {
+    let item: OutlineItem
+    let isLast: Bool
+    let canPlay: Bool
+    let onPlay: @MainActor () -> Void
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 4) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "play.fill").appFont(size: 8, weight: .bold)
+                        Text(timestamp(seconds: item.startSec))
+                            .appFont(size: 12, weight: .semibold)
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(canPlay ? appearance.accent.color : Theme.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background((canPlay ? appearance.accent.color : Theme.muted).opacity(0.10), in: Capsule())
+                    if !isLast {
+                        Rectangle().fill(Theme.line).frame(width: 1).frame(maxHeight: .infinity)
+                    }
+                }
+                .frame(width: 66)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).appFont(size: 15, weight: .semibold)
+                    Text(item.summary)
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineSpacing(2)
+                }
+                .multilineTextAlignment(.leading)
+                .padding(.bottom, isLast ? 0 : 16)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canPlay)
+    }
+}
+
+/// Transkript: konuşmacılı paragraflar (≤30 sn), sohbet gibi rozetle. Çalan paragraf hafif dolgulu ve kelime kelime
+/// vurgulu; görünür alanın üst üçte birine kayar. Paragrafa dokununca oradan çalar.
 private struct TranscriptList: View {
     let record: MeetingRecord
+    let paragraphs: [TranscriptParagraph]
     let player: MeetingAudioPlayer
     let canPlay: Bool
     let proxy: ScrollViewProxy
@@ -340,8 +471,7 @@ private struct TranscriptList: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
-        LazyVStack(alignment: .leading, spacing: 4) {
+        LazyVStack(alignment: .leading, spacing: 2) {
             if paragraphs.isEmpty {
                 EmptyStateCard(symbol: "text.alignleft", title: "Transkript yok", message: nil)
             }
@@ -353,40 +483,49 @@ private struct TranscriptList: View {
                 Button {
                     onPlay(paragraph.startSec)
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            if !continues {
-                                Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames))
-                                    .appFont(size: 12, weight: .semibold)
-                                    .foregroundStyle(paragraph.person.map { personColor(person: $0) } ?? Theme.ink)
+                    HStack(alignment: .top, spacing: 10) {
+                        Group {
+                            if continues {
+                                Color.clear
+                            } else {
+                                SpeakerBadge(speaker: paragraph.speaker, person: paragraph.person, size: 30)
                             }
-                            Text(timestamp(seconds: paragraph.startSec))
-                                .appFont(size: 11, weight: .regular)
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.muted)
                         }
-                        if isActive {
-                            KaraokeParagraph(words: paragraph.words, player: player, accent: appearance.accent.color)
-                                .appFont(size: 16, weight: .regular)
-                                .lineSpacing(3)
-                        } else {
-                            Text(paragraph.text)
-                                .appFont(size: 16, weight: .regular)
-                                .lineSpacing(3)
-                                .foregroundStyle(Theme.ink)
+                        .frame(width: 30, height: 30)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                if !continues {
+                                    Text(paragraphLabel(paragraph: paragraph, speakerNames: record.speakerNames))
+                                        .appFont(size: 13, weight: .semibold)
+                                        .foregroundStyle(paragraph.person.map { personColor(person: $0) } ?? Theme.ink)
+                                }
+                                Text(timestamp(seconds: paragraph.startSec))
+                                    .appFont(size: 11, weight: .regular)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            Group {
+                                if isActive {
+                                    KaraokeParagraph(words: paragraph.words, player: player, accent: appearance.accent.color)
+                                } else {
+                                    Text(paragraph.text).foregroundStyle(Theme.ink)
+                                }
+                            }
+                            .font(appearance.readingFont(size: 16, weight: .regular))
+                            .lineSpacing(4)
+                            if let turkish = paragraph.turkish {
+                                Text(turkish)
+                                    .appFont(size: 14, weight: .regular)
+                                    .foregroundStyle(Theme.muted)
+                            }
                         }
-                        if let turkish = paragraph.turkish {
-                            Text(turkish)
-                                .appFont(size: 14, weight: .regular)
-                                .foregroundStyle(Theme.muted)
-                        }
+                        .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
                     }
-                    .multilineTextAlignment(.leading)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(isActive ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .padding(.top, continues ? 0 : 10)
+                    .padding(.vertical, 9)
+                    .background(isActive ? Theme.soft : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.top, continues ? 0 : 8)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -397,7 +536,7 @@ private struct TranscriptList: View {
         .padding(.horizontal, -10)
         .background {
             PlaybackFollower(player: player, meetingID: record.id, paragraphs: paragraphs) { (id: String?) -> Void in
-                activeID = id
+                withAnimation(.easeOut(duration: 0.2)) { activeID = id }
                 if let id, player.isPlaying {
                     withAnimation(.easeInOut(duration: 0.45)) { proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.3)) }
                 }
