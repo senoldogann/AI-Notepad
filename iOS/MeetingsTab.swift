@@ -309,6 +309,26 @@ private struct MeetingSummary: View {
                         }
                     }
                 }
+                if let myNotes = record.myNotes {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("SENİN NOTLARIN", systemImage: "square.and.pencil")
+                            .appFont(size: 11, weight: .semibold)
+                            .tracking(DesignTokens.labelTracking)
+                            .foregroundStyle(appearance.accent.color)
+                        Text(myNotes)
+                            .appFont(size: 15, weight: .regular)
+                            .lineSpacing(3)
+                            .textSelection(.enabled)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(appearance.accent.color.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(alignment: .leading) {
+                        UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
+                            .fill(appearance.accent.color.opacity(0.7))
+                            .frame(width: 3)
+                    }
+                }
                 Text(note.summary)
                     .font(appearance.readingFont(size: 18, weight: .regular))
                     .lineSpacing(6)

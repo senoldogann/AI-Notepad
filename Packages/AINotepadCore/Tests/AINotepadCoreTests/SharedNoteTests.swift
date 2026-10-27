@@ -25,11 +25,11 @@ private func sampleRecord() -> MeetingRecord {
     // Şablon yönergesi not istemine girer; genel şablonda ek yönerge yok; yeni not eski paylaşım sürümlerini siler.
     @Test func templateGoesIntoPromptAndNoteResetsShares() throws {
         let segments: [StoredSegment] = [stored("final-0", .others, 1, 0, "Budjetti on 10 000 euroa.")]
-        let client: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: "")))
+        let client: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), myNotes: ""))
         #expect(client.system.contains("müşteri görüşmesi"))
-        let custom: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .custom, customInstructions: "Riskleri ayrı say.")))
+        let custom: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: NoteTemplate(kind: .custom, customInstructions: "Riskleri ayrı say."), myNotes: ""))
         #expect(custom.system.contains("Riskleri ayrı say."))
-        let general: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: .general))
+        let general: LLMRequest = try #require(meetingNoteRequest(segments: segments, speakerNames: [:], userName: "Senol", template: .general, myNotes: ""))
         #expect(!general.system.contains("Toplantı türü"))
         let shared: MeetingRecord = sampleRecord().with(sharedNotes: ["fi": sampleNote])
         #expect(shared.with(note: sampleNote).sharedNotes == nil)
@@ -87,7 +87,7 @@ extension CloudTests {
             stored("me-0", .me, nil, 6, "Selvä. Lähetän teille tarjouksen ensi viikon tiistaina."),
             stored("final-1", .others, 1, 11, "Hyvä. Kilpailijanne Acme tarjosi jo, mutta heidän aikataulunsa oli liian hidas."),
         ]
-        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino"], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
+        let note: MeetingNote = try #require(try await writeMeetingNote(segments: segments, speakerNames: [1: "Aino"], userName: "Senol", template: NoteTemplate(kind: .client, customInstructions: ""), myNotes: "", llm: provider, progressFile: try temporaryDirectory().appending(path: "note-progress.json")))
         let summary: String = note.summary.lowercased()
         #expect(summary.contains("40") && summary.contains("acme"), "\(note.summary)")
         #expect(note.tasks.contains { $0.isMine }, "\(note.tasks)")

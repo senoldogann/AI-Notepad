@@ -52,6 +52,8 @@ final class PhoneRecorder {
     var languageMode: LanguageMode = .automatic
     /// Kayıtta işaretlenen anlar (not onları öne çıkarır).
     private(set) var highlights: [Highlight] = []
+    /// Kullanıcının kayıt sırasında yazdığı notlar (not bunları öncelik sayar).
+    var myNotes: String = ""
     /// "Katılımcılara haber ver" kartı bu kayıtta görünür (ayar açıksa kayıt başında açılır, kapatılabilir).
     var consentReminderVisible: Bool = false
     let levels: AudioLevels = AudioLevels(count: 36, interval: 0.08)
@@ -88,6 +90,7 @@ final class PhoneRecorder {
         lockedLanguage = nil
         errorMessages = []
         highlights = []
+        myNotes = ""
         let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
         let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
         guard case .success(let deepgramKey) = deepgram, case .success(let elevenLabsKey) = elevenLabs else {
@@ -468,6 +471,7 @@ final class PhoneRecorder {
             speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
         )
         .with(highlights: highlights)
+        .with(myNotes: myNotes)
     }
 
     /// Kayıt sürerken her 30 sn'de transkript saklanır: uygulama kapanırsa metin toplantıda kalır.

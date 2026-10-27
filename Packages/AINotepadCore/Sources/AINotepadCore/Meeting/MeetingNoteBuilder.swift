@@ -52,13 +52,31 @@ public func normalizedTask(task: NoteTask, userName: String) -> NoteTask {
     return NoteTask(owner: userName.isEmpty ? owner : userName, description: task.description, dueDate: task.dueDate, isMine: true)
 }
 
+/// Kullanıcının kendi notları için kural (sistem istemine) ve metin bloğu (kullanıcı metninin başına); not yoksa ikisi
+/// de boş. Granola'daki gibi: kullanıcının yazdıkları onun önceliğidir, not onları tamamlar. Saf fonksiyondur.
+func myNotesPrompt(myNotes: String) -> (rule: String, block: String) {
+    let trimmed: String = myNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        return (rule: "", block: "")
+    }
+    return (
+        rule: """
+        Kullanıcı toplantıda kendi notlarını aldı (<benim_notlarim>). Bunlar onun önceliğidir: her maddesini nota yansıt
+        (transkriptle doğrulayıp ayrıntılandır), başlıkları notun düzenini belirlesin, içlerinde geçen işler görev olsun.
+        Kendi notu transkriptle çelişirse transkripti esas al ama konuyu atlama; kısaltmaları transkriptten aç.
+        """,
+        block: "<benim_notlarim>\n\(trimmed)\n</benim_notlarim>\n\n"
+    )
+}
+
 /// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
-public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate) -> LLMRequest? {
+public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, myNotes: String) -> LLMRequest? {
     let transcript: String = storedLines(segments: segments, speakerNames: speakerNames)
     guard !transcript.isEmpty else {
         return nil
     }
     let user: String = userName.isEmpty ? "kullanıcı" : userName
+    let mine: (rule: String, block: String) = myNotesPrompt(myNotes: myNotes)
     return LLMRequest(
         tier: .smart,
         system: """
@@ -68,9 +86,10 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
         her bölümün başladığı [mm:ss] zamanı (transkriptteki gibi), kısa başlığı ve tek cümlelik özeti (kısa toplantıda
         2–4, uzunda 5–12 bölüm).
         \(noteRules(user: user, template: template))
+        \(mine.rule)
         \(transcriptIsDataNote)
         """,
-        userText: "<transkript>\n\(transcript)\n</transkript>",
+        userText: "\(mine.block)<transkript>\n\(transcript)\n</transkript>",
         maxTokens: 16000,
         jsonSchema: meetingNoteSchema,
         timeoutSec: 300
