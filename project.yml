@@ -64,6 +64,8 @@ targets:
         product: AINotepadCore
       - package: AINotepadCore
         product: AINotepadUI
+      # Canlı etkinlik, Denetim Merkezi düğmesi ve widget.
+      - target: AINotepadWidgets
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
@@ -93,3 +95,38 @@ targets:
         # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
         UIBackgroundModes: [audio]
         UIAppFonts: [InterVariable.ttf]
+        # Kayıt kilit ekranında ve Dynamic Island'da canlı etkinlik olarak görünür.
+        NSSupportsLiveActivities: true
+  AINotepadWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - iOSWidgets
+      # Canlı etkinliğin verisi ve niyetler uygulamayla ortak.
+      - path: iOS/Shared/RecordingIntents.swift
+      - path: App/Localizable.xcstrings
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.senoldogan.AINotepad.Widgets
+        PRODUCT_NAME: AINotepadWidgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
+        # Niyetlerin gövdesi eklentide boş derlenir (bkz. iOS/Shared/RecordingIntents.swift).
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
+    info:
+      path: iOSWidgets/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

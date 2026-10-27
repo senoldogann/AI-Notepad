@@ -1,0 +1,36 @@
+{
+  "sourceLanguage": "tr",
+  "strings": {
+    "${applicationName} ile toplantıyı kaydet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record a meeting with ${applicationName}"
+          }
+        }
+      }
+    },
+    "${applicationName} kaydı başlat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording in ${applicationName}"
+          }
+        }
+      }
+    },
+    "${applicationName} kaydı bitir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish recording in ${applicationName}"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
