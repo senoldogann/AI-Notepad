@@ -975,22 +975,47 @@ private struct ConnectionSectionHeader: View {
     }
 }
 
-/// Servisin marka renginde simge kutusu: üstten hafif aydınlık, ince parlak kenar ve renkli yumuşak gölge.
+/// Servisin işareti: kendi logosu (görsel kataloğunda, tek renk şablon) ya da logosu yoksa sistem simgesi.
+private enum BrandMark {
+    case logo(String)
+    /// Yazıdan oluşan geniş logo (ör. Zoom): kutuyu daha çok doldurur.
+    case wordmark(String)
+    case symbol(String)
+}
+
+/// Servis kutusu: uygulamanın pastel film gradyanı üstünde servisin kendi logosu, koyu mürekkep renginde.
 private struct BrandTile: View {
-    let symbol: String
-    let color: Color
+    let mark: BrandMark
+    let palette: FilmPalette
+    let seed: String
     let size: CGFloat
 
     var body: some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-        Image(systemName: symbol)
-            .appFont(size: size * 0.42, weight: .semibold)
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(LinearGradient(colors: [color.mix(with: .white, by: 0.14), color], startPoint: .top, endPoint: .bottom), in: shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.16)))
-            .shadow(color: color.opacity(0.28), radius: 6, y: 3)
-            .accessibilityHidden(true)
+        Group {
+            switch mark {
+            case .logo(let name):
+                Image(name)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size * 0.46, height: size * 0.46)
+            case .wordmark(let name):
+                Image(name)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size * 0.76, height: size * 0.76)
+            case .symbol(let name):
+                Image(systemName: name).appFont(size: size * 0.4, weight: .semibold)
+            }
+        }
+        .foregroundStyle(Color.black.opacity(0.8))
+        .frame(width: size, height: size)
+        .background { FilmGradient(seed: "marka-\(seed)", palette: palette) }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Color.white.opacity(0.2)))
+        .accessibilityHidden(true)
     }
 }
 
@@ -1038,11 +1063,6 @@ private struct ConnectionCard<Action: View>: View {
     }
 }
 
-/// 0xRRGGBB sRGB marka rengi.
-private func brandColor(_ hex: UInt32) -> Color {
-    Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255, opacity: 1)
-}
-
 /// Bir yapay zekâ uygulaması kartı: simgesi, adı, durumu; yüklüyse "Bağla" ya da (bağlıysa) "Kaldır". Yüklü değilse
 /// soluk. Bağlayınca uygulamanın yapılandırma dosyasına AI-Notepad eklenir (diğer ayarlar korunur); uygulama yeniden
 /// açılınca görünür.
@@ -1054,6 +1074,14 @@ private struct MCPClientCard: View {
 
     private var isInstalled: Bool {
         FileManager.default.fileExists(atPath: client.applicationPath)
+    }
+
+    private var tile: BrandTile {
+        switch client {
+        case .claudeDesktop: BrandTile(mark: .logo("brand-claude"), palette: .sunset, seed: "claude", size: 38)
+        case .cursor: BrandTile(mark: .logo("brand-cursor"), palette: .mint, seed: "cursor", size: 38)
+        case .vsCode: BrandTile(mark: .logo("brand-visualstudiocode"), palette: .ocean, seed: "vscode", size: 38)
+        }
     }
 
     /// Yapılandırmaya yazılacak uygulama yolu; uygulama geçici konumdan çalışıyorsa hata.
@@ -1068,21 +1096,7 @@ private struct MCPClientCard: View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                Group {
-                    if isInstalled {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: client.applicationPath))
-                            .resizable()
-                    } else {
-                        // Yüklü olmayan uygulamada sistem genel belge simgesi verir: yerine sade, soluk simge.
-                        Image(systemName: "app.dashed")
-                            .appFont(size: 18, weight: .regular)
-                            .foregroundStyle(Theme.muted)
-                            .frame(width: 38, height: 38)
-                            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                }
-                .frame(width: 38, height: 38)
-                .accessibilityHidden(true)
+                tile
                 Spacer(minLength: 6)
                 if isInstalled {
                     if isConnected {
@@ -1188,26 +1202,15 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Servisin marka rengi (simge kutusu).
-    var brand: Color {
+    /// Servis kutusu: kendi logosu ve gradyan ailesi.
+    var tile: BrandTile {
         switch self {
-        case .slack: brandColor(0x4A154B)
-        case .teams: brandColor(0x5059C9)
-        case .discord: brandColor(0x5865F2)
-        case .notion: brandColor(0x1F1F1F)
-        case .zoom: brandColor(0x0B5CFF)
-        case .webhook: brandColor(0x52525B)
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .slack: "number"
-        case .teams: "person.3.fill"
-        case .discord: "bubble.left.and.bubble.right.fill"
-        case .notion: "doc.richtext.fill"
-        case .zoom: "video.fill"
-        case .webhook: "bolt.horizontal.fill"
+        case .slack: BrandTile(mark: .logo("brand-slack"), palette: .rose, seed: rawValue, size: 38)
+        case .teams: BrandTile(mark: .logo("brand-microsoftteams"), palette: .violet, seed: rawValue, size: 38)
+        case .discord: BrandTile(mark: .logo("brand-discord"), palette: .ocean, seed: rawValue, size: 38)
+        case .notion: BrandTile(mark: .logo("brand-notion"), palette: .coral, seed: rawValue, size: 38)
+        case .zoom: BrandTile(mark: .wordmark("brand-zoom"), palette: .ocean, seed: rawValue, size: 38)
+        case .webhook: BrandTile(mark: .symbol("bolt.horizontal.fill"), palette: .mint, seed: rawValue, size: 38)
         }
     }
 
@@ -1325,7 +1328,7 @@ private struct WebhookSettings: View {
     private func destinationRow(destination: NoteDestination) -> some View {
         let card: ChannelCard = ChannelCard.allCases.first { $0.matches(destination: destination) } ?? .webhook
         return HStack(spacing: 12) {
-            BrandTile(symbol: card.symbol, color: card.brand, size: 38)
+            card.tile
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: destinationName(destination: destination))
                     .appFont(size: 14, weight: .semibold)
@@ -1464,7 +1467,7 @@ private struct WebhookSettings: View {
     private func channelCard(card: ChannelCard) -> some View {
         let count: Int = model.destinations.filter { card.matches(destination: $0) }.count
         return ConnectionCard(
-            tile: BrandTile(symbol: card.symbol, color: card.brand, size: 38), title: Text(verbatim: card.name), detail: Text(card.detail),
+            tile: card.tile, title: Text(verbatim: card.name), detail: Text(card.detail),
             badge: count > 0 ? String(localized: "\(count) bağlı") : nil
         ) {
             if count > 0 {
@@ -1492,7 +1495,7 @@ private struct WebhookSettings: View {
 
     private var appleNotesCard: some View {
         ConnectionCard(
-            tile: BrandTile(symbol: "note.text", color: brandColor(0xE8A90E), size: 38), title: Text("Apple Notlar"),
+            tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
             detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"AI-Notepad\" klasörüne, hesap gerekmez"), badge: nil
         ) {
             Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
@@ -1514,7 +1517,7 @@ private struct WebhookSettings: View {
 
     private var folderCard: some View {
         ConnectionCard(
-            tile: BrandTile(symbol: "folder.fill", color: brandColor(0x3B82F6), size: 38), title: Text("Klasör (Obsidian, iCloud)"),
+            tile: BrandTile(mark: .symbol("folder.fill"), palette: .ocean, seed: "klasor", size: 38), title: Text("Klasör (Obsidian, iCloud)"),
             detail: Text(folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))),
             badge: nil
         ) {
@@ -1743,8 +1746,8 @@ private struct TaskTrackerSettings: View {
 
     private func tile(service: MCPService) -> BrandTile {
         service == .linear
-            ? BrandTile(symbol: "checklist", color: brandColor(0x5E6AD2), size: 38)
-            : BrandTile(symbol: "square.stack.3d.up.fill", color: brandColor(0x0052CC), size: 38)
+            ? BrandTile(mark: .logo("brand-linear"), palette: .violet, seed: "linear", size: 38)
+            : BrandTile(mark: .logo("brand-jira"), palette: .ocean, seed: "jira", size: 38)
     }
 
     /// Bağlı araçta takım/proje alanı ve ⋯ menüsünde kaldır; bağlı değilse "Bağlan" (girişte "Vazgeç").
