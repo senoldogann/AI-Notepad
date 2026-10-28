@@ -820,10 +820,14 @@ public struct ExampleQuestionCard: View {
 }
 
 /// Çapraz (45°) ince çizgiler: kart dokusu.
-struct DiagonalLines: Shape {
+public struct DiagonalLines: Shape {
     let spacing: CGFloat
 
-    func path(in rect: CGRect) -> Path {
+    public init(spacing: CGFloat) {
+        self.spacing = spacing
+    }
+
+    public func path(in rect: CGRect) -> Path {
         var path: Path = Path()
         var x: CGFloat = -rect.height
         while x < rect.width {

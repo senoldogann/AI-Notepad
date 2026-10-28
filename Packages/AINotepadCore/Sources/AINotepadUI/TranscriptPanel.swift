@@ -22,6 +22,8 @@ public struct PanelActions {
     public let onRetryTranslations: @MainActor ([SegmentID]) -> Void
     /// Kayıt sırasında toplantı dilini değiştir.
     public let onSetLanguage: @MainActor (MeetingLanguage) -> Void
+    /// Kayıt yokken bir sonraki kaydın dilini seç (otomatik ya da sabit).
+    public let onChooseLanguageMode: @MainActor (LanguageMode) -> Void
     /// Bir bloğun bölümlerini verilen konuşmacıya ata (otomatik ayırma yanıldıysa).
     public let onReassignBlock: @MainActor ([SegmentID], Int) -> Void
     /// Bir konuşmacının tümünü (geçmiş ve gelecek) diğeriyle birleştir.
@@ -42,6 +44,7 @@ public struct PanelActions {
         onCloseCard: @escaping @MainActor () -> Void,
         onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void,
+        onChooseLanguageMode: @escaping @MainActor (LanguageMode) -> Void,
         onReassignBlock: @escaping @MainActor ([SegmentID], Int) -> Void,
         onMergePerson: @escaping @MainActor (Int, Int) -> Void,
         onBookmark: @escaping @MainActor () -> Void
@@ -58,6 +61,7 @@ public struct PanelActions {
         self.onCloseCard = onCloseCard
         self.onRetryTranslations = onRetryTranslations
         self.onSetLanguage = onSetLanguage
+        self.onChooseLanguageMode = onChooseLanguageMode
         self.onReassignBlock = onReassignBlock
         self.onMergePerson = onMergePerson
         self.onBookmark = onBookmark
@@ -133,9 +137,9 @@ public struct TranscriptPanel: View {
             StatusLabel(state: state)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                // Durum hiç görünmez olmasın: önce düğmeler menüye toplanır, durum en son kısalır.
-                // Kayıtta yalnızca nokta + süre (kısa); boşta "Hazır · Deepgram" gibi daha uzun.
-                .frame(minWidth: state.isRecording ? 60 : 96, alignment: .leading)
+                // Durum hiç görünmez olmasın: önce düğmeler menüye toplanır, durum en son kısalır. Kayıtta nokta + süre;
+                // boşta yalnızca bir sorun varsa (ör. "Model hazırlanıyor…") görünür.
+                .frame(minWidth: state.isRecording ? 60 : (state.statusText.isEmpty ? 0 : 96), alignment: .leading)
                 .layoutPriority(-1)
             if state.isRecording && !state.isPaused {
                 LevelMeter(levels: levels)
@@ -164,6 +168,11 @@ public struct TranscriptPanel: View {
                         if state.isRecording {
                             Menu("Dili değiştir") {
                                 LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
+                            }
+                        } else if state.phase == .idle {
+                            Menu("Dili seç") {
+                                Button("Otomatik") { actions.onChooseLanguageMode(.automatic) }
+                                LanguageMenuItems { (language: MeetingLanguage) -> Void in actions.onChooseLanguageMode(.fixed(language)) }
                             }
                         }
                         overflowItems
@@ -274,6 +283,20 @@ public struct TranscriptPanel: View {
             .fixedSize()
             .hoverHint("Toplantı dilini değiştir", alignment: .center, edge: .bottom)
             .accessibilityLabel("Toplantı dili: \(state.languageText). Değiştir")
+        } else if state.phase == .idle {
+            // Kayıt yokken bir sonraki kaydın dili seçilir.
+            Menu {
+                Button("Otomatik") { actions.onChooseLanguageMode(.automatic) }
+                LanguageMenuItems { (language: MeetingLanguage) -> Void in actions.onChooseLanguageMode(.fixed(language)) }
+            } label: {
+                chip
+            }
+            .menuStyle(.button)
+            .buttonStyle(.hoverCapsule)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .hoverHint("Toplantının dilini seç", alignment: .center, edge: .bottom)
+            .accessibilityLabel("Toplantı dili: \(state.languageText). Seç")
         } else {
             chip
         }
@@ -510,7 +533,7 @@ struct StatusLabel: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Kayıtta")
-        } else {
+        } else if !state.statusText.isEmpty {
             Text(state.statusText)
                 .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.secondary)
