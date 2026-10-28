@@ -198,6 +198,15 @@ public func paragraphLabel(paragraph: TranscriptParagraph, speakerNames: [Int: S
     return speakerLabel(speaker: paragraph.speaker, person: paragraph.person)
 }
 
+/// Konuşmacı adlarına düzenlemeler uygulanır ("Konuşmacı 2 = Aino"): ad kırpılır, boş ad kişinin adını kaldırır
+/// ("Konuşmacı N" etiketi geri gelir); düzenlenmeyen kişilerin adları kalır. Saf fonksiyondur.
+public func renamingSpeakers(names: [Int: String], edits: [Int: String]) -> [Int: String] {
+    edits.reduce(into: names) { (result: inout [Int: String], edit: (key: Int, value: String)) -> Void in
+        let trimmed: String = edit.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        result[edit.key] = trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// Toplantı dilinin arayüz dilindeki adı. Saf fonksiyondur.
 public func meetingLanguageName(language: MeetingLanguage) -> String {
     switch language {

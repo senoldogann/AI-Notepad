@@ -98,6 +98,8 @@ final class AppModel {
     @ObservationIgnored private var pendingAutoMeeting: CalendarMeeting?
     @ObservationIgnored private var calendarTask: Task<Void, Never>?
     @ObservationIgnored private var calendarChangesTask: Task<Void, Never>?
+    /// Toplantı listesini arka planda okur; art arda gelen istekleri birleştirir.
+    @ObservationIgnored private let meetingReloader: MeetingReloader = MeetingReloader()
     @ObservationIgnored private var lastMicSuggestion: Date = .distantPast
     /// Önümüzdeki 24 saatin toplantıları (takvim açıksa).
     var upcomingMeetings: [CalendarMeeting] = []
@@ -2406,6 +2408,7 @@ final class AppModel {
         }
         closeSpeakerReview(meetingID: meetingID)
         meetings.removeAll { $0.id == meetingID }
+        meetingReloader.invalidate()
         // Bu toplantıdan öğrenilen ses izleri de geri alınır (biyometrik veri toplantıdan uzun yaşamasın).
         let voices: [RegisteredVoice] = forgettingMeeting(voices: registeredVoices, meetingID: meetingID, now: Date())
         if voices != registeredVoices {
@@ -2447,24 +2450,27 @@ final class AppModel {
 
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
     func performStartupMaintenance() {
-        reloadMeetings()
-        Task {
-            await loadDestinations()
-            await processPendingAutoSends()
-        }
         loadVoices()
         loadPeople()
         loadRecipes()
         loadAskHistory()
-        startCalendarServices()
-        // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
-        let local: Set<String> = localMeetingIDsReportingFailure()
-        for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) }) {
-            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
-                saveRecord(record: record, directory: directory)
+        // Toplantılar arka planda okunur (büyük arşivde açılış donmasın); listeye bağlı işler okuma bitince başlar.
+        Task {
+            await reloadMeetingsAndWait()
+            // Takvim (kendiliğinden kayıt, kaydı olan etkinlik) toplantı listesine bakar.
+            startCalendarServices()
+            // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
+            // Okuma sürerken başlatılmış kayıt (kilitli) yarıda kalmış sayılmaz.
+            let local: Set<String> = localMeetingIDsReportingFailure()
+            for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) }) {
+                withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                    saveRecord(record: record, directory: directory)
+                }
             }
+            applyRetention()
+            await loadDestinations()
+            await processPendingAutoSends()
         }
-        applyRetention()
         startRetentionTimer()
         startCloudSyncIfEnabled()
         Task { await refreshSetupProblems() }
@@ -2507,18 +2513,25 @@ final class AppModel {
         }
     }
 
+    /// Toplantıları arka planda yeniden okur (iCloud değişikliği, taşıma); art arda gelen istekler birleşir.
     func reloadMeetings() {
-        do {
-            let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: activeStorageLocation))
-            meetings = result.meetings
-            meetingLoadFailures = result.failures
-            cloudDownloadingCount = result.downloading.count
+        Task { await reloadMeetingsAndWait() }
+    }
+
+    /// Toplantıları ana iş parçacığını bekletmeden yeniden okur; liste güncellenince döner.
+    private func reloadMeetingsAndWait() async {
+        await meetingReloader.reload(load: { () async throws -> MeetingLoadResult in
+            try await loadMeetingsInBackground(location: self.activeStorageLocation)
+        }, apply: { (result: MeetingLoadResult) -> Void in
+            self.meetings = result.meetings
+            self.meetingLoadFailures = result.failures
+            self.cloudDownloadingCount = result.downloading.count
             for failure in result.failures {
                 Self.logger.error("Toplantı okunamadı, klasör: \(failure.folder, privacy: .public), neden: \(failure.reason, privacy: .private)")
             }
-        } catch {
-            meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: userFacingMessage(error: error))]
-        }
+        }, fail: { (error: any Error) -> Void in
+            self.meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: userFacingMessage(error: error))]
+        })
     }
 
     /// Kaydı diske yazar ve bellekteki listeyi günceller (her kayıtta tüm toplantılar yeniden okunmaz).
@@ -2526,6 +2539,8 @@ final class AppModel {
         do {
             try saveMeeting(record: record, directory: directory)
             meetings = upsertMeeting(records: meetings, record: record)
+            // Süren bir arka plan okuması bu yazmayı görmemiş olabilir: sonucu bu kaydı geri almasın.
+            meetingReloader.invalidate()
         } catch {
             Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))

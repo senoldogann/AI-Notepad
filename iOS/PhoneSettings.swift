@@ -14,6 +14,8 @@ enum PhoneSettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// Tema takımı (Mac'teki ayarla aynı ad; bkz. `AppTheme`).
     static let theme: String = "appearance.theme"
+    /// Takvim (sıradaki toplantılar, kaydı süren etkinliğe bağlama); varsayılan kapalı, açılınca izin istenir.
+    static let calendarEnabled: String = "calendar.enabled"
 }
 
 /// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).
