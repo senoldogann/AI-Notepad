@@ -448,6 +448,7 @@ private struct GeneralSettings: View {
             #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
+            FeedbackSettingsRow()
         }
     }
 }

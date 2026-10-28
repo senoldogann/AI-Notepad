@@ -54,6 +54,8 @@ targets:
         SUFeedURL: "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
         SUEnableAutomaticChecks: true
+        # Geri bildirim ve çökme raporlarının gittiği sunucu (`POST /v1/reports`, hesapsız); Debug ve Release aynı.
+        ReportsAPIBase: "https://api.gistsmith.com"
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
@@ -105,8 +107,8 @@ targets:
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
         NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
-        # E-posta giriş bağlantısı (sitedeki giriş sayfası) uygulamayı açar:
-        # com.senoldogan.ainotepad.hosted://auth/email?token=… (bkz. App/Hosted/HostedAccount.swift).
+        # Sitedeki Google girişi uygulamayı açar:
+        # com.senoldogan.ainotepad.hosted://auth/google#idToken=… (bkz. App/Hosted/HostedAccount.swift).
         CFBundleURLTypes:
           - CFBundleURLName: com.senoldogan.AINotepad.hosted.auth
             CFBundleURLSchemes: [com.senoldogan.ainotepad.hosted]
@@ -139,11 +141,11 @@ targets:
         Debug:
           HOSTED_API_BASE: "http://localhost:8787"
           HOSTED_SITE_BASE: "http://localhost:8788"
-        # Üretim Worker'ı ve sitesi; alan adı alınınca ikisi de değişir. Release https dışındaki adresi reddeder. Site
-        # adresi sunucunun SITE_ORIGIN'iyle aynı olmalı.
+        # Üretim sunucusu ve sitesi. Release https dışındaki adresi reddeder. Site adresi sunucunun SITE_ORIGIN'iyle
+        # aynı olmalı.
         Release:
-          HOSTED_API_BASE: "https://ainotepad-server-production.senoldogan0233.workers.dev"
-          HOSTED_SITE_BASE: "https://ainotepad.pages.dev"
+          HOSTED_API_BASE: "https://api.gistsmith.com"
+          HOSTED_SITE_BASE: "https://gistsmith.com"
   AINotepadiOS:
     type: application
     platform: iOS
@@ -208,6 +210,8 @@ targets:
         # Kayıttan sonra işleme uygulamadan çıkılsa da sürer (BGContinuedProcessingTask); kimlik
         # `com.senoldogan.AINotepad.process.<UUID>` biçimindedir (bkz. iOS/PhoneRecorder.swift).
         BGTaskSchedulerPermittedIdentifiers: [com.senoldogan.AINotepad.process.*]
+        # Çökme raporlarının gittiği sunucu (`POST /v1/reports`, hesapsız); Debug ve Release aynı.
+        ReportsAPIBase: "https://api.gistsmith.com"
   AINotepadWidgets:
     type: app-extension
     platform: iOS

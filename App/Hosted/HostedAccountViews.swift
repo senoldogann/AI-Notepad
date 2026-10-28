@@ -14,7 +14,7 @@ func hostedMonthlyUsageText(used: Double, cap: Double) -> String {
     return String(localized: "Bu ay \(used.formatted(style)) / \(cap.formatted(style)) saat")
 }
 
-/// Apple ile ve e-postayla giriş; kurulumda ve Ayarlar › Hesap'ta aynı.
+/// Apple ile ve Google ile giriş; kurulumda ve Ayarlar › Hesap'ta aynı.
 struct HostedSignInPanel: View {
     let account: HostedAccount
     /// Apple isteğine verilen nonce'un ham hali (yanıt gelince sunucuya gider).
@@ -48,10 +48,17 @@ struct HostedSignInPanel: View {
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(width: 260, height: 36)
             .disabled(account.isWorking)
-            Button("E-postayla giriş bağlantısı al", systemImage: "envelope") { account.openEmailSignIn() }
-                .buttonStyle(.hoverPlain)
-                .disabled(account.isWorking)
-            Text("E-posta adresini sitede yazarsın; gelen bağlantı AI-Notepad'i açar ve girişi tamamlar.")
+            Button {
+                account.startGoogleSignIn()
+            } label: {
+                Text("Google ile devam et")
+                    .frame(width: 228)
+            }
+            .buttonStyle(.pill)
+            .disabled(account.isWorking)
+            Text(account.pendingGoogleSignIn == nil
+                ? "Google hesabını tarayıcıda seçersin; ardından Gistsmith açılır ve girişi tamamlar."
+                : "Tarayıcıda Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.")
                 .appFont(size: 12, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)

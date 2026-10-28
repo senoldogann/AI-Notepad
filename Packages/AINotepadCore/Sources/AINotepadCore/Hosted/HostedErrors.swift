@@ -72,8 +72,6 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case network(path: String, reason: String)
     /// Yanıt beklenen biçimde değil; gövde hata ayıklama içindir (jeton içermez).
     case malformedResponse(path: String, status: Int, body: String)
-    /// Giriş bağlantısı uygulamanın beklediği biçimde değil.
-    case invalidSignInLink
 }
 
 /// Sunucu hata gövdesinin biçimi.
@@ -169,7 +167,7 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
 public func hostedClientMessage(error: HostedClientError) -> String {
     switch error {
     case .notSignedIn:
-        String(localized: "Giriş yapılmamış. Ayarlar › Hesap'tan Apple ile ya da e-postayla giriş yap.")
+        String(localized: "Giriş yapılmamış. Ayarlar › Hesap'tan Apple ya da Google ile giriş yap.")
     case .sessionEnded:
         String(localized: "Oturumun kapandı (çıkış yapılmış ya da güvenlik nedeniyle tüm oturumlar kapatılmış). Yeniden giriş yap.")
     case .insecureBaseURL(let url):
@@ -182,8 +180,6 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "AI-Notepad sunucusuna ulaşılamadı; internet bağlantını kontrol et.")
     case .malformedResponse(_, let status, _):
         String(localized: "AI-Notepad sunucusundan beklenmeyen yanıt geldi (HTTP \(status)). Uygulamayı güncelleyip yeniden dene.")
-    case .invalidSignInLink:
-        String(localized: "Giriş bağlantısı geçersiz. E-postadaki son bağlantıyı aç ya da yeni bağlantı iste.")
     }
 }
 
@@ -200,7 +196,7 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
         switch client {
         case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL:
             return true
-        case .network, .malformedResponse, .invalidSignInLink:
+        case .network, .malformedResponse:
             return false
         }
     default:

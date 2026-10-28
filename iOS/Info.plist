@@ -28,6 +28,8 @@
 	<string>AI-Notepad sıradaki toplantılarını gösterir ve kaydı süren toplantının adı ve katılımcılarıyla kaydeder.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>ReportsAPIBase</key>
+	<string>https://api.gistsmith.com</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InterVariable.ttf</string>

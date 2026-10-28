@@ -41,7 +41,7 @@ Hedef: toplantı saati başına ~0,25 $.
    - Kod açık kaynaktır; güvenlik gizliliğe değil, hesaplara ve kotalara dayanır.
 2. **Kimlik.**
    - Apple ile giriş: kimlik jetonu Apple'ın JWKS'iyle doğrulanır; `aud` ve `iss` denetlenir, nonce kullanılır.
-   - E-posta bağlantısı: tek kullanımlık, 15 dakika geçerli, karma olarak saklanır.
+   - Google ile giriş: Google kimlik jetonu; nonce uygulamanın deneme başına ürettiği ham değerin SHA-256'sıdır.
    - Oturum: kısa ömürlü erişim jetonu (15 dk, imzalı) ve dönen yenileme jetonu (karma olarak saklanır; yeniden kullanılırsa tüm oturumlar düşer).
    - Uygulama jetonları Anahtar Zinciri'nde tutar.
 3. **Cihaz doğrulama.**
@@ -117,8 +117,11 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
     Sor, notu yenileme, tekrar işleme, düzenleme, paylaşım çevirisi ve görev aracı her zaman, toplantısız (abonelik ya da
     kalan deneme; kullanıcının günlük/aylık sınırı, `LLM_ACCOUNT_MAX_TOKENS`).
   - Süre sınırından 5 dk önce panelde ve adada uyarı; sınırda kayıt bitirilip normal işlenir.
-  - E-posta girişinin formu sitededir (Turnstile): uygulama `/giris?app=1` açar, site e-postadaki bağlantıyı
-    `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletir.
+  - Giriş Apple ile (uygulamada) ya da Google ile; e-posta girişi kaldırıldı. Google arayüzü sitededir: uygulama
+    `/sign-in?app=1&nonce=<sha256hex(ham)>` açar, site `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile
+    döner, uygulama `POST /v1/auth/google` `{identityToken, nonce: ham}` gönderir (ham nonce bellekte, tek kullanımlık,
+    10 dk).
+  - Geri bildirim ve çökme raporları (iki sürüm ve iPhone) `POST /v1/reports`'a gider; GitHub'a bağlantı yok.
   - **Yayından önce:** abonelik sürümünün kendi Sparkle akışı (appcast) ve imza anahtarı gerekir; o zamana dek
     güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı).
 - [x] 3. Web sitesi (PR #80).
@@ -135,6 +138,5 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
     ElevenLabs (yalnızca Speech to Text izinli) üretim anahtarları Worker gizli değerlerinde.
   - Stripe test ortamı başka bir projeyle (HouseStory) paylaşılıyor: Checkout ve Portal'da işletme adı "HouseStory"
     görünür. Canlıda hesabın genel adı görünür; testte ayrı bir Stripe sandbox'ı daha temiz olur.
-  - **Yayından önce:** alan adı (site, Worker, Apple Services ID ve Turnstile alan adları birlikte değişir); e-posta
-    gönderimi (şimdilik `EMAIL_SENDER=dev`, giriş yalnızca Apple ile); Stripe canlı mod (canlı ürün, fiyat, webhook ve
-    anahtar); abonelik sürümünün Sparkle akışı; yasal metinlerdeki işletmeci bilgileri ve hukuki inceleme.
+  - **Yayından önce:** alan adı (site, Worker, Apple Services ID ve Turnstile alan adları birlikte değişir); Stripe
+    canlı mod (canlı ürün, fiyat, webhook ve anahtar); abonelik sürümünün Sparkle akışı; yasal metinlerdeki işletmeci bilgileri ve hukuki inceleme.
