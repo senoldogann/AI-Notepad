@@ -1,4 +1,5 @@
 import AINotepadCore
+import AINotepadUI
 import Foundation
 import os
 
@@ -19,6 +20,9 @@ enum PhoneSettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// Tema takımı (Mac'teki ayarla aynı ad; bkz. `AppTheme`).
     static let theme: String = "appearance.theme"
+    /// Tasarım stili (`DesignStyle`) ve Liquid Glass'ın cam rengi (`GlassTint`); Mac'teki ayarlarla aynı adlar.
+    static let designStyle: String = "appearance.designStyle"
+    static let glassTint: String = "appearance.glassTint"
     /// Takvim (sıradaki toplantılar, kaydı süren etkinliğe bağlama); varsayılan kapalı, açılınca izin istenir.
     static let calendarEnabled: String = "calendar.enabled"
     /// Yazıya dökme ve notun yapıldığı yer (bkz. `PhoneEngine`).
@@ -43,6 +47,8 @@ func registerPhoneDefaults() {
         PhoneSettingsKey.engine: PhoneEngine.cloud.rawValue,
         // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
         PhoneSettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
+        PhoneSettingsKey.designStyle: DesignLook.standard.style.rawValue,
+        PhoneSettingsKey.glassTint: DesignLook.standard.tint.rawValue,
     ])
 }
 

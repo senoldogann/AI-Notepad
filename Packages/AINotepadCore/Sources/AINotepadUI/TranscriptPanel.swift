@@ -178,6 +178,7 @@ public struct TranscriptPanel: View {
             }
             IconButton(symbol: "minus", help: "Paneli gizle", action: actions.onHide)
         }
+        .glassGroup(spacing: DesignTokens.Spacing.s)
     }
 
     /// Kayıtta nokta ve süre (hep tam); boşta yalnızca bir sorun ya da bekleme varsa durum (önce bu kısalır).
@@ -323,7 +324,7 @@ public struct TranscriptPanel: View {
                 .appFont(size: 12, weight: .medium)
                 .padding(.horizontal, DesignTokens.Spacing.s)
                 .padding(.vertical, 4)
-                .background(Theme.primary, in: Capsule())
+                .primarySurface(shape: Capsule())
                 .foregroundStyle(Theme.onPrimary)
         }
         .buttonStyle(.hoverCapsule)
@@ -338,7 +339,7 @@ public struct TranscriptPanel: View {
         }
         .padding(.horizontal, 3)
         .padding(.vertical, 2)
-        .background(Theme.soft, in: Capsule())
+        .softSurface(shape: Capsule())
     }
 
     private var pauseButton: some View {
@@ -384,7 +385,7 @@ public struct TranscriptPanel: View {
             .fixedSize()
             .padding(.horizontal, DesignTokens.Spacing.s)
             .padding(.vertical, 3)
-            .background(Theme.soft, in: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
+            .softSurface(shape: RoundedRectangle(cornerRadius: DesignTokens.chipRadius))
         if state.isRecording {
             Menu {
                 LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
@@ -499,7 +500,7 @@ public struct TranscriptPanel: View {
                             .appFont(size: 12, weight: .medium)
                             .padding(.horizontal, DesignTokens.Spacing.m)
                             .padding(.vertical, 5)
-                            .background(Theme.primary, in: Capsule())
+                            .primarySurface(shape: Capsule())
                             .foregroundStyle(Theme.onPrimary)
                     }
                     .buttonStyle(.hoverCapsule)
@@ -532,6 +533,7 @@ public struct TranscriptPanel: View {
                 questionField
             }
         }
+        .glassGroup(spacing: DesignTokens.Spacing.s)
     }
 
     /// "Ne kaçırdım?" düğmesi; etiketi (yazılı ya da yalnızca simge) genişliğe göre verilir.
@@ -559,7 +561,7 @@ public struct TranscriptPanel: View {
             .appFont(size: 12, weight: .medium)
             .padding(.horizontal, DesignTokens.Spacing.m)
             .padding(.vertical, 6)
-            .background(Theme.soft, in: Capsule())
+            .softSurface(shape: Capsule())
             .onSubmit {
                 let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {

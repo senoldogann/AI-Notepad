@@ -6,6 +6,8 @@ public struct PillPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: LocalizedStringKey)]
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @Environment(\.designLook) private var look: DesignLook
+    @Environment(\.colorScheme) private var colorScheme: ColorScheme
     /// Seçili kart bölümler arasında kayar (zıplamaz).
     @Namespace private var selectionSpace: Namespace.ID
 
@@ -31,7 +33,7 @@ public struct PillPicker<Value: Hashable>: View {
                         // ElevenLabs bölüm seçicisi: soluk iz üzerinde seçili bölüm beyaz kart.
                         .background {
                             if isSelected {
-                                Capsule().fill(Theme.card).shadow(color: .black.opacity(0.10), radius: 2, y: 1)
+                                selectedThumb
                                     .matchedGeometryEffect(id: "secili", in: selectionSpace)
                             }
                         }
@@ -43,8 +45,19 @@ public struct PillPicker<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(Theme.soft, in: Capsule())
+        .softSurface(shape: Capsule())
         .animation(.smooth(duration: 0.25), value: selection)
+    }
+
+    /// Seçili bölüm: Standart'ta gölgeli beyaz kart; Liquid Glass'ta cam izin üstünde buzlu beyaz.
+    @ViewBuilder
+    private var selectedThumb: some View {
+        switch look.style {
+        case .standard:
+            Capsule().fill(Theme.card).shadow(color: .black.opacity(0.10), radius: 2, y: 1)
+        case .liquidGlass:
+            Capsule().fill(glassColors(tint: look.tint, colorScheme: colorScheme).selectionFill)
+        }
     }
 }
 
