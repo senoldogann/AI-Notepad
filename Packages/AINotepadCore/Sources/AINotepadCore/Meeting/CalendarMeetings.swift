@@ -71,6 +71,14 @@ public func currentMeeting(meetings: [CalendarMeeting], now: Date) -> CalendarMe
         .min { abs($0.start.timeIntervalSince(now)) < abs($1.start.timeIntervalSince(now)) }
 }
 
+/// Sıradaki toplantılar: bitmemiş (süren dahil) ve `horizonSec` içinde başlayan etkinlikler, başlangıca göre sıralı.
+/// Saf fonksiyondur.
+public func upcomingMeetings(meetings: [CalendarMeeting], now: Date, horizonSec: Double) -> [CalendarMeeting] {
+    meetings
+        .filter { $0.end > now && $0.start.timeIntervalSince(now) < horizonSec }
+        .sorted { $0.start < $1.start }
+}
+
 /// Hatırlatma zamanlanacak toplantılar: henüz başlamamış, `horizonSec` içinde başlayan, 8 saatten kısa; sıralı.
 /// Saf fonksiyondur.
 public func meetingsToRemind(meetings: [CalendarMeeting], now: Date, horizonSec: Double) -> [CalendarMeeting] {

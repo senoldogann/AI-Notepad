@@ -260,6 +260,80 @@ struct MeetingsListPage: View {
     }
 }
 
+/// Gönderim durumu satırı (kanal ya da görev aracı). Gönderilirken kâğıt uçak sakince nabız atar; sonuç (gitti ya da
+/// hata) bir süre sonra yumuşakça kaybolur. Durum modelde kalır; gizleme yalnızca bu görünümdedir: gizlenen değer
+/// tutulur, yeni bir durum gelince satır yeniden görünür ve zamanlayıcı baştan başlar.
+private struct SendStatusLine: View {
+    let state: WebhookSendState?
+    let sending: LocalizedStringKey
+    let sent: LocalizedStringKey
+    @State private var dismissed: WebhookSendState?
+
+    var body: some View {
+        if let state, state != dismissed {
+            line(state: state)
+                .transition(.opacity)
+                .task(id: state) { await fade(shown: state) }
+        }
+    }
+
+    /// Görünen durum sonuçsa süresi dolunca gizler. Satır görünüyorsa önceki gizleme geçersizdir (aynı sonuç yeniden
+    /// gelirse de görünsün diye sıfırlanır).
+    private func fade(shown: WebhookSendState) async {
+        dismissed = nil
+        guard let delay = sendResultFadeDelay(state: shown) else {
+            return
+        }
+        do {
+            try await Task.sleep(for: delay)
+        } catch {
+            // Yalnızca iptal: yeni bir durum geldi, eski sonucun zamanlayıcısı bir şey gizlemez.
+            return
+        }
+        withAnimation(.easeOut(duration: 0.4)) { dismissed = shown }
+    }
+
+    @ViewBuilder
+    private func line(state: WebhookSendState) -> some View {
+        switch state {
+        case .sending:
+            Label {
+                Text(sending)
+            } icon: {
+                Image(systemName: "paperplane").symbolEffect(.pulse)
+            }
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(.secondary)
+        case .sent:
+            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .done(let summary):
+            Label(summary, systemImage: "checkmark.circle")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+        }
+    }
+}
+
+/// Gönderim sonucunun kaybolma süresi: gitti 3,5 sn, hata 5 sn; gönderilirken kalır. Saf fonksiyondur.
+private func sendResultFadeDelay(state: WebhookSendState) -> Duration? {
+    switch state {
+    case .sending: nil
+    case .sent, .done: .seconds(3.5)
+    case .failed: .seconds(5)
+    }
+}
+
+/// Dışa aktarma hatasının kullanıcı metni: boş dosya adı kalmadıysa ne yapılacağını söyler. Saf fonksiyondur.
+private func exportFailureMessage(error: any Error) -> String {
+    if case ExportFileError.allNamesTaken = error {
+        return String(localized: "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.")
+    }
+    return userFacingMessage(error: error)
+}
+
 /// Liste satırı: başlık, tarih, süre, durum ve varsa senin görev sayın.
 struct MeetingRow: View {
     let record: MeetingRecord
@@ -273,17 +347,11 @@ struct MeetingRow: View {
                 Text(record.note?.title ?? record.title)
                     .appFont(size: 13, weight: .semibold)
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
-                    if let minutes = meetingDurationMinutes(record: record) {
-                        Text("· " + String(localized: "\(minutes) dk"))
-                    }
-                    if let status = statusText(record: record, isProcessing: isProcessing) {
-                        Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
-                    }
-                }
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.secondary)
+                // Tek metin, tek satır: dar listede tarih, süre ve durum ayrı sütunlara bölünüp alt alta kaymaz.
+                infoLine
+                    .appFont(size: 11, weight: .regular)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
             let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
@@ -291,7 +359,7 @@ struct MeetingRow: View {
                 Label("\(mine)", systemImage: "star.fill")
                     .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(.tint)
-                    .help("Sana düşen görev sayısı")
+                    .hoverHint("Sana düşen görev sayısı", alignment: .trailing, edge: .bottom)
             }
             Image(systemName: "chevron.right")
                 .appFont(size: 10, weight: .semibold)
@@ -304,6 +372,22 @@ struct MeetingRow: View {
             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
         )
         .contentShape(Rectangle())
+    }
+
+    /// "tarih · süre · durum" tek metin olarak; hata durumu kırmızı.
+    private var infoLine: Text {
+        var line: AttributedString = AttributedString(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
+        if let minutes = meetingDurationMinutes(record: record) {
+            line += AttributedString(" · " + String(localized: "\(minutes) dk"))
+        }
+        if let status = statusText(record: record, isProcessing: isProcessing) {
+            var part: AttributedString = AttributedString(" · " + status)
+            if record.status == .failed {
+                part.foregroundColor = Color.red
+            }
+            line += part
+        }
+        return Text(line)
     }
 }
 
@@ -387,35 +471,19 @@ struct MeetingDetailPage: View {
                     exportLine
                         .transition(.move(edge: .top).combined(with: .opacity))
                     statusLines
-                    PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
-                        .frame(maxWidth: 260)
+                    // Sekmeler ve notun dili tek satırda: dil, iş arkadaşlarına göndermek için notun başka dildeki sürümü.
+                    HStack(spacing: 10) {
+                        PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
+                            .frame(maxWidth: 260)
+                        Spacer(minLength: 8)
+                        if tab == .summary, record.note != nil {
+                            noteLanguageMenu
+                        }
+                    }
                     Group {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            HStack(spacing: 8) {
-                                // Fince ve İngilizce hep görünür; seçilen diğer dil de dördüncü olarak eklenir.
-                                let others: [(value: ShareLanguage?, title: LocalizedStringKey)] = noteLanguage.flatMap { (language: ShareLanguage) -> [(value: ShareLanguage?, title: LocalizedStringKey)]? in
-                                    [.finnish, .english].contains(language) ? nil : [(value: language, title: LocalizedStringKey(language.nativeName))]
-                                } ?? []
-                                PillPicker(selection: $noteLanguage, options: [
-                                    (value: nil, title: "Türkçe"), (value: ShareLanguage.finnish, title: "Suomi"), (value: ShareLanguage.english, title: "English"),
-                                ] + others)
-                                .fixedSize()
-                                .hoverHint("İş arkadaşlarına göndermek için notun başka dildeki sürümü", alignment: .leading, edge: .bottom)
-                                Menu {
-                                    ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
-                                        Button(language.nativeName) { noteLanguage = language }
-                                    }
-                                } label: {
-                                    Label("Diğer diller", systemImage: "globe")
-                                }
-                                .menuStyle(.button)
-                                .buttonStyle(.pill)
-                                .menuIndicator(.hidden)
-                                .fixedSize()
-                                .hoverHint("Notu 30'dan fazla dilden birine çevir", alignment: .leading, edge: .bottom)
-                            }
                             if let language = noteLanguage {
                                 // Dil değişince durum (hata, deneme) sıfırlansın.
                                 SharedNoteSection(model: model, record: record, note: note, language: language)
@@ -497,8 +565,8 @@ struct MeetingDetailPage: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
-        sendStatus(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
-        sendStatus(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
+        SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
+        SendStatusLine(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
                 .appFont(size: 12, weight: .regular)
@@ -521,11 +589,18 @@ struct MeetingDetailPage: View {
         let spans: [SpeakerSpan] = speakerSpans(paragraphs: paragraphs)
         let totalSec: Double = paragraphs.map(\.endSec).max() ?? 0
         return VStack(alignment: .leading, spacing: 0) {
+            // Kapak şeridi: toplantının gradyanı (yazı altta, beyaz zeminde).
+            CoverImage(seed: record.id)
+                // Ana sayfa kartlarındaki gibi ortada toplantıya özgü ses dalgası.
+                .overlay { CoverWaveform(seed: record.id) }
+                .frame(height: 132)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous))
+                .padding(EdgeInsets(top: -24, leading: -26, bottom: 18, trailing: -26))
             Text(record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(interfaceLocale())))
                 .appFont(size: 12, weight: .medium)
                 .tracking(0.6)
                 .textCase(.uppercase)
-                .opacity(0.85)
+                .foregroundStyle(Theme.muted)
             Group {
                 if isRenaming {
                     TextField("Toplantı adı", text: $draftTitle)
@@ -545,9 +620,9 @@ struct MeetingDetailPage: View {
                         .hoverHint("Yeniden adlandırmak için çift tıkla", alignment: .leading, edge: .bottom)
                 }
             }
-            .appFont(size: 30, weight: .regular)
-            .tracking(-0.6)
-            .padding(.top, 8)
+            .appFont(size: 28, weight: .semibold)
+            .tracking(-0.7)
+            .padding(.top, 6)
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
                 let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
@@ -555,22 +630,20 @@ struct MeetingDetailPage: View {
                     HStack(spacing: -7) {
                         ForEach(Array(speakers.prefix(4).enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
                             SpeakerAvatar(text: avatarText(key: item.element.key, speakerNames: record.speakerNames), color: speakerColor(key: item.element.key), size: 24)
-                                .overlay(Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5))
+                                .overlay(Circle().strokeBorder(Theme.card, lineWidth: 1.5))
                                 .zIndex(Double(4 - item.offset))
                         }
                     }
                     .padding(.trailing, 4)
-                    // Kapak koyu ortamda çizilir; rozetler açık zeminli kalsın (gradyan üstünde soluk ve bulanık görünüyordu).
-                    .environment(\.colorScheme, .light)
                     .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
                 }
                 ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
                     Text(chip)
                         .appFont(size: 12, weight: .medium)
+                        .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.16), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22)))
+                        .background(Theme.soft, in: Capsule())
                 }
             }
             .padding(.top, 12)
@@ -583,15 +656,44 @@ struct MeetingDetailPage: View {
                 .padding(.top, 18)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Theme.ink)
         .padding(EdgeInsets(top: 24, leading: 26, bottom: 18, trailing: 26))
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Yalnızca zemin kırpılır: düğme ipuçları kapağın dışına taşabilsin.
+        // Yalnızca zemin kırpılır: düğme ipuçları kartın dışına taşabilsin.
         .background {
-            LivingCoverBackground(seed: record.id)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Theme.card)
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.line))
         }
-        .environment(\.colorScheme, .dark)
+    }
+
+    /// Notun dili: Türkçe (asıl not), sık kullanılan Fince ve İngilizce, sonra diğer diller.
+    private var noteLanguageMenu: some View {
+        Menu {
+            Button("Türkçe") { noteLanguage = nil }
+            Button(ShareLanguage.finnish.nativeName) { noteLanguage = .finnish }
+            Button(ShareLanguage.english.nativeName) { noteLanguage = .english }
+            Divider()
+            Menu("Diğer diller") {
+                ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
+                    Button(language.nativeName) { noteLanguage = language }
+                }
+            }
+        } label: {
+            Label {
+                if let language = noteLanguage {
+                    Text(verbatim: language.nativeName)
+                } else {
+                    Text("Türkçe")
+                }
+            } icon: {
+                Image(systemName: "globe")
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.pill)
+        .fixedSize()
+        .hoverHint("Notu iş arkadaşların için 30'dan fazla dilden birine çevir", alignment: .trailing, edge: .bottom)
     }
 
     /// Kapaktaki çipler: süre, dil, konuşmacı, karar ve terim sayısı (olanlar).
@@ -614,7 +716,7 @@ struct MeetingDetailPage: View {
             HStack(spacing: DesignTokens.Spacing.s) {
                 listenButton
                 Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .disabled(isLocked)
                     .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
                 Menu {
@@ -625,7 +727,7 @@ struct MeetingDetailPage: View {
                     Label("Tarif", systemImage: "wand.and.stars")
                 }
                 .menuStyle(.button)
-                .buttonStyle(.coverGlass)
+                .buttonStyle(.pill)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .disabled(record.note == nil)
@@ -636,20 +738,20 @@ struct MeetingDetailPage: View {
                         Label("Paylaş", systemImage: "square.and.arrow.up")
                     }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde", alignment: .trailing, edge: .bottom)
                 }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .trailing, edge: .bottom)
                 Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kaydet", alignment: .trailing, edge: .bottom)
                 Button("Kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
                 moreMenu {
                     fileExportItems
@@ -685,12 +787,12 @@ struct MeetingDetailPage: View {
                     play(from: 0)
                 }
             }
-            .buttonStyle(.bannerPrimary)
+            .buttonStyle(.pillPrimary)
             .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
         }
     }
 
-    /// "⋯" menüsü: kapak üstünde cam daire.
+    /// "⋯" menüsü: başlık kartında hap.
     private func moreMenu(@ViewBuilder items: () -> some View) -> some View {
         Menu {
             items()
@@ -699,7 +801,7 @@ struct MeetingDetailPage: View {
             Image(systemName: "ellipsis").frame(width: 16, height: 16)
         }
         .menuStyle(.button)
-        .buttonStyle(.coverGlass)
+        .buttonStyle(.pill)
         .menuIndicator(.hidden)
         .fixedSize()
         .hoverHint("Diğer işlemler", alignment: .trailing, edge: .bottom)
@@ -851,26 +953,6 @@ struct MeetingDetailPage: View {
         .disabled(isLocked || record.audioDeleted)
         Button("Toplantıyı sil", systemImage: "trash", role: .destructive) { export = .confirmDelete }
             .disabled(isLocked)
-    }
-
-    /// Gönderim durumu satırı (kanal ya da görev aracı).
-    @ViewBuilder
-    private func sendStatus(state: WebhookSendState?, sending: LocalizedStringKey, sent: LocalizedStringKey) -> some View {
-        switch state {
-        case .sending:
-            Label(sending, systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .sent:
-            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .done(let summary):
-            Label(summary, systemImage: "checkmark.circle")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
-        case nil:
-            EmptyView()
-        }
     }
 
     /// Notun önceki sürümleri: son değişikliği geri al ve sürüm listesi (tarih ve neden); geri yükleme de geri alınabilir.
@@ -1031,13 +1113,13 @@ struct MeetingDetailPage: View {
         Task {
             do {
                 let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                let url: URL = exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
+                let url: URL = try exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
                 let range: (start: Double, end: Double) = clipRange(startSec: paragraph.startSec, endSec: paragraph.endSec)
                 try await exportAudioClip(sources: sources, startSec: range.start, endSec: range.end, destination: url)
                 export = .saved(url)
             } catch {
                 meetingsLogger.error("Klip kaydedilemedi, hata: \(String(describing: error), privacy: .private)")
-                export = .failed(userFacingMessage(error: error))
+                export = .failed(exportFailureMessage(error: error))
             }
         }
     }
@@ -1086,7 +1168,7 @@ struct MeetingDetailPage: View {
     private func saveExport(fileExtension: String, write: (URL) throws -> Void) -> ExportStatus {
         do {
             let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            let url: URL = exportFileURL(directory: downloads, title: record.note?.title ?? record.title, startedAt: record.startedAt, fileExtension: fileExtension)
+            let url: URL = try exportFileURL(directory: downloads, title: record.note?.title ?? record.title, startedAt: record.startedAt, fileExtension: fileExtension)
             do {
                 try write(url)
             } catch {
@@ -1095,7 +1177,7 @@ struct MeetingDetailPage: View {
             return .saved(url)
         } catch {
             meetingsLogger.error("Dışa aktarılamadı, uzantı: \(fileExtension, privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            return .failed(userFacingMessage(error: error))
+            return .failed(exportFailureMessage(error: error))
         }
     }
 
@@ -1128,6 +1210,8 @@ private struct SummaryTab: View {
     /// İşaretlenen anı ses klibi olarak kaydeder.
     let onClip: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    /// Kendi notları yazılıyor (henüz notu yokken "Kendi notun" düğmesiyle açılır).
+    @State private var isEditingMyNotes: Bool = false
 
     var body: some View {
         let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
@@ -1154,10 +1238,10 @@ private struct SummaryTab: View {
     private var main: some View {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
+        let myNotes: String = record.myNotes ?? ""
+        let isLocked: Bool = model.isLocked(meetingID: record.id)
         return VStack(alignment: .leading, spacing: 30) {
-            if mine.isEmpty {
-                NoMyTasksCard(seed: record.id, hasOtherTasks: !others.isEmpty)
-            } else {
+            if !mine.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
                         .appFont(size: 11, weight: .semibold)
@@ -1172,12 +1256,19 @@ private struct SummaryTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            // Kendi notların ve notu sorarak düzenleme yan yana iki eylem: tek grupta, sıkı aralıkla.
+            // Kendi notların (varsa ya da yazılırken) ve notu sorarak düzenleme tek grupta; "Kendi notun" düzenleme
+            // alanının içinde küçük bir düğme.
             VStack(alignment: .leading, spacing: 10) {
-                MyNotesCard(notes: record.myNotes ?? "", isLocked: model.isLocked(meetingID: record.id)) { (text: String) -> Void in
-                    model.saveMyNotes(meetingID: record.id, text: text)
+                if !myNotes.isEmpty || isEditingMyNotes {
+                    MyNotesCard(notes: myNotes, isLocked: isLocked, isEditing: $isEditingMyNotes) { (text: String) -> Void in
+                        model.saveMyNotes(meetingID: record.id, text: text)
+                    }
                 }
-                NoteEditBar(isWorking: model.processingMeetingIDs.contains(record.id)) { (instruction: String) -> Void in
+                NoteEditBar(
+                    isWorking: model.processingMeetingIDs.contains(record.id),
+                    canAddMyNotes: myNotes.isEmpty && !isEditingMyNotes && !isLocked,
+                    onAddMyNotes: { withAnimation(.smooth(duration: 0.2)) { isEditingMyNotes = true } }
+                ) { (instruction: String) -> Void in
                     model.editNote(meetingID: record.id, instruction: instruction)
                 }
             }
@@ -1284,7 +1375,7 @@ private struct SummaryTab: View {
             ("\(note.tasks.filter(\.isMine).count)", "senin görevin"),
         ]
         let symbols: [String] = ["clock", "person.2", "checkmark.seal", "checklist"]
-        return asideCard(title: "BİR BAKIŞTA", symbol: "chart.bar.xaxis") {
+        return asideCard {
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 14) {
                 ForEach(Array(stats.enumerated()), id: \.offset) { (item: (offset: Int, element: (value: String, label: LocalizedStringKey))) in
                     HStack(alignment: .center, spacing: 10) {
@@ -1305,7 +1396,7 @@ private struct SummaryTab: View {
 
     /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde.
     private func talkShare(shares: [SpeakerShare]) -> some View {
-        asideCard(title: "KİM NE KADAR KONUŞTU", symbol: "waveform") {
+        asideCard {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(shares, id: \.key) { (share: SpeakerShare) in
                     // Ad ve yüzde üstte, pay çubuğu altta tam genişlikte: dar yan sütunda ad kesilmez.
@@ -1347,16 +1438,10 @@ private struct SummaryTab: View {
         }
     }
 
-    /// Yan sütun kartı: üstte toplantının kapağından ince film gradyanı şerit, simgeli küçük başlık, içerik.
-    private func asideCard(title: LocalizedStringKey, symbol: String, @ViewBuilder content: () -> some View) -> some View {
+    /// Yan sütun kartı: üstte toplantının kapağından ince film gradyanı şerit ve içerik (başlık etiketi yok; içerik
+    /// kendini anlatır).
+    private func asideCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(title).tracking(DesignTokens.labelTracking)
-            } icon: {
-                Image(systemName: symbol)
-            }
-            .appFont(size: 11, weight: .semibold)
-            .foregroundStyle(Theme.muted)
             content()
         }
         .padding(16)
@@ -1388,35 +1473,13 @@ private struct SummaryTab: View {
     }
 }
 
-/// "Bu toplantıda sana düşen görev yok": toplantının kapağından küçük gradyan simge kutusu, başlık ve kısa açıklama;
-/// vurgu renginde çok hafif zemin.
-private struct NoMyTasksCard: View {
-    let seed: String
-    let hasOtherTasks: Bool
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
-
-    var body: some View {
-        // Olmayan bir şey için dikkat çeken kart yok: tek, sakin satır.
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle")
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.muted)
-            Text("Bu toplantıda sana düşen görev yok")
-                .appFont(size: 13, weight: .medium)
-                .foregroundStyle(Theme.ink)
-            Text(hasOtherTasks ? "· başkalarına düşenler aşağıda" : "· özet ve kararlar aşağıda")
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.muted)
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
 /// Notu sorarak düzenle: tek satır istek ("özeti kısalt", "görevlere tarih ekle") ve hazır öneri hapları; düzenlenirken
 /// parıltılı "Not düzenleniyor…".
 private struct NoteEditBar: View {
     let isWorking: Bool
+    /// Henüz kendi notu yok: alanın sağında "Kendi notun" düğmesi görünür.
+    let canAddMyNotes: Bool
+    let onAddMyNotes: @MainActor () -> Void
     let onEdit: @MainActor (String) -> Void
     @State private var instruction: String = ""
     @FocusState private var isFocused: Bool
@@ -1449,6 +1512,13 @@ private struct NoteEditBar: View {
                     }
                     .buttonStyle(.hoverCapsule)
                     .accessibilityLabel("Notu düzenle")
+                } else if canAddMyNotes, instruction.isEmpty {
+                    Button("Kendi notun", systemImage: "square.and.pencil", action: onAddMyNotes)
+                        .appFont(size: 12, weight: .medium)
+                        .buttonStyle(.hoverPlain)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize()
+                        .hoverHint("Kendi notunu yaz; not onu öncelik sayıp yeniden yazılır", alignment: .trailing, edge: .bottom)
                 }
             }
             .padding(.horizontal, 12)
@@ -1488,88 +1558,75 @@ private struct NoteEditBar: View {
 }
 
 /// "Senin notların": kullanıcının toplantıda yazdıkları (not bunları öncelik saydı). Düzenlenebilir; "Kaydet ve notu
-/// yeniden yaz" notu yeni notlarla baştan yazar. Not yoksa tek satırlık "Kendi notunu ekle".
+/// yeniden yaz" notu yeni notlarla baştan yazar. Not yokken düzenleme alanındaki "Kendi notun" düğmesiyle açılır.
 private struct MyNotesCard: View {
     let notes: String
     let isLocked: Bool
+    @Binding var isEditing: Bool
     let onSave: @MainActor (String) -> Void
-    @State private var isEditing: Bool = false
     @State private var draft: String = ""
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        if notes.isEmpty, !isEditing {
-            Button {
-                draft = ""
-                withAnimation(.smooth(duration: 0.2)) { isEditing = true }
-            } label: {
-                Label("Kendi notunu ekle — not onu öncelik sayıp yeniden yazılır", systemImage: "square.and.pencil")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
-            }
-            .buttonStyle(.hoverPlain)
-            .disabled(isLocked)
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Label {
-                        Text("SENİN NOTLARIN").tracking(DesignTokens.labelTracking)
-                    } icon: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .appFont(size: 11, weight: .semibold)
-                    .foregroundStyle(appearance.accent.color)
-                    Spacer()
-                    if isEditing {
-                        Button("Vazgeç") { withAnimation(.smooth(duration: 0.2)) { isEditing = false } }
-                            .buttonStyle(.hoverPlain)
-                            .foregroundStyle(Theme.muted)
-                        Button("Kaydet ve notu yeniden yaz") {
-                            onSave(draft)
-                            withAnimation(.smooth(duration: 0.2)) { isEditing = false }
-                        }
-                        .buttonStyle(.pillPrimary)
-                        .controlSize(.small)
-                        // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
-                        .disabled(isLocked)
-                        .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
-                    } else {
-                        Button("Düzenle", systemImage: "pencil") {
-                            draft = notes
-                            withAnimation(.smooth(duration: 0.2)) { isEditing = true }
-                        }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Label {
+                    Text("SENİN NOTLARIN").tracking(DesignTokens.labelTracking)
+                } icon: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .appFont(size: 11, weight: .semibold)
+                .foregroundStyle(appearance.accent.color)
+                Spacer()
+                if isEditing {
+                    Button("Vazgeç") { withAnimation(.smooth(duration: 0.2)) { isEditing = false } }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(Theme.muted)
-                        .disabled(isLocked)
+                    Button("Kaydet ve notu yeniden yaz") {
+                        onSave(draft)
+                        withAnimation(.smooth(duration: 0.2)) { isEditing = false }
                     }
-                }
-                .appFont(size: 12, weight: .medium)
-                if isEditing {
-                    TextEditor(text: $draft)
-                        .appFont(size: 14, weight: .regular)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 90, maxHeight: 220)
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+                    // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
+                    .disabled(isLocked)
+                    .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
                 } else {
-                    Text(notes)
-                        .appFont(size: 14, weight: .regular)
-                        .foregroundStyle(Theme.ink)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Düzenle", systemImage: "pencil") {
+                        draft = notes
+                        withAnimation(.smooth(duration: 0.2)) { isEditing = true }
+                    }
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(Theme.muted)
+                    .disabled(isLocked)
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(appearance.accent.color.opacity(0.04), in: shape)
-            .overlay(alignment: .leading) {
-                // Sol kenarda vurgu çizgisi: bu metin kullanıcının kendi yazdığı.
-                UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
-                    .fill(appearance.accent.color.opacity(0.7))
-                    .frame(width: 3)
+            .appFont(size: 12, weight: .medium)
+            if isEditing {
+                TextEditor(text: $draft)
+                    .appFont(size: 14, weight: .regular)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 90, maxHeight: 220)
+            } else {
+                Text(notes)
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Theme.ink)
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .overlay(shape.strokeBorder(Theme.line))
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(appearance.accent.color.opacity(0.04), in: shape)
+        .overlay(alignment: .leading) {
+            // Sol kenarda vurgu çizgisi: bu metin kullanıcının kendi yazdığı.
+            UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
+                .fill(appearance.accent.color.opacity(0.7))
+                .frame(width: 3)
+        }
+        .overlay(shape.strokeBorder(Theme.line))
     }
 }
 
@@ -1877,7 +1934,7 @@ struct TaskCheckbox: View {
     var body: some View {
         Button(action: onToggle) {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 17, weight: .regular))
+                .appFont(size: 17, weight: .regular)
                 .foregroundStyle(isDone ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
                 .contentTransition(.symbolEffect(.replace.magic(fallback: .replace)))
                 .frame(width: 22, height: 22)
@@ -2001,7 +2058,7 @@ private struct SpeakerAvatar: View {
     }
 }
 
-/// Kapaktaki konuşmacı zaman çizgisi: kim ne zaman konuştu; çalarken beyaz okuma çizgisi; tıklayınca oradan çalar.
+/// Başlık kartındaki konuşmacı zaman çizgisi: kim ne zaman konuştu; çalarken okuma çizgisi; tıklayınca oradan çalar.
 private struct SpeakerTimeline: View {
     let spans: [SpeakerSpan]
     let totalSec: Double
@@ -2016,7 +2073,7 @@ private struct SpeakerTimeline: View {
                 let width: CGFloat = proxy.size.width
                 ZStack(alignment: .leading) {
                     ZStack(alignment: .leading) {
-                        Rectangle().fill(Color.black.opacity(0.28))
+                        Rectangle().fill(Theme.soft)
                         ForEach(Array(spans.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerSpan)) in
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(speakerColor(key: item.element.key))
@@ -2480,7 +2537,7 @@ private struct Playhead: View {
     var body: some View {
         if player.meetingID == meetingID {
             Capsule()
-                .fill(Color.white)
+                .fill(Theme.ink)
                 .frame(width: 3, height: 14)
                 .shadow(color: .black.opacity(0.35), radius: 2)
                 .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)

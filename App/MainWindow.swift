@@ -31,8 +31,13 @@ enum MainSection: Hashable {
 final class MainWindowRouter {
     var section: MainSection = .home
     var selectedMeetingID: String?
-    /// Üst çubuktaki arama (Toplantılar listesini süzer).
+    /// Toplantılar listesini süzen arama (arama penceresinde ↩ ile uygulanır; üst çubukta görünür, × ile temizlenir).
     var searchQuery: String = ""
+    /// Orta ekrandaki arama penceresi açık.
+    var isSearchPresented: Bool = false
+    /// Kayıt ekranı bu kayıt için kapatıldı ("Uygulamaya dön"); üst çubuktaki "Kayıtta" hapı yeniden açar. Her yeni
+    /// kayıtta sıfırlanır.
+    var isRecordingFocusDismissed: Bool = false
     /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
     var quitWarning: Bool = false
     /// Açılış ekranı bu açılışta gösterildi.
@@ -142,6 +147,10 @@ struct MainWindowView: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
+        let isRecordingFocusVisible: Bool = model.phase == .recording && !router.isRecordingFocusDismissed && router.section != .setup
+        // Arama penceresi ya da kayıt ekranı açıkken içerik bulanıklaşır (koyu perde yok, açık buzlu cam; toplantı
+        // hazırlanırken çıkan kart gibi) ve tıklamaları almaz.
+        let isContentCovered: Bool = router.isSearchPresented || isRecordingFocusVisible
         ZStack {
             // İlk açılışta bir kez: tam pencere, kenar çubuğu yok, içerik ortada.
             if router.section == .setup {
@@ -151,7 +160,7 @@ struct MainWindowView: View {
                 HStack(spacing: 0) {
                     Sidebar(model: model, router: router)
                     VStack(spacing: 0) {
-                        TopBar(router: router, onShowPanel: onShowPanel)
+                        TopBar(model: model, router: router, onShowPanel: onShowPanel)
                         // Ana penceredeki eylemlerin hataları (not düzenleme, tarif, ses silme…) burada görünür; önceden
                         // yalnızca canlı panelde çıkıyordu.
                         if !model.errorMessages.isEmpty {
@@ -176,6 +185,9 @@ struct MainWindowView: View {
             }
         }
         .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        .blur(radius: isContentCovered ? 10 : 0)
+        .allowsHitTesting(!isContentCovered)
+        .animation(.easeInOut(duration: 0.25), value: isContentCovered)
         // Açılış ekranı: uygulama her açıldığında bir kez (pencere kapatılıp açılınca tekrarlanmaz).
         .overlay {
             if !router.hasShownSplash {
@@ -185,6 +197,25 @@ struct MainWindowView: View {
                 .transition(.opacity.combined(with: .scale(scale: 1.02)))
             }
         }
+        .overlay {
+            if isRecordingFocusVisible {
+                RecordingFocus(model: model, router: router, onShowPanel: onShowPanel)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: isRecordingFocusVisible)
+        .onChange(of: model.phase) { (old: RecordingPhase, new: RecordingPhase) -> Void in
+            if old == .idle, new == .recording {
+                router.isRecordingFocusDismissed = false
+            }
+        }
+        .overlay {
+            if router.isSearchPresented {
+                SearchComposer(model: model, router: router)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: router.isSearchPresented)
         .foregroundStyle(Theme.ink)
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
@@ -241,8 +272,7 @@ private struct Sidebar: View {
             ScrollView {
             VStack(alignment: .leading, spacing: 2) {
             SidebarFolders(model: model, router: router)
-            // Ana sayfa ve Toplantılar zaten listeyi gösterir: orada tekrar edilmez.
-            if !model.meetings.isEmpty && router.section != .meetings && router.section != .home {
+            if !model.meetings.isEmpty {
                 Text("Son toplantılar")
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
@@ -314,49 +344,83 @@ private struct Sidebar: View {
     }
 }
 
-/// Üst çubuk: sayfa adı, toplantılarda arama (⌘K; yazınca Toplantılar açılır), "Canlı panel".
+/// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
+/// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
 private struct TopBar: View {
+    let model: AppModel
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
-    @FocusState private var isSearching: Bool
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
-            Text(title).appFont(size: 14, weight: .medium)
+            // En dar pencerede başlık tek satırda kalır, arama hapı daralır; çubuk taşmaz.
+            Text(title)
+                .appFont(size: 14, weight: .medium)
+                .lineLimit(1)
+                .layoutPriority(1)
+            // Kayıt ekranı kapatıldıysa "Kayıtta" hapı onu yeniden açar.
+            if model.phase == .recording, router.isRecordingFocusDismissed {
+                Button {
+                    router.isRecordingFocusDismissed = false
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.red).frame(width: 7, height: 7)
+                        Text("Kayıtta").appFont(size: 12, weight: .medium)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.red.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.hoverCapsule)
+                .hoverHint("Kayıt ekranını aç", alignment: .leading, edge: .bottom)
+            }
             Spacer(minLength: DesignTokens.Spacing.m)
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
-                TextField("Toplantılarda ara…", text: Binding<String>(
-                    get: { router.searchQuery },
-                    set: { (value: String) -> Void in
-                        router.searchQuery = value
-                        if !value.isEmpty {
-                            router.section = .meetings
+                Button {
+                    router.isSearchPresented = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
+                        if router.searchQuery.isEmpty {
+                            Text("Toplantılarda ara…").foregroundStyle(Theme.muted)
+                        } else {
+                            Text(verbatim: router.searchQuery).foregroundStyle(Theme.ink).lineLimit(1)
                         }
+                        Spacer(minLength: 0)
                     }
-                ))
-                .textFieldStyle(.plain)
-                .focused($isSearching)
-                // Pencere açılınca arama kutusu kendiliğinden odak almaz (imleç yanıp sönmesin).
-                .defaultFocus($isSearching, false)
-                Text("⌘K")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .padding(.horizontal, 5)
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if router.searchQuery.isEmpty {
+                    Text("⌘K")
+                        .appFont(size: 11, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 5)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                } else {
+                    Button {
+                        router.searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Aramayı temizle")
+                }
             }
             .appFont(size: 13, weight: .regular)
             .padding(.horizontal, 10)
-            .frame(width: 320, height: 32)
+            .frame(minWidth: 180, idealWidth: 320, maxWidth: 320)
+            .frame(height: 32)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSearching ? Theme.ink.opacity(0.35) : Theme.line))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
+            .linkPointer(isEnabled: true)
             .background {
-                // ⌘K ve ⌘F aramaya odaklanır.
-                Button("") { isSearching = true }
+                // ⌘K ve ⌘F arama penceresini açar.
+                Button { router.isSearchPresented = true } label: { Text(verbatim: "") }
                     .keyboardShortcut("k", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
-                Button("") { isSearching = true }
+                Button { router.isSearchPresented = true } label: { Text(verbatim: "") }
                     .keyboardShortcut("f", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
@@ -397,7 +461,7 @@ private struct SetupScreen: View {
             router.section = .home
         }
             .padding(.top, 28)
-            .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: true).ignoresSafeArea() }
+            .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: false).ignoresSafeArea() }
     }
 }
 
@@ -463,8 +527,8 @@ private struct HomePage: View {
                     heading
                     RecordBar(model: model, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 40)
+                .padding(.top, 24)
+                Shortcuts(model: model, router: router, onShowPanel: onShowPanel)
                 if !model.setupProblems.isEmpty {
                     problems
                 }
@@ -478,11 +542,11 @@ private struct HomePage: View {
                     router.section = .meetings
                 }
                 HomeTasks(model: model, router: router)
-                RecentMeetingList(model: model, router: router)
+                RecentMeetingCards(model: model, router: router)
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
-            .frame(maxWidth: 860)
+            .frame(maxWidth: 940)
             .frame(maxWidth: .infinity)
             .animation(.smooth(duration: 0.3), value: router.quitWarning)
             .animation(.smooth(duration: 0.3), value: model.phase)
@@ -497,7 +561,8 @@ private struct HomePage: View {
             HStack(spacing: 12) {
                 Image(systemName: "record.circle.fill")
                     .foregroundStyle(.red)
-                    .symbolEffect(.pulse, isActive: !model.isPaused)
+                    // Kayıt ekranı açıkken bulanıklığın altında boşuna titreşmesin.
+                    .symbolEffect(.pulse, isActive: !model.isPaused && router.isRecordingFocusDismissed)
                 if let startedAt = model.recordingStartedAt {
                     Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
                         .monospacedDigit()
@@ -511,13 +576,14 @@ private struct HomePage: View {
                 .appFont(size: 34, weight: .regular)
         case .idle:
             VStack(alignment: .leading, spacing: 4) {
-                Text(Date().formatted(Date.FormatStyle().weekday(.wide).day().month(.wide).locale(interfaceLocale())))
-                    .appFont(size: 13, weight: .medium)
+                Text(Date.now.formatted(Date.FormatStyle(date: .complete, time: .omitted).locale(interfaceLocale())))
+                    .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
-                Text(greeting(name: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", hour: Calendar.current.component(.hour, from: Date())))
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.5)
+                Text(verbatim: homeGreeting(name: UserDefaults.standard.string(forKey: SettingsKey.userName) ?? "", hour: Calendar.current.component(.hour, from: .now)))
+                    .appFont(size: 30, weight: .semibold)
+                    .tracking(-0.8)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -549,10 +615,52 @@ private struct RecordBar: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            bar
-            // Seçenekler çubuğun altında, ortalı ve gerekirse alt satıra geçer: dar pencerede, İngilizcede ya da büyük
-            // arayüz boyutunda çubuğun dışına taşıp kesilmez.
+        if model.phase == .idle {
+            hero
+        } else {
+            bar.frame(maxWidth: 720).frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Boşta: gradyan kayıt kartı (ElevenLabs'in büyük oluştur kartı gibi): ortada küre ve "Dinlemeye başla", altında
+    /// seçenekler. Gradyan açık tonlu olduğundan kart her temada açık görünümle çizilir.
+    private var hero: some View {
+        VStack(spacing: 16) {
+            orb(size: 64)
+                .padding(5)
+                .background(Color.white.opacity(0.4), in: Circle())
+                .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+            Button(action: onStartRecording) {
+                Label("Dinlemeye başla", systemImage: "record.circle")
+            }
+            .buttonStyle(.bannerPrimary)
+            .disabled(!model.isReadyToRecord || model.isStarting)
+            options
+        }
+        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, minHeight: 240)
+        .background {
+            FilmGradient(seed: "kayit-karti", palette: .sunset)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .environment(\.colorScheme, .light)
+    }
+
+    private func orb(size: CGFloat) -> some View {
+        Circle()
+            .fill(RadialGradient(
+                colors: [appearance.accent.color.mix(with: .white, by: 0.45), appearance.accent.color, appearance.accent.color.mix(with: .black, by: 0.55)],
+                center: UnitPoint(x: 0.35, y: 0.35), startRadius: 1, endRadius: size * 0.65
+            ))
+            .frame(width: size, height: size)
+            .tilt3D(maxAngle: 8)
+    }
+
+    /// Seçenekler ortalı ve gerekirse alt satıra geçer: dar pencerede, İngilizcede ya da büyük arayüz boyutunda kartın
+    /// dışına taşıp kesilmez.
+    private var options: some View {
+        VStack {
             if model.phase == .idle {
                 FlowLayout(spacing: 8, lineSpacing: 8) {
                     languageChip
@@ -568,20 +676,14 @@ private struct RecordBar: View {
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: 620)
     }
 
     private var bar: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.phase == .recording ? "waveform" : "mic")
-                .appFont(size: 14, weight: .medium)
-                .foregroundStyle(model.phase == .recording ? appearance.accent.color : Theme.ink)
-                .symbolEffect(.variableColor.iterative, isActive: model.phase == .recording && !model.isPaused)
-                .frame(width: 32, height: 32)
-                .background(Theme.soft, in: Circle())
+            orb(size: 34)
             switch model.phase {
             case .idle:
                 Text("Toplantını dinlemeye başla")
@@ -616,8 +718,9 @@ private struct RecordBar: View {
         .padding(.leading, 10)
         .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        .background(Theme.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.line))
+        .shadow(color: .black.opacity(0.05), radius: 14, y: 6)
     }
 
     private var languageChip: some View {
@@ -625,14 +728,15 @@ private struct RecordBar: View {
             Button("Otomatik") { model.languageMode = .automatic }
             LanguageMenuItems { (language: MeetingLanguage) -> Void in model.languageMode = .fixed(language) }
         } label: {
+            // Kart her temada açık pastel: yazı temanın mürekkebini değil siyahı alır (koyu temada beyaz kalıp kayboluyordu).
             languageTitle
                 .appFont(size: 12, weight: .medium)
+                .foregroundStyle(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Theme.soft, in: Capsule())
         }
         .menuStyle(.button)
-        .buttonStyle(.hoverCapsule)
+        .buttonStyle(HeroChipButtonStyle(fillOpacity: 0.9))
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -652,17 +756,113 @@ private struct RecordBar: View {
                     .contentTransition(.symbolEffect(.replace))
                 Text(title).appFont(size: 12, weight: .medium)
             }
-            .foregroundStyle(isOn ? Theme.ink : Theme.muted)
+            .foregroundStyle(isOn ? Color.black : Color.black.opacity(0.62))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Theme.soft, in: Capsule())
         }
-        .buttonStyle(.hoverCapsule)
+        .buttonStyle(HeroChipButtonStyle(fillOpacity: isOn ? 0.9 : 0.45))
         .fixedSize()
     }
 }
 
+/// Kayıt kartındaki seçenek hapı: pastel zeminde beyaz kapsül. Fare üstündeyken beyaz dolgu parlar (temanın koyu
+/// hover tonu pastel kartta kirli bir hale çiziyordu), basılınca hafifçe küçülür; el imleci gösterir.
+private struct HeroChipButtonStyle: ButtonStyle {
+    let fillOpacity: Double
 
+    func makeBody(configuration: Configuration) -> some View {
+        HeroChipBody(configuration: configuration, fillOpacity: fillOpacity)
+    }
+}
+
+private struct HeroChipBody: View {
+    let configuration: ButtonStyleConfiguration
+    let fillOpacity: Double
+    @Environment(\.isEnabled) private var isEnabled: Bool
+    @State private var isHovering: Bool = false
+
+    var body: some View {
+        configuration.label
+            .background(Color.white.opacity(isEnabled && isHovering ? min(fillOpacity + 0.25, 1) : fillOpacity), in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled ? 1 : 0.4)
+            .onHover { (hovering: Bool) -> Void in isHovering = hovering }
+            .linkPointer(isEnabled: isEnabled)
+            .animation(.easeOut(duration: 0.12), value: isHovering)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+    }
+}
+
+/// Kısayollar: dört sade, yatay kart: solda küçük gradyan kutuda simge, yanında ad ve kısa bilgi. Kayıt büyük kartta,
+/// Ayarlar kenar çubuğunda olduğu için burada yok.
+private struct Shortcuts: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let onShowPanel: @MainActor () -> Void
+
+    var body: some View {
+        let openTasks: Int = myTasks(meetings: model.meetings).filter { !isTaskDone(record: $0.record, task: $0.task) }.count
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
+            Text("Kısayollar").appFont(size: 15, weight: .medium)
+            // Dört kart satırı doldurur; dar pencerede ikişerli iki satıra iner.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) { cards(openTasks: openTasks) }
+                    .frame(minWidth: 720)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
+                    cards(openTasks: openTasks)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func cards(openTasks: Int) -> some View {
+        Group {
+            card(title: "Canlı panel", detail: String(localized: "Kayıt sırasında yazı"), symbol: "rectangle.on.rectangle", palette: .ocean) { onShowPanel() }
+            card(title: "İçe aktar", detail: String(localized: "Ses ya da video"), symbol: "square.and.arrow.down", palette: .mint) {
+                router.section = .meetings
+                chooseMediaToImport(model: model)
+            }
+            card(title: "Toplantılarına sor", detail: String(localized: "\(model.meetings.count) toplantı"), symbol: "sparkle.magnifyingglass", palette: .violet) {
+                router.section = .ask
+            }
+            card(title: "Görevlerim", detail: String(localized: "\(openTasks) açık"), symbol: "checkmark.circle", palette: .coral) {
+                router.section = .tasks
+            }
+        }
+    }
+
+    private func card(title: LocalizedStringKey, detail: String, symbol: String, palette: FilmPalette, action: @escaping @MainActor () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 11) {
+                Image(systemName: symbol)
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Color.black.opacity(0.78))
+                    .frame(width: 34, height: 34)
+                    .background { FilmGradient(seed: "kisayol-\(symbol)", palette: palette) }
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .appFont(size: 13, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                    Text(verbatim: detail)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { ShortcutCardBackground() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.hoverPlain)
+    }
+}
 
 /// Son toplantılarda sana düşen görevler (en yeni toplantıdan başlayarak).
 private struct HomeTasks: View {
@@ -850,17 +1050,17 @@ private struct TaskLine: View {
 }
 
 /// Son toplantılar: gradyan kapaklı kartlar (renk toplantıya göre sabit), başlık ve bilgi kapağın üstünde.
-private struct RecentMeetingList: View {
+private struct RecentMeetingCards: View {
     let model: AppModel
     let router: MainWindowRouter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
             HStack {
                 Text("Son toplantılar").appFont(size: 15, weight: .medium)
                 Spacer(minLength: 0)
                 if !model.meetings.isEmpty {
-                    Button("Tümü ›") { router.section = .meetings }
+                    Button("Tümünü gör ›") { router.section = .meetings }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(Theme.muted)
                 }
@@ -868,67 +1068,59 @@ private struct RecentMeetingList: View {
             if model.meetings.isEmpty {
                 EmptyStateCard(symbol: "waveform", title: "Henüz toplantı yok", message: "Kaydı başlatınca toplantıların ve notların burada görünür.")
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(model.meetings.prefix(8).enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
-                        if item.offset > 0 {
-                            Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 56)
-                        }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16, alignment: .top)], alignment: .leading, spacing: 18) {
+                    ForEach(model.meetings.prefix(6)) { (record: MeetingRecord) in
                         Button {
-                            router.selectedMeetingID = item.element.id
+                            router.selectedMeetingID = record.id
                             router.section = .meetings
                         } label: {
-                            RecentMeetingRow(record: item.element, isProcessing: model.processingMeetingIDs.contains(item.element.id))
+                            MeetingCover(record: record, isProcessing: model.processingMeetingIDs.contains(record.id))
                         }
                         .buttonStyle(.hoverPlain)
                     }
                 }
-                .padding(.vertical, 4)
-                .cardSurface(cornerRadius: 14)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Son toplantı satırı: toplantıya özgü küçük renk kimliği, başlık, tarih · süre · konuşmacı, sağda görev sayısı ya da
-/// durum.
-private struct RecentMeetingRow: View {
+/// Toplantı kartı: toplantıya göre sabit renkli gradyan kapak; başlık, tarih ve görev sayısı kapağın altında.
+private struct MeetingCover: View {
     let record: MeetingRecord
     let isProcessing: Bool
 
     var body: some View {
         let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
-        HStack(spacing: 12) {
-            CoverBackground(seed: record.id)
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(record.note?.title ?? record.title)
-                    .appFont(size: 14, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(1)
-                Text(meta)
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            if isProcessing || record.status == .processing {
-                Text("İşleniyor").appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted)
-            } else if record.status == .failed {
-                Text("Hata").appFont(size: 12, weight: .medium).foregroundStyle(.red)
-            } else if mine > 0 {
-                Text("\(mine) görev").appFont(size: 12, weight: .medium).foregroundStyle(Theme.ink)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            CoverImage(seed: record.id)
+                // Ortada toplantıya özgü ses dalgası, kapağın kendi renginin koyu tonunda.
+                .overlay { CoverWaveform(seed: record.id) }
+                .frame(height: 132)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .tilt3D(maxAngle: 4)
+            Text(record.note?.title ?? record.title)
+                .appFont(size: 14, weight: .medium)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .padding(.top, 10)
+            Text(coverSubtitle(mine: mine))
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(record.status == .failed ? Color.red : Theme.muted)
+                .padding(.top, 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var meta: String {
+    private func coverSubtitle(mine: Int) -> String {
         let date: String = record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))
-        return ([date] + (meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? [])).joined(separator: " · ")
+        if isProcessing || record.status == .processing {
+            return date + " · " + String(localized: "İşleniyor")
+        }
+        if record.status == .failed {
+            return date + " · " + String(localized: "Hata")
+        }
+        return mine > 0 ? date + " · " + String(localized: "\(mine) görev") : date
     }
 }
 
@@ -967,11 +1159,12 @@ private struct TasksPage: View {
                         }
                     } else if doneCount > 0 {
                         EmptyStateHero(
-                            symbol: "checkmark", title: "Açık görevin kalmadı",
+                            symbol: "party.popper.fill", title: "Açık görevin kalmadı",
                             message: "Hepsi tamamlandı. Yeni toplantılarda sana düşen işler buraya gelir.", palette: .sunset, steps: []
                         ) {
                             EmptyView()
                         }
+                        .overlay { ConfettiBurst(palette: .sunset) }
                     } else {
                         EmptyStateHero(
                             symbol: "checklist", title: "Henüz sana düşen görev yok",
@@ -1228,3 +1421,262 @@ private struct ErrorBanner: View {
     }
 }
 
+/// Saate göre selam; ad varsa ilk adıyla. Saf fonksiyondur.
+func homeGreeting(name: String, hour: Int) -> String {
+    let base: String = switch hour {
+    case 5..<12: String(localized: "Günaydın")
+    case 12..<18: String(localized: "İyi günler")
+    case 18..<23: String(localized: "İyi akşamlar")
+    default: String(localized: "İyi geceler")
+    }
+    let first: String = name.split(separator: " ").first.map(String.init) ?? ""
+    return first.isEmpty ? base : "\(base), \(first)"
+}
+
+/// Orta ekrandaki arama penceresi (Spotlight gibi): arka plan bulanıklaşır ve kararır; büyük arama alanı yazıldıkça
+/// toplantıları anında süzer (başlık, not, görevler, adlar, transkript). ↑↓ seçer, ↩ seçileni açar (seçim yoksa aramayı
+/// Toplantılar listesine uygular), Esc ya da dışarı tıklama kapatır.
+private struct SearchComposer: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    @State private var query: String = ""
+    @State private var highlighted: Int = 0
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        let trimmed: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let results: [MeetingRecord] = Array((trimmed.isEmpty ? model.meetings : filterMeetings(records: model.meetings, query: trimmed)).prefix(8))
+        ZStack(alignment: .top) {
+            // Arkadaki içerik pencerede bulanıklaşır; burada yalnızca dışarı tıklayınca kapatan saydam katman.
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { close() }
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .appFont(size: 18, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                    TextField("Toplantılarda ara…", text: $query)
+                        .textFieldStyle(.plain)
+                        .appFont(size: 20, weight: .regular)
+                        .focused($isFocused)
+                        .onSubmit { open(results: results) }
+                    Text("esc")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 60)
+                Rectangle().fill(Theme.line).frame(height: 1)
+                if results.isEmpty {
+                    Text("Eşleşen toplantı yok")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(trimmed.isEmpty ? "Son toplantılar" : "Toplantılar")
+                            .appFont(size: 11, weight: .semibold)
+                            .tracking(DesignTokens.labelTracking)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                            .padding(.bottom, 4)
+                        ForEach(Array(results.enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
+                            row(record: item.element, isHighlighted: item.offset == min(highlighted, results.count - 1))
+                                .onHover { (hovering: Bool) -> Void in
+                                    if hovering {
+                                        highlighted = item.offset
+                                    }
+                                }
+                        }
+                    }
+                    .padding(8)
+                }
+                Rectangle().fill(Theme.line).frame(height: 1)
+                HStack(spacing: 14) {
+                    Text("↑↓ seç")
+                    Text("↩ aç")
+                    Spacer(minLength: 0)
+                    if !trimmed.isEmpty {
+                        Button("Tüm sonuçları listede göster") { applyToList() }
+                            .buttonStyle(.hoverPlain)
+                    }
+                }
+                .appFont(size: 11, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 16)
+                .frame(height: 34)
+            }
+            .frame(width: 600)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+            .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
+            .padding(.top, 96)
+        }
+        .onAppear {
+            query = router.searchQuery
+            isFocused = true
+        }
+        .onChange(of: query) { (_: String, _: String) -> Void in highlighted = 0 }
+        .onKeyPress(.downArrow) {
+            highlighted = min(highlighted + 1, max(0, results.count - 1))
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            highlighted = max(highlighted - 1, 0)
+            return .handled
+        }
+        .onExitCommand { close() }
+    }
+
+    private func row(record: MeetingRecord, isHighlighted: Bool) -> some View {
+        Button {
+            openMeeting(id: record.id)
+        } label: {
+            HStack(spacing: 12) {
+                CoverImage(seed: record.id)
+                    .frame(width: 40, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(record.note?.title ?? record.title)
+                        .appFont(size: 14, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                    Text(record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale())))
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer(minLength: 0)
+                if isHighlighted {
+                    Image(systemName: "return")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isHighlighted ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// ↩: vurgulanan toplantıyı açar; sonuç yoksa aramayı listeye uygular.
+    private func open(results: [MeetingRecord]) {
+        guard !results.isEmpty else {
+            applyToList()
+            return
+        }
+        openMeeting(id: results[min(highlighted, results.count - 1)].id)
+    }
+
+    private func openMeeting(id: String) {
+        router.searchQuery = ""
+        router.folderFilter = nil
+        router.selectedMeetingID = id
+        router.section = .meetings
+        close()
+    }
+
+    /// Aramayı Toplantılar listesine uygular (üst çubukta görünür, × ile temizlenir).
+    private func applyToList() {
+        router.searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        router.folderFilter = nil
+        router.section = .meetings
+        close()
+    }
+
+    private func close() {
+        router.isSearchPresented = false
+    }
+}
+
+/// Kısayol kartının zemini: Sor'daki örnek kartlar gibi kart yüzeyi, sağa doğru beliren ince çapraz çizgiler ve çerçeve.
+private struct ShortcutCardBackground: View {
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        ZStack {
+            shape.fill(Theme.card)
+            DiagonalLines(spacing: 9)
+                .stroke(Theme.line, lineWidth: 1)
+                .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+                .clipShape(shape)
+            shape.strokeBorder(Theme.line)
+        }
+    }
+}
+
+/// Kayıt ekranı: kayıt sürerken ana pencerenin arkası bulanıklaşır, ortada paneldeki ses ölçerin büyük eşi, süre ve
+/// durum; altında duraklat/devam, paneli göster ve kırmızı "Bitir". "Uygulamaya dön" (ya da Esc) ekranı bu kayıt için
+/// kapatır; üst çubuktaki "Kayıtta" hapı geri açar.
+private struct RecordingFocus: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let onShowPanel: @MainActor () -> Void
+    // Ekran açılınca odak buraya alınır: tuşlar ve Return arkadaki gizli alanlara (ör. Sor kutusu) gitmesin.
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        ZStack {
+            // Arkadaki içerik pencerede bulanıklaşır; koyu perde yok. Temanın zemin rengiyle hafif bir örtü yazıyı
+            // açık ve koyu temada okunur tutar, tıklamaları da arkaya geçirmez.
+            Theme.background
+                .opacity(0.35)
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+            VStack(spacing: 22) {
+                LargeLevelMeter(levels: model.audioLevels)
+                    .opacity(model.isPaused ? 0.35 : 1)
+                VStack(spacing: 6) {
+                    if let startedAt = model.recordingStartedAt {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
+                            Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
+                                .appFont(size: 40, weight: .semibold)
+                                .monospacedDigit()
+                                .tracking(-1)
+                        }
+                    }
+                    Text(model.isPaused ? "Duraklatıldı" : "Dinleniyor — konuşmalar canlı panelde yazıya dökülüyor")
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                HStack(spacing: 10) {
+                    Button(model.isPaused ? "Devam ettir" : "Duraklat", systemImage: model.isPaused ? "play.fill" : "pause.fill") { model.togglePause() }
+                        .buttonStyle(.pill)
+                    Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
+                        .buttonStyle(.pill)
+                    Button {
+                        model.stopRecording()
+                    } label: {
+                        Label("Bitir", systemImage: "stop.fill")
+                            .appFont(size: 13, weight: .semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(Color.red, in: Capsule())
+                    }
+                    .buttonStyle(.hoverCapsule)
+                }
+                Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(Theme.muted)
+                    .appFont(size: 12, weight: .medium)
+                    .padding(.top, 4)
+            }
+            .padding(36)
+        }
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onAppear { isFocused = true }
+        .onExitCommand { router.isRecordingFocusDismissed = true }
+    }
+}

@@ -12,8 +12,21 @@ public func gapFillSamples(elapsedSec: Double, emittedSamples: Int, chunkSamples
     return Double(gap) > thresholdSec * Double(sampleRate) ? gap : 0
 }
 
-/// Ses akışını kaydın başladığı ana (`origin`) hizalar: akıştaki boşluklar sessizlikle doldurulur.
-/// Saatler arasındaki küçük kaymalar (`thresholdSec` altı) düzeltilmez.
+/// Sessizlik dolgusunu en fazla `maxChunkSamples` uzunluğunda parçalara böler (parça uzunlukları). Saf fonksiyondur.
+///
+/// Uzun bir boşluk (ör. kapak kapalıyken saat ilerledi) tek dev dizi olarak ayrılıp kopyalanmasın diye dolgu
+/// sınırlı parçalarla verilir.
+public func silenceChunkLengths(totalSamples: Int, maxChunkSamples: Int) -> [Int] {
+    guard totalSamples > 0, maxChunkSamples > 0 else {
+        return []
+    }
+    let fullChunks: Int = totalSamples / maxChunkSamples
+    let remainder: Int = totalSamples % maxChunkSamples
+    return [Int](repeating: maxChunkSamples, count: fullChunks) + (remainder > 0 ? [remainder] : [])
+}
+
+/// Ses akışını kaydın başladığı ana (`origin`) hizalar: akıştaki boşluklar sessizlikle doldurulur (en fazla 1 sn'lik
+/// parçalarla). Saatler arasındaki küçük kaymalar (`thresholdSec` altı) düzeltilmez.
 public func clockAlignedStream(
     audio: AsyncStream<[Float]>,
     origin: ContinuousClock.Instant,
@@ -29,8 +42,8 @@ public func clockAlignedStream(
             let fill: Int = gapFillSamples(
                 elapsedSec: elapsedSec, emittedSamples: emitted, chunkSamples: chunk.count, sampleRate: sampleRate, thresholdSec: thresholdSec
             )
-            if fill > 0 {
-                sink.yield([Float](repeating: 0, count: fill))
+            for length in silenceChunkLengths(totalSamples: fill, maxChunkSamples: sampleRate) {
+                sink.yield([Float](repeating: 0, count: length))
             }
             sink.yield(chunk)
             emitted += fill + chunk.count

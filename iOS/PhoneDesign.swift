@@ -120,7 +120,7 @@ struct PillTabs<Value: Hashable>: View {
     }
 }
 
-/// Kapak (film gradyanı) üstündeki cam çip: beyaz yazı, yarı saydam zemin.
+/// Toplantı kapağı (`CoverBackground`) üstündeki çip: beyaz yazı, koyu yarı saydam zemin (açık kapakta da okunur).
 struct GlassChip: View {
     let text: String
     let systemImage: String?
@@ -136,8 +136,36 @@ struct GlassChip: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(.white.opacity(0.16), in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.24)))
+        .background(.black.opacity(0.28), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.20)))
+    }
+}
+
+/// Açık pastel film gradyanı (kayıt ve Sor kartları) üstündeki çip: koyu yazı, beyaz zemin (Mac'teki kayıt kartı gibi).
+struct PastelChip: View {
+    let text: String
+    let systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage).appFont(size: 11, weight: .semibold)
+            }
+            Text(text)
+        }
+        .appFont(size: 12, weight: .medium)
+        .foregroundStyle(Color.black.opacity(0.8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.9), in: Capsule())
+    }
+}
+
+/// Kapak üstündeki beyaz yazının okunması için alttan koyulaşan katman (ortak `CoverBackground` Mac'te de kullanıldığı
+/// için iPhone kapaklarına ayrıca eklenir).
+struct CoverScrim: View {
+    var body: some View {
+        LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
     }
 }
 
@@ -176,41 +204,43 @@ func meetingStatusText(status: MeetingStatus) -> String? {
     }
 }
 
-/// Toplantı satırı: toplantıya özgü küçük renk kimliği, başlık, saat · süre · dil; sağda sana düşen açık görev sayısı ya
-/// da durum.
-struct PhoneMeetingRow: View {
+/// Toplantı kartı: film gradyanı üstünde başlık; altta saat, süre, dil ve (varsa) sana düşen görev sayısı ya da durum.
+struct PhoneMeetingCard: View {
     let record: MeetingRecord
+    let height: CGFloat
 
     var body: some View {
         let myTasks: Int = (record.note?.tasks ?? []).filter { $0.isMine && !isTaskDone(record: record, task: $0) }.count
-        HStack(spacing: 12) {
-            CoverBackground(seed: record.id)
-                .frame(width: 38, height: 38)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(record.note?.title ?? record.title)
-                    .appFont(size: 16, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                Text(subtitle)
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if let status = meetingStatusText(status: record.status) {
+                    GlassChip(text: status, systemImage: record.status == .failed ? "exclamationmark.triangle.fill" : nil)
+                }
+                Spacer(minLength: 0)
+                if myTasks > 0 {
+                    GlassChip(text: String(localized: "\(myTasks) görev"), systemImage: "checkmark.circle")
+                }
             }
-            Spacer(minLength: 8)
-            if let status = meetingStatusText(status: record.status) {
-                Text(status)
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(record.status == .failed ? Color.red : Theme.muted)
-            } else if myTasks > 0 {
-                Text(String(localized: "\(myTasks) görev"))
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-            }
+            Spacer(minLength: 0)
+            Text(record.note?.title ?? record.title)
+                .appFont(size: 18, weight: .semibold)
+                .tracking(-0.2)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 1)
+            Text(subtitle)
+                .appFont(size: 12, weight: .medium)
+                .opacity(0.88)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
+        .foregroundStyle(.white)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .bottomLeading)
+        .background {
+            CoverBackground(seed: record.id)
+                .overlay { CoverScrim() }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var subtitle: String {

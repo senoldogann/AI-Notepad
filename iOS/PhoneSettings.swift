@@ -2,7 +2,8 @@ import AINotepadCore
 import Foundation
 import os
 
-/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır (eşitleme aşamasında ortaklaşır).
+/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır. Ayarlar cihazda kalır (iCloud yalnızca toplantıları ve
+/// paylaşılan anahtarları eşitler).
 enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     static let userName: String = "userName"
@@ -14,6 +15,8 @@ enum PhoneSettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// Tema takımı (Mac'teki ayarla aynı ad; bkz. `AppTheme`).
     static let theme: String = "appearance.theme"
+    /// Takvim (sıradaki toplantılar, kaydı süren etkinliğe bağlama); varsayılan kapalı, açılınca izin istenir.
+    static let calendarEnabled: String = "calendar.enabled"
     /// Yazıya dökme ve notun yapıldığı yer (bkz. `PhoneEngine`).
     static let engine: String = "phone.engine"
 }

@@ -23,6 +23,17 @@ private enum OnboardingStep: Int, CaseIterable {
         }
     }
 
+    /// Yol haritasında adımın tek satırlık açıklaması.
+    var roadmapDetail: LocalizedStringKey {
+        switch self {
+        case .welcome: "Uygulamanın yapabildikleri"
+        case .permissions: "Mikrofon ve sistem sesi"
+        case .profile: "Adın ve canlı metin motoru"
+        case .keys: "Bulut ve Claude anahtarları"
+        case .ready: "Kısayollar ve ilk kayıt"
+        }
+    }
+
     /// Soldaki film gradyanlı panelin başlığı.
     var panelTitle: LocalizedStringKey {
         switch self {
@@ -99,6 +110,13 @@ struct SetupPage: View {
                         .transition(.opacity.combined(with: .offset(x: 18)))
                     }
                     .scrollIndicators(.hidden)
+                    // Yol haritası her adımda aynı yerde, düğmelerin hemen üstünde: içerik yukarıda kalır, aradaki boşluk
+                    // dolar. Yer darsa önce açıklamalar, o da sığmazsa harita tümden gizlenir (kesilmez).
+                    ViewThatFits(in: .vertical) {
+                        SetupRoadmap(current: step, showsDetails: true) { (target: OnboardingStep) -> Void in step = target }
+                        SetupRoadmap(current: step, showsDetails: false) { (target: OnboardingStep) -> Void in step = target }
+                        Color.clear.frame(height: 0)
+                    }
                     HStack(spacing: 12) {
                         if step != .welcome {
                             Button("Geri", systemImage: "chevron.left") { move(by: -1) }
@@ -132,6 +150,118 @@ struct SetupPage: View {
 
     private func move(by offset: Int) {
         step = OnboardingStep(rawValue: step.rawValue + offset) ?? step
+    }
+}
+
+/// Kurulumun yol haritası: tüm adımlar sırayla, aralarında ince dikey çizgi. Biten adım soluk ve onaylı (tıklayınca
+/// ona dönülür), şimdiki adım vurgu renginde dolu nokta ve koyu yazıyla, sıradakiler boş halka ve soluk. Durgundur;
+/// yalnızca adım değişince kısa bir geçiş yapar.
+private struct SetupRoadmap: View {
+    let current: OnboardingStep
+    let showsDetails: Bool
+    let onSelect: @MainActor (OnboardingStep) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(OnboardingStep.allCases, id: \.self) { (item: OnboardingStep) in
+                row(step: item, isLast: item == OnboardingStep.allCases.last)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.smooth(duration: 0.25), value: current)
+    }
+
+    @ViewBuilder
+    private func row(step: OnboardingStep, isLast: Bool) -> some View {
+        if step.rawValue < current.rawValue {
+            Button { onSelect(step) } label: {
+                rowContent(step: step, isLast: isLast)
+            }
+            .buttonStyle(.plain)
+            .linkPointer(isEnabled: true)
+            .accessibilityHint(Text("Bu adıma dön"))
+        } else {
+            rowContent(step: step, isLast: isLast)
+                .accessibilityAddTraits(step == current ? [.isSelected] : [])
+        }
+    }
+
+    private func rowContent(step: OnboardingStep, isLast: Bool) -> some View {
+        let isCurrent: Bool = step == current
+        return HStack(alignment: .top, spacing: 12) {
+            RoadmapMarker(state: roadmapMarkerState(step: step, current: current))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.title)
+                    .appFont(size: 13, weight: isCurrent ? .medium : .regular)
+                    .foregroundStyle(isCurrent ? Theme.ink : Theme.muted)
+                    .lineLimit(1)
+                if showsDetails {
+                    Text(step.roadmapDetail)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.bottom, isLast ? 0 : 12)
+            Spacer(minLength: 0)
+        }
+        // Noktaları birleştiren çizgi: bu noktanın altından bir sonrakinin tepesine.
+        .background(alignment: .topLeading) {
+            if !isLast {
+                Rectangle()
+                    .fill(Theme.line)
+                    .frame(width: 1)
+                    .padding(.top, roadmapMarkerSize + 2)
+                    .padding(.bottom, 2)
+                    .padding(.leading, roadmapMarkerSize / 2 - 0.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Yol haritası noktasının çapı.
+private let roadmapMarkerSize: CGFloat = 18
+
+/// Yol haritasındaki adımın durumu.
+private enum RoadmapMarkerState {
+    case done
+    case current
+    case upcoming
+}
+
+/// Adımın şimdiki adıma göre durumu. Saf fonksiyondur.
+private func roadmapMarkerState(step: OnboardingStep, current: OnboardingStep) -> RoadmapMarkerState {
+    if step == current {
+        return .current
+    }
+    return step.rawValue < current.rawValue ? .done : .upcoming
+}
+
+/// Yol haritasının noktası: biten adımda onay, şimdikinde vurgu renginde dolu nokta, sıradakinde boş halka.
+private struct RoadmapMarker: View {
+    let state: RoadmapMarkerState
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    var body: some View {
+        ZStack {
+            switch state {
+            case .done:
+                Circle().fill(Theme.soft)
+                Circle().strokeBorder(Theme.line)
+                Image(systemName: "checkmark")
+                    .appFont(size: 8, weight: .bold)
+                    .foregroundStyle(Theme.muted)
+            case .current:
+                Circle().strokeBorder(appearance.accent.color, lineWidth: 1.5)
+                Circle().fill(appearance.accent.color).padding(4.5)
+            case .upcoming:
+                Circle().strokeBorder(Theme.line, lineWidth: 1.5)
+            }
+        }
+        .frame(width: roadmapMarkerSize, height: roadmapMarkerSize)
+        .accessibilityHidden(true)
     }
 }
 

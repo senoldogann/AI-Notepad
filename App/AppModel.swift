@@ -98,6 +98,8 @@ final class AppModel {
     @ObservationIgnored private var pendingAutoMeeting: CalendarMeeting?
     @ObservationIgnored private var calendarTask: Task<Void, Never>?
     @ObservationIgnored private var calendarChangesTask: Task<Void, Never>?
+    /// Toplantı listesini arka planda okur; art arda gelen istekleri birleştirir.
+    @ObservationIgnored private let meetingReloader: MeetingReloader = MeetingReloader()
     @ObservationIgnored private var lastMicSuggestion: Date = .distantPast
     /// Önümüzdeki 24 saatin toplantıları (takvim açıksa).
     var upcomingMeetings: [CalendarMeeting] = []
@@ -195,11 +197,14 @@ final class AppModel {
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
+    /// Uyku ve çıkış bildirimlerinin gözlemcileri (uygulama boyunca yaşar).
+    @ObservationIgnored private var systemObservers: [any NSObjectProtocol] = []
 
     init(liveEngine: LiveEngine, displayMode: DisplayMode, player: MeetingAudioPlayer) {
         self.liveEngine = liveEngine
         self.displayMode = displayMode
         self.player = player
+        observeSleepAndTermination()
     }
 
     /// Uygulamanın tek oynatıcısı: kayıt başlarken durdurulur (çalan ses mikrofona girip yeni kayda karışmasın).
@@ -223,7 +228,8 @@ final class AppModel {
             assistantCard: assistantCard, phase: phase,
             newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
-            languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
+            // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
+            languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
         if let cache = viewStateCache, cache.inputs == inputs {
             return cache.state
@@ -238,11 +244,12 @@ final class AppModel {
     }
 
     /// Kayıt yokken gösterilen durum metni.
+    /// Panelde kayıt yokken gösterilen durum: hazırken boş (gereksiz yazı yok), yalnızca model hazırlanırken ya da
+    /// hata varken dolu.
     private var statusText: String {
         switch (liveEngine, modelStatus) {
-        case (.deepgram, _): String(localized: "Hazır · Deepgram")
+        case (.deepgram, _), (.whisperKit, .ready): ""
         case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
-        case (.whisperKit, .ready): String(localized: "Hazır · Mac'te")
         case (.whisperKit, .failed(let message)): message
         case (.appleSpeech, .loading): speechModelProgress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") } ?? String(localized: "Konuşma modeli hazırlanıyor…")
         case (.appleSpeech, .ready): String(localized: "Hazır · Cihaz içi")
@@ -392,7 +399,12 @@ final class AppModel {
     }
 
     private func translate(segment: LiveSegment, context: [String], provider: LLMProvider, generation: Int) async {
-        guard !translationDisabled, generation == recordingGeneration else {
+        guard generation == recordingGeneration else {
+            return
+        }
+        guard !translationDisabled else {
+            // Anahtar reddedildi (401/403) ya da kayıt sonu süresi doldu: sıradaki cümle kaybolmasın, "Tekrar dene"de kalsın.
+            failedTranslations.insert(segment.id)
             return
         }
         do {
@@ -580,6 +592,9 @@ final class AppModel {
         }
         isStarting = true
         defer { isStarting = false }
+        // Motor bir kez okunur: izin pencereleri açıkken ayar değişse de bulut/yerel kararı ile kaydın motoru aynı kalır
+        // (yerel toplantı bulut sayılıp son geçişte buluta gönderilmesin).
+        let engineAtStart: LiveEngine = liveEngine
         player.stop()
         transcript = []
         speakerCorrections = .none
@@ -604,7 +619,7 @@ final class AppModel {
 
         // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz; eksiklerin hepsi bildirilir.
         let cloudKeys: (deepgram: String, elevenLabs: String)?
-        switch liveEngine {
+        switch engineAtStart {
         case .deepgram:
             let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
             let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
@@ -687,12 +702,17 @@ final class AppModel {
             return
         }
 
-        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer.
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
+        // kilitli kutuda birikir, ana aktöre en fazla 100 ms'de bir geçilir (her parça için ayrı görev açılmaz).
         audioLevels.start()
         let levels: AudioLevels = audioLevels
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: 0.1)
         let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
+            guard let peak = throttle.add(level: level) else {
+                return
+            }
             let now: Date = Date()
-            Task { @MainActor in levels.record(level: level, at: now) }
+            Task { @MainActor in levels.record(level: peak, at: now) }
         }
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
@@ -765,13 +785,13 @@ final class AppModel {
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
         finishingCardDismissed = false
         recordingStartedAt = startedAt
-        session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle, pauseGate: pauseGate, micGate: micGate)
+        session = RecordingSession(directory: directory, startedAt: startedAt, engine: engineAtStart, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
         keepAwake(meetingID: directory.lastPathComponent)
         startCheckpoints(directory: directory, startedAt: startedAt)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
         saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
-        Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(self.liveEngine.rawValue, privacy: .public)")
+        Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(engineAtStart.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in handle.events {
                 self?.handle(event: event)
@@ -864,6 +884,11 @@ final class AppModel {
             // "Sen"in metni bu kayıtta eksik kalır; toplantı sonunda "Sen" kaydı da yazıya dökülür.
             meStreamFailed = meStreamFailed || speaker == .me
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)"))
+        case .streamIncomplete(let speaker, let untranscribedSec):
+            // Kapanışta sesin sonu yazıya dökülemedi: "Sen" kaydı toplantı sonunda yazıya dökülür (kullanıcıya hata
+            // gösterilmez; metin son geçişte tamamlanır). "Diğerleri" son geçişten zaten geçer.
+            meStreamFailed = meStreamFailed || speaker == .me
+            Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }
@@ -994,7 +1019,7 @@ final class AppModel {
             }
             // Tekrar işlemede eski not geçmişe girer (ilk işlemede not yoktur).
             let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Tekrar işlendi"), savedAt: Date())
-            let saved: MeetingRecord = applyingPendingReminders(record: versioned)
+            let saved: MeetingRecord = withLatestMarks(result: versioned, start: record, directory: directory)
             saveRecord(record: saved, directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
@@ -1004,6 +1029,46 @@ final class AppModel {
                 await cloud.moveFinishedMeetings(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
             }
         }
+    }
+
+    /// Mac uykuya geçerken kaydı bitirir; uygulama kapanırken süren kaydın son halini saklar.
+    private func observeSleepAndTermination() {
+        let sleep: any NSObjectProtocol = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.finishRecordingBeforeSleep()
+            }
+        }
+        let terminate: any NSObjectProtocol = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.saveCheckpointBeforeQuit()
+            }
+        }
+        systemObservers = [sleep, terminate]
+    }
+
+    /// Kapak kapandı ya da Mac uyuyor: kayıt temiz biçimde bitirilir. Uykuda saat ilerlediği için sürdürülen kayıt
+    /// uyanınca uyku süresi kadar sessizlik (saatlik uykuda yüzlerce MB) üretip buluta yüklerdi.
+    private func finishRecordingBeforeSleep() {
+        guard isRecording, !isFinishing else {
+            return
+        }
+        Self.logger.info("Mac uykuya geçiyor, kayıt bitiriliyor")
+        stopRecording()
+        errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Mac uykuya geçtiği için kayıt bitirildi; not hazırlanıyor."))
+    }
+
+    /// "Yine de çık": süren kaydın son transkripti saklanır (son kontrol noktasından sonraki metin kaybolmasın);
+    /// toplantı açılışta "Yarıda kaldı" olarak bulunur.
+    private func saveCheckpointBeforeQuit() {
+        guard isRecording, let session else {
+            return
+        }
+        Self.logger.info("Kayıt sürerken uygulama kapanıyor, son durum saklanıyor, klasör: \(session.directory.lastPathComponent, privacy: .public)")
+        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, status: .recording, endedAt: nil), directory: session.directory)
     }
 
     /// Toplantının kaydı ya da işlenmesi sürerken boşta uykuyu engeller (kapak kapatma yine uyutur).
@@ -1113,19 +1178,21 @@ final class AppModel {
             Task {
                 defer { processingMeetingIDs.remove(meetingID) }
                 guard let llm = await optionalLLMProvider() else {
+                    savePendingMarks(meetingID: meetingID)
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: LLM anahtarı ya da ayarı yok."))
                     return
                 }
                 do {
                     let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
-                    // Eski not geçmişe girer ("Geri al"); düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
+                    // Eski not geçmişe girer ("Geri al"); düzenleme sürerken konan işaretler kaybolmasın.
                     let versioned: MeetingRecord = withNoteVersion(
                         updated: edited, previous: record, reason: String(localized: "Düzenlendi: \(trimmed)"), savedAt: Date()
                     )
-                    saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
+                    saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                     refreshFolderCopy(meetingID: meetingID)
                 } catch {
                     Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                    savePendingMarks(meetingID: meetingID)
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
                 }
             }
@@ -1194,7 +1261,7 @@ final class AppModel {
                 let llm: LLMProvider? = await optionalLLMProvider()
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
                 let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: reason, savedAt: Date())
-                saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
+                saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                 processingMeetingIDs.remove(meetingID)
                 refreshFolderCopy(meetingID: meetingID)
             }
@@ -1813,15 +1880,20 @@ final class AppModel {
         (connection: ChannelConnection) async throws -> ChannelConnection in
         try await refreshConnectionTokens(connection: connection)
     }
+    /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
+    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: keychainService)
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
+    /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
+    /// beklemez.
+    @ObservationIgnored private var autoSendRequested: Bool = false
 
     /// Hedefleri ve görev araçlarını yükler; eski sürümün tek bağlantısı (hesap ya da webhook) bir kez hedeflere taşınır.
     func loadDestinations() async {
         do {
             try await migrateLegacyChannelIfNeeded()
             destinations = try await destinationVault.all()
-            taskTrackers = try await Task.detached { try loadTaskTrackers(service: keychainService) }.value
+            taskTrackers = try await trackerVault.all()
         } catch {
             Self.logger.error("Hedefler okunamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bağlantılar okunamadı: \(userFacingMessage(error: error))"))
@@ -1867,12 +1939,11 @@ final class AppModel {
         destinations = try await destinationVault.all()
     }
 
+    /// Kendiliğinden gönderimi açar ya da kapatır; kayıtlı hedefin yalnızca bu ayarı değişir (bellekteki kopya eski
+    /// jetonlar taşıyabilir).
     func setAutoSend(destinationID: String, enabled: Bool) async {
-        guard let current = destinations.first(where: { $0.id == destinationID }) else {
-            return
-        }
         do {
-            try await destinationVault.upsert(current.with(autoSend: enabled))
+            try await destinationVault.setAutoSend(id: destinationID, enabled: enabled)
             destinations = try await destinationVault.all()
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -1899,21 +1970,43 @@ final class AppModel {
     /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
     func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
         let connection: ChannelConnection = try await destinationVault.connection(id: destinationID, force: false)
+        // Bağlantı alınırken jetonlar yenilenip yazılmış olabilir: bellekteki liste eski jetonlarla kalmasın.
+        await refreshDestinationList()
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
         return (signIn, try await listChannels(signIn: signIn))
     }
 
-    /// Notu bir hedefe gönderir; başarılıysa toplantıya işlenir (kendiliğinden gönderim yinelemez). Hata metni döner.
+    /// Notu bir hedefe gönderir; başarılıysa toplantıya işlenir (kendiliğinden gönderim yinelemez). Hata metni döner;
+    /// toplantı, not ya da hedef yoksa ve aynı gönderim zaten sürüyorsa da (iki kez düşmesin) hata metni döner.
     func sendNote(meetingID: String, destinationID: String) async -> String? {
-        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
-              let destination = destinations.first(where: { $0.id == destinationID }) else {
-            return nil
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return userFacingMessage(error: NoteSendError.meetingNotFound(id: meetingID))
         }
+        guard let note = record.note else {
+            return userFacingMessage(error: NoteSendError.noNote(meetingID: meetingID))
+        }
+        guard let destination = destinations.first(where: { $0.id == destinationID }) else {
+            return userFacingMessage(error: DestinationError.notFound(id: destinationID))
+        }
+        let sendKey: String = meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)
+        guard !notesInFlight.contains(sendKey) else {
+            Self.logger.info("Not zaten gönderiliyor, atlandı, toplantı: \(meetingID, privacy: .public), hedef: \(destinationID, privacy: .public)")
+            return userFacingMessage(error: NoteSendError.alreadySending(meetingID: meetingID, destinationID: destinationID))
+        }
+        notesInFlight.insert(sendKey)
+        defer { notesInFlight.remove(sendKey) }
+        // Elle gönderim belirsiz işaretini kaldırır: kullanıcı kontrol edip yeniden göndermeyi seçti.
+        setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: false)
         do {
             try await deliverNote(vault: destinationVault, destination: destination, record: record, note: note)
-            markSent(meetingID: meetingID, destinationID: destinationID)
+            markSent(meetingID: meetingID, destination: destination)
             Self.logger.info("Not hedefe gönderildi, toplantı: \(meetingID, privacy: .public), hedef: \(destinationName(destination: destination), privacy: .public)")
             return nil
+        } catch let error as DeliveryUncertainError {
+            // Not gitmiş olabilir: kendiliğinden yeniden gönderilmez (iki kez düşmesin); kullanıcıya gösterilir.
+            setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: true)
+            Self.logger.warning("Not gönderiminin sonucu belirsiz, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
         } catch {
             Self.logger.error("Not hedefe gönderilemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
@@ -1933,10 +2026,19 @@ final class AppModel {
         webhookStates[meetingID] = failures.isEmpty ? .sent : .failed(failures.joined(separator: "\n"))
     }
 
-    /// Ayarlardaki "Dene": örnek notu hedefe gönderir.
+    /// Süren not gönderimleri (`toplantı|hedef`): elle gönderim, kendiliğinden gönderim ve "Tümüne gönder" aynı notu
+    /// aynı hedefe üst üste göndermesin.
+    @ObservationIgnored private var notesInFlight: Set<String> = []
+
+    /// Toplantı ve hedef çiftinin anahtarı (süren ve sonucu belirsiz gönderimler). Saf fonksiyondur.
+    private func meetingDestinationKey(meetingID: String, destinationID: String) -> String {
+        "\(meetingID)|\(destinationID)"
+    }
+
+    /// Ayarlardaki "Dene": örnek notu hedefe gönderir; hedef yoksa (bu arada kaldırıldı) hata metni döner.
     func sendTestNote(destinationID: String) async -> String? {
         guard let destination = destinations.first(where: { $0.id == destinationID }) else {
-            return nil
+            return userFacingMessage(error: DestinationError.notFound(id: destinationID))
         }
         let sample: MeetingRecord = MeetingRecord(
             id: "deneme", title: "AI-Notepad", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
@@ -1967,18 +2069,45 @@ final class AppModel {
         }
     }
 
-    /// Gönderildi işareti: toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
-    private func markSent(meetingID: String, destinationID: String) {
-        guard let current = meetings.first(where: { $0.id == meetingID }) else {
-            return
-        }
+    /// Gönderildi işareti: hedefin kimliği ve cihazdan bağımsız anahtarı (başka Mac aynı kanala yeniden göndermesin).
+    /// Toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markSent(meetingID: String, destination: NoteDestination) {
+        let marks: [String] = [destination.id] + [destinationSendKey(destination: destination)].compactMap { $0 }
         guard !isLocked(meetingID: meetingID) else {
-            pendingSentMarks[meetingID, default: []].insert(destinationID)
+            pendingSentMarks[meetingID, default: []].formUnion(marks)
             return
         }
-        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-            saveRecord(record: current.markingSent(destinationID: destinationID), directory: directory)
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in
+            marks.reduce(record) { (result: MeetingRecord, mark: String) -> MeetingRecord in result.markingSent(destinationID: mark) }
         }
+    }
+
+    /// Değişikliği diskteki en güncel kayda uygular (iPhone'dan iCloud'la gelmiş düzenlemeler bellekteki eski kopyayla
+    /// ezilmesin).
+    private func updateRecordFromDisk(meetingID: String, change: (MeetingRecord) -> MeetingRecord) {
+        withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+            do {
+                saveRecord(record: change(try loadMeeting(directory: directory)), directory: directory)
+            } catch {
+                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
+            }
+        }
+    }
+
+    /// Sonucu belirsiz gönderimler: kendiliğinden gönderim bunları atlar.
+    private func uncertainSends() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: SettingsKey.uncertainSends) ?? [])
+    }
+
+    private func setUncertain(meetingID: String, destinationID: String, uncertain: Bool) {
+        let key: String = meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)
+        let current: Set<String> = uncertainSends()
+        let updated: Set<String> = uncertain ? current.union([key]) : current.subtracting([key])
+        guard updated != current else {
+            return
+        }
+        UserDefaults.standard.set(updated.sorted(), forKey: SettingsKey.uncertainSends)
     }
 
     /// İşleme sürerken gönderilen hedefler; işleme bitince kayda işlenir.
@@ -1988,61 +2117,100 @@ final class AppModel {
     /// sonra gider; her (toplantı, hedef) bir kez gönderilir.
     func processPendingAutoSends() async {
         guard !autoSendRunning else {
+            autoSendRequested = true
             return
         }
         autoSendRunning = true
         defer { autoSendRunning = false }
-        await refreshDestinationList()
-        let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
-            .filter { !(pendingSentMarks[$0.meetingID] ?? []).contains($0.destinationID) && !isLocked(meetingID: $0.meetingID) }
-        for item in pending {
-            if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
-                errorMessages = appendUnique(messages: errorMessages, message: failure)
-            }
-        }
-        if !pending.isEmpty {
+        repeat {
+            autoSendRequested = false
             await refreshDestinationList()
-        }
+            let uncertain: Set<String> = uncertainSends()
+            let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
+                .filter { (item: (meetingID: String, destinationID: String)) -> Bool in
+                    !(pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID) && !isLocked(meetingID: item.meetingID)
+                        && !uncertain.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID))
+                }
+            for item in pending {
+                // Liste kurulduktan sonra elle gönderilmeye başlandıysa ya da gönderildiyse atlanır (not iki kez düşmesin).
+                let sentMeanwhile: Bool = (meetings.first { $0.id == item.meetingID }?.sentDestinationIDs ?? []).contains(item.destinationID)
+                    || (pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID)
+                guard !sentMeanwhile, !notesInFlight.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID)) else {
+                    continue
+                }
+                if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
+                    errorMessages = appendUnique(messages: errorMessages, message: failure)
+                }
+            }
+            if !pending.isEmpty {
+                await refreshDestinationList()
+            }
+        } while autoSendRequested
     }
 
     /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler.
     func connectNotion() async throws {
         let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            await MainActor.run { openSignInPage(url: url) }
         }
         try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
+    }
+
+    /// Notion hedefini yeniden bağlar: kimliği, kendiliğinden gönderim ayarı ve bağlanma anı korunur (bağlantı koptuğu
+    /// sırada kaçan toplantılar da gönderilir, gönderim geçmişi kaybolmaz).
+    func reconnectNotion(destinationID: String) async throws {
+        let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
+            await MainActor.run { openSignInPage(url: url) }
+        }
+        try await replaceDestinationTarget(id: destinationID, target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
     }
 
     // MARK: Görev araçları (Linear, Jira)
 
     /// Linear ya da Jira'ya tek tıkla bağlanır (tarayıcıda izin; uygulama kaydı ya da API anahtarı gerekmez).
+    /// Bağlanırken sunucuda iş açan araç olduğu denetlenir; yoksa bağlantı kaldırılır ve neden gösterilir. Aynı servis
+    /// yeniden bağlanırsa kimlik ve hedef korunur (gönderilen görevler yeniden gönderilmez).
     func connectTracker(service: MCPService) async throws {
         let connection: MCPConnection = try await signInToMCP(service: service) { (url: URL) async -> Void in
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            await MainActor.run { openSignInPage(url: url) }
         }
-        let tracker: TaskTracker = TaskTracker(id: UUID().uuidString, service: service, connection: connection, target: "")
-        try saveTrackers(taskTrackers.filter { $0.service != service } + [tracker])
+        let tracker: TaskTracker = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
+        defer { Task { await self.refreshTrackerList() } }
+        do {
+            try await trackerVault.withTracker(id: tracker.id) {
+                (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+                try await validateTracker(service: current.service, connection: current.connection, persist: persist)
+            }
+        } catch TaskTrackerError.noCreateTool(let name) {
+            try await trackerVault.remove(id: tracker.id)
+            throw TaskTrackerError.noCreateTool(service: name)
+        }
     }
 
-    func removeTracker(id: String) {
+    func removeTracker(id: String) async {
         do {
-            try saveTrackers(taskTrackers.filter { $0.id != id })
+            try await trackerVault.remove(id: id)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
+        await refreshTrackerList()
     }
 
-    func setTrackerTarget(id: String, target: String) {
+    func setTrackerTarget(id: String, target: String) async {
         do {
-            try saveTrackers(taskTrackers.map { $0.id == id ? $0.with(target: target.trimmingCharacters(in: .whitespacesAndNewlines)) : $0 })
+            try await trackerVault.setTarget(id: id, target: target.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
+        await refreshTrackerList()
     }
 
-    private func saveTrackers(_ trackers: [TaskTracker]) throws {
-        try saveTaskTrackers(trackers: trackers, service: keychainService)
-        taskTrackers = trackers
+    private func refreshTrackerList() async {
+        do {
+            taskTrackers = try await trackerVault.all()
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
     }
 
     /// Toplantının görevlerini araçta iş olarak açar (`onlyMine`: yalnız sana düşenler); daha önce gönderilenler
@@ -2059,26 +2227,53 @@ final class AppModel {
             return
         }
         trackerStates[meetingID] = .sending
+        defer { Task { await self.refreshTrackerList() } }
         do {
             let llm: LLMProvider = try await resolveLLMProvider()
-            let result: (summary: String, connection: MCPConnection) = try await sendTasksToTracker(tracker: tracker, tasks: tasks, meetingTitle: note.title, llm: llm)
-            if result.connection != tracker.connection {
-                try saveTrackers(taskTrackers.map { $0.id == trackerID ? $0.with(connection: result.connection) : $0 })
+            let title: String = note.title
+            let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
+                (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
+                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, llm: llm)
             }
-            if let current = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) {
-                let marked: MeetingRecord = tasks.reduce(current) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in
-                    result.markingTaskSent(trackerID: trackerID, task: task)
-                }
-                withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-                    saveRecord(record: marked, directory: directory)
-                }
-            }
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: result.createdTaskIndices.map { tasks[$0] })
             trackerStates[meetingID] = .done(result.summary)
+        } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
+            // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            let error: TaskTrackerError = .partial(service: service, created: created, total: total, reason: reason)
+            Self.logger.error("Görevlerin bir kısmı açılamadı, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public)")
+            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
+        } catch TaskTrackerError.uncertain(let service, let created, let uncertainTask, let taskTitle, let total, let reason) {
+            // Kesin açılanlar işaretlenir; sonucu belirsiz görev işaretlenmez (açılmadıysa gönderilebilsin), kullanıcıya
+            // yeniden göndermeden önce araçta kontrol etmesi söylenir.
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            let error: TaskTrackerError = .uncertain(
+                service: service, created: created, uncertainTask: uncertainTask, taskTitle: taskTitle, total: total, reason: reason
+            )
+            Self.logger.warning("Görev açmanın sonucu belirsiz, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public), görev sırası: \(uncertainTask, privacy: .public)")
+            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
         } catch {
             Self.logger.error("Görevler araca gönderilemedi, araç: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             trackerStates[meetingID] = .failed(String(localized: "\(tracker.service.displayName): \(userFacingMessage(error: error))"))
         }
     }
+
+    /// Araçta açılan görevleri işaretler; toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markTasksSent(meetingID: String, trackerID: String, tasks: [NoteTask]) {
+        guard !tasks.isEmpty else {
+            return
+        }
+        guard !isLocked(meetingID: meetingID) else {
+            pendingTaskMarks[meetingID, default: []] += tasks.map { (trackerID: trackerID, task: $0) }
+            return
+        }
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in
+            tasks.reduce(record) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in result.markingTaskSent(trackerID: trackerID, task: task) }
+        }
+    }
+
+    /// İşleme sürerken araca gönderilen görevler; işleme bitince kayda işlenir.
+    @ObservationIgnored private var pendingTaskMarks: [String: [(trackerID: String, task: NoteTask)]] = [:]
 
     // MARK: Apple Notlar ve klasör
 
@@ -2160,7 +2355,38 @@ final class AppModel {
         let tasks: [NoteTask] = pendingReminded.removeValue(forKey: record.id) ?? []
         let sent: Set<String> = pendingSentMarks.removeValue(forKey: record.id) ?? []
         let withSent: MeetingRecord = sent.sorted().reduce(record) { (result: MeetingRecord, id: String) -> MeetingRecord in result.markingSent(destinationID: id) }
-        return tasks.reduce(withSent) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
+        let trackerMarks: [(trackerID: String, task: NoteTask)] = pendingTaskMarks.removeValue(forKey: record.id) ?? []
+        let withTasks: MeetingRecord = trackerMarks.reduce(withSent) { (result: MeetingRecord, mark: (trackerID: String, task: NoteTask)) -> MeetingRecord in
+            result.markingTaskSent(trackerID: mark.trackerID, task: mark.task)
+        }
+        return tasks.reduce(withTasks) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
+    }
+
+    /// Uzun not işinin (işleme, düzenleme, yeniden yazma; 30–300 sn) kaydedilecek sonucu. İş, başladığı andaki kaydın
+    /// kopyasıyla çalışır; bu arada diğer cihazda (iCloud) ya da kendiliğinden gönderimde diske yazılan işaretler diskten
+    /// yeniden okunur, bekleyen işaretlerle birlikte eski nota uygulanır ve yeni nota taşınır (`withJobMarks`). Bekleyen
+    /// işaretler eski notun görevlerine göredir: önce eski kayda uygulanır, sonra taşınır. Disk okunamazsa neden
+    /// gösterilir ve işin başındaki işaretlerle kaydedilir (işin sonucu kaybolmaz).
+    private func withLatestMarks(result: MeetingRecord, start: MeetingRecord, directory: URL) -> MeetingRecord {
+        let onDisk: [MeetingRecord]
+        do {
+            onDisk = [try loadMeeting(directory: directory)]
+        } catch {
+            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: \(userFacingMessage(error: error))"))
+            onDisk = []
+        }
+        let old: MeetingRecord = applyingPendingReminders(record: mergingUserMarks(current: start, others: onDisk))
+        return withJobMarks(old: old, result: result)
+    }
+
+    /// Not işi başarısız oldu: iş sürerken bekletilen işaretler (Anımsatıcılar, gönderimler) diskteki kayda yazılır,
+    /// yoksa kaybolur ve görevler yeniden eklenebilir ya da gönderilebilirdi.
+    private func savePendingMarks(meetingID: String) {
+        guard pendingReminded[meetingID] != nil || pendingSentMarks[meetingID] != nil || pendingTaskMarks[meetingID] != nil else {
+            return
+        }
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in applyingPendingReminders(record: record) }
     }
 
     // MARK: Sesinden tanıma
@@ -2378,6 +2604,7 @@ final class AppModel {
         }
         closeSpeakerReview(meetingID: meetingID)
         meetings.removeAll { $0.id == meetingID }
+        meetingReloader.invalidate()
         // Bu toplantıdan öğrenilen ses izleri de geri alınır (biyometrik veri toplantıdan uzun yaşamasın).
         let voices: [RegisteredVoice] = forgettingMeeting(voices: registeredVoices, meetingID: meetingID, now: Date())
         if voices != registeredVoices {
@@ -2419,24 +2646,27 @@ final class AppModel {
 
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
     func performStartupMaintenance() {
-        reloadMeetings()
-        Task {
-            await loadDestinations()
-            await processPendingAutoSends()
-        }
         loadVoices()
         loadPeople()
         loadRecipes()
         loadAskHistory()
-        startCalendarServices()
-        // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
-        let local: Set<String> = localMeetingIDsReportingFailure()
-        for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) }) {
-            withSessionDirectory(id: record.id) { (directory: URL) -> Void in
-                saveRecord(record: record, directory: directory)
+        // Toplantılar arka planda okunur (büyük arşivde açılış donmasın); listeye bağlı işler okuma bitince başlar.
+        Task {
+            await reloadMeetingsAndWait()
+            // Takvim (kendiliğinden kayıt, kaydı olan etkinlik) toplantı listesine bakar.
+            startCalendarServices()
+            // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
+            // Okuma sürerken başlatılmış kayıt (kilitli) yarıda kalmış sayılmaz.
+            let local: Set<String> = localMeetingIDsReportingFailure()
+            for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) }) {
+                withSessionDirectory(id: record.id) { (directory: URL) -> Void in
+                    saveRecord(record: record, directory: directory)
+                }
             }
+            applyRetention()
+            await loadDestinations()
+            await processPendingAutoSends()
         }
-        applyRetention()
         startRetentionTimer()
         startCloudSyncIfEnabled()
         Task { await refreshSetupProblems() }
@@ -2479,18 +2709,25 @@ final class AppModel {
         }
     }
 
+    /// Toplantıları arka planda yeniden okur (iCloud değişikliği, taşıma); art arda gelen istekler birleşir.
     func reloadMeetings() {
-        do {
-            let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: activeStorageLocation))
-            meetings = result.meetings
-            meetingLoadFailures = result.failures
-            cloudDownloadingCount = result.downloading.count
+        Task { await reloadMeetingsAndWait() }
+    }
+
+    /// Toplantıları ana iş parçacığını bekletmeden yeniden okur; liste güncellenince döner.
+    private func reloadMeetingsAndWait() async {
+        await meetingReloader.reload(load: { () async throws -> MeetingLoadResult in
+            try await loadMeetingsInBackground(location: self.activeStorageLocation)
+        }, apply: { (result: MeetingLoadResult) -> Void in
+            self.meetings = result.meetings
+            self.meetingLoadFailures = result.failures
+            self.cloudDownloadingCount = result.downloading.count
             for failure in result.failures {
                 Self.logger.error("Toplantı okunamadı, klasör: \(failure.folder, privacy: .public), neden: \(failure.reason, privacy: .private)")
             }
-        } catch {
-            meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: userFacingMessage(error: error))]
-        }
+        }, fail: { (error: any Error) -> Void in
+            self.meetingLoadFailures = [MeetingLoadFailure(folder: "Sessions", reason: userFacingMessage(error: error))]
+        })
     }
 
     /// Kaydı diske yazar ve bellekteki listeyi günceller (her kayıtta tüm toplantılar yeniden okunmaz).
@@ -2498,6 +2735,8 @@ final class AppModel {
         do {
             try saveMeeting(record: record, directory: directory)
             meetings = upsertMeeting(records: meetings, record: record)
+            // Süren bir arka plan okuması bu yazmayı görmemiş olabilir: sonucu bu kaydı geri almasın.
+            meetingReloader.invalidate()
         } catch {
             Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
@@ -2706,4 +2945,15 @@ private func runAppleScript(source: String) -> String? {
     let number: Int = (error[NSAppleScript.errorNumber] as? Int) ?? 0
     let message: String = (error[NSAppleScript.errorMessage] as? String) ?? ""
     return "\(message) (\(number))"
+}
+
+/// Giriş sayfasını varsayılan tarayıcıda açar; yalnızca https (keşiften gelen adres `file:` ya da özel şema olup yerel
+/// bir uygulamayı başlatamasın).
+@MainActor
+private func openSignInPage(url: URL) {
+    guard url.scheme?.lowercased() == "https" else {
+        Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel").error("Güvenli olmayan giriş adresi açılmadı, şema: \(url.scheme ?? "yok", privacy: .public)")
+        return
+    }
+    NSWorkspace.shared.open(url)
 }

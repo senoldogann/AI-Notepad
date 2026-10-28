@@ -102,12 +102,21 @@ public func reminderDraft(record: MeetingRecord, task: NoteTask, calendar: Calen
 }
 
 /// Not yeniden yazılınca (ad verildi, şablon değişti) görevler başka sözcüklerle yazılır ve kimlikleri değişir.
-/// İşaretli eski görevler yeni görevlere açıklamalarının sözcük benzerliğiyle (Jaccard ≥ 0,5, en benzeri) eşlenir;
-/// eşleşenlerin yeni kimlikleri döner. Saf fonksiyondur.
+/// İşaretli eski görev yeni notta aynı kimlikle varsa o alınır; yoksa açıklamalarının sözcük benzerliğiyle (Jaccard
+/// ≥ 0,5, en benzeri) eşlenir; eşleşenlerin yeni kimlikleri döner. Saf fonksiyondur.
 public func carriedTaskKeys(oldTasks: [NoteTask], newTasks: [NoteTask], keys: [String]) -> [String] {
     let words: (NoteTask) -> Set<String> = { (task: NoteTask) -> Set<String> in Set(searchTokens(text: task.description).map { String($0.prefix(5)) }) }
     let marked: [NoteTask] = oldTasks.filter { keys.contains(taskKey(task: $0)) }
+    let newKeys: [String] = newTasks.map { taskKey(task: $0) }
     return marked.reduce(into: [String]()) { (result: inout [String], old: NoteTask) -> Void in
+        // Değişmeyen görev kendisiyle eşlenir (benzerlik, aynı açıklamalı iki görevi ya da sözcüksüz görevi şaşırabilir).
+        let oldKey: String = taskKey(task: old)
+        if newKeys.contains(oldKey) {
+            if !result.contains(oldKey) {
+                result.append(oldKey)
+            }
+            return
+        }
         let oldWords: Set<String> = words(old)
         let best: (task: NoteTask, score: Double)? = newTasks
             .map { (new: NoteTask) -> (task: NoteTask, score: Double) in
@@ -122,10 +131,66 @@ public func carriedTaskKeys(oldTasks: [NoteTask], newTasks: [NoteTask], keys: [S
     }
 }
 
-/// Yeni not yazılmış kayıtta tamamlandı ve Anımsatıcılar işaretlerini eski nottan taşır. Saf fonksiyondur.
+/// Yeni not yazılmış kayıtta tamamlandı, Anımsatıcılar ve araca (Linear, Jira) gönderildi işaretlerini eski nottan
+/// taşır. Gönderildi işareti taşınmazsa yeniden yazılan not görevleri araçta ikinci kez açardı. Saf fonksiyondur.
 public func withCarriedTaskMarks(old: MeetingRecord, new: MeetingRecord) -> MeetingRecord {
     let oldTasks: [NoteTask] = old.note?.tasks ?? []
     let newTasks: [NoteTask] = new.note?.tasks ?? []
-    let completed: MeetingRecord = old.completedTasks.map { new.with(completedTasks: carriedTaskKeys(oldTasks: oldTasks, newTasks: newTasks, keys: $0)) } ?? new
-    return old.remindedTasks.map { completed.with(remindedTasks: carriedTaskKeys(oldTasks: oldTasks, newTasks: newTasks, keys: $0)) } ?? completed
+    let carry: ([String]) -> [String] = { (keys: [String]) -> [String] in carriedTaskKeys(oldTasks: oldTasks, newTasks: newTasks, keys: keys) }
+    let completed: MeetingRecord = old.completedTasks.map { new.with(completedTasks: carry($0)) } ?? new
+    let reminded: MeetingRecord = old.remindedTasks.map { completed.with(remindedTasks: carry($0)) } ?? completed
+    return old.sentTaskKeys.map { (sent: [String: [String]]) -> MeetingRecord in
+        reminded.with(sentTaskKeys: sent.mapValues(carry))
+    } ?? reminded
+}
+
+/// Listelerin sırayı koruyan, tekrarsız birleşimi; hepsi nil ise nil. Saf fonksiyondur.
+private func unitedKeys(lists: [[String]?]) -> [String]? {
+    let present: [[String]] = lists.compactMap { $0 }
+    guard !present.isEmpty else {
+        return nil
+    }
+    return present.joined().reduce(into: [String]()) { (result: inout [String], key: String) -> Void in
+        if !result.contains(key) {
+            result.append(key)
+        }
+    }
+}
+
+/// Notun gönderim işaretlerini birleştirir: gönderildiği hedefler (tekrarsız), Apple Notlar ve webhook anlarının en
+/// eskisi. Bu işaretler görevlere değil nota bağlıdır; not değişse de olduğu gibi geçer. Saf fonksiyondur.
+private func unitingNoteSendMarks(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
+    let records: [MeetingRecord] = [current] + others
+    return current.with(
+        sentDestinationIDs: unitedKeys(lists: records.map(\.sentDestinationIDs)),
+        notesSentAt: records.compactMap(\.notesSentAt).min(),
+        webhookSentAt: records.compactMap(\.webhookSentAt).min()
+    )
+}
+
+/// Aynı toplantının iki ya da daha çok sürümündeki kullanıcı işaretlerini `current`'a birleştirir: tamamlanan,
+/// Anımsatıcılar'a eklenen ve araca gönderilen (araç başına) görevler ile notun gönderildiği hedefler tekrarsız
+/// birleşir; Apple Notlar ve webhook gönderim anlarının en eskisi kalır. Diğer alanlar `current`'tan gelir. Görev
+/// işaretleri olduğu gibi birleşir: sürümlerin notları farklıysa çağıran ayrıca `withCarriedTaskMarks` ile taşır.
+/// iCloud çakışması ve uzun not işi (diskteki güncel kayıt) bunu kullanır. Saf fonksiyondur.
+public func mergingUserMarks(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
+    let records: [MeetingRecord] = [current] + others
+    let completed: MeetingRecord = unitedKeys(lists: records.map(\.completedTasks)).map { current.with(completedTasks: $0) } ?? current
+    let reminded: MeetingRecord = unitedKeys(lists: records.map(\.remindedTasks)).map { completed.with(remindedTasks: $0) } ?? completed
+    let trackers: [String] = unitedKeys(lists: records.map { $0.sentTaskKeys.map { Array($0.keys).sorted() } }) ?? []
+    let sentTasks: MeetingRecord = records.allSatisfy { $0.sentTaskKeys == nil }
+        ? reminded
+        : reminded.with(sentTaskKeys: Dictionary(uniqueKeysWithValues: trackers.map { (tracker: String) -> (String, [String]) in
+            (tracker, unitedKeys(lists: records.map { $0.sentTaskKeys?[tracker] }) ?? [])
+        }))
+    return unitingNoteSendMarks(current: sentTasks, others: others)
+}
+
+/// Uzun not işinin (işleme, düzenleme, yeniden yazma; 30–300 sn) sonucuna eski kaydın işaretlerini uygular: görev
+/// işaretleri benzer yeni görevlere taşınır (`withCarriedTaskMarks`), notun gönderim işaretleri eklenir. `old`: eski
+/// notlu kaydın en güncel işaretli hali (iş sürerken diskteki kayıtla `mergingUserMarks` ile birleşmiş, bekleyen
+/// işaretleri uygulanmış). Böylece iş sürerken diğer cihazda ya da kendiliğinden gönderimde konan işaretler işin
+/// sonucuyla ezilmez. Saf fonksiyondur.
+public func withJobMarks(old: MeetingRecord, result: MeetingRecord) -> MeetingRecord {
+    unitingNoteSendMarks(current: withCarriedTaskMarks(old: old, new: result), others: [old])
 }

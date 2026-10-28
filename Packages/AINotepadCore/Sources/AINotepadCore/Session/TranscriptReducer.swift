@@ -13,7 +13,7 @@ public func applyEvent(transcript: [LiveSegment], event: LiveSessionEvent) -> [L
         return transcript.map { (segment: LiveSegment) -> LiveSegment in
             assignments[segment.id].map { (person: Int) -> LiveSegment in withPerson(segment: segment, person: person) } ?? segment
         }
-    case .languageLocked, .captureEnded, .recordingFailed, .streamFailed, .diarizationFailed:
+    case .languageLocked, .captureEnded, .recordingFailed, .streamFailed, .streamIncomplete, .diarizationFailed:
         return transcript
     }
 }

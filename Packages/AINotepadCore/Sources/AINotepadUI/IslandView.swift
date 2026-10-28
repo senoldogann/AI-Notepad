@@ -186,10 +186,9 @@ public struct IslandView: View {
 }
 
 
-/// Adanın sol kanadı: kayıtta halesi yayılan kırmızı nokta ve süre; duraklatılınca turuncu; bitirilirken dönen yay.
+/// Adanın sol kanadı: kayıtta haleli kırmızı nokta ve süre; duraklatılınca turuncu; bitirilirken dönen yay.
 private struct IslandStatus: View {
     let state: LiveViewState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
         Group {
@@ -204,16 +203,12 @@ private struct IslandStatus: View {
                     .foregroundStyle(.orange)
             } else if state.isRecording, let startedAt = state.startedAt {
                 HStack(spacing: 7) {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { (context: TimelineViewDefaultContext) in
-                        let phase: Double = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.0) / 2.0
-                        ZStack {
-                            Circle()
-                                .fill(Color.red.opacity(reduceMotion ? 0 : 0.25 * (1 - phase)))
-                                .frame(width: 7 + phase * 6, height: 7 + phase * 6)
-                            Circle().fill(Color.red).frame(width: 7, height: 7)
-                        }
-                        .frame(width: 17, height: 17)
+                    // Durağan nokta ve sabit hale: kayıt boyunca saniyede 30 kez yeniden çizim pil tüketiyordu.
+                    ZStack {
+                        Circle().fill(Color.red.opacity(0.25)).frame(width: 13, height: 13)
+                        Circle().fill(Color.red).frame(width: 7, height: 7)
                     }
+                    .frame(width: 17, height: 17)
                     TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
                         Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
                             .appFont(size: 12, weight: .semibold)

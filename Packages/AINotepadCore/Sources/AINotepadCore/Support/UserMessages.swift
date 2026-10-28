@@ -54,10 +54,22 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Bu bağlantı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.")
     case DestinationError.notAnAccount:
         return String(localized: "Bu bağlantıda kanal seçilmez.")
-    case TaskTrackerError.unfinished(let service, let summary):
-        return String(localized: "\(service) görevleri bitiremedi: \(summary)")
-    case TaskTrackerError.invalidArguments(let service, let tool):
-        return String(localized: "\(service) için geçersiz istek üretildi (\(tool)); yeniden dene.")
+    case TaskTrackerError.partial(let service, let created, let total, let reason):
+        return String(localized: "\(service): \(created.count)/\(total) görev açıldı; kalanlar açılamadı: \(reason). Yeniden gönderince yalnızca kalanlar gider.")
+    case TaskTrackerError.noCreateTool(let service):
+        return String(localized: "\(service) bağlantısında iş açan araç bulunamadı; sunucunun araçları değişmiş olabilir. Uygulamayı güncelle ya da yeniden bağlan.")
+    case TaskTrackerError.notFound:
+        return String(localized: "Bu görev aracı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.")
+    case TaskTrackerError.uncertain(let service, let created, _, let taskTitle, let total, let reason):
+        return String(localized: "\(service): \(created.count)/\(total) görev açıldı. «\(taskTitle)» açılırken yanıt gelmedi (\(reason)); iş açılmış olabilir. Yeniden göndermeden önce \(service) içinde kontrol et: açıldıysa yeniden gönderim onu ikinci kez açar.")
+    case NoteSendError.meetingNotFound:
+        return String(localized: "Bu toplantı artık yok (silinmiş ya da taşınmış); listeyi yenileyip yeniden dene.")
+    case NoteSendError.noNote:
+        return String(localized: "Bu toplantının notu yok; önce notu oluştur.")
+    case NoteSendError.alreadySending:
+        return String(localized: "Bu not bu bağlantıya zaten gönderiliyor; bitmesini bekle.")
+    case let error as DeliveryUncertainError:
+        return String(localized: "\(error.host) yanıt vermedi (\(error.reason)); not gitmiş olabilir. Kontrol et, gitmediyse elle yeniden gönder. Kendiliğinden yeniden gönderilmeyecek.")
     case MCPConfigError.invalidConfig(let path, _):
         return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
     case MCPConfigError.hasComments(let path):

@@ -45,6 +45,46 @@ import Testing
         #expect(carriedTaskKeys(oldTasks: old, newTasks: [new[2]], keys: old.map(taskKey)).isEmpty)
     }
 
+    // Not yeniden yazılınca araca gönderildi işareti de (araç başına) benzer yeni göreve geçer: görev Linear'da ikinci
+    // kez açılmaz. Değişmeyen görev kendi kimliğini korur.
+    @Test func sentTaskMarksSurviveRewrite() {
+        let old: [NoteTask] = [
+            NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true),
+            NoteTask(owner: "Aino", description: "Bütçeyi onaylamak", dueDate: nil, isMine: false),
+        ]
+        let new: [NoteTask] = [
+            NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: "Perşembe", isMine: true),
+            old[1],
+        ]
+        let marked: MeetingRecord = record(tasks: old)
+            .markingTaskSent(trackerID: "linear", task: old[0])
+            .markingTaskSent(trackerID: "jira", task: old[1])
+        let rewritten: MeetingRecord = record(tasks: new)
+        let carried: MeetingRecord = withCarriedTaskMarks(old: marked, new: rewritten)
+        #expect(carried.sentTaskKeys == ["linear": [taskKey(task: new[0])], "jira": [taskKey(task: old[1])]])
+        #expect(withCarriedTaskMarks(old: rewritten, new: rewritten).sentTaskKeys == nil)
+    }
+
+    // Uzun not işi sürerken diğer cihazda konan işaretler (eski notun görevlerine) işin sonucuna taşınır; gönderim
+    // işaretleri eklenir, Apple Notlar anının en eskisi kalır.
+    @Test func jobResultKeepsMarksMadeDuringJob() {
+        let oldTask: NoteTask = NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let newTask: NoteTask = NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let start: MeetingRecord = record(tasks: [oldTask])
+        let early: Date = Date(timeIntervalSince1970: 1_000)
+        let onDisk: MeetingRecord = togglingTask(record: start, task: oldTask)
+            .markingSent(destinationID: "slack")
+            .markingTaskSent(trackerID: "linear", task: oldTask)
+            .with(notesSentAt: early)
+        let result: MeetingRecord = record(tasks: [newTask]).with(notesSentAt: Date(timeIntervalSince1970: 2_000))
+        let saved: MeetingRecord = withJobMarks(old: mergingUserMarks(current: start, others: [onDisk]), result: result)
+        #expect(saved.note?.tasks == [newTask])
+        #expect(saved.completedTasks == [taskKey(task: newTask)])
+        #expect(saved.sentTaskKeys == ["linear": [taskKey(task: newTask)]])
+        #expect(saved.sentDestinationIDs == ["slack"])
+        #expect(saved.notesSentAt == early)
+    }
+
     // Serbest metin tarihleri: ISO, gün.ay.yıl, yılsız (toplantıdan önceyse gelecek yıl); göreli ve geçersizler nil.
     @Test func dueDatesParseOnlyWhenExplicit() {
         let meeting: Date = calendar.date(from: DateComponents(year: 2026, month: 12, day: 15))!
