@@ -14,12 +14,13 @@
 #
 # Bir kerelik hazırlık (Apple kimliği ve uygulamaya özel şifre Keychain'e kaydedilir, betikte görünmez):
 #   xcrun notarytool store-credentials AINotepad --apple-id <apple-id-e-postan> --team-id <takım-kimliği>
-# Sparkle anahtarı (bir kez; gizli anahtar giriş Anahtar Zinciri'nde "ed25519" hesabına kaydedilir, asla repoya girmez):
+# Sparkle anahtarı (bir kez; gizli anahtar giriş Anahtar Zinciri'nde "ainotepad" hesabına kaydedilir, asla repoya
+# girmez; Sparkle'ın varsayılan "ed25519" hesabı başka projelerle paylaşılabildiği için ayrı hesap):
 #   xcodegen generate && xcodebuild -resolvePackageDependencies -project AINotepad.xcodeproj -scheme AINotepad \
 #       -derivedDataPath .build/xcode-dist
-#   .build/xcode-dist/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
+#   .build/xcode-dist/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account ainotepad
 # Aracın yazdığı açık anahtar Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY'e yazılıp repoya işlenir. Anahtar
-# kaybolursa yayınlanmış sürümler artık güncelleme alamaz: Anahtar Zinciri yedeği için `generate_keys -x <dosya>`.
+# kaybolursa yayınlanmış sürümler artık güncelleme alamaz: Anahtar Zinciri yedeği için `generate_keys --account ainotepad -x <dosya>`.
 #
 # release-archive/ (repoya girmez) appcast.xml'in yerel kopyasını tutar; silinmez, her sürüm üstüne eklenir. Önceki
 # sürümlerin DMG'leri release-archive/old_updates/'e taşınır (generate_appcast yalnızca kökteki arşivleri işler; eski
@@ -36,6 +37,8 @@ notes="$1"
 notes="$(cd "$(dirname "$notes")" && pwd)/$(basename "$notes")"
 
 profile="AINotepad"
+# Sparkle gizli anahtarının Anahtar Zinciri hesabı (AI-Notepad'e özel).
+sparkle_account="ainotepad"
 # Sürüm project.yml'den: üç hedef (Mac, iPhone, widget) aynı sürümü taşımalı; farklıysa ya da biçim bozuksa durulur
 # (önceden üç satır birleşip bozuk DMG adı çıkıyordu).
 versions="$(grep -E '^[[:space:]]+MARKETING_VERSION:' project.yml | sed -E 's/.*"(.*)".*/\1/' | sort -u)"
@@ -89,8 +92,8 @@ for tool in sign_update generate_appcast generate_keys; do
     [[ -x "$sparkle_bin/$tool" ]] || { echo "Sparkle aracı bulunamadı: $sparkle_bin/$tool (SPARKLE_BIN ile klasörü ver)." >&2; exit 1; }
 done
 # Anahtar Zinciri'ndeki gizli anahtar uygulamadaki açık anahtarla eşleşmeli; yoksa güncellemenin imzası reddedilir.
-keychain_public_key="$("$sparkle_bin/generate_keys" --account ed25519 -p)" || {
-    echo "Anahtar Zinciri'nde Sparkle anahtarı (hesap: ed25519) yok. Bir kez generate_keys çalıştır (bkz. betiğin başı)." >&2
+keychain_public_key="$("$sparkle_bin/generate_keys" --account "$sparkle_account" -p)" || {
+    echo "Anahtar Zinciri'nde Sparkle anahtarı (hesap: $sparkle_account) yok. Bir kez generate_keys çalıştır (bkz. betiğin başı)." >&2
     exit 1
 }
 [[ "$keychain_public_key" == "$sparkle_public_key" ]] || {
@@ -159,7 +162,7 @@ shasum -a 256 "$dmg"
 echo "Hazır: $dmg"
 
 # Staple'dan sonra imzalanır: staple DMG'yi değiştirir, imza son dosyanın baytlarına aittir.
-sparkle_signature="$("$sparkle_bin/sign_update" --account ed25519 "$dmg")" || {
+sparkle_signature="$("$sparkle_bin/sign_update" --account "$sparkle_account" "$dmg")" || {
     echo "DMG Sparkle anahtarıyla imzalanamadı: $dmg" >&2
     exit 1
 }
@@ -173,7 +176,7 @@ for old in "$archive_dir"/*.dmg "$archive_dir"/*.md; do
 done
 cp "$dmg" "$archive_dir/"
 cp "$notes" "$archive_dir/$(basename "${dmg%.dmg}").md"
-"$sparkle_bin/generate_appcast" --account ed25519 --embed-release-notes --maximum-deltas 0 \
+"$sparkle_bin/generate_appcast" --account "$sparkle_account" --embed-release-notes --maximum-deltas 0 \
     --download-url-prefix "https://github.com/$repo/releases/download/v$version/" "$archive_dir"
 appcast="$archive_dir/appcast.xml"
 grep -q "<sparkle:version>$build</sparkle:version>" "$appcast" || { echo "appcast.xml'de $build derlemesi yok; generate_appcast çıktısını kontrol et." >&2; exit 1; }
