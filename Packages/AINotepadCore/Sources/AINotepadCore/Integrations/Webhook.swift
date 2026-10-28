@@ -132,7 +132,7 @@ public func webhookText(record: MeetingRecord, note: MeetingNote) -> String {
     return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-/// Gönderilecek gövde: servise uygun biçimde webhook metni (Türkçe), genel webhook'ta ayrıca yapılandırılmış toplantı.
+/// Gönderilecek gövde: servise uygun biçimde webhook metni (notun dilinde), genel webhook'ta ayrıca yapılandırılmış toplantı.
 /// Saf fonksiyondur.
 public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote) throws -> Data {
     let markdown: String = webhookText(record: record, note: note)

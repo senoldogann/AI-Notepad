@@ -135,7 +135,7 @@ private struct SettingsTabs: View {
     }
 }
 
-/// Motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
+/// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
     let onShowSetup: @MainActor () -> Void
@@ -152,15 +152,18 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.autoRecord) private var autoRecord: Bool = false
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
     @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
     var body: some View {
         // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
         let isBusy: Bool = model.isBusy
+        // Seçili not dilinin adı (arayüz dilinde): çeviri ayarlarında geçer.
+        let noteLanguageName: String = storedNoteLanguage(value: noteLanguage).interfaceName
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Arayüz dili")) {
-                Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
+                Text("Menülerin ve ayarların dili.")
                 if interfaceLanguage != launchInterfaceLanguage {
                     Text("Yeniden başlatınca uygulanır.").foregroundStyle(Theme.ink)
                 }
@@ -189,6 +192,13 @@ private struct GeneralSettings: View {
             }
             .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
                 storeInterfaceLanguage(language: language)
+            }
+            SettingsRow(title: Text("Not ve çeviri dili")) {
+                Text("Toplantı notları, canlı çeviri, \"Ne kaçırdım?\" özeti ve Sor cevapları bu dilde yazılır. Önceki notlar yazıldıkları dilde kalır.")
+            } control: {
+                SettingsMenu(selection: $noteLanguage, options: ShareLanguage.allCases.map { (language: ShareLanguage) -> (String, Text) in
+                    (language.rawValue, Text(verbatim: language.nativeName))
+                })
             }
             SettingsRow(title: Text("Canlı metin")) {
                 Text(model.liveEngine == .deepgram
@@ -312,12 +322,12 @@ private struct GeneralSettings: View {
                 .padding(.vertical, 12)
                 SettingsDivider()
             }
-            SettingsRow(title: Text("Kayıt sırasında Türkçeye çevir")) {
+            SettingsRow(title: Text("Kayıt sırasında \(noteLanguageName) diline çevir")) {
                 Text(model.displayMode.needsLiveTranslation
-                    ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
-                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
+                    ? "Her cümle kayıt sırasında \(noteLanguageName) diline çevrilir (LLM çağrısı); toplantı zaten bu dildeyse çevrilmez. Toplantı bitince \(noteLanguageName) not (görevler, kararlar, özet) hazırlanır."
+                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince \(noteLanguageName) not (görevler, kararlar, özet) yine hazırlanır.")
             } control: {
-                Toggle("Kayıt sırasında Türkçeye çevir", isOn: Binding<Bool>(
+                Toggle("Kayıt sırasında \(noteLanguageName) diline çevir", isOn: Binding<Bool>(
                     get: { model.displayMode.needsLiveTranslation },
                     set: { (enabled: Bool) -> Void in model.selectDisplayMode(mode: enabled ? .bilingual : .originalOnly) }
                 ))
@@ -331,8 +341,8 @@ private struct GeneralSettings: View {
                         get: { model.displayMode },
                         set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
                     ), options: [
-                        (DisplayMode.bilingual, Text("İki dil (orijinal + Türkçe)")),
-                        (DisplayMode.turkishOnly, Text("Sadece Türkçe")),
+                        (DisplayMode.bilingual, Text("İki dil (orijinal + \(noteLanguageName))")),
+                        (DisplayMode.turkishOnly, Text("Sadece \(noteLanguageName)")),
                     ])
                 }
             }
@@ -850,7 +860,7 @@ private func testConnection() async -> ConnectionTest {
     }
     let reply: String
     do {
-        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: []))
+        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: [], language: selectedNoteLanguage()))
     } catch {
         return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
     }

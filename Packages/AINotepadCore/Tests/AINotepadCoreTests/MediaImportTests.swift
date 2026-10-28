@@ -47,7 +47,7 @@ extension CloudTests {
             record: record, directory: directory,
             finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: [])),
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), languageMode: .automatic, userName: "Doğan",
-            voiceEmbedder: nil, registry: [], onStep: { (_: ProcessingStep) async -> Void in }
+            noteLanguage: .turkish, voiceEmbedder: nil, registry: [], onStep: { (_: ProcessingStep) async -> Void in }
         )
         #expect(result.status == .done, "\(result.failureMessage ?? "")")
         #expect(Set(result.finalSegments.compactMap(\.person)).count >= 2)
@@ -65,7 +65,7 @@ extension CloudTests {
             record: record, directory: directory,
             finalPass: .run(ElevenLabsFinalTranscriber(apiKey: try cloudKey(account: .elevenlabs), keyterms: [])),
             llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), languageMode: .automatic, userName: "Doğan",
-            voiceEmbedder: nil, registry: [], onStep: { (_: ProcessingStep) async -> Void in }
+            noteLanguage: .turkish, voiceEmbedder: nil, registry: [], onStep: { (_: ProcessingStep) async -> Void in }
         )
         #expect(result.status == .done, "\(result.failureMessage ?? "")")
         #expect(result.language == .swedish)

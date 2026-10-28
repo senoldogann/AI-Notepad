@@ -309,7 +309,7 @@ final class PhoneStore {
             let llm: LLMProvider = try await phoneLLMProvider()
             let directory: URL = try sessionDirectory(id: meetingID)
             let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
-            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName, language: phoneNoteLanguage())
             // Not yazılırken Mac'te değişmiş olabilir: yeni not diskteki güncel kayda uygulanır, işaretler oradan taşınır.
             let fresh: MeetingRecord = try loadMeeting(directory: directory)
             let merged: MeetingRecord = applyingRegeneratedNote(result: result, original: record, fresh: fresh)

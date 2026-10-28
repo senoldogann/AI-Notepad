@@ -6,6 +6,8 @@ import os
 /// paylaşılan anahtarları eşitler).
 enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
+    /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri ve Sor cevapları bu dilde yazılır.
+    static let noteLanguage: String = "language.note"
     static let userName: String = "userName"
     /// Kayıt başında "katılımcılara haber ver" kartı.
     static let consentReminder: String = "consentReminder"
@@ -25,6 +27,8 @@ func registerPhoneDefaults() {
         PhoneSettingsKey.consentReminder: true,
         PhoneSettingsKey.audioRetentionDays: 30,
         PhoneSettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
+        // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
+        PhoneSettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
     ])
 }
 
@@ -36,6 +40,21 @@ func phonePrimaryMeetingLanguage() -> MeetingLanguage {
     guard let language = MeetingLanguage(rawValue: stored) else {
         phoneSettingsLogger.error("Ana toplantı dili tanınmadı, değer: \(stored, privacy: .public)")
         return .finnish
+    }
+    return language
+}
+
+/// Not ve çeviri dili (Ayarlar); kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func phoneNoteLanguage() -> ShareLanguage {
+    phoneStoredNoteLanguage(value: UserDefaults.standard.string(forKey: PhoneSettingsKey.noteLanguage) ?? "")
+}
+
+/// Ayarın ham değerinden not dili (görünümlerdeki `@AppStorage(PhoneSettingsKey.noteLanguage)` için: dil değişince
+/// etiketler de güncellenir); tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func phoneStoredNoteLanguage(value stored: String) -> ShareLanguage {
+    guard let language = ShareLanguage(rawValue: stored) else {
+        phoneSettingsLogger.error("Not dili tanınmadı, varsayılan kullanılıyor, değer: \(stored, privacy: .public)")
+        return defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations)
     }
     return language
 }

@@ -9,7 +9,7 @@ public struct TranscriptParagraph: Sendable, Equatable, Identifiable {
     public let startSec: Double
     public let endSec: Double
     public let text: String
-    /// Bölümlerin Türkçeleri sırayla; hiç yoksa nil.
+    /// Bölümlerin not dilindeki çevirileri sırayla; hiç yoksa nil.
     public let turkish: String?
     /// Çalarken vurgulanacak kelimeler: son geçişin gerçek zamanları, yoksa bölüm süresine göre tahmin.
     public let words: [StoredWord]

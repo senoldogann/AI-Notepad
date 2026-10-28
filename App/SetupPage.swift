@@ -48,7 +48,7 @@ private enum OnboardingStep: Int, CaseIterable {
     /// Panelin kısa tanıtımı.
     var panelSubtitle: LocalizedStringKey {
         switch self {
-        case .welcome: "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin."
+        case .welcome: "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince \(selectedNoteLanguage().interfaceName) not hazır, en üstte senin görevlerin."
         case .permissions: "Mikrofon senin sesin, sistem sesi karşı taraf. İkisi ayrı kaydedilir, konuşmacılar ayrılır."
         case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
         case .keys: "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider."
@@ -267,13 +267,15 @@ private struct RoadmapMarker: View {
 
 private struct WelcomeStep: View {
     var body: some View {
+        // Not ve çeviri dilinin adı (kurulumda varsayılanı: arayüz dili).
+        let noteLanguageName: String = selectedNoteLanguage().interfaceName
         VStack(alignment: .leading, spacing: 16) {
             Text("Birkaç adımda hazırsın; her adım atlanabilir, hepsi sonra Ayarlar'dan değişir.")
                 .appFont(size: 14, weight: .regular)
                 .foregroundStyle(Theme.muted)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "Fince, İngilizce ve 33 dil daha; Türkçesi altında akar.", palette: .sunset)
-                FeatureTile(symbol: "sparkles", title: "Ne kaçırdım?", text: "Son dakikaların Türkçe özeti, toplantıya soru.", palette: .rose)
+                FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "Fince, İngilizce ve 33 dil daha; \(noteLanguageName) çevirisi altında akar.", palette: .sunset)
+                FeatureTile(symbol: "sparkles", title: "Ne kaçırdım?", text: "Son dakikaların \(noteLanguageName) özeti, toplantıya soru.", palette: .rose)
                 FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar, özet ve sözlük.", palette: .rose)
                 FeatureTile(symbol: "eye.slash.fill", title: "Ekran paylaşımında gizli", text: "Panel ve ada paylaşılan ekranda görünmez.", palette: .sunset)
             }
@@ -504,7 +506,7 @@ private struct ReadyStep: View {
             }
             FeatureTile(
                 symbol: "rectangle.on.rectangle", title: "Kayıt sırasında cam panel",
-                text: "Canlı metin ve Türkçesi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.", palette: .sunset
+                text: "Canlı metin ve \(selectedNoteLanguage().interfaceName) çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.", palette: .sunset
             )
             .padding(.top, 6)
             FeatureTile(

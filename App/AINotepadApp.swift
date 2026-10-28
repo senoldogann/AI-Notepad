@@ -22,7 +22,7 @@ enum AppEntry {
         }
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version)
+            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version, noteLanguage: selectedNoteLanguage())
         } catch {
             FileHandle.standardError.write(Data("AI-Notepad MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)

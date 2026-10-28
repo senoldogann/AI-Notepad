@@ -88,12 +88,12 @@ final class PhoneAsk {
                 }
                 if scoped.isEmpty {
                     _ = try await askArchive(
-                        question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: records, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
                         now: Date(), onProgress: onProgress
                     )
                 } else {
                     _ = try await askAboutMeetings(
-                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
                         now: Date(), onProgress: onProgress
                     )
                 }
@@ -233,6 +233,8 @@ struct AskTab: View {
     @FocusState private var isFocused: Bool
     /// Sohbet geçmişi listesi açık (gezinme yığınında).
     @State private var isShowingHistory: Bool = false
+    /// Not ve çeviri dili (Ayarlar): cevapların dili metinde adıyla geçer.
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     private let examples: [(symbol: String, text: String)] = [
         ("checklist", "Bana hangi görevler verildi?"),
@@ -347,7 +349,7 @@ struct AskTab: View {
                     .appFont(size: 28, weight: .regular)
                     .tracking(-0.5)
                     .foregroundStyle(Color.black.opacity(0.8))
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                     .appFont(size: 14, weight: .regular)
                     .foregroundStyle(Color.black.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
