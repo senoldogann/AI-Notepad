@@ -34,6 +34,12 @@ export interface Config {
   readonly pastDueGraceMs: number;
   readonly trialMeetingTokenBudget: number;
   readonly subscriberMeetingTokenBudget: number;
+  /** Kullanıcı başına aylık token sınırı (tüm toplantılar). */
+  readonly monthlyTokenCap: number;
+  /** Kullanıcı başına günlük token sınırı. */
+  readonly dailyTokenCap: number;
+  /** Kullanıcı başına günde en çok toplantı başlatma. */
+  readonly maxMeetingStartsPerDay: number;
   readonly llm: {
     readonly maxTokens: number;
     readonly maxRequestBytes: number;
@@ -95,6 +101,9 @@ const envSchema = z.object({
   PAST_DUE_GRACE_DAYS: positiveInt,
   TRIAL_MEETING_TOKEN_BUDGET: positiveInt,
   SUBSCRIBER_MEETING_TOKEN_BUDGET: positiveInt,
+  MONTHLY_TOKEN_CAP: positiveInt,
+  DAILY_TOKEN_CAP: positiveInt,
+  MAX_MEETING_STARTS_PER_DAY: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
   LLM_MAX_REQUEST_BYTES: positiveInt,
   LLM_MAX_INPUT_TOKENS: positiveInt,
@@ -150,6 +159,9 @@ export function parseConfig(env: Env): Config {
     pastDueGraceMs: value.PAST_DUE_GRACE_DAYS * 86_400_000,
     trialMeetingTokenBudget: value.TRIAL_MEETING_TOKEN_BUDGET,
     subscriberMeetingTokenBudget: value.SUBSCRIBER_MEETING_TOKEN_BUDGET,
+    monthlyTokenCap: value.MONTHLY_TOKEN_CAP,
+    dailyTokenCap: value.DAILY_TOKEN_CAP,
+    maxMeetingStartsPerDay: value.MAX_MEETING_STARTS_PER_DAY,
     llm: {
       maxTokens: value.LLM_MAX_TOKENS,
       maxRequestBytes: value.LLM_MAX_REQUEST_BYTES,

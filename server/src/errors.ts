@@ -20,6 +20,8 @@ export type ErrorCode =
   | "trial_exhausted"
   | "trial_ip_limit"
   | "monthly_cap_reached"
+  | "daily_cap_reached"
+  | "transcription_closed"
   | "meeting_not_active"
   | "meeting_budget_exhausted"
   | "audio_too_long"
@@ -50,6 +52,8 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   trial_exhausted: 402,
   trial_ip_limit: 429,
   monthly_cap_reached: 403,
+  daily_cap_reached: 429,
+  transcription_closed: 403,
   meeting_not_active: 403,
   meeting_budget_exhausted: 429,
   audio_too_long: 413,

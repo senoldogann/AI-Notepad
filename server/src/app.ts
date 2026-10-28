@@ -17,6 +17,7 @@ import { llmRequestSchema } from "./llm/request";
 import { proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
 import { endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import { requireSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { parseTranscribeParams, proxyTranscription } from "./transcribe";
 
@@ -245,6 +246,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
     const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    await requireSpendHeadroom(db, config, now);
     const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
     return proxyLLM(db, context, config, meeting, body);
   }
@@ -252,6 +254,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
     const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    await requireSpendHeadroom(db, config, now);
     const params = parseTranscribeParams(new URL(request.url), config.transcribe.maxKeyterms);
     return proxyTranscription(db, context, config, meeting, request, params);
   }

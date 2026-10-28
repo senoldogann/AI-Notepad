@@ -51,6 +51,13 @@
     // Not: çağrı başına `tahmin + max_tokens` önceden ayrılır, sonra gerçek kullanıma indirilir; bütçe gerçek kullanımı ölçer.
     "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
     "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
+    // Kullanıcı başına token sınırları (yeni toplantı açmak bütçeyi sıfırlamasın diye):
+    // - Saatlik oran yukarıdaki türetmeden: 4 saat ≈ 2,07 M → ~0,52 M token/saat.
+    // - Aylık: 10 saat × 0,52 M = 5,2 M, %25 pay → 6,5 M (en çok ~0,9 $/ay).
+    // - Günlük: en uzun tek toplantının bütçesi (2,6 M) sığsın, kısa ek kullanım kalsın → 3,0 M.
+    "MONTHLY_TOKEN_CAP": "6500000",
+    "DAILY_TOKEN_CAP": "3000000",
+    "MAX_MEETING_STARTS_PER_DAY": "20",
     "LLM_MAX_TOKENS": "8192",
     "LLM_MAX_REQUEST_BYTES": "400000",
     "LLM_MAX_INPUT_TOKENS": "100000",
@@ -100,6 +107,9 @@
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
         "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
+        "MONTHLY_TOKEN_CAP": "6500000",
+        "DAILY_TOKEN_CAP": "3000000",
+        "MAX_MEETING_STARTS_PER_DAY": "20",
         "LLM_MAX_TOKENS": "8192",
             "LLM_MAX_REQUEST_BYTES": "400000",
         "LLM_MAX_INPUT_TOKENS": "100000",

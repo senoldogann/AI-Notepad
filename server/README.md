@@ -62,11 +62,11 @@ App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 in
 | `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |
 | `POST /v1/device/challenge` | Bearer | `{purpose: "attest" \| "assert"}` |
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |
-| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3 |
+| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3; kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır |
 | `POST /v1/meetings/{id}/end` | Bearer | |
-| `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE |
-| `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=` |
+| `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE; toplantı bütçesi + kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı |
+| `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=`. Süre önceden ayrılır: WAV (PCM) başlıktan kesin, m4a/aac/mp3 en düşük 8 kbit/s, ogg/webm 6 kbit/s varsayımıyla; toplantının sesi en çok toplantının süresi kadar. FLAC kabul edilmez. Uzun toplantıda WAV parçalar halinde gönderilir |
 | `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner |
 | `POST /v1/billing/webhook` | Stripe imzası | |
 
-Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir.
+Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir. Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner.

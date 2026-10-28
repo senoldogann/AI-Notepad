@@ -3,10 +3,11 @@ import type { Config } from "../config";
 import { ApiError, isRetryableStatus } from "../errors";
 import { jsonResponse } from "../http";
 import { errorName, log } from "../log";
-import { type MeetingRow, reserveMeetingTokens, settleMeetingTokensStatement } from "../meetings";
+import type { MeetingRow } from "../meetings";
 import type { RequestContext } from "../platform";
 import { withRetries } from "../retry";
-import { addSpendStatement, addTokenUsageStatement, llmCostMicroUsd } from "../usage";
+import { type TokenHeadroom, reserveAll, settleTokenStatements, tokenHeadroom, tokenReservationSteps } from "../reservations";
+import { addSpendStatement, llmCostMicroUsd } from "../usage";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
 
 /** Gerçekleşen token kullanımı. */
@@ -49,31 +50,39 @@ function totalInputTokens(usage: { input_tokens: number | null; cache_creation_i
   return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 
-/** Ayrılan tokenı gerçek kullanımla değiştirir; aylık kullanıma ve günlük harcamaya ekler. */
+/** Ayrılan tokenı (toplantı, aylık, günlük) gerçek kullanımla değiştirir ve günlük harcamaya ekler. */
 async function chargeUsage(db: D1Database, meeting: MeetingRow, reserved: number, usage: TokenUsage, now: Date): Promise<void> {
   await db.batch([
-    settleMeetingTokensStatement(db, meeting.id, reserved, usage.inputTokens + usage.outputTokens),
-    addTokenUsageStatement(db, meeting.user_id, now, usage.inputTokens, usage.outputTokens),
+    ...settleTokenStatements(db, meeting.id, meeting.user_id, reserved, usage.inputTokens, usage.outputTokens, now),
     addSpendStatement(db, now, llmCostMicroUsd(usage.inputTokens, usage.outputTokens)),
   ]);
   log("info", "llm_usage", { userId: meeting.user_id, meetingId: meeting.id, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }
 
 /**
- * Haiku vekili. Girdi tahmini sınırı aşarsa 413. Toplantı bütçesinden `tahmin + max_tokens` önceden ayrılır (eşzamanlı
- * çağrılar bütçeyi aşamaz); yanıt bitince gerçek kullanım yazılır. Akış kesilirse ayrılan miktar harcanmış sayılır.
+ * Haiku vekili. Girdi tahmini sınırı aşarsa 413. `max_tokens` toplantı bütçesi, kullanıcının aylık ve günlük token
+ * sınırından en dar olanına göre kısılır; `tahmin + max_tokens` üçünden de tek koşullu ifadelerle önceden ayrılır
+ * (eşzamanlı çağrılar ve yeniden başlatılan toplantılar sınırları aşamaz). Yanıt bitince gerçek kullanım yazılır;
+ * akış kesilirse ayrılan miktar harcanmış sayılır.
  */
 export async function proxyLLM(db: D1Database, context: RequestContext, config: Config, meeting: MeetingRow, request: LLMRequest): Promise<Response> {
   const estimatedInput: number = estimateInputTokens(request);
   if (estimatedInput > config.llm.maxInputTokens) {
     throw new ApiError("payload_too_large", `Girdi çok uzun (tahmini ${estimatedInput} token, en çok ${config.llm.maxInputTokens}).`);
   }
-  const remaining: number = meeting.token_budget - meeting.tokens_used;
-  const maxTokens: number = clampMaxTokens(request.max_tokens, config.llm.maxTokens, remaining, estimatedInput);
+  const now: Date = context.platform.now();
+  const headroom: TokenHeadroom = await tokenHeadroom(db, config, meeting.user_id, now);
+  const limits: ReadonlyArray<readonly [number, ApiError]> = [
+    [meeting.token_budget - meeting.tokens_used, new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu.")],
+    [headroom.monthly, new ApiError("monthly_cap_reached", "Bu ayki yapay zekâ kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")],
+    [headroom.daily, new ApiError("daily_cap_reached", "Bugünkü yapay zekâ kullanım sınırına ulaştın; yarın yeniden dene.")],
+  ];
+  const [remaining, exhausted]: readonly [number, ApiError] = limits.reduce(
+    (tightest: readonly [number, ApiError], limit: readonly [number, ApiError]): readonly [number, ApiError] => (limit[0] < tightest[0] ? limit : tightest),
+  );
+  const maxTokens: number = clampMaxTokens(request.max_tokens, config.llm.maxTokens, remaining, estimatedInput, exhausted);
   const reserved: number = estimatedInput + maxTokens;
-  if (!(await reserveMeetingTokens(db, meeting.id, reserved))) {
-    throw new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu; yeni bir toplantı başlat.");
-  }
+  await reserveAll(db, tokenReservationSteps(db, config, meeting.id, meeting.user_id, reserved, now));
   const client: Anthropic = anthropicClient(context, config);
   const params: Anthropic.MessageCreateParamsNonStreaming = upstreamParams(request, maxTokens);
   const retry = {
@@ -82,7 +91,6 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     baseDelayMs: context.platform.retryBaseDelayMs,
     isRetryable: isRetryableAnthropicError,
   };
-  const now: Date = context.platform.now();
 
   if (request.stream !== true) {
     let message: Anthropic.Message;

@@ -3,7 +3,8 @@ import { randomId } from "./crypto";
 import { deviceTrialMeetingsUsed, hasSubscriptionAccess, subscriptionState, userTrialMeetingsUsed } from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
-import { type MonthlyUsage, dayKey, monthlyUsage, spendCeilingReached } from "./usage";
+import { reserveMeetingStart } from "./reservations";
+import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
 export interface StartedMeeting {
@@ -27,14 +28,23 @@ export interface MeetingRow {
   readonly token_budget: number;
   readonly tokens_used: number;
   readonly audio_seconds: number;
+  readonly audio_reserved: number;
+  /** 1: gerçek ses süresi ayrılanı aştı, toplantının ses hakkı kapandı. */
+  readonly transcription_closed: number;
+  /** `ended`: kullanıcı bitirdi (not için ek süre); `superseded`: yeni toplantı başlayınca kapandı (ek süre yok). */
+  readonly end_reason: "ended" | "superseded" | null;
 }
 
-/** Kullanıcının açık oturumlarını kapatır (aynı anda tek toplantı; yeni başlangıç eskisini bitirir). */
+/**
+ * Kullanıcının açık oturumlarını kapatır (aynı anda tek toplantı; yeni başlangıç eskisini bitirir). Böyle kapanan
+ * toplantı `superseded` olur ve not için ek süre almaz: yeniden başlatarak bütçe katlanamaz.
+ */
 async function closeOpenMeetings(db: D1Database, userId: string, now: Date): Promise<void> {
   await db
     .prepare(
       `UPDATE meeting_sessions
-       SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER)
+       SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER),
+         end_reason = 'superseded'
        WHERE user_id = ? AND ended_at IS NULL`,
     )
     .bind(now.getTime(), now.getTime(), userId)
@@ -42,7 +52,8 @@ async function closeOpenMeetings(db: D1Database, userId: string, now: Date): Pro
 }
 
 /**
- * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503. Abonelik erişimi varsa (`past_due` ek süresi dahil)
+ * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503; kullanıcı bugün `maxMeetingStartsPerDay` toplantı
+ * başlattıysa 429. Abonelik erişimi varsa (`past_due` ek süresi dahil)
  * aylık sınırın altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı
  * düşer (`startTrialMeeting`).
  */
@@ -54,9 +65,8 @@ export async function startMeeting(
   clientIpHash: string,
   now: Date,
 ): Promise<StartedMeeting> {
-  if (await spendCeilingReached(db, config, now)) {
-    throw new ApiError("spend_ceiling_reached", "Servis bugün yoğun; yeni toplantı şu an başlatılamıyor. Lütfen daha sonra yeniden dene.");
-  }
+  await requireSpendHeadroom(db, config, now);
+  await reserveMeetingStart(db, config, userId, now);
   await closeOpenMeetings(db, userId, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
     return startTrialMeeting(db, config, userId, deviceId, clientIpHash, now);
@@ -167,7 +177,8 @@ export async function endMeeting(db: D1Database, userId: string, meetingId: stri
   await db
     .prepare(
       `UPDATE meeting_sessions
-       SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER)
+       SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER),
+         end_reason = 'ended'
        WHERE id = ? AND user_id = ? AND ended_at IS NULL`,
     )
     .bind(now.getTime(), now.getTime(), meetingId, userId)
@@ -184,9 +195,13 @@ async function findMeeting(db: D1Database, userId: string, meetingId: string): P
   return db.prepare("SELECT * FROM meeting_sessions WHERE id = ? AND user_id = ?").bind(meetingId, userId).first<MeetingRow>();
 }
 
-/** Toplantının vekil çağrılarına açık olduğu son an: bitiş (ya da en çok süre) + not üretimi için ek süre. Saf fonksiyondur. */
+/**
+ * Toplantının vekil çağrılarına açık olduğu son an: bitiş (ya da en çok süre) + not üretimi için ek süre. Yeni toplantı
+ * başlayınca kapanan (`superseded`) toplantı ek süre almaz. Saf fonksiyondur.
+ */
 export function meetingUsableUntil(row: MeetingRow, graceMs: number): number {
-  return Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at) + graceMs;
+  const end: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
+  return row.end_reason === "superseded" ? end : end + graceMs;
 }
 
 /** Vekil çağrısı için toplantı: çağırana ait, açık ya da ek süre içinde olmalı; değilse `meeting_not_active`. */
@@ -196,23 +211,4 @@ export async function requireUsableMeeting(db: D1Database, config: Config, userI
     throw new ApiError("meeting_not_active", "Toplantı oturumu açık değil; yeni bir toplantı başlat.");
   }
   return row;
-}
-
-/** Toplantı bütçesinden token ayırır (tek koşullu ifade); bütçe yetmezse false. */
-export async function reserveMeetingTokens(db: D1Database, meetingId: string, tokens: number): Promise<boolean> {
-  const result: D1Result = await db
-    .prepare("UPDATE meeting_sessions SET tokens_used = tokens_used + ? WHERE id = ? AND tokens_used + ? <= token_budget")
-    .bind(tokens, meetingId, tokens)
-    .run();
-  return result.meta.changes === 1;
-}
-
-/** Ayrılan tokenı gerçek kullanımla değiştiren ifade. */
-export function settleMeetingTokensStatement(db: D1Database, meetingId: string, reserved: number, actual: number): D1PreparedStatement {
-  return db.prepare("UPDATE meeting_sessions SET tokens_used = MAX(0, tokens_used - ? + ?) WHERE id = ?").bind(reserved, actual, meetingId);
-}
-
-/** Toplantının ses süresine ekleme ifadesi. */
-export function addMeetingAudioStatement(db: D1Database, meetingId: string, seconds: number): D1PreparedStatement {
-  return db.prepare("UPDATE meeting_sessions SET audio_seconds = audio_seconds + ? WHERE id = ?").bind(seconds, meetingId);
 }

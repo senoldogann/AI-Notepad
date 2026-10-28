@@ -42,18 +42,30 @@ describe("günlük harcama tavanı", () => {
     expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"daily_spend_ceiling_reached"'))).toBe(true);
     alerts.mockRestore();
 
-    // Süren toplantı kendi bütçesiyle devam eder.
-    expect(
-      (
-        await harness.call(
-          req("POST", "/v1/llm/messages", {
-            token: session.accessToken,
-            headers: { "x-meeting-id": meeting.meetingId },
-            json: { effort: "low", max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
-          }),
-        )
-      ).status,
-    ).toBe(200);
+    // Tavan her vekil çağrısında da denetlenir: süren toplantı da durur.
+    await expectError(
+      await harness.call(
+        req("POST", "/v1/llm/messages", {
+          token: session.accessToken,
+          headers: { "x-meeting-id": meeting.meetingId },
+          json: { effort: "low", max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
+        }),
+      ),
+      503,
+      "spend_ceiling_reached",
+    );
+    const audio: Uint8Array = new Uint8Array(1000);
+    await expectError(
+      await harness.call(
+        req("POST", "/v1/transcribe", {
+          token: session.accessToken,
+          headers: { "x-meeting-id": meeting.meetingId, "content-type": "audio/mp4", "content-length": String(audio.byteLength) },
+          body: audio,
+        }),
+      ),
+      503,
+      "spend_ceiling_reached",
+    );
 
     // Ertesi gün tavan sıfırlanır.
     harness.clock.nowMs += 86_400_000;

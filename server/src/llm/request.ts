@@ -94,11 +94,14 @@ export function upstreamParams(request: LLMRequest, clampedMaxTokens: number): A
   };
 }
 
-/** İstemcinin `max_tokens`'ı yapılandırma ve kalan bütçeyle sınırlanır; düşünmeye yer kalmıyorsa bütçe bitmiştir. Saf fonksiyondur. */
-export function clampMaxTokens(requested: number, configMax: number, remainingBudget: number, estimatedInput: number): number {
+/**
+ * İstemcinin `max_tokens`'ı yapılandırma ve en dar kalan bütçeyle sınırlanır; düşünmeye yer kalmıyorsa o bütçe
+ * bitmiştir ve `exhausted` fırlatılır. Saf fonksiyondur.
+ */
+export function clampMaxTokens(requested: number, configMax: number, remainingBudget: number, estimatedInput: number, exhausted: ApiError): number {
   const clamped: number = Math.min(requested, configMax, remainingBudget - estimatedInput);
   if (clamped < Math.min(minOutputTokens, requested)) {
-    throw new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu; yeni bir toplantı başlat.");
+    throw exhausted;
   }
   return clamped;
 }

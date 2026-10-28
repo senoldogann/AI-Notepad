@@ -207,6 +207,29 @@ export const blockingLimiter: RateLimit = {
   limit: async (): Promise<RateLimitOutcome> => ({ success: false }),
 };
 
+/** PCM WAV dosyası: 44 baytlık RIFF başlığı + `dataBytes` sıfır bayt. */
+export function wavFile(sampleRate: number, channels: number, bits: number, dataBytes: number): Uint8Array {
+  const file: Uint8Array = new Uint8Array(44 + dataBytes);
+  const view: DataView = new DataView(file.buffer);
+  const ascii = (offset: number, text: string): void => {
+    file.set(Array.from(text, (char: string): number => char.charCodeAt(0)), offset);
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, (sampleRate * channels * bits) / 8, true);
+  view.setUint16(32, (channels * bits) / 8, true);
+  view.setUint16(34, bits, true);
+  ascii(36, "data");
+  view.setUint32(40, dataBytes, true);
+  return file;
+}
+
 /** Abonelik satırı ekler (webhook testleri dışında kısayol). */
 export async function grantSubscription(userId: string, status: string, periodEndMs: number): Promise<void> {
   const customer: string = `cus_${randomToken(8)}`;

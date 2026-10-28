@@ -4,36 +4,39 @@ import { randomToken, utf8 } from "./crypto";
 import { ApiError, UpstreamError, isRetryableStatus } from "./errors";
 import { jsonResponse } from "./http";
 import { errorName, log } from "./log";
-import { type MeetingRow, addMeetingAudioStatement } from "./meetings";
+import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
-import { type MonthlyUsage, addAudioUsageStatement, addSpendStatement, monthlyUsage, transcriptionCostMicroUsd } from "./usage";
+import { audioReservationSteps, reserveAll, settleAudioStatements } from "./reservations";
+import { addSpendStatement, transcriptionCostMicroUsd } from "./usage";
 
 export const elevenLabsSpeechToTextUrl: string = "https://api.elevenlabs.io/v1/speech-to-text";
 export const scribeModel: string = "scribe_v2";
 
 /**
- * İzinli ses türleri ve en yüksek bayt/saniye varsayımı. Süre tahmini (bayt / bu değer) gerçek sürenin alt
- * sınırıdır: kalan süre bu tahmini karşılamıyorsa istek ElevenLabs'e gitmeden reddedilir.
+ * Sıkıştırılmış türlerde gerçekçi en düşük bit hızı (bayt/saniye). Süre tahmini = bayt / bu değer: gerçek sürenin
+ * üst sınırıdır, ayırma bu tahminle yapılır. Opus 6 kbit/s ≈ 750 B/s; HE-AAC v2 ve MP3 8 kbit/s ≈ 1000 B/s.
+ * FLAC kabul edilmez: sessizliği sınırsız sıkıştırdığı için boyuttan süreye üst sınır çıkmaz.
  */
-const maxBytesPerSecondByType: Readonly<Record<string, number>> = {
-  "audio/wav": 192_000,
-  "audio/x-wav": 192_000,
-  "audio/wave": 192_000,
-  "audio/flac": 192_000,
-  "audio/mp4": 40_000,
-  "audio/m4a": 40_000,
-  "audio/x-m4a": 40_000,
-  "audio/aac": 40_000,
-  "audio/mpeg": 40_000,
-  "audio/ogg": 40_000,
-  "audio/webm": 40_000,
+const minBytesPerSecondByType: Readonly<Record<string, number>> = {
+  "audio/mp4": 1000,
+  "audio/m4a": 1000,
+  "audio/x-m4a": 1000,
+  "audio/aac": 1000,
+  "audio/mpeg": 1000,
+  "audio/ogg": 750,
+  "audio/webm": 750,
 };
+
+/** WAV türleri: süre başlıktan kesin hesaplanır (PCM, veri baytı / bayt hızı). */
+const wavTypes: ReadonlySet<string> = new Set(["audio/wav", "audio/x-wav", "audio/wave"]);
+
+/** WAV başlığı için okunacak en çok bayt. */
+const maxWavHeaderBytes: number = 64 * 1024;
 
 const fileExtensionByType: Readonly<Record<string, string>> = {
   "audio/wav": "wav",
   "audio/x-wav": "wav",
   "audio/wave": "wav",
-  "audio/flac": "flac",
   "audio/mp4": "m4a",
   "audio/m4a": "m4a",
   "audio/x-m4a": "m4a",
@@ -86,19 +89,113 @@ export function parseTranscribeParams(url: URL, maxKeyterms: number): Transcribe
 /** Ses türü (parametresiz, küçük harf); izinli değilse `unsupported_media_type`. Saf fonksiyondur. */
 export function audioContentType(header: string | null): string {
   const type: string = (header ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
-  if (maxBytesPerSecondByType[type] === undefined) {
-    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor (wav, flac, m4a/mp4, aac, mp3, ogg, webm).");
+  if (!wavTypes.has(type) && minBytesPerSecondByType[type] === undefined) {
+    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor (wav, m4a/mp4, aac, mp3, ogg, webm).");
   }
   return type;
 }
 
-/** Boyuttan alt sınır süre tahmini (saniye). Saf fonksiyondur. */
-export function estimatedMinimumSeconds(bytes: number, contentType: string): number {
-  const rate: number | undefined = maxBytesPerSecondByType[contentType];
+/** Sıkıştırılmış ses için süre üst sınırı (saniye): bayt / en düşük gerçekçi bit hızı. Saf fonksiyondur. */
+export function compressedMaximumSeconds(bytes: number, contentType: string): number {
+  const rate: number | undefined = minBytesPerSecondByType[contentType];
   if (rate === undefined) {
     throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor.");
   }
   return bytes / rate;
+}
+
+/** WAV veri bölümünün başladığı konum ve bayt hızı. */
+export interface WavLayout {
+  readonly dataOffset: number;
+  readonly byteRate: number;
+}
+
+function invalidWav(reason: string): ApiError {
+  return new ApiError("invalid_body", `WAV başlığı geçersiz: ${reason}.`);
+}
+
+/**
+ * WAV (RIFF) başlığını okur: `fmt ` bölümü PCM (1) ya da genişletilmiş (0xFFFE), 1–8 kanal, 8–192 kHz, 8/16/24/32 bit
+ * ve tutarlı bayt hızı olmalı. `data` bölümü henüz gelmediyse null (daha çok bayt gerekir). ElevenLabs PCM'i de
+ * başlıktaki bayt hızıyla çözer; süre = veri baytı / bayt hızı kesindir. Saf fonksiyondur.
+ */
+export function wavLayout(head: Uint8Array): WavLayout | null {
+  if (head.byteLength < 12) {
+    return null;
+  }
+  const view: DataView = new DataView(head.buffer, head.byteOffset, head.byteLength);
+  const tag = (offset: number): string => String.fromCharCode(...head.subarray(offset, offset + 4));
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE") {
+    throw invalidWav("RIFF/WAVE değil");
+  }
+  let byteRate: number | null = null;
+  let offset: number = 12;
+  while (offset + 8 <= head.byteLength) {
+    const id: string = tag(offset);
+    const size: number = view.getUint32(offset + 4, true);
+    if (id === "data") {
+      if (byteRate === null) {
+        throw invalidWav("data bölümü fmt bölümünden önce");
+      }
+      return { dataOffset: offset + 8, byteRate };
+    }
+    if (id === "fmt ") {
+      if (offset + 8 + 16 > head.byteLength) {
+        return null;
+      }
+      const format: number = view.getUint16(offset + 8, true);
+      const channels: number = view.getUint16(offset + 10, true);
+      const sampleRate: number = view.getUint32(offset + 12, true);
+      const declaredByteRate: number = view.getUint32(offset + 16, true);
+      const bits: number = view.getUint16(offset + 22, true);
+      const pcm: boolean = format === 1 || format === 0xfffe;
+      const valid: boolean =
+        pcm &&
+        channels >= 1 &&
+        channels <= 8 &&
+        sampleRate >= 8000 &&
+        sampleRate <= 192_000 &&
+        [8, 16, 24, 32].includes(bits) &&
+        declaredByteRate === (sampleRate * channels * bits) / 8;
+      if (!valid) {
+        throw invalidWav("PCM değil ya da biçim tutarsız");
+      }
+      byteRate = declaredByteRate;
+    }
+    offset += 8 + size + (size % 2);
+  }
+  if (offset > maxWavHeaderBytes) {
+    throw invalidWav("data bölümü bulunamadı");
+  }
+  return null;
+}
+
+/** Gövdenin baştan okunmuş baytları ve süre üst sınırı. */
+interface AudioHead {
+  readonly head: Uint8Array;
+  readonly seconds: number;
+}
+
+/** WAV başlığını akıştan okur (en çok 64 KB) ve kesin süreyi hesaplar; okunan baytlar sonra aynen iletilir. */
+async function readWavHead(reader: ReadableStreamDefaultReader<Uint8Array>, declaredBytes: number): Promise<AudioHead> {
+  let head: Uint8Array = new Uint8Array(0);
+  for (;;) {
+    const layout: WavLayout | null = wavLayout(head);
+    if (layout !== null) {
+      return { head, seconds: Math.max(0, declaredBytes - layout.dataOffset) / layout.byteRate };
+    }
+    if (head.byteLength >= Math.min(maxWavHeaderBytes, declaredBytes)) {
+      throw invalidWav("data bölümü bulunamadı");
+    }
+    const { done, value }: ReadableStreamReadResult<Uint8Array> = await reader.read();
+    if (done) {
+      throw invalidWav("dosya başlıktan önce bitti");
+    }
+    const joined: Uint8Array = new Uint8Array(head.byteLength + value.byteLength);
+    joined.set(head);
+    joined.set(value, head.byteLength);
+    head = joined;
+  }
 }
 
 /** ElevenLabs çok parçalı gövdesinin metin alanları; dosya en sondadır. Saf fonksiyondur. */
@@ -145,7 +242,7 @@ const transcriptionSchema = z.object({
 
 export type Transcription = z.output<typeof transcriptionSchema>;
 
-/** Ücretlendirilecek süre: yanıttaki `audio_duration_secs`; yoksa son kelimenin bitişi ile boyut tahmininden büyüğü. Saf fonksiyondur. */
+/** Ücretlendirilecek süre: yanıttaki `audio_duration_secs`; yoksa son kelimenin bitişi ile süre üst sınırından büyüğü. Saf fonksiyondur. */
 export function billableSeconds(transcription: Transcription, estimatedSeconds: number): number {
   if (transcription.audio_duration_secs !== null && transcription.audio_duration_secs !== undefined) {
     return transcription.audio_duration_secs;
@@ -157,8 +254,12 @@ export function billableSeconds(transcription: Transcription, estimatedSeconds: 
 /**
  * Ses dosyasını ElevenLabs Scribe v2 toplu konuşma tanımaya iletir (konuşmacı ayırma isteğe bağlı). Gövde ham sestir
  * (`Content-Type: audio/...`, `Content-Length` zorunlu); parametreler sorgudadır. Ses bellekte biriktirilmeden akış
- * olarak iletilir (Worker belleği 128 MB); bu yüzden üst istek yeniden denenemez, istemci yeniden dener. Süre
- * yanıttan okunur ve aylık saatten düşer.
+ * olarak iletilir (Worker belleği 128 MB); bu yüzden üst istek yeniden denenemez, istemci yeniden dener.
+ *
+ * Süre sınırı: istekten önce sürenin üst sınırı (WAV'da başlıktan kesin, sıkıştırılmışta en düşük bit hızından)
+ * toplantının en uzun süresine ve aylık süreye karşı tek koşullu ifadelerle ayrılır; toplantının yüklemeleri
+ * birikimli sayılır. Yanıttaki gerçek süreyle kesinleşir. Gerçek süre ayrılanı aşarsa (tahmin yanlıştı) süre yine de
+ * yazılır, toplantının ses hakkı kapanır ve alarm logu yazılır. Hata durumunda ayırma geri verilir.
  */
 export async function proxyTranscription(
   db: D1Database,
@@ -180,23 +281,59 @@ export async function proxyTranscription(
   if (declaredBytes === 0 || request.body === null) {
     throw new ApiError("invalid_body", "Ses dosyası boş.");
   }
+  if (meeting.transcription_closed !== 0) {
+    throw new ApiError("transcription_closed", "Bu toplantının ses işleme hakkı kapandı.");
+  }
   const now: Date = context.platform.now();
-  const estimated: number = estimatedMinimumSeconds(declaredBytes, contentType);
-  const meetingMaxSeconds: number = (meeting.max_ends_at - meeting.started_at) / 1000;
-  if (estimated > meetingMaxSeconds) {
-    throw new ApiError("audio_too_long", "Ses dosyası toplantının en uzun süresinden uzun.");
+  const reader: ReadableStreamDefaultReader<Uint8Array> = request.body.getReader();
+  let audio: AudioHead;
+  try {
+    audio = wavTypes.has(contentType)
+      ? await readWavHead(reader, declaredBytes)
+      : { head: new Uint8Array(0), seconds: compressedMaximumSeconds(declaredBytes, contentType) };
+    await reserveAll(db, audioReservationSteps(db, config, meeting.id, meeting.user_id, audio.seconds, now));
+  } catch (error: unknown) {
+    await reader.cancel();
+    throw error;
   }
-  if (meeting.kind === "subscription") {
-    const usage: MonthlyUsage = await monthlyUsage(db, meeting.user_id, now);
-    if (usage.audioSeconds + estimated > config.monthlyCapSeconds) {
-      throw new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırı bu kaydı işlemeye yetmiyor; sınır ay başında sıfırlanır.");
-    }
+  const reserved: number = audio.seconds;
+  let transcription: Transcription;
+  try {
+    transcription = await sendToElevenLabs(context, config, meeting, params, contentType, declaredBytes, reader, audio.head);
+  } catch (error: unknown) {
+    await db.batch(settleAudioStatements(db, meeting.id, meeting.user_id, reserved, 0, 0, now));
+    throw error;
   }
+  const seconds: number = billableSeconds(transcription, reserved);
+  // Ayırma tahmini üst sınırdır; 1 saniyelik pay yuvarlama içindir.
+  const overrun: boolean = seconds > reserved + 1;
+  const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
+  await db.batch([
+    ...settleAudioStatements(db, meeting.id, meeting.user_id, reserved, seconds, overrun ? 1 : 0, now),
+    addSpendStatement(db, now, transcriptionCostMicroUsd(seconds, usdPerHour)),
+  ]);
+  if (overrun) {
+    log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
+  }
+  log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
+  return jsonResponse(200, transcription);
+}
 
+/** Çok parçalı gövdeyi akıtarak ElevenLabs'e gönderir ve yanıtı doğrular; hata gövdesi okunmaz ve iletilmez. */
+async function sendToElevenLabs(
+  context: RequestContext,
+  config: Config,
+  meeting: MeetingRow,
+  params: TranscribeParams,
+  contentType: string,
+  declaredBytes: number,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  head: Uint8Array,
+): Promise<Transcription> {
   const boundary: string = `ainotepad-${randomToken(18)}`;
   const { prefix, suffix } = multipartEnvelope(boundary, multipartFields(params), `audio.${fileExtensionByType[contentType] ?? "bin"}`, contentType);
   const { readable, writable } = new FixedLengthStream(prefix.byteLength + declaredBytes + suffix.byteLength);
-  const upload: Promise<void> = pipeAudio(request.body, writable, prefix, suffix, declaredBytes);
+  const upload: Promise<void> = pipeAudio(reader, head, writable, prefix, suffix, declaredBytes);
 
   let response: Response;
   try {
@@ -236,27 +373,31 @@ export async function proxyTranscription(
     log("error", "elevenlabs_malformed", { userId: meeting.user_id, meetingId: meeting.id });
     throw new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı.");
   }
-  const seconds: number = billableSeconds(parsed.data, estimated);
-  const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
-  await db.batch([
-    addMeetingAudioStatement(db, meeting.id, seconds),
-    addAudioUsageStatement(db, meeting.user_id, now, seconds),
-    addSpendStatement(db, now, transcriptionCostMicroUsd(seconds, usdPerHour)),
-  ]);
-  log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
-  return jsonResponse(200, parsed.data);
+  return parsed.data;
 }
 
 /**
- * İstemci gövdesini çok parçalı zarfın içine akıtır; bildirilen uzunluktan farklı bayt gelirse akışı hatayla keser
- * (`FixedLengthStream` da uzunluğu zorlar).
+ * Önceden okunmuş baştaki baytları ve gövdenin kalanını çok parçalı zarfın içine akıtır; bildirilen uzunluktan farklı
+ * bayt gelirse akışı hatayla keser (`FixedLengthStream` da uzunluğu zorlar).
  */
-async function pipeAudio(body: ReadableStream<Uint8Array>, writable: WritableStream<Uint8Array>, prefix: Uint8Array, suffix: Uint8Array, declaredBytes: number): Promise<void> {
+async function pipeAudio(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  head: Uint8Array,
+  writable: WritableStream<Uint8Array>,
+  prefix: Uint8Array,
+  suffix: Uint8Array,
+  declaredBytes: number,
+): Promise<void> {
   const writer: WritableStreamDefaultWriter<Uint8Array> = writable.getWriter();
-  const reader: ReadableStreamDefaultReader<Uint8Array> = body.getReader();
   try {
     await writer.write(prefix);
-    let total: number = 0;
+    let total: number = head.byteLength;
+    if (total > declaredBytes) {
+      throw new ApiError("payload_too_large", "Ses dosyası bildirilen boyuttan büyük.");
+    }
+    if (total > 0) {
+      await writer.write(head);
+    }
     for (;;) {
       const { done, value }: ReadableStreamReadResult<Uint8Array> = await reader.read();
       if (done) {
@@ -274,6 +415,7 @@ async function pipeAudio(body: ReadableStream<Uint8Array>, writable: WritableStr
     await writer.write(suffix);
     await writer.close();
   } catch (error: unknown) {
+    // Asıl hata aşağıda fırlatılır; temizlik adımlarının ikincil hataları onu gölgelemesin.
     await reader.cancel().catch((): void => undefined);
     await writer.abort(error).catch((): void => undefined);
     throw error;

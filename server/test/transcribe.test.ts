@@ -11,6 +11,7 @@ import {
   req,
   signIn,
   startMeeting,
+  wavFile,
 } from "./helpers";
 
 interface Context {
@@ -135,7 +136,7 @@ describe("konuşma tanıma vekili", () => {
     await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)")
       .bind(context.session.userId, new Date(context.harness.clock.nowMs).toISOString().slice(0, 7), 10 * 3600 - 60)
       .run();
-    // 40 KB/s varsayımıyla 4 MB ≈ 100 saniye > kalan 60 saniye.
+    // En düşük AAC hızı 1000 B/s ile 4 MB ≈ 4000 saniye > kalan 60 saniye.
     await expectError(await upload(context, "", new Uint8Array(4_000_000), "audio/mp4"), 403, "monthly_cap_reached");
     expect(context.harness.outbound.filter((request: Request): boolean => request.url.startsWith(elevenLabsSpeechToTextUrl))).toHaveLength(0);
   });
@@ -150,7 +151,7 @@ describe("konuşma tanıma vekili", () => {
       .run();
     const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
     expect(meeting.maxDurationMinutes).toBe(1);
-    // 40 KB/s varsayımıyla 4 MB ≈ 100 saniye > 60 saniye.
+    // En düşük AAC hızı 1000 B/s ile 4 MB ≈ 4000 saniye > 60 saniye.
     await expectError(await upload({ harness, session, meeting }, "", new Uint8Array(4_000_000), "audio/mp4"), 413, "audio_too_long");
   });
 
@@ -160,20 +161,27 @@ describe("konuşma tanıma vekili", () => {
       await request.arrayBuffer();
       return Response.json({ detail: { message: "invalid api key xi-123" } }, { status: 401 });
     });
-    const body = await expectError(await upload(context, "?diarize=true", new Uint8Array(32_000), "audio/wav"), 502, "upstream_rejected");
+    const body = await expectError(await upload(context, "?diarize=true", wavFile(16_000, 1, 16, 32_000), "audio/wav"), 502, "upstream_rejected");
     expect(body.error.message).not.toContain("xi-123");
     await context.harness.drain();
-    const usage = await env.DB.prepare("SELECT COUNT(*) AS count FROM monthly_usage WHERE user_id = ?").bind(context.session.userId).first<{ count: number }>();
-    expect(usage?.count).toBe(0);
+    // Ayırma geri verildi, süre yazılmadı.
+    const usage = await env.DB.prepare("SELECT audio_seconds, audio_reserved FROM monthly_usage WHERE user_id = ?")
+      .bind(context.session.userId)
+      .first<{ audio_seconds: number; audio_reserved: number }>();
+    expect(usage).toEqual({ audio_seconds: 0, audio_reserved: 0 });
+    const meeting = await env.DB.prepare("SELECT audio_seconds, audio_reserved FROM meeting_sessions WHERE id = ?")
+      .bind(context.meeting.meetingId)
+      .first<{ audio_seconds: number; audio_reserved: number }>();
+    expect(meeting).toEqual({ audio_seconds: 0, audio_reserved: 0 });
   });
 
-  it("yanıtta süre yoksa son kelime ile boyut tahmininden büyüğü ücretlendirilir", async () => {
+  it("yanıtta süre yoksa son kelime ile WAV başlığındaki süreden büyüğü ücretlendirilir", async () => {
     const context: Context = await setup(false);
     context.harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
       await request.arrayBuffer();
       return Response.json({ ...transcription, audio_duration_secs: null });
     });
-    expect((await upload(context, "", new Uint8Array(192_000 * 3), "audio/wav")).status).toBe(200);
+    expect((await upload(context, "", wavFile(16_000, 1, 16, 32_000 * 3), "audio/wav")).status).toBe(200);
     const meeting = await env.DB.prepare("SELECT audio_seconds FROM meeting_sessions WHERE id = ?").bind(context.meeting.meetingId).first<{ audio_seconds: number }>();
     expect(meeting?.audio_seconds).toBe(3);
   });

@@ -1,4 +1,5 @@
 import type { Config } from "./config";
+import { ApiError } from "./errors";
 import { log } from "./log";
 
 /**
@@ -60,7 +61,7 @@ export async function monthlyUsage(db: D1Database, userId: string, now: Date): P
       .bind(nowMs, nowMs, userId, monthStartMs(now))
       .first<{ seconds: number | null }>(),
     db
-      .prepare("SELECT audio_seconds FROM monthly_usage WHERE user_id = ? AND month = ?")
+      .prepare("SELECT audio_seconds + audio_reserved AS audio_seconds FROM monthly_usage WHERE user_id = ? AND month = ?")
       .bind(userId, monthKey(now))
       .first<{ audio_seconds: number }>(),
   ]);
@@ -85,36 +86,15 @@ export function addSpendStatement(db: D1Database, now: Date, microUsd: number): 
     .bind(dayKey(now), microUsd);
 }
 
-/** Aylık token kullanımına ekleme ifadesi. */
-export function addTokenUsageStatement(db: D1Database, userId: string, now: Date, inputTokens: number, outputTokens: number): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens) VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_id, month) DO UPDATE SET input_tokens = input_tokens + excluded.input_tokens,
-         output_tokens = output_tokens + excluded.output_tokens`,
-    )
-    .bind(userId, monthKey(now), inputTokens, outputTokens);
-}
-
-/** Aylık ses süresine ekleme ifadesi. */
-export function addAudioUsageStatement(db: D1Database, userId: string, now: Date, seconds: number): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)
-       ON CONFLICT(user_id, month) DO UPDATE SET audio_seconds = audio_seconds + excluded.audio_seconds`,
-    )
-    .bind(userId, monthKey(now), seconds);
-}
-
 /**
- * Günlük harcama tavanı aşıldıysa uyarı logu yazar ve true döndürür. Tavan yeni toplantı oturumlarını durdurur;
- * süren oturumlar kendi bütçeleriyle sınırlıdır.
+ * Günlük harcama tavanı: aşıldıysa alarm logu yazar ve 503 `spend_ceiling_reached` fırlatır. Toplantı başlatmada ve
+ * her vekil çağrısında (LLM, konuşma tanıma) denetlenir.
  */
-export async function spendCeilingReached(db: D1Database, config: Config, now: Date): Promise<boolean> {
+export async function requireSpendHeadroom(db: D1Database, config: Config, now: Date): Promise<void> {
   const spent: number = await todaySpendMicroUsd(db, now);
   if (spent < config.dailySpendCeilingMicroUsd) {
-    return false;
+    return;
   }
   log("alert", "daily_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailySpendCeilingMicroUsd });
-  return true;
+  throw new ApiError("spend_ceiling_reached", "Servis bugün yoğun; şu an yeni istek alınamıyor. Lütfen daha sonra yeniden dene.");
 }
