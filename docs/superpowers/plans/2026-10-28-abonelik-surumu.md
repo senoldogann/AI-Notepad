@@ -107,8 +107,12 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
 ## Durum
 
 - [x] 1. Sunucu: kimlik, haklar, vekil, Stripe (test modu); güvenlik incelemesi ve düzeltmeleri (PR #66), CI (PR #68).
-- [ ] 2. Mac abonelik sürümü (`AINotepadHosted`). Not: sunucu sıkıştırılmış sesin süresini en kötü bit hızıyla tahmin
-  eder; istemci sesi 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde gönderir.
+- [x] 2. Mac abonelik sürümü (`AINotepadHosted`, `App/Hosted`, `#if HOSTED_EDITION`). Sunucu sıkıştırılmış sesin
+  süresini en kötü bit hızıyla tahmin eder; istemci sesi 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde
+  gönderir. E-posta girişinin formu sitededir (Turnstile); bağlantı uygulamayı
+  `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile açar, uygulama yalnızca doğrular. Kalan: Apple ile giriş
+  Service ID ve sunucunun `APPLE_CLIENT_IDS`/`APP_ATTEST_APP_IDS` değerleri `com.senoldogan.AINotepad.hosted` olmalı;
+  Release `HOSTED_API_BASE` gerçek adres; güncelleme akışı (Sparkle) bu sürüm için ayrı.
 - [ ] 3. Web sitesi.
 - [ ] 4. Uçtan uca test (Stripe test kartı).
 - [ ] 5. Hesaplar, alan adı, yayın.

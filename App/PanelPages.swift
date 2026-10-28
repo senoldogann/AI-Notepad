@@ -245,7 +245,7 @@ struct ProcessingOverlayHost: ViewModifier {
     /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
     private var processingProgress: ProcessingProgress? {
         if model.phase == .finishing {
-            return model.finishingCardDismissed ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: model.liveEngine == .whisperKit)
+            return model.finishingCardDismissed ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: finalPassOnThisMac)
         }
         // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
         guard !model.finishingCardDismissed, let id = model.lastFinishedMeetingID, let step = model.processingSteps[id],
@@ -253,8 +253,17 @@ struct ProcessingOverlayHost: ViewModifier {
             return nil
         }
         // Cihaz içi modda son geçiş konuşmacı ayırmaz (bkz. `finalPassPlan`).
-        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local && model.liveEngine == .whisperKit
+        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local && finalPassOnThisMac
         return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
+    }
+
+    /// Son geçiş bu Mac'te mi (WhisperKit + SpeakerKit); abonelik sürümünde sunucuda yapılır.
+    private var finalPassOnThisMac: Bool {
+        #if HOSTED_EDITION
+        false
+        #else
+        model.liveEngine == .whisperKit
+        #endif
     }
 }
 

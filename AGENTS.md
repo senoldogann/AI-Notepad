@@ -24,6 +24,9 @@ xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debu
   -destination 'platform=iOS Simulator,name=iPhone 17' -quiet)                # çekirdek testleri iOS'ta
 AINOTEPAD_MODEL_TESTS=1 swift test --package-path Packages/AINotepadCore      # + gerçek WhisperKit modeli (~630 MB indirir)
 AINOTEPAD_CLOUD_TESTS=1 AINOTEPAD_SCENARIO_TESTS=1 swift test --package-path Packages/AINotepadCore --filter LLMScenarioTests  # pahalı: uzun toplantı × her model × max effort
+(cd server && npx wrangler dev --port 8797)   # sonra: AINOTEPAD_HOSTED_E2E=1 AINOTEPAD_HOSTED_BASE=http://127.0.0.1:8797 swift test --package-path Packages/AINotepadCore --filter HostedE2E (server/.dev.vars sahte değerlerle, migrate:local önce)
+xcodebuild -project AINotepad.xcodeproj -scheme AINotepadHosted -configuration Debug \
+  -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64' build -quiet   # abonelik sürümü (App/Hosted, HOSTED_EDITION)
 scripts/make-test-fixtures.sh                                                 # test seslerini yeniden üretir
 scripts/install-app.sh                                                        # Release'i /Applications'a kurar (izinler kalıcı)
 ```
