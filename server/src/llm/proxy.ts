@@ -75,7 +75,7 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     throw new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu; yeni bir toplantı başlat.");
   }
   const client: Anthropic = anthropicClient(context, config);
-  const params: Anthropic.MessageCreateParamsNonStreaming = upstreamParams(request, config, maxTokens);
+  const params: Anthropic.MessageCreateParamsNonStreaming = upstreamParams(request, maxTokens);
   const retry = {
     service: "anthropic",
     attempts: 3,

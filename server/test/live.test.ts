@@ -31,6 +31,7 @@ describe.skipIf(!live || anthropicKey === undefined)("gerçek Anthropic Haiku 5.
         headers: { "x-meeting-id": meeting.meetingId },
         env: liveEnv,
         json: {
+          effort: "medium",
           system: "Kısa ve Türkçe yanıt ver.",
           max_tokens: 2048,
           stream: true,

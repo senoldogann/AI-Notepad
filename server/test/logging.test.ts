@@ -20,7 +20,7 @@ describe("log hijyeni", () => {
         req("POST", "/v1/llm/messages", {
           token: session.accessToken,
           headers: { "x-meeting-id": meeting.meetingId },
-          json: { max_tokens: 1000, messages: [{ role: "user", content: secretContent }] },
+          json: { effort: "low", max_tokens: 1000, messages: [{ role: "user", content: secretContent }] },
         }),
       );
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));

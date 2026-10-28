@@ -56,7 +56,7 @@ async function meetingTokens(meetingId: string): Promise<number> {
   return row?.tokens_used ?? -1;
 }
 
-const basic = { max_tokens: 1000, messages: [{ role: "user", content: "Bu toplantıyı özetle." }] };
+const basic = { effort: "low", max_tokens: 1000, messages: [{ role: "user", content: "Bu toplantıyı özetle." }] };
 
 describe("LLM vekili: izin listesi", () => {
   it.each([
@@ -71,6 +71,10 @@ describe("LLM vekili: izin listesi", () => {
     ["ön doldurma", { ...basic, messages: [{ role: "user", content: "x" }, { role: "assistant", content: "{" }] }],
     ["sistem rolü", { ...basic, messages: [{ role: "system", content: "x" }] }],
     ["metin dışı biçim", { ...basic, output_config: { format: { type: "text" } } }],
+    ["effort eksik", { max_tokens: 1000, messages: [{ role: "user", content: "x" }] }],
+    ["effort high", { ...basic, effort: "high" }],
+    ["effort max", { ...basic, effort: "max" }],
+    ["output_config.effort", { ...basic, output_config: { effort: "low" } }],
   ])("%s reddedilir ve dışarı istek gitmez", async (_name: string, body: object) => {
     const context: Context = await setup();
     const before: number = context.harness.outbound.length;
@@ -98,7 +102,7 @@ describe("LLM vekili: izin listesi", () => {
 });
 
 describe("LLM vekili: üst istek ve muhasebe", () => {
-  it("model sabitlenir, max_tokens sınırlanır, effort sunucudan gelir; kullanım sayılır", async () => {
+  it("model sabitlenir, max_tokens sınırlanır, effort istekten (low/medium) gider; kullanım sayılır", async () => {
     const context: Context = await setup();
     let upstream: Record<string, unknown> = {};
     let apiKey: string | null = null;
@@ -111,11 +115,12 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
     const response: Response = await llm(
       context,
       {
+        effort: "medium",
         model: "claude-opus-5-5",
         system: "Türkçe yaz.",
         max_tokens: 50_000,
         messages: [{ role: "user", content: [{ type: "text", text: "Özetle." }] }],
-        output_config: { effort: "max", format: { type: "json_schema", schema } },
+        output_config: { format: { type: "json_schema", schema } },
       },
       null,
     );
@@ -128,7 +133,7 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
       max_tokens: 8192,
       system: "Türkçe yaz.",
       messages: [{ role: "user", content: [{ type: "text", text: "Özetle." }] }],
-      output_config: { effort: "low", format: { type: "json_schema", schema } },
+      output_config: { effort: "medium", format: { type: "json_schema", schema } },
     });
     expect(await meetingTokens(context.meeting.meetingId)).toBe(200);
     const usage = await env.DB.prepare("SELECT input_tokens, output_tokens FROM monthly_usage WHERE user_id = ?")

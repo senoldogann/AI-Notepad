@@ -24,7 +24,7 @@ describe("günlük harcama tavanı", () => {
       req("POST", "/v1/llm/messages", {
         token: session.accessToken,
         headers: { "x-meeting-id": meeting.meetingId },
-        json: { max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
+        json: { effort: "low", max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
       }),
     );
     expect(response.status).toBe(200);
@@ -49,7 +49,7 @@ describe("günlük harcama tavanı", () => {
           req("POST", "/v1/llm/messages", {
             token: session.accessToken,
             headers: { "x-meeting-id": meeting.meetingId },
-            json: { max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
+            json: { effort: "low", max_tokens: 2000, messages: [{ role: "user", content: "x" }] },
           }),
         )
       ).status,
