@@ -207,6 +207,17 @@ public actor DestinationVault {
         try store(updated)
     }
 
+    /// Hedefin bağlantısını değiştirir (kanalı değiştir, yeniden bağlan): kayıtlı (güncel) hedefin kimliği, ayarı ve
+    /// bağlanma anı korunur, "yeniden bağlan" işareti kalkar. Değişmeden önceki kayıtlı hedef döner (yerini alan eski
+    /// iznin güncel jetonlarıyla geri alınabilmesi için).
+    public func replaceTarget(id: String, target: DestinationTarget) throws -> NoteDestination {
+        guard let stored = try all().first(where: { $0.id == id }) else {
+            throw DestinationError.notFound(id: id)
+        }
+        try upsert(stored.with(target: target).with(needsReconnect: false))
+        return stored
+    }
+
     /// Hedefin kendiliğinden gönderim ayarını değiştirir: kayıtlı (güncel) hedef okunur, yalnızca ayar değişir.
     /// Bellekteki eski kopya yazılmaz; yoksa bu arada yenilenen jetonların (Slack yenileme jetonu tek kullanımlık)
     /// üzerine eskileri yazılırdı.
@@ -415,6 +426,12 @@ public func revokeDestination(destination: NoteDestination) async throws {
     case .webhook:
         return
     }
+}
+
+/// Yeniden bağlandı ama yerini alan eski bağlantının izni servis tarafında geri alınamadı: yeni bağlantı çalışır,
+/// kullanıcı eski erişimi servisin ayarlarından kaldırabilir. `service`: arayüzdeki adı. Saf fonksiyondur.
+public func replacedGrantRevocationFailureMessage(service: String, error: any Error) -> String {
+    String(localized: "\(service) yeniden bağlandı; eski bağlantının izni \(service) tarafında geri alınamadı (\(userFacingMessage(error: error))). Eski erişimi \(service) ayarlarından kaldırabilirsin.")
 }
 
 /// Bağlantı bu cihazdan kaldırıldı ama servis tarafında kapatılamadı: kullanıcı erişimi servisin kendi ayarlarından

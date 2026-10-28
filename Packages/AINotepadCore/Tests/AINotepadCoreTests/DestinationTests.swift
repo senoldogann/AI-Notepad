@@ -298,18 +298,22 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
 
     private func connection(refresh: String) -> MCPConnection {
         MCPConnection(
-            serverURL: URL(string: "https://mcp.linear.app/mcp")!, clientID: "c", tokenEndpoint: URL(string: "https://mcp.linear.app/token")!,
+            serverURL: URL(string: "https://mcp.linear.app/mcp")!, clientID: "c-\(refresh)", tokenEndpoint: URL(string: "https://mcp.linear.app/token")!,
             tokens: OAuthTokens(accessToken: "a-\(refresh)", refreshToken: refresh, expiresAt: Date().addingTimeInterval(3600))
         )
     }
 
+    // Yeniden bağlanınca araç kimliği ve hedef korunur, hesap kimliği boşalır (yeniden okunur); yerini alan eski izin
+    // (başka istemci kaydı) geri alınmak üzere döner.
     @Test func reconnectKeepsIdentityAndRefreshIsStored() async throws {
         try deleteSecret(service: service, account: .taskTrackers)
         let vault: TrackerVault = TrackerVault(service: service)
-        let first: TaskTracker = try await vault.connect(service: .linear, connection: connection(refresh: "r1"), newID: "id-1")
-        try await vault.setTarget(id: first.id, target: "Eng")
-        let second: TaskTracker = try await vault.connect(service: .linear, connection: connection(refresh: "r2"), newID: "id-2")
-        #expect(second.id == "id-1" && second.target == "Eng")
+        let first: TrackerConnectResult = try await vault.connect(service: .linear, connection: connection(refresh: "r1"), newID: "id-1")
+        #expect(first.replaced == nil)
+        try await vault.setTarget(id: first.tracker.id, target: "Eng")
+        let second: TrackerConnectResult = try await vault.connect(service: .linear, connection: connection(refresh: "r2"), newID: "id-2")
+        #expect(second.tracker.id == "id-1" && second.tracker.target == "Eng" && second.tracker.identity == nil)
+        #expect(second.replaced?.clientID == "c-r1" && second.replaced?.tokens.refreshToken == "r1")
         await #expect(throws: TaskTrackerError.partial(service: "Linear", created: [0], total: 2, reason: "x")) {
             try await vault.withTracker(id: "id-1") { (tracker: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Int in
                 try await persist(tracker.connection, self.connection(refresh: "r3"))
@@ -318,6 +322,95 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         }
         #expect(try await vault.all().map(\.connection.tokens.refreshToken) == ["r3"])
         try deleteSecret(service: service, account: .taskTrackers)
+    }
+}
+
+/// Görev araçlarının cihazlar arası gönderim anahtarı, işaretleri ve yerini alan iznin seçimi (saf fonksiyonlar).
+@Suite struct TrackerSendKeyTests {
+    private let rapor: NoteTask = NoteTask(owner: "Sen", description: "Raporu yaz", dueDate: nil, isMine: true)
+    private let butce: NoteTask = NoteTask(owner: "Aino", description: "Bütçeyi gönder", dueDate: nil, isMine: false)
+
+    private func connection(clientID: String) -> MCPConnection {
+        MCPConnection(
+            serverURL: URL(string: "https://mcp.linear.app/mcp")!, clientID: clientID, tokenEndpoint: URL(string: "https://mcp.linear.app/token")!,
+            tokens: OAuthTokens(accessToken: "gizli-erisim-\(clientID)", refreshToken: "gizli-yenileme-\(clientID)", expiresAt: Date(timeIntervalSince1970: 0))
+        )
+    }
+
+    private func tracker(id: String, service: MCPService, target: String, accountID: String?) -> TaskTracker {
+        TaskTracker(id: id, service: service, connection: connection(clientID: id), target: target, identity: accountID.map { TrackerIdentity(accountID: $0) })
+    }
+
+    private func meeting() -> MeetingRecord {
+        MeetingRecord(
+            id: "m", title: "T", startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, language: nil, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:],
+            note: MeetingNote(title: "Not", summary: "Özet", decisions: [], tasks: [rapor, butce], glossary: []), audioDeleted: false, engine: .cloud,
+            notice: nil, meNeedsFinalPass: nil
+        )
+    }
+
+    // Anahtar servis, hesap ve hedeften çıkar (hedefte büyük/küçük harf ve boşluk fark etmez); jeton içermez. Hesap
+    // kimliği okunmamış araç ya da görev aracı olmayan servis anahtar vermez.
+    @Test func sendKeyIsServiceAccountAndTarget() throws {
+        let linear: TaskTracker = tracker(id: "bu-mac", service: .linear, target: "  Mobil   Ekip ", accountID: "user-1")
+        let key: String = try #require(trackerSendKey(tracker: linear))
+        #expect(key == "linear:user-1:mobil ekip" && !key.contains("gizli"))
+        #expect(trackerSendKey(tracker: tracker(id: "diger-mac", service: .linear, target: "mobil ekip", accountID: "user-1")) == key)
+        #expect(trackerSendKey(tracker: tracker(id: "j", service: .atlassian, target: "OPS", accountID: "acc-1")) == "jira:acc-1:ops")
+        #expect(trackerSendKey(tracker: tracker(id: "x", service: .linear, target: "Web", accountID: "user-1")) != key)
+        #expect(trackerSendKey(tracker: tracker(id: "eski", service: .linear, target: "", accountID: nil)) == nil)
+        #expect(trackerSendKey(tracker: tracker(id: "n", service: .notion, target: "", accountID: "user-1")) == nil)
+        #expect(trackerMarkKeys(tracker: linear) == ["bu-mac", key])
+        #expect(trackerMarkKeys(tracker: tracker(id: "eski", service: .linear, target: "", accountID: nil)) == ["eski"])
+    }
+
+    // Bir Mac'te açılan görev iki anahtarla işaretlenir: aynı hesap ve hedefle bağlı diğer Mac'in aracı (farklı cihaz
+    // kimliği) onu gönderilmiş görür; başka hedefe bağlı araç görmez. Eski kayıt (yalnızca cihaz kimliği) de tanınır.
+    @Test func marksAreSeenFromOtherMacAndLegacyRecordsAreUnderstood() {
+        let here: TaskTracker = tracker(id: "bu-mac", service: .linear, target: "Eng", accountID: "user-1")
+        let other: TaskTracker = tracker(id: "diger-mac", service: .linear, target: "eng", accountID: "user-1")
+        let otherTeam: TaskTracker = tracker(id: "diger-mac", service: .linear, target: "Web", accountID: "user-1")
+        let marked: MeetingRecord = markingTasksSent(record: meeting(), tracker: here, tasks: [rapor])
+        #expect(Set(marked.sentTaskKeys?.keys.map { $0 } ?? []) == ["bu-mac", "linear:user-1:eng"])
+        #expect(isTaskSent(record: marked, tracker: here, task: rapor) && isTaskSent(record: marked, tracker: other, task: rapor))
+        #expect(!isTaskSent(record: marked, tracker: other, task: butce) && !isTaskSent(record: marked, tracker: otherTeam, task: rapor))
+        let legacy: MeetingRecord = meeting().markingTaskSent(trackerID: "bu-mac", task: butce)
+        #expect(isTaskSent(record: legacy, tracker: here, task: butce))
+        let unresolved: TaskTracker = tracker(id: "bu-mac", service: .linear, target: "Eng", accountID: nil)
+        #expect(isTaskSent(record: legacy, tracker: unresolved, task: butce) && !isTaskSent(record: marked, tracker: tracker(id: "u", service: .linear, target: "Eng", accountID: nil), task: rapor))
+        // İşaretler tekrarlanınca yinelenmez.
+        #expect(markingTasksSent(record: marked, tracker: here, tasks: [rapor]) == marked)
+    }
+
+    // Eski sürümün Anahtar Zinciri'ndeki aracı (kimlik alanı yok) okunur; jeton yenilenince hesap kimliği korunur.
+    @Test func legacyTrackerDecodesWithoutIdentity() throws {
+        let decoder: JSONDecoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let legacy: Data = Data(#"{"id":"t","service":"linear","target":"Eng","connection":{"serverURL":"https:\/\/mcp.linear.app\/mcp","clientID":"c","tokenEndpoint":"https:\/\/mcp.linear.app\/token","tokens":{"accessToken":"a","refreshToken":"r","expiresAt":"2033-05-18T03:33:20Z"}}}"#.utf8)
+        let decoded: TaskTracker = try decoder.decode(TaskTracker.self, from: legacy)
+        #expect(decoded.identity == nil && decoded.target == "Eng")
+        let resolved: TaskTracker = decoded.with(identity: TrackerIdentity(accountID: "user-1"))
+        #expect(resolved.with(connection: connection(clientID: "c")).identity == resolved.identity)
+        #expect(resolved.with(target: "Web").identity == resolved.identity)
+    }
+
+    // Hesap kimliği aracın çıktısından: Jira `account_id`, Linear `id`; alt nesnede de bulunur; kimliksiz çıktı hatadır.
+    @Test func accountIdentityIsParsed() throws {
+        #expect(trackerIdentityLookup(service: .linear)?.tool == "get_user" && trackerIdentityLookup(service: .atlassian)?.tool == "atlassianUserInfo")
+        #expect(trackerIdentityLookup(service: .notion) == nil)
+        let jira: String = #"{"account_id":"acc-1","email":"s@example.com","name":"Ş"}"#
+        #expect(try parseTrackerIdentity(text: jira, server: "s") == TrackerIdentity(accountID: "acc-1"))
+        #expect(try parseTrackerIdentity(text: "Kullanıcı:\n{\"user\":{\"id\":\"user-1\",\"name\":\"Ş\"}}", server: "s") == TrackerIdentity(accountID: "user-1"))
+        #expect(throws: MCPRemoteError.self) { try parseTrackerIdentity(text: "bulunamadı", server: "s") }
+        #expect(throws: MCPRemoteError.self) { try parseTrackerIdentity(text: #"{"name":"Ş"}"#, server: "s") }
+    }
+
+    // Yeniden bağlanınca eski izin yalnızca başka istemci kaydıysa geri alınır (aynı kayıt aynı izindir).
+    @Test func replacedGrantIsOnlyADifferentRegistration() {
+        let old: MCPConnection = connection(clientID: "eski")
+        #expect(replacedGrant(old: old, new: connection(clientID: "yeni")) == old)
+        #expect(replacedGrant(old: old, new: connection(clientID: "eski")) == nil)
     }
 }
 

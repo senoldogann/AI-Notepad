@@ -164,6 +164,17 @@ public func createNotionPage(connection: MCPConnection, persist: @Sendable (MCPC
 
 // MARK: Görev araçları (Linear, Jira)
 
+/// Görev aracındaki hesabın cihazdan bağımsız kimliği. Linear'da bağlanan kullanıcının kimliğidir (Linear'da kullanıcı
+/// kimliği çalışma alanına özeldir: çalışma alanını da belirler); Jira'da Atlassian hesap kimliğidir (`account_id`, tüm
+/// sitelerde aynı). Gizli değildir (jeton içermez); toplantı kaydındaki gönderildi işaretinde kullanılır.
+public struct TrackerIdentity: Sendable, Equatable, Codable {
+    public let accountID: String
+
+    public init(accountID: String) {
+        self.accountID = accountID
+    }
+}
+
 /// Görevlerin gönderildiği araç: Linear ya da Jira (MCP bağlantısıyla).
 public struct TaskTracker: Sendable, Equatable, Codable, Identifiable {
     public let id: String
@@ -171,21 +182,126 @@ public struct TaskTracker: Sendable, Equatable, Codable, Identifiable {
     public let connection: MCPConnection
     /// Görevlerin açılacağı takım ya da proje (boşsa aracın varsayılanı); kullanıcı yazar.
     public let target: String
+    /// Hesabın kimliği (bkz. `TrackerIdentity`); bağlandıktan sonra okunur. Eski sürümde bağlanan ya da henüz
+    /// okunamamış araçta nil (kayıtta alan yoktur).
+    public let identity: TrackerIdentity?
 
-    public init(id: String, service: MCPService, connection: MCPConnection, target: String) {
+    public init(id: String, service: MCPService, connection: MCPConnection, target: String, identity: TrackerIdentity?) {
         self.id = id
         self.service = service
         self.connection = connection
         self.target = target
+        self.identity = identity
     }
 
+    /// Jetonları yenilenmiş kopya (aynı izin; hesap kimliği korunur).
     public func with(connection newConnection: MCPConnection) -> TaskTracker {
-        TaskTracker(id: id, service: service, connection: newConnection, target: target)
+        TaskTracker(id: id, service: service, connection: newConnection, target: target, identity: identity)
     }
 
     public func with(target newTarget: String) -> TaskTracker {
-        TaskTracker(id: id, service: service, connection: connection, target: newTarget)
+        TaskTracker(id: id, service: service, connection: connection, target: newTarget, identity: identity)
     }
+
+    public func with(identity newIdentity: TrackerIdentity) -> TaskTracker {
+        TaskTracker(id: id, service: service, connection: connection, target: target, identity: newIdentity)
+    }
+}
+
+/// Aracın cihazdan bağımsız gönderim anahtarı: servis, hesap ve hedef (takım ya da proje; büyük/küçük harf ve
+/// boşluklar sadeleşir). Ör. "linear:<kullanıcı>:eng", "jira:<hesap>:ops". Aynı hesapla aynı hedefe bağlı iki Mac'in
+/// araçları (cihaza özel kimlikleri farklı) aynı anahtarı verir: birinin açtığı işler iCloud'la diğerinde de gönderildi
+/// görünür, iki kez açılmaz. Hesap kimliği henüz okunmadıysa ya da araç görev aracı değilse nil. Saf fonksiyondur.
+public func trackerSendKey(tracker: TaskTracker) -> String? {
+    let prefix: String
+    switch tracker.service {
+    case .linear: prefix = "linear"
+    case .atlassian: prefix = "jira"
+    case .notion: return nil
+    }
+    let target: String = tracker.target.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return tracker.identity.map { (identity: TrackerIdentity) -> String in "\(prefix):\(identity.accountID):\(target)" }
+}
+
+/// Görevin araca gönderildi işaretinin yazıldığı anahtarlar: aracın bu cihazdaki kimliği (eski sürümler yalnız bunu
+/// okur) ve cihazdan bağımsız anahtarı (bkz. `trackerSendKey`). Saf fonksiyondur.
+public func trackerMarkKeys(tracker: TaskTracker) -> [String] {
+    [tracker.id] + [trackerSendKey(tracker: tracker)].compactMap { $0 }
+}
+
+/// Görevler araca gönderildi işaretli kopya: her görev `trackerMarkKeys` anahtarlarının hepsinde işaretlenir. Saf
+/// fonksiyondur.
+public func markingTasksSent(record: MeetingRecord, tracker: TaskTracker, tasks: [NoteTask]) -> MeetingRecord {
+    trackerMarkKeys(tracker: tracker).reduce(record) { (marked: MeetingRecord, key: String) -> MeetingRecord in
+        tasks.reduce(marked) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in result.markingTaskSent(trackerID: key, task: task) }
+    }
+}
+
+/// Görev bu araca (ya da başka Mac'te aynı hesap ve hedefle bağlı araca) gönderildi mi: bu cihazın araç kimliği ya da
+/// cihazdan bağımsız anahtar altında işaretli. Eski kayıtlar (yalnızca araç kimliği) de tanınır. Saf fonksiyondur.
+public func isTaskSent(record: MeetingRecord, tracker: TaskTracker, task: NoteTask) -> Bool {
+    let key: String = taskKey(task: task)
+    return trackerMarkKeys(tracker: tracker).contains { (markKey: String) -> Bool in (record.sentTaskKeys?[markKey] ?? []).contains(key) }
+}
+
+/// Hesap kimliğini okuyan salt okunur araç ve argümanları: Linear'da `get_user` ("me"), Jira'da `atlassianUserInfo`.
+/// İkisi de izin listesindeki arama araçlarıdır (bkz. `trackerToolPolicy`). Saf fonksiyondur.
+func trackerIdentityLookup(service: MCPService) -> (tool: String, arguments: JSONValue)? {
+    switch service {
+    case .linear: (tool: "get_user", arguments: .object(["query": .string("me")]))
+    case .atlassian: (tool: "atlassianUserInfo", arguments: .object([:]))
+    case .notion: nil
+    }
+}
+
+/// Hesap kimliği aracının metin çıktısından kimlik: çıktıdaki JSON nesnesinin (ilk `{` ile son `}` arası) üst
+/// düzeyinde ya da bir alt nesnesinde (ör. `user`) `account_id`, `accountId` ya da `id`. Okunamazsa `invalidResponse`.
+/// Saf fonksiyondur.
+func parseTrackerIdentity(text: String, server: String) throws -> TrackerIdentity {
+    guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "hesap bilgisi JSON değil: \(text.prefix(200))")
+    }
+    let value: JSONValue
+    do {
+        value = try JSONDecoder().decode(JSONValue.self, from: Data(text[start...end].utf8))
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "hesap bilgisi: \(error.localizedDescription)")
+    }
+    let identifier: ([String: JSONValue]) -> String? = { (object: [String: JSONValue]) -> String? in
+        for name in ["account_id", "accountId", "id"] {
+            if case .string(let found) = object[name], !found.isEmpty {
+                return found
+            }
+        }
+        return nil
+    }
+    guard case .object(let object) = value else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "hesap bilgisi nesne değil")
+    }
+    let nested: [[String: JSONValue]] = object.keys.sorted().compactMap { (name: String) -> [String: JSONValue]? in
+        if case .object(let child) = object[name] { child } else { nil }
+    }
+    guard let accountID = identifier(object) ?? nested.lazy.compactMap(identifier).first else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "hesap bilgisinde kimlik yok")
+    }
+    return TrackerIdentity(accountID: accountID)
+}
+
+/// Görev aracındaki hesabın kimliğini okur (bkz. `trackerIdentityLookup`); jeton yenilenirse `persist` ile hemen
+/// saklanır.
+public func fetchTrackerIdentity(service: MCPService, connection: MCPConnection, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerIdentity {
+    let server: String = connection.serverURL.host() ?? connection.serverURL.absoluteString
+    guard let lookup = trackerIdentityLookup(service: service) else {
+        throw MCPRemoteError.toolMissing(server: server, tool: "hesap bilgisi")
+    }
+    let session: MCPRemoteSession = try await openMCPSession(connection: connection, persist: persist)
+    return try parseTrackerIdentity(text: try await session.callTool(name: lookup.tool, arguments: lookup.arguments), server: server)
+}
+
+/// Yeniden bağlanınca yerini alan eski bağlantı: geri alınacak izin. Yeni bağlantı aynı istemci kaydını kullanıyorsa
+/// (aynı izin) nil: eskiyi geri almak yeniyi de geçersiz kılardı. Saf fonksiyondur.
+public func replacedGrant(old: MCPConnection, new: MCPConnection) -> MCPConnection? {
+    old.clientID == new.clientID ? nil : old
 }
 
 /// Görev araçlarının Anahtar Zinciri'ndeki listesi.
@@ -213,6 +329,12 @@ func saveTaskTrackers(trackers: [TaskTracker], service: String) throws {
     try saveSecret(service: service, account: .taskTrackers, value: String(decoding: try encoder.encode(trackers), as: UTF8.self))
 }
 
+/// Aracın bağlanmasının sonucu: kaydedilen araç ve yerini aldığı eski bağlantının izni (yoksa nil).
+public struct TrackerConnectResult: Sendable, Equatable {
+    public let tracker: TaskTracker
+    public let replaced: MCPConnection?
+}
+
 /// Görev araçlarının deposu. Aynı araca yapılan işlemler sırayla yürür: iki gönderim aynı yenileme jetonunu iki kez
 /// kullanmasın. Yenilenen jeton hemen yazılır; araç bu arada kaldırıldıysa ya da yeniden bağlandıysa yazılmaz. Tüm
 /// değişiklikler Anahtar Zinciri'ndeki güncel listeye uygulanır (eski bir kopya yeni jetonun üzerine yazmaz).
@@ -229,13 +351,37 @@ public actor TrackerVault {
     }
 
     /// Servisin aracını bağlar: o servis zaten bağlıysa kimliği ve hedefi korunur (gönderilen görevlerin kaydı araç
-    /// kimliğine bağlıdır; yeniden bağlanınca görevler yeniden gönderilmesin).
-    public func connect(service trackerService: MCPService, connection: MCPConnection, newID: String) throws -> TaskTracker {
+    /// kimliğine bağlıdır; yeniden bağlanınca görevler yeniden gönderilmesin). Hesap kimliği boşalır: başka bir hesapla
+    /// bağlanılmış olabilir, yeniden okunur. Yerini alan eski bağlantının izni (geri alınmak üzere) sonuçta döner.
+    public func connect(service trackerService: MCPService, connection: MCPConnection, newID: String) throws -> TrackerConnectResult {
         let current: [TaskTracker] = try all()
         let existing: TaskTracker? = current.first { $0.service == trackerService }
-        let tracker: TaskTracker = TaskTracker(id: existing?.id ?? newID, service: trackerService, connection: connection, target: existing?.target ?? "")
+        let tracker: TaskTracker = TaskTracker(
+            id: existing?.id ?? newID, service: trackerService, connection: connection, target: existing?.target ?? "", identity: nil
+        )
         try saveTaskTrackers(trackers: current.filter { $0.service != trackerService } + [tracker], service: service)
-        return tracker
+        return TrackerConnectResult(tracker: tracker, replaced: existing.flatMap { replacedGrant(old: $0.connection, new: connection) })
+    }
+
+    /// Aracın hesap kimliğini okuyup saklar (bkz. `fetchTrackerIdentity`). İşlem araçla yapılan diğer işlemlerle
+    /// sırayla yürür; jeton yenilenirse hemen saklanır. Araç bu arada başka bir girişle yeniden bağlandıysa (istemci
+    /// kimliği değişti) kimlik yazılmaz: yeni hesabın olmayabilir.
+    public func resolveIdentity(id: String) async throws {
+        try await withTracker(id: id) {
+            (tracker: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+            let identity: TrackerIdentity = try await fetchTrackerIdentity(service: tracker.service, connection: tracker.connection, persist: persist)
+            try await self.storeIdentity(id: id, clientID: tracker.connection.clientID, identity: identity)
+        }
+    }
+
+    /// Kimliği yazar; araç başka bir girişle yeniden bağlandıysa yazmaz.
+    private func storeIdentity(id: String, clientID: String, identity: TrackerIdentity) throws {
+        let current: [TaskTracker] = try all()
+        guard current.contains(where: { $0.id == id && $0.connection.clientID == clientID }) else {
+            mcpIntegrationLogger.info("Hesap kimliği okunurken görev aracı yeniden bağlandı, kimlik yazılmadı, araç: \(id, privacy: .public)")
+            return
+        }
+        try saveTaskTrackers(trackers: current.map { $0.id == id ? $0.with(identity: identity) : $0 }, service: service)
     }
 
     /// Aracı kaldırır; kaldırılan araç (OAuth iznini sunucuda geri almak için) döner.
