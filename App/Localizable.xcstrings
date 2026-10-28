@@ -1398,6 +1398,16 @@
         }
       }
     },
+    "Aramayı temizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear search"
+          }
+        }
+      }
+    },
     "Aranan": {
       "localizations": {
         "en": {
@@ -8847,6 +8857,16 @@
         }
       }
     },
+    "Tüm sonuçları listede göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show all results in the list"
+          }
+        }
+      }
+    },
     "Tüm toplantılar": {
       "localizations": {
         "en": {
@@ -9579,6 +9599,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "effort (%@)"
+          }
+        }
+      }
+    },
+    "esc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "esc"
           }
         }
       }
@@ -10634,6 +10664,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Merge with"
+          }
+        }
+      }
+    },
+    "↑↓ seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ select"
+          }
+        }
+      }
+    },
+    "↩ aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↩ open"
           }
         }
       }

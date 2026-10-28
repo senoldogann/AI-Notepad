@@ -143,6 +143,10 @@ struct AINotepadApp: App {
                 if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
                     model.askArchive(question: CommandLine.arguments[index + 1], meetingIDs: [], recipeTitle: nil)
                 }
+                // "--ara": arama penceresini açar (görsel kontrol için).
+                if CommandLine.arguments.contains("--ara") {
+                    router.isSearchPresented = true
+                }
                 let section: MainSection? = launchSection(arguments: CommandLine.arguments)
                 let page: PanelPage? = launchPage(arguments: CommandLine.arguments)
                 if let section {
