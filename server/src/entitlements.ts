@@ -54,6 +54,19 @@ export function subscriptionAccess(subscription: SubscriptionState | null, now: 
   return "none";
 }
 
+/**
+ * Abonelik bitmiş mi: `canceled`, `incomplete_expired` ya da dönemi geçmiş `unpaid`. Bitmemiş abonelik (`active`,
+ * `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`) ek süresi geçmiş olsa da Stripe'ta yaşar: yeni Checkout
+ * açılmaz (Portal'dan yönetilir) ve başka bir aboneliğin olayı onu ezmez (bkz. `handleStripeWebhook`; SQL koşulu bu
+ * fonksiyonla aynıdır). Saf fonksiyondur.
+ */
+export function isTerminalSubscription(subscription: SubscriptionState, now: Date): boolean {
+  if (subscription.status === "canceled" || subscription.status === "incomplete_expired") {
+    return true;
+  }
+  return subscription.status === "unpaid" && subscription.currentPeriodEnd <= now.getTime();
+}
+
 /** Abonelik hak veriyor mu (`active` ya da `grace`). Saf fonksiyondur. */
 export function hasSubscriptionAccess(subscription: SubscriptionState | null, now: Date, pastDueGraceMs: number): boolean {
   return subscriptionAccess(subscription, now, pastDueGraceMs) !== "none";

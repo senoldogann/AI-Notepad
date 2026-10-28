@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import type { Config } from "./config";
-import { hasSubscriptionAccess, subscriptionState } from "./entitlements";
+import { type SubscriptionState, isTerminalSubscription, subscriptionState } from "./entitlements";
 import { ApiError } from "./errors";
 import { errorName, log } from "./log";
 import type { Platform } from "./platform";
@@ -61,11 +61,18 @@ async function customerId(db: D1Database, stripe: Stripe, platform: Platform, us
   return stored.stripe_customer_id;
 }
 
-/** Aylık abonelik için Stripe Checkout oturumu (otomatik vergi açık, müşteri yeniden kullanılır); ödeme adresini döndürür. */
+/**
+ * Aylık abonelik için Stripe Checkout oturumu (otomatik vergi açık, müşteri yeniden kullanılır); ödeme adresini
+ * döndürür. Bitmemiş bir abonelik varsa (ek süresi geçmiş `past_due` dahil) `subscription_exists`: aynı kullanıcıda
+ * iki abonelik aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar.
+ */
 export async function createCheckout(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
-  if (hasSubscriptionAccess(await subscriptionState(db, userId), platform.now(), config.pastDueGraceMs)) {
-    // Ödemesi gecikmiş (`past_due`) abonelik de buraya düşer: yeni abonelik değil, Portal'da ödeme yöntemi güncellenir.
-    throw new ApiError("bad_request", "Zaten bir aboneliğin var; Müşteri Portalı'ndan yönetebilirsin.");
+  const current: SubscriptionState | null = await subscriptionState(db, userId);
+  if (current !== null && !isTerminalSubscription(current, platform.now())) {
+    throw new ApiError(
+      "subscription_exists",
+      "Zaten bir aboneliğin var; yeni abonelik açılmaz. Ödeme yöntemini güncellemek ya da aboneliği yönetmek için Müşteri Portalı'nı aç.",
+    );
   }
   const stripe: Stripe = stripeClient(platform, config);
   const customer: string = await customerId(db, stripe, platform, userId);
@@ -127,8 +134,14 @@ export function subscriptionPeriodEndMs(subscription: Stripe.Subscription): numb
 /**
  * Stripe webhook'u: imza `constructEventAsync` ile doğrulanır (5 dakika tolerans). Olay kimliği `stripe_events`
  * tablosuna, abonelik durumu `subscriptions` tablosuna aynı toplu işlemde yazılır: aynı olay ikinci kez gelirse
- * birincil anahtar çakışır, hiçbir şey değişmez. Eski tarihli olay yeni durumu ezmez. Abonelik durumu yalnızca
- * burada yazılır.
+ * birincil anahtar çakışır, hiçbir şey değişmez. Abonelik durumu yalnızca burada yazılır. Kullanıcı başına tek satır
+ * vardır ("geçerli abonelik"):
+ * - aynı aboneliğin olayı yalnızca daha eski değilse yazılır (`last_event_created`);
+ * - başka bir aboneliğin olayı geçerli satırı yalnızca geçerli abonelik bitmişse (`isTerminalSubscription`) ya da
+ *   gelen `active`/`trialing` iken geçerli olan öyle değilse değiştirir. Eski aboneliğin geç gelen iptali yeni, ödenmiş
+ *   aboneliği ezmez; olay işlenmiş sayılır.
+ * Tanınmayan müşterinin bitmiş aboneliği (ör. silinmiş hesap) kaydedilir ve yok sayılır; bitmemişse Stripe yeniden
+ * denesin diye reddedilir.
  */
 export async function handleStripeWebhook(db: D1Database, platform: Platform, config: Config, payload: string, signature: string): Promise<{ duplicate: boolean }> {
   let event: Stripe.Event;
@@ -154,31 +167,43 @@ export async function handleStripeWebhook(db: D1Database, platform: Platform, co
   const subscription: Stripe.Subscription | null = subscriptionFromEvent(event);
   if (subscription !== null) {
     const customer: string = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    const periodEndMs: number = subscriptionPeriodEndMs(subscription);
     const owner: { user_id: string } | null = await db
       .prepare("SELECT user_id FROM stripe_customers WHERE stripe_customer_id = ?")
       .bind(customer)
       .first<{ user_id: string }>();
-    if (owner === null) {
+    if (owner === null && isTerminalSubscription({ status: subscription.status, currentPeriodEnd: periodEndMs }, platform.now())) {
+      // Silinmiş hesabın iptali gibi: hak vermeyen durum, yazılacak satır yok; olay işlenmiş sayılır.
+      log("info", "stripe_event_unknown_customer_terminal", { eventId: event.id, type: event.type });
+    } else if (owner === null) {
       // Bilinmeyen müşteri: olay kaydedilmez, Stripe yeniden dener; elle inceleme için uyarı.
       log("alert", "stripe_unknown_customer", { eventId: event.id, type: event.type });
       throw new ApiError("not_found", "Müşteri tanınmıyor.");
+    } else {
+      // Koşul `isTerminalSubscription` ile aynıdır (geçerli satır için).
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id,
+               stripe_subscription_id = excluded.stripe_subscription_id, status = excluded.status,
+               current_period_end = excluded.current_period_end, last_event_created = excluded.last_event_created,
+               updated_at = excluded.updated_at
+             WHERE (excluded.stripe_subscription_id = subscriptions.stripe_subscription_id
+                 AND excluded.last_event_created >= subscriptions.last_event_created)
+               OR (excluded.stripe_subscription_id <> subscriptions.stripe_subscription_id
+                 AND (subscriptions.status IN ('canceled', 'incomplete_expired')
+                   OR (subscriptions.status = 'unpaid' AND subscriptions.current_period_end <= ?)
+                   OR (excluded.status IN ('active', 'trialing') AND subscriptions.status NOT IN ('active', 'trialing'))))`,
+          )
+          .bind(owner.user_id, customer, subscription.id, subscription.status, periodEndMs, event.created, nowMs, nowMs),
+      );
     }
-    statements.push(
-      db
-        .prepare(
-          `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id,
-             stripe_subscription_id = excluded.stripe_subscription_id, status = excluded.status,
-             current_period_end = excluded.current_period_end, last_event_created = excluded.last_event_created,
-             updated_at = excluded.updated_at
-           WHERE excluded.last_event_created >= subscriptions.last_event_created`,
-        )
-        .bind(owner.user_id, customer, subscription.id, subscription.status, subscriptionPeriodEndMs(subscription), event.created, nowMs),
-    );
   }
+  let results: D1Result[];
   try {
-    await db.batch(statements);
+    results = await db.batch(statements);
   } catch (error: unknown) {
     const seen: { id: string } | null = await db.prepare("SELECT id FROM stripe_events WHERE id = ?").bind(event.id).first<{ id: string }>();
     if (seen !== null) {
@@ -186,6 +211,10 @@ export async function handleStripeWebhook(db: D1Database, platform: Platform, co
       return { duplicate: true };
     }
     throw error;
+  }
+  if (statements.length > 1 && results[1]?.meta.changes !== 1) {
+    // Eski tarihli olay ya da geçerli olmayan bir aboneliğin olayı: kaydedildi, durumu değiştirmedi.
+    log("info", "stripe_event_not_applied", { eventId: event.id, type: event.type });
   }
   log("info", "stripe_event_processed", { eventId: event.id, type: event.type });
   return { duplicate: false };

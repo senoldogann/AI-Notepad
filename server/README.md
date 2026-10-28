@@ -66,7 +66,7 @@ App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 in
 | `POST /v1/meetings/{id}/end` | Bearer | |
 | `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE; toplantı bütçesi + kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=`. Süre önceden ayrılır: WAV (PCM) başlıktan kesin, m4a/aac/mp3 en düşük 8 kbit/s, ogg/webm 6 kbit/s varsayımıyla; toplantının sesi en çok toplantının süresi kadar. FLAC kabul edilmez. Uzun toplantıda WAV parçalar halinde gönderilir |
-| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner |
-| `POST /v1/billing/webhook` | Stripe imzası | |
+| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
+| `POST /v1/billing/webhook` | Stripe imzası | kullanıcı başına tek geçerli abonelik: başka bir aboneliğin olayı onu yalnızca geçerli olan bitmişse ya da gelen `active`/`trialing` iken geçerli olan öyle değilse değiştirir |
 
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir. Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner.
