@@ -45,3 +45,25 @@ jobs:
           xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debug
           -derivedDataPath .build/xcode-ios -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO build -quiet
+
+  # Abonelik sunucusu (Cloudflare Worker): tipler ve Workers çalışma zamanında gerçek D1 ile testler. Dış servisler
+  # testlerde sahte; gerçek anahtar gerekmez.
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Bağımlılıklar
+        run: npm ci
+      - name: Tipler
+        run: npm run typecheck
+      - name: Testler
+        run: npm test
