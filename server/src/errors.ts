@@ -18,6 +18,7 @@ export type ErrorCode =
   | "challenge_invalid"
   | "subscription_required"
   | "trial_exhausted"
+  | "trial_ip_limit"
   | "monthly_cap_reached"
   | "meeting_not_active"
   | "meeting_budget_exhausted"
@@ -47,6 +48,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   challenge_invalid: 400,
   subscription_required: 402,
   trial_exhausted: 402,
+  trial_ip_limit: 429,
   monthly_cap_reached: 403,
   meeting_not_active: 403,
   meeting_budget_exhausted: 429,

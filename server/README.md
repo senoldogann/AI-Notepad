@@ -59,12 +59,12 @@ App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 in
 | `POST /v1/auth/email/start` | — | `{email, turnstileToken}`; her zaman 202 |
 | `POST /v1/auth/email/verify` | — | `{token}` (bağlantının `#token=` parçası) |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür |
-| `GET /v1/me` | Bearer | plan, kalan deneme, aylık saat ve sınır, abonelik |
+| `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |
 | `POST /v1/device/challenge` | Bearer | `{purpose: "attest" \| "assert"}` |
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |
-| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}` |
+| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3 |
 | `POST /v1/meetings/{id}/end` | Bearer | |
-| `POST /v1/llm/messages` | Bearer + `x-meeting-id` | Anthropic Messages alt kümesi; `stream: true` ise SSE |
+| `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=` |
 | `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner |
 | `POST /v1/billing/webhook` | Stripe imzası | |

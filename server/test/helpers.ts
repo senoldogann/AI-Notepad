@@ -208,13 +208,13 @@ export const blockingLimiter: RateLimit = {
 };
 
 /** Abonelik satırı ekler (webhook testleri dışında kısayol). */
-export async function grantSubscription(userId: string, periodEndMs: number): Promise<void> {
+export async function grantSubscription(userId: string, status: string, periodEndMs: number): Promise<void> {
   const customer: string = `cus_${randomToken(8)}`;
   await env.DB.batch([
     env.DB.prepare("INSERT INTO stripe_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, 0)").bind(userId, customer),
     env.DB.prepare(
       `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at)
-       VALUES (?, ?, ?, 'active', ?, 0, 0)`,
-    ).bind(userId, customer, `sub_${randomToken(8)}`, periodEndMs),
+       VALUES (?, ?, ?, ?, ?, 0, 0)`,
+    ).bind(userId, customer, `sub_${randomToken(8)}`, status, periodEndMs),
   ]);
 }

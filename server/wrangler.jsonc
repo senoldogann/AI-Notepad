@@ -32,14 +32,26 @@
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
     "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
     "TRIAL_MEETINGS": "3",
+    "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
     "TRIAL_MAX_MEETING_MINUTES": "90",
     "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
     "MONTHLY_CAP_HOURS": "10",
     "MEETING_GRACE_MINUTES": "30",
-    "TRIAL_MEETING_TOKEN_BUDGET": "600000",
-    "SUBSCRIBER_MEETING_TOKEN_BUDGET": "1500000",
+    "PAST_DUE_GRACE_DAYS": "7",
+    // Toplantı başına token bütçesi (girdi + çıktı, Haiku 5.5 tokenizer'ı; Türkçe ~1,7 token/kelime):
+    // - Canlı çeviri: her bitmiş cümle için bir çağrı (`translationRequest`: sistem ~300 + 3 cümle bağlam ~75 +
+    //   cümle ~25 + sarmalayıcı ~20 ≈ 420 girdi; çeviri ~30 + low effort düşünme ~70 ≈ 100 çıktı) ≈ 600 token/çağrı.
+    //   Konuşma ~150 kelime/dk, ~12 kelime/cümle → ~12 cümle/dk = 720 çağrı/saat.
+    //   4 saat: 2880 × 600 ≈ 1,73 M.  90 dakika: 1080 × 600 ≈ 0,65 M.
+    // - "Ne kaçırdım?" ve Sor: ~10 kullanım × ~4 K ≈ 40 K (deneme ~15 K).
+    // - Toplantı sonu not (parçalı not + birleştirme + konuşmacı gözden geçirme): 4 saatlik metin ~60–70 K token,
+    //   ~3 geçiş + 8 K'lık çıktılar ≈ 300 K (90 dakika ≈ 100 K).
+    // Toplam 4 saat ≈ 2,07 M, %25 pay → 2,6 M. Deneme (90 dk) ≈ 0,77 M, %25 pay → 1,0 M.
+    // Maliyet üst sınırı (girdi ağırlıklı, 0,10 $/M girdi, 0,50 $/M çıktı): 4 saatlik toplantı < ~0,40 $.
+    // Not: çağrı başına `tahmin + max_tokens` önceden ayrılır, sonra gerçek kullanıma indirilir; bütçe gerçek kullanımı ölçer.
+    "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
+    "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
     "LLM_MAX_TOKENS": "8192",
-    "LLM_EFFORT": "low",
     "LLM_MAX_REQUEST_BYTES": "400000",
     "LLM_MAX_INPUT_TOKENS": "100000",
     "TRANSCRIBE_MAX_BYTES": "95000000",
@@ -79,15 +91,17 @@
         "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
         "TRIAL_MEETINGS": "3",
+        "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
         "TRIAL_MAX_MEETING_MINUTES": "90",
         "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
         "MONTHLY_CAP_HOURS": "10",
         "MEETING_GRACE_MINUTES": "30",
-        "TRIAL_MEETING_TOKEN_BUDGET": "600000",
-        "SUBSCRIBER_MEETING_TOKEN_BUDGET": "1500000",
+        "PAST_DUE_GRACE_DAYS": "7",
+        // Türetme: üstteki geliştirme `vars` açıklaması.
+        "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
+        "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
         "LLM_MAX_TOKENS": "8192",
-        "LLM_EFFORT": "low",
-        "LLM_MAX_REQUEST_BYTES": "400000",
+            "LLM_MAX_REQUEST_BYTES": "400000",
         "LLM_MAX_INPUT_TOKENS": "100000",
         "TRANSCRIBE_MAX_BYTES": "95000000",
         "TRANSCRIBE_MAX_KEYTERMS": "100",

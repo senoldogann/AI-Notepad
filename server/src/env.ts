@@ -14,14 +14,15 @@ export interface Env {
   readonly APP_ATTEST_APP_IDS: string;
   readonly APP_ATTEST_ALLOWED_CATEGORIES: string;
   readonly TRIAL_MEETINGS: string;
+  readonly TRIAL_ACCOUNTS_PER_IP_PER_DAY: string;
   readonly TRIAL_MAX_MEETING_MINUTES: string;
   readonly SUBSCRIBER_MAX_MEETING_MINUTES: string;
   readonly MONTHLY_CAP_HOURS: string;
   readonly MEETING_GRACE_MINUTES: string;
+  readonly PAST_DUE_GRACE_DAYS: string;
   readonly TRIAL_MEETING_TOKEN_BUDGET: string;
   readonly SUBSCRIBER_MEETING_TOKEN_BUDGET: string;
   readonly LLM_MAX_TOKENS: string;
-  readonly LLM_EFFORT: string;
   readonly LLM_MAX_REQUEST_BYTES: string;
   readonly LLM_MAX_INPUT_TOKENS: string;
   readonly TRANSCRIBE_MAX_BYTES: string;

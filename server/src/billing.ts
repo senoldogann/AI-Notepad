@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import type { Config } from "./config";
-import { isSubscriptionActive, subscriptionState } from "./entitlements";
+import { hasSubscriptionAccess, subscriptionState } from "./entitlements";
 import { ApiError } from "./errors";
 import { errorName, log } from "./log";
 import type { Platform } from "./platform";
@@ -63,8 +63,9 @@ async function customerId(db: D1Database, stripe: Stripe, platform: Platform, us
 
 /** Aylık abonelik için Stripe Checkout oturumu (otomatik vergi açık, müşteri yeniden kullanılır); ödeme adresini döndürür. */
 export async function createCheckout(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
-  if (isSubscriptionActive(await subscriptionState(db, userId), platform.now())) {
-    throw new ApiError("bad_request", "Zaten aktif bir aboneliğin var; Müşteri Portalı'ndan yönetebilirsin.");
+  if (hasSubscriptionAccess(await subscriptionState(db, userId), platform.now(), config.pastDueGraceMs)) {
+    // Ödemesi gecikmiş (`past_due`) abonelik de buraya düşer: yeni abonelik değil, Portal'da ödeme yöntemi güncellenir.
+    throw new ApiError("bad_request", "Zaten bir aboneliğin var; Müşteri Portalı'ndan yönetebilirsin.");
   }
   const stripe: Stripe = stripeClient(platform, config);
   const customer: string = await customerId(db, stripe, platform, userId);

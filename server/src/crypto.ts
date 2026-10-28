@@ -20,6 +20,12 @@ export async function sha256Hex(text: string): Promise<string> {
   return hexEncode(await sha256(utf8(text)));
 }
 
+/** HMAC-SHA256, onaltılık. Tersine çevrilmesi kolay değerleri (IP) anahtarlı özetlemek için. */
+export async function hmacSha256Hex(secret: string, text: string): Promise<string> {
+  const key: CryptoKey = await crypto.subtle.importKey("raw", utf8(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hexEncode(new Uint8Array(await crypto.subtle.sign("HMAC", key, utf8(text))));
+}
+
 /**
  * Sabit zamanlı karşılaştırma: iki değer önce özetlenir (uzunluk sızmaz), sonra Workers'ın `timingSafeEqual`'ı ile
  * karşılaştırılır.

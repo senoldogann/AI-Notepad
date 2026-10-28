@@ -7,9 +7,6 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
-/** Claude düşünme derinliği; sunucu belirler. */
-export type LLMEffort = "low" | "medium" | "high" | "xhigh" | "max";
-
 /** E-posta gönderimi: Resend ya da yalnızca log yazan geliştirme göndericisi. */
 export type EmailConfig =
   | { readonly kind: "dev"; readonly from: string; readonly linkUrl: string }
@@ -27,15 +24,18 @@ export interface Config {
     readonly allowedCategories: readonly number[];
   };
   readonly trialMeetings: number;
+  /** Bir IP'den bir günde denemeye başlayabilecek yeni hesap sayısı. */
+  readonly trialAccountsPerIpPerDay: number;
   readonly trialMaxMeetingMinutes: number;
   readonly subscriberMaxMeetingMinutes: number;
   readonly monthlyCapSeconds: number;
   readonly meetingGraceMs: number;
+  /** `past_due` aboneliğin dönem sonundan sonra erişimi koruduğu süre. */
+  readonly pastDueGraceMs: number;
   readonly trialMeetingTokenBudget: number;
   readonly subscriberMeetingTokenBudget: number;
   readonly llm: {
     readonly maxTokens: number;
-    readonly effort: LLMEffort;
     readonly maxRequestBytes: number;
     readonly maxInputTokens: number;
   };
@@ -87,14 +87,15 @@ const envSchema = z.object({
   APP_ATTEST_APP_IDS: csv,
   APP_ATTEST_ALLOWED_CATEGORIES: csv,
   TRIAL_MEETINGS: positiveInt,
+  TRIAL_ACCOUNTS_PER_IP_PER_DAY: positiveInt,
   TRIAL_MAX_MEETING_MINUTES: positiveInt,
   SUBSCRIBER_MAX_MEETING_MINUTES: positiveInt,
   MONTHLY_CAP_HOURS: positiveNumber,
   MEETING_GRACE_MINUTES: positiveInt,
+  PAST_DUE_GRACE_DAYS: positiveInt,
   TRIAL_MEETING_TOKEN_BUDGET: positiveInt,
   SUBSCRIBER_MEETING_TOKEN_BUDGET: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
-  LLM_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]),
   LLM_MAX_REQUEST_BYTES: positiveInt,
   LLM_MAX_INPUT_TOKENS: positiveInt,
   TRANSCRIBE_MAX_BYTES: positiveInt.max(95_000_000),
@@ -141,15 +142,16 @@ export function parseConfig(env: Env): Config {
       allowedCategories: categories,
     },
     trialMeetings: value.TRIAL_MEETINGS,
+    trialAccountsPerIpPerDay: value.TRIAL_ACCOUNTS_PER_IP_PER_DAY,
     trialMaxMeetingMinutes: value.TRIAL_MAX_MEETING_MINUTES,
     subscriberMaxMeetingMinutes: value.SUBSCRIBER_MAX_MEETING_MINUTES,
     monthlyCapSeconds: Math.round(value.MONTHLY_CAP_HOURS * 3600),
     meetingGraceMs: value.MEETING_GRACE_MINUTES * 60_000,
+    pastDueGraceMs: value.PAST_DUE_GRACE_DAYS * 86_400_000,
     trialMeetingTokenBudget: value.TRIAL_MEETING_TOKEN_BUDGET,
     subscriberMeetingTokenBudget: value.SUBSCRIBER_MEETING_TOKEN_BUDGET,
     llm: {
       maxTokens: value.LLM_MAX_TOKENS,
-      effort: value.LLM_EFFORT,
       maxRequestBytes: value.LLM_MAX_REQUEST_BYTES,
       maxInputTokens: value.LLM_MAX_INPUT_TOKENS,
     },

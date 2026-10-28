@@ -8,7 +8,7 @@ import { findOrCreateUser } from "./auth/users";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
-import { sha256Hex } from "./crypto";
+import { Base64Error, base64Decode, base64Encode, hmacSha256Hex, sha256Hex } from "./crypto";
 import { entitlements } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
@@ -104,6 +104,26 @@ function meetingIdHeader(request: Request): string {
   return value;
 }
 
+/**
+ * İsteğe bağlı `x-device-key-id` başlığı (App Attest anahtar kimliği, base64): `/v1/me` etkin deneme sayısını cihazla
+ * birlikte göstersin diye. Yalnızca gösterim içindir; hak toplantı başlatırken imzalı onayla denetlenir.
+ * Biçim geçersizse `bad_request`.
+ */
+function deviceKeyIdHeader(request: Request): string | null {
+  const value: string | null = request.headers.get("x-device-key-id");
+  if (value === null) {
+    return null;
+  }
+  try {
+    return base64Encode(base64Decode(value));
+  } catch (error: unknown) {
+    if (error instanceof Base64Error) {
+      throw new ApiError("bad_request", "x-device-key-id base64 olmalı.");
+    }
+    throw error;
+  }
+}
+
 /** Oturum yanıtı gövdesi. Saf fonksiyondur. */
 function sessionBody(tokens: SessionTokens): object {
   return {
@@ -184,7 +204,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
   if (path === "/v1/me" && method === "GET") {
     const user: AuthedUser = await authed();
-    return jsonResponse(200, await entitlements(db, config, user.userId, now));
+    return jsonResponse(200, await entitlements(db, config, user.userId, deviceKeyIdHeader(request), now));
   }
 
   if (path === "/v1/device/challenge" && method === "POST") {
@@ -211,7 +231,8 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     }
     const deviceId: string | null =
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
-    return jsonResponse(201, await startMeeting(db, config, user.userId, deviceId, now));
+    const clientIpHash: string = await hmacSha256Hex(config.secrets.accessToken, `trial-ip:${context.clientIp}`);
+    return jsonResponse(201, await startMeeting(db, config, user.userId, deviceId, clientIpHash, now));
   }
   const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
   if (endMatch !== null && endMatch[1] !== undefined && method === "POST") {

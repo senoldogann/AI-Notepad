@@ -23,7 +23,7 @@ async function setup(subscribed: boolean): Promise<Context> {
   const harness: Harness = await defaultHarness();
   const session: Session = await signIn(harness);
   if (subscribed) {
-    await grantSubscription(session.userId, harness.clock.nowMs + 20 * 86_400_000);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
   }
   const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
   return { harness, session, meeting };
@@ -143,7 +143,7 @@ describe("konuşma tanıma vekili", () => {
   it("toplantının en uzun süresinden uzun ses reddedilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
-    await grantSubscription(session.userId, harness.clock.nowMs + 20 * 86_400_000);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
     // Ayda 1 dakika kaldı: toplantı en çok 1 dakika sürer.
     await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)")
       .bind(session.userId, new Date(harness.clock.nowMs).toISOString().slice(0, 7), 10 * 3600 - 60)

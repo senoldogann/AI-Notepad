@@ -162,8 +162,17 @@ describe("App Attest onayı (assertion) ve cihaz başına deneme", () => {
 
     const second: Session = await signIn(harness);
     await expectError(await startWithDevice(harness, second, device, ++counter), 402, "trial_exhausted");
-    const me = await (await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).json<{ trialMeetingsLeft: number }>();
-    expect(me.trialMeetingsLeft).toBe(3);
+    // /v1/me cihazla birlikte etkin kalanı (hesap ve cihazın küçüğü) gösterir; cihazsız yalnızca hesabı.
+    const withDevice = await (
+      await harness.call(req("GET", "/v1/me", { token: second.accessToken, headers: { "x-device-key-id": device.keyIdBase64 } }))
+    ).json<{ trialMeetingsLeft: number; accountTrialMeetingsLeft: number; deviceTrialMeetingsLeft: number | null }>();
+    expect(withDevice).toMatchObject({ trialMeetingsLeft: 0, accountTrialMeetingsLeft: 3, deviceTrialMeetingsLeft: 0 });
+    const withoutDevice = await (await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).json<{ trialMeetingsLeft: number; deviceTrialMeetingsLeft: number | null }>();
+    expect(withoutDevice).toMatchObject({ trialMeetingsLeft: 3, deviceTrialMeetingsLeft: null });
+    const unknownDevice = await (
+      await harness.call(req("GET", "/v1/me", { token: second.accessToken, headers: { "x-device-key-id": (await createDeviceKey()).keyIdBase64 } }))
+    ).json<{ trialMeetingsLeft: number; deviceTrialMeetingsLeft: number | null }>();
+    expect(unknownDevice).toMatchObject({ trialMeetingsLeft: 3, deviceTrialMeetingsLeft: null });
   });
 
   it("zorunlu politikada cihaz onayı olmadan toplantı başlamaz", async () => {

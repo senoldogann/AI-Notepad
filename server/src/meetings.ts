@@ -1,9 +1,9 @@
 import type { Config } from "./config";
 import { randomId } from "./crypto";
-import { isSubscriptionActive, subscriptionState, userTrialMeetingsUsed } from "./entitlements";
+import { deviceTrialMeetingsUsed, hasSubscriptionAccess, subscriptionState, userTrialMeetingsUsed } from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
-import { type MonthlyUsage, monthlyUsage, spendCeilingReached } from "./usage";
+import { type MonthlyUsage, dayKey, monthlyUsage, spendCeilingReached } from "./usage";
 
 /** Yeni toplantı oturumu. */
 export interface StartedMeeting {
@@ -42,69 +42,115 @@ async function closeOpenMeetings(db: D1Database, userId: string, now: Date): Pro
 }
 
 /**
- * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503. Aktif abonelikte aylık sınırın altında olmak gerekir
- * (oturum süresi kalan aylık süreyle de sınırlanır); abonelik yoksa bir deneme toplantısı düşer. Deneme hakkı kullanıcı
- * başına ve (doğrulanmış cihaz varsa) cihaz başınadır: yeni hesap aynı cihazda yeni deneme almaz. Sayım ve ekleme tek
- * SQL ifadesidir; eşzamanlı istekler fazladan deneme alamaz.
+ * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503. Abonelik erişimi varsa (`past_due` ek süresi dahil)
+ * aylık sınırın altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı
+ * düşer (`startTrialMeeting`).
  */
-export async function startMeeting(db: D1Database, config: Config, userId: string, deviceId: string | null, now: Date): Promise<StartedMeeting> {
+export async function startMeeting(
+  db: D1Database,
+  config: Config,
+  userId: string,
+  deviceId: string | null,
+  clientIpHash: string,
+  now: Date,
+): Promise<StartedMeeting> {
   if (await spendCeilingReached(db, config, now)) {
     throw new ApiError("spend_ceiling_reached", "Servis bugün yoğun; yeni toplantı şu an başlatılamıyor. Lütfen daha sonra yeniden dene.");
   }
   await closeOpenMeetings(db, userId, now);
-  const meetingId: string = randomId();
-  if (isSubscriptionActive(await subscriptionState(db, userId), now)) {
-    const usage: MonthlyUsage = await monthlyUsage(db, userId, now);
-    const remainingSeconds: number = config.monthlyCapSeconds - usage.usedSeconds;
-    if (remainingSeconds <= 0) {
-      throw new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.");
-    }
-    const maxMinutes: number = Math.max(1, Math.min(config.subscriberMaxMeetingMinutes, Math.floor(remainingSeconds / 60)));
-    const maxEndsAt: number = now.getTime() + maxMinutes * 60_000;
-    await db
-      .prepare(
-        `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget)
-         VALUES (?, ?, ?, 'subscription', ?, ?, ?)`,
-      )
-      .bind(meetingId, userId, deviceId, now.getTime(), maxEndsAt, config.subscriberMeetingTokenBudget)
-      .run();
-    log("info", "meeting_started", { userId, meetingId, kind: "subscription", attested: deviceId !== null });
-    return {
-      meetingId,
-      kind: "subscription",
-      tokenBudget: config.subscriberMeetingTokenBudget,
-      maxDurationMinutes: maxMinutes,
-      expiresAt: new Date(maxEndsAt).toISOString(),
-      trialMeetingsLeft: null,
-    };
+  if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
+    return startTrialMeeting(db, config, userId, deviceId, clientIpHash, now);
   }
-  const maxEndsAt: number = now.getTime() + config.trialMaxMeetingMinutes * 60_000;
-  const inserted: D1Result = await db
+  const meetingId: string = randomId();
+  const usage: MonthlyUsage = await monthlyUsage(db, userId, now);
+  const remainingSeconds: number = config.monthlyCapSeconds - usage.usedSeconds;
+  if (remainingSeconds <= 0) {
+    throw new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.");
+  }
+  const maxMinutes: number = Math.max(1, Math.min(config.subscriberMaxMeetingMinutes, Math.floor(remainingSeconds / 60)));
+  const maxEndsAt: number = now.getTime() + maxMinutes * 60_000;
+  await db
     .prepare(
       `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget)
-       SELECT ?, ?, ?, 'trial', ?, ?, ?
-       WHERE (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') < ?
-         AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)`,
+       VALUES (?, ?, ?, 'subscription', ?, ?, ?)`,
     )
-    .bind(
-      meetingId,
-      userId,
-      deviceId,
-      now.getTime(),
-      maxEndsAt,
-      config.trialMeetingTokenBudget,
-      userId,
-      config.trialMeetings,
-      deviceId,
-      deviceId,
-      config.trialMeetings,
-    )
+    .bind(meetingId, userId, deviceId, now.getTime(), maxEndsAt, config.subscriberMeetingTokenBudget)
     .run();
-  if (inserted.meta.changes !== 1) {
-    log("info", "trial_refused", { userId, attested: deviceId !== null });
-    throw new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
+  log("info", "meeting_started", { userId, meetingId, kind: "subscription", attested: deviceId !== null });
+  return {
+    meetingId,
+    kind: "subscription",
+    tokenBudget: config.subscriberMeetingTokenBudget,
+    maxDurationMinutes: maxMinutes,
+    expiresAt: new Date(maxEndsAt).toISOString(),
+    trialMeetingsLeft: null,
+  };
+}
+
+/**
+ * Deneme toplantısı. Her hesabın doğrulanmış bir kimliği vardır (Apple `sub` ya da tıklanmış e-posta bağlantısı;
+ * hesap başka yoldan oluşmaz). Hak üç koşula bağlıdır:
+ * - hesap başına `trialMeetings` toplantı;
+ * - doğrulanmış cihaz bildirildiyse cihaz başına `trialMeetings` toplantı (yeni hesap aynı cihazda yeni deneme almaz);
+ * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı `trialAccountsPerIpPerDay`
+ *   altında olmalı.
+ * Koşullar ve ekleme tek toplu işlemdir (D1 işlemi): eşzamanlı istekler sınırları aşamaz.
+ */
+async function startTrialMeeting(
+  db: D1Database,
+  config: Config,
+  userId: string,
+  deviceId: string | null,
+  clientIpHash: string,
+  now: Date,
+): Promise<StartedMeeting> {
+  const meetingId: string = randomId();
+  const day: string = dayKey(now);
+  const maxEndsAt: number = now.getTime() + config.trialMaxMeetingMinutes * 60_000;
+  const [inserted] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget)
+         SELECT ?, ?, ?, 'trial', ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') < ?
+           AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)
+           AND (EXISTS (SELECT 1 FROM trial_starts WHERE user_id = ?)
+             OR (SELECT COUNT(*) FROM trial_starts WHERE ip_hash = ? AND day = ?) < ?)`,
+      )
+      .bind(
+        meetingId,
+        userId,
+        deviceId,
+        now.getTime(),
+        maxEndsAt,
+        config.trialMeetingTokenBudget,
+        userId,
+        config.trialMeetings,
+        deviceId,
+        deviceId,
+        config.trialMeetings,
+        userId,
+        clientIpHash,
+        day,
+        config.trialAccountsPerIpPerDay,
+      ),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO trial_starts (user_id, ip_hash, day, created_at)
+         SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
+      )
+      .bind(userId, clientIpHash, day, now.getTime(), meetingId),
+  ]);
+  const accountUsed: number = await userTrialMeetingsUsed(db, userId);
+  const deviceUsed: number | null = deviceId === null ? null : await deviceTrialMeetingsUsed(db, deviceId);
+  if (inserted?.meta.changes !== 1) {
+    const exhausted: boolean = accountUsed >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings;
+    log("info", "trial_refused", { userId, attested: deviceId !== null, reason: exhausted ? "exhausted" : "ip_daily_limit" });
+    if (exhausted) {
+      throw new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
+    }
+    throw new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
   }
-  const trialUsed: number = await userTrialMeetingsUsed(db, userId);
   log("info", "meeting_started", { userId, meetingId, kind: "trial", attested: deviceId !== null });
   return {
     meetingId,
@@ -112,7 +158,7 @@ export async function startMeeting(db: D1Database, config: Config, userId: strin
     tokenBudget: config.trialMeetingTokenBudget,
     maxDurationMinutes: config.trialMaxMeetingMinutes,
     expiresAt: new Date(maxEndsAt).toISOString(),
-    trialMeetingsLeft: Math.max(0, config.trialMeetings - trialUsed),
+    trialMeetingsLeft: Math.max(0, config.trialMeetings - Math.max(accountUsed, deviceUsed ?? 0)),
   };
 }
 

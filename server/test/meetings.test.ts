@@ -37,6 +37,8 @@ describe("haklar ve toplantı oturumları", () => {
       plan: "trial",
       trialMeetingsTotal: 3,
       trialMeetingsLeft: 3,
+      accountTrialMeetingsLeft: 3,
+      deviceTrialMeetingsLeft: null,
       monthlyHoursUsed: 0,
       monthlyHoursCap: 10,
       subscription: null,
@@ -50,7 +52,7 @@ describe("haklar ve toplantı oturumları", () => {
       const response: Response = await startMeeting(harness, session);
       expect(response.status).toBe(201);
       const body: StartedMeetingBody = await response.json<StartedMeetingBody>();
-      expect(body).toMatchObject({ kind: "trial", maxDurationMinutes: 90, tokenBudget: 600000, trialMeetingsLeft: left });
+      expect(body).toMatchObject({ kind: "trial", maxDurationMinutes: 90, tokenBudget: 1000000, trialMeetingsLeft: left });
       harness.clock.nowMs += 60_000;
     }
     await expectError(await startMeeting(harness, session), 402, "trial_exhausted");
@@ -86,7 +88,7 @@ describe("haklar ve toplantı oturumları", () => {
         req("POST", "/v1/llm/messages", {
           token: other.accessToken,
           headers: { "x-meeting-id": meeting.meetingId },
-          json: { max_tokens: 100, messages: [{ role: "user", content: "merhaba" }] },
+          json: { effort: "low", max_tokens: 100, messages: [{ role: "user", content: "merhaba" }] },
         }),
       ),
       403,
@@ -120,11 +122,11 @@ describe("haklar ve toplantı oturumları", () => {
   it("abone aylık sınırın altında toplantı açar; sınır dolunca reddedilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
-    await grantSubscription(session.userId, harness.clock.nowMs + 20 * 86_400_000);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
     expect((await me(harness, session)).plan).toBe("subscription");
 
     const first: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
-    expect(first).toMatchObject({ kind: "subscription", maxDurationMinutes: 240, tokenBudget: 1500000, trialMeetingsLeft: null });
+    expect(first).toMatchObject({ kind: "subscription", maxDurationMinutes: 240, tokenBudget: 2600000, trialMeetingsLeft: null });
     expect((await me(harness, session)).trialMeetingsLeft).toBe(3);
 
     // 9,5 saatlik ses kullanılmış: kalan 30 dakika, toplantı süresi buna kısalır.
@@ -142,7 +144,7 @@ describe("haklar ve toplantı oturumları", () => {
   it("dönemi geçmiş ya da iptal edilmiş abonelik hak vermez", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
-    await grantSubscription(session.userId, harness.clock.nowMs - 1000);
+    await grantSubscription(session.userId, "canceled", harness.clock.nowMs + 20 * 86_400_000);
     expect((await me(harness, session)).plan).toBe("trial");
     const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
     expect(meeting.kind).toBe("trial");
