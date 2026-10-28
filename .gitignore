@@ -8,3 +8,6 @@ Config/Local.xcconfig
 
 # Ajan çalışma kopyaları
 .claude/worktrees/
+
+# Sparkle appcast ve yayınlanan DMG kopyaları (scripts/release.sh)
+release-archive/

@@ -28,6 +28,12 @@ public enum AppPaths {
         try ensureDirectory(url: applicationSupport().appending(path: "AskHistory", directoryHint: .isDirectory))
     }
 
+    /// MetricKit çökme ve donma raporları: `CrashReports` (her teşhis paketi bir JSON dosyası; yalnız bu cihazda kalır,
+    /// iCloud'a eşitlenmez ve kendiliğinden hiçbir yere gönderilmez).
+    public static func crashReportsDirectory() throws -> URL {
+        try ensureDirectory(url: applicationSupport().appending(path: "CrashReports", directoryHint: .isDirectory))
+    }
+
     /// Yeni bir kayıt oturumu klasörü: `Sessions/<yyyyMMdd-HHmmss>`.
     public static func newSessionDirectory(startedAt: Date) throws -> URL {
         try ensureDirectory(url: sessionsDirectory().appending(path: sessionFolderName(startedAt: startedAt), directoryHint: .isDirectory))

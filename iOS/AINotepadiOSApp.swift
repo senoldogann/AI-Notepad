@@ -12,6 +12,8 @@ struct AINotepadiOSApp: App {
     @State private var ask: PhoneAsk
     @State private var router: PhoneRouter
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
+    /// Çökme raporları (MetricKit; yalnız bu iPhone'da, Ayarlar'da gösterilir).
+    @State private var crashReports: CrashReportCenter = CrashReportCenter()
 
     init() {
         registerPhoneDefaults()
@@ -40,11 +42,12 @@ struct AINotepadiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player)
+            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, crashReports: crashReports)
                 .environment(\.panelAppearance, .standard)
                 .font(PanelAppearance.standard.font(size: 15, weight: .regular))
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
+                    crashReports.start()
                     store.reload()
                     ask.loadRecipes()
                     ask.loadHistory()
@@ -117,6 +120,7 @@ struct RootView: View {
     let ask: PhoneAsk
     @Bindable var router: PhoneRouter
     let player: MeetingAudioPlayer
+    let crashReports: CrashReportCenter
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
@@ -136,7 +140,7 @@ struct RootView: View {
                 TasksTab(store: store, router: router)
             }
             Tab("Ayarlar", systemImage: "gearshape", value: PhoneTab.settings) {
-                PhoneSettingsTab(store: store, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
+                PhoneSettingsTab(store: store, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }), crashReports: crashReports)
             }
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {
