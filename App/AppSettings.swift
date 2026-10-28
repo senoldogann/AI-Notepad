@@ -334,6 +334,10 @@ func storeKeyBinding(key: String, binding: KeyBinding) throws {
 /// Seçili sağlayıcının yapılandırması: anahtar Keychain'den arka planda okunur. Anthropic anahtarı yoksa
 /// `KeychainError.notFound`; OpenAI uyumlu ayar eksikse `LLMError.notConfigured`.
 func resolveLLMProvider() async throws -> LLMProvider {
+    #if HOSTED_EDITION
+    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider.
+    return try hostedLLMProvider()
+    #else
     switch selectedLLMProviderKind() {
     case .anthropic:
         return .anthropic(AnthropicConfig(
@@ -348,6 +352,7 @@ func resolveLLMProvider() async throws -> LLMProvider {
     case .onDevice:
         return .onDevice(try onDeviceConfig())
     }
+    #endif
 }
 
 /// İlk açılışta (kurulum bitmemiş, motor ve LLM hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence

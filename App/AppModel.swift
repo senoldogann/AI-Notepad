@@ -444,7 +444,7 @@ final class AppModel {
                 failedTranslations.insert(segment.id)
                 return
             }
-            if case LLMError.http(let status, _, _, _) = error, status == 401 || status == 403 {
+            if stopsLiveTranslation(error: error) {
                 translationDisabled = true
             }
             failedTranslations.insert(segment.id)
@@ -499,6 +499,10 @@ final class AppModel {
 
     /// Seçili motor ve LLM için eksik anahtar/ayarları bulur (değer okunmaz, izin penceresi açılmaz).
     func refreshSetupProblems() async {
+        #if HOSTED_EDITION
+        // Abonelik sürümünde anahtar yok: eksik yalnızca giriş (ya da sunucu adresi).
+        setupProblems = await hostedSetupProblems()
+        #else
         var required: [SecretAccount] = []
         if liveEngine == .deepgram {
             required += [.deepgram, .elevenlabs]
@@ -536,6 +540,7 @@ final class AppModel {
             }
         }
         setupProblems = problems
+        #endif
     }
 
     // MARK: Motor
@@ -732,6 +737,19 @@ final class AppModel {
         guard !startedSpeakers.isEmpty else {
             return
         }
+        #if HOSTED_EDITION
+        // Abonelik: toplantı oturumu ses akışları başladıktan sonra açılır (yakalama başarısızsa deneme hakkı yanmasın);
+        // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, nedeni panelde görünür.
+        do {
+            _ = try await HostedAccount.shared.startMeeting()
+        } catch {
+            Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            microphone.stop()
+            systemAudio.stop()
+            return
+        }
+        #endif
 
         // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
         // kilitli kutuda birikir, ana aktöre çubuk aralığının yarısında bir geçilir (her parça için ayrı görev
@@ -958,6 +976,15 @@ final class AppModel {
         systemAudio.stop()
         audioLevels.stop()
         consentReminderVisible = false
+        #if HOSTED_EDITION
+        // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
+        do {
+            try await HostedAccount.shared.endMeeting()
+        } catch {
+            Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı oturumu kapatılamadı: \(userFacingMessage(error: error))"))
+        }
+        #endif
         guard let finished = session else {
             return
         }
@@ -1140,6 +1167,10 @@ final class AppModel {
 
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
+        #if HOSTED_EDITION
+        // Abonelik: kaydın motoru ne olursa olsun son geçiş sunucuda (konuşmacılar ayrılır).
+        return await hostedFinalPassPlan(keyterms: recognitionKeyterms)
+        #else
         switch record.engine ?? .cloud {
         case .local where liveEngine == .appleSpeech:
             // Cihaz içi modda WhisperKit (~630 MB) indirilmez: kayıt Apple'ın konuşma tanımasıyla yeniden yazılır.
@@ -1163,6 +1194,7 @@ final class AppModel {
                 return .skip(reason: userFacingMessage(error: error))
             }
         }
+        #endif
     }
 
     /// LLM sağlayıcısı; anahtar ya da ayar yoksa nil (not adımı bunu açıkça bildirir), diğer hatalar panelde.

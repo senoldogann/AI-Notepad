@@ -913,6 +913,17 @@
         }
       }
     },
+    "%lld toplantıdan %lld tanesi kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld free meetings: %lld left"
+          }
+        }
+      }
+    },
     "1 dk sonra: %@": {
       "localizations": {
         "en": {
@@ -983,6 +994,17 @@
         }
       }
     },
+    "3 toplantı ücretsiz": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 meetings free"
+          }
+        }
+      }
+    },
     "35 dil; konuşmacılar ayrılır, %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
@@ -1033,12 +1055,89 @@
         }
       }
     },
+    "AI-Notepad sunucusu beklenmeyen bir yanıt verdi (HTTP %lld). Biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The AI-Notepad server returned an unexpected response (HTTP %lld). Try again a bit later."
+          }
+        }
+      }
+    },
+    "AI-Notepad sunucusuna ulaşılamadı; internet bağlantını kontrol et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach the AI-Notepad server; check your internet connection."
+          }
+        }
+      }
+    },
+    "AI-Notepad sunucusunda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An unexpected error occurred on the AI-Notepad server; try again a bit later."
+          }
+        }
+      }
+    },
+    "AI-Notepad sunucusundan beklenmeyen yanıt geldi (HTTP %lld). Uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected response from the AI-Notepad server (HTTP %lld). Update the app and try again."
+          }
+        }
+      }
+    },
     "AI-Notepad'i açar ve yüz yüze toplantıyı kaydetmeye başlar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Opens AI-Notepad and starts recording an in-person meeting."
+          }
+        }
+      }
+    },
+    "Abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe"
+          }
+        }
+      }
+    },
+    "Abonelik etkin; dönem %@ tarihinde yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription active; renews on %@."
+          }
+        }
+      }
+    },
+    "Aboneliğin etkin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription is active."
           }
         }
       }
@@ -1133,6 +1232,17 @@
         }
       }
     },
+    "Adil kullanım sınırı; ay başında sıfırlanır. Canlı metin bu Mac'te yazılır ve sınırdan düşmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fair-use limit; resets at the start of the month. Live text is transcribed on this Mac and doesn't count toward it."
+          }
+        }
+      }
+    },
     "Adlar kaydedilemedi: %@": {
       "localizations": {
         "en": {
@@ -1209,6 +1319,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your name marks your tasks in the note; the main language sets which language live text starts in."
+          }
+        }
+      }
+    },
+    "Adın notta sana düşen görevleri ayırır; canlı metin bu Mac'te yazılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name picks out your tasks in the note; live text is transcribed on this Mac."
           }
         }
       }
@@ -1360,6 +1481,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the key from the Keychain (%@, code %lld). Choose \"Always Allow\" in the permission dialog."
+          }
+        }
+      }
+    },
+    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma AI-Notepad sunucusundan. İlk 3 toplantı ücretsiz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No keys needed: notes, translation and speaker separation come from the AI-Notepad server. Your first 3 meetings are free."
           }
         }
       }
@@ -1580,6 +1712,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't write to Apple Notes: %@. Allow Notes for AI-Notepad in System Settings › Privacy & Security › Automation."
+          }
+        }
+      }
+    },
+    "Apple ile giriş başarısız: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Apple failed: %@"
+          }
+        }
+      }
+    },
+    "Apple ile giriş başlatılamadı; yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't start Sign in with Apple; try again."
+          }
+        }
+      }
+    },
+    "Apple ile ya da e-postayla giriş": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Apple or email"
+          }
+        }
+      }
+    },
+    "Apple kimlik jetonu gelmedi; yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple didn't return an identity token; try again."
           }
         }
       }
@@ -2359,6 +2535,17 @@
         }
       }
     },
+    "Bu Mac doğrulanamadı; uygulamayı yeniden açıp tekrar dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac couldn't be verified; reopen the app and try again."
+          }
+        }
+      }
+    },
     "Bu Mac'te": {
       "localizations": {
         "en": {
@@ -2375,6 +2562,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not installed on this Mac"
+          }
+        }
+      }
+    },
+    "Bu Mac'teki oturumu kapatır; toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signs out on this Mac; your meetings and notes stay on this Mac."
           }
         }
       }
@@ -2425,6 +2623,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bookmark this moment (highlighted in the note)"
+          }
+        }
+      }
+    },
+    "Bu ay %@ / %@ saat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month %@ / %@ hours"
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've reached this month's usage limit; it resets at the start of the month."
+          }
+        }
+      }
+    },
+    "Bu ağdan bugün çok fazla yeni deneme başlatıldı. Yarın yeniden dene ya da abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many new trials were started from this network today. Try again tomorrow or subscribe."
           }
         }
       }
@@ -2531,6 +2762,28 @@
         }
       }
     },
+    "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This requires a subscription. Subscribe in Settings › Account."
+          }
+        }
+      }
+    },
+    "Bu işleme izin yok.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This action isn't allowed."
+          }
+        }
+      }
+    },
     "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor": {
       "localizations": {
         "en": {
@@ -2577,6 +2830,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This note version is no longer in the history; reopen the menu and choose again."
+          }
+        }
+      }
+    },
+    "Bu sürüm cihaz doğrulaması istiyor; AI-Notepad'i güncelle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version requires device verification; update AI-Notepad."
           }
         }
       }
@@ -2651,12 +2915,34 @@
         }
       }
     },
+    "Bu toplantının ses işleme hakkı kapandı (gönderilen ses toplantının süresini aştı). Canlı metin kullanılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio processing for this meeting is closed (the audio sent exceeded the meeting's length). The live text is used."
+          }
+        }
+      }
+    },
     "Bu toplantının ses kaydı yok.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This meeting has no audio recording."
+          }
+        }
+      }
+    },
+    "Bu toplantının yapay zekâ kullanım hakkı doldu.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting's AI allowance is used up."
           }
         }
       }
@@ -2727,6 +3013,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prep my day"
+          }
+        }
+      }
+    },
+    "Bugünkü kullanım sınırına ulaştın; yarın yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've reached today's usage limit; try again tomorrow."
           }
         }
       }
@@ -3263,6 +3560,17 @@
         }
       }
     },
+    "Deneme bitti; yeni toplantı için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial is over; subscribe to record new meetings."
+          }
+        }
+      }
+    },
     "Deneme mesajı gönder": {
       "localizations": {
         "en": {
@@ -3751,6 +4059,28 @@
         }
       }
     },
+    "E-posta adresini sitede yazarsın; gelen bağlantı AI-Notepad'i açar ve girişi tamamlar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your email on the website; the link you receive opens AI-Notepad and completes sign-in."
+          }
+        }
+      }
+    },
+    "E-postayla giriş bağlantısı al": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get a sign-in link by email"
+          }
+        }
+      }
+    },
     "E-postayla gönder": {
       "localizations": {
         "en": {
@@ -3837,6 +4167,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manual configuration"
+          }
+        }
+      }
+    },
+    "Emin misin? Bu işlem geri alınamaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you sure? This can't be undone."
           }
         }
       }
@@ -4091,6 +4432,39 @@
         }
       }
     },
+    "Giriş bağlantısı geçersiz. E-postadaki son bağlantıyı aç ya da yeni bağlantı iste.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in link is invalid. Open the latest link in your email or request a new one."
+          }
+        }
+      }
+    },
+    "Giriş yapıldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Giriş yapılmamış. Ayarlar › Hesap'tan Apple ile ya da e-postayla giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in. Sign in with Apple or email in Settings › Account."
+          }
+        }
+      }
+    },
     "Git": {
       "localizations": {
         "en": {
@@ -4137,6 +4511,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "No open tasks to send (all sent or completed)."
+          }
+        }
+      }
+    },
+    "Gönderilen veri sunucunun sınırını aşıyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The data sent exceeds the server's limit."
           }
         }
       }
@@ -4619,6 +5004,83 @@
           "stringUnit": {
             "state": "translated",
             "value": "Herkese günaydın, toplantıya başlayalım."
+          }
+        }
+      }
+    },
+    "Hesabı kalıcı olarak sil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete account permanently"
+          }
+        }
+      }
+    },
+    "Hesabı sil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete account"
+          }
+        }
+      }
+    },
+    "Hesabı sil…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete account…"
+          }
+        }
+      }
+    },
+    "Hesabı yönet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage account"
+          }
+        }
+      }
+    },
+    "Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deletes your account, your subscription (cancelled immediately) and all your records on the server. Meetings and notes on this Mac are not deleted."
+          }
+        }
+      }
+    },
+    "Hesap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "Hesap kullanılamıyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account unavailable"
           }
         }
       }
@@ -6090,6 +6552,17 @@
         }
       }
     },
+    "Kullanım": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage"
+          }
+        }
+      }
+    },
     "Kum": {
       "localizations": {
         "en": {
@@ -7390,6 +7863,39 @@
         }
       }
     },
+    "Oturum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session"
+          }
+        }
+      }
+    },
+    "Oturumun kapandı (çıkış yapılmış ya da güvenlik nedeniyle tüm oturumlar kapatılmış). Yeniden giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session was closed (you signed out, or all sessions were closed for security). Sign in again."
+          }
+        }
+      }
+    },
+    "Oturumun sona erdi; Ayarlar › Hesap'tan yeniden giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session has ended; sign in again in Settings › Account."
+          }
+        }
+      }
+    },
     "Oturumun süresi doldu; yeniden bağlan": {
       "localizations": {
         "en": {
@@ -7538,6 +8044,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pink"
+          }
+        }
+      }
+    },
+    "Plan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plan"
           }
         }
       }
@@ -7825,6 +8342,17 @@
         }
       }
     },
+    "Servis bugün çok yoğun; yeni toplantılar ve yapay zekâ istekleri geçici olarak durduruldu. Biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service is very busy today; new meetings and AI requests are paused for now. Try again a bit later."
+          }
+        }
+      }
+    },
     "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.": {
       "localizations": {
         "en": {
@@ -7975,6 +8503,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't play audio (code %lld). Another app may be using audio; try again in a moment."
+          }
+        }
+      }
+    },
+    "Ses, toplantının süresinden ya da bu ay kalan süreden uzun; gönderilemedi.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio is longer than the meeting or than the time left this month; it couldn't be sent."
           }
         }
       }
@@ -8360,6 +8899,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask… (@ meeting, / recipe)"
+          }
+        }
+      }
+    },
+    "Sunucu adresi geçersiz: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server address is invalid: %@"
+          }
+        }
+      }
+    },
+    "Sunucu adresi güvenli değil (https olmalı): %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server address isn't secure (must be https): %@"
+          }
+        }
+      }
+    },
+    "Sunucu isteği anlamadı (%@); AI-Notepad'i güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server didn't understand the request (%@); update AI-Notepad and try again."
           }
         }
       }
@@ -9139,6 +9711,28 @@
         }
       }
     },
+    "Toplantı oturumu kapandı: yapay zekâ özellikleri toplantı sırasında ve bittikten kısa süre sonrasına kadar açıktır. Yeni bir toplantı başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The meeting session has closed: AI features are available during a meeting and for a short time after it ends. Start a new meeting."
+          }
+        }
+      }
+    },
+    "Toplantı oturumu kapatılamadı: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't close the meeting session: %@"
+          }
+        }
+      }
+    },
     "Toplantı sayfası › ⋯ › Görevleri gönder. Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar.": {
       "localizations": {
         "en": {
@@ -9862,6 +10456,39 @@
         }
       }
     },
+    "Yapay zekâ ya da konuşma tanıma servisi isteği reddetti. Sorun sürerse bize yaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The AI or speech recognition service rejected the request. If it keeps happening, contact us."
+          }
+        }
+      }
+    },
+    "Yapay zekâ ya da konuşma tanıma servisi şu an yanıt vermiyor; biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The AI or speech recognition service isn't responding right now; try again a bit later."
+          }
+        }
+      }
+    },
+    "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI features are available during a meeting and for a short time after it ends; start a meeting first."
+          }
+        }
+      }
+    },
     "Yapılandırma yazılamadı: %@. Klasör izinlerini kontrol et.": {
       "localizations": {
         "en": {
@@ -10211,6 +10838,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zapier, Make, n8n, Teams workflow"
+          }
+        }
+      }
+    },
+    "Zaten bir aboneliğin var; \"Hesabı yönet\" ile düzenleyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You already have a subscription; change it with \"Manage account\"."
           }
         }
       }
@@ -10647,6 +11285,17 @@
         }
       }
     },
+    "Çok fazla istek gönderildi; biraz bekleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many requests; wait a moment and try again."
+          }
+        }
+      }
+    },
     "Çok yüksek": {
       "localizations": {
         "en": {
@@ -10727,6 +11376,17 @@
         }
       }
     },
+    "Çıkış yap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out"
+          }
+        }
+      }
+    },
     "ÖRNEK SORULAR": {
       "localizations": {
         "en": {
@@ -10743,6 +11403,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "SUMMARY"
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı; erişimin %@ tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed; your access continues until %@. Update your card under \"Manage account\"."
           }
         }
       }
@@ -10967,6 +11638,17 @@
         }
       }
     },
+    "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial meetings are used up. To continue, subscribe in Settings › Account."
+          }
+        }
+      }
+    },
     "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır.": {
       "localizations": {
         "en": {
@@ -11100,6 +11782,17 @@
         }
       }
     },
+    "İlk 3 toplantı ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your first 3 meetings are free, no keys needed. After that, a monthly subscription."
+          }
+        }
+      }
+    },
     "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.": {
       "localizations": {
         "en": {
@@ -11126,6 +11819,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "English"
+          }
+        }
+      }
+    },
+    "İnsan doğrulaması başarısız; giriş sayfasını yenileyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Human verification failed; reload the sign-in page and try again."
           }
         }
       }
