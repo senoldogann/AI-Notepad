@@ -93,6 +93,71 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         let marked: MeetingRecord = record.markingTaskSent(trackerID: "lin", task: task).markingTaskSent(trackerID: "lin", task: task)
         #expect(marked.sentTaskKeys == ["lin": [taskKey(task: task)]])
     }
+
+    /// Bu cihazda bağlı Notion hedefi; kimlik (çalışma alanı, kullanıcı) verilmezse eski sürümde bağlanmış gibidir.
+    private func notionDestination(id: String, clientID: String, identity: NotionIdentity?, createdAt: Date) -> NoteDestination {
+        let connection: MCPConnection = MCPConnection(
+            serverURL: URL(string: "https://mcp.notion.com/mcp")!, clientID: clientID, tokenEndpoint: URL(string: "https://mcp.notion.com/token")!,
+            tokens: OAuthTokens(accessToken: "gizli-erisim-\(clientID)", refreshToken: "gizli-yenileme-\(clientID)", expiresAt: createdAt)
+        )
+        return NoteDestination(id: id, target: .notion(NotionTarget(connection: connection, pageTitle: "Özel sayfalar", identity: identity)), autoSend: true, createdAt: createdAt, needsReconnect: false)
+    }
+
+    // Notion'un gönderim anahtarı hesabın çalışma alanı ve kullanıcısıdır: iki Mac'in ayrı kayıtlı (istemci kimliği,
+    // jetonlar farklı) bağlantıları aynı anahtarı verir; anahtarda jeton yoktur. Kimliği okunmamış hedefin anahtarı yok.
+    @Test func notionSendKeyIsAccountIdentity() throws {
+        let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
+        let identity: NotionIdentity = NotionIdentity(workspaceID: "ws-1", userID: "user-1")
+        let here: NoteDestination = notionDestination(id: "bu-mac", clientID: "c1", identity: identity, createdAt: now)
+        let other: NoteDestination = notionDestination(id: "diger-mac", clientID: "c2", identity: identity, createdAt: now)
+        let key: String = try #require(destinationSendKey(destination: here))
+        #expect(key == "notion:ws-1:user-1" && destinationSendKey(destination: other) == key && !key.contains("gizli"))
+        let otherAccount: NoteDestination = notionDestination(id: "x", clientID: "c3", identity: NotionIdentity(workspaceID: "ws-2", userID: "user-1"), createdAt: now)
+        #expect(destinationSendKey(destination: otherAccount) != key)
+        #expect(destinationSendKey(destination: notionDestination(id: "eski", clientID: "c4", identity: nil, createdAt: now)) == nil)
+    }
+
+    // İki Mac aynı Notion hesabına kendiliğinden gönderiyor: diğer Mac'in işareti (kendi hedef kimliği + hesap anahtarı)
+    // burada ikinci gönderimi önler; farklı hesaba gönderim sürer. Eski sürümün kaydı (yalnızca hedef kimliği) da tanınır.
+    @Test func notionMarkFromOtherMacPreventsSecondSend() {
+        let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
+        let connected: Date = now.addingTimeInterval(-86_400)
+        let identity: NotionIdentity = NotionIdentity(workspaceID: "ws-1", userID: "user-1")
+        let here: NoteDestination = notionDestination(id: "bu-mac", clientID: "c1", identity: identity, createdAt: connected)
+        let sentElsewhere: MeetingRecord = destinationRecord(id: "diger", endedAt: now.addingTimeInterval(-60), sent: ["diger-mac", "notion:ws-1:user-1"])
+        let otherAccount: MeetingRecord = destinationRecord(id: "baska-hesap", endedAt: now.addingTimeInterval(-60), sent: ["diger-mac", "notion:ws-2:user-9"])
+        let legacy: MeetingRecord = destinationRecord(id: "eski", endedAt: now.addingTimeInterval(-60), sent: ["bu-mac"])
+        #expect(wasSent(record: sentElsewhere, destination: here) && wasSent(record: legacy, destination: here))
+        #expect(!wasSent(record: otherAccount, destination: here))
+        let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: [sentElsewhere, otherAccount, legacy], destinations: [here], now: now)
+        #expect(pending.map(\.meetingID) == ["baska-hesap"])
+        // Kimliği henüz okunmamış (eski sürümde bağlanan) hedef yalnızca kendi kimliğiyle denetlenir.
+        let unresolved: NoteDestination = notionDestination(id: "bu-mac", clientID: "c1", identity: nil, createdAt: connected)
+        #expect(!wasSent(record: sentElsewhere, destination: unresolved) && wasSent(record: legacy, destination: unresolved))
+    }
+
+    // Eski sürümün Anahtar Zinciri'ndeki Notion hedefi (kimlik alanı yok) okunur; kimlikli hedef olduğu gibi geri okunur.
+    @Test func legacyNotionTargetDecodesWithoutIdentity() throws {
+        let decoder: JSONDecoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let encoder: JSONEncoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let legacy: Data = Data(#"{"connection":{"serverURL":"https:\/\/mcp.notion.com\/mcp","clientID":"c","tokenEndpoint":"https:\/\/mcp.notion.com\/token","tokens":{"accessToken":"a","refreshToken":"r","expiresAt":"2033-05-18T03:33:20Z"}},"pageTitle":"Özel sayfalar"}"#.utf8)
+        let decoded: NotionTarget = try decoder.decode(NotionTarget.self, from: legacy)
+        #expect(decoded.identity == nil && decoded.connection.clientID == "c")
+        let resolved: NotionTarget = decoded.with(identity: NotionIdentity(workspaceID: "w", userID: "u"))
+        #expect(try decoder.decode(NotionTarget.self, from: encoder.encode(resolved)) == resolved)
+        #expect(resolved.with(connection: decoded.connection).identity == resolved.identity)
+    }
+
+    // `notion-get-self` çıktısından çalışma alanı ve kullanıcı; JSON çevresinde açıklama metni olabilir.
+    @Test func notionIdentityIsParsedFromGetSelf() throws {
+        let json: String = #"{"workspace":{"id":"ws-1","name":"Ekip"},"user":{"type":"person","id":"user-1","name":"Ş","email":"s@example.com"}}"#
+        #expect(try parseNotionIdentity(text: json) == NotionIdentity(workspaceID: "ws-1", userID: "user-1"))
+        #expect(try parseNotionIdentity(text: "Connected workspace:\n\(json)\n") == NotionIdentity(workspaceID: "ws-1", userID: "user-1"))
+        #expect(throws: MCPRemoteError.self) { try parseNotionIdentity(text: "Yetki yok") }
+        #expect(throws: MCPRemoteError.self) { try parseNotionIdentity(text: #"{"workspace":{"id":""},"user":{"id":"u"}}"#) }
+    }
 }
 
 /// Anahtar Zinciri'nde ayrı test servisinde: aynı hedefe aynı anda gelen gönderimler jetonu bir kez yeniler; yenileme
@@ -120,8 +185,8 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
-        async let first: ChannelConnection = vault.connection(id: "d", force: false)
-        async let second: ChannelConnection = vault.connection(id: "d", force: false)
+        async let first: ChannelConnection = vault.connection(id: "d")
+        async let second: ChannelConnection = vault.connection(id: "d")
         let results: [ChannelConnection] = try await [first, second]
         #expect(await counter.value == 1)
         #expect(results.allSatisfy { $0.tokens.accessToken == "yeni" })
@@ -145,7 +210,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
-        let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d", force: false) }
+        let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d") }
         var signals: AsyncStream<Void>.Iterator = started.makeAsyncIterator()
         await signals.next()
         _ = try await vault.remove(id: "d")
@@ -161,7 +226,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
         await #expect(throws: ChannelAuthError.expired(service: .slack)) {
-            try await vault.connection(id: "d", force: false)
+            try await vault.connection(id: "d")
         }
         #expect(try await vault.all().first?.needsReconnect == true)
         try deleteSecret(service: service, account: .destinations)
@@ -179,7 +244,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         try deleteSecret(service: service, account: .destinations)
         let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
         let original: MCPConnection = mcpConnection(refresh: "n1")
-        try await vault.upsert(NoteDestination(id: "n", target: .notion(NotionTarget(connection: original, pageTitle: "P")), autoSend: true, createdAt: Date(), needsReconnect: false))
+        try await vault.upsert(NoteDestination(id: "n", target: .notion(NotionTarget(connection: original, pageTitle: "P", identity: nil)), autoSend: true, createdAt: Date(), needsReconnect: false))
         await #expect(throws: MCPRemoteError.http(server: "mcp.notion.com", status: 502, body: "")) {
             try await vault.withNotion(id: "n") { (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
                 try await persist(target.connection, self.mcpConnection(refresh: "n2"))
@@ -205,10 +270,10 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         try deleteSecret(service: service, account: .destinations)
         let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
         let destination: NoteDestination = NoteDestination(
-            id: "n", target: .notion(NotionTarget(connection: mcpConnection(refresh: "n1"), pageTitle: "P")), autoSend: true, createdAt: Date(), needsReconnect: false
+            id: "n", target: .notion(NotionTarget(connection: mcpConnection(refresh: "n1"), pageTitle: "P", identity: nil)), autoSend: true, createdAt: Date(), needsReconnect: false
         )
         try await vault.upsert(destination)
-        let reconnected: NoteDestination = destination.with(target: .notion(NotionTarget(connection: mcpConnection(refresh: "yeni"), pageTitle: "P")))
+        let reconnected: NoteDestination = destination.with(target: .notion(NotionTarget(connection: mcpConnection(refresh: "yeni"), pageTitle: "P", identity: nil)))
         await #expect(throws: MCPRemoteError.expired(server: "mcp.notion.com")) {
             try await vault.withNotion(id: "n") { (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
                 try await vault.upsert(reconnected)

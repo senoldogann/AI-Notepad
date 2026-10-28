@@ -57,31 +57,81 @@ public func claudeMaxTokens(requested: Int, thinking: [String: String]?) -> Int 
 /// yedek model, akış (SSE) açık — model uzun düşünürken de bağlantıdan veri gelir, boşta zaman aşımı dolmaz.
 /// Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
 public func claudeRequestBody(request: LLMRequest, model: ClaudeModel, effort: LLMEffort) throws -> Data {
-    var outputConfig: [String: Any] = ["effort": effort.rawValue]
-    if let schemaText = request.jsonSchema {
-        outputConfig["format"] = ["type": "json_schema", "schema": try parsedSchema(text: schemaText)]
+    let format: ClaudeRequestBody.OutputFormat? = try request.jsonSchema.map { (schemaText: String) throws -> ClaudeRequestBody.OutputFormat in
+        ClaudeRequestBody.OutputFormat(type: "json_schema", schema: try parsedSchema(text: schemaText))
     }
     let thinking: [String: String]? = claudeThinking(model: model, tier: request.tier, effort: effort)
-    var body: [String: Any] = [
-        "model": model.rawValue,
-        "max_tokens": claudeMaxTokens(requested: request.maxTokens, thinking: thinking),
-        "stream": true,
-        "system": request.system,
-        "messages": [["role": "user", "content": request.userText]],
-        "output_config": outputConfig,
-    ]
-    if let thinking {
-        body["thinking"] = thinking
-    }
-    if claudeSupportsServerFallback(model: model) {
-        body["fallbacks"] = "default"
-    }
-    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    let body: ClaudeRequestBody = ClaudeRequestBody(
+        model: model.rawValue,
+        maxTokens: claudeMaxTokens(requested: request.maxTokens, thinking: thinking),
+        stream: true,
+        system: request.system,
+        messages: [LLMChatMessage(role: "user", content: request.userText)],
+        outputConfig: ClaudeRequestBody.OutputConfig(effort: effort.rawValue, format: format),
+        thinking: thinking,
+        fallbacks: claudeSupportsServerFallback(model: model) ? "default" : nil
+    )
+    return try llmRequestEncoder().encode(body)
 }
 
-/// JSON şema metnini nesneye çevirir; geçersizse `invalidSchema`.
-func parsedSchema(text: String) throws -> [String: Any] {
-    guard let schema = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
+/// Claude Messages isteğinin gövdesi; alan adları API'ninkilerdir. Boş (nil) alanlar gövdeye yazılmaz.
+struct ClaudeRequestBody: Encodable {
+    /// Yanıt biçimi: JSON şeması.
+    struct OutputFormat: Encodable {
+        let type: String
+        let schema: JSONValue
+    }
+
+    struct OutputConfig: Encodable {
+        let effort: String
+        let format: OutputFormat?
+    }
+
+    let model: String
+    let maxTokens: Int
+    let stream: Bool
+    let system: String
+    let messages: [LLMChatMessage]
+    let outputConfig: OutputConfig
+    /// Düşünmeyi kapatan alan (bkz. `claudeThinking`).
+    let thinking: [String: String]?
+    /// Sunucu tarafı yedek model (bkz. `claudeSupportsServerFallback`).
+    let fallbacks: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case maxTokens = "max_tokens"
+        case stream
+        case system
+        case messages
+        case outputConfig = "output_config"
+        case thinking
+        case fallbacks
+    }
+}
+
+/// Sohbet mesajı (Claude ve OpenAI uyumlu gövdelerde aynı biçim).
+struct LLMChatMessage: Encodable, Equatable {
+    let role: String
+    let content: String
+}
+
+/// İstek gövdelerinin kodlayıcısı: anahtarlar sıralı (gövde her seferinde aynı baytlar).
+func llmRequestEncoder() -> JSONEncoder {
+    let encoder: JSONEncoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return encoder
+}
+
+/// JSON şema metnini JSON nesnesine çevirir; geçersiz JSON ya da nesne olmayan değer `invalidSchema`.
+func parsedSchema(text: String) throws -> JSONValue {
+    let schema: JSONValue
+    do {
+        schema = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
+    } catch {
+        throw LLMError.invalidSchema(schema: "\(error): \(text)")
+    }
+    guard case .object = schema else {
         throw LLMError.invalidSchema(schema: text)
     }
     return schema

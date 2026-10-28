@@ -237,7 +237,7 @@ final class PhoneRecorder {
         }
         levels.stop()
         microphone.stop()
-        updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true), force: true)
+        updateActivityNow(state: RecordingActivityAttributes.ContentState(lastLine: activityLine.text, speaker: activityLine.speaker, isFinishing: true))
     }
 
     /// Kullanımdaki toplantılar (kayıtta ya da işleniyor): iCloud'a taşınmaz.
@@ -323,7 +323,7 @@ final class PhoneRecorder {
         phase = .recording
         consentReminderVisible = true
         startActivity(startedAt: startedAt ?? Date())
-        updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: sample[2].text, speaker: speakerLabel(speaker: .others, person: 2), isFinishing: false), force: true)
+        updateActivityNow(state: RecordingActivityAttributes.ContentState(lastLine: sample[2].text, speaker: speakerLabel(speaker: .others, person: 2), isFinishing: false))
     }
     #endif
 
@@ -338,10 +338,10 @@ final class PhoneRecorder {
         case .segment(let segment):
             if segment.isFinal, !segment.text.isEmpty {
                 enqueueTranslation(segment: segment)
-                updateActivity(state: RecordingActivityAttributes.ContentState(
+                updateActivityThrottled(state: RecordingActivityAttributes.ContentState(
                     lastLine: segment.text, speaker: segment.person.map { speakerLabel(speaker: segment.id.speaker, person: $0) } ?? "",
                     isFinishing: phase == .finishing
-                ), force: false)
+                ))
             }
         case .languageLocked(let language):
             lockedLanguage = language
@@ -584,9 +584,17 @@ final class PhoneRecorder {
         }
     }
 
-    /// Canlı etkinliği günceller; `force` değilse en fazla 2 sn'de bir (sistem sık güncellemeyi kısar).
-    private func updateActivity(state: RecordingActivityAttributes.ContentState, force: Bool) {
-        guard let activity, force || Date().timeIntervalSince(lastActivityUpdate) >= 2 else {
+    /// Canlı etkinliği en fazla 2 sn'de bir günceller (her cümlede çağrılır; sistem sık güncellemeyi kısar).
+    private func updateActivityThrottled(state: RecordingActivityAttributes.ContentState) {
+        guard Date().timeIntervalSince(lastActivityUpdate) >= 2 else {
+            return
+        }
+        updateActivityNow(state: state)
+    }
+
+    /// Canlı etkinliği hemen günceller (kayıt başladı, bitiyor, sessizlikte tazeleme).
+    private func updateActivityNow(state: RecordingActivityAttributes.ContentState) {
+        guard let activity else {
             return
         }
         lastActivityUpdate = Date()
@@ -716,7 +724,7 @@ final class PhoneRecorder {
                 }
                 self.saveRecord(record: self.liveRecord(recording: recording, status: .recording, endedAt: nil), directory: recording.directory)
                 // Sessizlikte de canlı etkinlik tazelenir: uygulama kapanırsa 2 dk sonra eskimiş görünür, saymayı sürdürmez.
-                self.updateActivity(state: RecordingActivityAttributes.ContentState(lastLine: self.activityLine.text, speaker: self.activityLine.speaker, isFinishing: false), force: true)
+                self.updateActivityNow(state: RecordingActivityAttributes.ContentState(lastLine: self.activityLine.text, speaker: self.activityLine.speaker, isFinishing: false))
             }
         }
     }

@@ -1993,8 +1993,9 @@ final class AppModel {
         }
     }
 
-    /// Hedefi kaldırır; servis tarafında da kapatılır (Slack jetonu geri alınır, Discord webhook'u silinir). Servis
-    /// tarafı kapatılamazsa hedef yine kaldırılır, neden gösterilir.
+    /// Hedefi kaldırır; servis tarafında da kapatılır (Slack jetonu ve Notion izni geri alınır, Discord webhook'u
+    /// silinir). Servis tarafı kapatılamazsa hedef yine kaldırılır (kullanıcı kaldırmak istedi); neden ve erişimin
+    /// servisin ayarlarından nasıl kaldırılacağı gösterilir.
     func removeDestination(id: String) async {
         do {
             let removed: NoteDestination = try await destinationVault.remove(id: id)
@@ -2002,8 +2003,8 @@ final class AppModel {
             do {
                 try await revokeDestination(destination: removed)
             } catch {
-                Self.logger.warning("Hedef servis tarafında kapatılamadı, hata: \(String(describing: error), privacy: .private)")
-                errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Eski bağlantı servis tarafında kapatılamadı: \(userFacingMessage(error: error))"))
+                Self.logger.warning("Hedef servis tarafında kapatılamadı, hedef: \(destinationName(destination: removed), privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: destinationName(destination: removed), error: error))
             }
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -2012,7 +2013,7 @@ final class AppModel {
 
     /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
     func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
-        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID, force: false)
+        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID)
         // Bağlantı alınırken jetonlar yenilenip yazılmış olabilir: bellekteki liste eski jetonlarla kalmasın.
         await refreshDestinationList()
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
@@ -2039,7 +2040,7 @@ final class AppModel {
         notesInFlight.insert(sendKey)
         defer { notesInFlight.remove(sendKey) }
         // Elle gönderim belirsiz işaretini kaldırır: kullanıcı kontrol edip yeniden göndermeyi seçti.
-        setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: false)
+        clearUncertain(meetingID: meetingID, destinationID: destinationID)
         do {
             try await deliverNote(vault: destinationVault, destination: destination, record: record, note: note)
             markSent(meetingID: meetingID, destination: destination)
@@ -2047,7 +2048,7 @@ final class AppModel {
             return nil
         } catch let error as DeliveryUncertainError {
             // Not gitmiş olabilir: kendiliğinden yeniden gönderilmez (iki kez düşmesin); kullanıcıya gösterilir.
-            setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: true)
+            markUncertain(meetingID: meetingID, destinationID: destinationID)
             Self.logger.warning("Not gönderiminin sonucu belirsiz, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return String(localized: "\(destinationName(destination: destination)): \(userFacingMessage(error: error))")
         } catch {
@@ -2165,14 +2166,22 @@ final class AppModel {
         Set(UserDefaults.standard.stringArray(forKey: SettingsKey.uncertainSends) ?? [])
     }
 
-    private func setUncertain(meetingID: String, destinationID: String, uncertain: Bool) {
-        let key: String = meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)
-        let current: Set<String> = uncertainSends()
-        let updated: Set<String> = uncertain ? current.union([key]) : current.subtracting([key])
-        guard updated != current else {
+    /// Gönderimin sonucu belirsiz: kendiliğinden yeniden gönderilmez.
+    private func markUncertain(meetingID: String, destinationID: String) {
+        storeUncertainSends(sends: uncertainSends().union([meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)]))
+    }
+
+    /// Belirsiz işareti kalkar (kullanıcı elle yeniden gönderdi).
+    private func clearUncertain(meetingID: String, destinationID: String) {
+        storeUncertainSends(sends: uncertainSends().subtracting([meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)]))
+    }
+
+    /// Belirsiz gönderimleri yazar (değişmediyse yazılmaz).
+    private func storeUncertainSends(sends: Set<String>) {
+        guard sends != uncertainSends() else {
             return
         }
-        UserDefaults.standard.set(updated.sorted(), forKey: SettingsKey.uncertainSends)
+        UserDefaults.standard.set(sends.sorted(), forKey: SettingsKey.uncertainSends)
     }
 
     /// İşleme sürerken gönderilen hedefler; işleme bitince kayda işlenir.
@@ -2190,6 +2199,7 @@ final class AppModel {
         repeat {
             autoSendRequested = false
             await refreshDestinationList()
+            await resolveMissingNotionIdentities()
             let uncertain: Set<String> = uncertainSends()
             let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
                 .filter { (item: (meetingID: String, destinationID: String)) -> Bool in
@@ -2197,9 +2207,12 @@ final class AppModel {
                         && !uncertain.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID))
                 }
             for item in pending {
-                // Liste kurulduktan sonra elle gönderilmeye başlandıysa ya da gönderildiyse atlanır (not iki kez düşmesin).
-                let sentMeanwhile: Bool = (meetings.first { $0.id == item.meetingID }?.sentDestinationIDs ?? []).contains(item.destinationID)
-                    || (pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID)
+                // Liste kurulduktan sonra elle gönderilmeye başlandıysa ya da gönderildiyse (başka Mac'ten de) atlanır
+                // (not iki kez düşmesin).
+                let record: MeetingRecord? = meetings.first { $0.id == item.meetingID }
+                let destination: NoteDestination? = destinations.first { $0.id == item.destinationID }
+                let sentMeanwhile: Bool = (pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID)
+                    || (record.flatMap { (current: MeetingRecord) -> Bool? in destination.map { wasSent(record: current, destination: $0) } } ?? false)
                 guard !sentMeanwhile, !notesInFlight.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID)) else {
                     continue
                 }
@@ -2213,21 +2226,52 @@ final class AppModel {
         } while autoSendRequested
     }
 
-    /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler.
+    /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler; hesabın kimliği hemen okunur (bkz.
+    /// `resolveMissingNotionIdentities`).
     func connectNotion() async throws {
         let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
-        try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
+        try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"), identity: nil)))
+        await resolveMissingNotionIdentities()
     }
 
     /// Notion hedefini yeniden bağlar: kimliği, kendiliğinden gönderim ayarı ve bağlanma anı korunur (bağlantı koptuğu
-    /// sırada kaçan toplantılar da gönderilir, gönderim geçmişi kaybolmaz).
+    /// sırada kaçan toplantılar da gönderilir, gönderim geçmişi kaybolmaz). Başka bir hesapla bağlanılmış olabileceği
+    /// için hesabın kimliği yeniden okunur.
     func reconnectNotion(destinationID: String) async throws {
         let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
-        try await replaceDestinationTarget(id: destinationID, target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"))))
+        try await replaceDestinationTarget(
+            id: destinationID, target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"), identity: nil))
+        )
+        await resolveMissingNotionIdentities()
+    }
+
+    /// Kimliği bilinmeyen Notion hedeflerinin çalışma alanını ve kullanıcısını okur (yeni bağlanan, yeniden bağlanan ve
+    /// eski sürümde bağlananlar); kimlik, notun başka Mac'ten aynı Notion hesabına gönderildiğini tanımak içindir (bkz.
+    /// `destinationSendKey`). Okunamazsa hedef kimliksiz kalır, uyarı loglanır ve sonraki gönderim turunda yeniden
+    /// denenir: gönderim engellenmez, o zamana dek gönderildi işareti yalnızca bu cihazın hedef kimliğiyle denetlenir.
+    private func resolveMissingNotionIdentities() async {
+        let missing: [String] = destinations.compactMap { (destination: NoteDestination) -> String? in
+            guard case .notion(let target) = destination.target, target.identity == nil, !destination.needsReconnect else {
+                return nil
+            }
+            return destination.id
+        }
+        guard !missing.isEmpty else {
+            return
+        }
+        for id in missing {
+            do {
+                try await destinationVault.resolveNotionIdentity(id: id)
+                Self.logger.info("Notion hesabının kimliği okundu, hedef: \(id, privacy: .public)")
+            } catch {
+                Self.logger.warning("Notion hesabının kimliği okunamadı, hedef: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            }
+        }
+        await refreshDestinationList()
     }
 
     // MARK: Görev araçları (Linear, Jira)
@@ -2247,18 +2291,30 @@ final class AppModel {
                 try await validateTracker(service: current.service, connection: current.connection, persist: persist)
             }
         } catch TaskTrackerError.noCreateTool(let name) {
-            try await trackerVault.remove(id: tracker.id)
+            await revokeTracker(tracker: try await trackerVault.remove(id: tracker.id))
             throw TaskTrackerError.noCreateTool(service: name)
         }
     }
 
+    /// Görev aracını kaldırır; OAuth izni sunucuda da geri alınır (bkz. `revokeTracker`).
     func removeTracker(id: String) async {
         do {
-            try await trackerVault.remove(id: id)
+            await revokeTracker(tracker: try await trackerVault.remove(id: id))
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
         await refreshTrackerList()
+    }
+
+    /// Kaldırılan aracın OAuth iznini yetkilendirme sunucusunda geri alır. Geri alınamazsa araç yine kaldırılmış kalır
+    /// (kullanıcı kaldırmak istedi); neden ve erişimin servisin ayarlarından nasıl kaldırılacağı gösterilir.
+    private func revokeTracker(tracker: TaskTracker) async {
+        do {
+            try await revokeMCPConnection(connection: tracker.connection)
+        } catch {
+            Self.logger.warning("Görev aracının izni geri alınamadı, servis: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: tracker.service.displayName, error: error))
+        }
     }
 
     func setTrackerTarget(id: String, target: String) async {
@@ -2278,15 +2334,16 @@ final class AppModel {
         }
     }
 
-    /// Toplantının görevlerini araçta iş olarak açar (`onlyMine`: yalnız sana düşenler); daha önce gönderilenler
-    /// yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
-    func sendTasks(meetingID: String, trackerID: String, onlyMine: Bool) async {
+    /// Toplantının kapsamdaki görevlerini (`scope`: yalnız sana düşenler ya da hepsi) araçta iş olarak açar; daha önce
+    /// gönderilenler yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
+    func sendTasks(meetingID: String, trackerID: String, scope: TaskSendScope) async {
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
               let tracker = taskTrackers.first(where: { $0.id == trackerID }) else {
             return
         }
         let sent: [String] = record.sentTaskKeys?[trackerID] ?? []
-        let tasks: [NoteTask] = note.tasks.filter { (onlyMine ? $0.isMine : true) && !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
+        let tasks: [NoteTask] = tasksInScope(tasks: note.tasks, scope: scope)
+            .filter { !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
         guard !tasks.isEmpty else {
             showSendState(state: .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış).")), meetingID: meetingID, states: \.trackerStates)
             return
@@ -2833,9 +2890,14 @@ final class AppModel {
         }
     }
 
-    /// iCloud eşitlemesini açar ya da kapatır (bkz. `CloudSyncController.setEnabled`).
-    func setCloudSync(enabled: Bool) async {
-        await cloud.setEnabled(enabled, excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
+    /// iCloud eşitlemesini açar (bkz. `CloudSyncController.enable`).
+    func enableCloudSync() async {
+        await cloud.enable(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
+    }
+
+    /// iCloud eşitlemesini kapatır (bkz. `CloudSyncController.disable`).
+    func disableCloudSync() async {
+        await cloud.disable { [weak self] in self?.reloadMeetings() }
     }
 
     /// iCloud'a taşınmayacak toplantılar: kayıtta, işlenen ya da düzenlenen ve çalınan (dosyaları kullanımda).

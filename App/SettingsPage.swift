@@ -458,7 +458,13 @@ private struct CloudSyncRow: View {
             Toggle("iCloud ile eşitle", isOn: Binding<Bool>(
                 get: { model.cloud.location == .iCloud },
                 set: { (enabled: Bool) -> Void in
-                    Task { await model.setCloudSync(enabled: enabled) }
+                    Task {
+                        if enabled {
+                            await model.enableCloudSync()
+                        } else {
+                            await model.disableCloudSync()
+                        }
+                    }
                 }
             ))
             .settingsToggle()

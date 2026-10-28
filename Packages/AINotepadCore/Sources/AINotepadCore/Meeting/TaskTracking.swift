@@ -21,6 +21,22 @@ public func myTasks(meetings: [MeetingRecord]) -> [(record: MeetingRecord, task:
     }
 }
 
+/// Görev aracına gönderilecek görevlerin kapsamı.
+public enum TaskSendScope: Sendable, Equatable {
+    /// Yalnızca kullanıcıya düşenler.
+    case mine
+    /// Toplantının tüm görevleri.
+    case all
+}
+
+/// Kapsamdaki görevler (verilen sırada). Saf fonksiyondur.
+public func tasksInScope(tasks: [NoteTask], scope: TaskSendScope) -> [NoteTask] {
+    switch scope {
+    case .mine: tasks.filter(\.isMine)
+    case .all: tasks
+    }
+}
+
 /// Görev tamamlandı mı. Saf fonksiyondur.
 public func isTaskDone(record: MeetingRecord, task: NoteTask) -> Bool {
     (record.completedTasks ?? []).contains(taskKey(task: task))

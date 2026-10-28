@@ -157,6 +157,16 @@
         }
       }
     },
+    "%@ bağlantısı bu cihazdan kaldırıldı ama %@ tarafında kapatılamadı (%@). AI-Notepad'in erişimini %@ ayarlarından kaldır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ connection was removed from this device, but it couldn't be closed on the %@ side (%@). Remove AI-Notepad's access in your %@ settings."
+          }
+        }
+      }
+    },
     "%@ bağlantısında iş açan araç bulunamadı; sunucunun araçları değişmiş olabilir. Uygulamayı güncelle ya da yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -234,6 +244,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ is already assigned to the other action."
+          }
+        }
+      }
+    },
+    "%@ erişimin uygulamadan geri alınmasını desteklemiyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ doesn't support revoking access from the app."
           }
         }
       }
@@ -3848,16 +3868,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "English"
-          }
-        }
-      }
-    },
-    "Eski bağlantı servis tarafında kapatılamadı: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't close the old connection on the service side: %@"
           }
         }
       }

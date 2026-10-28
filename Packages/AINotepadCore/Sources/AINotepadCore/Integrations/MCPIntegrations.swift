@@ -48,24 +48,83 @@ func mcpCallbackCode(url: URL, expectedState: String, server: String) throws -> 
 
 // MARK: Notion
 
+/// Notion bağlantısının cihazdan bağımsız kimliği: bağlanılan çalışma alanı ve kullanıcı. Notlar bu kullanıcının o
+/// çalışma alanındaki özel sayfalarına yazıldığı için aynı kimlik, aynı hedef demektir (başka Mac'teki bağlantı da).
+/// Gizli değildir (jeton içermez); toplantı kaydındaki gönderildi işaretinde kullanılır.
+public struct NotionIdentity: Sendable, Equatable, Codable {
+    public let workspaceID: String
+    public let userID: String
+
+    public init(workspaceID: String, userID: String) {
+        self.workspaceID = workspaceID
+        self.userID = userID
+    }
+}
+
 /// Notion hedefi: Notion MCP bağlantısı. Notlar Notion'da özel sayfa olarak oluşur (üst sayfa seçmek gerekmez).
 public struct NotionTarget: Sendable, Equatable, Codable {
     public let connection: MCPConnection
     /// Arayüzdeki açıklama (ör. "Özel sayfalar").
     public let pageTitle: String
+    /// Çalışma alanı ve kullanıcı (`notion-get-self`); bağlandıktan sonra okunur. Eski sürümde bağlanan ya da henüz
+    /// okunamamış hedefte nil (kayıtta alan yoktur).
+    public let identity: NotionIdentity?
 
-    public init(connection: MCPConnection, pageTitle: String) {
+    public init(connection: MCPConnection, pageTitle: String, identity: NotionIdentity?) {
         self.connection = connection
         self.pageTitle = pageTitle
+        self.identity = identity
     }
 
     public func with(connection newConnection: MCPConnection) -> NotionTarget {
-        NotionTarget(connection: newConnection, pageTitle: pageTitle)
+        NotionTarget(connection: newConnection, pageTitle: pageTitle, identity: identity)
+    }
+
+    public func with(identity newIdentity: NotionIdentity) -> NotionTarget {
+        NotionTarget(connection: connection, pageTitle: pageTitle, identity: newIdentity)
     }
 }
 
 /// Notion MCP'nin sayfa oluşturma aracı (Notion'un belgelediği ad).
 let notionCreatePagesTool: String = "notion-create-pages"
+
+/// Notion MCP'nin bağlanılan çalışma alanını ve kullanıcıyı veren aracı (Notion'un belgelediği ad).
+let notionGetSelfTool: String = "notion-get-self"
+
+/// `notion-get-self` yanıtının kullanılan alanları.
+private struct NotionSelfResponse: Decodable {
+    struct Item: Decodable {
+        let id: String
+    }
+
+    let workspace: Item
+    let user: Item
+}
+
+/// `notion-get-self` metin çıktısından kimlik: çıktı JSON nesnesidir; önünde ya da arkasında açıklama metni olsa da
+/// ilk `{` ile son `}` arası okunur. Okunamazsa `invalidResponse`. Saf fonksiyondur.
+func parseNotionIdentity(text: String) throws -> NotionIdentity {
+    guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
+        throw MCPRemoteError.invalidResponse(server: "mcp.notion.com", reason: "\(notionGetSelfTool) JSON vermedi: \(text.prefix(200))")
+    }
+    let decoded: NotionSelfResponse
+    do {
+        decoded = try JSONDecoder().decode(NotionSelfResponse.self, from: Data(text[start...end].utf8))
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: "mcp.notion.com", reason: "\(notionGetSelfTool): \(error.localizedDescription)")
+    }
+    guard !decoded.workspace.id.isEmpty, !decoded.user.id.isEmpty else {
+        throw MCPRemoteError.invalidResponse(server: "mcp.notion.com", reason: "\(notionGetSelfTool): boş kimlik")
+    }
+    return NotionIdentity(workspaceID: decoded.workspace.id, userID: decoded.user.id)
+}
+
+/// Notion bağlantısının çalışma alanını ve kullanıcısını okur (`notion-get-self`); jeton yenilenirse `persist` ile hemen
+/// saklanır.
+public func fetchNotionIdentity(connection: MCPConnection, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> NotionIdentity {
+    let session: MCPRemoteSession = try await openMCPSession(connection: connection, persist: persist)
+    return try parseNotionIdentity(text: try await session.callTool(name: notionGetSelfTool, arguments: .object([:])))
+}
 
 /// Notion'a yazılacak sayfa: başlık ve Markdown içerik (önce görevler, sonra kararlar, özet ve konu akışı). Saf
 /// fonksiyondur.
@@ -179,8 +238,14 @@ public actor TrackerVault {
         return tracker
     }
 
-    public func remove(id: String) throws {
-        try saveTaskTrackers(trackers: try all().filter { $0.id != id }, service: service)
+    /// Aracı kaldırır; kaldırılan araç (OAuth iznini sunucuda geri almak için) döner.
+    public func remove(id: String) throws -> TaskTracker {
+        let current: [TaskTracker] = try all()
+        guard let removed = current.first(where: { $0.id == id }) else {
+            throw TaskTrackerError.notFound(id: id)
+        }
+        try saveTaskTrackers(trackers: current.filter { $0.id != id }, service: service)
+        return removed
     }
 
     public func setTarget(id: String, target: String) throws {
