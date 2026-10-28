@@ -521,11 +521,16 @@ struct MeetingDetailPage: View {
         let spans: [SpeakerSpan] = speakerSpans(paragraphs: paragraphs)
         let totalSec: Double = paragraphs.map(\.endSec).max() ?? 0
         return VStack(alignment: .leading, spacing: 0) {
+            // Kapak şeridi: toplantının gradyanı (yazı altta, beyaz zeminde).
+            CoverImage(seed: record.id)
+                .frame(height: 132)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous))
+                .padding(EdgeInsets(top: -24, leading: -26, bottom: 18, trailing: -26))
             Text(record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(interfaceLocale())))
                 .appFont(size: 12, weight: .medium)
                 .tracking(0.6)
                 .textCase(.uppercase)
-                .opacity(0.85)
+                .foregroundStyle(Theme.muted)
             Group {
                 if isRenaming {
                     TextField("Toplantı adı", text: $draftTitle)
@@ -545,9 +550,9 @@ struct MeetingDetailPage: View {
                         .hoverHint("Yeniden adlandırmak için çift tıkla", alignment: .leading, edge: .bottom)
                 }
             }
-            .appFont(size: 30, weight: .regular)
-            .tracking(-0.6)
-            .padding(.top, 8)
+            .appFont(size: 28, weight: .semibold)
+            .tracking(-0.7)
+            .padding(.top, 6)
             FlowLayout(spacing: 6, lineSpacing: 6) {
                 // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
                 let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
@@ -555,22 +560,20 @@ struct MeetingDetailPage: View {
                     HStack(spacing: -7) {
                         ForEach(Array(speakers.prefix(4).enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
                             SpeakerAvatar(text: avatarText(key: item.element.key, speakerNames: record.speakerNames), color: speakerColor(key: item.element.key), size: 24)
-                                .overlay(Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5))
+                                .overlay(Circle().strokeBorder(Theme.card, lineWidth: 1.5))
                                 .zIndex(Double(4 - item.offset))
                         }
                     }
                     .padding(.trailing, 4)
-                    // Kapak koyu ortamda çizilir; rozetler açık zeminli kalsın (gradyan üstünde soluk ve bulanık görünüyordu).
-                    .environment(\.colorScheme, .light)
                     .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
                 }
                 ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
                     Text(chip)
                         .appFont(size: 12, weight: .medium)
+                        .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.16), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22)))
+                        .background(Theme.soft, in: Capsule())
                 }
             }
             .padding(.top, 12)
@@ -583,15 +586,15 @@ struct MeetingDetailPage: View {
                 .padding(.top, 18)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Theme.ink)
         .padding(EdgeInsets(top: 24, leading: 26, bottom: 18, trailing: 26))
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Yalnızca zemin kırpılır: düğme ipuçları kapağın dışına taşabilsin.
+        // Yalnızca zemin kırpılır: düğme ipuçları kartın dışına taşabilsin.
         .background {
-            LivingCoverBackground(seed: record.id)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Theme.card)
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.line))
         }
-        .environment(\.colorScheme, .dark)
     }
 
     /// Kapaktaki çipler: süre, dil, konuşmacı, karar ve terim sayısı (olanlar).
@@ -614,7 +617,7 @@ struct MeetingDetailPage: View {
             HStack(spacing: DesignTokens.Spacing.s) {
                 listenButton
                 Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .disabled(isLocked)
                     .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
                 Menu {
@@ -625,7 +628,7 @@ struct MeetingDetailPage: View {
                     Label("Tarif", systemImage: "wand.and.stars")
                 }
                 .menuStyle(.button)
-                .buttonStyle(.coverGlass)
+                .buttonStyle(.pill)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .disabled(record.note == nil)
@@ -636,20 +639,20 @@ struct MeetingDetailPage: View {
                         Label("Paylaş", systemImage: "square.and.arrow.up")
                     }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde", alignment: .trailing, edge: .bottom)
                 }
                 Button("PDF", systemImage: "doc.richtext") { exportPDF() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .trailing, edge: .bottom)
                 Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kaydet", alignment: .trailing, edge: .bottom)
                 Button("Kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(.coverGlass)
+                    .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
                 moreMenu {
                     fileExportItems
@@ -685,12 +688,12 @@ struct MeetingDetailPage: View {
                     play(from: 0)
                 }
             }
-            .buttonStyle(.bannerPrimary)
+            .buttonStyle(.pillPrimary)
             .hoverHint("Baştan dinle; çalan kelime renklenir", alignment: .leading, edge: .bottom)
         }
     }
 
-    /// "⋯" menüsü: kapak üstünde cam daire.
+    /// "⋯" menüsü: başlık kartında hap.
     private func moreMenu(@ViewBuilder items: () -> some View) -> some View {
         Menu {
             items()
@@ -699,7 +702,7 @@ struct MeetingDetailPage: View {
             Image(systemName: "ellipsis").frame(width: 16, height: 16)
         }
         .menuStyle(.button)
-        .buttonStyle(.coverGlass)
+        .buttonStyle(.pill)
         .menuIndicator(.hidden)
         .fixedSize()
         .hoverHint("Diğer işlemler", alignment: .trailing, edge: .bottom)
@@ -2008,7 +2011,7 @@ private struct SpeakerAvatar: View {
     }
 }
 
-/// Kapaktaki konuşmacı zaman çizgisi: kim ne zaman konuştu; çalarken beyaz okuma çizgisi; tıklayınca oradan çalar.
+/// Başlık kartındaki konuşmacı zaman çizgisi: kim ne zaman konuştu; çalarken okuma çizgisi; tıklayınca oradan çalar.
 private struct SpeakerTimeline: View {
     let spans: [SpeakerSpan]
     let totalSec: Double
@@ -2023,7 +2026,7 @@ private struct SpeakerTimeline: View {
                 let width: CGFloat = proxy.size.width
                 ZStack(alignment: .leading) {
                     ZStack(alignment: .leading) {
-                        Rectangle().fill(Color.black.opacity(0.28))
+                        Rectangle().fill(Theme.soft)
                         ForEach(Array(spans.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerSpan)) in
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(speakerColor(key: item.element.key))
@@ -2487,7 +2490,7 @@ private struct Playhead: View {
     var body: some View {
         if player.meetingID == meetingID {
             Capsule()
-                .fill(Color.white)
+                .fill(Theme.ink)
                 .frame(width: 3, height: 14)
                 .shadow(color: .black.opacity(0.35), radius: 2)
                 .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)

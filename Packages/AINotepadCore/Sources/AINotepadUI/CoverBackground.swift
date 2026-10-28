@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Toplantı kapağı (kartlar): kimliğinden sabit renk ailesiyle durgun film gradyanı ve yazı okunsun diye altta hafif
-/// kararma. Toplantı sayfasının başlığı hareketli sürümü (`LivingCoverBackground`) kullanır.
+/// Üstüne beyaz yazı konan toplantı kapağı (iPhone kartları, görev grupları): kimliğinden sabit renk ailesiyle durgun
+/// film gradyanı ve yazı okunsun diye altta kararma. Yazısı kapağın altında olan kartlar `CoverImage` kullanır.
 public struct CoverBackground: View {
     let seed: String
 
@@ -11,12 +11,12 @@ public struct CoverBackground: View {
 
     public var body: some View {
         FilmGradient(seed: seed, palette: filmPalette(seed: seed))
-            .overlay { LinearGradient(colors: [.clear, .black.opacity(0.32)], startPoint: .center, endPoint: .bottom) }
+            .overlay { LinearGradient(colors: [.clear, .black.opacity(0.38)], startPoint: .top, endPoint: .bottom) }
     }
 }
 
-/// Toplantı sayfasının kapağı: kartla aynı aile ve düzen, yavaşça akar.
-public struct LivingCoverBackground: View {
+/// Yalnızca görsel kapak (yazı altında): kimliğinden sabit renk ailesiyle durgun film gradyanı, kararma yok.
+public struct CoverImage: View {
     let seed: String
 
     public init(seed: String) {
@@ -24,8 +24,7 @@ public struct LivingCoverBackground: View {
     }
 
     public var body: some View {
-        LivingFilmGradient(seed: seed, palette: filmPalette(seed: seed))
-            .overlay { LinearGradient(colors: [.clear, .black.opacity(0.28)], startPoint: .center, endPoint: .bottom) }
+        FilmGradient(seed: seed, palette: filmPalette(seed: seed))
     }
 }
 

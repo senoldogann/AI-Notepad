@@ -412,14 +412,14 @@ private struct AskIntro: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Image(systemName: "sparkle.magnifyingglass")
                         .appFont(size: 22, weight: .medium)
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(Color.black.opacity(0.7))
                     Text("Toplantılarına sor")
-                        .appFont(size: 34, weight: .regular)
-                        .tracking(-0.6)
-                        .foregroundStyle(.white)
+                        .appFont(size: 32, weight: .semibold)
+                        .tracking(-0.8)
+                        .foregroundStyle(Color.black)
                     Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                         .appFont(size: 14, weight: .regular)
-                        .foregroundStyle(.white.opacity(0.82))
+                        .foregroundStyle(Color.black.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
                         IntroStat(text: Text("\(meetings.count) toplantı"))
@@ -454,10 +454,9 @@ private struct IntroStat: View {
     var body: some View {
         text
             .appFont(size: 12, weight: .medium)
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.black.opacity(0.75))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(.white.opacity(0.16), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.22)))
+            .background(.white.opacity(0.55), in: Capsule())
     }
 }

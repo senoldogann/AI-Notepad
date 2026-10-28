@@ -288,7 +288,7 @@ struct MeetingReadView: View {
         .foregroundStyle(.white)
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .bottomLeading)
-        .background { LivingCoverBackground(seed: record.id) }
+        .background { CoverBackground(seed: record.id) }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .environment(\.colorScheme, .dark)
     }
