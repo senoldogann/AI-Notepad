@@ -1,0 +1,34 @@
+{
+  "name": "ainotepad-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env production",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "migrate:local": "wrangler d1 migrations apply ainotepad --local",
+    "migrate:production": "wrangler d1 migrations apply ainotepad-production --remote --env production"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
+    "@peculiar/x509": "3.1.0",
+    "cborg": "6.2.0",
+    "jose": "6.2.13",
+    "reflect-metadata": "0.2.2",
+    "stripe": "23.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.9",
+    "@cloudflare/workers-types": "5.20261028.1",
+    "@types/node": "26.6.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5",
+    "wrangler": "4.154.0"
+  },
+  "allowScripts": {
+    "workerd@1.20261023.1": true,
+    "esbuild@0.28.2": true
+  }
+}

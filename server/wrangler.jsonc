@@ -1,0 +1,105 @@
+// AI-Notepad abonelik sürümü sunucusu (Cloudflare Worker).
+// Gizli değerler burada değil, `wrangler secret put` ile girilir (bkz. README.md).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ainotepad-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ainotepad",
+      // `wrangler d1 create ainotepad` çıktısındaki kimlik buraya yazılır.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir.
+  "ratelimits": [
+    { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
+    { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
+    { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SITE_ORIGIN": "http://localhost:8788",
+    "APPLE_CLIENT_IDS": "com.senoldogan.AINotepadHosted",
+    "APP_ATTEST_POLICY": "optional",
+    "APP_ATTEST_ENVIRONMENT": "development",
+    "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
+    "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
+    "TRIAL_MEETINGS": "3",
+    "TRIAL_MAX_MEETING_MINUTES": "90",
+    "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
+    "MONTHLY_CAP_HOURS": "10",
+    "MEETING_GRACE_MINUTES": "30",
+    "TRIAL_MEETING_TOKEN_BUDGET": "600000",
+    "SUBSCRIBER_MEETING_TOKEN_BUDGET": "1500000",
+    "LLM_MAX_TOKENS": "8192",
+    "LLM_EFFORT": "low",
+    "LLM_MAX_REQUEST_BYTES": "400000",
+    "LLM_MAX_INPUT_TOKENS": "100000",
+    "TRANSCRIBE_MAX_BYTES": "95000000",
+    "TRANSCRIBE_MAX_KEYTERMS": "100",
+    "SCRIBE_USD_PER_HOUR": "0.22",
+    "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+    "DAILY_SPEND_CEILING_USD": "25",
+    "REFRESH_TOKEN_DAYS": "60",
+    "EMAIL_SENDER": "dev",
+    "EMAIL_FROM": "AI-Notepad <giris@example.com>",
+    "EMAIL_LINK_URL": "http://localhost:8788/giris/eposta",
+    "STRIPE_PRICE_ID": "price_placeholder"
+  },
+  "env": {
+    "production": {
+      "name": "ainotepad-server-production",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "ainotepad-production",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        { "name": "AUTH_IP_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 300, "period": 60 } },
+        { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
+        { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "SITE_ORIGIN": "https://ainotepad.pages.dev",
+        "APPLE_CLIENT_IDS": "com.senoldogan.AINotepadHosted",
+        "APP_ATTEST_POLICY": "optional",
+        "APP_ATTEST_ENVIRONMENT": "production",
+        "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
+        "APP_ATTEST_ALLOWED_CATEGORIES": "6",
+        "TRIAL_MEETINGS": "3",
+        "TRIAL_MAX_MEETING_MINUTES": "90",
+        "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
+        "MONTHLY_CAP_HOURS": "10",
+        "MEETING_GRACE_MINUTES": "30",
+        "TRIAL_MEETING_TOKEN_BUDGET": "600000",
+        "SUBSCRIBER_MEETING_TOKEN_BUDGET": "1500000",
+        "LLM_MAX_TOKENS": "8192",
+        "LLM_EFFORT": "low",
+        "LLM_MAX_REQUEST_BYTES": "400000",
+        "LLM_MAX_INPUT_TOKENS": "100000",
+        "TRANSCRIBE_MAX_BYTES": "95000000",
+        "TRANSCRIBE_MAX_KEYTERMS": "100",
+        "SCRIBE_USD_PER_HOUR": "0.22",
+        "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+        "DAILY_SPEND_CEILING_USD": "25",
+        "REFRESH_TOKEN_DAYS": "60",
+        "EMAIL_SENDER": "resend",
+        "EMAIL_FROM": "AI-Notepad <giris@example.com>",
+        "EMAIL_LINK_URL": "https://ainotepad.pages.dev/giris/eposta",
+        "STRIPE_PRICE_ID": "price_placeholder"
+      }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+/** İstemciye dönen hata kodları; her biri sabit bir HTTP durumuna bağlıdır. */
+export type ErrorCode =
+  | "bad_request"
+  | "invalid_body"
+  | "unauthorized"
+  | "invalid_token"
+  | "forbidden"
+  | "not_found"
+  | "method_not_allowed"
+  | "length_required"
+  | "payload_too_large"
+  | "unsupported_media_type"
+  | "rate_limited"
+  | "turnstile_failed"
+  | "attestation_required"
+  | "attestation_invalid"
+  | "assertion_invalid"
+  | "challenge_invalid"
+  | "subscription_required"
+  | "trial_exhausted"
+  | "monthly_cap_reached"
+  | "meeting_not_active"
+  | "meeting_budget_exhausted"
+  | "audio_too_long"
+  | "upstream_rejected"
+  | "upstream_unavailable"
+  | "spend_ceiling_reached"
+  | "webhook_invalid"
+  | "internal_error";
+
+const statusByCode: Readonly<Record<ErrorCode, number>> = {
+  bad_request: 400,
+  invalid_body: 400,
+  unauthorized: 401,
+  invalid_token: 401,
+  forbidden: 403,
+  not_found: 404,
+  method_not_allowed: 405,
+  length_required: 411,
+  payload_too_large: 413,
+  unsupported_media_type: 415,
+  rate_limited: 429,
+  turnstile_failed: 403,
+  attestation_required: 403,
+  attestation_invalid: 400,
+  assertion_invalid: 403,
+  challenge_invalid: 400,
+  subscription_required: 402,
+  trial_exhausted: 402,
+  monthly_cap_reached: 403,
+  meeting_not_active: 403,
+  meeting_budget_exhausted: 429,
+  audio_too_long: 413,
+  upstream_rejected: 502,
+  upstream_unavailable: 502,
+  spend_ceiling_reached: 503,
+  webhook_invalid: 400,
+  internal_error: 500,
+};
+
+/**
+ * İstemciye gösterilecek hata. Mesaj kullanıcıya/istemciye açıktır: gizli değer, jeton, toplantı içeriği ya da üst
+ * servis gövdesi içermez.
+ */
+export class ApiError extends Error {
+  override readonly name: string = "ApiError";
+  readonly code: ErrorCode;
+  readonly status: number;
+
+  constructor(code: ErrorCode, message: string) {
+    super(message);
+    this.code = code;
+    this.status = statusByCode[code];
+  }
+}
+
+/** Üst servis (Anthropic, ElevenLabs, Apple, Stripe, Resend, Turnstile) hatası; gövde değil yalnızca durum taşır. */
+export class UpstreamError extends Error {
+  override readonly name: string = "UpstreamError";
+  readonly service: string;
+  readonly status: number;
+  readonly retryable: boolean;
+
+  constructor(service: string, status: number, retryable: boolean, detail: string) {
+    super(`${service} isteği başarısız (durum ${status}): ${detail}`);
+    this.service = service;
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
+/** HTTP durumu yeniden denenebilir mi (zaman aşımı, hız sınırı, sunucu hatası). Saf fonksiyondur. */
+export function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
