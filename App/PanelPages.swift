@@ -187,8 +187,6 @@ struct AppearanceEnvironment: ViewModifier {
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
-    @AppStorage(SettingsKey.designStyle) private var designStyle: String = DesignLook.standard.style.rawValue
-    @AppStorage(SettingsKey.glassTint) private var glassTint: String = DesignLook.standard.tint.rawValue
 
     func body(content: Content) -> some View {
         let standard: PanelAppearance = .standard
@@ -202,11 +200,6 @@ struct AppearanceEnvironment: ViewModifier {
         )
         content
             .environment(\.panelAppearance, appearance)
-            // Tasarım stili (Standart ya da Liquid Glass) ve cam rengi; "Saydamlığı azalt" açıksa Standart.
-            .designLook(DesignLook(
-                style: DesignStyle(rawValue: designStyle) ?? DesignLook.standard.style,
-                tint: GlassTint(rawValue: glassTint) ?? DesignLook.standard.tint
-            ))
             .tint(appearance.accent.color)
             .fontDesign(appearance.systemFontDesign)
             // Yazı tipi belirtilmemiş metinler ve sistem denetimleri de seçili aile ve ölçekte.

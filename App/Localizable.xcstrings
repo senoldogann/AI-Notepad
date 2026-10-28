@@ -2781,17 +2781,6 @@
         }
       }
     },
-    "Buz": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ice"
-          }
-        }
-      }
-    },
     "Buzlu cam": {
       "localizations": {
         "en": {
@@ -2829,16 +2818,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glass opacity: %lld%%"
-          }
-        }
-      }
-    },
-    "Cam rengi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Glass color"
           }
         }
       }
@@ -3661,17 +3640,6 @@
         }
       }
     },
-    "Duman": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Smoke"
-          }
-        }
-      }
-    },
     "Duraklat": {
       "localizations": {
         "en": {
@@ -4173,17 +4141,6 @@
         }
       }
     },
-    "Gök": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sky"
-          }
-        }
-      }
-    },
     "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış).": {
       "localizations": {
         "en": {
@@ -4370,17 +4327,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review"
-          }
-        }
-      }
-    },
-    "Gül": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rose"
           }
         }
       }
@@ -5459,17 +5405,6 @@
         }
       }
     },
-    "Kehribar": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Amber"
-          }
-        }
-      }
-    },
     "Kendi adınla, seçtiğin kanala": {
       "localizations": {
         "en": {
@@ -6326,17 +6261,6 @@
         }
       }
     },
-    "Lavanta": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lavender"
-          }
-        }
-      }
-    },
     "Lehçe": {
       "localizations": {
         "en": {
@@ -6353,26 +6277,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Latvian"
-          }
-        }
-      }
-    },
-    "Liquid Glass": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Liquid Glass"
-          }
-        }
-      }
-    },
-    "Liquid Glass: kartlar, kenar çubuğu ve düğmeler Apple'ın camından.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Liquid Glass: cards, sidebar and buttons made of Apple's glass."
           }
         }
       }
@@ -6830,17 +6734,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "MY NOTES"
-          }
-        }
-      }
-    },
-    "Nane": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mint"
           }
         }
       }
@@ -8457,26 +8350,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask… (@ meeting, / recipe)"
-          }
-        }
-      }
-    },
-    "Standart": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Standard"
-          }
-        }
-      }
-    },
-    "Stil": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Style"
           }
         }
       }

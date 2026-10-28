@@ -20,7 +20,7 @@ struct RecordTab: View {
                     LiveRecordingView(recorder: recorder)
                 }
             }
-            .screenBackground()
+            .background(Theme.background)
             .animation(.smooth(duration: 0.35), value: recorder.phase == .recording || recorder.phase == .finishing)
         }
     }
@@ -462,7 +462,8 @@ private struct ConsentCard: View {
             .accessibilityLabel("Kapat")
         }
         .padding(14)
-        .outlinedCard(cornerRadius: 16)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -559,7 +560,8 @@ private struct PreparingCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .outlinedCard(cornerRadius: 20)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.line))
     }
 }
 

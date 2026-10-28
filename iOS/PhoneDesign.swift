@@ -51,7 +51,8 @@ struct PhoneStatTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .outlinedCard(cornerRadius: 16)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -115,7 +116,7 @@ struct PillTabs<Value: Hashable>: View {
             }
         }
         .padding(3)
-        .softSurface(shape: Capsule())
+        .background(Theme.soft, in: Capsule())
     }
 }
 

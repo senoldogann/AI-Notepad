@@ -147,41 +147,32 @@ public struct PanelAppearance: Equatable, Sendable {
     }
 }
 
-/// Sayfa ve kenar çubuğu zemini: dolu yüzeyde zemin rengi; camda ve Liquid Glass'ta saydam (pencerenin tek zemini
-/// görünsün).
+/// Sayfa ve kenar çubuğu zemini: dolu yüzeyde zemin rengi; camda saydam (pencerenin tek cam katmanı görünsün).
 private struct PageBackground: ViewModifier {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
-    @Environment(\.designLook) private var look: DesignLook
 
     func body(content: Content) -> some View {
-        content.background(appearance.surface == .solid && !look.usesGlass ? Theme.background : Color.clear)
+        content.background(appearance.surface == .solid ? Theme.background : Color.clear)
     }
 }
 
-/// Pencere zemini: dolu yüzeyde zemin rengi; camda sistem camı üstüne yarı saydam zemin. Liquid Glass'ta yüzey
-/// seçeneği yerine cam renginin durgun zemini (cam yüzeyler onu kırar).
+/// Pencere zemini: dolu yüzeyde zemin rengi; camda sistem camı üstüne yarı saydam zemin.
 public struct WindowBackdrop: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
-    @Environment(\.designLook) private var look: DesignLook
 
     public init() {}
 
     public var body: some View {
         ZStack {
-            switch look.style {
-            case .standard:
-                switch appearance.surface {
-                case .solid:
-                    Theme.background
-                case .frosted:
-                    Rectangle().fill(.thinMaterial)
-                    Theme.background.opacity(appearance.surfaceOpacity)
-                case .clear:
-                    Rectangle().fill(.ultraThinMaterial)
-                    Theme.background.opacity(appearance.surfaceOpacity * 0.6)
-                }
-            case .liquidGlass:
-                GlassBackdrop(tint: look.tint)
+            switch appearance.surface {
+            case .solid:
+                Theme.background
+            case .frosted:
+                Rectangle().fill(.thinMaterial)
+                Theme.background.opacity(appearance.surfaceOpacity)
+            case .clear:
+                Rectangle().fill(.ultraThinMaterial)
+                Theme.background.opacity(appearance.surfaceOpacity * 0.6)
             }
         }
         .ignoresSafeArea()

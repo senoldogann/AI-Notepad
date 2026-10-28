@@ -2,7 +2,6 @@
 #if os(macOS)
 // Tasarımı gözle kontrol etmek için ada ve paneli örnek verilerle gerçek pencerelerde gösterir.
 // Kullanım: swift run --package-path Packages/AINotepadCore AINotepadPreview <saniye>
-// Liquid Glass sahneleri (Buz, Gök, Gül × açık, koyu): ... AINotepadPreview <saniye> cam
 // Pencere numaralarını yazdırır; `screencapture -l <numara>` ile görüntü alınır.
 import AINotepadCore
 import AINotepadUI
@@ -68,109 +67,11 @@ func showWindow(view: some View, frame: NSRect) -> Int {
     return window.windowNumber
 }
 
-/// Liquid Glass örnek sahnesi: solda canlı panel; sağda kapaklı kart sırası, haplar ve çipler, ayar satırları ve
-/// tarifler. Pencere zemini cam renginin durgun zemini.
-@MainActor
-func glassScene(tint: GlassTint, scheme: ColorScheme, actions: PanelActions) -> some View {
-    HStack(alignment: .top, spacing: 20) {
-        TranscriptPanel(state: sampleState(phase: .recording), actions: actions, levels: AudioLevels(count: 14, interval: 0.1), myNotes: .constant(""))
-            .panelSurface()
-            .frame(width: 360, height: 620)
-        VStack(alignment: .leading, spacing: 16) {
-            Text(verbatim: "\(tint.displayName) · \(scheme == .dark ? "koyu" : "açık")")
-                .appFont(size: 20, weight: .semibold)
-            // Kart sırası: kapak camın içinde, başlık kapağın altında.
-            HStack(spacing: 12) {
-                ForEach(["toplanti-a", "toplanti-b", "toplanti-c"], id: \.self) { (seed: String) in
-                    VStack(alignment: .leading, spacing: 8) {
-                        CoverImage(seed: seed)
-                            .frame(height: 70)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        Text(verbatim: "Haftalık ekip toplantısı")
-                            .appFont(size: 13, weight: .medium)
-                            .lineLimit(1)
-                        Text(verbatim: "28 Eki · 32 dk")
-                            .appFont(size: 11, weight: .regular)
-                            .foregroundStyle(Theme.muted)
-                    }
-                    .padding(8)
-                    .cardSurface(cornerRadius: 16)
-                }
-            }
-            .glassGroup(spacing: 12)
-            // Haplar, kapsül düğmeler, çipler ve bölüm seçici.
-            HStack(spacing: 10) {
-                Button("Canlı panel", systemImage: "rectangle.on.rectangle") {}
-                    .buttonStyle(.pill)
-                Button("Kaydı başlat", systemImage: "record.circle") {}
-                    .buttonStyle(.pillPrimary)
-                Button {} label: {
-                    Image(systemName: "ellipsis").frame(width: 24, height: 24)
-                }
-                .buttonStyle(.hoverCapsule)
-                Text(verbatim: "3 görev")
-                    .appFont(size: 11, weight: .medium)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .chipSurface(shape: Capsule())
-                PillPicker(selection: .constant(1), options: [(0, "Özet"), (1, "Transkript")])
-                    .fixedSize()
-            }
-            .glassGroup(spacing: 10)
-            HStack(alignment: .top, spacing: 16) {
-                // Ayarlar benzeri satırlar tek cam kartta.
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(["Tema", "Vurgu rengi", "Yazı tipi"], id: \.self) { (title: String) in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(verbatim: title).appFont(size: 15, weight: .medium)
-                                Text(verbatim: "Uygulamanın tamamında.").appFont(size: 13, weight: .regular).foregroundStyle(Theme.muted)
-                            }
-                            Spacer()
-                            Button("Seç") {}.buttonStyle(.pill)
-                        }
-                        .padding(.vertical, 12)
-                        Rectangle().fill(Theme.line).frame(height: 1)
-                    }
-                }
-                .liquidGlassGroup(cornerRadius: 20, padding: EdgeInsets(top: 2, leading: 16, bottom: 6, trailing: 16))
-                .frame(width: 330)
-                RecipeSuggestions(recipes: Array(builtInRecipes().prefix(4)), highlighted: 0, onPick: { (_: Recipe) -> Void in }, onDelete: { (_: Recipe) -> Void in })
-                    .frame(width: 330)
-            }
-        }
-        .foregroundStyle(Theme.ink)
-    }
-    .padding(24)
-    .frame(width: 1100, height: 680, alignment: .topLeading)
-    .background { GlassBackdrop(tint: tint) }
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    .environment(\.colorScheme, scheme)
-    .designLook(DesignLook(style: .liquidGlass, tint: tint))
-}
-
 let seconds: Double = Double(CommandLine.arguments.dropFirst().first ?? "") ?? 6
-/// `cam` ikinci argümanıyla yalnızca Liquid Glass sahneleri açılır.
-let showsGlassScenes: Bool = CommandLine.arguments.dropFirst(2).first == "cam"
 let app: NSApplication = NSApplication.shared
 app.setActivationPolicy(.accessory)
 MainActor.assumeIsolated {
     let actions: PanelActions = PanelActions(onHide: {}, onStart: {}, onTogglePause: {}, onToggleMic: {}, onStop: {}, onOpenMeetings: {}, onOpenSettings: {}, onMissed: {}, onAsk: { _ in }, onCloseCard: {}, onRetryTranslations: { _ in }, onSetLanguage: { _ in }, onChooseLanguageMode: { _ in }, onReassignBlock: { _, _ in }, onMergePerson: { _, _ in }, onBookmark: {})
-    // Liquid Glass: Buz, Gök ve Gül; açık ve koyu (pencereler kademeli, `screencapture -l` örtüşmeden etkilenmez).
-    if showsGlassScenes {
-        let variants: [(tint: GlassTint, scheme: ColorScheme)] = [GlassTint.ice, .sky, .rose].flatMap { (tint: GlassTint) -> [(tint: GlassTint, scheme: ColorScheme)] in
-            [(tint, ColorScheme.light), (tint, ColorScheme.dark)]
-        }
-        for (index, variant) in variants.enumerated() {
-            let number: Int = showWindow(
-                view: glassScene(tint: variant.tint, scheme: variant.scheme, actions: actions),
-                frame: NSRect(x: 40 + Double(index) * 30, y: 60 + Double(index) * 20, width: 1100, height: 680)
-            )
-            print("glass-\(variant.tint.rawValue)-\(variant.scheme == .dark ? "dark" : "light") \(number)")
-        }
-        fflush(stdout)
-        return
-    }
     let panel: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions, levels: AudioLevels(count: 14, interval: 0.1), myNotes: .constant("")).panelSurface(), frame: NSRect(x: 120, y: 100, width: 400, height: 720))
     // Dar panel: başlık düğmeleri "⋯" menüsüne toplanmalı, "Ne kaçırdım?" simgeye dönmeli.
     let narrow: Int = showWindow(view: TranscriptPanel(state: sampleState(phase: .recording), actions: actions, levels: AudioLevels(count: 14, interval: 0.1), myNotes: .constant("")).panelSurface(), frame: NSRect(x: 560, y: 100, width: 340, height: 560))

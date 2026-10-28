@@ -49,7 +49,7 @@ struct MeetingsListPage: View {
                         .appFont(size: 12, weight: .medium)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                     }
                     .buttonStyle(.hoverCapsule)
                     .hoverHint("Tüm toplantılar", alignment: .leading, edge: .bottom)
@@ -341,7 +341,10 @@ struct MeetingRow: View {
         }
         .padding(.horizontal, DesignTokens.Spacing.m)
         .padding(.vertical, DesignTokens.Spacing.s)
-        .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(
+            isSelected ? Theme.selected : Color.clear,
+            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+        )
         .contentShape(Rectangle())
     }
 
@@ -640,7 +643,7 @@ struct MeetingDetailPage: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                 }
             }
             .padding(.top, 12)
@@ -1571,7 +1574,7 @@ private struct NoteEditBar: View {
                                 .foregroundStyle(Theme.ink)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .chipSurface(shape: Capsule())
+                                .background(Theme.soft, in: Capsule())
                         }
                         .buttonStyle(.hoverPlain)
                     }
@@ -1687,7 +1690,7 @@ private struct GlossarySection: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 1)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
                         .appFont(size: 11, weight: .semibold)
@@ -1734,7 +1737,7 @@ private struct GlossarySection: View {
                             .foregroundStyle(Theme.ink.opacity(0.8))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
-                            .chipSurface(shape: Capsule())
+                            .background(Theme.soft, in: Capsule())
                     }
                     if glossary.count > 6 {
                         Text(verbatim: "+\(glossary.count - 6)")
@@ -1894,7 +1897,7 @@ private struct OutlineRow: View {
                     .foregroundStyle(canPlay ? appearance.accent.color : Theme.muted)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .chipSurface(shape: Capsule())
+                    .background(Theme.soft, in: Capsule())
                 }
                 .buttonStyle(.hoverCapsule)
                 .disabled(!canPlay)
@@ -1948,7 +1951,7 @@ private struct TaskCard: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2649,7 +2652,7 @@ private struct NowPlayingBar: View {
                         .monospacedDigit()
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                 }
                 .buttonStyle(.hoverCapsule)
                 .hoverHint("Çalma hızı", alignment: .trailing, edge: .top)

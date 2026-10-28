@@ -382,7 +382,7 @@ private struct AskHistoryRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .onHover { (hovering: Bool) -> Void in
             isHovering = hovering
             if !hovering {

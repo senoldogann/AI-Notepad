@@ -106,9 +106,6 @@ enum SettingsKey {
     /// Pencere yüzeyi (dolu, buzlu cam, şeffaf cam), cam opaklığı ve zemin tonu.
     static let surface: String = "appearance.surface"
     static let surfaceOpacity: String = "appearance.surfaceOpacity"
-    /// Tasarım stili (`DesignStyle`: Standart ya da Liquid Glass) ve Liquid Glass'ın cam rengi (`GlassTint`).
-    static let designStyle: String = "appearance.designStyle"
-    static let glassTint: String = "appearance.glassTint"
 }
 
 /// Arayüz dili; macOS'ta uygulama dili yeniden başlatınca uygulanır.
@@ -192,7 +189,7 @@ enum SettingsRange {
 func resetAppearanceSettings(defaults: UserDefaults) {
     for key in [SettingsKey.theme, SettingsKey.accent, SettingsKey.fontDesign, SettingsKey.uiScale, SettingsKey.textSize,
                 SettingsKey.lineSpacing, SettingsKey.bottomSpacing, SettingsKey.islandEnabled, SettingsKey.surface,
-                SettingsKey.surfaceOpacity, SettingsKey.designStyle, SettingsKey.glassTint] {
+                SettingsKey.surfaceOpacity] {
         defaults.removeObject(forKey: key)
     }
 }
@@ -264,8 +261,6 @@ func registerDefaultSettings() {
         SettingsKey.islandEnabled: true,
         SettingsKey.surface: PanelAppearance.standard.surface.rawValue,
         SettingsKey.surfaceOpacity: PanelAppearance.standard.surfaceOpacity,
-        SettingsKey.designStyle: DesignLook.standard.style.rawValue,
-        SettingsKey.glassTint: DesignLook.standard.tint.rawValue,
     ])
 }
 
