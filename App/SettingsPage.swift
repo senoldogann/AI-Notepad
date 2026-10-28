@@ -903,33 +903,150 @@ private struct KeySettings: View {
     }
 }
 
-/// Bağlantılar: yapay zekâ uygulamalarına tek tıkla MCP (Claude, Cursor, VS Code), kanallara not gönderme (webhook) ve
-/// başka MCP istemcileri için elle yapılandırma.
+/// Bağlantılar: notların gittiği yerler (bağlı olanlar tek kartta, eklenebilenler marka renkli kartlarda), görev
+/// araçları, yapay zekâ uygulamaları ve gelişmiş (beceriler, elle MCP yapılandırması). Uzun açıklamalar bilgi ipucunda.
 private struct ConnectionSettings: View {
     let model: AppModel
+    @State private var showsAdvanced: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsGroupHeader(title: "Yapay zekâ uygulamaları")
-            Text("Bağlayınca Claude, Cursor ya da VS Code toplantılarını listeleyip arar, notları ve transkriptleri okur (yalnızca okur, hiçbir şey değiştirmez). Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.")
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 8)
-            ForEach(MCPClient.allCases, id: \.self) { (client: MCPClient) in
-                MCPClientRow(client: client)
-            }
             WebhookSettings(model: model)
             TaskTrackerSettings(model: model)
-            SkillSettings(model: model)
-            MCPSettings()
+            ConnectionSectionHeader(
+                title: "Yapay zekâ uygulamaları", subtitle: "Claude, Cursor ve VS Code toplantılarını arayıp okuyabilir.",
+                info: "Bağlayınca uygulama toplantılarını listeleyip arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okuduğunu kendi yapay zekâ sağlayıcısına gönderir."
+            )
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: 3), spacing: 12) {
+                ForEach(MCPClient.allCases, id: \.self) { (client: MCPClient) in
+                    MCPClientCard(client: client)
+                }
+            }
+            Button {
+                withAnimation(.smooth(duration: 0.25)) { showsAdvanced.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .appFont(size: 11, weight: .semibold)
+                        .rotationEffect(.degrees(showsAdvanced ? 90 : 0))
+                    Text("Gelişmiş: beceriler ve elle MCP yapılandırması").appFont(size: 13, weight: .medium)
+                }
+                .foregroundStyle(Theme.muted)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.hoverPlain)
+            .padding(.top, 30)
+            if showsAdvanced {
+                VStack(alignment: .leading, spacing: 0) {
+                    SkillSettings(model: model)
+                    MCPSettings()
+                }
+                .transition(.opacity)
+            }
         }
     }
 }
 
-/// Bir yapay zekâ uygulaması: simgesi, adı, durumu; yüklüyse "Bağla" ya da (bağlıysa) "Kaldır". Bağlayınca uygulamanın
-/// yapılandırma dosyasına AI-Notepad eklenir (diğer ayarlar korunur); uygulama yeniden açılınca görünür.
-private struct MCPClientRow: View {
+/// Bağlantı bölümünün başlığı: başlık, tek satır açıklama ve uzun açıklama için bilgi ipucu.
+private struct ConnectionSectionHeader: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let info: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .appFont(size: 18, weight: .semibold)
+                    .tracking(-0.3)
+                    .foregroundStyle(Theme.ink)
+                Image(systemName: "info.circle")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .hoverHint(info, alignment: .leading, edge: .bottom)
+            }
+            Text(subtitle)
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+        }
+        .padding(.top, 34)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Servisin marka renginde simge kutusu: üstten hafif aydınlık, ince parlak kenar ve renkli yumuşak gölge.
+private struct BrandTile: View {
+    let symbol: String
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+        Image(systemName: symbol)
+            .appFont(size: size * 0.42, weight: .semibold)
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(LinearGradient(colors: [color.mix(with: .white, by: 0.14), color], startPoint: .top, endPoint: .bottom), in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.16)))
+            .shadow(color: color.opacity(0.28), radius: 6, y: 3)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Bağlantı kartı: marka kutusu, ad, kısa açıklama, (varsa) "bağlı" rozeti ve sağda eylem.
+private struct ConnectionCard<Action: View>: View {
+    let tile: BrandTile
+    let title: Text
+    let detail: Text
+    let badge: String?
+    let action: Action
+
+    init(tile: BrandTile, title: Text, detail: Text, badge: String?, @ViewBuilder action: () -> Action) {
+        self.tile = tile
+        self.title = title
+        self.detail = detail
+        self.badge = badge
+        self.action = action()
+    }
+
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        HStack(spacing: 12) {
+            tile
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
+                    if let badge {
+                        Text(verbatim: badge)
+                            .appFont(size: 10, weight: .semibold)
+                            .foregroundStyle(Color.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.12), in: Capsule())
+                    }
+                }
+                detail.appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted).lineLimit(2)
+            }
+            Spacer(minLength: 6)
+            action
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+        .background(Theme.card, in: shape)
+        .overlay(shape.strokeBorder(Theme.line))
+    }
+}
+
+/// 0xRRGGBB sRGB marka rengi.
+private func brandColor(_ hex: UInt32) -> Color {
+    Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255, opacity: 1)
+}
+
+/// Bir yapay zekâ uygulaması kartı: simgesi, adı, durumu; yüklüyse "Bağla" ya da (bağlıysa) "Kaldır". Yüklü değilse
+/// soluk. Bağlayınca uygulamanın yapılandırma dosyasına AI-Notepad eklenir (diğer ayarlar korunur); uygulama yeniden
+/// açılınca görünür.
+private struct MCPClientCard: View {
     let client: MCPClient
     @State private var isConnected: Bool = false
     @State private var errorMessage: String?
@@ -948,8 +1065,9 @@ private struct MCPClientRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
                 Group {
                     if isInstalled {
                         Image(nsImage: NSWorkspace.shared.icon(forFile: client.applicationPath))
@@ -959,44 +1077,57 @@ private struct MCPClientRow: View {
                         Image(systemName: "app.dashed")
                             .appFont(size: 18, weight: .regular)
                             .foregroundStyle(Theme.muted)
-                            .frame(width: 34, height: 34)
-                            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .frame(width: 38, height: 38)
+                            .background(Theme.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                 }
-                .frame(width: 34, height: 34)
+                .frame(width: 38, height: 38)
                 .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: client.displayName)
-                        .appFont(size: 15, weight: .medium)
-                        .foregroundStyle(Theme.ink)
-                    Group {
-                        if !isInstalled {
-                            Text("Bu Mac'te yüklü değil").foregroundStyle(Theme.muted)
-                        } else if let errorMessage {
-                            Text(errorMessage).foregroundStyle(.red)
-                        } else if isConnected {
-                            Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.tint)
-                        } else {
-                            Text("Tek tıkla bağla").foregroundStyle(Theme.muted)
-                        }
-                    }
-                    .appFont(size: 13, weight: .regular)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 12)
+                Spacer(minLength: 6)
                 if isInstalled {
                     if isConnected {
-                        Button("Kaldır", role: .destructive) { disconnect() }
+                        Menu {
+                            Button("Kaldır", role: .destructive) { disconnect() }
+                        } label: {
+                            Image(systemName: "ellipsis").frame(width: 16, height: 16)
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.hoverCapsule)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel("Diğer işlemler")
                     } else {
-                        Button("Bağla", systemImage: "link") { connect() }
+                        Button("Bağla") { connect() }
                             .buttonStyle(.pillPrimary)
+                            .controlSize(.small)
                     }
                 }
             }
-            .padding(.vertical, 14)
-            SettingsDivider()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: client.displayName)
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.ink)
+                Group {
+                    if !isInstalled {
+                        Text("Bu Mac'te yüklü değil").foregroundStyle(Theme.muted)
+                    } else if let errorMessage {
+                        Text(errorMessage).foregroundStyle(.red)
+                    } else if isConnected {
+                        Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Color.green)
+                    } else {
+                        Text("Tek tıkla bağla").foregroundStyle(Theme.muted)
+                    }
+                }
+                .appFont(size: 12, weight: .regular)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .background(Theme.card, in: shape)
+        .overlay(shape.strokeBorder(Theme.line))
+        .opacity(isInstalled ? 1 : 0.55)
         .animation(.smooth(duration: 0.2), value: isConnected)
         .task { refresh() }
     }
@@ -1054,6 +1185,18 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         case .notion: "Notion"
         case .zoom: "Zoom Team Chat"
         case .webhook: String(localized: "Webhook adresi")
+        }
+    }
+
+    /// Servisin marka rengi (simge kutusu).
+    var brand: Color {
+        switch self {
+        case .slack: brandColor(0x4A154B)
+        case .teams: brandColor(0x5059C9)
+        case .discord: brandColor(0x5865F2)
+        case .notion: brandColor(0x1F1F1F)
+        case .zoom: brandColor(0x0B5CFF)
+        case .webhook: brandColor(0x52525B)
         }
     }
 
@@ -1142,17 +1285,15 @@ private struct WebhookSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsGroupHeader(title: "Kanallara gönder")
-            Text("Her toplantının notu (önce görevler, sonra kararlar ve özet) bağladığın yerlere gider; her hedefte kendiliğinden gönderimi ayrı açabilirsin. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilir. Ağ yokken kaçan gönderimler sonra kendiliğinden gider.")
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 12)
-            ForEach(model.destinations) { (destination: NoteDestination) in
-                destinationRow(destination: destination)
+            ConnectionSectionHeader(
+                title: "Notların gittiği yerler", subtitle: "Not hazır olunca kanallara, Notion'a, Apple Notlar'a ya da klasöre gider.",
+                info: "Her toplantının notu (önce görevler, sonra kararlar ve özet) bağladığın yerlere gider; her hedefte otomatik gönderimi ayrı açabilirsin. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilir. Ağ yokken kaçan gönderimler sonra kendiliğinden gider."
+            )
+            if !model.destinations.isEmpty {
+                connectedList.padding(.bottom, 16)
             }
             setupStatus
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
                 ForEach(ChannelCard.allCases) { (card: ChannelCard) in
                     channelCard(card: card)
                 }
@@ -1164,40 +1305,85 @@ private struct WebhookSettings: View {
         .task { await model.loadDestinations() }
     }
 
-    /// Bağlı hedef: ad, kanal, kendiliğinden gönderim, dene, kanalı değiştir ya da yeniden bağlan, kaldır.
-    private func destinationRow(destination: NoteDestination) -> some View {
-        SettingsRow(title: Text(verbatim: destinationName(destination: destination))) {
-            if destination.needsReconnect {
-                Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            } else {
-                Label(String(localized: "Bağlı · \(destinationDetail(destination: destination))"), systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-            }
-        } control: {
-            HStack(spacing: 8) {
-                if case .account(let connection) = destination.target {
-                    if destination.needsReconnect {
-                        Button("Yeniden bağlan") { Task { await signIn(service: connection.service, replacing: destination.id) } }
-                            .buttonStyle(.pillPrimary)
-                    } else {
-                        Button("Kanalı değiştir") { Task { await changeChannel(destinationID: destination.id, service: connection.service) } }
-                            .disabled(isBusy)
-                    }
+    /// Bağlı hedefler tek kartta, ince çizgilerle ayrılmış satırlar.
+    private var connectedList: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return VStack(spacing: 0) {
+            ForEach(Array(model.destinations.enumerated()), id: \.element.id) { (item: (offset: Int, element: NoteDestination)) in
+                if item.offset > 0 {
+                    SettingsDivider().padding(.leading, 64)
                 }
-                if case .notion = destination.target, destination.needsReconnect {
-                    Button("Yeniden bağlan") { notionSignIn = Task { await reconnectNotion(destinationID: destination.id) } }
-                        .buttonStyle(.pillPrimary)
-                }
-                Button("Dene") { Task { await test(destinationID: destination.id) } }
-                    .disabled(isBusy)
-                Button("Kaldır", role: .destructive) { Task { await model.removeDestination(id: destination.id) } }
-                Toggle("Kendiliğinden gönder", isOn: Binding<Bool>(
-                    get: { destination.autoSend },
-                    set: { (enabled: Bool) -> Void in Task { await model.setAutoSend(destinationID: destination.id, enabled: enabled) } }
-                ))
-                .settingsToggle()
-                .hoverHint("Not hazır olunca kendiliğinden gönder", alignment: .trailing, edge: .bottom)
+                destinationRow(destination: item.element)
             }
         }
+        .background(Theme.card, in: shape)
+        .overlay(shape.strokeBorder(Theme.line))
+    }
+
+    /// Bağlı hedef: marka kutusu, ad ve kanal (ya da "yeniden bağlan" uyarısı), otomatik gönderim; dene, kanalı
+    /// değiştir ve kaldır ⋯ menüsünde.
+    private func destinationRow(destination: NoteDestination) -> some View {
+        let card: ChannelCard = ChannelCard.allCases.first { $0.matches(destination: destination) } ?? .webhook
+        return HStack(spacing: 12) {
+            BrandTile(symbol: card.symbol, color: card.brand, size: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: destinationName(destination: destination))
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.ink)
+                if destination.needsReconnect {
+                    Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill")
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text(verbatim: destinationDetail(destination: destination))
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if destination.needsReconnect {
+                Button("Yeniden bağlan") {
+                    switch destination.target {
+                    case .account(let connection): Task { await signIn(service: connection.service, replacing: destination.id) }
+                    case .notion: notionSignIn = Task { await reconnectNotion(destinationID: destination.id) }
+                    case .webhook: return
+                    }
+                }
+                .buttonStyle(.pillPrimary)
+                .controlSize(.small)
+            }
+            Text("Otomatik gönder")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+            Toggle("Otomatik gönder", isOn: Binding<Bool>(
+                get: { destination.autoSend },
+                set: { (enabled: Bool) -> Void in Task { await model.setAutoSend(destinationID: destination.id, enabled: enabled) } }
+            ))
+            .settingsToggle()
+            .hoverHint("Not hazır olunca kendiliğinden gönder", alignment: .trailing, edge: .bottom)
+            Menu {
+                Button("Deneme mesajı gönder", systemImage: "paperplane") { Task { await test(destinationID: destination.id) } }
+                    .disabled(isBusy)
+                if case .account(let connection) = destination.target, !destination.needsReconnect {
+                    Button("Kanalı değiştir", systemImage: "arrow.left.arrow.right") {
+                        Task { await changeChannel(destinationID: destination.id, service: connection.service) }
+                    }
+                    .disabled(isBusy)
+                }
+                Divider()
+                Button("Kaldır", systemImage: "trash", role: .destructive) { Task { await model.removeDestination(id: destination.id) } }
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 16, height: 16)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.hoverCapsule)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("Diğer işlemler")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -1277,14 +1463,18 @@ private struct WebhookSettings: View {
 
     private func channelCard(card: ChannelCard) -> some View {
         let count: Int = model.destinations.filter { card.matches(destination: $0) }.count
-        return destinationCard(symbol: card.symbol, title: Text(verbatim: card.name), detail: card.detail) {
-            HStack(spacing: 6) {
-                if count > 0 {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.tint)
-                        .accessibilityLabel(Text("Bağlı"))
-                }
-                Button(count > 0 ? "Ekle" : (card.service == nil && card != .notion ? "Yapıştır" : "Bağlan")) { start(card: card) }
+        return ConnectionCard(
+            tile: BrandTile(symbol: card.symbol, color: card.brand, size: 38), title: Text(verbatim: card.name), detail: Text(card.detail),
+            badge: count > 0 ? String(localized: "\(count) bağlı") : nil
+        ) {
+            if count > 0 {
+                Button("Ekle", systemImage: "plus") { start(card: card) }
+                    .buttonStyle(.pill)
+                    .controlSize(.small)
+                    .disabled(isBusy)
+                    .hoverHint("Başka bir kanal ya da hesap ekle", alignment: .trailing, edge: .bottom)
+            } else {
+                Button(card.service == nil && card != .notion ? "Yapıştır" : "Bağlan") { start(card: card) }
                     .buttonStyle(.pillPrimary)
                     .controlSize(.small)
                     .disabled(isBusy)
@@ -1301,7 +1491,10 @@ private struct WebhookSettings: View {
     }
 
     private var appleNotesCard: some View {
-        destinationCard(symbol: "note.text", title: Text("Apple Notlar"), detail: notesStatus.map { LocalizedStringKey($0) } ?? "\"AI-Notepad\" klasörüne, hesap gerekmez") {
+        ConnectionCard(
+            tile: BrandTile(symbol: "note.text", color: brandColor(0xE8A90E), size: 38), title: Text("Apple Notlar"),
+            detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"AI-Notepad\" klasörüne, hesap gerekmez"), badge: nil
+        ) {
             Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
                 .settingsToggle()
                 .onChange(of: notesAutoSend) { (_: Bool, enabled: Bool) in
@@ -1320,9 +1513,10 @@ private struct WebhookSettings: View {
     }
 
     private var folderCard: some View {
-        destinationCard(
-            symbol: "folder.fill", title: Text("Klasör (Obsidian, iCloud)"),
-            detail: folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))
+        ConnectionCard(
+            tile: BrandTile(symbol: "folder.fill", color: brandColor(0x3B82F6), size: 38), title: Text("Klasör (Obsidian, iCloud)"),
+            detail: Text(folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))),
+            badge: nil
         ) {
             if markdownFolder.isEmpty {
                 Button("Seç…") { chooseFolder() }
@@ -1335,27 +1529,6 @@ private struct WebhookSettings: View {
                 }
             }
         }
-    }
-
-    private func destinationCard(symbol: String, title: Text, detail: LocalizedStringKey, @ViewBuilder action: () -> some View) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .appFont(size: 14, weight: .semibold)
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background { FilmGradient(seed: "kanal-\(symbol)", palette: .sunset) }
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
-                Text(detail).appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted).lineLimit(2)
-            }
-            Spacer(minLength: 6)
-            action()
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
     }
 
     private func start(card: ChannelCard) {
@@ -1549,14 +1722,14 @@ private struct TaskTrackerSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsGroupHeader(title: "Görev araçları")
-            Text("Toplantıdaki görevleri tek tıkla Linear ya da Jira'da iş olarak açar (toplantı sayfası › ⋯ › Görevleri gönder). Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar.")
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 12)
-            ForEach([MCPService.linear, MCPService.atlassian], id: \.self) { (service: MCPService) in
-                trackerRow(service: service)
+            ConnectionSectionHeader(
+                title: "Görev araçları", subtitle: "Görevleri tek tıkla Linear ya da Jira'da iş olarak aç.",
+                info: "Toplantı sayfası › ⋯ › Görevleri gönder. Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar."
+            )
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
+                ForEach([MCPService.linear, MCPService.atlassian], id: \.self) { (service: MCPService) in
+                    trackerCard(service: service)
+                }
             }
             if let status {
                 Text(status)
@@ -1568,31 +1741,49 @@ private struct TaskTrackerSettings: View {
         }
     }
 
+    private func tile(service: MCPService) -> BrandTile {
+        service == .linear
+            ? BrandTile(symbol: "checklist", color: brandColor(0x5E6AD2), size: 38)
+            : BrandTile(symbol: "square.stack.3d.up.fill", color: brandColor(0x0052CC), size: 38)
+    }
+
+    /// Bağlı araçta takım/proje alanı ve ⋯ menüsünde kaldır; bağlı değilse "Bağlan" (girişte "Vazgeç").
     @ViewBuilder
-    private func trackerRow(service: MCPService) -> some View {
+    private func trackerCard(service: MCPService) -> some View {
         if let tracker = model.taskTrackers.first(where: { $0.service == service }) {
-            SettingsRow(title: Text(verbatim: service.displayName)) {
-                Label("Bağlı", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
-            } control: {
-                HStack(spacing: 8) {
+            ConnectionCard(tile: tile(service: service), title: Text(verbatim: service.displayName), detail: Text("Bağlı"), badge: nil) {
+                HStack(spacing: 6) {
                     TrackerTargetField(
                         placeholder: service == .atlassian ? "Proje (boş: ilki)" : "Takım (boş: ilki)", saved: tracker.target
                     ) { (value: String) -> Void in
                         Task { await model.setTrackerTarget(id: tracker.id, target: value) }
                     }
-                    Button("Kaldır", role: .destructive) { Task { await model.removeTracker(id: tracker.id) } }
+                    Menu {
+                        Button("Kaldır", systemImage: "trash", role: .destructive) { Task { await model.removeTracker(id: tracker.id) } }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 16, height: 16)
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.hoverCapsule)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("Diğer işlemler")
                 }
             }
         } else {
-            SettingsRow(title: Text(verbatim: service.displayName)) {
-                Text(service == .linear ? "Takımındaki işler" : "Jira projesindeki işler")
-            } control: {
-                HStack(spacing: 8) {
+            ConnectionCard(
+                tile: tile(service: service), title: Text(verbatim: service.displayName),
+                detail: Text(service == .linear ? "Takımındaki işler" : "Jira projesindeki işler"), badge: nil
+            ) {
+                HStack(spacing: 6) {
                     if connecting == service, let signIn {
                         Button("Vazgeç") { signIn.cancel() }
+                            .buttonStyle(.hoverPlain)
+                            .foregroundStyle(Theme.muted)
                     }
-                    Button(connecting == service ? "Tarayıcıda izin ver…" : "Bağlan") { connect(service: service) }
+                    Button(connecting == service ? "İzin bekleniyor…" : "Bağlan") { connect(service: service) }
                         .buttonStyle(.pillPrimary)
+                        .controlSize(.small)
                         .disabled(connecting != nil)
                 }
             }
@@ -1631,7 +1822,7 @@ private struct TrackerTargetField: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.roundedBorder)
-            .frame(width: 180)
+            .frame(width: 130)
             .focused($focused)
             .onAppear { text = saved }
             .onChange(of: saved) { (_: String, value: String) -> Void in

@@ -387,35 +387,19 @@ struct MeetingDetailPage: View {
                     exportLine
                         .transition(.move(edge: .top).combined(with: .opacity))
                     statusLines
-                    PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
-                        .frame(maxWidth: 260)
+                    // Sekmeler ve notun dili tek satırda: dil, iş arkadaşlarına göndermek için notun başka dildeki sürümü.
+                    HStack(spacing: 10) {
+                        PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
+                            .frame(maxWidth: 260)
+                        Spacer(minLength: 8)
+                        if tab == .summary, record.note != nil {
+                            noteLanguageMenu
+                        }
+                    }
                     Group {
                     switch tab {
                     case .summary:
                         if let note = record.note {
-                            HStack(spacing: 8) {
-                                // Fince ve İngilizce hep görünür; seçilen diğer dil de dördüncü olarak eklenir.
-                                let others: [(value: ShareLanguage?, title: LocalizedStringKey)] = noteLanguage.flatMap { (language: ShareLanguage) -> [(value: ShareLanguage?, title: LocalizedStringKey)]? in
-                                    [.finnish, .english].contains(language) ? nil : [(value: language, title: LocalizedStringKey(language.nativeName))]
-                                } ?? []
-                                PillPicker(selection: $noteLanguage, options: [
-                                    (value: nil, title: "Türkçe"), (value: ShareLanguage.finnish, title: "Suomi"), (value: ShareLanguage.english, title: "English"),
-                                ] + others)
-                                .fixedSize()
-                                .hoverHint("İş arkadaşlarına göndermek için notun başka dildeki sürümü", alignment: .leading, edge: .bottom)
-                                Menu {
-                                    ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
-                                        Button(language.nativeName) { noteLanguage = language }
-                                    }
-                                } label: {
-                                    Label("Diğer diller", systemImage: "globe")
-                                }
-                                .menuStyle(.button)
-                                .buttonStyle(.pill)
-                                .menuIndicator(.hidden)
-                                .fixedSize()
-                                .hoverHint("Notu 30'dan fazla dilden birine çevir", alignment: .leading, edge: .bottom)
-                            }
                             if let language = noteLanguage {
                                 // Dil değişince durum (hata, deneme) sıfırlansın.
                                 SharedNoteSection(model: model, record: record, note: note, language: language)
@@ -595,6 +579,35 @@ struct MeetingDetailPage: View {
                 .fill(Theme.card)
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.line))
         }
+    }
+
+    /// Notun dili: Türkçe (asıl not), sık kullanılan Fince ve İngilizce, sonra diğer diller.
+    private var noteLanguageMenu: some View {
+        Menu {
+            Button("Türkçe") { noteLanguage = nil }
+            Button(ShareLanguage.finnish.nativeName) { noteLanguage = .finnish }
+            Button(ShareLanguage.english.nativeName) { noteLanguage = .english }
+            Divider()
+            Menu("Diğer diller") {
+                ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
+                    Button(language.nativeName) { noteLanguage = language }
+                }
+            }
+        } label: {
+            Label {
+                if let language = noteLanguage {
+                    Text(verbatim: language.nativeName)
+                } else {
+                    Text("Türkçe")
+                }
+            } icon: {
+                Image(systemName: "globe")
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.pill)
+        .fixedSize()
+        .hoverHint("Notu iş arkadaşların için 30'dan fazla dilden birine çevir", alignment: .trailing, edge: .bottom)
     }
 
     /// Kapaktaki çipler: süre, dil, konuşmacı, karar ve terim sayısı (olanlar).
@@ -1131,6 +1144,8 @@ private struct SummaryTab: View {
     /// İşaretlenen anı ses klibi olarak kaydeder.
     let onClip: @MainActor (TranscriptParagraph) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    /// Kendi notları yazılıyor (henüz notu yokken "Kendi notun" düğmesiyle açılır).
+    @State private var isEditingMyNotes: Bool = false
 
     var body: some View {
         let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
@@ -1157,10 +1172,10 @@ private struct SummaryTab: View {
     private var main: some View {
         let mine: [NoteTask] = note.tasks.filter(\.isMine)
         let others: [NoteTask] = note.tasks.filter { !$0.isMine }
+        let myNotes: String = record.myNotes ?? ""
+        let isLocked: Bool = model.isLocked(meetingID: record.id)
         return VStack(alignment: .leading, spacing: 30) {
-            if mine.isEmpty {
-                NoMyTasksCard(seed: record.id, hasOtherTasks: !others.isEmpty)
-            } else {
+            if !mine.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SENİN GÖREVLERİN")
                         .appFont(size: 11, weight: .semibold)
@@ -1175,12 +1190,19 @@ private struct SummaryTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.soft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            // Kendi notların ve notu sorarak düzenleme yan yana iki eylem: tek grupta, sıkı aralıkla.
+            // Kendi notların (varsa ya da yazılırken) ve notu sorarak düzenleme tek grupta; "Kendi notun" düzenleme
+            // alanının içinde küçük bir düğme.
             VStack(alignment: .leading, spacing: 10) {
-                MyNotesCard(notes: record.myNotes ?? "", isLocked: model.isLocked(meetingID: record.id)) { (text: String) -> Void in
-                    model.saveMyNotes(meetingID: record.id, text: text)
+                if !myNotes.isEmpty || isEditingMyNotes {
+                    MyNotesCard(notes: myNotes, isLocked: isLocked, isEditing: $isEditingMyNotes) { (text: String) -> Void in
+                        model.saveMyNotes(meetingID: record.id, text: text)
+                    }
                 }
-                NoteEditBar(isWorking: model.processingMeetingIDs.contains(record.id)) { (instruction: String) -> Void in
+                NoteEditBar(
+                    isWorking: model.processingMeetingIDs.contains(record.id),
+                    canAddMyNotes: myNotes.isEmpty && !isEditingMyNotes && !isLocked,
+                    onAddMyNotes: { withAnimation(.smooth(duration: 0.2)) { isEditingMyNotes = true } }
+                ) { (instruction: String) -> Void in
                     model.editNote(meetingID: record.id, instruction: instruction)
                 }
             }
@@ -1391,42 +1413,13 @@ private struct SummaryTab: View {
     }
 }
 
-/// "Bu toplantıda sana düşen görev yok": toplantının kapağından küçük gradyan simge kutusu, başlık ve kısa açıklama;
-/// vurgu renginde çok hafif zemin.
-private struct NoMyTasksCard: View {
-    let seed: String
-    let hasOtherTasks: Bool
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
-
-    var body: some View {
-        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark")
-                .appFont(size: 15, weight: .bold)
-                .foregroundStyle(.white)
-                .frame(width: 38, height: 38)
-                .background { CoverBackground(seed: seed) }
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Bu toplantıda sana düşen görev yok")
-                    .appFont(size: 14, weight: .semibold)
-                    .foregroundStyle(Theme.ink)
-                Text(hasOtherTasks ? "Başkalarına düşen görevler ve kararlar aşağıda." : "Özet ve kararlar aşağıda.")
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .background(appearance.accent.color.opacity(0.05), in: shape)
-        .overlay(shape.strokeBorder(appearance.accent.color.opacity(0.18)))
-    }
-}
-
 /// Notu sorarak düzenle: tek satır istek ("özeti kısalt", "görevlere tarih ekle") ve hazır öneri hapları; düzenlenirken
 /// parıltılı "Not düzenleniyor…".
 private struct NoteEditBar: View {
     let isWorking: Bool
+    /// Henüz kendi notu yok: alanın sağında "Kendi notun" düğmesi görünür.
+    let canAddMyNotes: Bool
+    let onAddMyNotes: @MainActor () -> Void
     let onEdit: @MainActor (String) -> Void
     @State private var instruction: String = ""
     @FocusState private var isFocused: Bool
@@ -1459,6 +1452,13 @@ private struct NoteEditBar: View {
                     }
                     .buttonStyle(.hoverCapsule)
                     .accessibilityLabel("Notu düzenle")
+                } else if canAddMyNotes, instruction.isEmpty {
+                    Button("Kendi notun", systemImage: "square.and.pencil", action: onAddMyNotes)
+                        .appFont(size: 12, weight: .medium)
+                        .buttonStyle(.hoverPlain)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize()
+                        .hoverHint("Kendi notunu yaz; not onu öncelik sayıp yeniden yazılır", alignment: .trailing, edge: .bottom)
                 }
             }
             .padding(.horizontal, 12)
@@ -1498,88 +1498,75 @@ private struct NoteEditBar: View {
 }
 
 /// "Senin notların": kullanıcının toplantıda yazdıkları (not bunları öncelik saydı). Düzenlenebilir; "Kaydet ve notu
-/// yeniden yaz" notu yeni notlarla baştan yazar. Not yoksa tek satırlık "Kendi notunu ekle".
+/// yeniden yaz" notu yeni notlarla baştan yazar. Not yokken düzenleme alanındaki "Kendi notun" düğmesiyle açılır.
 private struct MyNotesCard: View {
     let notes: String
     let isLocked: Bool
+    @Binding var isEditing: Bool
     let onSave: @MainActor (String) -> Void
-    @State private var isEditing: Bool = false
     @State private var draft: String = ""
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        if notes.isEmpty, !isEditing {
-            Button {
-                draft = ""
-                withAnimation(.smooth(duration: 0.2)) { isEditing = true }
-            } label: {
-                Label("Kendi notunu ekle — not onu öncelik sayıp yeniden yazılır", systemImage: "square.and.pencil")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
-            }
-            .buttonStyle(.hoverPlain)
-            .disabled(isLocked)
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Label {
-                        Text("SENİN NOTLARIN").tracking(DesignTokens.labelTracking)
-                    } icon: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .appFont(size: 11, weight: .semibold)
-                    .foregroundStyle(appearance.accent.color)
-                    Spacer()
-                    if isEditing {
-                        Button("Vazgeç") { withAnimation(.smooth(duration: 0.2)) { isEditing = false } }
-                            .buttonStyle(.hoverPlain)
-                            .foregroundStyle(Theme.muted)
-                        Button("Kaydet ve notu yeniden yaz") {
-                            onSave(draft)
-                            withAnimation(.smooth(duration: 0.2)) { isEditing = false }
-                        }
-                        .buttonStyle(.pillPrimary)
-                        .controlSize(.small)
-                        // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
-                        .disabled(isLocked)
-                        .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
-                    } else {
-                        Button("Düzenle", systemImage: "pencil") {
-                            draft = notes
-                            withAnimation(.smooth(duration: 0.2)) { isEditing = true }
-                        }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Label {
+                    Text("SENİN NOTLARIN").tracking(DesignTokens.labelTracking)
+                } icon: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .appFont(size: 11, weight: .semibold)
+                .foregroundStyle(appearance.accent.color)
+                Spacer()
+                if isEditing {
+                    Button("Vazgeç") { withAnimation(.smooth(duration: 0.2)) { isEditing = false } }
                         .buttonStyle(.hoverPlain)
                         .foregroundStyle(Theme.muted)
-                        .disabled(isLocked)
+                    Button("Kaydet ve notu yeniden yaz") {
+                        onSave(draft)
+                        withAnimation(.smooth(duration: 0.2)) { isEditing = false }
                     }
-                }
-                .appFont(size: 12, weight: .medium)
-                if isEditing {
-                    TextEditor(text: $draft)
-                        .appFont(size: 14, weight: .regular)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 90, maxHeight: 220)
+                    .buttonStyle(.pillPrimary)
+                    .controlSize(.small)
+                    // Toplantı işlenirken kayıt reddedilir: taslak kaybolmasın, düğme beklesin.
+                    .disabled(isLocked)
+                    .hoverHint(isLocked ? "Toplantı işleniyor; bitince kaydedebilirsin" : "Notu bu notlarla yeniden yazar", alignment: .trailing, edge: .bottom)
                 } else {
-                    Text(notes)
-                        .appFont(size: 14, weight: .regular)
-                        .foregroundStyle(Theme.ink)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Düzenle", systemImage: "pencil") {
+                        draft = notes
+                        withAnimation(.smooth(duration: 0.2)) { isEditing = true }
+                    }
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(Theme.muted)
+                    .disabled(isLocked)
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(appearance.accent.color.opacity(0.04), in: shape)
-            .overlay(alignment: .leading) {
-                // Sol kenarda vurgu çizgisi: bu metin kullanıcının kendi yazdığı.
-                UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
-                    .fill(appearance.accent.color.opacity(0.7))
-                    .frame(width: 3)
+            .appFont(size: 12, weight: .medium)
+            if isEditing {
+                TextEditor(text: $draft)
+                    .appFont(size: 14, weight: .regular)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 90, maxHeight: 220)
+            } else {
+                Text(notes)
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Theme.ink)
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .overlay(shape.strokeBorder(Theme.line))
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(appearance.accent.color.opacity(0.04), in: shape)
+        .overlay(alignment: .leading) {
+            // Sol kenarda vurgu çizgisi: bu metin kullanıcının kendi yazdığı.
+            UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16)
+                .fill(appearance.accent.color.opacity(0.7))
+                .frame(width: 3)
+        }
+        .overlay(shape.strokeBorder(Theme.line))
     }
 }
 

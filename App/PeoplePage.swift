@@ -2,14 +2,16 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Kişiler: toplantılarda adı verilen konuşmacılar ve elle eklenenler. Solda arama, "Kişi ekle" ve liste (son
-/// görüldüğü toplantıya göre), sağda kişinin sayfası (düzenle, kaldır) ya da ekleme formu.
+/// Kişiler: toplantılarda adı verilen konuşmacılar ve elle eklenenler. Solda açılıp kapanan liste (arama ve "Kişi
+/// ekle"; son görüldüğü toplantıya göre; varsayılan kapalı), sağda kişinin sayfası (düzenle, kaldır) ya da ekleme formu.
+/// Liste kapalıyken üst çubuktaki menüden kişi seçilir.
 struct PeoplePage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var selected: String?
     @State private var isAdding: Bool = false
     @State private var filter: String = ""
+    @AppStorage(SettingsKey.peopleListVisible) private var listVisible: Bool = false
 
     var body: some View {
         let people: [PersonSummary] = peopleDirectory(
@@ -22,108 +24,156 @@ struct PeoplePage: View {
         }
         let current: PersonSummary? = people.first { $0.id == selected } ?? people.first
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
-                        TextField("Kişi ara", text: $filter).textFieldStyle(.plain)
-                    }
-                    .appFont(size: 13, weight: .regular)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Theme.soft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    Button {
-                        withAnimation(.smooth(duration: 0.25)) { isAdding = true }
-                    } label: {
-                        Image(systemName: "person.badge.plus")
-                            .appFont(size: 14, weight: .medium)
-                            .frame(width: 32, height: 30)
-                    }
-                    .buttonStyle(.hoverPlain)
-                    .accessibilityLabel("Kişi ekle")
-                    .hoverHint("Kişi ekle", alignment: .trailing, edge: .bottom)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
-                if let error = model.peopleBookError {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 14)
-                }
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(shown) { (person: PersonSummary) in
-                            row(person: person, isSelected: !isAdding && current?.id == person.id)
+            if listVisible {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
+                            TextField("Kişi ara", text: $filter).textFieldStyle(.plain)
                         }
-                        if shown.isEmpty, !people.isEmpty {
-                            Text("Eşleşen kişi yok")
-                                .appFont(size: 13, weight: .regular)
-                                .foregroundStyle(Theme.muted)
-                                .padding(12)
+                        .appFont(size: 13, weight: .regular)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Theme.soft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        Button {
+                            withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                        } label: {
+                            Image(systemName: "person.badge.plus")
+                                .appFont(size: 14, weight: .medium)
+                                .frame(width: 32, height: 30)
                         }
+                        .buttonStyle(.hoverPlain)
+                        .accessibilityLabel("Kişi ekle")
+                        .hoverHint("Kişi ekle", alignment: .trailing, edge: .bottom)
                     }
-                    .padding(8)
-                }
-            }
-            .frame(width: 280)
-            .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
-            Group {
-                if isAdding {
-                    PersonForm(title: "Kişi ekle", initialName: "", lockedName: nil, initialRole: "", initialEmail: "") { (name: String, role: String, email: String) -> Void in
-                        model.savePerson(name: name, role: role, email: email)
-                        selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                        isAdding = false
-                    } onCancel: {
-                        isAdding = false
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
+                    if let error = model.peopleBookError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 14)
                     }
-                    .transition(.opacity)
-                } else if let current {
-                    PersonDetail(person: current, router: router) { (name: String, role: String, email: String) -> Void in
-                        // Elle eklenen kişinin adı değişebilir (sesi de taşınır); toplantıdan gelen kişinin adı
-                        // toplantılarda verildiği için formda kilitlidir, yalnızca ünvan ve e-posta kaydedilir.
-                        // Toplantılarda adı geçen kişinin adı toplantılarda verildiği için değişmez (değişirse kişi ikiye
-                        // bölünürdü); yalnızca toplantısız, elle eklenen kişinin adı değişir.
-                        if current.isSaved, current.meetings.isEmpty {
-                            model.renamePerson(oldName: current.name, name: name, role: role, email: email)
-                            selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                        } else {
-                            model.savePerson(name: current.name, role: role, email: email)
-                            selected = current.id
-                        }
-                    } onRemove: {
-                        model.removePerson(name: current.name)
-                        selected = nil
-                    }
-                    .id(current.id)
-                    .transition(.opacity)
-                } else {
                     ScrollView {
-                        EmptyStateHero(
-                            symbol: "person.2.fill", title: "Henüz kimse yok",
-                            message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle. Sık görüştüğün kişileri şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir.",
-                            palette: .sunset,
-                            steps: [
-                                EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
-                                EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),
-                                EmptyStateStep(symbol: "person.crop.circle.badge.checkmark", title: "Kişi burada toplanır"),
-                            ]
-                        ) {
-                            Button("Kişi ekle", systemImage: "person.badge.plus") {
-                                withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(shown) { (person: PersonSummary) in
+                                row(person: person, isSelected: !isAdding && current?.id == person.id)
                             }
-                            .buttonStyle(.pillPrimary)
+                            if shown.isEmpty, !people.isEmpty {
+                                Text("Eşleşen kişi yok")
+                                    .appFont(size: 13, weight: .regular)
+                                    .foregroundStyle(Theme.muted)
+                                    .padding(12)
+                            }
                         }
-                        .padding(.top, 24)
+                        .padding(8)
                     }
-                    .scrollIndicators(.hidden)
                 }
+                .frame(width: 280)
+                .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            VStack(spacing: 0) {
+                toolbar(people: people, current: current)
+                Group {
+                    if isAdding {
+                        PersonForm(title: "Kişi ekle", initialName: "", lockedName: nil, initialRole: "", initialEmail: "") { (name: String, role: String, email: String) -> Void in
+                            model.savePerson(name: name, role: role, email: email)
+                            selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                            isAdding = false
+                        } onCancel: {
+                            isAdding = false
+                        }
+                        .transition(.opacity)
+                    } else if let current {
+                        PersonDetail(person: current, router: router) { (name: String, role: String, email: String) -> Void in
+                            // Elle eklenen kişinin adı değişebilir (sesi de taşınır); toplantıdan gelen kişinin adı
+                            // toplantılarda verildiği için formda kilitlidir, yalnızca ünvan ve e-posta kaydedilir.
+                            // Toplantılarda adı geçen kişinin adı toplantılarda verildiği için değişmez (değişirse kişi ikiye
+                            // bölünürdü); yalnızca toplantısız, elle eklenen kişinin adı değişir.
+                            if current.isSaved, current.meetings.isEmpty {
+                                model.renamePerson(oldName: current.name, name: name, role: role, email: email)
+                                selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                            } else {
+                                model.savePerson(name: current.name, role: role, email: email)
+                                selected = current.id
+                            }
+                        } onRemove: {
+                            model.removePerson(name: current.name)
+                            selected = nil
+                        }
+                        .id(current.id)
+                        .transition(.opacity)
+                    } else {
+                        ScrollView {
+                            EmptyStateHero(
+                                symbol: "person.2.fill", title: "Henüz kimse yok",
+                                message: "Konuşmacıya bir kez ad ver; kişi burada görünür, toplantıları, konuşma payı ve görevleriyle. Sık görüştüğün kişileri şimdiden ekleyebilirsin; adları konuşma tanımaya da verilir.",
+                                palette: .sunset,
+                                steps: [
+                                    EmptyStateStep(symbol: "doc.text", title: "Toplantının transkriptini aç"),
+                                    EmptyStateStep(symbol: "character.cursor.ibeam", title: "Konuşmacıya ad ver"),
+                                    EmptyStateStep(symbol: "person.crop.circle.badge.checkmark", title: "Kişi burada toplanır"),
+                                ]
+                            ) {
+                                Button("Kişi ekle", systemImage: "person.badge.plus") {
+                                    withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                                }
+                                .buttonStyle(.pillPrimary)
+                            }
+                            .padding(.top, 24)
+                        }
+                        .scrollIndicators(.hidden)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
         .animation(.smooth(duration: 0.25), value: selected)
         .animation(.smooth(duration: 0.25), value: isAdding)
+        .animation(.smooth(duration: 0.25), value: listVisible)
+    }
+
+    /// Üst çubuk: listeyi göster/gizle; liste kapalıyken kişi seçici menü ve "Kişi ekle".
+    private func toolbar(people: [PersonSummary], current: PersonSummary?) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                listVisible.toggle()
+            } label: {
+                Image(systemName: "sidebar.left")
+                    .appFont(size: 14, weight: .medium)
+                    .frame(width: 30, height: 28)
+            }
+            .buttonStyle(.hoverPlain)
+            .accessibilityLabel(listVisible ? "Kişi listesini gizle" : "Kişi listesini göster")
+            .hoverHint(listVisible ? "Kişi listesini gizle" : "Kişi listesini göster", alignment: .leading, edge: .bottom)
+            if !listVisible, !people.isEmpty {
+                Menu {
+                    ForEach(people) { (person: PersonSummary) in
+                        Button(person.name) {
+                            isAdding = false
+                            selected = person.id
+                        }
+                    }
+                } label: {
+                    Text(verbatim: current?.name ?? "")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.pill)
+                .fixedSize()
+                .hoverHint("Başka bir kişiyi aç", alignment: .leading, edge: .bottom)
+                Spacer(minLength: 8)
+                Button("Kişi ekle", systemImage: "person.badge.plus") {
+                    withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+                }
+                .buttonStyle(.pill)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
     }
 
     private func row(person: PersonSummary, isSelected: Bool) -> some View {

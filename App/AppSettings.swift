@@ -81,6 +81,8 @@ enum SettingsKey {
     static let folders: String = "folders"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
+    /// Kişiler sayfasındaki liste açık (varsayılan kapalı: sayfa kişinin kendisine yer açar).
+    static let peopleListVisible: String = "people.listVisible"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
     static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.
@@ -226,6 +228,7 @@ func registerDefaultSettings() {
         SettingsKey.voiceRecognition: false,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
+        SettingsKey.peopleListVisible: false,
         SettingsKey.inPersonMode: false,
         SettingsKey.appleNotesAutoSend: false,
         SettingsKey.markdownFolder: "",
