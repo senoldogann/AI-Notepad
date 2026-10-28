@@ -1,0 +1,4 @@
+# Bağımlılıklar ve derleme çıktıları
+node_modules/
+dist/
+.astro/

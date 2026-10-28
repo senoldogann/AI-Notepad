@@ -1,0 +1,15 @@
+---
+// Durgun film gradyanı yüzeyi (kapak). Görünüm global.css'teki `.film` sınıflarındadır.
+import type { FilmLayout, FilmPalette } from "../lib/film";
+
+interface Props {
+  readonly palette: FilmPalette;
+  readonly layout: FilmLayout;
+  readonly class: string;
+}
+const { palette, layout, class: extraClass } = Astro.props;
+---
+
+<div class:list={["film", `film--${palette}`, `film--${layout}`, extraClass]}>
+  <slot />
+</div>

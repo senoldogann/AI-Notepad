@@ -1,0 +1,17 @@
+{
+  "name": "ainotepad-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "PUBLIC_WEB_TARGET=local astro dev --port 8788",
+    "typecheck": "PUBLIC_WEB_TARGET=production astro check",
+    "build": "PUBLIC_WEB_TARGET=production astro build",
+    "build:local": "PUBLIC_WEB_TARGET=local astro build",
+    "preview": "astro preview --port 8788"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "astro": "7.4.4",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,172 @@
+---
+// Alt bilgi: kısa tanım, ürün, hesap ve yasal bağlantılar, dil değiştirici.
+import Logo from "./Logo.astro";
+import { repositoryUrl } from "../config";
+import { copy, type CommonCopy } from "../i18n/copy";
+import { type Lang, type PageKey, langMeta, langs, pagePath } from "../i18n/routes";
+
+interface Props {
+  readonly lang: Lang;
+  readonly page: PageKey;
+}
+const { lang, page } = Astro.props;
+const text: CommonCopy = copy[lang].common;
+const nav = copy[lang].common.nav;
+const columns: { readonly title: string; readonly links: { readonly href: string; readonly label: string; readonly external: boolean }[] }[] = [
+  {
+    title: text.footer.product,
+    links: [
+      { href: `${pagePath("home", lang)}#features`, label: nav.features, external: false },
+      { href: pagePath("pricing", lang), label: nav.pricing, external: false },
+      { href: pagePath("download", lang), label: nav.download, external: false },
+      { href: repositoryUrl, label: text.footer.sourceCode, external: true },
+    ],
+  },
+  {
+    title: text.footer.account,
+    links: [
+      { href: pagePath("signIn", lang), label: nav.signIn, external: false },
+      { href: pagePath("account", lang), label: nav.account, external: false },
+    ],
+  },
+  {
+    title: text.footer.legal,
+    links: [
+      { href: pagePath("privacy", lang), label: nav.privacy, external: false },
+      { href: pagePath("terms", lang), label: nav.terms, external: false },
+      { href: "/fonts/Inter-OFL.txt", label: text.footer.fontLicense, external: false },
+    ],
+  },
+];
+---
+
+<footer class="site-footer">
+  <div class="page site-footer__grid">
+    <div class="site-footer__about">
+      <a class="site-footer__brand" href={pagePath("home", lang)} aria-label={text.homeLabel}>
+        <Logo size={28} />
+        <span>AI-Notepad</span>
+      </a>
+      <p class="muted">{text.footer.tagline}</p>
+      <ul class="site-footer__langs">
+        {
+          langs.map((option: Lang) => (
+            <li>
+              {option === lang ? (
+                <span aria-current="true">{langMeta[option].name}</span>
+              ) : (
+                <a href={pagePath(page, option)} hreflang={option} lang={option}>
+                  {langMeta[option].name}
+                </a>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    {
+      columns.map((column) => (
+        <nav aria-label={column.title}>
+          <h2 class="site-footer__title">{column.title}</h2>
+          <ul class="site-footer__links">
+            {column.links.map((link) => (
+              <li>
+                <a href={link.href} rel={link.external ? "noopener" : undefined}>
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ))
+    }
+  </div>
+  <div class="page site-footer__bottom">
+    <p>{text.footer.copyright}</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: clamp(48px, 8vw, 96px);
+    border-top: 1px solid var(--line);
+    padding-top: 56px;
+    font-size: 0.9375rem;
+  }
+
+  .site-footer__grid {
+    display: grid;
+    grid-template-columns: 1.6fr repeat(3, 1fr);
+    gap: 32px;
+  }
+
+  .site-footer__about {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+  }
+
+  .site-footer__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    width: fit-content;
+  }
+
+  .site-footer__title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .site-footer__links,
+  .site-footer__langs {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-footer__langs {
+    display: flex;
+    gap: 14px;
+    font-size: 0.875rem;
+  }
+
+  .site-footer__langs span {
+    font-weight: 600;
+  }
+
+  .site-footer a {
+    text-decoration: none;
+  }
+
+  .site-footer__links a:hover,
+  .site-footer__langs a:hover {
+    text-decoration: underline;
+  }
+
+  .site-footer__bottom {
+    margin-top: 48px;
+    padding-block: 24px 32px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  @media (max-width: 760px) {
+    .site-footer__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .site-footer__about {
+      grid-column: 1 / -1;
+    }
+  }
+</style>
