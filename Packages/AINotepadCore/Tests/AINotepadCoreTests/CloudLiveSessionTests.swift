@@ -35,7 +35,7 @@ func cloudConfig(
         languageConfidence: 0.8,
         keyterms: ["Aino", "raportti"],
         // Gerçek ses izi (SpeakerKit): pencereler canlıdaki gibi izle eşlenir.
-        voiceEmbedder: SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory()),
+        voiceEmbedder: SpeakerKitVoiceEmbedder(modelsDirectory: try testModelsDirectory()),
         automaticStartLanguage: .finnish
     )
 }

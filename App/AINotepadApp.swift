@@ -26,6 +26,15 @@ private func writeAcceptanceResult(line: String) {
 @main
 enum AppEntry {
     static func main() {
+        // Veri klasörü adı Info.plist'ten gelir; yoksa uygulama başka bir uygulamanın verisine yazmasın diye açılmaz.
+        do {
+            _ = try AppPaths.dataFolderName(bundle: .main)
+        } catch {
+            let message: String = userFacingMessage(error: error)
+            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+            FileHandle.standardError.write(Data("AI-Notepad: \(message)\n".utf8))
+            fatalError(message)
+        }
         #if DEBUG
         if CommandLine.arguments.contains("--icloud-yokla") {
             probeICloud()

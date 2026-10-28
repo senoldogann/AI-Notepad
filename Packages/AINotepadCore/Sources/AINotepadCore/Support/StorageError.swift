@@ -11,4 +11,6 @@ public enum StorageError: Error, Equatable {
     /// Taşıma hedefinde aynı adlı klasör var (üzerine yazılmaz).
     case alreadyExists(path: String)
     case moveFailed(path: String, reason: String)
+    /// Uygulamanın Info.plist'inde veri klasörü adı yok (derleme yapılandırması hatası; bkz. `dataFolderInfoKey`).
+    case dataFolderNotConfigured(key: String, bundle: String)
 }

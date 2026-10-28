@@ -231,6 +231,8 @@ private func storageMessage(error: StorageError) -> String {
         String(localized: "Aynı toplantı hedefte zaten var: \((path as NSString).lastPathComponent). İki kopyayı karşılaştırıp birini sil.")
     case .moveFailed(let path, _):
         String(localized: "Toplantı taşınamadı: \((path as NSString).lastPathComponent). İnternet bağlantısını kontrol edip yeniden dene.")
+    case .dataFolderNotConfigured(let key, let bundle):
+        String(localized: "Uygulamanın veri klasörü tanımlı değil (\(bundle) Info.plist'inde \(key) yok). Uygulamayı yeniden kur.")
     }
 }
 

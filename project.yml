@@ -38,6 +38,8 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Gömülü Inter (App/Fonts; Resources köküne kopyalanır).
         ATSApplicationFontsPath: "."
+        # Veri klasörü: ~/Library/Application Support/AINotepad (bkz. AppPaths.dataFolderName).
+        AINotepadDataFolderName: AINotepad
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
@@ -97,6 +99,8 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ATSApplicationFontsPath: "."
+        # Kendi veri klasörü: geliştirici sürümünün ~/Library/Application Support/AINotepad'ine hiç dokunulmaz.
+        AINotepadDataFolderName: "AINotepad Hosted"
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
@@ -193,6 +197,8 @@ targets:
       properties:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Veri klasörü (uygulamanın kendi kabında): Application Support/AINotepad.
+        AINotepadDataFolderName: AINotepad
         # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
         UIBackgroundModes: [audio]
         UIAppFonts: [InterVariable.ttf]
