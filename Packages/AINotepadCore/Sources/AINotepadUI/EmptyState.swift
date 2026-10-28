@@ -217,7 +217,7 @@ struct EmptyStateOrb: View {
                 .blur(radius: 34)
             Group {
                 if isAnimated {
-                    LivingFilmGradient(seed: "bos-\(symbol)", palette: palette)
+                    FilmGradient(seed: "bos-\(symbol)", palette: palette)
                 } else {
                     FilmGradient(seed: "bos-\(symbol)", palette: palette)
                 }

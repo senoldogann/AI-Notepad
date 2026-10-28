@@ -358,7 +358,7 @@ struct AskTab: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background { LivingFilmGradient(seed: "ask", palette: .violet) }
+            .background { FilmGradient(seed: "ask", palette: .violet) }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .environment(\.colorScheme, .dark)
             PhoneSectionHeader(title: "Örnek sorular", actionTitle: nil, action: nil)

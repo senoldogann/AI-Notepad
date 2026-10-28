@@ -169,7 +169,7 @@ private struct RecordHeroCard: View {
         .padding(20)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background { LivingFilmGradient(seed: "kayit", palette: .sunset) }
+        .background { FilmGradient(seed: "kayit", palette: .sunset) }
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.10)))
         .environment(\.colorScheme, .dark)

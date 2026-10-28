@@ -74,7 +74,7 @@ public struct OnboardingPanel: View {
         .foregroundStyle(.white)
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background { LivingFilmGradient(seed: seed, palette: palette) }
+        .background { FilmGradient(seed: seed, palette: palette) }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.10)))
         .environment(\.colorScheme, .dark)

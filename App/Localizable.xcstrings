@@ -637,6 +637,16 @@
         }
       }
     },
+    "%lld açık": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld open"
+          }
+        }
+      }
+    },
     "%lld beceri Sor'a tarif olarak eklendi.": {
       "localizations": {
         "en": {
@@ -3826,6 +3836,16 @@
         }
       }
     },
+    "Günaydın": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good morning"
+          }
+        }
+      }
+    },
     "Güncelle": {
       "localizations": {
         "en": {
@@ -4761,6 +4781,16 @@
         }
       }
     },
+    "Kayıt sırasında yazı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text while recording"
+          }
+        }
+      }
+    },
     "Kayıt sırasında çentikte adayı göster": {
       "localizations": {
         "en": {
@@ -5361,16 +5391,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speakers and final pass"
-          }
-        }
-      }
-    },
-    "Konuşmacılara ad ver — \"Gözden geçir\" adları ve birleştirmeleri önerir": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Name your speakers — \"Review\" suggests names and merges"
           }
         }
       }
@@ -7224,6 +7244,16 @@
         }
       }
     },
+    "Ses ya da video": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio or video"
+          }
+        }
+      }
+    },
     "Ses ya da video dosyasından toplantı (sürükleyip bırakabilirsin)": {
       "localizations": {
         "en": {
@@ -7608,16 +7638,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "What was decided in recent meetings?"
-          }
-        }
-      }
-    },
-    "Son toplantıyı aç": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open latest meeting"
           }
         }
       }
@@ -8930,16 +8950,6 @@
         }
       }
     },
-    "Uzun toplantılar artık parça parça not — hiçbir görev kaybolmaz": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Long meetings are now noted part by part — no task gets lost"
-          }
-        }
-      }
-    },
     "Varsayılan görünüm": {
       "localizations": {
         "en": {
@@ -9086,16 +9096,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only the other side will be recorded (click: include your voice)"
-          }
-        }
-      }
-    },
-    "Yalnızca karşı tarafı kaydet — mikrofon hiç açılmaz, yankı olmaz": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Record only the other side — the microphone never opens, no echo"
           }
         }
       }
@@ -10304,6 +10304,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Italian"
+          }
+        }
+      }
+    },
+    "İyi akşamlar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good evening"
+          }
+        }
+      }
+    },
+    "İyi geceler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good night"
+          }
+        }
+      }
+    },
+    "İyi günler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good afternoon"
           }
         }
       }
