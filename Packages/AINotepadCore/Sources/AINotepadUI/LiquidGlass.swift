@@ -362,7 +362,11 @@ private struct PrimarySurface<S: Shape>: ViewModifier {
         case .standard:
             content.background(Theme.primary, in: shape)
         case .liquidGlass:
-            content.glassEffect(.regular.tint(Theme.primary).interactive(), in: shape)
+            // Dolgu düz kalır, cam üstte kenar ve parıltı olur: yalnızca camı ana renkle tonlamak (yarı saydam) siyahı
+            // açık griye çeviriyor, beyaz yazı okunmuyordu.
+            content
+                .background(Theme.primary, in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
         }
     }
 }

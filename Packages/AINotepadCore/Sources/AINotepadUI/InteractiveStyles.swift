@@ -202,16 +202,12 @@ private struct GlassPillBody: View {
             .padding(.horizontal, metrics.horizontal)
             .padding(.vertical, metrics.vertical)
             .contentShape(Capsule())
-            .glassEffect(glass, in: Capsule())
+            // Ana düğmede dolgu düz kalır, cam üstte kenar ve parıltı olur: camı ana renkle tonlamak (yarı saydam)
+            // siyahı açık griye çeviriyor, beyaz yazı okunmuyordu.
+            .background(isPrimary && isEnabled ? Theme.primary : Color.clear, in: Capsule())
+            .glassEffect(look.interactiveGlass(colorScheme: colorScheme), in: Capsule())
             .opacity(isEnabled || isPrimary ? 1 : 0.45)
             .linkPointer(isEnabled: isEnabled)
-    }
-
-    private var glass: Glass {
-        if isPrimary && isEnabled {
-            return .regular.tint(Theme.primary).interactive()
-        }
-        return look.interactiveGlass(colorScheme: colorScheme)
     }
 
     private var foreground: Color {
