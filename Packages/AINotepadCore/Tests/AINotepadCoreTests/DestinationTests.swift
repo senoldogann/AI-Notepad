@@ -67,6 +67,24 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         #expect(migratedDestinations(connection: nil, webhook: nil, autoSend: true, now: now) { "x" }.isEmpty)
     }
 
+    // Discord girişinin webhook'u ayrı türde saklanır; eski sürümün `.webhook` kaydı aynen okunur. İkisinin gönderim
+    // anahtarı aynıdır (eski sürümdeki Mac aynı adrese yeniden göndermez). Yapıştırılan Discord adresi kaldırılınca
+    // Discord'da silinmez (ağ isteği yapılmaz).
+    @Test func discordSignInWebhookIsSeparateAndLegacyDecodes() async throws {
+        let url: URL = URL(string: "https://discord.com/api/webhooks/1/abc")!
+        let decoder: JSONDecoder = JSONDecoder()
+        let legacy: DestinationTarget = try decoder.decode(DestinationTarget.self, from: Data(#"{"webhook":{"_0":"https:\/\/discord.com\/api\/webhooks\/1\/abc"}}"#.utf8))
+        #expect(legacy == .webhook(url))
+        let signedIn: DestinationTarget = .discordSignIn(url)
+        #expect(try decoder.decode(DestinationTarget.self, from: JSONEncoder().encode(signedIn)) == signedIn)
+        let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
+        let pasted: NoteDestination = NoteDestination(id: "p", target: legacy, autoSend: false, createdAt: now, needsReconnect: false)
+        let created: NoteDestination = NoteDestination(id: "s", target: signedIn, autoSend: false, createdAt: now, needsReconnect: false)
+        #expect(destinationSendKey(destination: pasted) == destinationSendKey(destination: created))
+        #expect(destinationName(destination: created) == "Discord" && destinationDetail(destination: created) == "discord.com")
+        try await revokeDestination(destination: pasted)
+    }
+
     // Kayıt işaretleri yinelenmez.
     @Test func sentMarksAreUnique() {
         let record: MeetingRecord = destinationRecord(id: "m", endedAt: Date(), sent: ["a", "a", "b"])
@@ -118,13 +136,18 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
 
     @Test func removedDuringRefreshStaysRemoved() async throws {
         try deleteSecret(service: service, account: .destinations)
+        // Yenileme başlayınca haber verir: kaldırma sabit bir beklemeyle değil, yenileme gerçekten sürerken yapılır
+        // (yüklü makinede 50 ms yetmeyebiliyordu).
+        let (started, startedSignal): (AsyncStream<Void>, AsyncStream<Void>.Continuation) = AsyncStream<Void>.makeStream()
         let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in
+            startedSignal.yield()
             try await Task.sleep(for: .milliseconds(300))
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
         let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d", force: false) }
-        try await Task.sleep(for: .milliseconds(50))
+        var signals: AsyncStream<Void>.Iterator = started.makeAsyncIterator()
+        await signals.next()
         _ = try await vault.remove(id: "d")
         _ = await refresh.result
         #expect(try await vault.all().isEmpty)

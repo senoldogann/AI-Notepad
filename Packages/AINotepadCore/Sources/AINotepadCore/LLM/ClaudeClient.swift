@@ -2,10 +2,10 @@ import Foundation
 
 /// Seçilebilen Claude modelleri; ham değer API kimliğidir.
 public enum ClaudeModel: String, Sendable, CaseIterable, Codable {
-    /// Hızlı ve çok ucuz: canlı çeviri için varsayılan.
+    /// Hızlı ve çok ucuz: hem canlı çeviri hem "Ne kaçırdım?", soru-cevap ve not için varsayılan.
     case haiku = "claude-haiku-5-5"
     case sonnet = "claude-sonnet-5-5"
-    /// "Ne kaçırdım?", soru-cevap ve not için varsayılan.
+    /// Daha güçlü; Ayarlar › LLM'den seçilir.
     case opus = "claude-opus-5-5"
     /// En yetenekli (ve en pahalı).
     case fable = "claude-fable-5-1"

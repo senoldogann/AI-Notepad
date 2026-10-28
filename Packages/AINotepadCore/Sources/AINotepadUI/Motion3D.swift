@@ -35,55 +35,9 @@ func tiltAmount(phase: HoverPhase, size: CGSize) -> CGSize {
     return CGSize(width: x, height: y)
 }
 
-/// Durgun süzülme: hafif yukarı-aşağı ve 3D sallanma (ana simge gibi tek bir vurgu öğesi için).
-private struct Floating3D: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
-
-    func body(content: Content) -> some View {
-        if reduceMotion {
-            content
-        } else {
-            content.phaseAnimator([false, true]) { (view: PlaceholderContentView<Content>, raised: Bool) in
-                view
-                    .offset(y: raised ? -3 : 3)
-                    .rotation3DEffect(.degrees(raised ? 6 : -6), axis: (x: 0.3, y: 1, z: 0), perspective: 0.5)
-            } animation: { (_: Bool) in
-                .easeInOut(duration: 2.8)
-            }
-        }
-    }
-}
-
 public extension View {
     /// Fareye göre 3D eğilme; `maxAngle` en büyük eğim (derece).
     func tilt3D(maxAngle: Double) -> some View {
         modifier(Tilt3D(maxAngle: maxAngle))
-    }
-
-    /// Durgun 3D süzülme.
-    func floating3D() -> some View {
-        modifier(Floating3D())
-    }
-}
-
-/// Kart gibi dikey eksende dönerek giriş/çıkış (adımlar arasında geçiş): giren sağdan dönerek gelir, çıkan sola döner.
-private struct Flip3D: ViewModifier {
-    let angle: Double
-    let opacity: Double
-
-    func body(content: Content) -> some View {
-        content
-            .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: angle > 0 ? .leading : .trailing, perspective: 0.5)
-            .opacity(opacity)
-    }
-}
-
-public extension AnyTransition {
-    /// Adım geçişi: 3D dönüş + solma.
-    static var flip3D: AnyTransition {
-        .asymmetric(
-            insertion: .modifier(active: Flip3D(angle: 35, opacity: 0), identity: Flip3D(angle: 0, opacity: 1)),
-            removal: .modifier(active: Flip3D(angle: -35, opacity: 0), identity: Flip3D(angle: 0, opacity: 1))
-        )
     }
 }

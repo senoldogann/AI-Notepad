@@ -204,7 +204,7 @@ private struct GeneralSettings: View {
                     (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
-                .disabled(model.isRecording)
+                .disabled(model.isRecording || model.isStarting)
             }
             SettingsRow(title: Text("Ana toplantı dili")) {
                 Text("Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.")
@@ -1040,18 +1040,25 @@ private struct ConnectionCard<Action: View>: View {
         HStack(spacing: 12) {
             tile
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
-                    if let badge {
-                        Text(verbatim: badge)
-                            .appFont(size: 10, weight: .semibold)
-                            .foregroundStyle(Color.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.12), in: Capsule())
-                    }
+                // Uzun adlar (ör. "Folder (Obsidian, iCloud)") yanda iki düğme varken kesilmesin diye alta kayar.
+                title
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Rozet başlığın altında: yanında dururken uzun adları (İngilizcede) kesiyordu.
+                if let badge {
+                    Text(verbatim: badge)
+                        .appFont(size: 10, weight: .semibold)
+                        .foregroundStyle(Color.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.12), in: Capsule())
                 }
-                detail.appFont(size: 12, weight: .regular).foregroundStyle(Theme.muted).lineLimit(2)
+                detail
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 6)
             action
@@ -1240,6 +1247,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         switch destination.target {
         case .account(let connection): service == connection.service
         case .notion: self == .notion
+        case .discordSignIn: self == .discord
         case .webhook(let url):
             switch webhookKind(url: url) {
             case .slack: self == .slack
@@ -1266,6 +1274,15 @@ private enum ChannelSetup: Equatable {
     case working(String)
     case done(String)
     case failed(String)
+}
+
+/// Kurulum sonucunun kendiliğinden kaybolma süresi: başarı 3,5 sn, hata 5 sn; diğer durumlar kalır. Saf fonksiyondur.
+private func channelSetupFadeDelay(setup: ChannelSetup) -> Duration? {
+    switch setup {
+    case .done: .seconds(3.5)
+    case .failed: .seconds(5)
+    case .idle, .signingIn, .choosing, .pasting, .pastingZoom, .working: nil
+    }
 }
 
 /// Kanallara gönder: bağlı hedefler (her birinin kendiliğinden gönderimi, dene, kanalı değiştir, yeniden bağlan,
@@ -1296,7 +1313,8 @@ private struct WebhookSettings: View {
                 connectedList.padding(.bottom, 16)
             }
             setupStatus
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
+            // Dar alanda (İngilizce, büyük arayüz boyutu) tek sütuna iner: kartlar kesilmez.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12, alignment: .top)], spacing: 12) {
                 ForEach(ChannelCard.allCases) { (card: ChannelCard) in
                     channelCard(card: card)
                 }
@@ -1306,6 +1324,7 @@ private struct WebhookSettings: View {
             .padding(.vertical, 6)
         }
         .task { await model.loadDestinations() }
+        .task(id: setup) { await fadeSetupResult(shown: setup) }
     }
 
     /// Bağlı hedefler tek kartta, ince çizgilerle ayrılmış satırlar.
@@ -1350,7 +1369,7 @@ private struct WebhookSettings: View {
                     switch destination.target {
                     case .account(let connection): Task { await signIn(service: connection.service, replacing: destination.id) }
                     case .notion: notionSignIn = Task { await reconnectNotion(destinationID: destination.id) }
-                    case .webhook: return
+                    case .webhook, .discordSignIn: return
                     }
                 }
                 .buttonStyle(.pillPrimary)
@@ -1442,17 +1461,44 @@ private struct WebhookSettings: View {
                     .disabled(manualAddress.isEmpty || zoomToken.isEmpty)
             }
         case .working(let message):
-            Label(message, systemImage: "paperplane").appFont(size: 13, weight: .regular).padding(.bottom, 8)
+            // Gönderim sürerken sakin bir nabız; yalnızca bu durumda çizilir, boştayken hiçbir şey kıpırdamaz.
+            Label {
+                Text(message)
+            } icon: {
+                Image(systemName: "paperplane").symbolEffect(.pulse)
+            }
+            .appFont(size: 13, weight: .regular)
+            .padding(.bottom, 8)
         case .done(let message):
             Label(message, systemImage: "checkmark.circle.fill")
                 .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
+                .transition(.opacity)
         case .failed(let message):
             Text(message)
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
+                .transition(.opacity)
         }
+    }
+
+    /// Sonuç mesajı (başarı ya da hata) bir süre sonra kendiliğinden yumuşakça kaybolur. Daha yeni bir durum gelince
+    /// görev iptal olur, zamanlayıcı yeniden başlar.
+    private func fadeSetupResult(shown: ChannelSetup) async {
+        guard let delay = channelSetupFadeDelay(setup: shown) else {
+            return
+        }
+        do {
+            try await Task.sleep(for: delay)
+        } catch {
+            // Yalnızca iptal: yeni bir durum geldi, eski mesajın zamanlayıcısı bir şey silmez.
+            return
+        }
+        guard setup == shown else {
+            return
+        }
+        withAnimation(.easeOut(duration: 0.4)) { setup = .idle }
     }
 
     private func statusPanel(@ViewBuilder content: () -> some View) -> some View {
@@ -1571,7 +1617,8 @@ private struct WebhookSettings: View {
             switch service {
             case .discord:
                 let url: URL = try await exchangeDiscordCode(code: code, verifier: pkce.verifier, clientID: clientID)
-                let destination: NoteDestination = try await model.addDestination(target: .webhook(url))
+                // Girişle oluşturulan webhook: hedef kaldırılınca Discord'da da silinir (yapıştırılan adresler silinmez).
+                let destination: NoteDestination = try await model.addDestination(target: .discordSignIn(url))
                 await test(destinationID: destination.id)
             case .slack:
                 await showChannels(signIn: try await exchangeSlackCode(code: code, verifier: pkce.verifier, clientID: clientID), replacing: replacing)
@@ -1729,7 +1776,8 @@ private struct TaskTrackerSettings: View {
                 title: "Görev araçları", subtitle: "Görevleri tek tıkla Linear ya da Jira'da iş olarak aç.",
                 info: "Toplantı sayfası › ⋯ › Görevleri gönder. Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar."
             )
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
+            // Dar alanda (İngilizce, büyük arayüz boyutu) tek sütuna iner: kartlar kesilmez.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12, alignment: .top)], spacing: 12) {
                 ForEach([MCPService.linear, MCPService.atlassian], id: \.self) { (service: MCPService) in
                     trackerCard(service: service)
                 }

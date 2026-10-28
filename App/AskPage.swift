@@ -59,7 +59,8 @@ struct AskPage: View {
                     }
                     .animation(.smooth(duration: 0.35), value: model.archiveExchanges.map(\.id))
                     .padding(.horizontal, 40)
-                    .padding(.top, 28)
+                    // Sağ üstteki Geçmiş / Yeni sohbet düğmeleri görünürken ilk soru balonu onların altında kalmasın.
+                    .padding(.top, hasCornerButtons ? 76 : 28)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 780, alignment: .leading)
                     .frame(maxWidth: .infinity)
@@ -123,6 +124,11 @@ struct AskPage: View {
     }
 
     private let bottomID: String = "ask-bottom"
+
+    /// Sağ üst köşede Geçmiş ya da Yeni sohbet düğmesi var mı.
+    private var hasCornerButtons: Bool {
+        !model.askConversations.isEmpty || !model.archiveExchanges.isEmpty
+    }
 
     private var composer: some View {
         let isEmpty: Bool = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

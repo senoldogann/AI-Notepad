@@ -691,11 +691,14 @@ public func refreshConnectionTokens(connection: ChannelConnection) async throws 
 }
 
 /// Bağlantıyı servis tarafında da kapatır: Slack'te jeton geri alınır (yenileme jetonu Slack'te geçerli kalmasın).
-/// Teams'te uygulamaya özel geri alma çağrısı yok; erişim myapps.microsoft.com'dan kaldırılır.
+/// Teams'te uygulamaya özel geri alma çağrısı yok; erişim myapps.microsoft.com'dan kaldırılır. Slack'te erişim jetonunun
+/// süresi bitmiş ya da bitmek üzereyse önce yenilenir: süresi geçmiş jetonla geri alma reddedilir ve yenileme jetonu
+/// Slack'te geçerli kalırdı.
 public func revokeChannelConnection(connection: ChannelConnection) async throws {
     switch connection.service {
     case .slack:
-        var request: URLRequest = bearerRequest(url: slackAPI.appending(path: "auth.revoke"), token: connection.tokens.accessToken, method: "POST", json: nil)
+        let current: ChannelConnection = try await refreshedConnection(connection: connection, now: Date())
+        var request: URLRequest = bearerRequest(url: slackAPI.appending(path: "auth.revoke"), token: current.tokens.accessToken, method: "POST", json: nil)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
         let data: Data = try await authorizedChannelData(service: .slack, request: request)
         let status: SlackStatus = try decode(SlackStatus.self, service: .slack, data: data)

@@ -322,6 +322,69 @@ public enum TaskTrackerError: Error, Equatable {
     case noCreateTool(service: String)
     /// Görev aracı bulunamadı (bu arada kaldırıldı).
     case notFound(id: String)
+    /// Bir görev için iş açılırken yanıt gelmedi (ağ koptu, sunucu 5xx): iş açılmış olabilir. `created`: kesin açılanlar,
+    /// `uncertainTask`: sonucu belirsiz görevin sırası, `taskTitle`: onun açıklaması. Gönderim orada durdu; belirsiz
+    /// görev gönderildi sayılmaz, kullanıcı araçta kontrol etmeden yeniden göndermemeli.
+    case uncertain(service: String, created: [Int], uncertainTask: Int, taskTitle: String, total: Int, reason: String)
+}
+
+/// Araç çağrısı hatası, sonucu belirsiz kılıyor mu: ağ hatası ve 5xx'te istek sunucuya ulaşıp işlenmiş olabilir
+/// (neden döner); diğer hatalarda iş açılmamıştır (nil). Saf fonksiyondur.
+func uncertainOutcomeReason(error: MCPRemoteError) -> String? {
+    switch error {
+    case .network(_, let reason): reason
+    case .http(_, let status, _) where status >= 500: "HTTP \(status)"
+    default: nil
+    }
+}
+
+/// Ajan adımının denetimi: çalıştırılacak arama ya da iş açma çağrısı, ya da ajana geri verilecek hata.
+enum TrackerStepCheck: Equatable {
+    case lookup(arguments: JSONValue)
+    /// `taskIndex`: açılacak görevin listedeki sırası (0'dan).
+    case create(arguments: JSONValue, taskIndex: Int)
+    case rejected(reason: String)
+}
+
+/// Ajanın "call" adımını denetler: araç izin listesinde olmalı, argümanlar geçerli JSON olmalı; iş açan çağrıda
+/// `task_number` açılmamış bir görevi göstermeli ve argümanlar var olan bir öğeyi göstermemeli. Saf fonksiyondur.
+func checkTrackerStep(step: TrackerAgentStep, allowed: Set<String>, policy: TrackerToolPolicy, taskCount: Int, created: Set<Int>) -> TrackerStepCheck {
+    guard allowed.contains(step.tool) else {
+        return .rejected(reason: "bu araç kullanılamaz; yalnızca listedeki araçlar.")
+    }
+    let arguments: JSONValue
+    do {
+        arguments = try JSONDecoder().decode(JSONValue.self, from: Data(step.argumentsJSON.utf8))
+    } catch {
+        return .rejected(reason: "arguments_json geçerli JSON değil.")
+    }
+    guard policy.creates.contains(step.tool) else {
+        return .lookup(arguments: arguments)
+    }
+    let index: Int = step.taskNumber - 1
+    guard (0..<taskCount).contains(index), !created.contains(index) else {
+        return .rejected(reason: "task_number açılmamış bir görevin numarası olmalı.")
+    }
+    guard !referencesExistingItem(arguments: arguments) else {
+        return .rejected(reason: "var olan öğe değiştirilemez; kimlik vermeden yeni iş aç.")
+    }
+    return .create(arguments: arguments, taskIndex: index)
+}
+
+/// Araç çıktısını `<tool_output>` sınırlayıcısına koymadan önce kaçışlar: çıktıdaki `</tool_output>` gibi etiketler
+/// sınırlayıcıyı kapatıp güvenilmeyen metni yönerge gibi gösteremesin. Saf fonksiyondur.
+func escapedToolOutput(text: String) -> String {
+    text.replacing("<", with: "&lt;").replacing(">", with: "&gt;")
+}
+
+/// Ajanın yanıtından adım; şemaya uymayan yanıt `LLMError.malformed` olur (yeniden sorulur, kullanıcıya anlaşılır
+/// mesaj gider). Saf fonksiyondur.
+func parseTrackerStep(text: String) throws -> TrackerAgentStep {
+    do {
+        return try JSONDecoder().decode(TrackerAgentStep.self, from: Data(text.utf8))
+    } catch {
+        throw LLMError.malformed(body: "\(error): \(text)")
+    }
 }
 
 /// Görev gönderiminin sonucu: açılan görevlerin listedeki sıraları ve ajanın özeti.
@@ -343,7 +406,9 @@ public func validateTracker(service: MCPService, connection: MCPConnection, pers
 /// Görevleri araçta iş olarak açar: izin listesindeki araçlar listelenir, LLM her adımda bir araç seçer, sonuçlar ona
 /// geri verilir. Adım bütçesi görev sayısı + 6'dır. Her görev en çok bir kez açılır; hangi görevin açıldığı kayıt
 /// altındadır. Hepsi açılamazsa `partial` fırlar (açılanlar listede): çağıran yalnızca açılanları işaretler, yeniden
-/// gönderim yinelemez. Jeton yenilenirse `persist` ile hemen saklanır.
+/// gönderim yinelemez. İş açarken yanıt gelmezse (ağ, 5xx) gönderim durur ve `uncertain` fırlar: o görev açılmış
+/// olabilir, işaretlenmez ve kullanıcı kontrol etmeden yeniden göndermemelidir. Araç çıktıları ve hataları
+/// sınırlayıcısından kaçamasın diye kaçışlanır. Jeton yenilenirse `persist` ile hemen saklanır.
 public func sendTasksToTracker(tracker: TaskTracker, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void, tasks: [NoteTask], meetingTitle: String, llm: LLMProvider) async throws -> TrackerSendResult {
     let session: MCPRemoteSession = try await openMCPSession(connection: tracker.connection, persist: persist)
     let tools: [MCPRemoteTool] = trackerAgentTools(tools: try await session.listTools(), service: tracker.service)
@@ -362,46 +427,50 @@ public func sendTasksToTracker(tracker: TaskTracker, persist: @Sendable (MCPConn
                 service: tracker.service, target: tracker.target, tasks: tasks, created: created, meetingTitle: meetingTitle, tools: tools, transcript: transcript
             )
             let next: TrackerAgentStep = try await requestStructured(provider: llm, request: request) { (text: String) throws -> TrackerAgentStep in
-                try JSONDecoder().decode(TrackerAgentStep.self, from: Data(text.utf8))
+                try parseTrackerStep(text: text)
             }
             if next.action == "done" {
                 summary = next.summary
                 break
             }
-            guard allowed.contains(next.tool) else {
-                transcript.append("\(step). \(next.tool) → HATA: bu araç kullanılamaz; yalnızca listedeki araçlar.")
-                continue
-            }
+            let check: TrackerStepCheck = checkTrackerStep(step: next, allowed: allowed, policy: policy, taskCount: tasks.count, created: created)
             let arguments: JSONValue
-            do {
-                arguments = try JSONDecoder().decode(JSONValue.self, from: Data(next.argumentsJSON.utf8))
-            } catch {
-                transcript.append("\(step). \(next.tool) → HATA: arguments_json geçerli JSON değil.")
+            let createIndex: Int?
+            switch check {
+            case .rejected(let reason):
+                transcript.append("\(step). \(next.tool) → HATA: \(reason)")
                 continue
-            }
-            let isCreate: Bool = policy.creates.contains(next.tool)
-            let index: Int = next.taskNumber - 1
-            if isCreate {
-                guard tasks.indices.contains(index), !created.contains(index) else {
-                    transcript.append("\(step). \(next.tool) → HATA: task_number açılmamış bir görevin numarası olmalı.")
-                    continue
-                }
-                guard !referencesExistingItem(arguments: arguments) else {
-                    transcript.append("\(step). \(next.tool) → HATA: var olan öğe değiştirilemez; kimlik vermeden yeni iş aç.")
-                    continue
-                }
+            case .lookup(let value):
+                arguments = value
+                createIndex = nil
+            case .create(let value, let index):
+                arguments = value
+                createIndex = index
             }
             do {
                 let result: String = try await session.callTool(name: next.tool, arguments: arguments)
-                if isCreate {
-                    created.insert(index)
+                if let createIndex {
+                    created.insert(createIndex)
                 }
-                transcript.append("\(step). \(next.tool)(\(String(next.argumentsJSON.prefix(400)))) → <tool_output>\(String(result.prefix(1500)))</tool_output>")
+                transcript.append("\(step). \(next.tool)(\(String(next.argumentsJSON.prefix(400)))) → <tool_output>\(escapedToolOutput(text: String(result.prefix(1500))))</tool_output>")
             } catch MCPRemoteError.toolFailed(_, let tool, let message) {
                 // Aracın hatası ajana geri verilir: argümanı düzeltip yeniden deneyebilir.
-                transcript.append("\(step). \(tool) → HATA: <tool_output>\(message)</tool_output>")
+                transcript.append("\(step). \(tool) → HATA: <tool_output>\(escapedToolOutput(text: message))</tool_output>")
+            } catch let error as MCPRemoteError {
+                // İş açarken yanıt gelmedi (ağ, 5xx): iş açılmış olabilir. Döngü durur; bu görev gönderildi sayılmaz ama
+                // yeniden gönderilmeden önce kullanıcı araçta kontrol etmeli (yoksa iş iki kez açılabilir).
+                guard let createIndex, let reason = uncertainOutcomeReason(error: error) else {
+                    throw error
+                }
+                throw TaskTrackerError.uncertain(
+                    service: service, created: created.sorted(), uncertainTask: createIndex, taskTitle: tasks[createIndex].description,
+                    total: tasks.count, reason: reason
+                )
             }
         }
+    } catch let error as TaskTrackerError {
+        // Sonucu belirsiz iş: olduğu gibi çağırana gider (yarım gönderim sayılmaz, kalanlar güvenle yeniden gönderilemez).
+        throw error
     } catch {
         // Yarıda kalan gönderim: açılanlar kaybolmasın (yeniden gönderimde yinelenmesinler).
         guard !created.isEmpty else {
