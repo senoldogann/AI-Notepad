@@ -85,8 +85,8 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
       automatic_tax: { enabled: true },
       customer_update: { address: "auto", name: "auto" },
       subscription_data: { metadata: { user_id: userId } },
-      success_url: `${config.siteOrigin}/hesap?odeme=tamam`,
-      cancel_url: `${config.siteOrigin}/fiyat`,
+      success_url: `${config.siteOrigin}/account?payment=done`,
+      cancel_url: `${config.siteOrigin}/pricing`,
     }),
   );
   if (session.url === null) {
@@ -106,7 +106,7 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
   }
   const stripe: Stripe = stripeClient(platform, config);
   const session: Stripe.BillingPortal.Session = await callStripe(platform, "billingPortal.sessions.create", userId, () =>
-    stripe.billingPortal.sessions.create({ customer: row.stripe_customer_id, return_url: `${config.siteOrigin}/hesap` }),
+    stripe.billingPortal.sessions.create({ customer: row.stripe_customer_id, return_url: `${config.siteOrigin}/account` }),
   );
   return session.url;
 }

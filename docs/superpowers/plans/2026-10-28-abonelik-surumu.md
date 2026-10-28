@@ -117,7 +117,7 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
     Sor, notu yenileme, tekrar işleme, düzenleme, paylaşım çevirisi ve görev aracı her zaman, toplantısız (abonelik ya da
     kalan deneme; kullanıcının günlük/aylık sınırı, `LLM_ACCOUNT_MAX_TOKENS`).
   - Süre sınırından 5 dk önce panelde ve adada uyarı; sınırda kayıt bitirilip normal işlenir.
-  - E-posta girişinin formu sitededir (Turnstile): uygulama `/giris?app=1` açar, site e-postadaki bağlantıyı
+  - E-posta girişinin formu sitededir (Turnstile): uygulama `/sign-in?app=1` açar, site e-postadaki bağlantıyı
     `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletir.
   - **Yayından önce:** abonelik sürümünün kendi Sparkle akışı (appcast) ve imza anahtarı gerekir; o zamana dek
     güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı).

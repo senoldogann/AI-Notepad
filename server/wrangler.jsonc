@@ -80,7 +80,7 @@
     "REFRESH_TOKEN_DAYS": "60",
     "EMAIL_SENDER": "dev",
     "EMAIL_FROM": "AI-Notepad <giris@example.com>",
-    "EMAIL_LINK_URL": "http://localhost:8788/giris/eposta",
+    "EMAIL_LINK_URL": "http://localhost:8788/sign-in/email",
     "STRIPE_PRICE_ID": "price_placeholder"
   },
   "env": {
@@ -138,7 +138,7 @@
         // Apple ile çalışır. Alan adı alınınca "resend", gönderici o alan adından ve RESEND_API_KEY gizli değeri.
         "EMAIL_SENDER": "dev",
         "EMAIL_FROM": "AI-Notepad <giris@ainotepad.pages.dev>",
-        "EMAIL_LINK_URL": "https://ainotepad.pages.dev/giris/eposta",
+        "EMAIL_LINK_URL": "https://ainotepad.pages.dev/sign-in/email",
         "STRIPE_PRICE_ID": "price_1UVfcuLZMyeEus1FzSQVrqKa"
       }
     }

@@ -11,7 +11,7 @@ const productionWithPlaceholders: Env = envWith({
   APP_ATTEST_APP_IDS: "TEAMID0000.com.senoldogan.AINotepad.hosted",
   EMAIL_SENDER: "resend",
   EMAIL_FROM: "AI-Notepad <giris@example.com>",
-  EMAIL_LINK_URL: "https://ainotepad.pages.dev/giris/eposta",
+  EMAIL_LINK_URL: "https://ainotepad.pages.dev/sign-in/email",
   STRIPE_PRICE_ID: "price_placeholder",
 });
 
@@ -48,7 +48,7 @@ describe("üretim yapılandırmasında yer tutucular", () => {
     const local: Env = envWith({
       ...productionFilledIn,
       SITE_ORIGIN: "http://localhost:8788",
-      EMAIL_LINK_URL: "https://www.example.org/giris",
+      EMAIL_LINK_URL: "https://www.example.org/sign-in",
     });
     expect(placeholderError(local).fields).toEqual(["SITE_ORIGIN", "EMAIL_LINK_URL"]);
   });
