@@ -279,8 +279,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const meetingId: string | null = optionalMeetingIdHeader(request);
     let scope: LLMScope;
     if (meetingId === null) {
-      await requireAccountLLMAccess(db, config, user.userId, now);
-      scope = { kind: "account", userId: user.userId };
+      scope = { kind: "account", userId: user.userId, access: await requireAccountLLMAccess(db, config, user.userId, now) };
     } else {
       scope = { kind: "meeting", userId: user.userId, meeting: await requireUsableMeeting(db, config, user.userId, meetingId, now) };
     }

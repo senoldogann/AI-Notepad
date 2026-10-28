@@ -4,6 +4,7 @@ import { ApiError, isRetryableStatus } from "../errors";
 import { jsonResponse } from "../http";
 import { errorName, log } from "../log";
 import type { MeetingRow } from "../meetings";
+import type { AccountLLMAccess } from "../entitlements";
 import type { RequestContext } from "../platform";
 import { withRetries } from "../retry";
 import {
@@ -12,8 +13,12 @@ import {
   meetingTokenStep,
   reserveAll,
   settleMeetingTokenStatement,
+  settleTrialAccountTokenStatement,
   settleUserTokenStatements,
   tokenHeadroom,
+  trialAccountCapError,
+  trialAccountHeadroom,
+  trialAccountTokenStep,
   userTokenSteps,
 } from "../reservations";
 import { addSpendStatement, llmCostMicroUsd } from "../usage";
@@ -26,7 +31,12 @@ import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } 
  */
 export type LLMScope =
   | { readonly kind: "meeting"; readonly userId: string; readonly meeting: MeetingRow }
-  | { readonly kind: "account"; readonly userId: string };
+  | { readonly kind: "account"; readonly userId: string; readonly access: AccountLLMAccess };
+
+/** Deneme kullanıcısının toplantısız çağrısı mı (ayrıca küçük günlük sınır). Saf fonksiyondur. */
+function isTrialAccountCall(scope: LLMScope): boolean {
+  return scope.kind === "account" && scope.access === "trial";
+}
 
 /** Log alanı: toplantı kimliği ya da hesap çağrısında null. Saf fonksiyondur. */
 function scopeMeetingId(scope: LLMScope): string | null {
@@ -75,10 +85,12 @@ function totalInputTokens(usage: { input_tokens: number | null; cache_creation_i
 
 /** Ayrılan tokenı (toplantı varsa toplantı, aylık, günlük) gerçek kullanımla değiştirir ve günlük harcamaya ekler. */
 async function chargeUsage(db: D1Database, scope: LLMScope, reserved: number, usage: TokenUsage, now: Date): Promise<void> {
-  const meetingStatements: D1PreparedStatement[] =
-    scope.kind === "meeting" ? [settleMeetingTokenStatement(db, scope.meeting.id, reserved, usage.inputTokens + usage.outputTokens)] : [];
+  const actual: number = usage.inputTokens + usage.outputTokens;
+  const meetingStatements: D1PreparedStatement[] = scope.kind === "meeting" ? [settleMeetingTokenStatement(db, scope.meeting.id, reserved, actual)] : [];
+  const trialStatements: D1PreparedStatement[] = isTrialAccountCall(scope) ? [settleTrialAccountTokenStatement(db, scope.userId, reserved, actual, now)] : [];
   await db.batch([
     ...meetingStatements,
+    ...trialStatements,
     ...settleUserTokenStatements(db, scope.userId, reserved, usage.inputTokens, usage.outputTokens, now),
     addSpendStatement(db, now, llmCostMicroUsd(usage.inputTokens, usage.outputTokens)),
   ]);
@@ -103,8 +115,12 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     scope.kind === "meeting"
       ? [[scope.meeting.token_budget - scope.meeting.tokens_used, new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu.")]]
       : [];
+  const trialLimits: ReadonlyArray<readonly [number, ApiError]> = isTrialAccountCall(scope)
+    ? [[await trialAccountHeadroom(db, config, scope.userId, now), trialAccountCapError()]]
+    : [];
   const limits: ReadonlyArray<readonly [number, ApiError]> = [
     ...meetingLimits,
+    ...trialLimits,
     [headroom.monthly, new ApiError("monthly_cap_reached", "Bu ayki yapay zekâ kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")],
     [headroom.daily, new ApiError("daily_cap_reached", "Bugünkü yapay zekâ kullanım sınırına ulaştın; yarın yeniden dene.")],
   ];
@@ -115,7 +131,8 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
   const maxTokens: number = clampMaxTokens(request.max_tokens, callMax, remaining, estimatedInput, exhausted);
   const reserved: number = estimatedInput + maxTokens;
   const meetingSteps: ReservationStep[] = scope.kind === "meeting" ? [meetingTokenStep(db, scope.meeting.id, reserved)] : [];
-  await reserveAll(db, [...meetingSteps, ...userTokenSteps(db, config, scope.userId, reserved, now)]);
+  const trialSteps: ReservationStep[] = isTrialAccountCall(scope) ? [trialAccountTokenStep(db, config, scope.userId, reserved, now)] : [];
+  await reserveAll(db, [...meetingSteps, ...trialSteps, ...userTokenSteps(db, config, scope.userId, reserved, now)]);
   const client: Anthropic = anthropicClient(context, config);
   const params: Anthropic.MessageCreateParamsNonStreaming = upstreamParams(request, maxTokens);
   const retry = {

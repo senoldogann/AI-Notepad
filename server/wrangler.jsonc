@@ -34,6 +34,13 @@
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
     "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
     "TRIAL_MEETINGS": "3",
+    // Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev
+    // aracı) için günlük token sınırı. Türetme: 90 dakikalık toplantının notunu yeniden yazmak ~100 K token (aşağıdaki
+    // bütçe açıklaması), bir Sor cevabı ~10–30 K. 300 K ≈ günde 3 not yenileme ya da ~10–20 soru: denemeyi değerlendirmeye
+    // yeter. Maliyet üst sınırı (girdi ağırlıklı, 0,10 $/M girdi, 0,50 $/M çıktı): ≤ ~0,06 $/gün/hesap; yeni hesap
+    // açarak (IP başına günde 3) kötüye kullanım günlük harcama tavanıyla da sınırlı. Aboneler kullanıcı sınırlarını
+    // (DAILY_TOKEN_CAP, MONTHLY_TOKEN_CAP) kullanır.
+    "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
     "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
     "TRIAL_MAX_MEETING_MINUTES": "90",
     "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
@@ -102,6 +109,8 @@
         "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
         "TRIAL_MEETINGS": "3",
+        // Türetme: üstteki geliştirme `vars` açıklaması.
+        "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
         "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
         "TRIAL_MAX_MEETING_MINUTES": "90",
         "SUBSCRIBER_MAX_MEETING_MINUTES": "240",

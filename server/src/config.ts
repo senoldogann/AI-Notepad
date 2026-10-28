@@ -24,6 +24,8 @@ export interface Config {
     readonly allowedCategories: readonly number[];
   };
   readonly trialMeetings: number;
+  /** Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrılarının günlük token sınırı. */
+  readonly trialAccountDailyTokens: number;
   /** Bir IP'den bir günde denemeye başlayabilecek yeni hesap sayısı. */
   readonly trialAccountsPerIpPerDay: number;
   readonly trialMaxMeetingMinutes: number;
@@ -144,6 +146,7 @@ const envSchema = z.object({
   APP_ATTEST_APP_IDS: csv,
   APP_ATTEST_ALLOWED_CATEGORIES: csv,
   TRIAL_MEETINGS: positiveInt,
+  TRIAL_ACCOUNT_DAILY_TOKENS: positiveInt,
   TRIAL_ACCOUNTS_PER_IP_PER_DAY: positiveInt,
   TRIAL_MAX_MEETING_MINUTES: positiveInt,
   SUBSCRIBER_MAX_MEETING_MINUTES: positiveInt,
@@ -216,6 +219,7 @@ export function parseConfig(env: Env): Config {
       allowedCategories: categories,
     },
     trialMeetings: value.TRIAL_MEETINGS,
+    trialAccountDailyTokens: value.TRIAL_ACCOUNT_DAILY_TOKENS,
     trialAccountsPerIpPerDay: value.TRIAL_ACCOUNTS_PER_IP_PER_DAY,
     trialMaxMeetingMinutes: value.TRIAL_MAX_MEETING_MINUTES,
     subscriberMaxMeetingMinutes: value.SUBSCRIBER_MAX_MEETING_MINUTES,

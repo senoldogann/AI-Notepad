@@ -103,19 +103,25 @@ export async function deviceTrialMeetingsUsed(db: D1Database, deviceId: string):
   return row === null || row.registered === 0 ? null : row.count;
 }
 
+/** Toplantıya bağlı olmayan çağrının hakkı: abonelik ya da deneme (deneme ayrıca küçük günlük sınıra tabidir). */
+export type AccountLLMAccess = "subscription" | "trial";
+
 /**
  * Toplantıya bağlı olmayan yapay zekâ çağrısı (Sor, notu yeniden yazma, düzenleme, görev aracı) hakkı: erişimi olan
  * abonelik (`active` ya da `grace`) ya da hesabın kullanılmamış deneme toplantısı. Deneme bitmiş ve abonelik yoksa
  * `subscription_required`. Hak toplantı bütçesiyle değil, kullanıcının günlük ve aylık token sınırıyla ve küçük çağrı
- * başı `max_tokens` ile sınırlanır.
+ * başı `max_tokens` ile sınırlanır; denemede ayrıca `TRIAL_ACCOUNT_DAILY_TOKENS`.
  */
-export async function requireAccountLLMAccess(db: D1Database, config: Config, userId: string, now: Date): Promise<void> {
+export async function requireAccountLLMAccess(db: D1Database, config: Config, userId: string, now: Date): Promise<AccountLLMAccess> {
   const [subscription, trialUsed]: [SubscriptionState | null, number] = await Promise.all([
     subscriptionState(db, userId),
     userTrialMeetingsUsed(db, userId),
   ]);
-  if (hasSubscriptionAccess(subscription, now, config.pastDueGraceMs) || trialUsed < config.trialMeetings) {
-    return;
+  if (hasSubscriptionAccess(subscription, now, config.pastDueGraceMs)) {
+    return "subscription";
+  }
+  if (trialUsed < config.trialMeetings) {
+    return "trial";
   }
   throw new ApiError("subscription_required", "Deneme bitti; toplantı dışında yapay zekâ özellikleri için abone ol.");
 }

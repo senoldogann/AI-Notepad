@@ -318,6 +318,40 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     expect(await userTokens(session.userId)).toEqual({ monthly: 0, daily: 0 });
   });
 
+  it("aboneliği olmayan kullanıcının toplantısız çağrıları küçük günlük deneme sınırına sayılır; aşınca 429", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(120, 30)));
+    expect((await accountLLM(harness, session, basic, null)).status).toBe(200);
+    const row = await env.DB.prepare("SELECT trial_account_tokens_used AS used, trial_account_tokens_reserved AS reserved FROM daily_usage WHERE user_id = ?")
+      .bind(session.userId)
+      .first<{ used: number; reserved: number }>();
+    expect(row).toEqual({ used: 150, reserved: 0 });
+    // Kalan deneme sınırı (850) istenen max_tokens (1000) ve girdiye yetmez: istek gitmez.
+    const tight: Env = envWith({ TRIAL_ACCOUNT_DAILY_TOKENS: "1000" });
+    const before: number = harness.outbound.length;
+    await expectError(await accountLLM(harness, session, basic, tight), 429, "daily_cap_reached");
+    expect(harness.outbound.length).toBe(before);
+    // Toplantıya bağlı çağrı deneme sınırından etkilenmez.
+    const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    const meetingCall: Response = await harness.call(
+      req("POST", "/v1/llm/messages", { token: session.accessToken, headers: { "x-meeting-id": meeting.meetingId }, json: basic, env: tight }),
+    );
+    expect(meetingCall.status).toBe(200);
+  });
+
+  it("abone deneme sınırına tabi değildir", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 86_400_000);
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    const tiny: Env = envWith({ TRIAL_ACCOUNT_DAILY_TOKENS: "1" });
+    expect((await accountLLM(harness, session, basic, tiny)).status).toBe(200);
+    expect((await accountLLM(harness, session, basic, tiny)).status).toBe(200);
+    const row = await env.DB.prepare("SELECT trial_account_tokens_used AS used FROM daily_usage WHERE user_id = ?").bind(session.userId).first<{ used: number }>();
+    expect(row?.used).toBe(0);
+  });
+
   it("toplantıya bağlı çağrı değişmeden toplantı bütçesinden düşer", async () => {
     const context: Context = await setup();
     context.harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));

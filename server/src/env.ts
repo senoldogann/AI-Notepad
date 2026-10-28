@@ -14,6 +14,7 @@ export interface Env {
   readonly APP_ATTEST_APP_IDS: string;
   readonly APP_ATTEST_ALLOWED_CATEGORIES: string;
   readonly TRIAL_MEETINGS: string;
+  readonly TRIAL_ACCOUNT_DAILY_TOKENS: string;
   readonly TRIAL_ACCOUNTS_PER_IP_PER_DAY: string;
   readonly TRIAL_MAX_MEETING_MINUTES: string;
   readonly SUBSCRIBER_MAX_MEETING_MINUTES: string;
