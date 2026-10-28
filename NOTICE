@@ -6,3 +6,7 @@ including WhisperKit and SpeakerKit (MIT, argmax, inc.).
 
 The bundled Inter typeface (App/Fonts) is licensed under the SIL Open Font License 1.1
 (Copyright 2016 The Inter Project Authors); see App/Fonts/Inter-OFL.txt.
+
+Service logos in Connections (App/Assets.xcassets/Brand) come from Simple Icons (https://simpleicons.org),
+released under CC0 1.0. The logos and names are trademarks of their respective owners and are used only to show
+which services AI-Notepad connects to.

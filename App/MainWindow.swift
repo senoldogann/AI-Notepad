@@ -699,8 +699,8 @@ private struct RecordBar: View {
     }
 }
 
-/// Kısayollar: gradyan görselli dört kart (ElevenLabs'in araç kartları gibi): görselin köşesinde simge, altında ad ve
-/// kısa bilgi. Kayıt büyük kartta, Ayarlar kenar çubuğunda olduğu için burada yok.
+/// Kısayollar: dört sade, yatay kart: solda küçük gradyan kutuda simge, yanında ad ve kısa bilgi. Kayıt büyük kartta,
+/// Ayarlar kenar çubuğunda olduğu için burada yok.
 private struct Shortcuts: View {
     let model: AppModel
     let router: MainWindowRouter
@@ -712,9 +712,9 @@ private struct Shortcuts: View {
             Text("Kısayollar").appFont(size: 15, weight: .medium)
             // Dört kart satırı doldurur; dar pencerede ikişerli iki satıra iner.
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 14) { cards(openTasks: openTasks) }
-                    .frame(minWidth: 600)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)], spacing: 14) {
+                HStack(alignment: .top, spacing: 12) { cards(openTasks: openTasks) }
+                    .frame(minWidth: 720)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
                     cards(openTasks: openTasks)
                 }
             }
@@ -741,28 +741,28 @@ private struct Shortcuts: View {
 
     private func card(title: LocalizedStringKey, detail: String, symbol: String, palette: FilmPalette, action: @escaping @MainActor () -> Void) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                FilmGradient(seed: "kisayol-\(symbol)", palette: palette)
-                    .frame(height: 92)
-                    .overlay(alignment: .bottomLeading) {
-                        Image(systemName: symbol)
-                            .appFont(size: 15, weight: .semibold)
-                            .foregroundStyle(Color.black.opacity(0.72))
-                            .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.7), in: Circle())
-                            .padding(10)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                Text(title)
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                    .padding(.top, 9)
-                Text(verbatim: detail)
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .padding(.top, 1)
+            HStack(spacing: 11) {
+                Image(systemName: symbol)
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Color.black.opacity(0.78))
+                    .frame(width: 34, height: 34)
+                    .background { FilmGradient(seed: "kisayol-\(symbol)", palette: palette) }
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .appFont(size: 13, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                    Text(verbatim: detail)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
             }
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .cardSurface(cornerRadius: 14)
             .contentShape(Rectangle())
         }
         .buttonStyle(.hoverPlain)
@@ -998,6 +998,15 @@ private struct MeetingCover: View {
         let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
         VStack(alignment: .leading, spacing: 0) {
             CoverImage(seed: record.id)
+                .overlay {
+                    // Toplantının baş harfleri: kapakları bir bakışta ayırt ettirir (ElevenLabs kartlarındaki simge gibi).
+                    Text(verbatim: meetingMonogram(title: record.note?.title ?? record.title))
+                        .appFont(size: 17, weight: .semibold)
+                        .foregroundStyle(Color.black.opacity(0.75))
+                        .frame(width: 52, height: 52)
+                        .background(Color.white.opacity(0.55), in: Circle())
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.7)))
+                }
                 .frame(height: 132)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .tilt3D(maxAngle: 4)
@@ -1334,4 +1343,11 @@ func homeGreeting(name: String, hour: Int) -> String {
     }
     let first: String = name.split(separator: " ").first.map(String.init) ?? ""
     return first.isEmpty ? base : "\(base), \(first)"
+}
+
+/// Toplantı başlığının baş harfleri: ilk iki kelimenin ilk harfi, büyük harfle (ör. "SpaceX Finansal…" → "SF"); tek
+/// kelimede tek harf. Saf fonksiyondur.
+func meetingMonogram(title: String) -> String {
+    let words: [Substring] = title.split { !$0.isLetter && !$0.isNumber }
+    return words.prefix(2).compactMap(\.first).map { String($0).uppercased(with: interfaceLocale()) }.joined()
 }
