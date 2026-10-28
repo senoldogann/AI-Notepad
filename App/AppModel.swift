@@ -1974,12 +1974,12 @@ final class AppModel {
     }
 
     /// Hedefin bağlantısını değiştirir (kanalı değiştir, yeniden bağlan); kimliği ve ayarı korunur.
-    func replaceDestinationTarget(id: String, target: DestinationTarget) async throws {
-        guard let current = destinations.first(where: { $0.id == id }) else {
-            throw DestinationError.notFound(id: id)
-        }
-        try await destinationVault.upsert(current.with(target: target).with(needsReconnect: false))
+    /// Değişmeden önceki kayıtlı hedef döner (yerini alan eski izni geri almak için).
+    @discardableResult
+    func replaceDestinationTarget(id: String, target: DestinationTarget) async throws -> NoteDestination {
+        let previous: NoteDestination = try await destinationVault.replaceTarget(id: id, target: target)
         destinations = try await destinationVault.all()
+        return previous
     }
 
     /// Kendiliğinden gönderimi açar ya da kapatır; kayıtlı hedefin yalnızca bu ayarı değişir (bellekteki kopya eski
@@ -2238,15 +2238,33 @@ final class AppModel {
 
     /// Notion hedefini yeniden bağlar: kimliği, kendiliğinden gönderim ayarı ve bağlanma anı korunur (bağlantı koptuğu
     /// sırada kaçan toplantılar da gönderilir, gönderim geçmişi kaybolmaz). Başka bir hesapla bağlanılmış olabileceği
-    /// için hesabın kimliği yeniden okunur.
+    /// için hesabın kimliği yeniden okunur. Yeni bağlantı kaydedildikten sonra yerini aldığı eski izin geri alınır (bkz.
+    /// `revokeReplacedGrant`).
     func reconnectNotion(destinationID: String) async throws {
         let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
-        try await replaceDestinationTarget(
+        let previous: NoteDestination = try await replaceDestinationTarget(
             id: destinationID, target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"), identity: nil))
         )
+        if case .notion(let old) = previous.target, let replaced = replacedGrant(old: old.connection, new: connection) {
+            revokeReplacedGrant(connection: replaced, service: MCPService.notion.displayName)
+        }
         await resolveMissingNotionIdentities()
+    }
+
+    /// Yeniden bağlanınca yerini alan eski bağlantının OAuth iznini arka planda geri alır (yeniden bağlanmayı
+    /// bekletmez). Geri alınamazsa uyarı loglanır ve engellemeyen bir mesaj gösterilir: yeni bağlantı çalışır, kullanıcı
+    /// eski erişimi servisin ayarlarından kaldırabilir.
+    private func revokeReplacedGrant(connection: MCPConnection, service: String) {
+        Task {
+            do {
+                try await revokeMCPConnection(connection: connection)
+            } catch {
+                Self.logger.warning("Eski bağlantının izni geri alınamadı, servis: \(service, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                errorMessages = appendUnique(messages: errorMessages, message: replacedGrantRevocationFailureMessage(service: service, error: error))
+            }
+        }
     }
 
     /// Kimliği bilinmeyen Notion hedeflerinin çalışma alanını ve kullanıcısını okur (yeni bağlanan, yeniden bağlanan ve
@@ -2278,12 +2296,18 @@ final class AppModel {
 
     /// Linear ya da Jira'ya tek tıkla bağlanır (tarayıcıda izin; uygulama kaydı ya da API anahtarı gerekmez).
     /// Bağlanırken sunucuda iş açan araç olduğu denetlenir; yoksa bağlantı kaldırılır ve neden gösterilir. Aynı servis
-    /// yeniden bağlanırsa kimlik ve hedef korunur (gönderilen görevler yeniden gönderilmez).
+    /// yeniden bağlanırsa kimlik ve hedef korunur (gönderilen görevler yeniden gönderilmez); yeni bağlantı kaydedildikten
+    /// sonra yerini aldığı eski izin geri alınır (bkz. `revokeReplacedGrant`) ve hesabın kimliği okunur (bkz.
+    /// `resolveTrackerIdentity`).
     func connectTracker(service: MCPService) async throws {
         let connection: MCPConnection = try await signInToMCP(service: service) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
-        let tracker: TaskTracker = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
+        let connected: TrackerConnectResult = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
+        let tracker: TaskTracker = connected.tracker
+        if let replaced = connected.replaced {
+            revokeReplacedGrant(connection: replaced, service: service.displayName)
+        }
         defer { Task { await self.refreshTrackerList() } }
         do {
             try await trackerVault.withTracker(id: tracker.id) {
@@ -2294,6 +2318,20 @@ final class AppModel {
             await revokeTracker(tracker: try await trackerVault.remove(id: tracker.id))
             throw TaskTrackerError.noCreateTool(service: name)
         }
+        await resolveTrackerIdentity(id: tracker.id)
+    }
+
+    /// Aracın hesap kimliğini okur: görevlerin başka Mac'ten aynı hesap ve hedefe gönderildiğini tanımak içindir (bkz.
+    /// `trackerSendKey`). Okunamazsa araç kimliksiz kalır, uyarı loglanır ve sonraki gönderimde yeniden denenir:
+    /// gönderim engellenmez, o zamana dek gönderildi işareti yalnızca bu cihazın araç kimliğiyle denetlenir.
+    private func resolveTrackerIdentity(id: String) async {
+        do {
+            try await trackerVault.resolveIdentity(id: id)
+            Self.logger.info("Görev aracının hesap kimliği okundu, araç: \(id, privacy: .public)")
+        } catch {
+            Self.logger.warning("Görev aracının hesap kimliği okunamadı, araç: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+        }
+        await refreshTrackerList()
     }
 
     /// Görev aracını kaldırır; OAuth izni sunucuda da geri alınır (bkz. `revokeTracker`).
@@ -2337,13 +2375,16 @@ final class AppModel {
     /// Toplantının kapsamdaki görevlerini (`scope`: yalnız sana düşenler ya da hepsi) araçta iş olarak açar; daha önce
     /// gönderilenler yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
     func sendTasks(meetingID: String, trackerID: String, scope: TaskSendScope) async {
+        // Hesap kimliği bilinmiyorsa (eski sürümde bağlanan araç) önce okunur: başka Mac'ten gönderilenler tanınsın.
+        if let known = taskTrackers.first(where: { $0.id == trackerID }), known.identity == nil {
+            await resolveTrackerIdentity(id: trackerID)
+        }
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
               let tracker = taskTrackers.first(where: { $0.id == trackerID }) else {
             return
         }
-        let sent: [String] = record.sentTaskKeys?[trackerID] ?? []
         let tasks: [NoteTask] = tasksInScope(tasks: note.tasks, scope: scope)
-            .filter { !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
+            .filter { !isTaskSent(record: record, tracker: tracker, task: $0) && !isTaskDone(record: record, task: $0) }
         guard !tasks.isEmpty else {
             showSendState(state: .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış).")), meetingID: meetingID, states: \.trackerStates)
             return
@@ -2359,18 +2400,18 @@ final class AppModel {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
                 try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
-            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: result.createdTaskIndices.map { tasks[$0] })
+            markTasksSent(meetingID: meetingID, tracker: tracker, tasks: result.createdTaskIndices.map { tasks[$0] })
             showSendState(state: .done(result.summary), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
             // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
-            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            markTasksSent(meetingID: meetingID, tracker: tracker, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
             let error: TaskTrackerError = .partial(service: service, created: created, total: total, reason: reason)
             Self.logger.error("Görevlerin bir kısmı açılamadı, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public)")
             showSendState(state: .failed(userFacingMessage(error: error)), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.uncertain(let service, let created, let uncertainTask, let taskTitle, let total, let reason) {
             // Kesin açılanlar işaretlenir; sonucu belirsiz görev işaretlenmez (açılmadıysa gönderilebilsin), kullanıcıya
             // yeniden göndermeden önce araçta kontrol etmesi söylenir.
-            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            markTasksSent(meetingID: meetingID, tracker: tracker, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
             let error: TaskTrackerError = .uncertain(
                 service: service, created: created, uncertainTask: uncertainTask, taskTitle: taskTitle, total: total, reason: reason
             )
@@ -2382,22 +2423,23 @@ final class AppModel {
         }
     }
 
-    /// Araçta açılan görevleri işaretler; toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
-    private func markTasksSent(meetingID: String, trackerID: String, tasks: [NoteTask]) {
+    /// Araçta açılan görevleri aracın bu cihazdaki kimliği ve cihazdan bağımsız anahtarıyla işaretler (bkz.
+    /// `markingTasksSent`); toplantı kilitliyse (işleniyor) işleme bitince uygulanır.
+    private func markTasksSent(meetingID: String, tracker: TaskTracker, tasks: [NoteTask]) {
         guard !tasks.isEmpty else {
             return
         }
         guard !isLocked(meetingID: meetingID) else {
-            pendingTaskMarks[meetingID, default: []] += tasks.map { (trackerID: trackerID, task: $0) }
+            pendingTaskMarks[meetingID, default: []].append((tracker: tracker, tasks: tasks))
             return
         }
         updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in
-            tasks.reduce(record) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in result.markingTaskSent(trackerID: trackerID, task: task) }
+            markingTasksSent(record: record, tracker: tracker, tasks: tasks)
         }
     }
 
     /// İşleme sürerken araca gönderilen görevler; işleme bitince kayda işlenir.
-    @ObservationIgnored private var pendingTaskMarks: [String: [(trackerID: String, task: NoteTask)]] = [:]
+    @ObservationIgnored private var pendingTaskMarks: [String: [(tracker: TaskTracker, tasks: [NoteTask])]] = [:]
 
     // MARK: Apple Notlar ve klasör
 
@@ -2479,9 +2521,9 @@ final class AppModel {
         let tasks: [NoteTask] = pendingReminded.removeValue(forKey: record.id) ?? []
         let sent: Set<String> = pendingSentMarks.removeValue(forKey: record.id) ?? []
         let withSent: MeetingRecord = sent.sorted().reduce(record) { (result: MeetingRecord, id: String) -> MeetingRecord in result.markingSent(destinationID: id) }
-        let trackerMarks: [(trackerID: String, task: NoteTask)] = pendingTaskMarks.removeValue(forKey: record.id) ?? []
-        let withTasks: MeetingRecord = trackerMarks.reduce(withSent) { (result: MeetingRecord, mark: (trackerID: String, task: NoteTask)) -> MeetingRecord in
-            result.markingTaskSent(trackerID: mark.trackerID, task: mark.task)
+        let trackerMarks: [(tracker: TaskTracker, tasks: [NoteTask])] = pendingTaskMarks.removeValue(forKey: record.id) ?? []
+        let withTasks: MeetingRecord = trackerMarks.reduce(withSent) { (result: MeetingRecord, mark: (tracker: TaskTracker, tasks: [NoteTask])) -> MeetingRecord in
+            markingTasksSent(record: result, tracker: mark.tracker, tasks: mark.tasks)
         }
         return tasks.reduce(withTasks) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
     }

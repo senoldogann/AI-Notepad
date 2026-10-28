@@ -521,6 +521,16 @@
         }
       }
     },
+    "%@ yeniden bağlandı; eski bağlantının izni %@ tarafında geri alınamadı (%@). Eski erişimi %@ ayarlarından kaldırabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ reconnected, but the old connection's access couldn't be revoked on the %@ side (%@). You can remove the old access in your %@ settings."
+          }
+        }
+      }
+    },
     "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
       "extractionState": "stale",
       "localizations": {
