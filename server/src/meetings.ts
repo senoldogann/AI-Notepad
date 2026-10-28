@@ -198,7 +198,7 @@ async function startTrialMeeting(
   const gate: StartGate = {
     sql: `(SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') < ?
       AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)
-      AND (EXISTS (SELECT 1 FROM trial_starts WHERE user_id = ?)
+      AND (EXISTS (SELECT 1 FROM meeting_sessions WHERE user_id = ? AND kind = 'trial')
         OR (SELECT COUNT(*) FROM trial_starts WHERE ip_hash = ? AND day = ?)
           + COALESCE((SELECT accounts FROM deleted_trial_starts WHERE ip_hash = ? AND day = ?), 0) < ?)`,
     binds: [
@@ -215,12 +215,15 @@ async function startTrialMeeting(
       config.trialAccountsPerIpPerDay,
     ],
   };
+  // Yalnızca hesabın ilk deneme toplantısı IP sayacına girer: eski günlerin satırları temizlikte silinir
+  // (`cleanup.ts`), "denemeye başlamış mı" sorusu toplantılardan yanıtlanır.
   const recordTrialStart: D1PreparedStatement = db
     .prepare(
       `INSERT OR IGNORE INTO trial_starts (user_id, ip_hash, day, created_at)
-       SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
+       SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)
+         AND (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') = 1`,
     )
-    .bind(userId, clientIpHash, day, now.getTime(), meetingId);
+    .bind(userId, clientIpHash, day, now.getTime(), meetingId, userId);
   const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget };
   const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart], now);
   if (!inserted) {

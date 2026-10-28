@@ -1,5 +1,6 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
+import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
 import type { Env } from "./env";
 import type { Platform } from "./platform";
 
@@ -19,5 +20,9 @@ export default {
       // Cloudflare her istekte bu başlığı koyar; yerel geliştirmede yoktur.
       clientIp: request.headers.get("cf-connecting-ip") ?? "local",
     });
+  },
+  /** Günlük Cron Trigger: süresi dolmuş satırların temizliği. */
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    await cleanupExpiredRows(env.DB, new Date(controller.scheduledTime), scheduledCleanupLimits);
   },
 } satisfies ExportedHandler<Env>;

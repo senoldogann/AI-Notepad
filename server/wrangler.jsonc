@@ -7,6 +7,8 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "observability": { "enabled": true },
+  // Günlük temizlik (03:17 UTC): süresi dolmuş satırlar silinir (`src/cleanup.ts`). Ortamlara kalıtılır.
+  "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {
       "binding": "DB",

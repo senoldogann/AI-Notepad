@@ -39,6 +39,15 @@ yer tutucular geçerlidir.
 `migrations/` altındaki SQL dosyaları sırayla uygulanır: yerelde `npm run migrate:local`, üretimde
 `npm run migrate:production`. Yeni şema değişikliği yeni bir numaralı dosyadır; uygulanmış dosya değiştirilmez.
 
+## Zamanlanmış temizlik
+
+`wrangler.jsonc` → `triggers.crons` her gün 03:17 UTC'de `scheduled` işleyicisini çalıştırır (`src/cleanup.ts`). Silinenler:
+süresi dolmuş Apple nonce'ları, süresi dolmuş ya da kullanılmış e-posta bağlantıları ve cihaz meydan okumaları, süresi
+dolmuş ya da ailesi düşürülmüş yenileme jetonları ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük
+harcama, bugünden eski deneme başlangıçları, 2 günden eski kullanıcı günlük kullanımı. Silme tablo başına 1000 satırlık
+en çok 4 turdur; kalan ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev --test-scheduled`,
+sonra `curl "http://localhost:8787/__scheduled?cron=17+3+*+*+*"`.
+
 ## İlk dağıtım (sahibin bir kez yapacakları)
 
 1. `npx wrangler login`
