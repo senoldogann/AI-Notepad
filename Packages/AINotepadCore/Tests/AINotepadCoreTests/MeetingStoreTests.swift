@@ -193,8 +193,9 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(Set(loadMeetings(sessionsDirectory: local).meetings.map(\.id)) == ["a", "b"])
     }
 
-    // Taşımada kullanımdaki, bitmemiş ve iCloud'da zaten olan toplantılara dokunulmaz (hata da sayılmaz).
-    @Test func moveSkipsBusyUnfinishedAndExisting() throws {
+    // Taşımada kullanımdaki ve bitmemiş toplantılara dokunulmaz; iCloud'da zaten olan birleştirilir ve yerel kopyası
+    // kalkar (hata sayılmaz).
+    @Test func moveSkipsBusyAndUnfinishedAndMergesExisting() throws {
         let local: URL = try temporaryDirectory()
         let cloud: URL = try temporaryDirectory()
         try makeMeeting(root: local, id: "kullanimda", status: .done)
@@ -202,8 +203,78 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         try makeMeeting(root: local, id: "zaten", status: .done)
         try makeMeeting(root: cloud, id: "zaten", status: .done)
         let result: CloudMoveResult = moveFinishedMeetingsToCloud(localSessions: local, cloudSessions: cloud, excluding: ["kullanimda"])
-        #expect(result.moved.isEmpty && result.failures.isEmpty)
-        #expect(loadMeetings(sessionsDirectory: local).meetings.count == 3)
+        #expect(result.moved.isEmpty && result.merged == ["zaten"] && result.failures.isEmpty)
+        #expect(Set(loadMeetings(sessionsDirectory: local).meetings.map(\.id)) == ["kullanimda", "isleniyor"])
+        #expect(loadMeetings(sessionsDirectory: cloud).meetings.map(\.id) == ["zaten"])
+    }
+
+    private let rapor: NoteTask = NoteTask(owner: "Sen", description: "Raporu yaz", dueDate: nil, isMine: true)
+    private let butce: NoteTask = NoteTask(owner: "Aino", description: "Bütçeyi gönder", dueDate: nil, isMine: false)
+
+    /// Görevli notu olan bitmiş toplantı (işaretler görev kimliklerine bağlıdır).
+    private func notedMeeting(id: String) -> MeetingRecord {
+        record(id: id, startedAt: Date(timeIntervalSince1970: 1_800_000_000), status: .done, audioDeleted: false)
+            .with(note: MeetingNote(title: "Palaveri", summary: "Özet", decisions: [], tasks: [rapor, butce], glossary: []))
+    }
+
+    /// Toplantıyı klasörüne yazar ve `meeting.json`'un son yazılma anını verilen ana çeker.
+    private func write(record: MeetingRecord, root: URL, modifiedAt: Date) throws -> URL {
+        let folder: URL = root.appending(path: record.id, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try saveMeeting(record: record, directory: folder)
+        try FileManager.default.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: folder.appending(path: meetingFileName).path)
+        return folder
+    }
+
+    // Eşitleme kapalıyken yerelde düzenlenen toplantı, açılınca iCloud kopyasına yazılır: yerelin içeriği (daha yeni)
+    // kalır, iCloud'da diğer cihazda konan işaretler kaybolmaz, yerel kopya kalkar (liste tek kopya gösterir).
+    @Test func reEnablingWritesNewerLocalCopyToCloud() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        let base: MeetingRecord = notedMeeting(id: "20261026-100000")
+        let phone: MeetingRecord = markingReminded(record: base, task: butce).markingSent(destinationID: "slack")
+        let edited: MeetingRecord = togglingTask(record: base.with(title: "Yerelde düzeltilen başlık"), task: rapor).markingSent(destinationID: "notion")
+        _ = try write(record: phone, root: cloud, modifiedAt: Date(timeIntervalSince1970: 1_800_001_000))
+        let localFolder: URL = try write(record: edited, root: local, modifiedAt: Date(timeIntervalSince1970: 1_800_002_000))
+        let result: CloudMoveResult = moveFinishedMeetingsToCloud(localSessions: local, cloudSessions: cloud, excluding: [])
+        #expect(result.merged == [base.id] && result.failures.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: localFolder.path))
+        let merged: MeetingRecord = try #require(loadMeetings(sessionsDirectory: cloud).meetings.first)
+        #expect(merged.title == "Yerelde düzeltilen başlık")
+        #expect(isTaskDone(record: merged, task: rapor) && isTaskReminded(record: merged, task: butce))
+        #expect(Set(merged.sentDestinationIDs ?? []) == ["slack", "notion"])
+        // Listede tek kopya: iCloud'daki birleşik kayıt.
+        #expect(loadMeetings(directories: [local, cloud]).meetings == [merged])
+    }
+
+    // iCloud kopyası daha yeniyse içeriği kalır, yerelde konan işaret eklenir; ses yerelde silinmişse (saklama süresi
+    // doldu) iCloud'daki ses de silinir ve kayıt "ses silindi" olur.
+    @Test func newerCloudCopyKeepsContentAndLocalAudioDeletion() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        let base: MeetingRecord = notedMeeting(id: "20261026-110000")
+        let cloudFolder: URL = try write(record: base.with(title: "Diğer cihazda düzeltilen"), root: cloud, modifiedAt: Date(timeIntervalSince1970: 1_800_003_000))
+        try Data("ses".utf8).write(to: cloudFolder.appending(path: "others.m4a"))
+        let localFolder: URL = try write(record: togglingTask(record: base, task: rapor).withAudioDeleted(), root: local, modifiedAt: Date(timeIntervalSince1970: 1_800_002_000))
+        let result: CloudMoveResult = moveFinishedMeetingsToCloud(localSessions: local, cloudSessions: cloud, excluding: [])
+        #expect(result.merged == [base.id] && result.failures.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: localFolder.path))
+        #expect(!FileManager.default.fileExists(atPath: cloudFolder.appending(path: "others.m4a").path))
+        let merged: MeetingRecord = try loadMeeting(directory: cloudFolder)
+        #expect(merged.title == "Diğer cihazda düzeltilen" && merged.audioDeleted && isTaskDone(record: merged, task: rapor))
+    }
+
+    // iCloud kopyası okunamazsa yerel kopya silinmez, hata toplantıyla birlikte bildirilir.
+    @Test func unreadableCloudCopyKeepsLocalCopy() throws {
+        let local: URL = try temporaryDirectory()
+        let cloud: URL = try temporaryDirectory()
+        let localFolder: URL = try write(record: notedMeeting(id: "bozuk"), root: local, modifiedAt: Date())
+        let cloudFolder: URL = cloud.appending(path: "bozuk", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: cloudFolder, withIntermediateDirectories: true)
+        try Data("{bozuk".utf8).write(to: cloudFolder.appending(path: meetingFileName))
+        let result: CloudMoveResult = moveFinishedMeetingsToCloud(localSessions: local, cloudSessions: cloud, excluding: [])
+        #expect(result.merged.isEmpty && result.failures.map(\.folder) == ["bozuk"])
+        #expect(FileManager.default.fileExists(atPath: localFolder.path))
     }
 }
 

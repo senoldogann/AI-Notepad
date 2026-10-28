@@ -51,7 +51,13 @@ struct PhoneSettingsTab: View {
                     Toggle("iCloud ile eşitle", isOn: Binding<Bool>(
                         get: { store.cloud.location == .iCloud },
                         set: { (enabled: Bool) -> Void in
-                            Task { await store.cloud.setEnabled(enabled, excluding: excludedFromMoves) { store.reload() } }
+                            Task {
+                                if enabled {
+                                    await store.cloud.enable(excluding: excludedFromMoves) { store.reload() }
+                                } else {
+                                    await store.cloud.disable { store.reload() }
+                                }
+                            }
                         }
                     ))
                     .disabled(store.cloud.state == .working)

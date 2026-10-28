@@ -2833,9 +2833,14 @@ final class AppModel {
         }
     }
 
-    /// iCloud eşitlemesini açar ya da kapatır (bkz. `CloudSyncController.setEnabled`).
-    func setCloudSync(enabled: Bool) async {
-        await cloud.setEnabled(enabled, excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
+    /// iCloud eşitlemesini açar (bkz. `CloudSyncController.enable`).
+    func enableCloudSync() async {
+        await cloud.enable(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
+    }
+
+    /// iCloud eşitlemesini kapatır (bkz. `CloudSyncController.disable`).
+    func disableCloudSync() async {
+        await cloud.disable { [weak self] in self?.reloadMeetings() }
     }
 
     /// iCloud'a taşınmayacak toplantılar: kayıtta, işlenen ya da düzenlenen ve çalınan (dosyaları kullanımda).
