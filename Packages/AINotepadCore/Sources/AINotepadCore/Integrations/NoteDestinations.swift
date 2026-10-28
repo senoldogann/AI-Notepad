@@ -6,7 +6,12 @@ import os
 /// Zapier, Make, n8n) ya da Notion sayfası.
 public enum DestinationTarget: Sendable, Equatable, Codable {
     case account(ChannelConnection)
+    /// Kullanıcının yapıştırdığı webhook adresi (eski sürümlerde Discord girişinin oluşturduğu da): kaldırılınca
+    /// serviste silinmez, adres kullanıcınındır ve başka yerde de kullanılıyor olabilir.
     case webhook(URL)
+    /// Discord girişinin (OAuth `webhook.incoming`) AI-Notepad için oluşturduğu webhook: kaldırılınca Discord'da da
+    /// silinir.
+    case discordSignIn(URL)
     case notion(NotionTarget)
 }
 
@@ -56,6 +61,7 @@ public func destinationName(destination: NoteDestination) -> String {
         case .zoom: "Zoom Team Chat"
         case .generic: url.host() ?? "Webhook"
         }
+    case .discordSignIn: "Discord"
     case .notion: "Notion"
     }
 }
@@ -65,7 +71,7 @@ public func destinationName(destination: NoteDestination) -> String {
 public func destinationDetail(destination: NoteDestination) -> String {
     switch destination.target {
     case .account(let connection): [connection.channel.name, connection.workspace].filter { !$0.isEmpty }.joined(separator: " · ")
-    case .webhook(let url): url.host() ?? ""
+    case .webhook(let url), .discordSignIn(let url): url.host() ?? ""
     case .notion(let target): target.pageTitle
     }
 }
@@ -103,7 +109,8 @@ public func destinationSendKey(destination: NoteDestination) -> String? {
     switch destination.target {
     case .account(let connection):
         return "\(connection.service.rawValue):\(connection.channel.teamID ?? connection.workspace):\(connection.channel.id)"
-    case .webhook(let url):
+    case .webhook(let url), .discordSignIn(let url):
+        // Aynı adres eski sürümde `.webhook` olarak kayıtlı olabilir: anahtar türden değil adresten çıkar.
         let digest: SHA256.Digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         return "webhook:" + digest.prefix(12).map { String(format: "%02x", $0) }.joined()
     case .notion:
@@ -124,6 +131,16 @@ public enum DestinationError: Error, Equatable {
     case notFound(id: String)
     /// Hedef hesap bağlantısı değil (kanal listesi yalnızca Slack ve Teams'te).
     case notAnAccount(id: String)
+}
+
+/// Not gönderiminin başlamadan biten durumları.
+public enum NoteSendError: Error, Equatable {
+    /// Toplantı bulunamadı (bu arada silindi ya da taşındı).
+    case meetingNotFound(id: String)
+    /// Toplantının notu yok (henüz yazılmadı ya da yazılamadı).
+    case noNote(meetingID: String)
+    /// Bu not bu hedefe zaten gönderiliyor (iki gönderim üst üste binmesin, not iki kez düşmesin).
+    case alreadySending(meetingID: String, destinationID: String)
 }
 
 private let destinationLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Destinations")
@@ -181,6 +198,16 @@ public actor DestinationVault {
             ? current.map { $0.id == destination.id ? destination : $0 }
             : current + [destination]
         try store(updated)
+    }
+
+    /// Hedefin kendiliğinden gönderim ayarını değiştirir: kayıtlı (güncel) hedef okunur, yalnızca ayar değişir.
+    /// Bellekteki eski kopya yazılmaz; yoksa bu arada yenilenen jetonların (Slack yenileme jetonu tek kullanımlık)
+    /// üzerine eskileri yazılırdı.
+    public func setAutoSend(id: String, enabled: Bool) throws {
+        guard let stored = try all().first(where: { $0.id == id }) else {
+            throw DestinationError.notFound(id: id)
+        }
+        try upsert(stored.with(autoSend: enabled))
     }
 
     /// Hedefi kaldırır; kaldırılan hedef (servis tarafında kapatmak için) döner.
@@ -314,7 +341,7 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
             try await postNote(connection: fresh, record: record, note: note)
         }
         try await vault.clearReconnect(id: destination.id)
-    case .webhook(let url):
+    case .webhook(let url), .discordSignIn(let url):
         try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
     case .notion:
         try await vault.withNotion(id: destination.id) {
@@ -324,18 +351,16 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
     }
 }
 
-/// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord'da girişle oluşturulan webhook
-/// silinir. Webhook adresleri ve Notion'da yapılacak bir şey yok (Notion erişimi kullanıcının çalışma alanında
-/// kaldırılır).
+/// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord girişinin oluşturduğu webhook
+/// silinir. Yapıştırılan webhook adreslerine (Discord'unkiler dahil) dokunulmaz: adres kullanıcınındır. Notion'da
+/// yapılacak bir şey yok (Notion erişimi kullanıcının çalışma alanında kaldırılır).
 public func revokeDestination(destination: NoteDestination) async throws {
     switch destination.target {
     case .account(let connection):
         try await revokeChannelConnection(connection: connection)
-    case .webhook(let url):
-        if webhookKind(url: url) == .discord {
-            try await deleteDiscordWebhook(url: url)
-        }
-    case .notion:
+    case .discordSignIn(let url):
+        try await deleteDiscordWebhook(url: url)
+    case .webhook, .notion:
         return
     }
 }

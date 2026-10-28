@@ -67,6 +67,24 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         #expect(migratedDestinations(connection: nil, webhook: nil, autoSend: true, now: now) { "x" }.isEmpty)
     }
 
+    // Discord girişinin webhook'u ayrı türde saklanır; eski sürümün `.webhook` kaydı aynen okunur. İkisinin gönderim
+    // anahtarı aynıdır (eski sürümdeki Mac aynı adrese yeniden göndermez). Yapıştırılan Discord adresi kaldırılınca
+    // Discord'da silinmez (ağ isteği yapılmaz).
+    @Test func discordSignInWebhookIsSeparateAndLegacyDecodes() async throws {
+        let url: URL = URL(string: "https://discord.com/api/webhooks/1/abc")!
+        let decoder: JSONDecoder = JSONDecoder()
+        let legacy: DestinationTarget = try decoder.decode(DestinationTarget.self, from: Data(#"{"webhook":{"_0":"https:\/\/discord.com\/api\/webhooks\/1\/abc"}}"#.utf8))
+        #expect(legacy == .webhook(url))
+        let signedIn: DestinationTarget = .discordSignIn(url)
+        #expect(try decoder.decode(DestinationTarget.self, from: JSONEncoder().encode(signedIn)) == signedIn)
+        let now: Date = Date(timeIntervalSince1970: 2_000_000_000)
+        let pasted: NoteDestination = NoteDestination(id: "p", target: legacy, autoSend: false, createdAt: now, needsReconnect: false)
+        let created: NoteDestination = NoteDestination(id: "s", target: signedIn, autoSend: false, createdAt: now, needsReconnect: false)
+        #expect(destinationSendKey(destination: pasted) == destinationSendKey(destination: created))
+        #expect(destinationName(destination: created) == "Discord" && destinationDetail(destination: created) == "discord.com")
+        try await revokeDestination(destination: pasted)
+    }
+
     // Kayıt işaretleri yinelenmez.
     @Test func sentMarksAreUnique() {
         let record: MeetingRecord = destinationRecord(id: "m", endedAt: Date(), sent: ["a", "a", "b"])

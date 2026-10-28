@@ -232,14 +232,16 @@ public func startDownloadingCloudAudio(directory: URL) throws -> Bool {
     return started
 }
 
-/// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. İnmemişse indirmesi başlatılır ve false döner.
+/// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. Sunucuda daha yeni sürümü olan dosya (`.downloaded`)
+/// da okunabilir: yeni sürümün indirmesi arka planda başlatılır ve true döner (toplantı listeden kaybolmaz; yeni sürüm
+/// inince değişiklik bildirimiyle yeniden okunur). Hiç inmemişse indirmesi başlatılır ve false döner.
 public func isDownloaded(file: URL) throws -> Bool {
     let values: URLResourceValues = try file.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
     guard values.isUbiquitousItem == true, values.ubiquitousItemDownloadingStatus != .current else {
         return true
     }
     try FileManager.default.startDownloadingUbiquitousItem(at: file)
-    return false
+    return values.ubiquitousItemDownloadingStatus == .downloaded
 }
 
 /// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Saf fonksiyondur.

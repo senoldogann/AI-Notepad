@@ -199,16 +199,15 @@ func loopbackResponse(decision: LoopbackDecision) -> String {
 }
 
 /// HTTP isteğinin ilk satırından dönüş adresi: `GET /callback?code=…&state=… HTTP/1.1`; yol tam olarak `/callback`
-/// değilse nil. Saf fonksiyondur.
+/// değilse ya da adres kurulamıyorsa nil. Adres istisna atmayan `URLComponents(string:)` ile kurulur (bozuk yüzde
+/// kodlaması — `%zz`, tek `%` — ve ASCII dışı bayt yeniden kodlanır): `percentEncodedQuery` ataması bozuk sorguda
+/// Objective-C istisnasıyla süreci çökertir, tek bir istek uygulamayı kapatabilirdi. Saf fonksiyondur.
 func callbackURL(request: String, redirectURI: String) -> URL? {
     guard let line = request.split(whereSeparator: \.isNewline).first,
-          let match = String(line).firstMatch(of: /^GET \/callback(\?[^ ]*)? HTTP\//),
-          let base = URL(string: redirectURI) else {
+          let match = String(line).firstMatch(of: /^GET \/callback(\?[^ ]*)? HTTP\//) else {
         return nil
     }
-    var components: URLComponents? = URLComponents(url: base, resolvingAgainstBaseURL: false)
-    components?.percentEncodedQuery = match.1.map { String($0.dropFirst()) }
-    return components?.url
+    return URLComponents(string: redirectURI + (match.1.map { String($0) } ?? ""))?.url
 }
 
 /// Devamın yalnızca bir kez sürdürülmesi (dinleyici durumu birden çok kez bildirebilir).

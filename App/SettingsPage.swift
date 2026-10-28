@@ -1240,6 +1240,7 @@ private enum ChannelCard: String, CaseIterable, Identifiable {
         switch destination.target {
         case .account(let connection): service == connection.service
         case .notion: self == .notion
+        case .discordSignIn: self == .discord
         case .webhook(let url):
             switch webhookKind(url: url) {
             case .slack: self == .slack
@@ -1350,7 +1351,7 @@ private struct WebhookSettings: View {
                     switch destination.target {
                     case .account(let connection): Task { await signIn(service: connection.service, replacing: destination.id) }
                     case .notion: notionSignIn = Task { await reconnectNotion(destinationID: destination.id) }
-                    case .webhook: return
+                    case .webhook, .discordSignIn: return
                     }
                 }
                 .buttonStyle(.pillPrimary)
@@ -1571,7 +1572,8 @@ private struct WebhookSettings: View {
             switch service {
             case .discord:
                 let url: URL = try await exchangeDiscordCode(code: code, verifier: pkce.verifier, clientID: clientID)
-                let destination: NoteDestination = try await model.addDestination(target: .webhook(url))
+                // Girişle oluşturulan webhook: hedef kaldırılınca Discord'da da silinir (yapıştırılan adresler silinmez).
+                let destination: NoteDestination = try await model.addDestination(target: .discordSignIn(url))
                 await test(destinationID: destination.id)
             case .slack:
                 await showChannels(signIn: try await exchangeSlackCode(code: code, verifier: pkce.verifier, clientID: clientID), replacing: replacing)

@@ -607,6 +607,16 @@
         }
       }
     },
+    "%@: %lld/%lld görev açıldı. «%@» açılırken yanıt gelmedi (%@); iş açılmış olabilir. Yeniden göndermeden önce %@ içinde kontrol et: açıldıysa yeniden gönderim onu ikinci kez açar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld of %lld tasks created. No response while creating “%@” (%@); the issue may have been created. Check in %@ before sending again: if it was created, sending again creates it a second time."
+          }
+        }
+      }
+    },
     "%@: %lld/%lld görev açıldı; kalanlar açılamadı: %@. Yeniden gönderince yalnızca kalanlar gider.": {
       "localizations": {
         "en": {
@@ -793,6 +803,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Move %lld meetings (text, note and audio) to the Trash?"
+          }
+        }
+      }
+    },
+    "%lld toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings could not be copied to this device; iCloud sync stays on, try again: %@"
           }
         }
       }
@@ -2416,12 +2436,32 @@
         }
       }
     },
+    "Bu not bu bağlantıya zaten gönderiliyor; bitmesini bekle.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This note is already being sent to this connection; wait for it to finish."
+          }
+        }
+      }
+    },
     "Bu not sürümü artık geçmişte yok; menüyü yeniden açıp tekrar seç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This note version is no longer in the history; reopen the menu and choose again."
+          }
+        }
+      }
+    },
+    "Bu toplantı artık yok (silinmiş ya da taşınmış); listeyi yenileyip yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting no longer exists (deleted or moved); refresh the list and try again."
           }
         }
       }
@@ -2462,6 +2502,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting has no note"
+          }
+        }
+      }
+    },
+    "Bu toplantının notu yok; önce notu oluştur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no note; create the note first."
           }
         }
       }
@@ -3156,6 +3206,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other MCP clients"
+          }
+        }
+      }
+    },
+    "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marks from the other device could not be read; the note was saved without them: %@"
           }
         }
       }

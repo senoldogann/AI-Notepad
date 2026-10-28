@@ -933,7 +933,7 @@ final class AppModel {
             }
             // Tekrar işlemede eski not geçmişe girer (ilk işlemede not yoktur).
             let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Tekrar işlendi"), savedAt: Date())
-            let saved: MeetingRecord = applyingPendingReminders(record: versioned)
+            let saved: MeetingRecord = withLatestMarks(result: versioned, start: record, directory: directory)
             saveRecord(record: saved, directory: directory)
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
@@ -1049,19 +1049,21 @@ final class AppModel {
             Task {
                 defer { processingMeetingIDs.remove(meetingID) }
                 guard let llm = await optionalLLMProvider() else {
+                    savePendingMarks(meetingID: meetingID)
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: LLM anahtarı ya da ayarı yok."))
                     return
                 }
                 do {
                     let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: userName)
-                    // Eski not geçmişe girer ("Geri al"); düzenleme sürerken Anımsatıcılar'a eklenenler kaybolmasın.
+                    // Eski not geçmişe girer ("Geri al"); düzenleme sürerken konan işaretler kaybolmasın.
                     let versioned: MeetingRecord = withNoteVersion(
                         updated: edited, previous: record, reason: String(localized: "Düzenlendi: \(trimmed)"), savedAt: Date()
                     )
-                    saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
+                    saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                     refreshFolderCopy(meetingID: meetingID)
                 } catch {
                     Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                    savePendingMarks(meetingID: meetingID)
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
                 }
             }
@@ -1130,7 +1132,7 @@ final class AppModel {
                 let llm: LLMProvider? = await optionalLLMProvider()
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
                 let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: reason, savedAt: Date())
-                saveRecord(record: applyingPendingReminders(record: versioned), directory: directory)
+                saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                 processingMeetingIDs.remove(meetingID)
                 refreshFolderCopy(meetingID: meetingID)
             }
@@ -1808,12 +1810,11 @@ final class AppModel {
         destinations = try await destinationVault.all()
     }
 
+    /// Kendiliğinden gönderimi açar ya da kapatır; kayıtlı hedefin yalnızca bu ayarı değişir (bellekteki kopya eski
+    /// jetonlar taşıyabilir).
     func setAutoSend(destinationID: String, enabled: Bool) async {
-        guard let current = destinations.first(where: { $0.id == destinationID }) else {
-            return
-        }
         do {
-            try await destinationVault.upsert(current.with(autoSend: enabled))
+            try await destinationVault.setAutoSend(id: destinationID, enabled: enabled)
             destinations = try await destinationVault.all()
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -1840,16 +1841,31 @@ final class AppModel {
     /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
     func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
         let connection: ChannelConnection = try await destinationVault.connection(id: destinationID, force: false)
+        // Bağlantı alınırken jetonlar yenilenip yazılmış olabilir: bellekteki liste eski jetonlarla kalmasın.
+        await refreshDestinationList()
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
         return (signIn, try await listChannels(signIn: signIn))
     }
 
-    /// Notu bir hedefe gönderir; başarılıysa toplantıya işlenir (kendiliğinden gönderim yinelemez). Hata metni döner.
+    /// Notu bir hedefe gönderir; başarılıysa toplantıya işlenir (kendiliğinden gönderim yinelemez). Hata metni döner;
+    /// toplantı, not ya da hedef yoksa ve aynı gönderim zaten sürüyorsa da (iki kez düşmesin) hata metni döner.
     func sendNote(meetingID: String, destinationID: String) async -> String? {
-        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
-              let destination = destinations.first(where: { $0.id == destinationID }) else {
-            return nil
+        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+            return userFacingMessage(error: NoteSendError.meetingNotFound(id: meetingID))
         }
+        guard let note = record.note else {
+            return userFacingMessage(error: NoteSendError.noNote(meetingID: meetingID))
+        }
+        guard let destination = destinations.first(where: { $0.id == destinationID }) else {
+            return userFacingMessage(error: DestinationError.notFound(id: destinationID))
+        }
+        let sendKey: String = meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)
+        guard !notesInFlight.contains(sendKey) else {
+            Self.logger.info("Not zaten gönderiliyor, atlandı, toplantı: \(meetingID, privacy: .public), hedef: \(destinationID, privacy: .public)")
+            return userFacingMessage(error: NoteSendError.alreadySending(meetingID: meetingID, destinationID: destinationID))
+        }
+        notesInFlight.insert(sendKey)
+        defer { notesInFlight.remove(sendKey) }
         // Elle gönderim belirsiz işaretini kaldırır: kullanıcı kontrol edip yeniden göndermeyi seçti.
         setUncertain(meetingID: meetingID, destinationID: destinationID, uncertain: false)
         do {
@@ -1881,10 +1897,19 @@ final class AppModel {
         webhookStates[meetingID] = failures.isEmpty ? .sent : .failed(failures.joined(separator: "\n"))
     }
 
-    /// Ayarlardaki "Dene": örnek notu hedefe gönderir.
+    /// Süren not gönderimleri (`toplantı|hedef`): elle gönderim, kendiliğinden gönderim ve "Tümüne gönder" aynı notu
+    /// aynı hedefe üst üste göndermesin.
+    @ObservationIgnored private var notesInFlight: Set<String> = []
+
+    /// Toplantı ve hedef çiftinin anahtarı (süren ve sonucu belirsiz gönderimler). Saf fonksiyondur.
+    private func meetingDestinationKey(meetingID: String, destinationID: String) -> String {
+        "\(meetingID)|\(destinationID)"
+    }
+
+    /// Ayarlardaki "Dene": örnek notu hedefe gönderir; hedef yoksa (bu arada kaldırıldı) hata metni döner.
     func sendTestNote(destinationID: String) async -> String? {
         guard let destination = destinations.first(where: { $0.id == destinationID }) else {
-            return nil
+            return userFacingMessage(error: DestinationError.notFound(id: destinationID))
         }
         let sample: MeetingRecord = MeetingRecord(
             id: "deneme", title: "AI-Notepad", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
@@ -1947,7 +1972,7 @@ final class AppModel {
     }
 
     private func setUncertain(meetingID: String, destinationID: String, uncertain: Bool) {
-        let key: String = "\(meetingID)|\(destinationID)"
+        let key: String = meetingDestinationKey(meetingID: meetingID, destinationID: destinationID)
         let current: Set<String> = uncertainSends()
         let updated: Set<String> = uncertain ? current.union([key]) : current.subtracting([key])
         guard updated != current else {
@@ -1975,9 +2000,15 @@ final class AppModel {
             let pending: [(meetingID: String, destinationID: String)] = pendingAutoSends(records: meetings, destinations: destinations, now: Date())
                 .filter { (item: (meetingID: String, destinationID: String)) -> Bool in
                     !(pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID) && !isLocked(meetingID: item.meetingID)
-                        && !uncertain.contains("\(item.meetingID)|\(item.destinationID)")
+                        && !uncertain.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID))
                 }
             for item in pending {
+                // Liste kurulduktan sonra elle gönderilmeye başlandıysa ya da gönderildiyse atlanır (not iki kez düşmesin).
+                let sentMeanwhile: Bool = (meetings.first { $0.id == item.meetingID }?.sentDestinationIDs ?? []).contains(item.destinationID)
+                    || (pendingSentMarks[item.meetingID] ?? []).contains(item.destinationID)
+                guard !sentMeanwhile, !notesInFlight.contains(meetingDestinationKey(meetingID: item.meetingID, destinationID: item.destinationID)) else {
+                    continue
+                }
                 if let failure = await sendNote(meetingID: item.meetingID, destinationID: item.destinationID) {
                     errorMessages = appendUnique(messages: errorMessages, message: failure)
                 }
@@ -2082,6 +2113,15 @@ final class AppModel {
             markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
             let error: TaskTrackerError = .partial(service: service, created: created, total: total, reason: reason)
             Self.logger.error("Görevlerin bir kısmı açılamadı, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public)")
+            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
+        } catch TaskTrackerError.uncertain(let service, let created, let uncertainTask, let taskTitle, let total, let reason) {
+            // Kesin açılanlar işaretlenir; sonucu belirsiz görev işaretlenmez (açılmadıysa gönderilebilsin), kullanıcıya
+            // yeniden göndermeden önce araçta kontrol etmesi söylenir.
+            markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
+            let error: TaskTrackerError = .uncertain(
+                service: service, created: created, uncertainTask: uncertainTask, taskTitle: taskTitle, total: total, reason: reason
+            )
+            Self.logger.warning("Görev açmanın sonucu belirsiz, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public), görev sırası: \(uncertainTask, privacy: .public)")
             trackerStates[meetingID] = .failed(userFacingMessage(error: error))
         } catch {
             Self.logger.error("Görevler araca gönderilemedi, araç: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
@@ -2191,6 +2231,33 @@ final class AppModel {
             result.markingTaskSent(trackerID: mark.trackerID, task: mark.task)
         }
         return tasks.reduce(withTasks) { (result: MeetingRecord, task: NoteTask) -> MeetingRecord in markingReminded(record: result, task: task) }
+    }
+
+    /// Uzun not işinin (işleme, düzenleme, yeniden yazma; 30–300 sn) kaydedilecek sonucu. İş, başladığı andaki kaydın
+    /// kopyasıyla çalışır; bu arada diğer cihazda (iCloud) ya da kendiliğinden gönderimde diske yazılan işaretler diskten
+    /// yeniden okunur, bekleyen işaretlerle birlikte eski nota uygulanır ve yeni nota taşınır (`withJobMarks`). Bekleyen
+    /// işaretler eski notun görevlerine göredir: önce eski kayda uygulanır, sonra taşınır. Disk okunamazsa neden
+    /// gösterilir ve işin başındaki işaretlerle kaydedilir (işin sonucu kaybolmaz).
+    private func withLatestMarks(result: MeetingRecord, start: MeetingRecord, directory: URL) -> MeetingRecord {
+        let onDisk: [MeetingRecord]
+        do {
+            onDisk = [try loadMeeting(directory: directory)]
+        } catch {
+            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: \(userFacingMessage(error: error))"))
+            onDisk = []
+        }
+        let old: MeetingRecord = applyingPendingReminders(record: mergingUserMarks(current: start, others: onDisk))
+        return withJobMarks(old: old, result: result)
+    }
+
+    /// Not işi başarısız oldu: iş sürerken bekletilen işaretler (Anımsatıcılar, gönderimler) diskteki kayda yazılır,
+    /// yoksa kaybolur ve görevler yeniden eklenebilir ya da gönderilebilirdi.
+    private func savePendingMarks(meetingID: String) {
+        guard pendingReminded[meetingID] != nil || pendingSentMarks[meetingID] != nil || pendingTaskMarks[meetingID] != nil else {
+            return
+        }
+        updateRecordFromDisk(meetingID: meetingID) { (record: MeetingRecord) -> MeetingRecord in applyingPendingReminders(record: record) }
     }
 
     // MARK: Sesinden tanıma

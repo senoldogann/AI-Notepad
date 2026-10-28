@@ -56,6 +56,14 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "\(service) bağlantısında iş açan araç bulunamadı; sunucunun araçları değişmiş olabilir. Uygulamayı güncelle ya da yeniden bağlan.")
     case TaskTrackerError.notFound:
         return String(localized: "Bu görev aracı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.")
+    case TaskTrackerError.uncertain(let service, let created, _, let taskTitle, let total, let reason):
+        return String(localized: "\(service): \(created.count)/\(total) görev açıldı. «\(taskTitle)» açılırken yanıt gelmedi (\(reason)); iş açılmış olabilir. Yeniden göndermeden önce \(service) içinde kontrol et: açıldıysa yeniden gönderim onu ikinci kez açar.")
+    case NoteSendError.meetingNotFound:
+        return String(localized: "Bu toplantı artık yok (silinmiş ya da taşınmış); listeyi yenileyip yeniden dene.")
+    case NoteSendError.noNote:
+        return String(localized: "Bu toplantının notu yok; önce notu oluştur.")
+    case NoteSendError.alreadySending:
+        return String(localized: "Bu not bu bağlantıya zaten gönderiliyor; bitmesini bekle.")
     case let error as DeliveryUncertainError:
         return String(localized: "\(error.host) yanıt vermedi (\(error.reason)); not gitmiş olabilir. Kontrol et, gitmediyse elle yeniden gönder. Kendiliğinden yeniden gönderilmeyecek.")
     case MCPConfigError.invalidConfig(let path, _):

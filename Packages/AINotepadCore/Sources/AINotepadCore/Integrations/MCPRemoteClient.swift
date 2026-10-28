@@ -73,6 +73,15 @@ public enum MCPRemoteError: Error, Equatable {
 private let mcpRemoteLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MCPRemote")
 private let mcpProtocolVersion: String = "2025-06-18"
 
+/// Ağ hatasının MCP karşılığı: iptal edilen istek (kullanıcı girişten vazgeçti, görev iptal edildi) ağ hatası değildir,
+/// `CancellationError` olur ve hata olarak gösterilmez. Saf fonksiyondur.
+func mcpNetworkError(error: URLError, server: String) -> any Error {
+    guard error.code != .cancelled else {
+        return CancellationError()
+    }
+    return MCPRemoteError.network(server: server, reason: error.localizedDescription)
+}
+
 // MARK: OAuth keşfi ve dinamik kayıt
 
 /// Yetkilendirme sunucusunun bilgileri (RFC 8414).
@@ -160,7 +169,7 @@ private func getJSON<Value: Decodable>(_ type: Value.Type, url: URL, server: Str
     do {
         (data, response) = try await URLSession.shared.data(for: request)
     } catch let error as URLError {
-        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+        throw mcpNetworkError(error: error, server: server)
     }
     let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard (200..<300).contains(status) else {
@@ -188,7 +197,7 @@ public func discoverAuthorization(server: URL) async throws -> AuthorizationServ
     do {
         (_, response) = try await URLSession.shared.data(for: probe)
     } catch let error as URLError {
-        throw MCPRemoteError.network(server: name, reason: error.localizedDescription)
+        throw mcpNetworkError(error: error, server: name)
     }
     let header: String = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "WWW-Authenticate") ?? ""
     guard let metadataURL = resourceMetadataURL(wwwAuthenticate: header) ?? wellKnownResourceMetadataURL(server: server) else {
@@ -257,7 +266,7 @@ public func registerClient(metadata: AuthorizationServerMetadata, redirectURI: S
     do {
         (data, response) = try await URLSession.shared.data(for: request)
     } catch let error as URLError {
-        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+        throw mcpNetworkError(error: error, server: server)
     }
     let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard (200..<300).contains(status) else {
@@ -311,7 +320,7 @@ private func mcpTokens(endpoint: URL, fields: [(String, String)], previousRefres
     do {
         (data, response) = try await URLSession.shared.data(for: request)
     } catch let error as URLError {
-        throw MCPRemoteError.network(server: server, reason: error.localizedDescription)
+        throw mcpNetworkError(error: error, server: server)
     }
     let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
     let body: String = String(decoding: data.prefix(400), as: UTF8.self)
@@ -476,7 +485,7 @@ public struct MCPRemoteSession: Sendable {
         do {
             (data, response) = try await URLSession.shared.data(for: request(body: body))
         } catch let error as URLError {
-            throw MCPRemoteError.network(server: serverName, reason: error.localizedDescription)
+            throw mcpNetworkError(error: error, server: serverName)
         }
         let http: HTTPURLResponse? = response as? HTTPURLResponse
         let status: Int = http?.statusCode ?? 0
@@ -502,7 +511,7 @@ public struct MCPRemoteSession: Sendable {
                 throw MCPRemoteError.http(server: serverName, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
             }
         } catch let error as URLError {
-            throw MCPRemoteError.network(server: serverName, reason: error.localizedDescription)
+            throw mcpNetworkError(error: error, server: serverName)
         }
     }
 
