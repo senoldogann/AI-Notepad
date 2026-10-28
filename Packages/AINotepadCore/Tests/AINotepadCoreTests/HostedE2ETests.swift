@@ -4,6 +4,9 @@ import Synchronization
 import Testing
 @testable import AINotepadCore
 
+// Yerel sunucuyu `Process` ile hazırlar: yalnızca macOS'ta derlenir (iOS'ta `Process` yok).
+#if os(macOS)
+
 /// Yerel sunucuya karşı uçtan uca deneme yalnızca açıkça istenirse: `AINOTEPAD_HOSTED_E2E=1` ve sunucunun adresi
 /// `AINOTEPAD_HOSTED_BASE` (ör. `http://127.0.0.1:8787`). Önce `server/` içinde: `.dev.vars` (sahte gizli değerler),
 /// `npm run migrate:local`, `npx wrangler dev`.
@@ -134,3 +137,5 @@ private func randomLinkToken() -> String {
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await familyClient.entitlements() }
     }
 }
+
+#endif

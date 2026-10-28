@@ -52,6 +52,8 @@ public struct HostedSubscription: Decodable, Sendable, Equatable {
     /// Stripe durumu (`active`, `past_due`, `canceled`…).
     public let status: String
     public let currentPeriodEnd: Date
+    /// İptal edilmiş aboneliğin biteceği an (yenilenmez); yenilenecekse nil.
+    public let cancelAt: Date?
     public let access: HostedSubscriptionAccess
     /// Ek sürenin bittiği an; ek süre yoksa nil.
     public let graceEndsAt: Date?
@@ -135,8 +137,10 @@ func hostedJSONDecoder() -> JSONDecoder {
 public enum HostedPlanStatus: Sendable, Equatable {
     /// Deneme: kalan ve toplam ücretsiz toplantı.
     case trial(left: Int, total: Int)
-    /// Abonelik etkin; dönem sonu.
+    /// Abonelik etkin; dönem sonunda yenilenir.
     case subscribed(renewsAt: Date)
+    /// Abonelik iptal edildi; erişim bu ana dek sürer, yenilenmez.
+    case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
     case grace(endsAt: Date)
 }
@@ -146,6 +150,9 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
     if let subscription = entitlements.subscription {
         switch subscription.access {
         case .active:
+            if let cancelAt = subscription.cancelAt {
+                return .ending(endsAt: cancelAt)
+            }
             return .subscribed(renewsAt: subscription.currentPeriodEnd)
         case .grace:
             return .grace(endsAt: subscription.graceEndsAt ?? subscription.currentPeriodEnd)

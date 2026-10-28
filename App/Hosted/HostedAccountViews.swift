@@ -113,6 +113,8 @@ struct HostedAccountSettings: View {
                 }
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(renewsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde yenilenir.")
+            case .ending(let endsAt):
+                Text("Abonelik iptal edildi; \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):
                 Text("Ödeme alınamadı; erişimin \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.")
                     .foregroundStyle(.orange)
@@ -192,7 +194,7 @@ struct HostedSignInStep: View {
                     Text(verbatim: hostedTrialText(left: left, total: total))
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
-                case .subscribed, .grace:
+                case .subscribed, .ending, .grace:
                     Text("Aboneliğin etkin.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)

@@ -58,6 +58,8 @@ function subscriptionEventOf(subscriptionId: string, id: string, type: string, c
         object: "subscription",
         customer,
         status,
+        cancel_at: null,
+        cancel_at_period_end: false,
         items: { object: "list", data: [{ id: "si_1", object: "subscription_item", current_period_end: periodEnd }] },
       },
     },
@@ -74,7 +76,13 @@ async function postWebhook(harness: Harness, payload: string, secret: string): P
   return harness.call(req("POST", "/v1/billing/webhook", { body: payload, headers: { "stripe-signature": signature, "content-type": "application/json" } }));
 }
 
-async function plan(harness: Harness, session: Session): Promise<{ plan: string; subscription: { status: string } | null }> {
+/** Olayın aboneliğine iptal alanlarını yazar (Portal'daki iptal `cancel_at`, eski API `cancel_at_period_end`). */
+function withCancellation(payload: string, cancelAt: number | null, cancelAtPeriodEnd: boolean): string {
+  const event = JSON.parse(payload) as { data: { object: Record<string, unknown> } };
+  return JSON.stringify({ ...event, data: { object: { ...event.data.object, cancel_at: cancelAt, cancel_at_period_end: cancelAtPeriodEnd } } });
+}
+
+async function plan(harness: Harness, session: Session): Promise<{ plan: string; subscription: { status: string; cancelAt: string | null } | null }> {
   return (await harness.call(req("GET", "/v1/me", { token: session.accessToken }))).json();
 }
 
@@ -173,6 +181,40 @@ describe("Stripe webhook", () => {
 
     const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM stripe_events").first<{ count: number }>();
     expect(count?.count).toBe(3);
+  });
+
+  it("iptal edilen abonelik dönem sonuna dek sürer ve biteceği an bildirilir; iptalden vazgeçilince silinir", async () => {
+    const harness: Harness = await defaultHarness();
+    stubStripe(harness);
+    const session: Session = await signIn(harness);
+    await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken }));
+    const customer: string = await customerOf(session.userId);
+    const nowSeconds: number = Math.floor(harness.clock.nowMs / 1000);
+    const periodEnd: number = nowSeconds + 30 * 86_400;
+    const id = uniqueIds();
+    const active: string = subscriptionEventOf(id("sub"), id("evt_c1"), "customer.subscription.created", customer, "active", nowSeconds - 10, periodEnd);
+    await postWebhook(harness, active, env.STRIPE_WEBHOOK_SECRET);
+    expect((await plan(harness, session)).subscription?.cancelAt).toBeNull();
+
+    const portalCancel: string = withCancellation(
+      subscriptionEventOf(id("sub"), id("evt_c2"), "customer.subscription.updated", customer, "active", nowSeconds - 5, periodEnd),
+      periodEnd,
+      false,
+    );
+    await postWebhook(harness, portalCancel, env.STRIPE_WEBHOOK_SECRET);
+    expect(await plan(harness, session)).toMatchObject({ plan: "subscription", subscription: { cancelAt: new Date(periodEnd * 1000).toISOString() } });
+
+    const resumed: string = subscriptionEventOf(id("sub"), id("evt_c3"), "customer.subscription.updated", customer, "active", nowSeconds - 3, periodEnd);
+    await postWebhook(harness, resumed, env.STRIPE_WEBHOOK_SECRET);
+    expect((await plan(harness, session)).subscription?.cancelAt).toBeNull();
+
+    const periodEndCancel: string = withCancellation(
+      subscriptionEventOf(id("sub"), id("evt_c4"), "customer.subscription.updated", customer, "active", nowSeconds - 1, periodEnd),
+      null,
+      true,
+    );
+    await postWebhook(harness, periodEndCancel, env.STRIPE_WEBHOOK_SECRET);
+    expect((await plan(harness, session)).subscription?.cancelAt).toBe(new Date(periodEnd * 1000).toISOString());
   });
 
   it("abonelik dışı olay kaydedilir ama durumu değiştirmez; bilinmeyen müşteri reddedilir", async () => {

@@ -288,6 +288,11 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedPlanStatus(entitlements: entitlements) == .grace(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-08T00:00:00Z")))
         let trial: String = json.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trial.utf8))) == .trial(left: 1, total: 3))
+        // İptal edilmiş ama dönemi süren abonelik "sona eriyor"dur, yenilenmez.
+        let ending: String = json
+            .replacingOccurrences(of: #""access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""access":"active","graceEndsAt":null"#)
+            .replacingOccurrences(of: #""status":"past_due","#, with: #""status":"active","cancelAt":"2026-10-01T00:00:00.000Z","#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(ending.utf8))) == .ending(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
     }
 }
 
