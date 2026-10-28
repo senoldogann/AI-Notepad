@@ -72,6 +72,11 @@ targets:
         buildPhase: resources
       - path: App/Fonts/Inter-OFL.txt
         buildPhase: resources
+      # iPhone da WhisperKit'i bağlar; lisansı ve bildirimleri onunla gelir.
+      - path: App/Licenses
+        buildPhase: resources
+      - path: NOTICE
+        buildPhase: resources
       # Takvim bağlantısı (EventKit) Mac'le aynı.
       - path: App/EventKitConnector.swift
     dependencies:

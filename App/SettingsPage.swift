@@ -1040,7 +1040,12 @@ private struct ConnectionCard<Action: View>: View {
         HStack(spacing: 12) {
             tile
             VStack(alignment: .leading, spacing: 3) {
-                title.appFont(size: 14, weight: .semibold).foregroundStyle(Theme.ink).lineLimit(1)
+                // Uzun adlar (ör. "Folder (Obsidian, iCloud)") yanda iki düğme varken kesilmesin diye alta kayar.
+                title
+                    .appFont(size: 14, weight: .semibold)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 // Rozet başlığın altında: yanında dururken uzun adları (İngilizcede) kesiyordu.
                 if let badge {
                     Text(verbatim: badge)
