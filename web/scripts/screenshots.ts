@@ -27,12 +27,13 @@ const variants: readonly Variant[] = [
   { name: "390-dark", width: 390, colorScheme: "dark" },
 ];
 
-const pages: readonly { readonly name: string; readonly path: string }[] = [
-  { name: "home", path: "/tr" },
-  { name: "home-en", path: "/en" },
-  { name: "pricing", path: "/tr/fiyat" },
-  { name: "download", path: "/tr/indir" },
-  { name: "signin", path: "/tr/giris" },
+/** Görüntülenecek sayfalar; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). */
+const pages: readonly { readonly name: string; readonly path: string; readonly ready: string }[] = [
+  { name: "home", path: "/tr", ready: "main" },
+  { name: "home-en", path: "/en", ready: "main" },
+  { name: "pricing", path: "/tr/fiyat", ready: "main" },
+  { name: "download", path: "/tr/indir", ready: "main" },
+  { name: "signin", path: "/tr/giris", ready: "#email-submit:not([disabled])" },
 ];
 
 /** Komut satırı bağımsız değişkeni; yoksa hata. */
@@ -108,7 +109,8 @@ async function captureStaticPages(browser: Browser, base: string, outDir: string
       const shot: string = `${target.name}-${variant.name}`;
       const page: Page = await context.newPage();
       collectErrors(page, (): string => shot, findings);
-      await page.goto(`${base}${target.path}`, { waitUntil: "networkidle" });
+      await page.goto(`${base}${target.path}`, { waitUntil: "load" });
+      await page.waitForSelector(target.ready, { timeout: 20_000 });
       await capture(page, outDir, shot, findings);
       await page.close();
     }
@@ -123,7 +125,7 @@ async function captureEmailSent(browser: Browser, base: string, outDir: string, 
   const page: Page = await context.newPage();
   const shot: string = "signin-sent-1440-light";
   collectErrors(page, (): string => shot, findings);
-  await page.goto(`${base}/tr/giris`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/tr/giris`, { waitUntil: "load" });
   await page.fill("#email", "deneme@example.com");
   await page.waitForSelector("#email-submit:not([disabled])", { timeout: 20_000 });
   await page.click("#email-submit");
@@ -144,7 +146,7 @@ async function captureAccount(browser: Browser, base: string, outDir: string, to
     shot = `account-${variant.name}`;
     await page.setViewportSize({ width: variant.width, height: 900 });
     await page.emulateMedia({ colorScheme: variant.colorScheme, reducedMotion: "reduce" });
-    await page.reload({ waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "load" });
     await page.waitForSelector("#account-content:not(.hidden)", { timeout: 20_000 });
     await capture(page, outDir, shot, findings);
   }

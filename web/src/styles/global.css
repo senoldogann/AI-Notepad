@@ -358,9 +358,10 @@ p {
   z-index: 0;
 }
 
-/* Gren: SVG gürültüsü (feTurbulence) döşenir, overlay ile hem aydınlatır hem karartır. */
+/* Gren: SVG gürültüsünden (scripts/grain.svg, feTurbulence) bir kez üretilmiş döşeme (scripts/make-grain.ts); overlay
+   ile hem aydınlatır hem karartır. Filtre sayfada canlı çizilmez: yavaş telefonda ana iş parçacığını saniyelerce tutar. */
 .film::before {
-  background-image: url("/grain.svg");
+  background-image: url("/grain.png");
   background-size: 180px 180px;
   mix-blend-mode: overlay;
   opacity: 0.5;
