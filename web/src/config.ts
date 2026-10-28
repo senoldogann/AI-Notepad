@@ -32,15 +32,14 @@ export const repositoryUrl: string = "https://github.com/senoldogann/AI-Notepad"
 /** GitHub Releases'teki en son sürümün sayfası (sürüm notları, geliştirici sürümü); her yayında kendiliğinden güncel. */
 export const latestReleaseUrl: string = `${repositoryUrl}/releases/latest`;
 
-/** Yayınlanmış en son sürüm. Yeni sürüm yayınlanınca bu değer güncellenir (DMG adı sürümü taşır). */
+/** Yayınlanmış en son sürüm (yalnızca sayfada gösterilir; indirme adresi buna bağlı değil). */
 export const latestVersion: string = "0.1.3";
 
 /**
- * DMG indirme adresi. `releases/latest/download/<ad>` kalıbı yalnızca dosya adı sabitse sürümler arasında çalışır;
- * yayın betiği adı `AI-Notepad-<sürüm>.dmg` verdiği için o kalıp bir sonraki sürümde 404 olur. Bu yüzden adres sürümden
- * üretilir (2026-10-28'de doğrulandı: v0.1.3 varlığı indiriliyor).
+ * DMG indirme adresi: her sürüme yüklenen sabit adlı kopya (`AI-Notepad.dmg`, bkz. scripts/release.sh).
+ * `releases/latest/download/` her zaman son sürümü indirir; yeni sürümde bağlantı değişmez.
  */
-const dmgUrl: string = `${repositoryUrl}/releases/download/v${latestVersion}/AI-Notepad-${latestVersion}.dmg`;
+const dmgUrl: string = `${repositoryUrl}/releases/latest/download/AI-Notepad.dmg`;
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {
