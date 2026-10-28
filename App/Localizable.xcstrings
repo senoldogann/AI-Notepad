@@ -4091,16 +4091,6 @@
         }
       }
     },
-    "Geçmişi gizle": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide history"
-          }
-        }
-      }
-    },
     "Git": {
       "localizations": {
         "en": {
@@ -8191,6 +8181,26 @@
         }
       }
     },
+    "Sohbet geçmişini gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide chat history"
+          }
+        }
+      }
+    },
+    "Sohbet geçmişini göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show chat history"
+          }
+        }
+      }
+    },
     "Sohbet saklanamadı: %@": {
       "localizations": {
         "en": {
@@ -10783,16 +10793,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Earlier answers won't be used as context; this chat stays in history"
-          }
-        }
-      }
-    },
-    "Önceki sohbetler: yeniden aç, devam et ya da sil": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Earlier chats: reopen, continue or delete"
           }
         }
       }

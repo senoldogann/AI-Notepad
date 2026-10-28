@@ -91,6 +91,8 @@ enum SettingsKey {
     static let peopleListVisible: String = "people.listVisible"
     /// Toplantılar sayfasındaki toplantı listesi açık (üst çubuktaki düğmeyle gizlenir).
     static let meetingsListVisible: String = "meetings.listVisible"
+    /// Sor sayfasındaki sohbet geçmişi sütunu açık (üst çubuktaki düğmeyle).
+    static let askHistoryVisible: String = "ask.historyVisible"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
     static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.
@@ -238,6 +240,7 @@ func registerDefaultSettings() {
         SettingsKey.calendarEnabled: false,
         SettingsKey.peopleListVisible: false,
         SettingsKey.meetingsListVisible: true,
+        SettingsKey.askHistoryVisible: false,
         SettingsKey.inPersonMode: false,
         SettingsKey.appleNotesAutoSend: false,
         SettingsKey.markdownFolder: "",

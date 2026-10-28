@@ -206,7 +206,7 @@ struct AppearanceEnvironment: ViewModifier {
             .font(appearance.font(size: 13, weight: .regular))
             // İpuçları pencerenin en üst katmanında (metnin altında kalmasın, kesilmesin).
             .hoverHintLayer()
-            // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
+            // Stil belirtilmemiş tüm düğmeler hap biçiminde (el imleci ve hover dahil).
             .buttonStyle(.pill)
             // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.
             .onChange(of: theme, initial: true) { (_: String, value: String) in

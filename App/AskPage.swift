@@ -16,8 +16,8 @@ struct AskPage: View {
     /// `@` önerilerinde klavyeyle seçili satır.
     @State private var highlighted: Int = 0
     @FocusState private var isFocused: Bool
-    /// Soldaki sohbet geçmişi sütunu açık.
-    @State private var isShowingHistory: Bool = false
+    /// Soldaki sohbet geçmişi sütunu açık (düğmesi pencerenin üst çubuğunda).
+    @AppStorage(SettingsKey.askHistoryVisible) private var isShowingHistory: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -59,7 +59,7 @@ struct AskPage: View {
                     }
                     .animation(.smooth(duration: 0.35), value: model.archiveExchanges.map(\.id))
                     .padding(.horizontal, 40)
-                    // Sağ üstteki Geçmiş / Yeni sohbet düğmeleri görünürken ilk soru balonu onların altında kalmasın.
+                    // Sağ üstteki "Yeni sohbet" düğmesi görünürken ilk soru balonu onun altında kalmasın.
                     .padding(.top, hasCornerButtons ? 76 : 28)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 780, alignment: .leading)
@@ -102,13 +102,6 @@ struct AskPage: View {
         .frame(maxWidth: .infinity)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
-                if !model.askConversations.isEmpty {
-                    Button(isShowingHistory ? "Geçmişi gizle" : "Geçmiş", systemImage: "clock.arrow.circlepath") {
-                        isShowingHistory.toggle()
-                    }
-                    .controlSize(.small)
-                    .hoverHint("Önceki sohbetler: yeniden aç, devam et ya da sil", alignment: .trailing, edge: .bottom)
-                }
                 if !model.archiveExchanges.isEmpty {
                     Button("Yeni sohbet", systemImage: "square.and.pencil") {
                         model.clearArchiveConversation()
@@ -125,9 +118,9 @@ struct AskPage: View {
 
     private let bottomID: String = "ask-bottom"
 
-    /// Sağ üst köşede Geçmiş ya da Yeni sohbet düğmesi var mı.
+    /// Sağ üst köşede "Yeni sohbet" düğmesi var mı.
     private var hasCornerButtons: Bool {
-        !model.askConversations.isEmpty || !model.archiveExchanges.isEmpty
+        !model.archiveExchanges.isEmpty
     }
 
     private var composer: some View {

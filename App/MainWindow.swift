@@ -312,7 +312,7 @@ private struct Sidebar: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
-        .frame(width: 228)
+        .frame(width: sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .pageBackground()
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
@@ -354,27 +354,31 @@ private struct Sidebar: View {
 
 /// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
 /// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
+/// Ana penceredeki kenar çubuğunun genişliği (arama penceresi içerik alanına göre ortalanır).
+private let sidebarWidth: CGFloat = 228
+
 private struct TopBar: View {
     let model: AppModel
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
 
     @AppStorage(SettingsKey.meetingsListVisible) private var meetingsListVisible: Bool = true
+    @AppStorage(SettingsKey.peopleListVisible) private var peopleListVisible: Bool = false
+    @AppStorage(SettingsKey.askHistoryVisible) private var askHistoryVisible: Bool = false
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
-            // Toplantılarda listeyi gizle/göster (Kişiler'deki gibi); toplantı seçili değilken liste hep görünür.
-            if router.section == .meetings, router.selectedMeetingID != nil {
-                Button {
-                    meetingsListVisible.toggle()
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .appFont(size: 14, weight: .medium)
-                        .frame(width: 30, height: 28)
-                }
-                .buttonStyle(.hoverPlain)
-                .accessibilityLabel(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster")
-                .hoverHint(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster", alignment: .leading, edge: .bottom)
+            // Sayfanın sol listesini gizle/göster: her bölümde aynı yerde, başlığın solunda.
+            switch router.section {
+            case .meetings where router.selectedMeetingID != nil:
+                // Toplantı seçili değilken liste hep görünür (seçecek bir şey kalmasın).
+                listToggle(isVisible: $meetingsListVisible, show: "Toplantı listesini göster", hide: "Toplantı listesini gizle")
+            case .people:
+                listToggle(isVisible: $peopleListVisible, show: "Kişi listesini göster", hide: "Kişi listesini gizle")
+            case .ask where !model.askConversations.isEmpty:
+                listToggle(isVisible: $askHistoryVisible, show: "Sohbet geçmişini göster", hide: "Sohbet geçmişini gizle")
+            default:
+                EmptyView()
             }
             // En dar pencerede başlık tek satırda kalır, arama hapı daralır; çubuk taşmaz.
             Text(title)
@@ -456,6 +460,20 @@ private struct TopBar: View {
         .padding(.horizontal, 20)
         .frame(height: 52)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
+    /// Sol listeyi gizleyen/gösteren düğme (Toplantılar, Kişiler, Sor'da aynı).
+    private func listToggle(isVisible: Binding<Bool>, show: LocalizedStringKey, hide: LocalizedStringKey) -> some View {
+        Button {
+            isVisible.wrappedValue.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .appFont(size: 14, weight: .medium)
+                .frame(width: 30, height: 28)
+        }
+        .buttonStyle(.hoverPlain)
+        .accessibilityLabel(isVisible.wrappedValue ? hide : show)
+        .hoverHint(isVisible.wrappedValue ? hide : show, alignment: .leading, edge: .bottom)
     }
 
     private var title: LocalizedStringKey {
@@ -1552,6 +1570,9 @@ private struct SearchComposer: View {
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
             .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
             .padding(.top, 96)
+            // Kenar çubuğundan sonraki içerik alanının ortasında (pencerenin ortasında kenar çubuğu yüzünden sola kaymış
+            // görünüyordu).
+            .padding(.leading, sidebarWidth)
         }
         .onAppear {
             query = router.searchQuery
