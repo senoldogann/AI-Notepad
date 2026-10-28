@@ -849,10 +849,10 @@ struct MeetingDetailPage: View {
             } else {
                 ForEach(model.taskTrackers) { (tracker: TaskTracker) in
                     Button("Bana düşenleri \(tracker.service.displayName)'e gönder") {
-                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: true) }
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, scope: .mine) }
                     }
                     Button("Tüm görevleri \(tracker.service.displayName)'e gönder") {
-                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, onlyMine: false) }
+                        Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, scope: .all) }
                     }
                 }
             }

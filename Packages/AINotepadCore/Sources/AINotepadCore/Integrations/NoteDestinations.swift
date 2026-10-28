@@ -229,21 +229,41 @@ public actor DestinationVault {
         return removed
     }
 
-    /// Hesap hedefinin geçerli bağlantısı: jeton bitmek üzereyse (ya da `force`) yenilenir ve yazılır. Aynı hedefin
-    /// süren yenilemesi varsa onu bekler. Oturum reddedilirse hedef "yeniden bağlan" olarak işaretlenir.
-    public func connection(id: String, force: Bool) async throws -> ChannelConnection {
+    /// Hesap hedefinin geçerli bağlantısı: jeton bitmek üzereyse yenilenir ve yazılır. Aynı hedefin süren yenilemesi
+    /// varsa onu bekler. Oturum reddedilirse hedef "yeniden bağlan" olarak işaretlenir.
+    public func connection(id: String) async throws -> ChannelConnection {
         if let running = refreshes[id] {
             return try await running.value
         }
+        let connection: ChannelConnection = try storedAccount(id: id)
+        guard needsRefresh(tokens: connection.tokens, now: Date()) else {
+            return connection
+        }
+        return try await refresh(id: id, connection: connection)
+    }
+
+    /// Hesap hedefinin jetonlarını süresine bakmadan yeniler (sunucu erişim jetonunu süresinden önce geri aldı, 401) ve
+    /// yazar. Aynı hedefin süren yenilemesi varsa onu bekler. Oturum reddedilirse hedef "yeniden bağlan" olarak işaretlenir.
+    public func refreshedConnection(id: String) async throws -> ChannelConnection {
+        if let running = refreshes[id] {
+            return try await running.value
+        }
+        return try await refresh(id: id, connection: try storedAccount(id: id))
+    }
+
+    /// Kayıtlı hesap hedefinin bağlantısı; hedef yoksa `notFound`, hesap değilse `notAnAccount`.
+    private func storedAccount(id: String) throws -> ChannelConnection {
         guard let destination = try all().first(where: { $0.id == id }) else {
             throw DestinationError.notFound(id: id)
         }
         guard case .account(let connection) = destination.target else {
             throw DestinationError.notAnAccount(id: id)
         }
-        guard force || needsRefresh(tokens: connection.tokens, now: Date()) else {
-            return connection
-        }
+        return connection
+    }
+
+    /// Jetonları yeniler (hedef başına tek yenileme) ve hedef hâlâ bu bağlantıysa yazar.
+    private func refresh(id: String, connection: ChannelConnection) async throws -> ChannelConnection {
         let refresher: @Sendable (ChannelConnection) async throws -> ChannelConnection = self.refresher
         let task: Task<ChannelConnection, any Error> = Task { try await refresher(connection) }
         refreshes[id] = task
@@ -363,11 +383,11 @@ public actor DestinationVault {
 public func deliverNote(vault: DestinationVault, destination: NoteDestination, record: MeetingRecord, note: MeetingNote) async throws {
     switch destination.target {
     case .account:
-        let connection: ChannelConnection = try await vault.connection(id: destination.id, force: false)
+        let connection: ChannelConnection = try await vault.connection(id: destination.id)
         do {
             try await postNote(connection: connection, record: record, note: note)
         } catch ChannelAuthError.expired {
-            let fresh: ChannelConnection = try await vault.connection(id: destination.id, force: true)
+            let fresh: ChannelConnection = try await vault.refreshedConnection(id: destination.id)
             try await postNote(connection: fresh, record: record, note: note)
         }
         try await vault.clearReconnect(id: destination.id)

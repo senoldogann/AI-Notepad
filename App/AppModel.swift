@@ -2013,7 +2013,7 @@ final class AppModel {
 
     /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
     func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
-        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID, force: false)
+        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID)
         // Bağlantı alınırken jetonlar yenilenip yazılmış olabilir: bellekteki liste eski jetonlarla kalmasın.
         await refreshDestinationList()
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
@@ -2334,15 +2334,16 @@ final class AppModel {
         }
     }
 
-    /// Toplantının görevlerini araçta iş olarak açar (`onlyMine`: yalnız sana düşenler); daha önce gönderilenler
-    /// yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
-    func sendTasks(meetingID: String, trackerID: String, onlyMine: Bool) async {
+    /// Toplantının kapsamdaki görevlerini (`scope`: yalnız sana düşenler ya da hepsi) araçta iş olarak açar; daha önce
+    /// gönderilenler yinelenmez. Sonuç özeti ya da hata toplantı sayfasında görünür.
+    func sendTasks(meetingID: String, trackerID: String, scope: TaskSendScope) async {
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note,
               let tracker = taskTrackers.first(where: { $0.id == trackerID }) else {
             return
         }
         let sent: [String] = record.sentTaskKeys?[trackerID] ?? []
-        let tasks: [NoteTask] = note.tasks.filter { (onlyMine ? $0.isMine : true) && !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
+        let tasks: [NoteTask] = tasksInScope(tasks: note.tasks, scope: scope)
+            .filter { !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
         guard !tasks.isEmpty else {
             showSendState(state: .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış).")), meetingID: meetingID, states: \.trackerStates)
             return

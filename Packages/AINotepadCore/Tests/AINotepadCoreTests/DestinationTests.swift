@@ -185,8 +185,8 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
-        async let first: ChannelConnection = vault.connection(id: "d", force: false)
-        async let second: ChannelConnection = vault.connection(id: "d", force: false)
+        async let first: ChannelConnection = vault.connection(id: "d")
+        async let second: ChannelConnection = vault.connection(id: "d")
         let results: [ChannelConnection] = try await [first, second]
         #expect(await counter.value == 1)
         #expect(results.allSatisfy { $0.tokens.accessToken == "yeni" })
@@ -210,7 +210,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
-        let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d", force: false) }
+        let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d") }
         var signals: AsyncStream<Void>.Iterator = started.makeAsyncIterator()
         await signals.next()
         _ = try await vault.remove(id: "d")
@@ -226,7 +226,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
         await #expect(throws: ChannelAuthError.expired(service: .slack)) {
-            try await vault.connection(id: "d", force: false)
+            try await vault.connection(id: "d")
         }
         #expect(try await vault.all().first?.needsReconnect == true)
         try deleteSecret(service: service, account: .destinations)
