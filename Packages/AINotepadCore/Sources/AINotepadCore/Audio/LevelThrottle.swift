@@ -1,12 +1,11 @@
 import Foundation
 import Synchronization
 
-/// Çubukların kayma aralığına göre seviyenin ana aktöre geçme aralığı: aralığın dörtte biri. Gösterge çubuğu kendi
-/// aralığında kaydırır; seviye aynı aralıkla gelseydi iki saat birbirinin altına düşünce (ör. 98 ms) değer atlanır,
-/// çubuk 200 ms sonra kayar ve ölçer takılarak akardı. Dörtte birlik aralıkla kayma en çok çeyrek aralık sapar.
-/// Saf fonksiyondur.
+/// Çubukların kayma aralığına göre seviyenin ana aktöre geçme aralığı: aralığın yarısı. Çubukları göstergenin kendi
+/// saati kaydırır (`AudioLevels`); seviyenin her adımda en az bir kez gelmesi yeter, daha sık geçiş yalnızca ana aktörü
+/// yorar. Saf fonksiyondur.
 public func levelThrottleInterval(barInterval: Double) -> Double {
-    barInterval / 4
+    barInterval / 2
 }
 
 /// Ses seviyelerinin en yükseğini biriktirip en fazla `intervalSec`'te bir veren kutu. Thread-safe.

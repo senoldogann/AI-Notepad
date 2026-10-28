@@ -577,6 +577,8 @@ private struct HomePage: View {
                     .foregroundStyle(Theme.muted)
             }
             .appFont(size: 34, weight: .regular)
+            // Kayıt sürerken sayfanın odağı bu satır: ortada durur.
+            .frame(maxWidth: .infinity, alignment: .center)
         case .finishing:
             Text("Bitiriliyor…")
                 .appFont(size: 34, weight: .regular)

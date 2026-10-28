@@ -734,7 +734,7 @@ final class AppModel {
         }
 
         // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
-        // kilitli kutuda birikir, ana aktöre çubuk aralığının dörtte birinde bir geçilir (her parça için ayrı görev
+        // kilitli kutuda birikir, ana aktöre çubuk aralığının yarısında bir geçilir (her parça için ayrı görev
         // açılmaz; bkz. `levelThrottleInterval`).
         audioLevels.start()
         let levels: AudioLevels = audioLevels
@@ -743,8 +743,7 @@ final class AppModel {
             guard let peak = throttle.add(level: level) else {
                 return
             }
-            let now: Date = Date()
-            Task { @MainActor in levels.record(level: peak, at: now) }
+            Task { @MainActor in levels.record(level: peak) }
         }
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
@@ -2191,6 +2190,12 @@ final class AppModel {
     /// Bekleyen kendiliğinden gönderimleri yapar: işleme bitince, açılışta ve saatte bir. Ağ yokken kaçanlar böylece
     /// sonra gider; her (toplantı, hedef) bir kez gönderilir.
     func processPendingAutoSends() async {
+        #if DEBUG
+        // "--otomatik-gonderim-yok": ölçüm ve kabul testlerinde test toplantıları hedeflere gitmesin (yalnız Debug).
+        if CommandLine.arguments.contains("--otomatik-gonderim-yok") {
+            return
+        }
+        #endif
         guard !autoSendRunning else {
             autoSendRequested = true
             return
@@ -2337,12 +2342,17 @@ final class AppModel {
 
     /// Görev aracını kaldırır; OAuth izni sunucuda da geri alınır (bkz. `revokeTracker`).
     func removeTracker(id: String) async {
+        let removed: TaskTracker
         do {
-            await revokeTracker(tracker: try await trackerVault.remove(id: id))
+            removed = try await trackerVault.remove(id: id)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            await refreshTrackerList()
+            return
         }
+        // Satır hemen kalkar; izin arka planda geri alınır (ağ yavaşsa bir dakikaya dek sürebilir).
         await refreshTrackerList()
+        Task { await revokeTracker(tracker: removed) }
     }
 
     /// Kaldırılan aracın OAuth iznini yetkilendirme sunucusunda geri alır. Geri alınamazsa araç yine kaldırılmış kalır
@@ -2493,6 +2503,11 @@ final class AppModel {
     /// İşleme bitince açık olan hedeflere kendiliğinden gönderir: webhook, Apple Notlar (bir kez) ve klasör (her
     /// seferinde güncellenir). Hata panelde görünür; gönderilenler toplantıya işlenir.
     private func autoSendToDestinations(record: MeetingRecord) {
+        #if DEBUG
+        if CommandLine.arguments.contains("--otomatik-gonderim-yok") {
+            return
+        }
+        #endif
         Task { await processPendingAutoSends() }
         guard record.note != nil else {
             return
