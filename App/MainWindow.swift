@@ -783,7 +783,7 @@ private struct Shortcuts: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .cardSurface(cornerRadius: 14)
+            .background { ShortcutCardBackground() }
             .contentShape(Rectangle())
         }
         .buttonStyle(.hoverPlain)
@@ -1521,5 +1521,20 @@ private struct SearchComposer: View {
 
     private func close() {
         router.isSearchPresented = false
+    }
+}
+
+/// Kısayol kartının zemini: Sor'daki örnek kartlar gibi kart yüzeyi, sağa doğru beliren ince çapraz çizgiler ve çerçeve.
+private struct ShortcutCardBackground: View {
+    var body: some View {
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        ZStack {
+            shape.fill(Theme.card)
+            DiagonalLines(spacing: 9)
+                .stroke(Theme.line, lineWidth: 1)
+                .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+                .clipShape(shape)
+            shape.strokeBorder(Theme.line)
+        }
     }
 }

@@ -219,7 +219,8 @@ final class AppModel {
             assistantCard: assistantCard, phase: phase,
             newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
-            languageText: languageText(locked: lockedLanguage, mode: languageMode, isRecording: isRecording), errors: errorMessages
+            // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
+            languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording), errors: errorMessages
         )
         if let cache = viewStateCache, cache.inputs == inputs {
             return cache.state
@@ -234,11 +235,12 @@ final class AppModel {
     }
 
     /// Kayıt yokken gösterilen durum metni.
+    /// Panelde kayıt yokken gösterilen durum: hazırken boş (gereksiz yazı yok), yalnızca model hazırlanırken ya da
+    /// hata varken dolu.
     private var statusText: String {
         switch (liveEngine, modelStatus) {
-        case (.deepgram, _): String(localized: "Hazır · Deepgram")
+        case (.deepgram, _), (.whisperKit, .ready): ""
         case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
-        case (.whisperKit, .ready): String(localized: "Hazır · Mac'te")
         case (.whisperKit, .failed(let message)): message
         }
     }

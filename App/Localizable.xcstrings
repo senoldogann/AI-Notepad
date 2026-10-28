@@ -3010,6 +3010,16 @@
         }
       }
     },
+    "Dili seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose language"
+          }
+        }
+      }
+    },
     "Dinle": {
       "localizations": {
         "en": {
@@ -8365,6 +8375,16 @@
         }
       }
     },
+    "Toplantı dili: %@. Seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting language: %@. Choose"
+          }
+        }
+      }
+    },
     "Toplantı dilini değiştir": {
       "extractionState": "stale",
       "localizations": {
@@ -8693,6 +8713,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listens to your meeting, writes your notes."
+          }
+        }
+      }
+    },
+    "Toplantının dilini seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the meeting language"
           }
         }
       }

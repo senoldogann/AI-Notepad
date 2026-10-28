@@ -66,6 +66,7 @@ struct PanelHost: View {
                     onCloseCard: { model.closeAssistantCard() },
                     onRetryTranslations: { (ids: [SegmentID]) -> Void in model.retryTranslations(ids: ids) },
                     onSetLanguage: { (language: MeetingLanguage) -> Void in model.setLanguage(language: language) },
+                    onChooseLanguageMode: { (mode: LanguageMode) -> Void in model.languageMode = mode },
                     onReassignBlock: { (segments: [SegmentID], person: Int) -> Void in model.reassignBlock(segments: segments, person: person) },
                     onMergePerson: { (from: Int, into: Int) -> Void in model.mergeLivePersons(from: from, into: into) },
                     onBookmark: { model.bookmarkNow() }

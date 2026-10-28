@@ -47,7 +47,7 @@ public struct LiveViewState: Equatable, Sendable {
     /// Kayıt başlatılabilir (model hazır, önceki kayıt bitti).
     public let canStart: Bool
     public let startedAt: Date?
-    /// Kayıt yokken gösterilen durum ("Hazır · Deepgram" gibi).
+    /// Kayıt yokken gösterilen durum; yalnızca bir sorun ya da bekleme varsa dolu (ör. "Model hazırlanıyor…").
     public let statusText: String
     public let languageText: String
     /// Yankısı süzülmüş, konuşmacıya göre gruplanmış transkript.
