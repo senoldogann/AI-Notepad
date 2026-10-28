@@ -75,7 +75,9 @@ struct PeoplePage: View {
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
             VStack(spacing: 0) {
-                toolbar(people: people, current: current)
+                if !listVisible, !people.isEmpty {
+                    toolbar(people: people, current: current)
+                }
                 Group {
                     if isAdding {
                         PersonForm(title: "Kişi ekle", initialName: "", lockedName: nil, initialRole: "", initialEmail: "") { (name: String, role: String, email: String) -> Void in
@@ -135,42 +137,28 @@ struct PeoplePage: View {
         .animation(.smooth(duration: 0.25), value: listVisible)
     }
 
-    /// Üst çubuk: listeyi göster/gizle; liste kapalıyken kişi seçici menü ve "Kişi ekle".
+    /// Liste kapalıyken kişi seçici menü ve "Kişi ekle" (listeyi gösterme düğmesi pencerenin üst çubuğunda).
     private func toolbar(people: [PersonSummary], current: PersonSummary?) -> some View {
         HStack(spacing: 8) {
-            Button {
-                listVisible.toggle()
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .appFont(size: 14, weight: .medium)
-                    .frame(width: 30, height: 28)
-            }
-            .buttonStyle(.hoverPlain)
-            .accessibilityLabel(listVisible ? "Kişi listesini gizle" : "Kişi listesini göster")
-            .hoverHint(listVisible ? "Kişi listesini gizle" : "Kişi listesini göster", alignment: .leading, edge: .bottom)
-            if !listVisible, !people.isEmpty {
-                Menu {
-                    ForEach(people) { (person: PersonSummary) in
-                        Button(person.name) {
-                            isAdding = false
-                            selected = person.id
-                        }
+            Menu {
+                ForEach(people) { (person: PersonSummary) in
+                    Button(person.name) {
+                        isAdding = false
+                        selected = person.id
                     }
-                } label: {
-                    Text(verbatim: current?.name ?? "")
                 }
-                .menuStyle(.button)
-                .buttonStyle(.pill)
-                .fixedSize()
-                .hoverHint("Başka bir kişiyi aç", alignment: .leading, edge: .bottom)
-                Spacer(minLength: 8)
-                Button("Kişi ekle", systemImage: "person.badge.plus") {
-                    withAnimation(.smooth(duration: 0.25)) { isAdding = true }
-                }
-                .buttonStyle(.pill)
-            } else {
-                Spacer(minLength: 0)
+            } label: {
+                Text(verbatim: current?.name ?? "")
             }
+            .menuStyle(.button)
+            .buttonStyle(.pill)
+            .fixedSize()
+            .hoverHint("Başka bir kişiyi aç", alignment: .leading, edge: .bottom)
+            Spacer(minLength: 8)
+            Button("Kişi ekle", systemImage: "person.badge.plus") {
+                withAnimation(.smooth(duration: 0.25)) { isAdding = true }
+            }
+            .buttonStyle(.pill)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -207,7 +195,7 @@ struct PeoplePage: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.hoverPlain)

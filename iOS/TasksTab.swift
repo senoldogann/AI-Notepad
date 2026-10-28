@@ -122,7 +122,7 @@ struct TasksTab: View {
                 .animation(.smooth(duration: 0.3), value: shown.map(\.task.trackingKey))
             }
             .scrollIndicators(.hidden)
-            .screenBackground()
+            .background(Theme.background)
             .navigationTitle("Görevlerim")
         }
     }
@@ -162,7 +162,8 @@ struct PhoneTaskRow: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .outlinedCard(cornerRadius: 16)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
         .contentShape(Rectangle())
         .sensoryFeedback(.selection, trigger: isDone)
     }

@@ -58,61 +58,9 @@ public struct HoverPlainButtonStyle: ButtonStyle {
 public extension ButtonStyle where Self == HoverPlainButtonStyle {
     /// Satır ve simge düğmeleri.
     static var hoverPlain: HoverPlainButtonStyle { HoverPlainButtonStyle(cornerRadius: 7) }
-}
-
-/// Liquid Glass'ta kapsül düğmenin gövdesi: fare üstündeyken ya da basılıyken arkasında etkileşimli cam belirir
-/// (boştayken cam yok: düğmenin kendi zemini görünür). El imleci ve devre dışı soluklaşma Standart'taki gibi.
-private struct GlassHoverCapsuleBody: View {
-    let configuration: ButtonStyleConfiguration
-    @Environment(\.isEnabled) private var isEnabled: Bool
-    @Environment(\.designLook) private var look: DesignLook
-    @Environment(\.colorScheme) private var colorScheme: ColorScheme
-    @State private var isHovering: Bool = false
-
-    var body: some View {
-        let isActive: Bool = isEnabled && (isHovering || configuration.isPressed)
-        configuration.label
-            .contentShape(Capsule())
-            // Cam içerikten biraz büyük çizilir; yerleşim değişmez (dolgu eklenip geri alınır).
-            .padding(hoverOutset)
-            .glassEffect(isActive ? look.interactiveGlass(colorScheme: colorScheme) : .identity, in: Capsule())
-            .padding(-hoverOutset)
-            .opacity(isEnabled ? 1 : 0.4)
-            .onHover { (hovering: Bool) -> Void in isHovering = hovering }
-            .linkPointer(isEnabled: isEnabled)
-            .animation(.easeOut(duration: 0.12), value: isHovering)
-    }
-}
-
-/// Kapsül ve yuvarlak düğmeler (vurgu hapları, oynat düğmesi, seçici bölümleri): vurgu da kapsül biçiminde. Standart'ta
-/// `hoverPlain` ile aynı davranış; Liquid Glass'ta fare üstündeyken etkileşimli cam.
-public struct HoverCapsuleButtonStyle: ButtonStyle {
-    public init() {}
-
-    public func makeBody(configuration: Configuration) -> some View {
-        HoverCapsuleBody(configuration: configuration)
-    }
-}
-
-/// Kapsül düğmenin gövdesi: stile göre Standart vurgu ya da cam.
-private struct HoverCapsuleBody: View {
-    let configuration: ButtonStyleConfiguration
-    @Environment(\.designLook) private var look: DesignLook
-
-    var body: some View {
-        switch look.style {
-        case .standard:
-            // Yarıçap yüksekliğin yarısını aşınca köşeler tam yuvarlanır.
-            HoverPlainButtonStyle(cornerRadius: 1000).makeBody(configuration: configuration)
-        case .liquidGlass:
-            GlassHoverCapsuleBody(configuration: configuration)
-        }
-    }
-}
-
-public extension ButtonStyle where Self == HoverCapsuleButtonStyle {
-    /// Kapsül ve yuvarlak düğmeler (bkz. `HoverCapsuleButtonStyle`).
-    static var hoverCapsule: HoverCapsuleButtonStyle { HoverCapsuleButtonStyle() }
+    /// Kapsül ve yuvarlak düğmeler (vurgu hapları, oynat düğmesi, seçici bölümleri): vurgu da kapsül biçiminde
+    /// (yarıçap yüksekliğin yarısını aşınca köşeler tam yuvarlanır).
+    static var hoverCapsule: HoverPlainButtonStyle { HoverPlainButtonStyle(cornerRadius: 1000) }
 }
 
 /// Hap düğmenin boyutu: denetim boyutuna göre dolgu ve yazı.
@@ -138,21 +86,11 @@ private struct PillButtonBody: View {
     let isPrimary: Bool
     @Environment(\.isEnabled) private var isEnabled: Bool
     @Environment(\.controlSize) private var controlSize: ControlSize
-    @Environment(\.designLook) private var look: DesignLook
     @State private var isHovering: Bool = false
 
     var body: some View {
-        switch look.style {
-        case .standard:
-            standardBody
-        case .liquidGlass:
-            GlassPillBody(configuration: configuration, isPrimary: isPrimary)
-        }
-    }
-
-    private var standardBody: some View {
         let metrics: PillMetrics = pillMetrics(controlSize: controlSize)
-        return configuration.label
+        configuration.label
             .appFont(size: metrics.size, weight: .medium)
             .foregroundStyle(foreground)
             .padding(.horizontal, metrics.horizontal)
@@ -174,40 +112,6 @@ private struct PillButtonBody: View {
             return isEnabled ? Theme.primary.opacity(isHovering ? 0.85 : 1) : Theme.soft
         }
         return isEnabled && isHovering ? Theme.soft : Theme.card
-    }
-
-    private var foreground: Color {
-        if isPrimary {
-            return isEnabled ? Theme.onPrimary : Theme.muted
-        }
-        return configuration.role == .destructive ? Color(red: 0.86, green: 0.15, blue: 0.15) : Theme.ink
-    }
-}
-
-/// Liquid Glass hap düğme: etkileşimli cam kapsül (basınca cam tepki verir). İkincil düğme cam renginde, ana düğme
-/// ana renkle (siyah; koyu temada beyaz) tonlanmış cam; yazılar Standart'taki renklerde kalır.
-private struct GlassPillBody: View {
-    let configuration: ButtonStyleConfiguration
-    let isPrimary: Bool
-    @Environment(\.isEnabled) private var isEnabled: Bool
-    @Environment(\.controlSize) private var controlSize: ControlSize
-    @Environment(\.designLook) private var look: DesignLook
-    @Environment(\.colorScheme) private var colorScheme: ColorScheme
-
-    var body: some View {
-        let metrics: PillMetrics = pillMetrics(controlSize: controlSize)
-        configuration.label
-            .appFont(size: metrics.size, weight: .medium)
-            .foregroundStyle(foreground)
-            .padding(.horizontal, metrics.horizontal)
-            .padding(.vertical, metrics.vertical)
-            .contentShape(Capsule())
-            // Ana düğmede dolgu düz kalır, cam üstte kenar ve parıltı olur: camı ana renkle tonlamak (yarı saydam)
-            // siyahı açık griye çeviriyor, beyaz yazı okunmuyordu.
-            .background(isPrimary && isEnabled ? Theme.primary : Color.clear, in: Capsule())
-            .glassEffect(look.interactiveGlass(colorScheme: colorScheme), in: Capsule())
-            .opacity(isEnabled || isPrimary ? 1 : 0.45)
-            .linkPointer(isEnabled: isEnabled)
     }
 
     private var foreground: Color {

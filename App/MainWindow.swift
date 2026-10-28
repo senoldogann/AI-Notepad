@@ -312,10 +312,10 @@ private struct Sidebar: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
-        .frame(width: 228)
+        .frame(width: sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .top)
-        // Standart'ta sayfa zemini ve ince çizgi; Liquid Glass'ta yüzen cam.
-        .sidebarSurface()
+        .pageBackground()
+        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
     }
 
     private func item(title: LocalizedStringKey, symbol: String, section: MainSection, badge: Int?) -> some View {
@@ -340,13 +340,13 @@ private struct Sidebar: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
-                        .chipSurface(shape: Capsule())
+                        .background(Theme.soft, in: Capsule())
                 }
             }
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.hoverPlain)
     }
@@ -354,28 +354,31 @@ private struct Sidebar: View {
 
 /// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
 /// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
+/// Ana penceredeki kenar çubuğunun genişliği (arama penceresi içerik alanına göre ortalanır).
+private let sidebarWidth: CGFloat = 228
+
 private struct TopBar: View {
     let model: AppModel
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
 
     @AppStorage(SettingsKey.meetingsListVisible) private var meetingsListVisible: Bool = true
-    @Environment(\.designLook) private var look: DesignLook
+    @AppStorage(SettingsKey.peopleListVisible) private var peopleListVisible: Bool = false
+    @AppStorage(SettingsKey.askHistoryVisible) private var askHistoryVisible: Bool = false
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
-            // Toplantılarda listeyi gizle/göster (Kişiler'deki gibi); toplantı seçili değilken liste hep görünür.
-            if router.section == .meetings, router.selectedMeetingID != nil {
-                Button {
-                    meetingsListVisible.toggle()
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .appFont(size: 14, weight: .medium)
-                        .frame(width: 30, height: 28)
-                }
-                .buttonStyle(.hoverPlain)
-                .accessibilityLabel(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster")
-                .hoverHint(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster", alignment: .leading, edge: .bottom)
+            // Sayfanın sol listesini gizle/göster: her bölümde aynı yerde, başlığın solunda.
+            switch router.section {
+            case .meetings where router.selectedMeetingID != nil:
+                // Toplantı seçili değilken liste hep görünür (seçecek bir şey kalmasın).
+                listToggle(isVisible: $meetingsListVisible, show: "Toplantı listesini göster", hide: "Toplantı listesini gizle")
+            case .people:
+                listToggle(isVisible: $peopleListVisible, show: "Kişi listesini göster", hide: "Kişi listesini gizle")
+            case .ask where !model.askConversations.isEmpty:
+                listToggle(isVisible: $askHistoryVisible, show: "Sohbet geçmişini göster", hide: "Sohbet geçmişini gizle")
+            default:
+                EmptyView()
             }
             // En dar pencerede başlık tek satırda kalır, arama hapı daralır; çubuk taşmaz.
             Text(title)
@@ -435,7 +438,8 @@ private struct TopBar: View {
             .padding(.horizontal, 10)
             .frame(minWidth: 180, idealWidth: 320, maxWidth: 320)
             .frame(height: 32)
-            .outlinedCard(cornerRadius: 10)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
             .linkPointer(isEnabled: true)
             .background {
                 // ⌘K ve ⌘F arama penceresini açar.
@@ -453,16 +457,23 @@ private struct TopBar: View {
                 .buttonStyle(.pill)
                 .controlSize(.small)
         }
-        // Arama hapı ve düğmeler tek cam kapta (yalnızca Liquid Glass'ta).
-        .glassGroup(spacing: DesignTokens.Spacing.m)
         .padding(.horizontal, 20)
         .frame(height: 52)
-        .overlay(alignment: .bottom) {
-            // Liquid Glass'ta çubuk zemine karışır: alt çizgi yok.
-            if !look.usesGlass {
-                Rectangle().fill(Theme.line).frame(height: 1)
-            }
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
+    /// Sol listeyi gizleyen/gösteren düğme (Toplantılar, Kişiler, Sor'da aynı).
+    private func listToggle(isVisible: Binding<Bool>, show: LocalizedStringKey, hide: LocalizedStringKey) -> some View {
+        Button {
+            isVisible.wrappedValue.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .appFont(size: 14, weight: .medium)
+                .frame(width: 30, height: 28)
         }
+        .buttonStyle(.hoverPlain)
+        .accessibilityLabel(isVisible.wrappedValue ? hide : show)
+        .hoverHint(isVisible.wrappedValue ? hide : show, alignment: .leading, edge: .bottom)
     }
 
     private var title: LocalizedStringKey {
@@ -1387,7 +1398,7 @@ private struct SidebarFolders: View {
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.hoverPlain)
                 .contextMenu {
@@ -1555,9 +1566,13 @@ private struct SearchComposer: View {
                 .frame(height: 34)
             }
             .frame(width: 600)
-            .outlinedCard(cornerRadius: 18)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
             .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
             .padding(.top, 96)
+            // Kenar çubuğundan sonraki içerik alanının ortasında (pencerenin ortasında kenar çubuğu yüzünden sola kaymış
+            // görünüyordu).
+            .padding(.leading, sidebarWidth)
         }
         .onAppear {
             query = router.searchQuery
@@ -1601,7 +1616,7 @@ private struct SearchComposer: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .selectionSurface(isSelected: isHighlighted, shape: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(isHighlighted ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1638,31 +1653,17 @@ private struct SearchComposer: View {
 }
 
 /// Kısayol kartının zemini: Sor'daki örnek kartlar gibi kart yüzeyi, sağa doğru beliren ince çapraz çizgiler ve çerçeve.
-/// Liquid Glass'ta kart camdır; çapraz çizgiler camın üstünde kalır, çerçeve yok.
 private struct ShortcutCardBackground: View {
-    @Environment(\.designLook) private var look: DesignLook
-    @Environment(\.colorScheme) private var colorScheme: ColorScheme
-
     var body: some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
-        switch look.style {
-        case .standard:
-            ZStack {
-                shape.fill(Theme.card)
-                lines(shape: shape)
-                shape.strokeBorder(Theme.line)
-            }
-        case .liquidGlass:
-            lines(shape: shape)
-                .glassEffect(look.surfaceGlass(colorScheme: colorScheme), in: shape)
+        ZStack {
+            shape.fill(Theme.card)
+            DiagonalLines(spacing: 9)
+                .stroke(Theme.line, lineWidth: 1)
+                .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+                .clipShape(shape)
+            shape.strokeBorder(Theme.line)
         }
-    }
-
-    private func lines(shape: RoundedRectangle) -> some View {
-        DiagonalLines(spacing: 9)
-            .stroke(Theme.line, lineWidth: 1)
-            .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
-            .clipShape(shape)
     }
 }
 
@@ -1717,7 +1718,6 @@ private struct RecordingFocus: View {
                     }
                     .buttonStyle(.hoverCapsule)
                 }
-                .glassGroup(spacing: 10)
                 // Bulanık zeminde soluk renk okunmuyordu: koyu yazı.
                 Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
                     .keyboardShortcut(.cancelAction)
@@ -1727,8 +1727,6 @@ private struct RecordingFocus: View {
                     .padding(.top, 4)
             }
             .padding(36)
-            // Liquid Glass'ta kayıt ekranı bulanık içeriğin üstünde cam kartta (Standart'ta değişmez).
-            .liquidGlassGroup(cornerRadius: 32, padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         .focusable()
         .focusEffectDisabled()

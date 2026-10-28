@@ -69,7 +69,7 @@ struct MeetingsTab: View {
                 .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
-            .screenBackground()
+            .background(Theme.background)
             .navigationTitle("Toplantılar")
             .searchable(text: $query, prompt: "Toplantılarda ara")
             .navigationDestination(for: String.self) { (id: String) in
@@ -83,7 +83,7 @@ struct MeetingsTab: View {
                     EmptyStateCard(symbol: "doc.questionmark", title: "Toplantı bulunamadı", message: "Bu toplantı silinmiş olabilir.")
                         .padding(20)
                         .frame(maxHeight: .infinity, alignment: .top)
-                        .screenBackground()
+                        .background(Theme.background)
                 }
             }
             .refreshable { await store.reloadAndWait() }
@@ -175,7 +175,7 @@ struct MeetingReadView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .screenBackground()
+        .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

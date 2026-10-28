@@ -309,7 +309,7 @@ struct AskTab: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             }
-            .screenBackground()
+            .background(Theme.background)
             .navigationTitle("Sor")
             .navigationBarTitleDisplayMode(ask.exchanges.isEmpty ? .large : .inline)
             .toolbar {

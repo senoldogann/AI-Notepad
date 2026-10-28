@@ -187,8 +187,6 @@ struct AppearanceEnvironment: ViewModifier {
     @AppStorage(SettingsKey.bottomSpacing) private var bottomSpacing: Double = PanelAppearance.standard.bottomSpacing
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
-    @AppStorage(SettingsKey.designStyle) private var designStyle: String = DesignLook.standard.style.rawValue
-    @AppStorage(SettingsKey.glassTint) private var glassTint: String = DesignLook.standard.tint.rawValue
 
     func body(content: Content) -> some View {
         let standard: PanelAppearance = .standard
@@ -202,18 +200,13 @@ struct AppearanceEnvironment: ViewModifier {
         )
         content
             .environment(\.panelAppearance, appearance)
-            // Tasarım stili (Standart ya da Liquid Glass) ve cam rengi; "Saydamlığı azalt" açıksa Standart.
-            .designLook(DesignLook(
-                style: DesignStyle(rawValue: designStyle) ?? DesignLook.standard.style,
-                tint: GlassTint(rawValue: glassTint) ?? DesignLook.standard.tint
-            ))
             .tint(appearance.accent.color)
             .fontDesign(appearance.systemFontDesign)
             // Yazı tipi belirtilmemiş metinler ve sistem denetimleri de seçili aile ve ölçekte.
             .font(appearance.font(size: 13, weight: .regular))
             // İpuçları pencerenin en üst katmanında (metnin altında kalmasın, kesilmesin).
             .hoverHintLayer()
-            // Stil belirtilmemiş tüm düğmeler etkileşimli Liquid Glass (el imleci ve hover dahil).
+            // Stil belirtilmemiş tüm düğmeler hap biçiminde (el imleci ve hover dahil).
             .buttonStyle(.pill)
             // Tema uygulamanın tamamına uygulanır: ana pencere, cam zemin, panel, ada ve menüler aynı anda değişir.
             .onChange(of: theme, initial: true) { (_: String, value: String) in

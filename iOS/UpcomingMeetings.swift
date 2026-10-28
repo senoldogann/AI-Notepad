@@ -30,7 +30,8 @@ struct UpcomingCalendarSection: View {
                             UpcomingMeetingRow(meeting: item.element, isCurrent: item.element.id == current?.id, now: now)
                         }
                     }
-                    .outlinedCard(cornerRadius: 18)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
                 }
             }
         case .denied:
