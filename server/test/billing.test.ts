@@ -87,7 +87,7 @@ async function plan(harness: Harness, session: Session): Promise<{ plan: string;
 }
 
 describe("Stripe Checkout ve Portal", () => {
-  it("Checkout aylık fiyat, otomatik vergi ve kullanıcı referansıyla açılır; müşteri yeniden kullanılır", async () => {
+  it("Checkout aylık fiyat, Managed Payments ve kullanıcı referansıyla açılır; müşteri yeniden kullanılır", async () => {
     const harness: Harness = await defaultHarness();
     const calls: StripeCalls = stubStripe(harness);
     const session: Session = await signIn(harness);
@@ -103,7 +103,8 @@ describe("Stripe Checkout ve Portal", () => {
     expect(form?.get("customer")).toBe(await customerOf(session.userId));
     expect(form?.get("client_reference_id")).toBe(session.userId);
     expect(form?.get("line_items[0][price]")).toBe(env.STRIPE_PRICE_ID);
-    expect(form?.get("automatic_tax[enabled]")).toBe("true");
+    expect(form?.get("managed_payments[enabled]")).toBe("true");
+    expect(form?.get("automatic_tax[enabled]")).toBeNull();
     expect(calls.checkoutForms[1]?.get("customer")).toBe(form?.get("customer"));
   });
 
