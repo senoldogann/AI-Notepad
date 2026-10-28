@@ -147,12 +147,8 @@ done
 # Hata ayıklayıcı izni dağıtımda olmamalı (Apple noter onayı reddeder).
 [[ "$entitlements" != *"get-task-allow"* ]] || { echo "get-task-allow yetkisi var (noter onayı reddeder)." >&2; exit 1; }
 
-# DMG: uygulama + Uygulamalar kısayolu (sürükle-bırak kurulum).
-staging="$out/dmg"
-mkdir -p "$staging"
-ditto "$app" "$staging/AINotepad.app"
-ln -s /Applications "$staging/Applications"
-hdiutil create -volname "AI-Notepad $version" -srcfolder "$staging" -fs HFS+ -format UDZO "$dmg" -quiet
+# DMG: tasarlanmış kurulum penceresi (arka plan, uygulama → Uygulamalar kısayolu; sürükle-bırak kurulum).
+scripts/make-dmg.sh "$app" "$dmg" "AI-Notepad $version" Config/DMG
 codesign --sign "Developer ID Application" --timestamp "$dmg"
 
 xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait
