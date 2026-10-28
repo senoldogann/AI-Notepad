@@ -31,7 +31,9 @@ func noteRules(user: String, template: NoteTemplate, language: ShareLanguage) ->
       yhteenvedon lähettäminen" ya da "5. marraskuuta" aynen kalmaz, \(language.promptName) diline çevrilir). Transkriptin
       dilindeki sözcükler yalnızca sözlükteki terim alanında kalır.
     - Kullanıcıya ("Sen") düşen görevlerde sahip "\(user)" ve benimMi true; diğerlerinde sahip konuşan kişinin adı ya da
-      etiketi ve benimMi false.
+      etiketi ve benimMi false. Görev yalnızca "Sen" satırında üstlenildiyse ya da kullanıcıya adıyla ("\(user)")
+      verildiyse kullanıcınındır. "Ben yaparım", "minä voin", "I'll do it" gibi birinci tekil
+      sözler onu söyleyen konuşmacıya aittir: başka bir konuşmacının satırındaysa sahip o konuşmacıdır, benimMi false.
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
       Birinin "yaparım" diye üstlendiği iş de görevdir.
     - Transkriptte olmayan bir şey uydurma; tarih yoksa boş metin ver.

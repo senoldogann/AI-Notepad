@@ -2401,7 +2401,10 @@ final class AppModel {
                 try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
             markTasksSent(meetingID: meetingID, tracker: tracker, tasks: result.createdTaskIndices.map { tasks[$0] })
-            showSendState(state: .done(result.summary), meetingID: meetingID, states: \.trackerStates)
+            // Sonuç uygulamanın kendi cümlesiyle gösterilir: ajanın serbest özeti (kabul testinde) başarılı gönderimi
+            // "yanlışlıkla açıldı" diye anlatabiliyordu. Ajanın özeti yalnızca loglanır.
+            Self.logger.info("Görevler araca gönderildi, araç: \(tracker.service.rawValue, privacy: .public), sayı: \(result.createdTaskIndices.count, privacy: .public), özet: \(result.summary, privacy: .private)")
+            showSendState(state: .done(String(localized: "\(tracker.service.displayName): \(result.createdTaskIndices.count) görev açıldı")), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
             // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
             markTasksSent(meetingID: meetingID, tracker: tracker, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })

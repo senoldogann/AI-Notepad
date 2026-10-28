@@ -4,6 +4,22 @@ import os
 import SwiftUI
 
 private let appLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "App")
+#if DEBUG
+/// Kabul testi argümanlarının logu (yalnız Debug).
+private let testLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "AcceptanceTest")
+
+/// Kabul testinin sonucunu geçici dosyaya ekler (yalnız Debug; test betiği okur).
+@MainActor
+private func writeAcceptanceResult(line: String) {
+    let url: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-kabul.txt")
+    let text: String = (FileManager.default.contents(atPath: url.path).flatMap { String(data: $0, encoding: .utf8) } ?? "") + line + "\n"
+    do {
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    } catch {
+        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .public)")
+    }
+}
+#endif
 
 /// Giriş noktası: `--mcp` ile pencere açmadan yerel MCP sunucusu (stdio; Claude Desktop, ChatGPT gibi istemciler
 /// toplantı arşivini sorgular), yoksa uygulama.
@@ -154,6 +170,53 @@ struct AINotepadApp: App {
                 if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
                     model.askArchive(question: CommandLine.arguments[index + 1], meetingIDs: [], recipeTitle: nil)
                 }
+                #if DEBUG
+                // "--test-kaydi <sn>": kaydı başlatır, verilen süre sonra durdurur (uçtan uca kabul testi için; yalnız
+                // Debug). Ses dışarıdan (ör. `afplay`) sistem sesine çalınır.
+                if let index = CommandLine.arguments.firstIndex(of: "--test-kaydi"), CommandLine.arguments.indices.contains(index + 1),
+                   let seconds = Double(CommandLine.arguments[index + 1]) {
+                    Task {
+                        await toggleRecordingFlow(model: model, panel: panel, island: island)
+                        do {
+                            try await Task.sleep(for: .seconds(seconds))
+                        } catch {
+                            return
+                        }
+                        await toggleRecordingFlow(model: model, panel: panel, island: island)
+                    }
+                }
+                // "--test-gorev": en son toplantının kullanıcı görevlerini ilk görev aracına iki kez gönderir (kabul testi:
+                // ikincisi iş açmamalı); sonuçlar loglanır ve toplantı sayfasında görünür.
+                if CommandLine.arguments.contains("--test-gorev") {
+                    Task {
+                        for _ in 0..<60 where model.taskTrackers.isEmpty || model.meetings.isEmpty {
+                            do {
+                                try await Task.sleep(for: .milliseconds(500))
+                            } catch {
+                                return
+                            }
+                        }
+                        guard let tracker = model.taskTrackers.first,
+                              let meeting = model.meetings.max(by: { $0.startedAt < $1.startedAt }) else {
+                            testLogger.error("Kabul testi: görev aracı ya da toplantı yok")
+                            writeAcceptanceResult(line: "araç ya da toplantı yok, araç: \(model.taskTrackers.count), toplantı: \(model.meetings.count)")
+                            return
+                        }
+                        // "--test-gorev-hedef <ad>": göndermeden önce aracın hedefini (takım/proje) ayarlar.
+                        if let index = CommandLine.arguments.firstIndex(of: "--test-gorev-hedef"), CommandLine.arguments.indices.contains(index + 1) {
+                            await model.setTrackerTarget(id: tracker.id, target: CommandLine.arguments[index + 1])
+                        }
+                        writeAcceptanceResult(line: "başladı, araç: \(tracker.service.rawValue), hedef: \(model.taskTrackers.first?.target ?? "-"), toplantı: \(meeting.id)")
+                        router.section = .meetings
+                        router.selectedMeetingID = meeting.id
+                        for round in 1...2 {
+                            await model.sendTasks(meetingID: meeting.id, trackerID: tracker.id, scope: .mine)
+                            testLogger.info("Kabul testi: görev gönderimi \(round, privacy: .public), durum: \(String(describing: model.trackerStates[meeting.id]), privacy: .public)")
+                            writeAcceptanceResult(line: "tur \(round): \(String(describing: model.trackerStates[meeting.id]))")
+                        }
+                    }
+                }
+                #endif
                 // "--ara": arama penceresini açar (görsel kontrol için).
                 if CommandLine.arguments.contains("--ara") {
                     router.isSearchPresented = true
