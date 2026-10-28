@@ -823,7 +823,7 @@ struct MeetingDetailPage: View {
                 Text("Ayarlar › Bağlantılar'dan kanal ekle")
             } else {
                 ForEach(model.destinations) { (destination: NoteDestination) in
-                    let sent: Bool = (record.sentDestinationIDs ?? []).contains(destination.id)
+                    let sent: Bool = wasSent(record: record, destination: destination)
                     Button {
                         Task { await model.sendNote(meetingID: record.id, destinationIDs: [destination.id]) }
                     } label: {

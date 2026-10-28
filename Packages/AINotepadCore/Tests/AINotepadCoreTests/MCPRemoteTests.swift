@@ -159,6 +159,25 @@ import Testing
         #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: resource, issuer: issuer, metadata: insecure, server: server) }
         let otherResource: ProtectedResourceMetadata = ProtectedResourceMetadata(resource: "https://other.example.com/mcp", authorizationServers: [issuer])
         #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: otherResource, issuer: issuer, metadata: good, server: server) }
+        let insecureRevocation: AuthorizationServerMetadata = try JSONDecoder().decode(AuthorizationServerMetadata.self, from: Data(#"{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/a","token_endpoint":"https://auth.example.com/t","revocation_endpoint":"http://auth.example.com/r"}"#.utf8))
+        #expect(insecureRevocation.revocationEndpoint?.absoluteString == "http://auth.example.com/r" && good.revocationEndpoint == nil)
+        #expect(throws: MCPRemoteError.self) { try validateDiscovery(resource: resource, issuer: issuer, metadata: insecureRevocation, server: server) }
+    }
+
+    // Geri alma (RFC 7009): yenileme jetonu varsa o, yoksa erişim jetonu; gizli anahtar yok, yalnızca client_id.
+    @Test func revocationRequestSendsRefreshTokenOrAccessToken() throws {
+        let endpoint: URL = URL(string: "https://auth.example.com/revoke")!
+        let connection: MCPConnection = MCPConnection(
+            serverURL: URL(string: "https://mcp.example.com/mcp")!, clientID: "istemci", tokenEndpoint: URL(string: "https://auth.example.com/t")!,
+            tokens: OAuthTokens(accessToken: "erisim", refreshToken: "yenileme", expiresAt: Date())
+        )
+        let fields: (URLRequest) -> String = { (request: URLRequest) -> String in String(decoding: request.httpBody ?? Data(), as: UTF8.self) }
+        let withRefresh: URLRequest = mcpRevocationRequest(endpoint: endpoint, connection: connection)
+        #expect(withRefresh.httpMethod == "POST" && withRefresh.url == endpoint)
+        #expect(withRefresh.value(forHTTPHeaderField: "content-type") == "application/x-www-form-urlencoded")
+        #expect(fields(withRefresh) == "token=yenileme&token_type_hint=refresh_token&client_id=istemci")
+        let accessOnly: MCPConnection = connection.with(tokens: OAuthTokens(accessToken: "erisim", refreshToken: "", expiresAt: Date()))
+        #expect(fields(mcpRevocationRequest(endpoint: endpoint, connection: accessOnly)) == "token=erisim&token_type_hint=access_token&client_id=istemci")
     }
 }
 
@@ -171,6 +190,8 @@ extension CloudTests {
         let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: service.serverURL)
         #expect(metadata.registrationEndpoint != nil, "\(service.rawValue): kayıt adresi yok")
         #expect(metadata.authorizationEndpoint.scheme == "https" && metadata.tokenEndpoint.scheme == "https")
+        // Bağlantı kaldırılınca izin geri alınır (RFC 7009): üç sunucu da geri alma adresini bildirir.
+        #expect(metadata.revocationEndpoint?.scheme == "https", "\(service.rawValue): geri alma adresi yok")
     }
 
     @Test func publicServerSessionListsAndCallsTools() async throws {

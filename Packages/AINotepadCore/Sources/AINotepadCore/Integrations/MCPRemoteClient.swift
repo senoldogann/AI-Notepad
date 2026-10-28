@@ -68,6 +68,8 @@ public enum MCPRemoteError: Error, Equatable {
     case expired(server: String)
     /// Kullanıcı tarayıcıda izin vermedi ya da dönüş başka bir girişe ait.
     case denied(server: String, reason: String)
+    /// Yetkilendirme sunucusu jeton geri alma adresi (RFC 7009 `revocation_endpoint`) bildirmiyor.
+    case noRevocationEndpoint(server: String)
 }
 
 private let mcpRemoteLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "MCPRemote")
@@ -90,12 +92,15 @@ public struct AuthorizationServerMetadata: Sendable, Equatable, Decodable {
     public let authorizationEndpoint: URL
     public let tokenEndpoint: URL
     public let registrationEndpoint: URL?
+    /// Jeton geri alma adresi (RFC 7009); sunucu bildirmediyse nil.
+    public let revocationEndpoint: URL?
 
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
         case tokenEndpoint = "token_endpoint"
         case registrationEndpoint = "registration_endpoint"
+        case revocationEndpoint = "revocation_endpoint"
     }
 }
 
@@ -121,7 +126,8 @@ func validateDiscovery(resource: ProtectedResourceMetadata, issuer: URL, metadat
     guard let stated = metadata.issuer, trimmed(stated) == trimmed(issuer.absoluteString) else {
         throw MCPRemoteError.invalidResponse(server: name, reason: "yetkilendirme sunucusu kimliği uyuşmuyor: \(metadata.issuer ?? "yok")")
     }
-    let addresses: [URL] = [issuer, metadata.authorizationEndpoint, metadata.tokenEndpoint] + [metadata.registrationEndpoint].compactMap { $0 }
+    let addresses: [URL] = [issuer, metadata.authorizationEndpoint, metadata.tokenEndpoint]
+        + [metadata.registrationEndpoint, metadata.revocationEndpoint].compactMap { $0 }
     guard let insecure = addresses.first(where: { $0.scheme?.lowercased() != "https" }) else {
         return
     }
@@ -362,6 +368,69 @@ public func refreshMCPConnection(connection: MCPConnection) async throws -> MCPC
         ("resource", connection.serverURL.absoluteString),
     ], previousRefresh: connection.tokens.refreshToken, server: server)
     return connection.with(tokens: tokens)
+}
+
+// MARK: Jeton geri alma (RFC 7009)
+
+/// Geri alma denemesi sayısı (ağ hatası, 429 ve 5xx'te; geri alma tekrarlanabilir bir istektir).
+let mcpRevocationAttempts: Int = 3
+
+/// Geri alma isteği: yenileme jetonu varsa o (sunucu aynı izinle verilen erişim jetonlarını da geçersiz kılar), yoksa
+/// erişim jetonu; gizli anahtarsız (PKCE) istemci olduğu için yalnızca `client_id` gönderilir. Saf fonksiyondur.
+func mcpRevocationRequest(endpoint: URL, connection: MCPConnection) -> URLRequest {
+    let hasRefresh: Bool = !connection.tokens.refreshToken.isEmpty
+    var request: URLRequest = URLRequest(url: endpoint)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 20
+    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
+    request.httpBody = formBody(fields: [
+        ("token", hasRefresh ? connection.tokens.refreshToken : connection.tokens.accessToken),
+        ("token_type_hint", hasRefresh ? "refresh_token" : "access_token"),
+        ("client_id", connection.clientID),
+    ])
+    return request
+}
+
+/// Bağlantının OAuth iznini yetkilendirme sunucusunda geri alır (bağlantı kaldırılırken): sunucu yeniden keşfedilir,
+/// bildirdiği `revocation_endpoint`'e jeton gönderilir (bkz. `mcpRevocationRequest`). Keşfedilen jeton adresi
+/// bağlantınınkiyle aynı olmalı: jeton yalnızca onu veren sunucuya gider. Geri alma adresi yoksa `noRevocationEndpoint`.
+/// Ağ hatası, 429 ve 5xx'te uyarıyla yeniden denenir, sonra son hata fırlar; diğer retler (4xx) hemen fırlar. Sunucu
+/// geçersiz ya da zaten geri alınmış jeton için de 200 döner (RFC 7009 §2.2).
+public func revokeMCPConnection(connection: MCPConnection) async throws {
+    let server: String = connection.serverURL.host() ?? connection.serverURL.absoluteString
+    let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: connection.serverURL)
+    guard metadata.tokenEndpoint == connection.tokenEndpoint else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "yetkilendirme sunucusu değişmiş: \(metadata.tokenEndpoint.absoluteString)")
+    }
+    guard let endpoint = metadata.revocationEndpoint else {
+        throw MCPRemoteError.noRevocationEndpoint(server: server)
+    }
+    let request: URLRequest = mcpRevocationRequest(endpoint: endpoint, connection: connection)
+    var lastError: MCPRemoteError = .network(server: server, reason: "deneme yapılmadı")
+    for attempt in 1...mcpRevocationAttempts {
+        do {
+            let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
+            let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) {
+                mcpRemoteLogger.info("MCP izni geri alındı, sunucu: \(server, privacy: .public)")
+                return
+            }
+            let failure: MCPRemoteError = .http(server: server, status: status, body: String(decoding: data.prefix(400), as: UTF8.self))
+            guard !isPermanentHTTPRejection(status: status) else {
+                throw failure
+            }
+            lastError = failure
+        } catch let error as URLError where error.code != .cancelled {
+            lastError = .network(server: server, reason: error.localizedDescription)
+        } catch let error as URLError {
+            throw mcpNetworkError(error: error, server: server)
+        }
+        mcpRemoteLogger.warning("MCP izni geri alınamadı, sunucu: \(server, privacy: .public), deneme: \(attempt, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
+        if attempt < mcpRevocationAttempts {
+            try await Task.sleep(for: .seconds(Double(attempt)))
+        }
+    }
+    throw lastError
 }
 
 // MARK: JSON-RPC (Streamable HTTP)

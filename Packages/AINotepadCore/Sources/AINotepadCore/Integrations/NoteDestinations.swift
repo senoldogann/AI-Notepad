@@ -92,19 +92,26 @@ public func pendingAutoSends(records: [MeetingRecord], destinations: [NoteDestin
             guard now.timeIntervalSince(finished) <= autoSendLookbackSec else {
                 return []
             }
-            let sent: [String] = record.sentDestinationIDs ?? []
             return active
                 .filter { (destination: NoteDestination) -> Bool in
-                    let key: String? = destinationSendKey(destination: destination)
-                    return finished >= destination.createdAt && !sent.contains(destination.id) && !(key.map { sent.contains($0) } ?? false)
+                    finished >= destination.createdAt && !wasSent(record: record, destination: destination)
                 }
                 .map { (meetingID: record.id, destinationID: $0.id) }
         }
 }
 
-/// Hedefin cihazdan bağımsız kimliği: aynı kanal ya da webhook başka bir Mac'te de bağlıysa (hedef kimlikleri cihaza
-/// özeldir) gönderildi işareti iCloud'la oraya da ulaşır, not iki kez gitmez. Notion bağlantısı cihaza özel kayıtla
-/// kurulduğu için kimliği yoktur (nil). Webhook adresi gizli olduğu için yalnızca özeti kullanılır. Saf fonksiyondur.
+/// Not bu hedefe gönderildi mi: bu cihazın hedef kimliğiyle ya da aynı hedefin (başka Mac'te başka kimlikle bağlı)
+/// cihazdan bağımsız anahtarıyla işaretli (bkz. `destinationSendKey`). Eski sürümlerin kayıtlarında yalnızca hedef
+/// kimliği vardır; onlar da tanınır. Saf fonksiyondur.
+public func wasSent(record: MeetingRecord, destination: NoteDestination) -> Bool {
+    let sent: [String] = record.sentDestinationIDs ?? []
+    return sent.contains(destination.id) || (destinationSendKey(destination: destination).map { sent.contains($0) } ?? false)
+}
+
+/// Hedefin cihazdan bağımsız kimliği: aynı kanal, webhook ya da Notion hesabı başka bir Mac'te de bağlıysa (hedef
+/// kimlikleri cihaza özeldir) gönderildi işareti iCloud'la oraya da ulaşır, not iki kez gitmez. Kanal: servis, takım ya
+/// da çalışma alanı ve kanal kimliği; webhook: adres gizli olduğu için yalnızca özeti; Notion: çalışma alanı ve kullanıcı
+/// kimliği (henüz okunmadıysa nil). Anahtarlar jeton ya da gizli bilgi içermez. Saf fonksiyondur.
 public func destinationSendKey(destination: NoteDestination) -> String? {
     switch destination.target {
     case .account(let connection):
@@ -113,8 +120,8 @@ public func destinationSendKey(destination: NoteDestination) -> String? {
         // Aynı adres eski sürümde `.webhook` olarak kayıtlı olabilir: anahtar türden değil adresten çıkar.
         let digest: SHA256.Digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         return "webhook:" + digest.prefix(12).map { String(format: "%02x", $0) }.joined()
-    case .notion:
-        return nil
+    case .notion(let target):
+        return target.identity.map { (identity: NotionIdentity) -> String in "notion:\(identity.workspaceID):\(identity.userID)" }
     }
 }
 
@@ -319,6 +326,29 @@ public actor DestinationVault {
         try upsert(stored.with(needsReconnect: true))
     }
 
+    /// Notion hedefinin kimliğini (çalışma alanı, kullanıcı) okuyup saklar (bkz. `fetchNotionIdentity`). İşlem diğer
+    /// Notion işlemleriyle sırayla yürür; jeton yenilenirse hemen saklanır. Kimlik, okunduğu anda kayıtlı olan güncel
+    /// hedefe yazılır (bu arada yenilenen jetonların üzerine eski kopya yazılmaz); hedef bu arada başka bir girişle
+    /// yeniden bağlandıysa (istemci kimliği değişti) yazılmaz: kimlik yeni hesabın olmayabilir.
+    public func resolveNotionIdentity(id: String) async throws {
+        try await withNotion(id: id) {
+            (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+            let identity: NotionIdentity = try await fetchNotionIdentity(connection: target.connection, persist: persist)
+            try await self.storeNotionIdentity(id: id, clientID: target.connection.clientID, identity: identity)
+        }
+    }
+
+    private func storeNotionIdentity(id: String, clientID: String, identity: NotionIdentity) throws {
+        guard let stored = try all().first(where: { $0.id == id }), case .notion(let current) = stored.target else {
+            throw DestinationError.notFound(id: id)
+        }
+        guard current.connection.clientID == clientID else {
+            destinationLogger.info("Notion kimliği okunurken hedef yeniden bağlandı, kimlik yazılmadı, hedef: \(id, privacy: .public)")
+            return
+        }
+        try upsert(stored.with(target: .notion(current.with(identity: identity))))
+    }
+
     /// Gönderim başarılı: "yeniden bağlan" işareti kalkar.
     public func clearReconnect(id: String) throws {
         guard let stored = try all().first(where: { $0.id == id }), stored.needsReconnect else {
@@ -352,15 +382,23 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
 }
 
 /// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord girişinin oluşturduğu webhook
-/// silinir. Yapıştırılan webhook adreslerine (Discord'unkiler dahil) dokunulmaz: adres kullanıcınındır. Notion'da
-/// yapılacak bir şey yok (Notion erişimi kullanıcının çalışma alanında kaldırılır).
+/// silinir, Notion'un OAuth izni yetkilendirme sunucusunda geri alınır (bkz. `revokeMCPConnection`). Yapıştırılan
+/// webhook adreslerine (Discord'unkiler dahil) dokunulmaz: adres kullanıcınındır.
 public func revokeDestination(destination: NoteDestination) async throws {
     switch destination.target {
     case .account(let connection):
         try await revokeChannelConnection(connection: connection)
     case .discordSignIn(let url):
         try await deleteDiscordWebhook(url: url)
-    case .webhook, .notion:
+    case .notion(let target):
+        try await revokeMCPConnection(connection: target.connection)
+    case .webhook:
         return
     }
+}
+
+/// Bağlantı bu cihazdan kaldırıldı ama servis tarafında kapatılamadı: kullanıcı erişimi servisin kendi ayarlarından
+/// kaldırmalı. `service`: arayüzdeki adı (ör. "Notion"). Saf fonksiyondur.
+public func remoteRevocationFailureMessage(service: String, error: any Error) -> String {
+    String(localized: "\(service) bağlantısı bu cihazdan kaldırıldı ama \(service) tarafında kapatılamadı (\(userFacingMessage(error: error))). AI-Notepad'in erişimini \(service) ayarlarından kaldır.")
 }
