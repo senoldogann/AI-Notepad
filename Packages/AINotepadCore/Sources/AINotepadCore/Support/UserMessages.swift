@@ -10,6 +10,10 @@ public func userFacingMessage(error: any Error) -> String {
         return keychainMessage(error: error)
     case let error as LLMError:
         return llmMessage(error: error)
+    case let error as HostedAPIError:
+        return hostedErrorMessage(error: error)
+    case let error as HostedClientError:
+        return hostedClientMessage(error: error)
     case let error as OnDeviceLLMError:
         return onDeviceMessage(error: error)
     case let error as AppleSpeechError:
@@ -191,6 +195,8 @@ private func llmMessage(error: LLMError) -> String {
         String(localized: "Modelden beklenmeyen yanıt geldi. Tekrar dene.")
     case .notConfigured(let detail):
         String(localized: "LLM ayarı eksik: \(detail). Ayarlar'dan tamamla.")
+    case .hosted(let error):
+        hostedErrorMessage(error: error)
     }
 }
 

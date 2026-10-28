@@ -4,7 +4,7 @@ import Foundation
 public func openAIModel(config: OpenAICompatibleConfig, tier: LLMTier) -> String {
     switch tier {
     case .fast: config.fastModel
-    case .smart: config.smartModel
+    case .smart, .live: config.smartModel
     }
 }
 

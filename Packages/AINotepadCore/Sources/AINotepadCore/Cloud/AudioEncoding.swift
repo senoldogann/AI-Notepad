@@ -14,9 +14,16 @@ public func linear16Data(samples: [Float]) -> Data {
 /// Mono 16-bit PCM WAV dosyası üretir (44 baytlık RIFF başlığı + veri).
 public func wavData(samples: [Float], sampleRate: Int) -> Data {
     let pcm: Data = linear16Data(samples: samples)
-    var data: Data = Data(capacity: 44 + pcm.count)
+    var data: Data = wavHeader(dataBytes: pcm.count, sampleRate: sampleRate)
+    data.append(pcm)
+    return data
+}
+
+/// Mono 16-bit PCM WAV'ın 44 baytlık RIFF başlığı; `dataBytes` ardından gelecek PCM verisinin boyutudur. Saf fonksiyondur.
+public func wavHeader(dataBytes: Int, sampleRate: Int) -> Data {
+    var data: Data = Data(capacity: 44)
     data.append(contentsOf: Array("RIFF".utf8))
-    appendLittleEndian(data: &data, value: UInt32(36 + pcm.count))
+    appendLittleEndian(data: &data, value: UInt32(36 + dataBytes))
     data.append(contentsOf: Array("WAVEfmt ".utf8))
     appendLittleEndian(data: &data, value: UInt32(16))            // fmt bölüm boyutu
     appendLittleEndian(data: &data, value: UInt16(1))             // PCM
@@ -26,8 +33,7 @@ public func wavData(samples: [Float], sampleRate: Int) -> Data {
     appendLittleEndian(data: &data, value: UInt16(2))             // blok hizası
     appendLittleEndian(data: &data, value: UInt16(16))            // bit
     data.append(contentsOf: Array("data".utf8))
-    appendLittleEndian(data: &data, value: UInt32(pcm.count))
-    data.append(pcm)
+    appendLittleEndian(data: &data, value: UInt32(dataBytes))
     return data
 }
 

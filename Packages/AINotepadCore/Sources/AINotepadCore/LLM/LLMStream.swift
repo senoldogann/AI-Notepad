@@ -39,6 +39,10 @@ public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTex
         textDelta = { (line: Substring) -> String? in openAITextDelta(line: line) }
     case .onDevice(let config):
         return try await streamOnDevice(config: config, request: request, onText: onText)
+    case .hosted(let config):
+        // Sunucu Anthropic'in akış olaylarını aynen iletir.
+        call = try await prepareHostedCall(config: config, request: request)
+        textDelta = { (line: Substring) -> String? in claudeTextDelta(line: line) }
     }
     var lastError: any Error = LLMError.empty
     for attempt in 1...streamAttempts {

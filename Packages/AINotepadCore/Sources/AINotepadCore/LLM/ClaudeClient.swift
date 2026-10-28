@@ -15,7 +15,7 @@ public enum ClaudeModel: String, Sendable, CaseIterable, Codable {
 public func claudeModel(config: AnthropicConfig, tier: LLMTier) -> ClaudeModel {
     switch tier {
     case .fast: config.fastModel
-    case .smart: config.smartModel
+    case .smart, .live: config.smartModel
     }
 }
 
@@ -23,7 +23,7 @@ public func claudeModel(config: AnthropicConfig, tier: LLMTier) -> ClaudeModel {
 public func claudeEffort(config: AnthropicConfig, tier: LLMTier) -> LLMEffort {
     switch tier {
     case .fast: config.fastEffort
-    case .smart: config.smartEffort
+    case .smart, .live: config.smartEffort
     }
 }
 
