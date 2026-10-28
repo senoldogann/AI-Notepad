@@ -1,0 +1,193 @@
+---
+// Gizlilik politikası (Türkçe taslak). İçerik sunucunun gerçek davranışına dayanır: server/README.md,
+// server/src/account.ts, server/src/cleanup.ts, server/migrations/. Hukuki gözden geçirme gerekir.
+import { contactEmail, operatorAddress, operatorBusinessId, operatorName } from "./operator";
+import { pagePath } from "../i18n/routes";
+---
+
+<p>
+  Bu politika, AI-Notepad'in abonelik sürümünü (Mac uygulaması, abonelik sunucusu) ve bu web sitesini kullanırken hangi
+  kişisel verilerin neden işlendiğini, kimlerle paylaşıldığını, ne kadar saklandığını ve haklarını nasıl
+  kullanabileceğini anlatır. Kısaca: <strong>toplantı sesin yazıya dökülmek için işlenir ve sunucularımızda saklanmaz;
+  notların, metinlerin ve kayıtların senin cihazlarında kalır.</strong>
+</p>
+
+<h2>1. Veri sorumlusu</h2>
+<p>
+  {operatorName}, {operatorBusinessId}, {operatorAddress}. Gizlilikle ilgili her soru ve talep için: {contactEmail}.
+  Avrupa Birliği Genel Veri Koruma Tüzüğü (GDPR) ve Finlandiya veri koruma mevzuatı uygulanır.
+</p>
+
+<h2>2. Kapsam</h2>
+<p>
+  Bu politika abonelik sürümünü kapsar. Açık kaynak geliştirici sürümünü kendi API anahtarlarınla kullanıyorsan veriler
+  bizim sunucumuza hiç gelmez; doğrudan senin seçtiğin sağlayıcılara gider ve onların şartlarına tabidir.
+</p>
+
+<h2>3. Toplantı içeriği nasıl akar</h2>
+<ul>
+  <li><strong>Canlı metin</strong> Mac'inde, cihaz üstü konuşma modeliyle üretilir; bunun için ses cihazından çıkmaz.</li>
+  <li>
+    <strong>Toplantı sonu metni ve konuşmacı ayırma:</strong> toplantı bitince ses kaydı sunucumuz üzerinden ElevenLabs'e
+    iletilir. Sunucumuz sesi diske yazmaz ve saklamaz; yalnızca süresini kullanım sayacına ekler.
+  </li>
+  <li>
+    <strong>Not, canlı çeviri, “Ne kaçırdım?” ve Sor:</strong> ilgili metin parçaları sunucumuz üzerinden Anthropic'in
+    Claude modeline iletilir ve yanıt cihazına döner. Sunucumuz bu metinleri saklamaz ve loglamaz; yalnızca kullanılan
+    token sayısını sayar.
+  </li>
+  <li>
+    <strong>Notların, metinlerin ve ses kayıtların</strong> Mac'inde ve iPhone'unda, iCloud eşitlemesini açtıysan kendi
+    iCloud hesabında saklanır. Biz bunlara erişemeyiz.
+  </li>
+  <li>
+    <strong>Entegrasyonlar</strong> (Notion, Slack, Microsoft Teams, Discord, Zoom, Linear, Jira): gönderme senin isteğinle
+    doğrudan cihazından o servise yapılır; içerik sunucumuzdan geçmez.
+  </li>
+</ul>
+<p>
+  Toplantıyı kaydetmeden önce katılımcıları bilgilendirmek ve gerektiğinde onaylarını almak senin sorumluluğundadır.
+  Katılımcıların konuşmaları açısından içerik üzerinde sen karar verirsin; biz onu yalnızca senin adına, hizmeti sunmak
+  için işleriz.
+</p>
+
+<h2>4. İşlediğimiz veriler</h2>
+<table>
+  <thead>
+    <tr><th>Veri</th><th>Amaç</th><th>Hukuki dayanak (GDPR md. 6)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Hesap: Apple ile girişte Apple'ın verdiği kullanıcı kimliği ve paylaştıysan e-posta (gizli aktarma adresi de olabilir); e-postayla girişte e-posta adresin</td>
+      <td>Hesabı açmak, giriş yapmak</td>
+      <td>Sözleşmenin ifası (6/1-b)</td>
+    </tr>
+    <tr>
+      <td>Oturum: yenileme jetonlarının tek yönlü özetleri, oluşturma ve bitiş zamanları</td>
+      <td>Seni oturumda tutmak, çalınmış jetonu algılamak</td>
+      <td>Sözleşmenin ifası; güvenlikte meşru menfaat (6/1-f)</td>
+    </tr>
+    <tr>
+      <td>Cihaz doğrulama: Apple App Attest anahtar kimliği, açık anahtarı, Apple'ın onay makbuzu, uygulama sürümü</td>
+      <td>İsteklerin değiştirilmemiş uygulamamızdan geldiğini doğrulamak, deneme hakkının kötüye kullanımını önlemek</td>
+      <td>Meşru menfaat (6/1-f)</td>
+    </tr>
+    <tr>
+      <td>Kullanım: toplantı oturumlarının başlangıç ve bitiş zamanı, süresi, ses süresi ve token sayısı; günlük ve aylık toplamlar</td>
+      <td>Deneme ve aylık sınırları uygulamak, maliyeti denetlemek</td>
+      <td>Sözleşmenin ifası (6/1-b)</td>
+    </tr>
+    <tr>
+      <td>IP adresi: hız sınırları için kısa süreli; yeni hesabın ilk denemesinde IP'nin anahtarlı özeti ve gün</td>
+      <td>Kötüye kullanımı ve toplu hesap açmayı önlemek</td>
+      <td>Meşru menfaat (6/1-f)</td>
+    </tr>
+    <tr>
+      <td>Ödeme: Stripe müşteri kimliği, abonelik durumu ve dönem sonu (kart bilgilerin Stripe'ta kalır, bize gelmez)</td>
+      <td>Aboneliği yönetmek</td>
+      <td>Sözleşmenin ifası (6/1-b); vergi ve muhasebe kayıtlarında yasal yükümlülük (6/1-c)</td>
+    </tr>
+    <tr>
+      <td>Teknik loglar: uç adı, hata kodu, kullanıcı kimliği, zaman (toplantı içeriği yok)</td>
+      <td>Hataları bulmak, güvenlik</td>
+      <td>Meşru menfaat (6/1-f)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. Web sitesi</h2>
+<p>
+  Site çerez, analiz ya da reklam izleyicisi kullanmaz; yazı tipleri kendi sunucumuzdan yüklenir. Giriş yaptığında
+  oturum jetonların yalnızca o sekmenin oturum belleğinde (sessionStorage) tutulur ve sekmeyi kapatınca silinir; seçtiğin
+  dil de aynı yerde hatırlanır. Apple ile giriş ve Cloudflare Turnstile betikleri yalnızca giriş sayfasında yüklenir.
+  Turnstile, giriş bağlantısı isteklerinin bir insandan geldiğini doğrulamak için tarayıcı sinyallerini işler.
+</p>
+
+<h2>6. Alt işleyenler ve aktarımlar</h2>
+<table>
+  <thead>
+    <tr><th>Sağlayıcı</th><th>Ne için</th><th>Hangi veri</th><th>Konum ve güvence</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cloudflare, Inc.</td>
+      <td>Site ve sunucu barındırma (Pages, Workers, D1 veritabanı), hız sınırlama, Turnstile, loglar</td>
+      <td>Yukarıdaki hesap, kullanım ve teknik veriler; aktarım sırasında toplantı içeriği</td>
+      <td>Küresel ağ, ABD; AB-ABD Veri Gizliliği Çerçevesi ve Standart Sözleşme Maddeleri</td>
+    </tr>
+    <tr>
+      <td>Anthropic</td>
+      <td>Claude modeliyle not, çeviri ve yanıt üretmek</td>
+      <td>Toplantı metninin ilgili parçaları</td>
+      <td>ABD; Standart Sözleşme Maddeleri. API verileri model eğitiminde kullanılmaz. [Doğrula: saklama süresi ve sözleşme tarafı]</td>
+    </tr>
+    <tr>
+      <td>ElevenLabs</td>
+      <td>Sesi yazıya dökmek ve konuşmacıları ayırmak</td>
+      <td>Toplantı sesi</td>
+      <td>[Doğrula: işleme konumu, sıfır saklama kipinin açık olup olmadığı]; Standart Sözleşme Maddeleri</td>
+    </tr>
+    <tr>
+      <td>Stripe</td>
+      <td>Ödeme, vergi hesaplama (Stripe Tax), fatura, abonelik portalı</td>
+      <td>E-posta, ödeme bilgileri, fatura ülkesi ve adresi</td>
+      <td>Stripe Payments Europe (İrlanda); ABD'ye aktarımda Veri Gizliliği Çerçevesi ve Standart Sözleşme Maddeleri</td>
+    </tr>
+    <tr>
+      <td>Resend</td>
+      <td>Giriş bağlantısı e-postasını göndermek</td>
+      <td>E-posta adresi, bağlantı</td>
+      <td>ABD; Standart Sözleşme Maddeleri [Doğrula: e-posta sağlayıcısı kesinleşince]</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  Apple, Apple ile giriş ve App Attest için kendi gizlilik politikasına tabi bağımsız veri sorumlusudur. Verilerini
+  satmayız ve reklam için kullanmayız.
+</p>
+
+<h2>7. Saklama süreleri</h2>
+<ul>
+  <li>Hesap, cihaz kayıtları, toplantı oturum kayıtları ve aylık kullanım: hesabın açık olduğu sürece; hesabı silince hemen silinir.</li>
+  <li>Giriş bağlantıları: 15 dakika geçerlidir; kullanılınca ya da süresi dolunca en geç ertesi gün silinir.</li>
+  <li>Yenileme jetonları: süreleri dolunca ya da oturum kapatılınca en geç ertesi gün silinir.</li>
+  <li>Günlük kullanım: 2 gün. IP özetli deneme kaydı: yalnızca o gün.</li>
+  <li>İşlenmiş Stripe olayları ve toplam günlük harcama (kişisel değil): 90 gün.</li>
+  <li>Teknik loglar: Cloudflare'in log saklama süresince. [Doğrula: süre]</li>
+  <li>Veritabanı geri yükleme kayıtları (Cloudflare D1 Time Travel): en çok 30 gün.</li>
+  <li>Faturalar ve ödeme kayıtları: Fin muhasebe mevzuatının öngördüğü süre boyunca Stripe'ta.</li>
+</ul>
+
+<h2>8. Hesabını silmek</h2>
+<p>
+  <a href={pagePath("account", "tr")}>Hesap sayfasındaki</a> “Hesabı sil” düğmesiyle hesabını istediğin an silebilirsin.
+  Bitmemiş aboneliğin önce Stripe'ta hemen iptal edilir; sonra hesabın, oturumların, giriş bağlantıların, cihaz
+  kayıtların, toplantı oturum kayıtların, kullanımın, abonelik kaydın ve Stripe müşteri eşlemen tek işlemde silinir.
+  Kalanlar: bugünkü deneme sayacı (IP özeti başına, hesaba bağlı değil, gün sonunda silinir), Stripe'taki faturalar
+  (yasal yükümlülük) ve süresi dolana kadar teknik loglar. Cihazlarındaki notlar ve kayıtlar yerinde kalır; onları
+  uygulamadan sen silersin.
+</p>
+
+<h2>9. Hakların</h2>
+<p>
+  Verilerine erişme, düzeltme, silme, işlemeyi kısıtlama, taşınabilirlik ve meşru menfaate dayalı işlemeye itiraz etme
+  hakların vardır. Talebini {contactEmail} adresine gönder; en geç bir ay içinde yanıtlarız. Finlandiya Veri Koruma
+  Kurumu'na (Tietosuojavaltuutetun toimisto, tietosuoja.fi) ya da yaşadığın ülkenin denetim makamına şikâyette
+  bulunabilirsin.
+</p>
+
+<h2>10. Güvenlik</h2>
+<p>
+  Tüm bağlantılar şifrelidir (TLS). Jetonlar sunucuda yalnızca tek yönlü özet olarak tutulur, IP adresleri anahtarlı
+  özetle saklanır, uygulama istekleri App Attest ile doğrulanır. API anahtarlarımız yalnızca sunucuda gizli değer olarak
+  durur.
+</p>
+
+<h2>11. Çocuklar</h2>
+<p>Hizmet 18 yaşından küçüklere yönelik değildir.</p>
+
+<h2>12. Değişiklikler</h2>
+<p>
+  Bu politikayı değiştirirsek tarihini güncelleriz; önemli değişiklikleri yürürlüğe girmeden önce uygulamada ya da
+  e-postayla bildiririz.
+</p>

@@ -1,0 +1,40 @@
+---
+// Bulunamayan sayfa: iki dilde birlikte (Cloudflare Pages tüm bilinmeyen adreslerde bunu 404 durumuyla döndürür).
+import Minimal from "../layouts/Minimal.astro";
+import { copy } from "../i18n/copy";
+import { type Lang, langs, pagePath } from "../i18n/routes";
+---
+
+<Minimal title={`404 — AI-Notepad`} description={copy.en.notFound.text} indexed={false} alternatesFor={null}>
+  <p class="code tabular" aria-hidden="true">404</p>
+  {
+    langs.map((lang: Lang) => (
+      <section class="not-found" lang={lang}>
+        <h1 class="title-m">{copy[lang].notFound.title}</h1>
+        <p class="muted">{copy[lang].notFound.text}</p>
+        <a class="text-link" href={pagePath("home", lang)}>
+          {copy[lang].notFound.home} <span aria-hidden="true">→</span>
+        </a>
+      </section>
+    ))
+  }
+</Minimal>
+
+<style>
+  .code {
+    font-size: clamp(4rem, 14vw, 8rem);
+    font-weight: 600;
+    letter-spacing: -0.06em;
+    line-height: 1;
+    background: linear-gradient(120deg, #e9896a, #c9a3e0 55%, #8ea3e6);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .not-found {
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+  }
+</style>

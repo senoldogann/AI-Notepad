@@ -187,5 +187,9 @@ echo "appcast güncellendi: $appcast"
 # releases/latest/download/appcast.xml adresinden okur.
 echo
 echo "Yayınlamak için:"
-printf '  gh release create %q %q %q --repo %q --title %q --notes-file %q\n' \
-    "v$version" "$dmg" "$appcast" "$repo" "AI-Notepad $version" "$notes"
+# Sabit adlı kopya: web sitesi her zaman releases/latest/download/AI-Notepad.dmg adresinden son sürümü indirir
+# (sürümlü adla o adres bir sonraki sürümde 404 verirdi).
+stable_dmg="$out/AI-Notepad.dmg"
+cp "$dmg" "$stable_dmg"
+printf '  gh release create %q %q %q %q --repo %q --title %q --notes-file %q\n' \
+    "v$version" "$dmg" "$stable_dmg" "$appcast" "$repo" "AI-Notepad $version" "$notes"

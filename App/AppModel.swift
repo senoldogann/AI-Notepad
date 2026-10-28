@@ -2404,6 +2404,11 @@ final class AppModel {
         }
     }
 
+    /// Görev aracında seçilebilir hedefler (Linear takımları, Jira projeleri); Ayarlar'daki seçici gösterir.
+    func trackerTargets(id: String) async throws -> [String] {
+        try await trackerVault.targets(id: id)
+    }
+
     func setTrackerTarget(id: String, target: String) async {
         do {
             try await trackerVault.setTarget(id: id, target: target.trimmingCharacters(in: .whitespacesAndNewlines))

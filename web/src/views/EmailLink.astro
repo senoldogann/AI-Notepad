@@ -1,0 +1,74 @@
+---
+// E-posta bağlantısı sayfası: `#token=` ile girişi tamamlar. Betik: src/client/email-link.ts.
+import Base from "../layouts/Base.astro";
+import { copy, type SignInCopy } from "../i18n/copy";
+import { type Lang, pagePath } from "../i18n/routes";
+
+interface Props {
+  readonly lang: Lang;
+}
+const { lang } = Astro.props;
+const text: SignInCopy = copy[lang].signIn;
+---
+
+<Base lang={lang} page="emailLink" meta={text.linkMeta} indexed={false}>
+  <section class="narrow link-page" id="email-link" data-account-path={pagePath("account", lang)}>
+    <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
+    <div id="link-working" class="link-page__working" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <h1 class="title-m">{text.linkWorking}</h1>
+    </div>
+    <div id="link-failed" class="card link-page__failed hidden" tabindex="-1" role="alert">
+      <h1 class="title-l">{text.linkFailedTitle}</h1>
+      <p id="link-failed-text" class="muted"></p>
+      <a class="button button--primary" href={pagePath("signIn", lang)}>{text.linkRetry}</a>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import "../client/email-link";
+</script>
+
+<style>
+  .link-page {
+    display: grid;
+    place-items: center;
+    min-height: 50vh;
+    padding-block: 64px;
+  }
+
+  .link-page__working {
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+  }
+
+  .link-page__failed {
+    display: grid;
+    gap: 14px;
+    justify-items: start;
+    width: 100%;
+  }
+
+  /* Döner gösterge yalnızca hareket azaltılmamışsa döner. */
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2.5px solid var(--line);
+    border-top-color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .spinner {
+      animation: spin 900ms linear infinite;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+</style>

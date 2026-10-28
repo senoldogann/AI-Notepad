@@ -1,0 +1,22 @@
+---
+// Kapak ses dalgası: uygulamadaki CoverWaveform ile aynı çubuklar (tohumdan sabit). Rengi kapağın ailesinden gelir.
+import { coverWaveHeights, type WaveBar, waveBars } from "../lib/film";
+
+interface Props {
+  readonly seed: string;
+  readonly width: number;
+  readonly height: number;
+  readonly class: string;
+}
+const { seed, width, height, class: extraClass } = Astro.props;
+const bars: WaveBar[] = waveBars(coverWaveHeights(seed, 23), width, height, width / 37);
+const round = (value: number): number => Math.round(value * 100) / 100;
+---
+
+<svg class:list={["wave", extraClass]} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" focusable="false">
+  {
+    bars.map((bar: WaveBar) => (
+      <rect x={round(bar.x)} y={round(bar.y)} width={round(bar.width)} height={round(bar.height)} rx={round(bar.width / 2)} fill="currentColor" />
+    ))
+  }
+</svg>

@@ -1,0 +1,221 @@
+---
+// Üst çubuk: logo, menü, dil değiştirici ve indirme düğmesi. Dar ekranda menü <details> ile açılır (betik yok).
+import Logo from "./Logo.astro";
+import { copy, type CommonCopy } from "../i18n/copy";
+import { type Lang, type PageKey, langMeta, langs, pagePath } from "../i18n/routes";
+
+interface Props {
+  readonly lang: Lang;
+  /** Dil değiştiricinin öbür dilde açacağı sayfa; dile özgü olmayan sayfada ana sayfa. */
+  readonly page: PageKey;
+}
+const { lang, page } = Astro.props;
+const text: CommonCopy = copy[lang].common;
+const otherLangs: Lang[] = langs.filter((candidate: Lang): boolean => candidate !== lang);
+const links: { readonly href: string; readonly label: string }[] = [
+  { href: `${pagePath("home", lang)}#features`, label: text.nav.features },
+  { href: pagePath("pricing", lang), label: text.nav.pricing },
+  { href: pagePath("download", lang), label: text.nav.download },
+  { href: pagePath("signIn", lang), label: text.nav.signIn },
+];
+const currentPath: string = pagePath(page, lang);
+---
+
+<header class="site-header">
+  <div class="page site-header__inner">
+    <a class="brand" href={pagePath("home", lang)} aria-label={text.homeLabel}>
+      <Logo size={28} />
+      <span class="brand__name">AI-Notepad</span>
+    </a>
+
+    <nav class="nav" aria-label={text.navLabel}>
+      <ul class="nav__list">
+        {
+          links.map((link) => (
+            <li>
+              <a class="nav__link" href={link.href} aria-current={link.href === currentPath ? "page" : undefined}>
+                {link.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+
+    <div class="site-header__actions">
+      {
+        otherLangs.map((other: Lang) => (
+          <a class="lang-link" href={pagePath(page, other)} hreflang={other} lang={other}>
+            <span class="visually-hidden">{text.languageLabel}: </span>
+            {langMeta[other].name}
+          </a>
+        ))
+      }
+      <a class="button button--primary button--small header-cta" href={pagePath("download", lang)}>{text.nav.download}</a>
+      <details class="menu">
+        <summary class="menu__button">
+          <span class="visually-hidden">{text.navLabel}</span>
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          </svg>
+        </summary>
+        <ul class="menu__list">
+          {
+            links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))
+          }
+        </ul>
+      </details>
+    </div>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+
+  .site-header__inner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    height: 68px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-size: 1.0625rem;
+    border-radius: 8px;
+  }
+
+  .nav {
+    margin-left: 12px;
+  }
+
+  .nav__list {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .nav__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  .nav__link:hover,
+  .nav__link[aria-current="page"] {
+    color: var(--ink);
+    background: var(--soft);
+  }
+
+  .site-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+
+  .lang-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .lang-link:hover {
+    color: var(--ink);
+  }
+
+  .menu {
+    display: none;
+    position: relative;
+  }
+
+  .menu__button {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .menu__button::-webkit-details-marker {
+    display: none;
+  }
+
+  .menu__list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 200px;
+    margin: 0;
+    padding: 8px;
+    list-style: none;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    box-shadow: var(--shadow);
+  }
+
+  .menu__list a {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .menu__list a:hover {
+    background: var(--soft);
+  }
+
+  @media (max-width: 860px) {
+    .nav {
+      display: none;
+    }
+
+    .menu {
+      display: block;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .header-cta {
+      display: none;
+    }
+  }
+</style>

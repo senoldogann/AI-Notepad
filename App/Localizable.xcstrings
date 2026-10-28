@@ -8069,12 +8069,12 @@
         }
       }
     },
-    "Proje (boş: ilki)": {
+    "Proje": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Project (empty: first)"
+            "value": "Project"
           }
         }
       }
@@ -9208,12 +9208,12 @@
         }
       }
     },
-    "Takım (boş: ilki)": {
+    "Takım": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Team (empty: first)"
+            "value": "Team"
           }
         }
       }

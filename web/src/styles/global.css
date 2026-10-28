@@ -1,0 +1,659 @@
+/* AI-Notepad sitesi: yön C (ElevenLabs benzeri). Beyaz zemin, neredeyse siyah mürekkep, bol boşluk, Inter;
+   durgun pastel film gradyanları (bulutlar, ince gren, yumuşak ışık). Gradyanlar asla hareket etmez; yalnızca içerik
+   belirirken saydamlık ve kayma kullanılır, "hareketi azalt" açıksa hiç kullanılmaz. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Renkler uygulamanın ThemeColorSet.light / .dark takımlarıdır (Theme.swift). */
+:root {
+  color-scheme: light dark;
+  --bg: #fdfcfc;
+  --card: #ffffff;
+  --line: #e5e5e5;
+  --soft: #f5f5f5;
+  --selected: #efeeed;
+  --ink: #0a0a0a;
+  --muted: #5f5f5f;
+  --primary: #171717;
+  --on-primary: #fafafa;
+  --focus: #3b5bdb;
+  --danger: #b42318;
+  --ok: #2f7a55;
+  --warn: #9a5b00;
+  --shadow: 0 1px 2px rgb(10 10 10 / 0.04), 0 8px 24px rgb(10 10 10 / 0.06);
+  --radius-l: 28px;
+  --radius-m: 20px;
+  --radius-s: 12px;
+  --page: min(1200px, 100% - 2 * var(--gutter));
+  --gutter: clamp(20px, 4vw, 40px);
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --card: #141414;
+    --line: #262626;
+    --soft: #1c1c1c;
+    --selected: #232323;
+    --ink: #fafafa;
+    --muted: #a3a3a3;
+    --primary: #fafafa;
+    --on-primary: #0a0a0a;
+    --focus: #8ea3e6;
+    --danger: #ff8a7a;
+    --ok: #7fcfa3;
+    --warn: #f2b863;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 88px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.6;
+  font-feature-settings: "cv11", "ss03";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: #c7b3ec;
+  color: #0a0a0a;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -64px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+.page {
+  width: var(--page);
+  margin-inline: auto;
+}
+
+.narrow {
+  width: min(760px, 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+/* ---------- Yazı ---------- */
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e9896a;
+}
+
+.display {
+  font-size: clamp(2.5rem, 6.4vw, 5rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.title-xl {
+  font-size: clamp(2.25rem, 4.8vw, 3.75rem);
+  letter-spacing: -0.04em;
+  line-height: 1.04;
+}
+
+.title-l {
+  font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+  letter-spacing: -0.035em;
+}
+
+.title-m {
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.lead {
+  font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 38rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Düğmeler ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button[disabled],
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.button--primary:hover {
+  background: color-mix(in srgb, var(--primary) 86%, var(--bg));
+}
+
+.button--secondary {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.button--secondary:hover {
+  background: var(--soft);
+}
+
+.button--danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
+.button--danger:hover {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.button--danger-solid {
+  background: var(--danger);
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .button--danger-solid {
+    color: #0a0a0a;
+  }
+}
+
+.button--small {
+  min-height: 38px;
+  padding: 0 16px;
+  font-size: 0.875rem;
+}
+
+.button--block {
+  width: 100%;
+}
+
+.button--glass {
+  background: rgb(255 255 255 / 0.72);
+  color: #0a0a0a;
+  border-color: rgb(255 255 255 / 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.button--glass:hover {
+  background: rgb(255 255 255 / 0.88);
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Film gradyanı ----------
+   Uygulamadaki FilmGradient: pastel zemin, çok yumuşak renk bulutları (derin ton üstte, açık ton ortada, krem ışık
+   gölgenin karşısında, karşıt pastel gölge alt köşede), ince gren (overlay) ve sıcak kenar kararması (multiply).
+   Bulanıklık filtresi yerine yumuşak radyal gradyanlar: bir kez çizilir, kaydırmada maliyeti yok. */
+
+.film {
+  --base: #f0ae92;
+  --c0: #f7cdb8;
+  --c1: #fff3e6;
+  --c2: #c9a3e0;
+  --c3: #e9896a;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--radius-l);
+  background-color: var(--base);
+  color: #0a0a0a;
+  filter: saturate(0.94);
+}
+
+.film::before,
+.film::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Gren: SVG gürültüsünden (scripts/grain.svg, feTurbulence) bir kez üretilmiş döşeme (scripts/make-grain.ts); overlay
+   ile hem aydınlatır hem karartır. Filtre sayfada canlı çizilmez: yavaş telefonda ana iş parçacığını saniyelerce tutar. */
+.film::before {
+  background-image: url("/grain.png");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+/* Objektif gibi çok hafif, sıcak kenar kararması. */
+.film::after {
+  background: radial-gradient(ellipse 85% 85% at 50% 50%, transparent 55%, rgb(90 58 42 / 0.14) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* Özgüllüğü sıfır: bileşenler kendi konumlarını (ör. absolute) ezebilir. */
+:where(.film > *) {
+  position: relative;
+  z-index: 1;
+}
+
+.film--sunset { --base: #f0ae92; --c0: #f7cdb8; --c1: #fff3e6; --c2: #c9a3e0; --c3: #e9896a; }
+.film--coral { --base: #f0c49b; --c0: #f7dcc0; --c1: #fff6e8; --c2: #f2a7b4; --c3: #e0a36f; }
+.film--ocean { --base: #a9bcee; --c0: #cbd6f6; --c1: #f4f1ff; --c2: #e9b9d6; --c3: #8ea3e6; }
+.film--mint { --base: #a9cdb8; --c0: #cce3d4; --c1: #f6f7ea; --c2: #e9d7a8; --c3: #7fb096; }
+.film--rose { --base: #eba7b5; --c0: #f6cbd4; --c1: #fff1ec; --c2: #b9c9f0; --c3: #de8aa3; }
+.film--violet { --base: #c7b3ec; --c0: #ded1f5; --c1: #fff4ee; --c2: #f4c0a8; --c3: #a98bdb; }
+
+/* Bulutlar: gölge solda. */
+.film--clouds-left {
+  background-image:
+    radial-gradient(ellipse 34% 30% at 82% 34%, color-mix(in srgb, var(--c1) 92%, transparent) 0%, color-mix(in srgb, var(--c1) 45%, transparent) 45%, transparent 100%),
+    radial-gradient(ellipse 30% 22% at 28% 48%, color-mix(in srgb, var(--c0) 45%, transparent) 0%, transparent 100%),
+    radial-gradient(ellipse 26% 18% at 70% 82%, color-mix(in srgb, var(--c3) 38%, transparent) 0%, transparent 100%),
+    radial-gradient(ellipse 48% 40% at 64% 66%, color-mix(in srgb, var(--c0) 80%, transparent) 0%, color-mix(in srgb, var(--c0) 30%, transparent) 50%, transparent 100%),
+    radial-gradient(ellipse 66% 52% at 6% 100%, color-mix(in srgb, var(--c2) 95%, transparent) 0%, color-mix(in srgb, var(--c2) 45%, transparent) 50%, transparent 100%),
+    radial-gradient(ellipse 80% 58% at 48% -6%, color-mix(in srgb, var(--c3) 92%, transparent) 0%, color-mix(in srgb, var(--c3) 40%, transparent) 50%, transparent 100%);
+}
+
+/* Bulutlar: gölge sağda (ayna). */
+.film--clouds-right {
+  background-image:
+    radial-gradient(ellipse 34% 30% at 18% 30%, color-mix(in srgb, var(--c1) 92%, transparent) 0%, color-mix(in srgb, var(--c1) 45%, transparent) 45%, transparent 100%),
+    radial-gradient(ellipse 30% 22% at 72% 44%, color-mix(in srgb, var(--c0) 45%, transparent) 0%, transparent 100%),
+    radial-gradient(ellipse 26% 18% at 30% 84%, color-mix(in srgb, var(--c3) 38%, transparent) 0%, transparent 100%),
+    radial-gradient(ellipse 48% 40% at 36% 64%, color-mix(in srgb, var(--c0) 80%, transparent) 0%, color-mix(in srgb, var(--c0) 30%, transparent) 50%, transparent 100%),
+    radial-gradient(ellipse 66% 52% at 94% 100%, color-mix(in srgb, var(--c2) 95%, transparent) 0%, color-mix(in srgb, var(--c2) 45%, transparent) 50%, transparent 100%),
+    radial-gradient(ellipse 80% 58% at 54% -6%, color-mix(in srgb, var(--c3) 92%, transparent) 0%, color-mix(in srgb, var(--c3) 40%, transparent) 50%, transparent 100%);
+}
+
+/* Çapraz ışık süzmeleri: aynı eğimde derin, ince açık, açık ton ve alt köşede karşıt pastel şeritler. */
+.film--streaks {
+  background-image:
+    linear-gradient(152deg, transparent 8%, color-mix(in srgb, var(--c3) 70%, transparent) 22%, color-mix(in srgb, var(--c3) 55%, transparent) 30%, transparent 44%),
+    linear-gradient(152deg, transparent 44%, color-mix(in srgb, var(--c1) 85%, transparent) 50%, transparent 56%),
+    linear-gradient(152deg, transparent 56%, color-mix(in srgb, var(--c0) 60%, transparent) 62%, transparent 70%),
+    linear-gradient(152deg, transparent 72%, color-mix(in srgb, var(--c2) 85%, transparent) 90%, var(--c2) 100%);
+}
+
+/* Kapak ses dalgası: ailenin derin tonu, koyuya karışık, multiply ile ton üstüne ton. */
+.wave {
+  color: color-mix(in srgb, var(--c3) 80%, #000);
+  opacity: 0.62;
+  mix-blend-mode: multiply;
+}
+
+/* Kapaktaki cam yüzey (beyaz, yarı saydam): gradyan her temada açık kalır, içindeki yazı hep koyu. */
+.glass {
+  background: rgb(255 255 255 / 0.78);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: var(--radius-m);
+  box-shadow: 0 10px 30px rgb(90 58 42 / 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #0a0a0a;
+}
+
+/* Küre: uygulamadaki kayıt kartının küresi. */
+.orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #8a8a8a 0%, #2a2a2a 45%, #0a0a0a 100%);
+  box-shadow:
+    0 0 0 5px rgb(255 255 255 / 0.4),
+    0 14px 30px rgb(0 0 0 / 0.18);
+}
+
+/* ---------- Kartlar ---------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: clamp(20px, 3vw, 32px);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: var(--soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.pill--ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.pill--warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+.notice {
+  padding: 14px 18px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--soft);
+  font-size: 0.9375rem;
+}
+
+.notice--error {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 7%, var(--card));
+  color: var(--ink);
+}
+
+.notice--ok {
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+  background: color-mix(in srgb, var(--ok) 8%, var(--card));
+}
+
+.draft-banner {
+  margin-bottom: 32px;
+  padding: 14px 18px;
+  border-radius: var(--radius-s);
+  border: 1px dashed color-mix(in srgb, var(--warn) 60%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--card));
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+/* ---------- Formlar ---------- */
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.input:focus-visible {
+  outline-offset: 0;
+  border-color: var(--focus);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- Bölümler ---------- */
+
+.section {
+  padding-block: clamp(72px, 10vw, 136px);
+}
+
+.section-head {
+  display: grid;
+  gap: 16px;
+  margin-bottom: clamp(36px, 5vw, 64px);
+  max-width: 44rem;
+}
+
+/* ---------- Belirme (yalnızca içerik; gradyanlar hareket etmez) ----------
+   Kaydırmaya bağlı CSS animasyonu: betik yok, ilk ekrandaki içerik baştan görünür; desteklemeyen tarayıcıda içerik
+   hiç gizlenmez. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Yasal metinler ---------- */
+
+.prose {
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.prose h1 {
+  margin-bottom: 12px;
+}
+
+.prose h2 {
+  margin-top: 48px;
+  margin-bottom: 12px;
+  font-size: 1.375rem;
+  letter-spacing: -0.02em;
+}
+
+.prose h3 {
+  margin-top: 28px;
+  margin-bottom: 8px;
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+}
+
+.prose p,
+.prose ul,
+.prose ol,
+.prose table {
+  margin-block: 0 14px;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.25em;
+}
+
+.prose li + li {
+  margin-top: 6px;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose th,
+.prose td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.prose th {
+  font-weight: 600;
+  background: var(--soft);
+}
+
+.prose code {
+  font-size: 0.9em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--soft);
+}

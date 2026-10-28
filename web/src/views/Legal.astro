@@ -1,0 +1,31 @@
+---
+// Yasal metin sayfası (gizlilik, şartlar): taslak uyarısı, başlık, güncelleme tarihi ve içerik (src/legal/).
+import Base from "../layouts/Base.astro";
+import { copy, type PageMeta } from "../i18n/copy";
+import type { Lang, PageKey } from "../i18n/routes";
+import { legalUpdated } from "../legal/operator";
+
+interface Props {
+  readonly lang: Lang;
+  readonly page: PageKey;
+  readonly meta: PageMeta;
+  readonly title: string;
+}
+const { lang, page, meta, title } = Astro.props;
+const updated: string = new Intl.DateTimeFormat(lang, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${legalUpdated}T00:00:00Z`));
+---
+
+<Base lang={lang} page={page} meta={meta} indexed={true}>
+  <article class="narrow prose legal">
+    <p class="draft-banner" role="note">{copy[lang].common.draftBanner}</p>
+    <h1 class="title-l">{title}</h1>
+    <p class="muted small">{copy[lang].common.lastUpdated}: <time datetime={legalUpdated}>{updated}</time></p>
+    <slot />
+  </article>
+</Base>
+
+<style>
+  .legal {
+    padding-top: clamp(40px, 6vw, 72px);
+  }
+</style>

@@ -298,6 +298,97 @@ public func fetchTrackerIdentity(service: MCPService, connection: MCPConnection,
     return try parseTrackerIdentity(text: try await session.callTool(name: lookup.tool, arguments: lookup.arguments), server: server)
 }
 
+/// Araç çıktısındaki seçilebilir hedeflerin (Linear takımları, Jira projeleri) adları: `name` ve `key` alanı olan her
+/// nesne, bulunduğu sırayla, tekrarsız. Çıktı metninin içindeki JSON okunur. Saf fonksiyondur.
+func parseTrackerTargetNames(text: String, server: String) throws -> [String] {
+    let value: JSONValue = try embeddedJSON(text: text, server: server, what: "hedef listesi")
+    var names: [String] = []
+    collectNamedKeyed(value: value, into: &names)
+    return names
+}
+
+/// Atlassian'ın erişilebilir sitelerinden ilkinin bulut kimliği (`getAccessibleAtlassianResources`): `id` ve `url`
+/// alanı olan ilk nesne. Saf fonksiyondur.
+func parseAtlassianCloudID(text: String, server: String) throws -> String {
+    let value: JSONValue = try embeddedJSON(text: text, server: server, what: "Atlassian siteleri")
+    guard let id = firstCloudID(value: value) else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "Atlassian sitesi bulunamadı")
+    }
+    return id
+}
+
+/// Metnin içindeki ilk JSON değeri (nesne ya da dizi; araçlar JSON'u açıklama metniyle sarabiliyor).
+private func embeddedJSON(text: String, server: String, what: String) throws -> JSONValue {
+    let opener: String.Index? = text.firstIndex { $0 == "{" || $0 == "[" }
+    guard let start = opener else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "\(what) JSON değil: \(text.prefix(200))")
+    }
+    let closer: Character = text[start] == "{" ? "}" : "]"
+    guard let end = text.lastIndex(of: closer), start < end else {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "\(what) JSON değil: \(text.prefix(200))")
+    }
+    do {
+        return try JSONDecoder().decode(JSONValue.self, from: Data(text[start...end].utf8))
+    } catch {
+        throw MCPRemoteError.invalidResponse(server: server, reason: "\(what): \(error.localizedDescription)")
+    }
+}
+
+private func collectNamedKeyed(value: JSONValue, into names: inout [String]) {
+    switch value {
+    case .object(let object):
+        if case .string(let name) = object["name"], case .string = object["key"], !name.isEmpty, !names.contains(name) {
+            names.append(name)
+        }
+        for key in object.keys.sorted() {
+            if let child = object[key] {
+                collectNamedKeyed(value: child, into: &names)
+            }
+        }
+    case .array(let items):
+        for item in items {
+            collectNamedKeyed(value: item, into: &names)
+        }
+    default:
+        break
+    }
+}
+
+private func firstCloudID(value: JSONValue) -> String? {
+    switch value {
+    case .object(let object):
+        if case .string(let id) = object["id"], case .string = object["url"], !id.isEmpty {
+            return id
+        }
+        return object.keys.sorted().lazy.compactMap { (key: String) -> String? in object[key].flatMap(firstCloudID) }.first
+    case .array(let items):
+        return items.lazy.compactMap(firstCloudID).first
+    default:
+        return nil
+    }
+}
+
+/// Görev aracında seçilebilir hedefler: Linear'da takımlar (`list_teams`), Jira'da ilk sitenin projeleri
+/// (`getAccessibleAtlassianResources`, ardından `getVisibleJiraProjects`). Salt okunur; jeton yenilenirse `persist` ile
+/// hemen yazılır.
+public func fetchTrackerTargets(service: MCPService, connection: MCPConnection, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> [String] {
+    let server: String = connection.serverURL.host() ?? connection.serverURL.absoluteString
+    let session: MCPRemoteSession = try await openMCPSession(connection: connection, persist: persist)
+    switch service {
+    case .linear:
+        return try parseTrackerTargetNames(text: try await session.callTool(name: "list_teams", arguments: .object([:])), server: server)
+    case .atlassian:
+        let cloudID: String = try parseAtlassianCloudID(
+            text: try await session.callTool(name: "getAccessibleAtlassianResources", arguments: .object([:])), server: server
+        )
+        return try parseTrackerTargetNames(
+            text: try await session.callTool(name: "getVisibleJiraProjects", arguments: .object(["cloudId": .string(cloudID)])), server: server
+        )
+    case .notion:
+        throw MCPRemoteError.toolMissing(server: server, tool: "hedef listesi")
+    }
+}
+
 /// Yeniden bağlanınca yerini alan eski bağlantı: geri alınacak izin. Yeni bağlantı aynı istemci kaydını kullanıyorsa
 /// (aynı izin) nil: eskiyi geri almak yeniyi de geçersiz kılardı. Saf fonksiyondur.
 public func replacedGrant(old: MCPConnection, new: MCPConnection) -> MCPConnection? {
@@ -392,6 +483,14 @@ public actor TrackerVault {
         }
         try saveTaskTrackers(trackers: current.filter { $0.id != id }, service: service)
         return removed
+    }
+
+    /// Araçta seçilebilir hedefler (takımlar ya da projeler; bkz. `fetchTrackerTargets`).
+    public func targets(id: String) async throws -> [String] {
+        try await withTracker(id: id) {
+            (tracker: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> [String] in
+            try await fetchTrackerTargets(service: tracker.service, connection: tracker.connection, persist: persist)
+        }
     }
 
     public func setTarget(id: String, target: String) throws {
