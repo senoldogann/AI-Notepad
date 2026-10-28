@@ -80,6 +80,7 @@ struct AINotepadApp: App {
 
     init() {
         registerDefaultSettings()
+        keepLegacyNoteLanguage(defaults: .standard)
         // Tema ilk kareden önce: Gece/Grafit kullanıcısı açılışta önce açık renkleri görmesin.
         applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
         if migrateSmartEffort(defaults: .standard) {

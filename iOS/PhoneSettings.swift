@@ -8,6 +8,8 @@ enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri ve Sor cevapları bu dilde yazılır.
     static let noteLanguage: String = "language.note"
+    /// Not dili ayarından önceki sürümlerin kullanıcısına Türkçe bir kez yazıldı (`legacyNoteLanguage`).
+    static let noteLanguageMigrated: String = "migration.noteLanguage"
     static let userName: String = "userName"
     /// Kayıt başında "katılımcılara haber ver" kartı.
     static let consentReminder: String = "consentReminder"
@@ -42,6 +44,26 @@ func registerPhoneDefaults() {
         // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
         PhoneSettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
     ])
+}
+
+/// Not dili ayarından önceki sürümlerden gelen kullanıcının notları Türkçe kalır (bkz. `legacyNoteLanguage`); bu sürümün
+/// ilk açılışında bir kez çalışır. Varsayılanlar değil, yalnız kayıtlı değerler okunur.
+func keepPhoneLegacyNoteLanguage(defaults: UserDefaults) {
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        phoneSettingsLogger.error("Paket kimliği yok, not dili taşınmadı")
+        return
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    let language: ShareLanguage? = legacyNoteLanguage(
+        storedNoteLanguage: stored[PhoneSettingsKey.noteLanguage] as? String,
+        onboardingCompleted: stored[PhoneSettingsKey.onboardingCompleted] as? Bool ?? false,
+        alreadyMigrated: stored[PhoneSettingsKey.noteLanguageMigrated] as? Bool ?? false
+    )
+    if let language {
+        defaults.set(language.rawValue, forKey: PhoneSettingsKey.noteLanguage)
+        phoneSettingsLogger.info("Önceki sürümün kullanıcısı: not dili korundu, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(true, forKey: PhoneSettingsKey.noteLanguageMigrated)
 }
 
 /// Seçili motor; tanınmayan değer bulut sayılır ve hata loglanır.

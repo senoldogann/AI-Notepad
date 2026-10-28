@@ -69,6 +69,8 @@ enum SettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri, "Ne kaçırdım?" ve Sor cevapları bu dilde yazılır.
     static let noteLanguage: String = "language.note"
+    /// Not dili ayarından önceki sürümlerin kullanıcısına Türkçe bir kez yazıldı (`legacyNoteLanguage`).
+    static let noteLanguageMigrated: String = "migration.noteLanguage"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
@@ -257,6 +259,26 @@ func registerDefaultSettings() {
         SettingsKey.surface: PanelAppearance.standard.surface.rawValue,
         SettingsKey.surfaceOpacity: PanelAppearance.standard.surfaceOpacity,
     ])
+}
+
+/// Not dili ayarından önceki sürümlerden gelen kullanıcının notları Türkçe kalır (bkz. `legacyNoteLanguage`); bu sürümün
+/// ilk açılışında bir kez çalışır. Varsayılanlar değil, yalnız kayıtlı değerler okunur.
+func keepLegacyNoteLanguage(defaults: UserDefaults) {
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("Paket kimliği yok, not dili taşınmadı")
+        return
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    let language: ShareLanguage? = legacyNoteLanguage(
+        storedNoteLanguage: stored[SettingsKey.noteLanguage] as? String,
+        onboardingCompleted: stored[SettingsKey.onboardingCompleted] as? Bool ?? false,
+        alreadyMigrated: stored[SettingsKey.noteLanguageMigrated] as? Bool ?? false
+    )
+    if let language {
+        defaults.set(language.rawValue, forKey: SettingsKey.noteLanguage)
+        settingsLogger.info("Önceki sürümün kullanıcısı: not dili korundu, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(true, forKey: SettingsKey.noteLanguageMigrated)
 }
 
 /// Kayıtlı ayarın değeri, aralığa sıkıştırılmış.

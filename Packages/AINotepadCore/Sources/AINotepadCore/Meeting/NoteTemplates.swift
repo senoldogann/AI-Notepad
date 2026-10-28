@@ -233,6 +233,17 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
     }
 }
 
+/// Not dili ayarından önceki sürümlerden gelen kullanıcının not dili: o sürümlerde not her zaman Türkçeydi. Bu sürümün
+/// ilk açılışında (`alreadyMigrated` false) kurulumu tamamlamış ama not dili kaydedilmemiş kullanıcıya Türkçe yazılır;
+/// yoksa İngilizce arayüzdeki mevcut kullanıcının notları sessizce İngilizceye dönerdi. Yeni kurulumda (kurulum henüz
+/// tamamlanmamış) nil: not dili arayüz dilini izler. Saf fonksiyondur.
+public func legacyNoteLanguage(storedNoteLanguage: String?, onboardingCompleted: Bool, alreadyMigrated: Bool) -> ShareLanguage? {
+    guard !alreadyMigrated, storedNoteLanguage == nil, onboardingCompleted else {
+        return nil
+    }
+    return .turkish
+}
+
 /// Not dilinin varsayılanı: arayüz dili (`Bundle.main.preferredLocalizations`, öncelik sırasıyla). Türkçe arayüzde
 /// Türkçe (önceki sürümlerde not hep Türkçeydi; ayarı olmayan mevcut kullanıcılar Türkçe sürer), tanınmayan dilde
 /// İngilizce. Saf fonksiyondur.

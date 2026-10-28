@@ -104,4 +104,13 @@ private func noteLanguagePrompts(language: ShareLanguage) throws -> [(name: Stri
         let chinese: String = searchTermsRequest(question: "Diat?", history: [], languages: [.chinese, .finnish], language: .chineseSimplified).system
         #expect(chinese.contains("zh-Hans, fi"))
     }
+
+    // Önceki sürümün kullanıcısı (kurulum tamam, not dili kayıtlı değil) bir kez Türkçe alır; yeni kurulum, kayıtlı
+    // seçim ya da taşınmış ayar değişmez.
+    @Test func legacyUsersKeepTurkishNotes() {
+        #expect(legacyNoteLanguage(storedNoteLanguage: nil, onboardingCompleted: true, alreadyMigrated: false) == .turkish)
+        #expect(legacyNoteLanguage(storedNoteLanguage: nil, onboardingCompleted: false, alreadyMigrated: false) == nil)
+        #expect(legacyNoteLanguage(storedNoteLanguage: "en", onboardingCompleted: true, alreadyMigrated: false) == nil)
+        #expect(legacyNoteLanguage(storedNoteLanguage: nil, onboardingCompleted: true, alreadyMigrated: true) == nil)
+    }
 }

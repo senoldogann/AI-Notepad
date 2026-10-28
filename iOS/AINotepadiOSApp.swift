@@ -20,6 +20,7 @@ struct AINotepadiOSApp: App {
 
     init() {
         registerPhoneDefaults()
+        keepPhoneLegacyNoteLanguage(defaults: .standard)
         // Tema ilk kareden önce uygulanır.
         let theme: AppTheme = AppTheme(rawValue: UserDefaults.standard.string(forKey: PhoneSettingsKey.theme) ?? "") ?? .system
         ThemeStore.shared.set(light: theme.colorSets.light, dark: theme.colorSets.dark)
