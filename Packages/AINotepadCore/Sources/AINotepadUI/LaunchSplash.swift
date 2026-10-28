@@ -54,6 +54,8 @@ public struct LaunchSplash: View {
     @State private var barsRaised: Bool = false
     @State private var lineDrawn: Bool = false
     @State private var wordsShown: Bool = false
+    /// Kapanış: ekran kendi saydamlığıyla söner, sonra animasyonsuz kaldırılır.
+    @State private var isFadingOut: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     public init(onFinish: @escaping @MainActor () -> Void) {
@@ -80,6 +82,8 @@ public struct LaunchSplash: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        .opacity(isFadingOut ? 0 : 1)
+        .scaleEffect(isFadingOut ? 1.02 : 1)
         .contentShape(Rectangle())
         .onTapGesture { onFinish() }
         .task { await play() }
@@ -87,17 +91,24 @@ public struct LaunchSplash: View {
         .accessibilityLabel(Text(verbatim: "AI-Notepad"))
     }
 
-    /// Animasyon adımları; görünüm kapanırsa (görev iptal) yarıda bırakılır.
+    /// Animasyon adımları, sonra sönme. Ekran kendi saydamlığıyla söner ve `onFinish` onu animasyonsuz kaldırır:
+    /// kaldırma bir geçiş animasyonuna bırakıldığında, açılışta çalma başlayıp pencere art arda güncellenince geçiş
+    /// bitmiyor, açılış ekranı uygulamayı örtüp kalıyordu. Görev iptal edilirse de kapanır.
     private func play() async {
+        await playSteps()
+        withAnimation(.smooth(duration: 0.45)) { isFadingOut = true }
+        _ = await pause(milliseconds: 450)
+        onFinish()
+    }
+
+    /// Adımları sırayla oynatır; görev iptal edilince kalan adımlar atlanır.
+    private func playSteps() async {
         if reduceMotion {
             appeared = true
             barsRaised = true
             lineDrawn = true
             wordsShown = true
-            guard await pause(milliseconds: 500) else {
-                return
-            }
-            onFinish()
+            _ = await pause(milliseconds: 500)
             return
         }
         withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) { appeared = true }
@@ -110,10 +121,7 @@ public struct LaunchSplash: View {
         }
         lineDrawn = true
         withAnimation(.smooth(duration: 0.45)) { wordsShown = true }
-        guard await pause(milliseconds: 900) else {
-            return
-        }
-        onFinish()
+        _ = await pause(milliseconds: 900)
     }
 
     /// Bekler; görev iptal edildiyse false.

@@ -1907,6 +1907,12 @@ final class AppModel {
 
     // MARK: Not hedefleri (kanallar, webhook, Notion)
 
+    /// Toplantı sayfalarının son açık sekmesi (toplantı başına, oturum boyunca): sayfa başka bölüme geçip dönünce
+    /// yeniden kurulur ve kaldığı sekmede açılır. Görünümler yalnızca açılışta okur, gözlenmez.
+    @ObservationIgnored var meetingPageTabs: [String: String] = [:]
+    /// "--cal" açılış argümanının çalması başladı: sayfa yeniden açılınca tekrar başlamaz.
+    @ObservationIgnored var launchPlaybackStarted: Bool = false
+
     /// Toplantı başına gönderimin durumu (toplantı sayfasında görünür).
     var webhookStates: [String: WebhookSendState] = [:]
     /// Bağlı not hedefleri (Ayarlar › Bağlantılar); birden çok olabilir.

@@ -387,7 +387,7 @@ private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
 // MARK: Ayrıntı
 
 /// Toplantı sayfasının sekmeleri.
-private enum MeetingTab {
+private enum MeetingTab: String {
     case summary
     case transcript
 }
@@ -505,16 +505,28 @@ struct MeetingDetailPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .onChange(of: tab) { (_: MeetingTab, selected: MeetingTab) -> Void in
+            model.meetingPageTabs[record.id] = selected.rawValue
+        }
         .onAppear {
-            // Not varsa önce özet: toplantıdan sonra ilk bakılacak şey; yoksa transkript.
-            tab = record.note == nil ? .transcript : .summary
+            // Sayfa başka bölüme geçip dönünce yeniden kurulur: kaldığı yerden açılır. Bu toplantı çalıyorsa transkript
+            // (çalan paragrafa gidilir), değilse son açık sekme; ilk açılışta not varsa özet, yoksa transkript.
+            if player.meetingID == record.id {
+                tab = .transcript
+            } else if let raw = model.meetingPageTabs[record.id], let saved = MeetingTab(rawValue: raw) {
+                tab = saved
+            } else {
+                tab = record.note == nil ? .transcript : .summary
+            }
             // "--not-dili fi|en": özeti paylaşım dilinde açar (görsel kontrol için).
             if let index = CommandLine.arguments.firstIndex(of: "--not-dili"), CommandLine.arguments.indices.contains(index + 1) {
                 noteLanguage = ShareLanguage(rawValue: CommandLine.arguments[index + 1])
             }
-            // "--cal <saniye>": transkripti açıp oradan çalar (kelime vurgusunun akışını görsel kontrol için).
-            if let index = CommandLine.arguments.firstIndex(of: "--cal"), CommandLine.arguments.indices.contains(index + 1),
-               let startSec = Double(CommandLine.arguments[index + 1]) {
+            // "--cal <saniye>": transkripti açıp oradan çalar (görsel kontrol ve ölçüm için); yalnızca ilk açılışta, sayfa
+            // her açıldığında yeniden başlatmaz.
+            if !model.launchPlaybackStarted, let index = CommandLine.arguments.firstIndex(of: "--cal"),
+               CommandLine.arguments.indices.contains(index + 1), let startSec = Double(CommandLine.arguments[index + 1]) {
+                model.launchPlaybackStarted = true
                 play(from: startSec)
             }
             #if DEBUG
@@ -2574,7 +2586,7 @@ private struct Playhead: View {
                 .fill(Theme.ink)
                 .frame(width: 3, height: 14)
                 .shadow(color: .black.opacity(0.35), radius: 2)
-                .offset(x: width * min(1, max(0, player.currentTime / totalSec)) - 1.5)
+                .offset(x: width * min(1, max(0, Double(player.currentSecond) / totalSec)) - 1.5)
         }
     }
 }
@@ -2619,7 +2631,8 @@ private struct NowPlayingBar: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
-        let time: Double = player.currentTime
+        // Saniyede bir yeterli: çubuk, süreler ve çalan konuşmacının sözü (kelime vurgusu transkriptte).
+        let time: Double = Double(player.currentSecond)
         let current: TranscriptParagraph? = paragraphs.last { $0.startSec <= time }
         VStack(spacing: 8) {
             HStack(spacing: DesignTokens.Spacing.s) {
@@ -2677,7 +2690,7 @@ private struct NowPlayingBar: View {
             }
             VStack(spacing: 2) {
                 Slider(
-                    value: Binding<Double>(get: { player.currentTime }, set: { (value: Double) -> Void in player.seek(to: value) }),
+                    value: Binding<Double>(get: { Double(player.currentSecond) }, set: { (value: Double) -> Void in player.seek(to: value) }),
                     in: 0...max(player.duration, 0.1)
                 )
                 .controlSize(.small)
