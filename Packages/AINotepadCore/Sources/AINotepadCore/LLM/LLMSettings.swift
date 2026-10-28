@@ -8,9 +8,6 @@ public enum LLMProviderKind: String, Sendable, CaseIterable {
     case onDevice
 }
 
-/// Not, çeviri ve cevapların yazıldığı dil (istemler Türkçe yazar).
-public let noteOutputLanguage: MeetingLanguage = .turkish
-
 /// Bu bilgisayarı gösteren ana bilgisayar adları (şifresiz http'ye yalnızca bunlarda izin verilir).
 let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]
 

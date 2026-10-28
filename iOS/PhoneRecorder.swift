@@ -638,7 +638,7 @@ final class PhoneRecorder {
         }
         do {
             let language: MeetingLanguage? = lockedLanguage ?? fixedMeetingLanguage(mode: languageMode)
-            try requireOnDeviceLanguages(provider: provider, meetingLanguages: language.map { [$0] } ?? [])
+            try requireOnDeviceLanguages(provider: provider, meetingLanguages: language.map { [$0] } ?? [], outputLanguage: phoneNoteLanguage())
         } catch {
             // Cihaz içi model bu dili anlamıyor: bozuk çeviri yerine açık mesaj (bir kez).
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))

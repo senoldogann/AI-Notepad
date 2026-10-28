@@ -200,6 +200,10 @@ private struct GeneralSettings: View {
                     (language.rawValue, Text(verbatim: language.nativeName))
                 })
             }
+            // Cihaz içi modelin bu dili yazıp yazamadığı uyarısı yenilensin.
+            .onChange(of: noteLanguage) { (_: String, _: String) in
+                model.settingsChanged()
+            }
             SettingsRow(title: Text("Canlı metin")) {
                 switch model.liveEngine {
                 case .deepgram: Text("Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.")
@@ -692,6 +696,7 @@ private func accentName(accent: PanelAccent) -> String {
 /// dili ya da not dili desteklenmiyorsa uyarı.
 private struct OnDeviceLLMStatus: View {
     @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         switch onDeviceStatus() {
@@ -706,7 +711,10 @@ private struct OnDeviceLLMStatus: View {
             } control: {
                 EmptyView()
             }
-            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ onDeviceModeWarning(config: config, primaryLanguage: $0) }) {
+            // Ana toplantı dili ya da not dili modelde yoksa uyarı.
+            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ (language: MeetingLanguage) -> String? in
+                onDeviceModeWarning(config: config, primaryLanguage: language, outputLanguage: storedNoteLanguage(value: noteLanguage))
+            }) {
                 SettingsRow(title: Text("Ana toplantı dili")) {
                     Text(verbatim: warning)
                 } control: {
@@ -724,7 +732,7 @@ private struct OnDeviceLLMStatus: View {
 
     /// Modelin ayarı (kullanılabiliyorsa) ya da neden kullanılamadığı.
     private func onDeviceStatus() -> Result<OnDeviceConfig, any Error> {
-        Result { () throws -> OnDeviceConfig in try onDeviceConfig(outputLanguage: noteOutputLanguage) }
+        Result { () throws -> OnDeviceConfig in try onDeviceConfig() }
     }
 }
 

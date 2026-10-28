@@ -127,8 +127,8 @@ struct PhoneSettingsTab: View {
     /// Cihaz içi model kullanılamıyorsa ya da ana toplantı dilini desteklemiyorsa ne yapılacağı; sorun yoksa nil.
     private var onDeviceProblem: String? {
         do {
-            let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
-            return onDeviceModeWarning(config: config, primaryLanguage: phonePrimaryMeetingLanguage())
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return onDeviceModeWarning(config: config, primaryLanguage: phonePrimaryMeetingLanguage(), outputLanguage: phoneStoredNoteLanguage(value: noteLanguage))
         } catch {
             return userFacingMessage(error: error)
         }

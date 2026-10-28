@@ -8,13 +8,10 @@ public struct OnDeviceConfig: Sendable, Equatable {
     public let contextTokens: Int
     /// Modelin anladığı ve yazdığı diller (ISO 639 kodları, ör. "tr", "en", "nb"); Fince yoktur.
     public let languageCodes: Set<String>
-    /// Not, çeviri ve cevapların yazıldığı dil. Yalnızca dil desteği denetimi içindir: istemler dili kendileri taşır.
-    public let outputLanguage: MeetingLanguage
 
-    public init(contextTokens: Int, languageCodes: Set<String>, outputLanguage: MeetingLanguage) {
+    public init(contextTokens: Int, languageCodes: Set<String>) {
         self.contextTokens = contextTokens
         self.languageCodes = languageCodes
-        self.outputLanguage = outputLanguage
     }
 }
 
@@ -81,17 +78,17 @@ public func onDeviceUnavailableMessage(reason: OnDeviceUnavailableReason) -> Str
     }
 }
 
-/// Bu cihazda cihaz içi model kullanılabiliyorsa ayarı (bağlam, diller ve çıktı dili); değilse nedeniyle
-/// `OnDeviceLLMError.unavailable`.
-public func onDeviceConfig(outputLanguage: MeetingLanguage) throws -> OnDeviceConfig {
+/// Bu cihazda cihaz içi model kullanılabiliyorsa ayarı (bağlam ve diller); değilse nedeniyle
+/// `OnDeviceLLMError.unavailable`. Sağlayıcı dilden bağımsızdır: istemler dili kendileri taşır, iş başlatan yer dili
+/// `requireOnDeviceLanguages` ile denetler.
+public func onDeviceConfig() throws -> OnDeviceConfig {
     let model: SystemLanguageModel = onDeviceModel()
     if let reason = onDeviceUnavailableReason(availability: model.availability) {
         throw OnDeviceLLMError.unavailable(reason: reason)
     }
     return OnDeviceConfig(
         contextTokens: model.contextSize,
-        languageCodes: Set(model.supportedLanguages.compactMap { $0.languageCode?.identifier }),
-        outputLanguage: outputLanguage
+        languageCodes: Set(model.supportedLanguages.compactMap { $0.languageCode?.identifier })
     )
 }
 
@@ -107,37 +104,28 @@ public func onDeviceSupports(language: MeetingLanguage, languageCodes: Set<Strin
     onDeviceSupports(languageCode: language.rawValue, languageCodes: languageCodes)
 }
 
-/// İşin dilleri cihaz içi modelde yoksa hata: önce toplantı dilleri (ör. Fince transkript), sonra çıktı dili.
-/// Hepsi destekleniyorsa nil. Saf fonksiyondur.
-public func onDeviceLanguageError(config: OnDeviceConfig, meetingLanguages: [MeetingLanguage]) -> OnDeviceLLMError? {
+/// İşin dilleri cihaz içi modelde yoksa hata: önce okunan metnin dilleri (ör. Fince transkript), sonra yazılacak dil
+/// (not ve çeviri dili). Hepsi destekleniyorsa nil. Saf fonksiyondur.
+public func onDeviceLanguageError(config: OnDeviceConfig, meetingLanguages: [MeetingLanguage], outputLanguage: ShareLanguage) -> OnDeviceLLMError? {
     if let unsupported = meetingLanguages.first(where: { !onDeviceSupports(language: $0, languageCodes: config.languageCodes) }) {
         return .meetingLanguageUnsupported(languageName: meetingLanguageName(language: unsupported))
     }
-    guard onDeviceSupports(language: config.outputLanguage, languageCodes: config.languageCodes) else {
-        return .outputLanguageUnsupported(languageName: meetingLanguageName(language: config.outputLanguage))
+    guard onDeviceSupports(languageCode: outputLanguage.rawValue, languageCodes: config.languageCodes) else {
+        return .outputLanguageUnsupported(languageName: outputLanguage.interfaceName)
     }
     return nil
 }
 
-/// İş başlamadan dil denetimi: sağlayıcı cihaz içiyse toplantı dilleri ve çıktı dili modelde olmalı, yoksa
-/// `meetingLanguageUnsupported`/`outputLanguageUnsupported` (kötü bir not sessizce yazılmasın). Diğer sağlayıcılar
-/// her dili yazar; denetim yoktur. Saf fonksiyondur.
-public func requireOnDeviceLanguages(provider: LLMProvider, meetingLanguages: [MeetingLanguage]) throws {
+/// İş başlamadan dil denetimi: sağlayıcı cihaz içiyse okunan metnin dilleri ve yazılacak dil (not dili ya da paylaşım
+/// dili) modelde olmalı, yoksa `meetingLanguageUnsupported`/`outputLanguageUnsupported` (kötü bir not sessizce
+/// yazılmasın). Diğer sağlayıcılar her dili yazar; denetim yoktur. Saf fonksiyondur.
+public func requireOnDeviceLanguages(provider: LLMProvider, meetingLanguages: [MeetingLanguage], outputLanguage: ShareLanguage) throws {
     guard case .onDevice(let config) = provider else {
         return
     }
-    if let error = onDeviceLanguageError(config: config, meetingLanguages: meetingLanguages) {
+    if let error = onDeviceLanguageError(config: config, meetingLanguages: meetingLanguages, outputLanguage: outputLanguage) {
         throw error
     }
-}
-
-/// Paylaşım sürümü cihaz içi modelle yazılacaksa paylaşım dili modelde olmalı, yoksa `outputLanguageUnsupported`.
-/// Saf fonksiyondur.
-public func requireOnDeviceShareLanguage(provider: LLMProvider, language: ShareLanguage) throws {
-    guard case .onDevice(let config) = provider, !onDeviceSupports(languageCode: language.rawValue, languageCodes: config.languageCodes) else {
-        return
-    }
-    throw OnDeviceLLMError.outputLanguageUnsupported(languageName: language.nativeName)
 }
 
 /// Cihaz içi modelle "Sor"un okuyabileceği toplantılar ve okuyamadığı diller.
@@ -171,9 +159,11 @@ public func onDeviceReadableRecords(records: [MeetingRecord], provider: LLMProvi
     return OnDeviceReadableRecords(records: records.filter(isReadable), skippedLanguages: skipped)
 }
 
-/// Arşiv sorusunun okuyacağı toplantılar: cihaz içi modelde dili desteklenmeyenler çıkarılır; geriye toplantı
-/// kalmıyorsa ilk atlanan dille `meetingLanguageUnsupported` (cevap boş arşivden uydurulmasın). Saf fonksiyondur.
-public func onDeviceAskableArchive(records: [MeetingRecord], provider: LLMProvider) throws -> OnDeviceReadableRecords {
+/// Arşiv sorusunun okuyacağı toplantılar: cevap dili cihaz içi modelde yoksa `outputLanguageUnsupported`; dili
+/// desteklenmeyen toplantılar çıkarılır, geriye toplantı kalmıyorsa ilk atlanan dille `meetingLanguageUnsupported`
+/// (cevap boş arşivden uydurulmasın). Saf fonksiyondur.
+public func onDeviceAskableArchive(records: [MeetingRecord], provider: LLMProvider, outputLanguage: ShareLanguage) throws -> OnDeviceReadableRecords {
+    try requireOnDeviceLanguages(provider: provider, meetingLanguages: [], outputLanguage: outputLanguage)
     let readable: OnDeviceReadableRecords = onDeviceReadableRecords(records: records, provider: provider)
     if readable.records.isEmpty, let language = readable.skippedLanguages.first {
         throw OnDeviceLLMError.meetingLanguageUnsupported(languageName: meetingLanguageName(language: language))
@@ -191,10 +181,10 @@ public func askModelName(provider: LLMProvider, readable: OnDeviceReadableRecord
     return String(localized: "\(name) · okunmadı: \(languages) toplantılar (cihaz içi model bu dilleri desteklemiyor)")
 }
 
-/// Cihaz içi mod seçilirken gösterilen uyarı: ana toplantı dili ya da çıktı dili modelde yoksa ne olacağı ve ne
+/// Cihaz içi mod seçilirken gösterilen uyarı: ana toplantı dili ya da not dili modelde yoksa ne olacağı ve ne
 /// yapılacağı; sorun yoksa nil. Saf fonksiyondur.
-public func onDeviceModeWarning(config: OnDeviceConfig, primaryLanguage: MeetingLanguage) -> String? {
-    switch onDeviceLanguageError(config: config, meetingLanguages: [primaryLanguage]) {
+public func onDeviceModeWarning(config: OnDeviceConfig, primaryLanguage: MeetingLanguage, outputLanguage: ShareLanguage) -> String? {
+    switch onDeviceLanguageError(config: config, meetingLanguages: [primaryLanguage], outputLanguage: outputLanguage) {
     case .meetingLanguageUnsupported(let name):
         String(localized: "Cihaz içi model \(name) desteklemiyor: \(name) toplantılar yazıya dökülür ama not ve çeviri yazılmaz. Bu toplantılar için Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur); toplantıların başka dildeyse ana toplantı dilini değiştir.")
     case .some(let error):
@@ -202,6 +192,21 @@ public func onDeviceModeWarning(config: OnDeviceConfig, primaryLanguage: Meeting
     case nil:
         nil
     }
+}
+
+/// Anahtarsız ilk kurulumda (cihaz içi mod) ana toplantı dili: cihazın tercih ettiği dil (`Locale.preferredLanguages`'ın
+/// ilki, ör. "tr-TR") uygulamanın toplantı dillerinden biriyse ve cihaz içi model destekliyorsa o; değilse İngilizce.
+/// Norveççe ("nb", "nn") toplantıda "no"dur. Saf fonksiyondur.
+public func onDeviceDefaultMeetingLanguage(preferredLanguages: [String], languageCodes: Set<String>) -> MeetingLanguage {
+    guard let first = preferredLanguages.first else {
+        return .english
+    }
+    let base: String = localeLanguagePart(identifier: first)
+    guard let language = MeetingLanguage(rawValue: ["nb", "nn"].contains(base) ? "no" : base),
+          onDeviceSupports(language: language, languageCodes: languageCodes) else {
+        return .english
+    }
+    return language
 }
 
 /// Cihaz içi modelin yazabildiği toplantı dillerinin adları (Ayarlar'da). Saf fonksiyondur.
@@ -437,10 +442,6 @@ private func prepareOnDeviceCall(config: OnDeviceConfig, request: LLMRequest) as
     let model: SystemLanguageModel = onDeviceModel()
     if let reason = onDeviceUnavailableReason(availability: model.availability) {
         throw OnDeviceLLMError.unavailable(reason: reason)
-    }
-    // Çıktı dili her istekte denetlenir; toplantının dili işi başlatan yerde (`requireOnDeviceLanguages`).
-    if let error = onDeviceLanguageError(config: config, meetingLanguages: []) {
-        throw error
     }
     let instructions: String = compactedInstructions(system: request.system)
     let schema: GenerationSchema? = try request.jsonSchema.map { try generationSchema(schemaText: $0) }

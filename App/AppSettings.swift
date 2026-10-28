@@ -318,13 +318,14 @@ func resolveLLMProvider() async throws -> LLMProvider {
     case .openAICompatible:
         return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
     case .onDevice:
-        return .onDevice(try onDeviceConfig(outputLanguage: noteOutputLanguage))
+        return .onDevice(try onDeviceConfig())
     }
 }
 
 /// İlk açılışta (kurulum bitmemiş, motor ve LLM hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence
-/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Anahtarı olan ya da
-/// kurulumu bitirmiş kullanıcıya dokunulmaz. Seçim yapıldıysa true.
+/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Ana toplantı dili kayıtlı
+/// değilse cihazın dili (modelde varsa) ya da İngilizce olur (bkz. `onDeviceDefaultMeetingLanguage`). Anahtarı olan ya
+/// da kurulumu bitirmiş kullanıcıya dokunulmaz. Seçim yapıldıysa true.
 func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
     guard let bundleID = Bundle.main.bundleIdentifier else {
@@ -346,11 +347,19 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
             return false
         }
     }
+    let config: OnDeviceConfig
     do {
-        _ = try onDeviceConfig(outputLanguage: noteOutputLanguage)
+        config = try onDeviceConfig()
     } catch {
         settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
         return false
+    }
+    // Kayıtlı ana toplantı dili korunur (kurulumda bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
+    // (varsayılan Fince modelde yok) cihazın dili ya da İngilizce.
+    if defaults.persistentDomain(forName: bundleID)?[SettingsKey.primaryMeetingLanguage] == nil {
+        let language: MeetingLanguage = onDeviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages, languageCodes: config.languageCodes)
+        defaults.set(language.rawValue, forKey: SettingsKey.primaryMeetingLanguage)
+        settingsLogger.info("İlk açılışta ana toplantı dili seçildi, dil: \(language.rawValue, privacy: .public)")
     }
     defaults.set(LiveEngine.appleSpeech.rawValue, forKey: SettingsKey.liveEngine)
     defaults.set(LLMProviderKind.onDevice.rawValue, forKey: SettingsKey.llmProvider)

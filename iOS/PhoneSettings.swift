@@ -55,8 +55,9 @@ func phoneEngine() -> PhoneEngine {
 }
 
 /// İlk açılışta (karşılama bitmemiş, motor hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence
-/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Anahtarı olan kullanıcıya
-/// dokunulmaz. Seçim yapıldıysa true.
+/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Ana toplantı dili kayıtlı
+/// değilse cihazın dili (modelde varsa) ya da İngilizce olur (bkz. `onDeviceDefaultMeetingLanguage`). Anahtarı olan
+/// kullanıcıya dokunulmaz. Seçim yapıldıysa true.
 func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
     guard let bundleID = Bundle.main.bundleIdentifier else {
@@ -77,11 +78,19 @@ func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
             return false
         }
     }
+    let config: OnDeviceConfig
     do {
-        _ = try onDeviceConfig(outputLanguage: noteOutputLanguage)
+        config = try onDeviceConfig()
     } catch {
         phoneSettingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
         return false
+    }
+    // Kayıtlı ana toplantı dili korunur (karşılamada bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
+    // (varsayılan Fince modelde yok) cihazın dili ya da İngilizce.
+    if defaults.persistentDomain(forName: bundleID)?[PhoneSettingsKey.primaryMeetingLanguage] == nil {
+        let language: MeetingLanguage = onDeviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages, languageCodes: config.languageCodes)
+        defaults.set(language.rawValue, forKey: PhoneSettingsKey.primaryMeetingLanguage)
+        phoneSettingsLogger.info("İlk açılışta ana toplantı dili seçildi, dil: \(language.rawValue, privacy: .public)")
     }
     defaults.set(PhoneEngine.onDevice.rawValue, forKey: PhoneSettingsKey.engine)
     return true
@@ -124,7 +133,7 @@ func phoneUserName() -> String {
 func phoneLLMProvider() async throws -> LLMProvider {
     switch phoneEngine() {
     case .onDevice:
-        return .onDevice(try onDeviceConfig(outputLanguage: noteOutputLanguage))
+        return .onDevice(try onDeviceConfig())
     case .cloud:
         return .anthropic(AnthropicConfig(
             apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),

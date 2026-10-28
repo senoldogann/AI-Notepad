@@ -173,9 +173,9 @@ struct PhoneOnboarding: View {
     /// yoksa nil.
     private var onDeviceProblem: String? {
         do {
-            let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
+            let config: OnDeviceConfig = try onDeviceConfig()
             return MeetingLanguage(rawValue: primaryLanguage).flatMap { (language: MeetingLanguage) -> String? in
-                onDeviceModeWarning(config: config, primaryLanguage: language)
+                onDeviceModeWarning(config: config, primaryLanguage: language, outputLanguage: phoneNoteLanguage())
             }
         } catch {
             return userFacingMessage(error: error)

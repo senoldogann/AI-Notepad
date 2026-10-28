@@ -422,6 +422,7 @@ private struct ProfileStep: View {
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
     @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -513,8 +514,8 @@ private struct ProfileStep: View {
     /// Cihaz içi model kullanılamıyorsa nedeni ve ne yapılacağı; kullanılabiliyorsa nil.
     private var onDeviceProblem: String? {
         do {
-            let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
-            return onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage())
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage(), outputLanguage: storedNoteLanguage(value: noteLanguage))
         } catch {
             return userFacingMessage(error: error)
         }

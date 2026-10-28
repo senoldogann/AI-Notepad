@@ -339,11 +339,12 @@ final class AppModel {
         let requestID: Int = assistantRequestID
         assistantCard = .loading(title: title)
         let languages: [MeetingLanguage] = liveMeetingLanguages()
+        let noteLanguage: ShareLanguage = selectedNoteLanguage()
         assistantTask = Task { [weak self] in
             let card: AssistantCard
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                try requireOnDeviceLanguages(provider: provider, meetingLanguages: languages)
+                try requireOnDeviceLanguages(provider: provider, meetingLanguages: languages, outputLanguage: noteLanguage)
                 card = try await requestStructured(provider: provider, request: request, parse: makeCard)
             } catch {
                 card = .failed(message: userFacingMessage(error: error))
@@ -384,7 +385,7 @@ final class AppModel {
             return
         }
         do {
-            try requireOnDeviceLanguages(provider: provider, meetingLanguages: liveMeetingLanguages())
+            try requireOnDeviceLanguages(provider: provider, meetingLanguages: liveMeetingLanguages(), outputLanguage: selectedNoteLanguage())
         } catch {
             // Cihaz içi model bu dili anlamıyor: bozuk çeviri yerine açık mesaj; sağlayıcı değişince "Tekrar dene"de çevrilir.
             failedTranslations.insert(segment.id)
@@ -526,8 +527,8 @@ final class AppModel {
         }
         if kind == .onDevice {
             do {
-                let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
-                if let warning = onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage()) {
+                let config: OnDeviceConfig = try onDeviceConfig()
+                if let warning = onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage(), outputLanguage: selectedNoteLanguage()) {
                     problems.append(warning)
                 }
             } catch {
@@ -1254,7 +1255,10 @@ final class AppModel {
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         do {
             let provider: LLMProvider = try await resolveLLMProvider()
-            try requireOnDeviceShareLanguage(provider: provider, language: language)
+            // Not kendi dilinde okunur, paylaşım dilinde yazılır: ikisi de cihaz içi modelde olmalı.
+            try requireOnDeviceLanguages(
+                provider: provider, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language
+            )
             let shared: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: note, language: language, userName: userName)) { (text: String) throws -> MeetingNote in
                 try parseSharedNote(text: text, original: note).with(language: language)
             }
@@ -1672,14 +1676,14 @@ final class AppModel {
                 }
                 if scoped.isEmpty {
                     // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz; model satırında hangileri yazılır.
-                    let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider)
+                    let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider, outputLanguage: selectedNoteLanguage())
                     self?.updateExchange(id: id) { $0.modelName = askModelName(provider: provider, readable: readable) }
                     _ = try await AINotepadCore.askArchive(
                         question: trimmed, history: history, records: readable.records, userName: userName, language: selectedNoteLanguage(), llm: provider,
                         maxChars: noteLimits(provider: provider).archiveChars, now: Date(), onProgress: onProgress
                     )
                 } else {
-                    try requireOnDeviceLanguages(provider: provider, meetingLanguages: scoped.compactMap(\.language))
+                    try requireOnDeviceLanguages(provider: provider, meetingLanguages: scoped.compactMap(\.language), outputLanguage: selectedNoteLanguage())
                     _ = try await askAboutMeetings(
                         question: trimmed, history: history, records: scoped, userName: userName, language: selectedNoteLanguage(), llm: provider,
                         maxChars: noteLimits(provider: provider).archiveChars, now: Date(),
@@ -2293,6 +2297,7 @@ final class AppModel {
             let llm: LLMProvider = try await resolveLLMProvider()
             let title: String = note.title
             let language: ShareLanguage = selectedNoteLanguage()
+            try requireOnDeviceLanguages(provider: llm, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language)
             let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
                 try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
@@ -2576,7 +2581,7 @@ final class AppModel {
             let state: SpeakerReviewState
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                try requireOnDeviceLanguages(provider: provider, meetingLanguages: record.language.map { [$0] } ?? [])
+                try requireOnDeviceLanguages(provider: provider, meetingLanguages: record.language.map { [$0] } ?? [], outputLanguage: selectedNoteLanguage())
                 let names: [Int: String] = record.speakerNames
                 let review: SpeakerReview = try await requestStructured(provider: provider, request: request) { (text: String) throws -> SpeakerReview in
                     try parseSpeakerReview(text: text, persons: persons, speakerNames: names)
