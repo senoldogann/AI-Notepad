@@ -104,4 +104,9 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
 
 ## Durum
 
-- [ ] 1–5
+- [x] 1. Sunucu: kimlik, haklar, vekil, Stripe (test modu); güvenlik incelemesi ve düzeltmeleri (PR #66), CI (PR #68).
+- [ ] 2. Mac abonelik sürümü (`AINotepadHosted`). Not: sunucu sıkıştırılmış sesin süresini en kötü bit hızıyla tahmin
+  eder; istemci sesi 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde gönderir.
+- [ ] 3. Web sitesi.
+- [ ] 4. Uçtan uca test (Stripe test kartı).
+- [ ] 5. Hesaplar, alan adı, yayın.

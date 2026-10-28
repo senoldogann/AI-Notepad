@@ -50,6 +50,19 @@ private func translation(entry: [String: Any], language: String) -> String? {
         }
     }
 
+    // "stale" girdi kalmaz. Xcode yalnızca uygulama hedefinin kodunu tarar; paketteki (AINotepadCore/UI) metinleri
+    // görmediği için onları "stale" sanar ve "eskileri temizle" denince siler, İngilizce arayüz bozulur. Paketin
+    // kullandığı girdiler "manual", gerçekten kullanılmayanlar silinmiş olmalı.
+    @Test func mainCatalogHasNoStaleEntries() throws {
+        let data: Data = try Data(contentsOf: repositoryRoot().appending(path: "App/Localizable.xcstrings"))
+        let catalog: [String: Any] = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings: [String: Any] = try #require(catalog["strings"] as? [String: Any])
+        let stale: [String] = strings.compactMap { (key: String, value: Any) -> String? in
+            (value as? [String: Any])?["extractionState"] as? String == "stale" ? key : nil
+        }
+        #expect(stale.isEmpty, "stale girdiler (kullanılıyorsa \"manual\" yap, kullanılmıyorsa sil): \(stale.sorted())")
+    }
+
     // Uygulamanın ana kataloğu gerçekten dolu (yanlış dosya okunmasın).
     @Test func mainCatalogIsPopulated() throws {
         let data: Data = try Data(contentsOf: repositoryRoot().appending(path: "App/Localizable.xcstrings"))
