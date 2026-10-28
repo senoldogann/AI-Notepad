@@ -647,6 +647,16 @@
         }
       }
     },
+    "%lld bağlı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld connected"
+          }
+        }
+      }
+    },
     "%lld beceri Sor'a tarif olarak eklendi.": {
       "localizations": {
         "en": {
@@ -1729,12 +1739,12 @@
         }
       }
     },
-    "Bağlayınca Claude, Cursor ya da VS Code toplantılarını listeleyip arar, notları ve transkriptleri okur (yalnızca okur, hiçbir şey değiştirmez). Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.": {
+    "Bağlayınca uygulama toplantılarını listeleyip arar, notları ve transkriptleri okur; yalnızca okur, hiçbir şey değiştirmez. Okuduğunu kendi yapay zekâ sağlayıcısına gönderir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Once connected, Claude, Cursor or VS Code can list and search your meetings and read notes and transcripts (read-only, nothing is changed). What it reads is sent to its own AI provider."
+            "value": "Once connected, the app lists and searches your meetings and reads notes and transcripts; it only reads and never changes anything. What it reads goes to its own AI provider."
           }
         }
       }
@@ -1759,12 +1769,22 @@
         }
       }
     },
-    "Başkalarına düşen görevler ve kararlar aşağıda.": {
+    "Başka bir kanal ya da hesap ekle": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tasks for others and decisions are below."
+            "value": "Add another channel or account"
+          }
+        }
+      }
+    },
+    "Başka bir kişiyi aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open another person"
           }
         }
       }
@@ -2747,6 +2767,16 @@
         }
       }
     },
+    "Claude, Cursor ve VS Code toplantılarını arayıp okuyabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude, Cursor and VS Code can search and read your meetings."
+          }
+        }
+      }
+    },
     "Daha resmi yaz": {
       "localizations": {
         "en": {
@@ -2824,6 +2854,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Test"
+          }
+        }
+      }
+    },
+    "Deneme mesajı gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send a test message"
           }
         }
       }
@@ -3566,6 +3606,16 @@
         }
       }
     },
+    "Gelişmiş: beceriler ve elle MCP yapılandırması": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced: skills and manual MCP setup"
+          }
+        }
+      }
+    },
     "Genel": {
       "localizations": {
         "en": {
@@ -3742,6 +3792,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send tasks"
+          }
+        }
+      }
+    },
+    "Görevleri tek tıkla Linear ya da Jira'da iş olarak aç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create tasks as issues in Linear or Jira in one click."
           }
         }
       }
@@ -4099,7 +4159,7 @@
         }
       }
     },
-    "Her toplantının notu (önce görevler, sonra kararlar ve özet) bağladığın yerlere gider; her hedefte kendiliğinden gönderimi ayrı açabilirsin. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilir. Ağ yokken kaçan gönderimler sonra kendiliğinden gider.": {
+    "Her toplantının notu (önce görevler, sonra kararlar ve özet) bağladığın yerlere gider; her hedefte otomatik gönderimi ayrı açabilirsin. Toplantı sayfasındaki ⋯ menüsünden elle de gönderilir. Ağ yokken kaçan gönderimler sonra kendiliğinden gider.": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4931,12 +4991,22 @@
         }
       }
     },
-    "Kendi notunu ekle — not onu öncelik sayıp yeniden yazılır": {
+    "Kendi notun": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add your own notes — the note is rewritten around them"
+            "value": "Your notes"
+          }
+        }
+      }
+    },
+    "Kendi notunu yaz; not onu öncelik sayıp yeniden yazılır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write your own notes; the note is rewritten around them"
           }
         }
       }
@@ -5067,6 +5137,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add person"
+          }
+        }
+      }
+    },
+    "Kişi listesini gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide the people list"
+          }
+        }
+      }
+    },
+    "Kişi listesini göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the people list"
           }
         }
       }
@@ -6234,6 +6324,16 @@
         }
       }
     },
+    "Not hazır olunca kanallara, Notion'a, Apple Notlar'a ya da klasöre gider.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a note is ready it goes to channels, Notion, Apple Notes or a folder."
+          }
+        }
+      }
+    },
     "Not hazır olunca kendiliğinden gönder": {
       "localizations": {
         "en": {
@@ -6466,6 +6566,16 @@
         }
       }
     },
+    "Notların gittiği yerler": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where notes go"
+          }
+        }
+      }
+    },
     "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
       "localizations": {
         "en": {
@@ -6482,16 +6592,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your tasks in the note are recognised by this name."
-          }
-        }
-      }
-    },
-    "Notu 30'dan fazla dilden birine çevir": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Translate the note into one of 30+ languages"
           }
         }
       }
@@ -6532,6 +6632,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit note"
+          }
+        }
+      }
+    },
+    "Notu iş arkadaşların için 30'dan fazla dilden birine çevir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate the note into one of 30+ languages for your colleagues"
           }
         }
       }
@@ -6702,6 +6812,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "With automatic language, recording starts in this language; within the first minute the spoken language (35 languages) is detected and used. On-device recognition chooses between this language and English."
+          }
+        }
+      }
+    },
+    "Otomatik gönder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send automatically"
           }
         }
       }
@@ -7974,16 +8094,6 @@
         }
       }
     },
-    "Tarayıcıda izin ver…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow in your browser…"
-          }
-        }
-      }
-    },
     "Tarif": {
       "localizations": {
         "en": {
@@ -8367,6 +8477,16 @@
         }
       }
     },
+    "Toplantı sayfası › ⋯ › Görevleri gönder. Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting page › ⋯ › Send tasks. The connection uses Linear's and Atlassian's official MCP servers and is set up by allowing access in your browser; your AI provider creates the issues."
+          }
+        }
+      }
+    },
     "Toplantı silinemedi: %@": {
       "localizations": {
         "en": {
@@ -8413,16 +8533,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other people in the meeting (Teams, Zoom). macOS asks for permission on the first try."
-          }
-        }
-      }
-    },
-    "Toplantıdaki görevleri tek tıkla Linear ya da Jira'da iş olarak açar (toplantı sayfası › ⋯ › Görevleri gönder). Bağlantı Linear ve Atlassian'ın resmi MCP sunucusuyla, tarayıcıda izin vererek kurulur; işleri yapay zekâ sağlayıcın açar.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Creates the meeting's tasks as issues in Linear or Jira in one click (meeting page › ⋯ › Send tasks). The connection uses Linear's and Atlassian's official MCP servers and is set up by allowing access in your browser; your AI provider creates the issues."
           }
         }
       }
@@ -10125,16 +10235,6 @@
         }
       }
     },
-    "Özet ve kararlar aşağıda.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Summary and decisions are below."
-          }
-        }
-      }
-    },
     "Özeti kısalt": {
       "localizations": {
         "en": {
@@ -10338,6 +10438,16 @@
         }
       }
     },
+    "İzin bekleniyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for permission…"
+          }
+        }
+      }
+    },
     "İzin penceresini aç": {
       "localizations": {
         "en": {
@@ -10434,16 +10544,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A Finnish or English version of the note to send to colleagues"
-          }
-        }
-      }
-    },
-    "İş arkadaşlarına göndermek için notun başka dildeki sürümü": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The note in another language, to send to colleagues"
           }
         }
       }

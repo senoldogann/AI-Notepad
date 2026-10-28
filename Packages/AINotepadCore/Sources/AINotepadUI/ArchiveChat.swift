@@ -412,16 +412,22 @@ private struct StreamingAnswer: View {
         exchange.phase == .writing
     }
 
+    /// Kaynak numarası: yazıyla birlikte ölçeklenir.
+    private var citationFont: Font {
+        appearance.font(size: 10, weight: .bold)
+    }
+
     var body: some View {
         let full: String = exchange.answer.text
         let visible: String = String(full.prefix(shown))
         let isRevealing: Bool = isWriting || shown < full.count
         Text(isRevealing
-            ? answerAttributedText(text: visible, accent: appearance.accent.color) + streamingCaret(accent: appearance.accent.color)
-            : answerAttributedText(text: visible, accent: appearance.accent.color))
+            ? answerAttributedText(text: visible, accent: appearance.accent.color, citationFont: citationFont) + streamingCaret(accent: appearance.accent.color)
+            : answerAttributedText(text: visible, accent: appearance.accent.color, citationFont: citationFont))
             .textRenderer(InkRevealRenderer(fadingGlyphs: isRevealing && !reduceMotion ? 18 : 0, exemptTrailingGlyphs: streamingCaretGlyphs))
-            .font(appearance.readingFont(size: appearance.textSize + 2, weight: .regular))
-            .lineSpacing(appearance.lineSpacing + 3)
+            // Soruyla aynı boyut ve arayüz ölçeği (Ayarlar › Görünüm › Boyut); canlı panelin metin boyutu değil.
+            .font(appearance.font(size: 15, weight: .regular))
+            .lineSpacing(5 * appearance.uiScale)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
             .environment(\.openURL, OpenURLAction { (url: URL) -> OpenURLAction.Result in
@@ -456,7 +462,7 @@ private let citationScheme: String = "ainotepad-source"
 /// yükseltilmiş, vurgu renkli bağlantılara dönüşür (tıklayınca kaynak açılır). Akarken yarım kalan "**" düz görünür,
 /// yarım kaynak işareti gizlenir.
 /// Saf fonksiyondur.
-private func answerAttributedText(text: String, accent: Color) -> AttributedString {
+private func answerAttributedText(text: String, accent: Color, citationFont: Font) -> AttributedString {
     // Harf harf açılırken yarım kalan kaynak işareti ("[1") görünmesin.
     let bulleted: String = text.replacing(/\[\d*$/, with: "")
         .split(separator: "\n", omittingEmptySubsequences: false)
@@ -479,7 +485,7 @@ private func answerAttributedText(text: String, accent: Color) -> AttributedStri
             run.link = URL(string: "\(citationScheme)://\(number)")
             run.foregroundColor = accent
             run.baselineOffset = 5
-            run.font = .system(size: 10, weight: .bold)
+            run.font = citationFont
             result += run
         }
         rest = rest[match.range.upperBound...]
