@@ -1,0 +1,197 @@
+---
+// Giriş sayfası: Apple ile giriş ve Turnstile korumalı e-posta bağlantısı. Betik: src/client/sign-in.ts.
+import Base from "../layouts/Base.astro";
+import Film from "../components/Film.astro";
+import Logo from "../components/Logo.astro";
+import Waveform from "../components/Waveform.astro";
+import { copy, type CommonCopy, type SignInCopy } from "../i18n/copy";
+import { type Lang, pagePath } from "../i18n/routes";
+import { siteConfig } from "../site";
+
+interface Props {
+  readonly lang: Lang;
+}
+const { lang } = Astro.props;
+const text: SignInCopy = copy[lang].signIn;
+const common: CommonCopy = copy[lang].common;
+---
+
+<Base lang={lang} page="signIn" meta={text.meta} indexed={true}>
+  <section class="page auth" id="signin" data-account-path={pagePath("account", lang)} data-redirect-uri={`${siteConfig.siteOrigin}${pagePath("signIn", lang)}`}>
+    <Film palette="violet" layout="clouds-right" class="auth__cover">
+      <div class="glass auth__badge">
+        <Logo size={44} />
+        <p class="auth__tagline">{common.footer.tagline}</p>
+        <Waveform seed={common.footer.tagline} width={150} height={32} class="auth__wave" />
+      </div>
+    </Film>
+
+    <div class="auth__panel">
+      <h1 class="title-l">{text.title}</h1>
+      <p class="muted">{text.lead}</p>
+
+      <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
+      <p id="signin-error" class="notice notice--error hidden" role="alert"></p>
+
+      <div id="signin-panel" class="auth__forms">
+        <button id="apple-button" class="button button--apple button--block" type="button" disabled>
+          <svg width="16" height="19" viewBox="0 0 17 20" aria-hidden="true" focusable="false">
+            <path
+              fill="currentColor"
+              d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1ZM11.6 3c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5Z"
+            ></path>
+          </svg>
+          {text.apple}
+        </button>
+
+        <p class="divider"><span>{text.or}</span></p>
+
+        <form id="email-form" class="email-form">
+          <div class="field">
+            <label for="email">{text.emailLabel}</label>
+            <input id="email" class="input" type="email" name="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder={text.emailPlaceholder} />
+          </div>
+          <div id="turnstile" class="turnstile" aria-label={text.turnstileLabel}></div>
+          <button id="email-submit" class="button button--primary button--block" type="submit" disabled>{text.emailSubmit}</button>
+          <p class="small muted">{text.emailHelp}</p>
+        </form>
+      </div>
+
+      <div id="signin-sent" class="card sent hidden" tabindex="-1" role="status">
+        <h2 class="title-m">{text.sentTitle}</h2>
+        <p class="muted">{text.sentText}</p>
+        <button id="signin-again" class="button button--secondary button--small" type="button">{text.sentAgain}</button>
+      </div>
+
+      <p class="small muted legal">
+        {text.legal}
+        <a href={pagePath("terms", lang)}>{common.nav.terms}</a> · <a href={pagePath("privacy", lang)}>{common.nav.privacy}</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import "../client/sign-in";
+</script>
+
+<style>
+  .auth {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 88px);
+    align-items: stretch;
+    padding-top: clamp(32px, 6vw, 72px);
+  }
+
+  .auth :global(.auth__cover) {
+    display: grid;
+    place-items: center;
+    min-height: 520px;
+    padding: 32px;
+  }
+
+  .auth__badge {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding: 28px 32px;
+    text-align: center;
+  }
+
+  .auth__tagline {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    max-width: 16ch;
+  }
+
+  .auth__badge :global(.auth__wave) {
+    color: #4b3a6b;
+    mix-blend-mode: normal;
+    opacity: 0.6;
+  }
+
+  .auth__panel {
+    display: grid;
+    align-content: center;
+    gap: 18px;
+    max-width: 440px;
+    width: 100%;
+    justify-self: center;
+  }
+
+  .auth__forms {
+    display: grid;
+    gap: 18px;
+    margin-top: 8px;
+  }
+
+  .button--apple {
+    min-height: 50px;
+    background: #000;
+    color: #fff;
+    font-weight: 500;
+  }
+
+  .button--apple:hover {
+    background: #1f1f1f;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .button--apple {
+      background: #fff;
+      color: #000;
+    }
+
+    .button--apple:hover {
+      background: #e8e8e8;
+    }
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .email-form {
+    display: grid;
+    gap: 14px;
+  }
+
+  .turnstile {
+    min-height: 65px;
+  }
+
+  .sent {
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+  }
+
+  .legal a {
+    color: var(--ink);
+  }
+
+  @media (max-width: 860px) {
+    .auth {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth :global(.auth__cover) {
+      min-height: 200px;
+      order: 2;
+    }
+  }
+</style>

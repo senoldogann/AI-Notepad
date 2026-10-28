@@ -1,0 +1,23 @@
+---
+// Dile özgü olmayan adres: okuyanın dilindeki sayfaya geçer (sorgu ve `#` parçası korunur).
+import LangChoice from "../components/LangChoice.astro";
+import Minimal from "../layouts/Minimal.astro";
+import { copy } from "../i18n/copy";
+import type { PageKey } from "../i18n/routes";
+
+interface Props {
+  readonly page: PageKey;
+  /** Kök sayfa arama motorlarına açıktır; dönüş adresleri değildir. */
+  readonly indexed: boolean;
+}
+const { page, indexed } = Astro.props;
+---
+
+<Minimal title={copy.en.home.meta.title} description={copy.en.home.meta.description} indexed={indexed} alternatesFor={indexed ? page : null}>
+  <h1 class="title-m">{copy.tr.common.footer.tagline}<br /><span class="muted">{copy.en.common.footer.tagline}</span></h1>
+  <LangChoice page={page} />
+</Minimal>
+
+<script>
+  import "../client/lang-redirect";
+</script>

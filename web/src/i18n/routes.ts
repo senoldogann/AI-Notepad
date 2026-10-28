@@ -39,3 +39,22 @@ export const langMeta: Readonly<Record<Lang, { readonly htmlLang: string; readon
   tr: { htmlLang: "tr", ogLocale: "tr_TR", name: "Türkçe" },
   en: { htmlLang: "en", ogLocale: "en_US", name: "English" },
 };
+
+/** Dile özgü olmayan, okuyanın diline yönlendiren adres. */
+export interface NeutralRoute {
+  /** Yol (sonda eğik çizgi yok). */
+  readonly path: string;
+  /** Yönlendirilen sayfa. */
+  readonly page: PageKey;
+}
+
+/**
+ * Sunucunun sabit yazdığı adresler (server/src/billing.ts ve `EMAIL_LINK_URL`): Stripe Checkout dönüşü `/hesap`,
+ * Checkout iptali `/fiyat`, Müşteri Portalı dönüşü `/hesap`, giriş bağlantısı `/giris/eposta#token=…`. Bu sayfalar
+ * sorgu dizgisini ve `#` parçasını koruyarak okuyanın dilindeki sayfaya geçer.
+ */
+export const neutralRoutes: readonly NeutralRoute[] = [
+  { path: "/hesap", page: "account" },
+  { path: "/fiyat", page: "pricing" },
+  { path: "/giris/eposta", page: "emailLink" },
+];

@@ -50,6 +50,9 @@ export interface CommonCopy {
     readonly copyright: string;
   };
   readonly draftBanner: string;
+  readonly lastUpdated: string;
+  /** Dile özgü olmayan adreslerin (kök, Stripe ve e-posta dönüşleri) dil seçimi. */
+  readonly chooseLanguage: string;
 }
 
 /** Ana sayfa. */
@@ -117,6 +120,8 @@ export interface DownloadCopy {
   readonly title: string;
   readonly lead: string;
   readonly button: string;
+  /** Sürüm etiketi ("Sürüm" + numara). */
+  readonly versionLabel: string;
   readonly buttonNote: string;
   readonly requirementsTitle: string;
   readonly requirements: readonly TitledText[];
@@ -225,6 +230,8 @@ const tr: Copy = {
       copyright: "© 2026 AI-Notepad. Açık kaynak, Apache 2.0.",
     },
     draftBanner: "Taslak — yayından önce hukuken gözden geçirilmeli",
+    lastUpdated: "Son güncelleme",
+    chooseLanguage: "Dil seç",
   },
   home: {
     meta: {
@@ -383,6 +390,7 @@ const tr: Copy = {
     title: "AI-Notepad'i indir",
     lead: "Mac için. İlk 3 toplantı ücretsiz, kart gerekmez.",
     button: "DMG'yi indir",
+    versionLabel: "Sürüm",
     buttonNote: "GitHub Releases'teki son sürüm. Developer ID ile imzalı ve Apple tarafından onaylanmış (notarized).",
     requirementsTitle: "Sistem gereksinimleri",
     requirements: [
@@ -486,6 +494,8 @@ const en: Copy = {
       copyright: "© 2026 AI-Notepad. Open source, Apache 2.0.",
     },
     draftBanner: "Draft — must be legally reviewed before publication",
+    lastUpdated: "Last updated",
+    chooseLanguage: "Choose a language",
   },
   home: {
     meta: {
@@ -644,6 +654,7 @@ const en: Copy = {
     title: "Download AI-Notepad",
     lead: "For Mac. Your first 3 meetings are free, no card needed.",
     button: "Download the DMG",
+    versionLabel: "Version",
     buttonNote: "The latest release on GitHub Releases. Signed with a Developer ID and notarized by Apple.",
     requirementsTitle: "System requirements",
     requirements: [

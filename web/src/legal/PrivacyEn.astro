@@ -1,0 +1,191 @@
+---
+// Privacy policy (English draft). Gerçek sunucu davranışına dayanır: server/README.md, server/src/account.ts,
+// server/src/cleanup.ts, server/migrations/. Hukuki gözden geçirme gerekir.
+import { contactEmail, operatorAddress, operatorBusinessId, operatorName } from "./operator";
+import { pagePath } from "../i18n/routes";
+---
+
+<p>
+  This policy explains which personal data is processed when you use the AI-Notepad subscription edition (the Mac app and
+  the subscription server) and this website, why, who it is shared with, how long it is kept and how to use your rights.
+  In short: <strong>your meeting audio is processed to be transcribed and is not stored on our servers; your notes,
+  transcripts and recordings stay on your devices.</strong>
+</p>
+
+<h2>1. Controller</h2>
+<p>
+  {operatorName}, {operatorBusinessId}, {operatorAddress}. For any privacy question or request: {contactEmail}. The EU
+  General Data Protection Regulation (GDPR) and Finnish data protection law apply.
+</p>
+
+<h2>2. Scope</h2>
+<p>
+  This policy covers the subscription edition. If you use the open-source developer edition with your own API keys, your
+  data never reaches our server; it goes directly to the providers you chose and is subject to their terms.
+</p>
+
+<h2>3. How meeting content flows</h2>
+<ul>
+  <li>The <strong>live transcript</strong> is produced on your Mac by an on-device speech model; the audio doesn't leave your device for it.</li>
+  <li>
+    <strong>Final transcript and speaker separation:</strong> when the meeting ends, the recording is passed through our
+    server to ElevenLabs. Our server does not write the audio to disk or keep it; it only adds the duration to your usage.
+  </li>
+  <li>
+    <strong>Notes, live translation, “What did I miss?” and Ask:</strong> the relevant parts of the transcript are passed
+    through our server to Anthropic's Claude model and the answer returns to your device. Our server does not store or log
+    this text; it only counts the tokens used.
+  </li>
+  <li>
+    <strong>Your notes, transcripts and recordings</strong> are stored on your Mac and iPhone and, if you turned on iCloud
+    sync, in your own iCloud account. We cannot access them.
+  </li>
+  <li>
+    <strong>Integrations</strong> (Notion, Slack, Microsoft Teams, Discord, Zoom, Linear, Jira): content is sent at your
+    request directly from your device to that service; it does not pass through our server.
+  </li>
+</ul>
+<p>
+  Before recording, it is your responsibility to inform participants and, where required, obtain their consent. You decide
+  about the meeting content, including what participants say; we process it only on your behalf to provide the service.
+</p>
+
+<h2>4. Data we process</h2>
+<table>
+  <thead>
+    <tr><th>Data</th><th>Purpose</th><th>Legal basis (GDPR Art. 6)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Account: with Sign in with Apple, the user identifier Apple provides and, if you share it, your email (possibly a private relay address); with email sign-in, your email address</td>
+      <td>Creating your account, signing you in</td>
+      <td>Performance of a contract (6(1)(b))</td>
+    </tr>
+    <tr>
+      <td>Sessions: one-way hashes of refresh tokens, creation and expiry times</td>
+      <td>Keeping you signed in, detecting stolen tokens</td>
+      <td>Contract; legitimate interest in security (6(1)(f))</td>
+    </tr>
+    <tr>
+      <td>Device attestation: Apple App Attest key identifier, public key, Apple's attestation receipt, app version</td>
+      <td>Verifying that requests come from our unmodified app, preventing trial abuse</td>
+      <td>Legitimate interest (6(1)(f))</td>
+    </tr>
+    <tr>
+      <td>Usage: start and end time, duration, audio duration and token count of meeting sessions; daily and monthly totals</td>
+      <td>Enforcing trial and monthly limits, controlling cost</td>
+      <td>Performance of a contract (6(1)(b))</td>
+    </tr>
+    <tr>
+      <td>IP address: briefly for rate limiting; a keyed hash of the IP and the day for a new account's first trial</td>
+      <td>Preventing abuse and bulk account creation</td>
+      <td>Legitimate interest (6(1)(f))</td>
+    </tr>
+    <tr>
+      <td>Payments: Stripe customer ID, subscription status and period end (your card details stay with Stripe and never reach us)</td>
+      <td>Managing your subscription</td>
+      <td>Contract (6(1)(b)); legal obligation for tax and accounting records (6(1)(c))</td>
+    </tr>
+    <tr>
+      <td>Technical logs: endpoint, error code, user ID, time (no meeting content)</td>
+      <td>Finding errors, security</td>
+      <td>Legitimate interest (6(1)(f))</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. The website</h2>
+<p>
+  The site uses no cookies, analytics or advertising trackers, and fonts are served from our own domain. When you sign in,
+  your session tokens are kept only in that tab's session storage and are removed when you close the tab; your chosen
+  language is remembered in the same place. The Sign in with Apple and Cloudflare Turnstile scripts load only on the
+  sign-in page. Turnstile processes browser signals to check that sign-in link requests come from a person.
+</p>
+
+<h2>6. Sub-processors and transfers</h2>
+<table>
+  <thead>
+    <tr><th>Provider</th><th>Purpose</th><th>Data</th><th>Location and safeguard</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cloudflare, Inc.</td>
+      <td>Hosting the site and server (Pages, Workers, D1 database), rate limiting, Turnstile, logs</td>
+      <td>The account, usage and technical data above; meeting content in transit</td>
+      <td>Global network, USA; EU-US Data Privacy Framework and Standard Contractual Clauses</td>
+    </tr>
+    <tr>
+      <td>Anthropic</td>
+      <td>Producing notes, translations and answers with the Claude model</td>
+      <td>Relevant parts of the meeting transcript</td>
+      <td>USA; Standard Contractual Clauses. API data is not used for model training. [Verify: retention period and contracting entity]</td>
+    </tr>
+    <tr>
+      <td>ElevenLabs</td>
+      <td>Transcribing audio and separating speakers</td>
+      <td>Meeting audio</td>
+      <td>[Verify: processing location and whether zero-retention mode is enabled]; Standard Contractual Clauses</td>
+    </tr>
+    <tr>
+      <td>Stripe</td>
+      <td>Payments, tax calculation (Stripe Tax), invoices, subscription portal</td>
+      <td>Email, payment details, billing country and address</td>
+      <td>Stripe Payments Europe (Ireland); Data Privacy Framework and Standard Contractual Clauses for transfers to the USA</td>
+    </tr>
+    <tr>
+      <td>Resend</td>
+      <td>Sending sign-in link emails</td>
+      <td>Email address, link</td>
+      <td>USA; Standard Contractual Clauses [Verify once the email provider is final]</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  Apple is an independent controller for Sign in with Apple and App Attest under its own privacy policy. We do not sell your
+  data or use it for advertising.
+</p>
+
+<h2>7. Retention</h2>
+<ul>
+  <li>Account, device registrations, meeting session records and monthly usage: while your account exists; deleted immediately when you delete your account.</li>
+  <li>Sign-in links: valid for 15 minutes; deleted by the next day once used or expired.</li>
+  <li>Refresh tokens: deleted by the next day once expired or signed out.</li>
+  <li>Daily usage: 2 days. IP-hashed trial record: that day only.</li>
+  <li>Processed Stripe events and total daily spend (not personal): 90 days.</li>
+  <li>Technical logs: for Cloudflare's log retention period. [Verify: period]</li>
+  <li>Database restore points (Cloudflare D1 Time Travel): up to 30 days.</li>
+  <li>Invoices and payment records: at Stripe for the period required by Finnish accounting law.</li>
+</ul>
+
+<h2>8. Deleting your account</h2>
+<p>
+  You can delete your account at any time with “Delete account” on the <a href={pagePath("account", "en")}>account page</a>.
+  Any unfinished subscription is first cancelled immediately at Stripe; then your account, sessions, sign-in links, device
+  registrations, meeting session records, usage, subscription record and Stripe customer mapping are deleted in a single
+  transaction. What remains: today's trial counter (per IP hash, not linked to the account, deleted at the end of the day),
+  invoices at Stripe (legal obligation) and technical logs until they expire. Notes and recordings on your devices stay
+  where they are; you delete them in the app.
+</p>
+
+<h2>9. Your rights</h2>
+<p>
+  You have the right to access, rectify and erase your data, to restrict processing, to data portability and to object to
+  processing based on legitimate interest. Send your request to {contactEmail}; we reply within one month. You can lodge a
+  complaint with the Finnish Data Protection Ombudsman (Tietosuojavaltuutetun toimisto, tietosuoja.fi) or the supervisory
+  authority in your country.
+</p>
+
+<h2>10. Security</h2>
+<p>
+  All connections are encrypted (TLS). Tokens are stored on the server only as one-way hashes, IP addresses as keyed hashes,
+  and app requests are verified with App Attest. Our API keys exist only as secrets on the server.
+</p>
+
+<h2>11. Children</h2>
+<p>The service is not intended for anyone under 18.</p>
+
+<h2>12. Changes</h2>
+<p>
+  If we change this policy we update its date, and we announce material changes in the app or by email before they take
+  effect.
+</p>
