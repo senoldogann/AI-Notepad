@@ -314,8 +314,8 @@ private struct Sidebar: View {
         .padding(.bottom, 12)
         .frame(width: 228)
         .frame(maxHeight: .infinity, alignment: .top)
-        .pageBackground()
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+        // Standart'ta sayfa zemini ve ince çizgi; Liquid Glass'ta yüzen cam.
+        .sidebarSurface()
     }
 
     private func item(title: LocalizedStringKey, symbol: String, section: MainSection, badge: Int?) -> some View {
@@ -340,13 +340,13 @@ private struct Sidebar: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
-                        .background(Theme.soft, in: Capsule())
+                        .chipSurface(shape: Capsule())
                 }
             }
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.hoverPlain)
     }
@@ -360,6 +360,7 @@ private struct TopBar: View {
     let onShowPanel: @MainActor () -> Void
 
     @AppStorage(SettingsKey.meetingsListVisible) private var meetingsListVisible: Bool = true
+    @Environment(\.designLook) private var look: DesignLook
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
@@ -434,8 +435,7 @@ private struct TopBar: View {
             .padding(.horizontal, 10)
             .frame(minWidth: 180, idealWidth: 320, maxWidth: 320)
             .frame(height: 32)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
+            .outlinedCard(cornerRadius: 10)
             .linkPointer(isEnabled: true)
             .background {
                 // ⌘K ve ⌘F arama penceresini açar.
@@ -453,9 +453,16 @@ private struct TopBar: View {
                 .buttonStyle(.pill)
                 .controlSize(.small)
         }
+        // Arama hapı ve düğmeler tek cam kapta (yalnızca Liquid Glass'ta).
+        .glassGroup(spacing: DesignTokens.Spacing.m)
         .padding(.horizontal, 20)
         .frame(height: 52)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .overlay(alignment: .bottom) {
+            // Liquid Glass'ta çubuk zemine karışır: alt çizgi yok.
+            if !look.usesGlass {
+                Rectangle().fill(Theme.line).frame(height: 1)
+            }
+        }
     }
 
     private var title: LocalizedStringKey {
@@ -1380,7 +1387,7 @@ private struct SidebarFolders: View {
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.hoverPlain)
                 .contextMenu {
@@ -1548,8 +1555,7 @@ private struct SearchComposer: View {
                 .frame(height: 34)
             }
             .frame(width: 600)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+            .outlinedCard(cornerRadius: 18)
             .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
             .padding(.top, 96)
         }
@@ -1595,7 +1601,7 @@ private struct SearchComposer: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(isHighlighted ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .selectionSurface(isSelected: isHighlighted, shape: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1632,17 +1638,31 @@ private struct SearchComposer: View {
 }
 
 /// Kısayol kartının zemini: Sor'daki örnek kartlar gibi kart yüzeyi, sağa doğru beliren ince çapraz çizgiler ve çerçeve.
+/// Liquid Glass'ta kart camdır; çapraz çizgiler camın üstünde kalır, çerçeve yok.
 private struct ShortcutCardBackground: View {
+    @Environment(\.designLook) private var look: DesignLook
+    @Environment(\.colorScheme) private var colorScheme: ColorScheme
+
     var body: some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 14, style: .continuous)
-        ZStack {
-            shape.fill(Theme.card)
-            DiagonalLines(spacing: 9)
-                .stroke(Theme.line, lineWidth: 1)
-                .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
-                .clipShape(shape)
-            shape.strokeBorder(Theme.line)
+        switch look.style {
+        case .standard:
+            ZStack {
+                shape.fill(Theme.card)
+                lines(shape: shape)
+                shape.strokeBorder(Theme.line)
+            }
+        case .liquidGlass:
+            lines(shape: shape)
+                .glassEffect(look.surfaceGlass(colorScheme: colorScheme), in: shape)
         }
+    }
+
+    private func lines(shape: RoundedRectangle) -> some View {
+        DiagonalLines(spacing: 9)
+            .stroke(Theme.line, lineWidth: 1)
+            .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+            .clipShape(shape)
     }
 }
 
@@ -1697,6 +1717,7 @@ private struct RecordingFocus: View {
                     }
                     .buttonStyle(.hoverCapsule)
                 }
+                .glassGroup(spacing: 10)
                 // Bulanık zeminde soluk renk okunmuyordu: koyu yazı.
                 Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
                     .keyboardShortcut(.cancelAction)
@@ -1706,6 +1727,8 @@ private struct RecordingFocus: View {
                     .padding(.top, 4)
             }
             .padding(36)
+            // Liquid Glass'ta kayıt ekranı bulanık içeriğin üstünde cam kartta (Standart'ta değişmez).
+            .liquidGlassGroup(cornerRadius: 32, padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         .focusable()
         .focusEffectDisabled()

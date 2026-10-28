@@ -78,6 +78,8 @@ struct SettingsPage: View {
                     }
                 }
                 .id(section)
+                // Liquid Glass'ta satırlar tek cam kartta (Standart'ta değişmez).
+                .liquidGlassGroup(cornerRadius: 20, padding: EdgeInsets(top: 2, leading: 20, bottom: 6, trailing: 20))
                 .transition(.opacity)
                 .padding(.top, 8)
             }
@@ -505,6 +507,8 @@ private struct AppearanceSettings: View {
     @AppStorage(SettingsKey.islandEnabled) private var islandEnabled: Bool = true
     @AppStorage(SettingsKey.surface) private var surface: String = PanelAppearance.standard.surface.rawValue
     @AppStorage(SettingsKey.surfaceOpacity) private var surfaceOpacity: Double = PanelAppearance.standard.surfaceOpacity
+    @AppStorage(SettingsKey.designStyle) private var designStyle: String = DesignLook.standard.style.rawValue
+    @AppStorage(SettingsKey.glassTint) private var glassTint: String = DesignLook.standard.tint.rawValue
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -520,15 +524,37 @@ private struct AppearanceSettings: View {
             }
             .padding(.bottom, 14)
             SettingsDivider()
-            SettingsRow(title: Text("Yüzey")) {
-                Text("Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.")
+            SettingsRow(title: Text("Stil")) {
+                Text("Liquid Glass: kartlar, kenar çubuğu ve düğmeler Apple'ın camından.")
             } control: {
-                PillPicker(selection: $surface, options: [
-                    (WindowSurface.solid.rawValue, "Dolu"), (WindowSurface.frosted.rawValue, "Buzlu cam"), (WindowSurface.clear.rawValue, "Şeffaf cam"),
+                PillPicker(selection: $designStyle, options: [
+                    (DesignStyle.standard.rawValue, "Standart"), (DesignStyle.liquidGlass.rawValue, "Liquid Glass"),
                 ])
                 .fixedSize()
             }
-            if surface != WindowSurface.solid.rawValue {
+            if designStyle == DesignStyle.liquidGlass.rawValue {
+                SettingsRow(title: Text("Cam rengi")) {
+                    Text(verbatim: (GlassTint(rawValue: glassTint) ?? DesignLook.standard.tint).displayName)
+                } control: {
+                    HStack(spacing: 8) {
+                        ForEach(GlassTint.allCases, id: \.self) { (item: GlassTint) in
+                            GlassTintSwatch(tint: item, isSelected: glassTint == item.rawValue, accent: appearance.accent.color) { glassTint = item.rawValue }
+                        }
+                    }
+                    .glassGroup(spacing: 8)
+                }
+            } else {
+                // Liquid Glass'ta pencere zemini cam renginden gelir: yüzey seçeneği yalnızca Standart'ta.
+                SettingsRow(title: Text("Yüzey")) {
+                    Text("Cam yüzeyde masaüstü pencerenin ardından hafifçe görünür.")
+                } control: {
+                    PillPicker(selection: $surface, options: [
+                        (WindowSurface.solid.rawValue, "Dolu"), (WindowSurface.frosted.rawValue, "Buzlu cam"), (WindowSurface.clear.rawValue, "Şeffaf cam"),
+                    ])
+                    .fixedSize()
+                }
+            }
+            if surface != WindowSurface.solid.rawValue, designStyle == DesignStyle.standard.rawValue {
                 SettingsRow(title: Text("Cam opaklığı: %\(Int((surfaceOpacity * 100).rounded()))")) {
                     EmptyView()
                 } control: {

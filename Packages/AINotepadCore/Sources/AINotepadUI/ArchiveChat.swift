@@ -736,8 +736,7 @@ public struct MentionSuggestions: View {
         }
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+        .outlinedCard(cornerRadius: 16)
         .shadow(color: .black.opacity(0.12), radius: 18, y: 6)
     }
 }
@@ -902,8 +901,7 @@ public struct RecipeSuggestions: View {
         }
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+        .outlinedCard(cornerRadius: 16)
         .shadow(color: .black.opacity(0.12), radius: 18, y: 6)
     }
 }

@@ -216,15 +216,4 @@ public extension View {
     func appFont(size: CGFloat, weight: Font.Weight) -> some View {
         modifier(AppFont(size: size, weight: weight))
     }
-
-    /// Kart yüzeyi: zeminden ayrılan beyaz kart, ince çerçeve, çok hafif gölge.
-    func cardSurface(cornerRadius: CGFloat) -> some View {
-        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        // Gölge yalnızca sabit zemine: içeriğe uygulansaydı içerik her değiştiğinde (ör. çalma çubuğu saniyede onlarca
-        // kez) gölge baştan hesaplanır, pencere sunucusu boşuna yorulurdu.
-        return background {
-            shape.fill(Theme.card).shadow(color: .black.opacity(0.04), radius: 10, y: 4)
-        }
-        .overlay(shape.strokeBorder(Theme.line))
-    }
 }

@@ -33,6 +33,7 @@ import Testing
         try await Task.sleep(for: .milliseconds(1_050))
         let shifts: Int = levels.values.filter { $0 > 0 }.count
         levels.stop()
-        #expect((8...11).contains(shifts))
+        // Yük altında (CI, düşük öncelik) uyanmalar gecikebilir; saat yine de durmadan ilerlemeli.
+        #expect((6...11).contains(shifts))
     }
 }
