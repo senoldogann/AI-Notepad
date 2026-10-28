@@ -186,3 +186,35 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Giriş bağlantısı geçersiz. E-postadaki son bağlantıyı aç ya da yeni bağlantı iste.")
     }
 }
+
+/// Canlı çeviri bu kayıtta durmalı mı: anahtar reddedildi (401/403) ya da abonelik sunucusu toplantının yapay zekâ
+/// hakkını kapattı (oturum yok, toplantı kapalı, bütçe ya da sınır doldu, harcama tavanı). Her cümle aynı hatayı
+/// almasın diye çeviri durur; cümleler "Tekrar dene"de kalır. Saf fonksiyondur.
+public func stopsLiveTranslation(error: any Error) -> Bool {
+    switch error {
+    case LLMError.http(let status, _, _, _):
+        return status == 401 || status == 403
+    case LLMError.hosted(let hosted):
+        return isClosedHostedAccess(error: hosted)
+    case let client as HostedClientError:
+        switch client {
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL:
+            return true
+        case .network, .malformedResponse, .invalidSignInLink:
+            return false
+        }
+    default:
+        return false
+    }
+}
+
+/// Sunucu bu kullanıcının yapay zekâ erişimini şimdilik kapattı mı (yeniden denemek aynı sonucu verir). Saf fonksiyondur.
+private func isClosedHostedAccess(error: HostedAPIError) -> Bool {
+    switch error.code {
+    case .unauthorized, .invalidToken, .forbidden, .subscriptionRequired, .trialExhausted, .monthlyCapReached, .dailyCapReached,
+         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached:
+        return true
+    default:
+        return false
+    }
+}

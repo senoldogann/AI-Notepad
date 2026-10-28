@@ -122,7 +122,9 @@ public func writeHostedWavChunks(source: URL, directory: URL, maxBytes: Int) thr
         }
         var conversionError: NSError?
         let status: AVAudioConverterOutputStatus = converter.convert(to: buffer, error: &conversionError) { (_: AVAudioPacketCount, inputStatus: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? in
-            if reachedEnd {
+            // Dosyanın sonunda `read` boş tampon yerine hata fırlatır: sona gelindiyse okunmaz.
+            if reachedEnd || file.framePosition >= file.length {
+                reachedEnd = true
                 inputStatus.pointee = .endOfStream
                 return nil
             }

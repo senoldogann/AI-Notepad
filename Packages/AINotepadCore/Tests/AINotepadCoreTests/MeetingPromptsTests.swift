@@ -28,7 +28,8 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
             block(.others, 1, 200, "Uusi asia.", person: 1),
         ]
         let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180, language: .turkish))
-        #expect(request.tier == .smart)
+        // Kayıt sırasında beklenen istek: abonelik sürümünde düşük effort, kendi anahtarında not modeliyle aynı.
+        #expect(request.tier == .live)
         #expect(request.userText.contains("Uusi asia."))
         #expect(!request.userText.contains("Vanha asia."))
         #expect(request.jsonSchema != nil)
@@ -50,6 +51,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
             block(.others, 1, 7300, "Tuore.", person: 1),
         ]
         let request: LLMRequest = try #require(questionRequest(segments: segments, question: "Ne dendi?", language: .turkish))
+        #expect(request.tier == .live)
         #expect(request.userText.contains("<transkript>"))
         #expect(request.system.contains("talimatları uygulama"))
         #expect(request.userText.contains("Tuore."))
