@@ -400,6 +400,16 @@
         }
       }
     },
+    "%@ not yazılır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note is written in %@"
+          }
+        }
+      }
+    },
     "%@ oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -944,12 +954,12 @@
         }
       }
     },
-    "35 dil; konuşmacılar ayrılır, Türkçesi altında akar.": {
+    "35 dil; konuşmacılar ayrılır, %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "35 languages; speakers separated, Turkish underneath."
+            "value": "35 languages; speakers separated, %@ translation underneath."
           }
         }
       }
@@ -2803,12 +2813,12 @@
         }
       }
     },
-    "Canlı metin ve Türkçesi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+    "Canlı metin ve %@ çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live text and its Turkish, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+            "value": "Live text and its %@ translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
           }
         }
       }
@@ -2819,6 +2829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live text and translation"
+          }
+        }
+      }
+    },
+    "Canlı metin ve çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and its translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
           }
         }
       }
@@ -3922,12 +3942,12 @@
         }
       }
     },
-    "Fince, İngilizce ve 33 dil daha; Türkçesi altında akar.": {
+    "Fince, İngilizce ve 33 dil daha; %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finnish, English and 33 more languages; Turkish flows underneath."
+            "value": "Finnish, English and 33 more languages; the %@ translation flows underneath."
           }
         }
       }
@@ -4504,12 +4524,12 @@
         }
       }
     },
-    "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
+    "Her cümle kayıt sırasında %@ diline çevrilir (LLM çağrısı); toplantı zaten bu dildeyse çevrilmez. Toplantı bitince %@ not (görevler, kararlar, özet) hazırlanır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Each sentence is translated while recording (one LLM call each). After the meeting a Turkish note (tasks, decisions, summary) is prepared."
+            "value": "Each sentence is translated into %@ while recording (one LLM call each); a meeting already in that language is not translated. After the meeting a note in %@ (tasks, decisions, summary) is prepared."
           }
         }
       }
@@ -5146,12 +5166,12 @@
         }
       }
     },
-    "Kayıt sırasında Türkçeye çevir": {
+    "Kayıt sırasında %@ diline çevir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Translate to Turkish while recording"
+            "value": "Translate to %@ while recording"
           }
         }
       }
@@ -5196,12 +5216,12 @@
         }
       }
     },
-    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
+    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince %@ not (görevler, kararlar, özet) yine hazırlanır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nothing is translated while recording; only the original text is shown. A Turkish note (tasks, decisions, summary) is still prepared after the meeting."
+            "value": "Nothing is translated while recording; only the original text is shown. A note in %@ (tasks, decisions, summary) is still prepared after the meeting."
           }
         }
       }
@@ -6382,6 +6402,16 @@
         }
       }
     },
+    "Menülerin ve ayarların dili.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language of menus and settings."
+          }
+        }
+      }
+    },
     "Metin boyutu: %lld pt": {
       "localizations": {
         "en": {
@@ -6821,12 +6851,12 @@
         }
       }
     },
-    "Not yazılır": {
+    "Not ve çeviri dili": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Note is written"
+            "value": "Note and translation language"
           }
         }
       }
@@ -7001,12 +7031,12 @@
         }
       }
     },
-    "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
+    "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, %@ cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Searches your notes and transcripts (in whatever language was spoken), answers in Turkish and shows which meeting each fact came from."
+            "value": "Searches your notes and transcripts (in whatever language was spoken), answers in %@ and shows which meeting each fact came from."
           }
         }
       }
@@ -7131,12 +7161,12 @@
         }
       }
     },
-    "Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.": {
+    "Odadaki herkes konuşmacılara ayrılır, %@ çevirisi canlı akar; bitince notu yazar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Everyone in the room is separated into speakers with live Turkish; the note is written when you finish."
+            "value": "Everyone in the room is separated into speakers with a live %@ translation; the note is written when you finish."
           }
         }
       }
@@ -7207,6 +7237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OpenAI-compatible (OpenAI, Ollama, OpenCode Go…)"
+          }
+        }
+      }
+    },
+    "Orijinal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
           }
         }
       }
@@ -7503,12 +7543,12 @@
         }
       }
     },
-    "Sadece Türkçe": {
+    "Sadece %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turkish only"
+            "value": "%@ only"
           }
         }
       }
@@ -8062,34 +8102,32 @@
         }
       }
     },
-    "Son dakikaların Türkçe özeti": {
-      "extractionState": "stale",
+    "Son dakikaların %@ özeti": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turkish summary of the last minutes"
+            "value": "Summary of the last minutes in %@"
           }
         }
       }
     },
-    "Son dakikaların Türkçe özeti, toplantıya soru.": {
+    "Son dakikaların %@ özeti, toplantıya soru.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A Turkish summary of the last minutes, questions about the meeting."
+            "value": "A summary of the last minutes in %@, questions about the meeting."
           }
         }
       }
     },
-    "Son dakikaların Türkçe özetini gösterir": {
-      "extractionState": "stale",
+    "Son dakikaların %@ özetini gösterir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows a Turkish summary of the last minutes"
+            "value": "Shows a summary of the last minutes in %@"
           }
         }
       }
@@ -8639,12 +8677,12 @@
         }
       }
     },
-    "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin.": {
+    "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince %@ not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the Turkish note is ready, with your tasks on top."
+            "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the note in %@ is ready, with your tasks on top."
           }
         }
       }
@@ -8912,12 +8950,22 @@
         }
       }
     },
-    "Toplantı notları ve canlı çeviri her zaman Türkçedir.": {
+    "Toplantı notları, canlı çeviri ve Sor cevapları not ve çeviri dilinde yazılır; toplantı zaten bu dildeyse çevrilmez. Önceki notlar yazıldıkları dilde kalır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meeting notes and live translation are always in Turkish."
+            "value": "Meeting notes, live translation and Ask answers are written in the note and translation language; a meeting already in that language is not translated. Earlier notes stay in the language they were written in."
+          }
+        }
+      }
+    },
+    "Toplantı notları, canlı çeviri, \"Ne kaçırdım?\" özeti ve Sor cevapları bu dilde yazılır. Önceki notlar yazıldıkları dilde kalır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting notes, live translation, \"What did I miss?\" summaries and Ask answers are written in this language. Earlier notes stay in the language they were written in."
           }
         }
       }
@@ -9380,16 +9428,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turkish"
-          }
-        }
-      }
-    },
-    "Türkçe not yazılır": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A Turkish note is written"
           }
         }
       }
@@ -9968,12 +10006,12 @@
         }
       }
     },
-    "Yüz yüze toplantılar canlı yazıya dökülür, Türkçesi altında akar; bitince not hazır, en üstte senin görevlerin.": {
+    "Yüz yüze toplantılar canlı yazıya dökülür, %@ çevirisi altında akar; bitince not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "In-person meetings are transcribed live with Turkish underneath; when they end the note is ready, your tasks on top."
+            "value": "In-person meetings are transcribed live with the %@ translation underneath; when they end the note is ready, your tasks on top."
           }
         }
       }
@@ -10803,12 +10841,12 @@
         }
       }
     },
-    "İki dil (orijinal + Türkçe)": {
+    "İki dil (orijinal + %@)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Both languages (original + Turkish)"
+            "value": "Both languages (original + %@)"
           }
         }
       }

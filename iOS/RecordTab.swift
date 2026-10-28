@@ -115,6 +115,8 @@ func longDayTitle(date: Date, locale: Locale) -> String {
 /// Gradyan açık tonlu olduğundan yazılar koyu mürekkeptir (Mac'teki kayıt kartı gibi).
 private struct RecordHeroCard: View {
     let recorder: PhoneRecorder
+    /// Not ve çeviri dili (Ayarlar): canlı çevirinin dili adıyla geçer.
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         VStack(spacing: 18) {
@@ -164,9 +166,13 @@ private struct RecordHeroCard: View {
                     .appFont(size: 20, weight: .semibold)
                     .tracking(-0.3)
                     .foregroundStyle(Color.black.opacity(0.8))
-                Text(phoneEngine() == .onDevice
-                    ? "Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz."
-                    : "Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
+                Group {
+                    if phoneEngine() == .onDevice {
+                        Text("Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz.")
+                    } else {
+                        Text("Odadaki herkes konuşmacılara ayrılır, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) çevirisi canlı akar; bitince notu yazar.")
+                    }
+                }
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Color.black.opacity(0.6))
                     .multilineTextAlignment(.center)

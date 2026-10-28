@@ -11,14 +11,14 @@ func htmlEscaped(_ text: String) -> String {
 }
 
 /// Paylaşılabilir tek dosyalık web sayfası: notun başlığı, tarihi, özeti, kararları, görevleri (sahibi ve tarihiyle),
-/// konu akışı ve sözlüğü (Türkçe notta). Bağlantı ya da betik içermez; tarayıcıda açılır, e-postaya eklenir, açık ve
-/// koyu temaya uyar. `language` paylaşım dili (başlıklar o dilde); nil ise Türkçe not. Saf fonksiyondur.
+/// konu akışı ve sözlüğü (asıl notta). Bağlantı ya da betik içermez; tarayıcıda açılır, e-postaya eklenir, açık ve
+/// koyu temaya uyar. `language` paylaşım dili (başlıklar o dilde); nil ise asıl not (başlıklar arayüz dilinde). Saf fonksiyondur.
 public func meetingHTML(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?) -> String {
     let headings: (summary: String, decisions: String, tasks: String) = language.map { (language: ShareLanguage) -> (summary: String, decisions: String, tasks: String) in
         (summary: language.headings.summary, decisions: language.headings.decisions, tasks: language.headings.tasks)
     } ?? (summary: String(localized: "Özet"), decisions: String(localized: "Kararlar"), tasks: String(localized: "Görevler"))
-    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: language?.rawValue ?? "tr")))
-    // Türkçe notta "dk" (arayüz dilinde), paylaşım dillerinde evrensel "min".
+    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(language.map { Locale(identifier: $0.rawValue) } ?? interfaceLocale()))
+    // Asıl notta "dk" (arayüz dilinde), paylaşım dillerinde evrensel "min".
     let minutes: String = meetingDurationMinutes(record: record).map { (value: Int) -> String in
         language == nil ? " · " + String(localized: "\(value) dk") : " · \(value) min"
     } ?? ""

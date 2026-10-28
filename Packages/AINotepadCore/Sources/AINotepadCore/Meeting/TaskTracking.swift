@@ -45,9 +45,50 @@ public func markingReminded(record: MeetingRecord, task: NoteTask) -> MeetingRec
     return reminded.contains(key) ? record : record.with(remindedTasks: reminded + [key])
 }
 
-/// Notun serbest metin tarihinden takvim günü: "2026-11-03", "3.11.2026", "3.11.", Türkçe "5 Kasım" ve "5 Kasım 2026"
-/// (not tarihleri Türkçe yazar; yılsızda yıl toplantınınki, toplantıdan önceye düşerse ertesi yıl). "Perjantai", "sonraki dönem" gibi göreli ifadeler tarih vermez (nil). Saf fonksiyondur.
-public func parseDueDate(text: String, meetingDate: Date, calendar: Calendar) -> DateComponents? {
+/// Ay adıyla yazılmış tarihin parçaları, notun dilinde (`language`): gün ay ("5 Kasım", "5. marraskuuta", "18 Aralık
+/// 2026'ya kadar") ya da ay gün ("November 5, 2026"). Ay adları o dilin takviminden gelir (uzun adlar çekimli ekleriyle
+/// önekten, kısa adlar tam eşleşir); gün ay adının hemen önünde ya da arkasında, yıl yakınında dört haneli sayıdır.
+/// Bulunamazsa nil. Saf fonksiyondur.
+func namedMonthDate(text: String, language: ShareLanguage) -> (year: Int?, month: Int, day: Int)? {
+    let locale: Locale = Locale(identifier: language.rawValue)
+    let formatter: DateFormatter = DateFormatter()
+    formatter.locale = locale
+    let lowered: (String) -> String = { (name: String) -> String in
+        name.lowercased(with: locale).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+    let longNames: [(name: String, month: Int)] = [formatter.monthSymbols ?? [], formatter.standaloneMonthSymbols ?? []]
+        .flatMap { (symbols: [String]) -> [(name: String, month: Int)] in
+            symbols.enumerated().map { (item: (offset: Int, element: String)) -> (name: String, month: Int) in (lowered(item.element), item.offset + 1) }
+        }
+    let shortNames: [(name: String, month: Int)] = [formatter.shortMonthSymbols ?? [], formatter.shortStandaloneMonthSymbols ?? []]
+        .flatMap { (symbols: [String]) -> [(name: String, month: Int)] in
+            symbols.enumerated().map { (item: (offset: Int, element: String)) -> (name: String, month: Int) in (lowered(item.element), item.offset + 1) }
+        }
+    let tokens: [String] = text.lowercased(with: locale)
+        .split { (character: Character) -> Bool in !character.isLetter && !character.isNumber }
+        .map(String.init)
+    let day: (Int) -> Int? = { (index: Int) -> Int? in
+        guard tokens.indices.contains(index), tokens[index].count <= 2, let value = Int(tokens[index]), (1...31).contains(value) else {
+            return nil
+        }
+        return value
+    }
+    for (index, token) in tokens.enumerated() {
+        let longMatch: Int? = longNames.filter { !$0.name.isEmpty && token.hasPrefix($0.name) }.max { $0.name.count < $1.name.count }?.month
+        guard let month = longMatch ?? shortNames.first(where: { $0.name == token })?.month,
+              let foundDay = day(index - 1) ?? day(index + 1) else {
+            continue
+        }
+        let year: Int? = tokens[(index + 1)..<min(tokens.count, index + 4)].first { $0.count == 4 }.flatMap { Int($0) }
+        return (year, month, foundDay)
+    }
+    return nil
+}
+
+/// Notun serbest metin tarihinden takvim günü: "2026-11-03", "3.11.2026", "3.11." ve notun dilinde (`language`) ay
+/// adıyla yazılanlar (bkz. `namedMonthDate`). Yılsızda yıl toplantınınki, toplantıdan önceye düşerse ertesi yıl.
+/// "Perjantai", "sonraki dönem" gibi göreli ifadeler tarih vermez (nil). Saf fonksiyondur.
+public func parseDueDate(text: String, meetingDate: Date, calendar: Calendar, language: ShareLanguage) -> DateComponents? {
     let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let meeting: DateComponents = calendar.dateComponents([.year, .month, .day], from: meetingDate)
     let parts: (year: Int?, month: Int, day: Int)?
@@ -57,11 +98,8 @@ public func parseDueDate(text: String, meetingDate: Date, calendar: Calendar) ->
         parts = (Int(match.3), Int(match.2) ?? 0, Int(match.1) ?? 0)
     } else if let match = trimmed.firstMatch(of: /(\d{1,2})\.(\d{1,2})\./) {
         parts = (nil, Int(match.2) ?? 0, Int(match.1) ?? 0)
-    } else if let match = trimmed.lowercased(with: Locale(identifier: "tr")).firstMatch(of: /(\d{1,2})\s+(ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık)\w*(?:\s+(\d{4}))?/) {
-        let months: [String] = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"]
-        parts = (match.3.flatMap { Int($0) }, (months.firstIndex(of: String(match.2)) ?? -1) + 1, Int(match.1) ?? 0)
     } else {
-        parts = nil
+        parts = namedMonthDate(text: trimmed, language: language)
     }
     guard let parts, (1...12).contains(parts.month), (1...31).contains(parts.day), let meetingYear = meeting.year else {
         return nil
@@ -89,15 +127,16 @@ public struct ReminderDraft: Sendable, Equatable {
     public let due: DateComponents?
 }
 
-/// Görevden anımsatıcı taslağı. Saf fonksiyondur.
-public func reminderDraft(record: MeetingRecord, task: NoteTask, calendar: Calendar) -> ReminderDraft {
+/// Görevden anımsatıcı taslağı; tarih notun dilinde (`language`, bkz. `MeetingNote.writtenLanguage`) okunur. Saf
+/// fonksiyondur.
+public func reminderDraft(record: MeetingRecord, task: NoteTask, language: ShareLanguage, calendar: Calendar) -> ReminderDraft {
     let meetingTitle: String = record.note?.title ?? record.title
     let dueText: [String] = task.dueDate.map { [String(localized: "Tarih: \($0)")] } ?? []
     let notes: [String] = [String(localized: "Toplantı: \(meetingTitle)"), String(localized: "Sahibi: \(task.owner)")] + dueText
     return ReminderDraft(
         title: task.description,
         notes: notes.joined(separator: "\n"),
-        due: task.dueDate.flatMap { parseDueDate(text: $0, meetingDate: record.startedAt, calendar: calendar) }
+        due: task.dueDate.flatMap { parseDueDate(text: $0, meetingDate: record.startedAt, calendar: calendar, language: language) }
     )
 }
 

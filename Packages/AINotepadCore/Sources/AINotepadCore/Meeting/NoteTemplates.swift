@@ -44,8 +44,9 @@ public func templateInstructions(template: NoteTemplate) -> String {
     }
 }
 
-/// Notun paylaşım dili (iş arkadaşlarına gönderilecek sürüm); ham değer BCP 47 dil kodudur. Fince ve İngilizce
-/// öne, diğerleri sırayla.
+/// Not dili: notların, canlı çevirinin, "Ne kaçırdım?" özetinin ve Sor cevaplarının yazıldığı dil (Ayarlar › "Not ve
+/// çeviri dili") ve notun paylaşım sürümünün dili (iş arkadaşlarına gönderilecek çeviri). Ham değer BCP 47 dil kodudur.
+/// Fince ve İngilizce öne, diğerleri sırayla.
 public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
     case finnish = "fi"
     case english = "en"
@@ -71,6 +72,7 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
     case lithuanian = "lt"
     case russian = "ru"
     case ukrainian = "uk"
+    case turkish = "tr"
     case azerbaijani = "az"
     case arabic = "ar"
     case hebrew = "he"
@@ -111,6 +113,7 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         case .lithuanian: "Lietuvių"
         case .russian: "Русский"
         case .ukrainian: "Українська"
+        case .turkish: "Türkçe"
         case .azerbaijani: "Azərbaycan"
         case .arabic: "العربية"
         case .hebrew: "עברית"
@@ -153,6 +156,7 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         case .lithuanian: "Lithuanian"
         case .russian: "Russian"
         case .ukrainian: "Ukrainian"
+        case .turkish: "Turkish"
         case .azerbaijani: "Azerbaijani"
         case .arabic: "Arabic"
         case .hebrew: "Hebrew"
@@ -166,6 +170,23 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         case .vietnamese: "Vietnamese"
         case .thai: "Thai"
         }
+    }
+
+    /// İstemde hedef dilin adı: İngilizce adı ve kendi adı ("Finnish (Suomi)"); ikisi aynıysa tek ad ("English").
+    public var promptName: String {
+        englishName == nativeName ? englishName : "\(englishName) (\(nativeName))"
+    }
+
+    /// Arayüz etiketlerindeki adı, arayüz dilinde (Türkçe arayüzde "İngilizce", İngilizce arayüzde "English"). Ad
+    /// sistemin dil verisinden gelir; sistem kodu tanımazsa (bu listedeki kodlarda olmaz) dilin kendi adı yazılır.
+    public var interfaceName: String {
+        interfaceLocale().localizedString(forIdentifier: rawValue) ?? nativeName
+    }
+
+    /// Aynı dilin toplantı dili karşılığı (toplantı not diliyle aynıysa canlı çeviri gerekmez); Azerice konuşma dili
+    /// olarak desteklenmez (nil). Norveççe Bokmål "nb" toplantıda "no", Çincenin iki yazımı toplantıda "zh"dir.
+    public var meetingLanguage: MeetingLanguage? {
+        MeetingLanguage(rawValue: self == .norwegian ? "no" : String(rawValue.prefix { $0 != "-" }))
     }
 
     /// Paylaşım metnindeki başlıklar: özet, kararlar, görevler.
@@ -195,6 +216,7 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         case .lithuanian: ("Santrauka", "Sprendimai", "Užduotys")
         case .russian: ("Краткое содержание", "Решения", "Задачи")
         case .ukrainian: ("Підсумок", "Рішення", "Завдання")
+        case .turkish: ("Özet", "Kararlar", "Görevler")
         case .azerbaijani: ("Xülasə", "Qərarlar", "Tapşırıqlar")
         case .arabic: ("الملخص", "القرارات", "المهام")
         case .hebrew: ("סיכום", "החלטות", "משימות")
@@ -211,11 +233,21 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
     }
 }
 
-/// Türkçe notun paylaşım dilindeki sürümü için istek (akıllı model, notla aynı şema): her alan çevrilir, adlar ve
+/// Not dilinin varsayılanı: arayüz dili (`Bundle.main.preferredLocalizations`, öncelik sırasıyla). Türkçe arayüzde
+/// Türkçe (önceki sürümlerde not hep Türkçeydi; ayarı olmayan mevcut kullanıcılar Türkçe sürer), tanınmayan dilde
+/// İngilizce. Saf fonksiyondur.
+public func defaultNoteLanguage(interfaceLanguages: [String]) -> ShareLanguage {
+    guard let first = interfaceLanguages.first else {
+        return .english
+    }
+    return ShareLanguage(rawValue: first) ?? ShareLanguage(rawValue: String(first.prefix { $0 != "-" })) ?? .english
+}
+
+/// Notun paylaşım dilindeki sürümü için istek (akıllı model, notla aynı şema): her alan çevrilir, adlar ve
 /// rakamlar korunur, kullanıcının görevlerinde sahip kullanıcının adıdır ("Sen" değil), sözlük boş kalır (iş
 /// arkadaşları terimleri zaten bilir). Saf fonksiyondur.
 public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userName: String) -> LLMRequest {
-    let target: String = "\(language.englishName) (\(language.nativeName))"
+    let target: String = language.promptName
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let tasks: String = note.tasks.map { (task: NoteTask) -> String in
         "- sahip: \(task.owner); iş: \(task.description); tarih: \(task.dueDate ?? ""); benimMi: \(task.isMine)"
@@ -223,7 +255,7 @@ public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userNa
     return LLMRequest(
         tier: .smart,
         system: """
-        Türkçe bir toplantı notunu iş arkadaşlarıyla paylaşmak için \(target) diline çeviriyorsun. Kurallar:
+        Bir toplantı notunu iş arkadaşlarıyla paylaşmak için \(target) diline çeviriyorsun. Kurallar:
         - Başlık, özet, kararlar, görev açıklamaları ve tarihler doğal, iş yazışmasına uygun \(target) olur; anlam ekleme ya
           da çıkarma yapma.
         - Kişi adları, kurum adları, rakamlar ve tarihler korunur. Görevlerin sırası ve sayısı aynı kalır; benimMi aynen kalır.
@@ -247,7 +279,7 @@ public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userNa
     )
 }
 
-/// Paylaşım dilindeki notu ayrıştırır; görev sayısı Türkçe notla aynı olmalı (eksik çeviri `LLMError.malformed`,
+/// Paylaşım dilindeki notu ayrıştırır; görev sayısı asıl notla aynı olmalı (eksik çeviri `LLMError.malformed`,
 /// yeniden istenir). Sözlük atılır. Saf fonksiyondur.
 public func parseSharedNote(text: String, original: MeetingNote) throws -> MeetingNote {
     let note: MeetingNote = try parseMeetingNote(text: text)
@@ -262,12 +294,13 @@ public func parseSharedNote(text: String, original: MeetingNote) throws -> Meeti
 }
 
 /// Paylaşılacak not metni (Markdown; e-posta, Slack, Teams sohbetine yapıştırılır): başlık, tarih, özet, kararlar,
-/// görevler (sahibiyle). Türkçe notta sözlük de eklenir. Başlıklar notun dilinde. Saf fonksiyondur.
+/// görevler (sahibiyle). Asıl notta (`language` nil) konu akışı ve sözlük de eklenir; başlıklar ve tarih asıl notta arayüz
+/// dilinde, paylaşım sürümünde o dilde. Saf fonksiyondur.
 public func shareText(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?) -> String {
     let headings: (summary: String, decisions: String, tasks: String, glossary: String) = language.map { (language: ShareLanguage) -> (summary: String, decisions: String, tasks: String, glossary: String) in
         (summary: language.headings.summary, decisions: language.headings.decisions, tasks: language.headings.tasks, glossary: "")
     } ?? (summary: String(localized: "Özet"), decisions: String(localized: "Kararlar"), tasks: String(localized: "Görevler"), glossary: String(localized: "Sözlük"))
-    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: language?.rawValue ?? "tr")))
+    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(language.map { Locale(identifier: $0.rawValue) } ?? interfaceLocale()))
     var lines: [String] = ["# \(note.title)", "", "_\(date)_", "", "## \(headings.summary)", "", note.summary, ""]
     if language == nil, let outline = note.outline, !outline.isEmpty {
         lines += ["## " + String(localized: "Konu akışı"), ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] \($0.title) — \($0.summary)" } + [""]

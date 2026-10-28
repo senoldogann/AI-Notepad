@@ -399,6 +399,8 @@ private struct AskHistoryRow: View {
 private struct AskIntro: View {
     let meetings: [MeetingRecord]
     let onAsk: @MainActor (String) -> Void
+    /// Not ve çeviri dili (Ayarlar › Genel): cevapların dili metinde adıyla geçer.
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     /// Kartların sıcak film gradyanları (temanın turuncu ailesi).
     private let examplePalettes: [FilmPalette] = [.sunset, .rose, .sunset, .rose]
@@ -423,7 +425,7 @@ private struct AskIntro: View {
                         .appFont(size: 32, weight: .semibold)
                         .tracking(-0.8)
                         .foregroundStyle(Color.black)
-                    Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                    Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, \(storedNoteLanguage(value: noteLanguage).interfaceName) cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                         .appFont(size: 14, weight: .regular)
                         .foregroundStyle(Color.black.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)

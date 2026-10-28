@@ -105,7 +105,7 @@ import Testing
     @Test func refusesNoteBeforeRequest() async throws {
         let result: MeetingRecord = await regenerateNote(
             record: meeting(id: "fi", language: .finnish).with(status: .processing, failureMessage: nil), directory: try temporaryDirectory(),
-            llm: .onDevice(config(output: .turkish)), userName: "Ada"
+            llm: .onDevice(config(output: .turkish)), userName: "Ada", language: .turkish
         )
         #expect(result.status == .failed)
         #expect(result.failureMessage?.contains("Fince desteklemiyor") == true, "mesaj: \(result.failureMessage ?? "")")
@@ -222,7 +222,7 @@ struct OnDeviceModelTests {
         let english: String = try await engine.transcribe(samples: loadFixture(name: "en-meeting"), language: .english)
         #expect(english.lowercased().contains("report"), "metin: \(english)")
         let note: MeetingNote = try #require(try await writeMeetingNote(
-            segments: [stored("final-0", .others, 1, 0, english)], speakerNames: [1: "Aino"], userName: "Ada", template: .general, myNotes: "",
+            segments: [stored("final-0", .others, 1, 0, english)], speakerNames: [1: "Aino"], userName: "Ada", template: .general, myNotes: "", language: .turkish,
             llm: llm, progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         #expect(!note.title.isEmpty && !note.summary.isEmpty, "not: \(note)")
@@ -234,7 +234,7 @@ struct OnDeviceModelTests {
             liveSegments: [], finalSegments: [stored("final-0", .others, 1, 0, finnish)], translations: [:], speakerNames: [:], note: nil,
             audioDeleted: false, engine: .local, notice: nil, meNeedsFinalPass: nil
         )
-        let refused: MeetingRecord = await regenerateNote(record: finnishRecord, directory: try temporaryDirectory(), llm: llm, userName: "Ada")
+        let refused: MeetingRecord = await regenerateNote(record: finnishRecord, directory: try temporaryDirectory(), llm: llm, userName: "Ada", language: .turkish)
         #expect(refused.status == .failed && refused.note == nil)
         #expect(refused.failureMessage?.contains("Fince desteklemiyor") == true, "mesaj: \(refused.failureMessage ?? "")")
 
@@ -253,7 +253,7 @@ struct OnDeviceModelTests {
             state: ChunkedNoteState(partSummaries: summaries, decisions: [], tasks: [], glossary: []), maxChars: limits.summaryChars ?? 0
         )
         let request: LLMRequest = noteChunkRequest(
-            chunk: chunk, part: 31, partCount: 40, state: state, speakerNames: [:], userName: "Ada", template: .general, myNotes: ""
+            chunk: chunk, part: 31, partCount: 40, state: state, speakerNames: [:], userName: "Ada", template: .general, myNotes: "", language: .turkish
         )
         let part: NoteChunk = try await requestStructured(provider: llm, request: request) { (text: String) throws -> NoteChunk in
             try parseNoteChunk(text: text)

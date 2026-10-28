@@ -1129,6 +1129,8 @@ private struct TasksPage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var showsDone: Bool = false
+    /// Not ve çeviri dili (Ayarlar › Genel): boş durumda notun dili adıyla geçer.
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         let all: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: model.meetings)
@@ -1172,7 +1174,7 @@ private struct TasksPage: View {
                             palette: .sunset,
                             steps: [
                                 EmptyStateStep(symbol: "record.circle", title: "Toplantıyı kaydet"),
-                                EmptyStateStep(symbol: "sparkles", title: "Türkçe not yazılır"),
+                                EmptyStateStep(symbol: "sparkles", title: "\(storedNoteLanguage(value: noteLanguage).interfaceName) not yazılır"),
                                 EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
                             ]
                         ) {

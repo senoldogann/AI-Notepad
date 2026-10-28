@@ -69,7 +69,7 @@ public struct PanelActions {
 }
 
 /// Panelin canlı sayfası: üst satırda durum, kayıt denetimleri (başlat, duraklat/devam, mikrofon, bitir) ve
-/// gezinme; gövdede konuşmacı blokları (Türkçesiyle), altta asistan kartı, "Ne kaçırdım?" ve soru alanı, son hatalar.
+/// gezinme; gövdede konuşmacı blokları (çevirisiyle), altta asistan kartı, "Ne kaçırdım?" ve soru alanı, son hatalar.
 /// Yalnızca `LiveViewState` ile beslenir; cam yüzey `panelSurface()` ile dışarıdan verilir.
 public struct TranscriptPanel: View {
     let state: LiveViewState
@@ -519,7 +519,7 @@ public struct TranscriptPanel: View {
         )
     }
 
-    /// "Ne kaçırdım?" düğmesi ve Türkçe soru alanı.
+    /// "Ne kaçırdım?" düğmesi ve soru alanı.
     private var footer: some View {
         // Dar panelde "Ne kaçırdım?" yalnızca simge olur; soru alanı kalan genişliği alır.
         ViewThatFits(in: .horizontal) {
@@ -548,9 +548,9 @@ public struct TranscriptPanel: View {
         }
         .buttonStyle(.hoverCapsule)
         .disabled(!isEnabled)
-        .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
+        .hoverHint("Son dakikaların \(state.noteLanguageText) özeti", alignment: .leading, edge: .top)
         .accessibilityLabel("Ne kaçırdım?")
-        .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
+        .accessibilityHint("Son dakikaların \(state.noteLanguageText) özetini gösterir")
     }
 
     private var questionField: some View {
@@ -655,8 +655,8 @@ struct StatusLabel: View {
     }
 }
 
-/// Konuşmacı bloğu: renk noktası, etiket, akan metin (kesinleşmemiş kısım soluk) ve Türkçesi.
-/// İki dilde orijinal küçük ve soluk, Türkçe asıl metin; "Sadece Türkçe"de çevirisi olmayan metin orijinal kalır.
+/// Konuşmacı bloğu: renk noktası, etiket, akan metin (kesinleşmemiş kısım soluk) ve not dilindeki çevirisi.
+/// İki dilde orijinal küçük ve soluk, çeviri asıl metin; "Sadece çeviri"de çevirisi olmayan metin orijinal kalır.
 struct BlockView: View {
     let block: SpeakerBlock
     let turkish: String?
@@ -755,7 +755,7 @@ struct BlockView: View {
             .foregroundStyle(.secondary)
     }
 
-    /// "Sadece Türkçe": çevrilen bölümler Türkçe, henüz çevrilmeyenler orijinal ve soluk.
+    /// "Sadece çeviri": çevrilen bölümler çevirisiyle, henüz çevrilmeyenler orijinal ve soluk.
     private var turkishOnlyText: Text {
         turkishOnlyParts(block: block, translations: translations)
             .enumerated()

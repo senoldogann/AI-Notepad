@@ -22,13 +22,14 @@ public func storedLines(segments: [StoredSegment], speakerNames: [Int: String]) 
 /// Not istemlerinin ortak kuralları (tek istek ve parça parça): dil, görev sahipliği, madde başına tek iş. Ölçümde model
 /// bunlar yazılmadan görevleri Fince bırakıyor, kullanıcıyı bazen "Sen" bazen adıyla yazıyor ve farklı konuların
 /// işlerini tek maddede topluyordu. Saf fonksiyondur.
-func noteRules(user: String, template: NoteTemplate) -> String {
+func noteRules(user: String, template: NoteTemplate, language: ShareLanguage) -> String {
     let focus: String = templateInstructions(template: template)
     return """
     Kurallar:
-    - Çıktının tamamı Türkçe: özet, kararlar, görev açıklamaları ve tarihler Türkçe cümlelerdir, içinde yabancı dilde
-      kelime bırakma (ör. "Vaiheen 3 yhteenvedon gönderilmesi" değil "3. aşamanın özetini göndermek"; "5. marraskuuta" değil
-      "5 Kasım"). Yabancı dildeki sözcükler yalnızca sözlükteki terim alanında kalır.
+    - Çıktı dili \(language.promptName): başlık, özet, kararlar, görev açıklamaları, tarihler, konu akışı ve sözlükteki
+      anlamlar bu dilde cümlelerdir; transkript başka dildeyse içinde o dilden kelime bırakma (ör. Fince "Vaiheen 3
+      yhteenvedon lähettäminen" ya da "5. marraskuuta" aynen kalmaz, \(language.promptName) diline çevrilir). Transkriptin
+      dilindeki sözcükler yalnızca sözlükteki terim alanında kalır.
     - Kullanıcıya ("Sen") düşen görevlerde sahip "\(user)" ve benimMi true; diğerlerinde sahip konuşan kişinin adı ya da
       etiketi ve benimMi false.
     - Her görev tek bir işi anlatır; farklı konuların, aşamaların ya da kişilerin işlerini tek maddede birleştirme.
@@ -69,8 +70,10 @@ func myNotesPrompt(myNotes: String) -> (rule: String, block: String) {
     )
 }
 
-/// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı); metin yoksa nil. Saf fonksiyondur.
-public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, myNotes: String) -> LLMRequest? {
+/// Toplantı notu isteği (akıllı model, yapılandırılmış çıktı, not dilinde); metin yoksa nil. Saf fonksiyondur.
+public func meetingNoteRequest(
+    segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, myNotes: String, language: ShareLanguage
+) -> LLMRequest? {
     let transcript: String = storedLines(segments: segments, speakerNames: speakerNames)
     guard !transcript.isEmpty else {
         return nil
@@ -80,12 +83,13 @@ public func meetingNoteRequest(segments: [StoredSegment], speakerNames: [Int: St
     return LLMRequest(
         tier: .smart,
         system: """
-        Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinden Türkçe toplantı notu çıkarıyorsun. Kullanıcının adı \(user);
-        transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar, görevler (kim, ne, varsa ne zaman)
-        ve toplantıda geçen önemli yabancı dildeki terimlerin Türkçe anlamlarını yaz (toplantı Türkçeyse sözlük boş kalabilir). akis alanına konuların sırasını yaz:
+        Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinden \(language.promptName) dilinde toplantı notu
+        çıkarıyorsun. Kullanıcının adı \(user); transkriptte "Sen" odur. Kısa bir başlık, birkaç cümlelik özet, alınan kararlar,
+        görevler (kim, ne, varsa ne zaman) ve toplantıda geçen önemli yabancı dildeki terimlerin \(language.promptName) dilinde
+        anlamlarını yaz (toplantı zaten bu dildeyse sözlük boş kalabilir). akis alanına konuların sırasını yaz:
         her bölümün başladığı [mm:ss] zamanı (transkriptteki gibi), kısa başlığı ve tek cümlelik özeti (kısa toplantıda
         2–4, uzunda 5–12 bölüm).
-        \(noteRules(user: user, template: template))
+        \(noteRules(user: user, template: template, language: language))
         \(mine.rule)
         \(transcriptIsDataNote)
         """,

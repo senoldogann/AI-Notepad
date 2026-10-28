@@ -10,6 +10,7 @@ struct PhoneSettingsTab: View {
     /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
     let excludedFromMoves: Set<String>
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
@@ -95,15 +96,24 @@ struct PhoneSettingsTab: View {
                     Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.")
                 }
                 CalendarSettingsSection(calendar: calendar)
-                Section("Toplantı") {
+                Section {
                     Picker("Ana toplantı dili", selection: $primaryLanguage) {
                         ForEach(MeetingLanguage.allCases, id: \.rawValue) { (language: MeetingLanguage) in
                             Text(languageName(language: language)).tag(language.rawValue)
                         }
                     }
+                    Picker("Not ve çeviri dili", selection: $noteLanguage) {
+                        ForEach(ShareLanguage.allCases, id: \.rawValue) { (language: ShareLanguage) in
+                            Text(verbatim: language.nativeName).tag(language.rawValue)
+                        }
+                    }
                     TextField("Adın (notta senin görevlerin için)", text: $userName)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                } header: {
+                    Text("Toplantı")
+                } footer: {
+                    Text("Toplantı notları, canlı çeviri ve Sor cevapları not ve çeviri dilinde yazılır; toplantı zaten bu dildeyse çevrilmez. Önceki notlar yazıldıkları dilde kalır.")
                 }
                 Section("Uygulama") {
                     LabeledContent("Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")

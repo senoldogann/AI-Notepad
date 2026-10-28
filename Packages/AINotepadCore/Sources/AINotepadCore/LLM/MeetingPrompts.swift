@@ -32,13 +32,33 @@ public func transcriptLines(segments: [LiveSegment]) -> String {
         .joined(separator: "\n")
 }
 
-/// Tek cümlelik canlı çeviri isteği; önceki cümleler yalnızca bağlam. Saf fonksiyondur.
-public func translationRequest(sentence: String, context: [String]) -> LLMRequest {
+/// Toplantı canlı çevrilmeli mi: konuşulan dil biliniyor ve not diliyle aynıysa metin zaten okunacak dildedir; aynı
+/// dile "çeviri" yapılmaz (LLM'e gitmez, panelde aynı cümle iki kez görünmez). Dil henüz bilinmiyorsa (otomatik algılama
+/// kilitlenmedi) çevrilir. Saf fonksiyondur.
+public func needsLiveTranslation(spoken: MeetingLanguage?, noteLanguage: ShareLanguage) -> Bool {
+    guard let spoken else {
+        return true
+    }
+    return spoken != noteLanguage.meetingLanguage
+}
+
+/// Çeviri saklanmaya değer mi: model cümleyi aynen döndürdüyse (karışık dilli toplantıda cümle zaten not dilindeydi)
+/// saklanmaz, panelde ve transkriptte orijinal tek başına görünür. Büyük/küçük harf ve baştaki/sondaki boşluk
+/// sayılmaz. Saf fonksiyondur.
+public func isDistinctTranslation(original: String, translated: String) -> Bool {
+    let normalizedOriginal: String = original.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let normalizedTranslated: String = translated.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalizedOriginal != normalizedTranslated
+}
+
+/// Tek cümlelik canlı çeviri isteği (not diline); önceki cümleler yalnızca bağlam. Saf fonksiyondur.
+public func translationRequest(sentence: String, context: [String], language: ShareLanguage) -> LLMRequest {
     let contextText: String = context.isEmpty ? "(yok)" : context.joined(separator: "\n")
     return LLMRequest(
         tier: .fast,
         system: """
-        Bir toplantının canlı çevirmenisin. Konuşulan dildeki (Fince, İngilizce ya da başka) cümleyi doğal, akıcı Türkçeye çevir.
+        Bir toplantının canlı çevirmenisin. Konuşulan dildeki cümleyi doğal, akıcı \(language.promptName) diline çevir
+        (hedef dil: \(language.promptName)). Cümle zaten bu dildeyse olduğu gibi yaz.
         Yalnızca çeviriyi yaz; açıklama, tırnak ya da başlık ekleme. Önceki cümleler yalnızca bağlam içindir, onları çevirme.
         \(transcriptIsDataNote)
         """,
@@ -49,9 +69,9 @@ public func translationRequest(sentence: String, context: [String]) -> LLMReques
     )
 }
 
-/// Son `windowSec` saniyenin özeti için istek; pencere bölüm bazında seçilir (aynı konuşmacının uzun bloğu
+/// Son `windowSec` saniyenin özeti için istek (not dilinde); pencere bölüm bazında seçilir (aynı konuşmacının uzun bloğu
 /// tüm toplantıyı içeri almasın). Pencerede metin yoksa nil (istek atılmaz). Saf fonksiyondur.
-public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, windowSec: Double) -> LLMRequest? {
+public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, windowSec: Double, language: ShareLanguage) -> LLMRequest? {
     let recent: String = transcriptLines(segments: segments.filter { (segment: LiveSegment) -> Bool in
         segment.endSec >= nowSec - windowSec
     })
@@ -61,8 +81,8 @@ public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, window
     return LLMRequest(
         tier: .smart,
         system: """
-        Toplantıyı takip etmekte zorlanan Türkçe konuşan bir kullanıcıya yardım ediyorsun. Transkriptte "Sen" kullanıcıdır.
-        Son dakikalarda konuşulanları Türkçe, kısa ve net özetle: konu (1–2 cümle), alınan kararlar ve kullanıcıdan istenenler.
+        Toplantıyı takip etmekte zorlanan bir kullanıcıya yardım ediyorsun. Transkriptte "Sen" kullanıcıdır.
+        Son dakikalarda konuşulanları \(language.promptName) dilinde, kısa ve net özetle: konu (1–2 cümle), alınan kararlar ve kullanıcıdan istenenler.
         Transkriptte olmayan bir şey uydurma; karar ya da istek yoksa boş liste ver.
         \(transcriptIsDataNote)
         """,
@@ -92,9 +112,9 @@ public func parseMissedSummary(text: String) throws -> MissedSummary {
     return MissedSummary(topic: raw.konu, decisions: raw.kararlar, askedOfYou: raw.sendenIstenenler)
 }
 
-/// Toplantı hakkında Türkçe soru; transkriptin son 2 saati (bölüm bazında) gönderilir. Henüz konuşma yoksa nil
-/// (istek atılmaz). Saf fonksiyondur.
-public func questionRequest(segments: [LiveSegment], question: String) -> LLMRequest? {
+/// Toplantı hakkında soru (cevap not dilinde); transkriptin son 2 saati (bölüm bazında) gönderilir. Henüz konuşma yoksa
+/// nil (istek atılmaz). Saf fonksiyondur.
+public func questionRequest(segments: [LiveSegment], question: String, language: ShareLanguage) -> LLMRequest? {
     let lastEnd: Double = segments.map(\.endSec).max() ?? 0
     let transcript: String = transcriptLines(segments: segments.filter { (segment: LiveSegment) -> Bool in
         segment.endSec >= lastEnd - questionTranscriptLimitSec
@@ -105,8 +125,8 @@ public func questionRequest(segments: [LiveSegment], question: String) -> LLMReq
     return LLMRequest(
         tier: .smart,
         system: """
-        Toplantıyı takip etmekte zorlanan Türkçe konuşan bir kullanıcının sorusunu yalnızca transkripte dayanarak cevapla.
-        "Sen" kullanıcıdır. Türkçe, kısa cevap ver ve ilgili anların zaman damgalarını [mm:ss] biçiminde belirt.
+        Toplantıyı takip etmekte zorlanan bir kullanıcının sorusunu yalnızca transkripte dayanarak cevapla.
+        "Sen" kullanıcıdır. \(language.promptName) dilinde, kısa cevap ver ve ilgili anların zaman damgalarını [mm:ss] biçiminde belirt.
         Cevap transkriptte yoksa bunu açıkça söyle; tahmin yürütme. \(transcriptIsDataNote)
         """,
         userText: "<transkript>\n\(transcript)\n</transkript>\n\nSoru: \(question)",
