@@ -61,6 +61,20 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         let changed: [MeetingRecord] = staleStatusesToInterrupt(records: records)
         #expect(changed.map(\.id) == ["a", "b"])
         #expect(changed.allSatisfy { $0.status == .interrupted })
+        // Mikrofonsuz kayıt ("Sen" bölümü yok) "Sen" son geçişi istemez.
+        #expect(changed.allSatisfy { $0.meNeedsFinalPass == nil })
+    }
+
+    // Kayıt sırasında kapanan ve "Sen" bölümü olan toplantıda "Sen" kaydı da yeniden yazıya dökülür; işlemede kapanan değişmez.
+    @Test func interruptedRecordingWithMicrophoneNeedsMeFinalPass() {
+        let me: StoredSegment = StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0, endSec: 1, text: "Moi", words: nil)
+        let recording: MeetingRecord = record(id: "a", startedAt: Date(), status: .recording, audioDeleted: false)
+        let processing: MeetingRecord = record(id: "b", startedAt: Date(), status: .processing, audioDeleted: false)
+        let changed: [MeetingRecord] = staleStatusesToInterrupt(records: [
+            recording.with(liveSegments: recording.liveSegments + [me]),
+            processing.with(liveSegments: processing.liveSegments + [me]),
+        ])
+        #expect(changed.map(\.meNeedsFinalPass) == [true, nil])
     }
 
     @Test func retentionDeletesOnlyOldAudio() {
@@ -203,9 +217,32 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         )
         let current: MeetingRecord = base.with(completedTasks: ["a"])
         let phone: MeetingRecord = base.with(completedTasks: ["a", "b"]).with(remindedTasks: ["c"])
-        let merged: MeetingRecord = mergedConflictRecord(current: current, others: [phone])
+        let merged: MeetingRecord = mergingUserMarks(current: current, others: [phone])
         #expect(merged.completedTasks == ["a", "b"])
         #expect(merged.remindedTasks == ["c"])
-        #expect(mergedConflictRecord(current: current, others: []) == current.with(remindedTasks: []))
+        #expect(mergingUserMarks(current: current, others: []) == current)
+    }
+
+    // Gönderim işaretleri de birleşir: hedefler ve araca gönderilen görevler (araç başına) tekrarsız, Apple Notlar ve
+    // webhook anlarının en eskisi kalır; böylece çakışmadan sonra not ya da görev ikinci kez gönderilmez.
+    @Test func sendMarksAreUnited() {
+        let base: MeetingRecord = MeetingRecord(
+            id: "x", title: "T", startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, language: nil, status: .done, failureMessage: nil,
+            liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud,
+            notice: nil, meNeedsFinalPass: nil
+        )
+        let task: NoteTask = NoteTask(owner: "Sen", description: "Rapor", dueDate: nil, isMine: true)
+        let other: NoteTask = NoteTask(owner: "Aino", description: "Bütçe", dueDate: nil, isMine: false)
+        let early: Date = Date(timeIntervalSince1970: 100)
+        let late: Date = Date(timeIntervalSince1970: 200)
+        let current: MeetingRecord = base.markingSent(destinationID: "slack").markingTaskSent(trackerID: "linear", task: task).with(notesSentAt: late)
+        let phone: MeetingRecord = base.markingSent(destinationID: "notion").markingSent(destinationID: "slack")
+            .markingTaskSent(trackerID: "linear", task: other).markingTaskSent(trackerID: "jira", task: task)
+            .with(notesSentAt: early).with(webhookSentAt: late)
+        let merged: MeetingRecord = mergingUserMarks(current: current, others: [phone])
+        #expect(merged.sentDestinationIDs == ["slack", "notion"])
+        #expect(merged.sentTaskKeys == ["linear": [taskKey(task: task), taskKey(task: other)], "jira": [taskKey(task: task)]])
+        #expect(merged.notesSentAt == early)
+        #expect(merged.webhookSentAt == late)
     }
 }

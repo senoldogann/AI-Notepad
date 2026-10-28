@@ -412,16 +412,22 @@ private struct StreamingAnswer: View {
         exchange.phase == .writing
     }
 
+    /// Kaynak numarası: yazıyla birlikte ölçeklenir.
+    private var citationFont: Font {
+        appearance.font(size: 10, weight: .bold)
+    }
+
     var body: some View {
         let full: String = exchange.answer.text
         let visible: String = String(full.prefix(shown))
         let isRevealing: Bool = isWriting || shown < full.count
         Text(isRevealing
-            ? answerAttributedText(text: visible, accent: appearance.accent.color) + streamingCaret(accent: appearance.accent.color)
-            : answerAttributedText(text: visible, accent: appearance.accent.color))
+            ? answerAttributedText(text: visible, accent: appearance.accent.color, citationFont: citationFont) + streamingCaret(accent: appearance.accent.color)
+            : answerAttributedText(text: visible, accent: appearance.accent.color, citationFont: citationFont))
             .textRenderer(InkRevealRenderer(fadingGlyphs: isRevealing && !reduceMotion ? 18 : 0, exemptTrailingGlyphs: streamingCaretGlyphs))
-            .font(appearance.readingFont(size: appearance.textSize + 2, weight: .regular))
-            .lineSpacing(appearance.lineSpacing + 3)
+            // Soruyla aynı boyut ve arayüz ölçeği (Ayarlar › Görünüm › Boyut); canlı panelin metin boyutu değil.
+            .font(appearance.font(size: 15, weight: .regular))
+            .lineSpacing(5 * appearance.uiScale)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
             .environment(\.openURL, OpenURLAction { (url: URL) -> OpenURLAction.Result in
@@ -456,7 +462,7 @@ private let citationScheme: String = "ainotepad-source"
 /// yükseltilmiş, vurgu renkli bağlantılara dönüşür (tıklayınca kaynak açılır). Akarken yarım kalan "**" düz görünür,
 /// yarım kaynak işareti gizlenir.
 /// Saf fonksiyondur.
-private func answerAttributedText(text: String, accent: Color) -> AttributedString {
+private func answerAttributedText(text: String, accent: Color, citationFont: Font) -> AttributedString {
     // Harf harf açılırken yarım kalan kaynak işareti ("[1") görünmesin.
     let bulleted: String = text.replacing(/\[\d*$/, with: "")
         .split(separator: "\n", omittingEmptySubsequences: false)
@@ -479,7 +485,7 @@ private func answerAttributedText(text: String, accent: Color) -> AttributedStri
             run.link = URL(string: "\(citationScheme)://\(number)")
             run.foregroundColor = accent
             run.baselineOffset = 5
-            run.font = .system(size: 10, weight: .bold)
+            run.font = citationFont
             result += run
         }
         rest = rest[match.range.upperBound...]
@@ -756,29 +762,55 @@ public struct ExampleQuestionCard: View {
     }
 
     public var body: some View {
-        // Sade satır: nötr simge, soru, ince çerçeve; üzerine gelince zemin hafifçe koyulaşır.
-        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 18, style: .continuous)
         Button(action: onAsk) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
+                // Pastel film zemininde koyu mürekkep (marka kutuları gibi): beyaz simge açık tonlarda kayboluyordu.
                 Image(systemName: symbol)
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 20)
-                Text(question)
-                    .appFont(size: 14, weight: .regular)
-                    .foregroundStyle(Theme.ink)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .appFont(size: 16, weight: .semibold)
+                    .foregroundStyle(Color.black.opacity(0.8))
+                    .frame(width: 42, height: 42)
+                    .background { FilmGradient(seed: "soru-\(symbol)", palette: palette) }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: palette.colors.base.opacity(0.25), radius: 6, y: 3)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(question)
+                        .appFont(size: 15, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(hint)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
                 Spacer(minLength: 8)
                 Image(systemName: "arrow.up.right")
-                    .appFont(size: 11, weight: .semibold)
-                    .foregroundStyle(isHovering ? Theme.ink : Theme.muted)
+                    .appFont(size: 11, weight: .bold)
+                    .foregroundStyle(isHovering ? Color.white : Theme.muted)
+                    .frame(width: 28, height: 28)
+                    .background(isHovering ? appearance.accent.color : Theme.soft, in: Circle())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isHovering ? Theme.soft : Theme.card, in: shape)
-            .overlay(shape.strokeBorder(Theme.line))
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .background {
+                ZStack {
+                    shape.fill(Theme.card)
+                    DiagonalLines(spacing: 9)
+                        .stroke(Theme.line, lineWidth: 1)
+                        .mask(LinearGradient(colors: [.clear, .clear, .black], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(shape)
+                }
+            }
+            .overlay {
+                shape.strokeBorder(
+                    isHovering
+                        ? AnyShapeStyle(LinearGradient(colors: [appearance.accent.color.opacity(0.7), appearance.accent.color.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        : AnyShapeStyle(Theme.line),
+                    lineWidth: 1
+                )
+            }
+            .shadow(color: .black.opacity(isHovering ? 0.10 : 0.04), radius: isHovering ? 14 : 6, y: isHovering ? 6 : 2)
+            .offset(y: isHovering ? -1.5 : 0)
             .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -789,10 +821,14 @@ public struct ExampleQuestionCard: View {
 }
 
 /// Çapraz (45°) ince çizgiler: kart dokusu.
-struct DiagonalLines: Shape {
+public struct DiagonalLines: Shape {
     let spacing: CGFloat
 
-    func path(in rect: CGRect) -> Path {
+    public init(spacing: CGFloat) {
+        self.spacing = spacing
+    }
+
+    public func path(in rect: CGRect) -> Path {
         var path: Path = Path()
         var x: CGFloat = -rect.height
         while x < rect.width {
@@ -811,7 +847,6 @@ public struct RecipeSuggestions: View {
     let highlighted: Int
     let onPick: @MainActor (Recipe) -> Void
     let onDelete: @MainActor (Recipe) -> Void
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     public init(recipes: [Recipe], highlighted: Int, onPick: @escaping @MainActor (Recipe) -> Void, onDelete: @escaping @MainActor (Recipe) -> Void) {
         self.recipes = recipes
@@ -836,11 +871,13 @@ public struct RecipeSuggestions: View {
                     onPick(item.element)
                 } label: {
                     HStack(spacing: 10) {
+                        // Her tarif kendi sabit gradyan ailesinde (ElevenLabs simge kutuları gibi), koyu simgeyle.
                         Image(systemName: item.element.symbol)
                             .appFont(size: 12, weight: .semibold)
-                            .foregroundStyle(appearance.accent.color)
-                            .frame(width: 24, height: 24)
-                            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .foregroundStyle(Color.black.opacity(0.78))
+                            .frame(width: 28, height: 28)
+                            .background { FilmGradient(seed: "tarif-\(item.element.id)", palette: filmPalette(seed: item.element.id)) }
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         Text(verbatim: "/" + item.element.title)
                             .appFont(size: 14, weight: .regular)
                             .foregroundStyle(Theme.ink)

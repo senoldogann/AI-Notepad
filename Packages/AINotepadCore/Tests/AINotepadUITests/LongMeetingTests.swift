@@ -34,7 +34,8 @@ import AINotepadCore
         }
         let elapsed: Duration = runs.map(\.elapsed).min() ?? .zero
         let state: LiveViewState = runs[0].state
-        #expect(elapsed < .milliseconds(100), "güncelleme \(elapsed) sürdü")
+        // Sınır geniş: amaç karesel büyümeyi yakalamak (o zaman saniyeler sürer), yüklü CI makinesinde titremek değil.
+        #expect(elapsed < .milliseconds(500), "güncelleme \(elapsed) sürdü")
         #expect(state.blocks.allSatisfy { ($0.segments.last?.startSec ?? 0) - $0.startSec < 60 })
     }
 }

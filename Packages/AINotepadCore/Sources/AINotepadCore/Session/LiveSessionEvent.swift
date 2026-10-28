@@ -14,6 +14,8 @@ public enum LiveSessionEvent: Sendable, Equatable {
     case speakersAssigned([SegmentID: Int])
     /// Bir konuşmacının canlı metin akışı kalıcı olarak durdu (ses kaydı sürer).
     case streamFailed(speaker: Speaker, message: String)
+    /// Kapanışta konuşmacının sesinin sonu yazıya dökülemedi (ses dosyada); toplantı sonunda kayıttan yazıya dökülmeli.
+    case streamIncomplete(speaker: Speaker, untranscribedSec: Double)
     /// Bir konuşmacı ayırma penceresi başarısız oldu; sonraki pencere denenir.
     case diarizationFailed(message: String)
 }

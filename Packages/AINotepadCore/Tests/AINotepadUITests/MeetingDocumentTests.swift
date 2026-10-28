@@ -75,10 +75,10 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
     @Test func exportNameIsCleanAndUnique() throws {
         let directory: URL = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let first: URL = exportFileURL(directory: directory, title: "Rapor / sunum: plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf")
+        let first: URL = try exportFileURL(directory: directory, title: "Rapor / sunum: plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf")
         #expect(first.lastPathComponent == "Rapor  sunum plan 2027-01-15.pdf")
         try Data().write(to: first)
-        #expect(exportFileURL(directory: directory, title: "Rapor / sunum: plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf").lastPathComponent == "Rapor  sunum plan 2027-01-15 2.pdf")
+        #expect(try exportFileURL(directory: directory, title: "Rapor / sunum: plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf").lastPathComponent == "Rapor  sunum plan 2027-01-15 2.pdf")
         try FileManager.default.removeItem(at: directory)
     }
 }

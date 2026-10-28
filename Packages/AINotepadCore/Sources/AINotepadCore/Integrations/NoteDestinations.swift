@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os
 
@@ -5,7 +6,12 @@ import os
 /// Zapier, Make, n8n) ya da Notion sayfası.
 public enum DestinationTarget: Sendable, Equatable, Codable {
     case account(ChannelConnection)
+    /// Kullanıcının yapıştırdığı webhook adresi (eski sürümlerde Discord girişinin oluşturduğu da): kaldırılınca
+    /// serviste silinmez, adres kullanıcınındır ve başka yerde de kullanılıyor olabilir.
     case webhook(URL)
+    /// Discord girişinin (OAuth `webhook.incoming`) AI-Notepad için oluşturduğu webhook: kaldırılınca Discord'da da
+    /// silinir.
+    case discordSignIn(URL)
     case notion(NotionTarget)
 }
 
@@ -55,6 +61,7 @@ public func destinationName(destination: NoteDestination) -> String {
         case .zoom: "Zoom Team Chat"
         case .generic: url.host() ?? "Webhook"
         }
+    case .discordSignIn: "Discord"
     case .notion: "Notion"
     }
 }
@@ -64,7 +71,7 @@ public func destinationName(destination: NoteDestination) -> String {
 public func destinationDetail(destination: NoteDestination) -> String {
     switch destination.target {
     case .account(let connection): [connection.channel.name, connection.workspace].filter { !$0.isEmpty }.joined(separator: " · ")
-    case .webhook(let url): url.host() ?? ""
+    case .webhook(let url), .discordSignIn(let url): url.host() ?? ""
     case .notion(let target): target.pageTitle
     }
 }
@@ -85,10 +92,30 @@ public func pendingAutoSends(records: [MeetingRecord], destinations: [NoteDestin
             guard now.timeIntervalSince(finished) <= autoSendLookbackSec else {
                 return []
             }
+            let sent: [String] = record.sentDestinationIDs ?? []
             return active
-                .filter { finished >= $0.createdAt && !(record.sentDestinationIDs ?? []).contains($0.id) }
+                .filter { (destination: NoteDestination) -> Bool in
+                    let key: String? = destinationSendKey(destination: destination)
+                    return finished >= destination.createdAt && !sent.contains(destination.id) && !(key.map { sent.contains($0) } ?? false)
+                }
                 .map { (meetingID: record.id, destinationID: $0.id) }
         }
+}
+
+/// Hedefin cihazdan bağımsız kimliği: aynı kanal ya da webhook başka bir Mac'te de bağlıysa (hedef kimlikleri cihaza
+/// özeldir) gönderildi işareti iCloud'la oraya da ulaşır, not iki kez gitmez. Notion bağlantısı cihaza özel kayıtla
+/// kurulduğu için kimliği yoktur (nil). Webhook adresi gizli olduğu için yalnızca özeti kullanılır. Saf fonksiyondur.
+public func destinationSendKey(destination: NoteDestination) -> String? {
+    switch destination.target {
+    case .account(let connection):
+        return "\(connection.service.rawValue):\(connection.channel.teamID ?? connection.workspace):\(connection.channel.id)"
+    case .webhook(let url), .discordSignIn(let url):
+        // Aynı adres eski sürümde `.webhook` olarak kayıtlı olabilir: anahtar türden değil adresten çıkar.
+        let digest: SHA256.Digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        return "webhook:" + digest.prefix(12).map { String(format: "%02x", $0) }.joined()
+    case .notion:
+        return nil
+    }
 }
 
 /// Eski sürümün tek bağlantısından (hesap ya da webhook adresi) hedef listesi. Taşınan hedef `createdAt` olarak şimdiyi
@@ -106,6 +133,16 @@ public enum DestinationError: Error, Equatable {
     case notAnAccount(id: String)
 }
 
+/// Not gönderiminin başlamadan biten durumları.
+public enum NoteSendError: Error, Equatable {
+    /// Toplantı bulunamadı (bu arada silindi ya da taşındı).
+    case meetingNotFound(id: String)
+    /// Toplantının notu yok (henüz yazılmadı ya da yazılamadı).
+    case noNote(meetingID: String)
+    /// Bu not bu hedefe zaten gönderiliyor (iki gönderim üst üste binmesin, not iki kez düşmesin).
+    case alreadySending(meetingID: String, destinationID: String)
+}
+
 private let destinationLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Destinations")
 
 /// Hedeflerin Anahtar Zinciri'ndeki deposu (jetonlar içerdiği için) ve hesap jetonlarının yenilenmesi. Aynı hedefin
@@ -117,7 +154,10 @@ public actor DestinationVault {
     private let refresher: @Sendable (ChannelConnection) async throws -> ChannelConnection
     private var refreshes: [String: Task<ChannelConnection, any Error>] = [:]
     /// Notion hedefinde sıradaki işlem (bir öncekinin bitmesini bekler).
-    private var notionQueue: [String: Task<Void, Never>] = [:]
+    private let notionQueue: KeyedSerialQueue = KeyedSerialQueue()
+    /// Süren Notion işleminin bu hedefe yazdığı son yenileme jetonu: oturum reddedilirse hedefin hâlâ bu işlemin
+    /// bağlantısı olduğu (kullanıcı bu arada yeniden bağlanmadığı) böyle anlaşılır.
+    private var notionWritten: [String: String] = [:]
 
     /// `refresher`: uygulamada `refreshConnectionTokens`; testte sayaçlı yenileyici.
     public init(service: String, account: SecretAccount, refresher: @escaping @Sendable (ChannelConnection) async throws -> ChannelConnection) {
@@ -160,6 +200,16 @@ public actor DestinationVault {
         try store(updated)
     }
 
+    /// Hedefin kendiliğinden gönderim ayarını değiştirir: kayıtlı (güncel) hedef okunur, yalnızca ayar değişir.
+    /// Bellekteki eski kopya yazılmaz; yoksa bu arada yenilenen jetonların (Slack yenileme jetonu tek kullanımlık)
+    /// üzerine eskileri yazılırdı.
+    public func setAutoSend(id: String, enabled: Bool) throws {
+        guard let stored = try all().first(where: { $0.id == id }) else {
+            throw DestinationError.notFound(id: id)
+        }
+        try upsert(stored.with(autoSend: enabled))
+    }
+
     /// Hedefi kaldırır; kaldırılan hedef (servis tarafında kapatmak için) döner.
     public func remove(id: String) throws -> NoteDestination {
         let current: [NoteDestination] = try all()
@@ -190,7 +240,12 @@ public actor DestinationVault {
         let refresher: @Sendable (ChannelConnection) async throws -> ChannelConnection = self.refresher
         let task: Task<ChannelConnection, any Error> = Task { try await refresher(connection) }
         refreshes[id] = task
-        defer { refreshes[id] = nil }
+        defer {
+            // Bu arada hedef kaldırılıp aynı kimlikle yeni bir yenileme başladıysa o silinmez.
+            if refreshes[id] == task {
+                refreshes[id] = nil
+            }
+        }
         let fresh: ChannelConnection
         do {
             fresh = try await task.value
@@ -219,42 +274,49 @@ public actor DestinationVault {
         try upsert(stored.with(needsReconnect: true))
     }
 
-    /// MCP hedefinde (Notion) işlem tek seferde yapılır: aynı hedefe iki gönderim aynı anda jeton yenilemesin. İşlem
-    /// yenilenmiş bağlantıyı döndürürse ve hedef hâlâ aynı bağlantıysa saklanır.
-    public func withNotion(id: String, operation: @escaping @Sendable (NotionTarget) async throws -> MCPConnection) async throws {
-        let previous: Task<Void, Never>? = notionQueue[id]
-        let run: Task<Void, any Error> = Task {
-            await previous?.value
-            guard let stored = try self.all().first(where: { $0.id == id }), case .notion(let target) = stored.target else {
-                throw DestinationError.notFound(id: id)
-            }
-            let fresh: MCPConnection
-            do {
-                fresh = try await operation(target)
-            } catch MCPRemoteError.expired {
-                try self.upsert(stored.with(needsReconnect: true))
-                throw MCPRemoteError.expired(server: target.connection.serverURL.host() ?? "Notion")
-            }
-            try self.storeRefreshedNotion(id: id, previous: target.connection, fresh: fresh)
+    /// MCP hedefinde (Notion) işlemler sırayla yapılır: aynı hedefe iki gönderim aynı anda jeton yenilemesin. İşlem
+    /// jetonu yenilerse verilen `persist` ile hemen saklanır (sonraki adım başarısız olsa bile). Oturum reddedilirse ve
+    /// hedef hâlâ bu işlemin bağlantısıysa "yeniden bağlan" olarak işaretlenir; başarıda işaret kalkar.
+    public func withNotion(id: String, operation: @escaping @Sendable (NotionTarget, @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void) async throws {
+        try await notionQueue.run(key: id) {
+            try await self.runNotion(id: id, operation: operation)
         }
-        // Sıra yalnızca bitişi bekler; hata çağırana aşağıda iletilir.
-        notionQueue[id] = Task {
-            do {
-                try await run.value
-            } catch {
-                destinationLogger.debug("Notion işlemi hatayla bitti, hedef: \(id, privacy: .public)")
-            }
+    }
+
+    private func runNotion(id: String, operation: @escaping @Sendable (NotionTarget, @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void) async throws {
+        guard let stored = try all().first(where: { $0.id == id }), case .notion(let target) = stored.target else {
+            throw DestinationError.notFound(id: id)
         }
-        try await run.value
+        let original: String = target.connection.tokens.refreshToken
+        notionWritten[id] = original
+        defer { notionWritten[id] = nil }
+        do {
+            try await operation(target) { (previous: MCPConnection, fresh: MCPConnection) async throws -> Void in
+                try await self.storeRefreshedNotion(id: id, previous: previous, fresh: fresh)
+            }
+        } catch MCPRemoteError.expired(let server) {
+            try markNotionReconnect(id: id)
+            throw MCPRemoteError.expired(server: server)
+        }
+        try clearReconnect(id: id)
     }
 
     private func storeRefreshedNotion(id: String, previous: MCPConnection, fresh: MCPConnection) throws {
         guard let stored = try all().first(where: { $0.id == id }), case .notion(let current) = stored.target,
               current.connection.tokens.refreshToken == previous.tokens.refreshToken else {
+            destinationLogger.info("Notion yenilemesi sürerken hedef değişti, jetonlar yazılmadı, hedef: \(id, privacy: .public)")
             return
         }
-        let updated: NoteDestination = stored.with(needsReconnect: false)
-        try upsert(fresh == previous ? updated : updated.with(target: .notion(current.with(connection: fresh))))
+        try upsert(stored.with(target: .notion(current.with(connection: fresh))))
+        notionWritten[id] = fresh.tokens.refreshToken
+    }
+
+    private func markNotionReconnect(id: String) throws {
+        guard let stored = try all().first(where: { $0.id == id }), case .notion(let current) = stored.target,
+              current.connection.tokens.refreshToken == notionWritten[id] else {
+            return
+        }
+        try upsert(stored.with(needsReconnect: true))
     }
 
     /// Gönderim başarılı: "yeniden bağlan" işareti kalkar.
@@ -279,27 +341,26 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
             try await postNote(connection: fresh, record: record, note: note)
         }
         try await vault.clearReconnect(id: destination.id)
-    case .webhook(let url):
+    case .webhook(let url), .discordSignIn(let url):
         try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
     case .notion:
-        try await vault.withNotion(id: destination.id) { (target: NotionTarget) async throws -> MCPConnection in
-            try await createNotionPage(connection: target.connection, record: record, note: note)
+        try await vault.withNotion(id: destination.id) {
+            (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
+            try await createNotionPage(connection: target.connection, persist: persist, record: record, note: note)
         }
     }
 }
 
-/// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord'da girişle oluşturulan webhook
-/// silinir. Webhook adresleri ve Notion'da yapılacak bir şey yok (Notion erişimi kullanıcının çalışma alanında
-/// kaldırılır).
+/// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord girişinin oluşturduğu webhook
+/// silinir. Yapıştırılan webhook adreslerine (Discord'unkiler dahil) dokunulmaz: adres kullanıcınındır. Notion'da
+/// yapılacak bir şey yok (Notion erişimi kullanıcının çalışma alanında kaldırılır).
 public func revokeDestination(destination: NoteDestination) async throws {
     switch destination.target {
     case .account(let connection):
         try await revokeChannelConnection(connection: connection)
-    case .webhook(let url):
-        if webhookKind(url: url) == .discord {
-            try await deleteDiscordWebhook(url: url)
-        }
-    case .notion:
+    case .discordSignIn(let url):
+        try await deleteDiscordWebhook(url: url)
+    case .webhook, .notion:
         return
     }
 }

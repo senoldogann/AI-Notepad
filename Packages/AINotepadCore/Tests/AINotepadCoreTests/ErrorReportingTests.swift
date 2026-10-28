@@ -73,9 +73,19 @@ import Testing
         // geçen süre − parça (yüklü makinede/simülatörde görev geç çalışabilir; sabit pay testi kırılgan yapıyordu).
         let elapsed: Duration = .now - origin
         let maxFill: Int = Int(Double(elapsed.components.seconds) * 16000 + Double(elapsed.components.attoseconds) / 1e18 * 16000) - 1600
-        #expect(chunks.count == 2)
-        #expect(chunks.first?.allSatisfy { $0 == 0 } == true)
-        #expect((30400 - 1600...maxFill + 1600).contains(chunks.first?.count ?? 0), "dolgu: \(chunks.first?.count ?? 0), en çok: \(maxFill)")
+        // Dolgu en fazla 1 sn'lik sessiz parçalarla gelir; son parça gerçek sestir.
+        let silence: [[Float]] = Array(chunks.dropLast())
+        let filled: Int = silence.map(\.count).reduce(0, +)
+        #expect(chunks.last == [Float](repeating: 0.5, count: 1600))
+        #expect(silence.allSatisfy { $0.count <= 16000 && $0.allSatisfy { $0 == 0 } })
+        #expect((30400 - 1600...maxFill + 1600).contains(filled), "dolgu: \(filled), en çok: \(maxFill)")
+    }
+
+    // Uzun boşluk (uyku) tek dev dizi yerine sınırlı parçalara bölünür.
+    @Test func splitsLongSilenceIntoBoundedChunks() {
+        #expect(silenceChunkLengths(totalSamples: 0, maxChunkSamples: 16000) == [])
+        #expect(silenceChunkLengths(totalSamples: 40000, maxChunkSamples: 16000) == [16000, 16000, 8000])
+        #expect(silenceChunkLengths(totalSamples: 32000, maxChunkSamples: 16000) == [16000, 16000])
     }
 }
 

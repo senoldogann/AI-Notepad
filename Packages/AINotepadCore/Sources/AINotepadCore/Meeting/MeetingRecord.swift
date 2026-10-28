@@ -241,6 +241,23 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Notun gönderim işaretleri (hedefler, Apple Notlar ve webhook anları) değişmiş kopya; iki kaydın işaretlerini
+    /// birleştirirken kullanılır (nil: işaret yok).
+    public func with(sentDestinationIDs newIDs: [String]?, notesSentAt newNotesDate: Date?, webhookSentAt newWebhookDate: Date?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.sentDestinationIDs = newIDs
+        copy.notesSentAt = newNotesDate
+        copy.webhookSentAt = newWebhookDate
+        return copy
+    }
+
+    /// Araca gönderilen görevleri değişmiş kopya.
+    public func with(sentTaskKeys newTaskKeys: [String: [String]]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.sentTaskKeys = newTaskKeys
+        return copy
+    }
+
     /// Kendi notları değişmiş kopya (boş metin nil olur).
     public func with(myNotes newNotes: String) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -397,6 +414,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(notice newNotice: String?) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.notice = newNotice
+        return copy
+    }
+
+    /// "Sen" son geçiş işareti değişmiş kopya.
+    public func with(meNeedsFinalPass newValue: Bool?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.meNeedsFinalPass = newValue
         return copy
     }
 }

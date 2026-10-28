@@ -60,6 +60,9 @@ enum SettingsKey {
     static let micSuggestions: String = "calendar.micSuggestions"
     /// Not hazır olunca webhook'a kendiliğinden gönder.
     static let webhookAutoSend: String = "integrations.webhookAutoSend"
+    /// Sonucu belirsiz gönderimler ("toplantı|hedef"): sunucu yanıt vermedi, not gitmiş olabilir; kendiliğinden yeniden
+    /// gönderilmez. Bu cihaza özeldir.
+    static let uncertainSends: String = "integrations.uncertainSends"
     /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
     static let primaryMeetingLanguage: String = "language.primary"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
@@ -78,6 +81,8 @@ enum SettingsKey {
     static let folders: String = "folders"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
+    /// Kişiler sayfasındaki liste açık (varsayılan kapalı: sayfa kişinin kendisine yer açar).
+    static let peopleListVisible: String = "people.listVisible"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
     static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.
@@ -223,6 +228,7 @@ func registerDefaultSettings() {
         SettingsKey.voiceRecognition: false,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
+        SettingsKey.peopleListVisible: false,
         SettingsKey.inPersonMode: false,
         SettingsKey.appleNotesAutoSend: false,
         SettingsKey.markdownFolder: "",

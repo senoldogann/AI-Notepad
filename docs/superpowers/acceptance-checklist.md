@@ -77,7 +77,6 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Panelden Başlat → Duraklat ("Duraklatıldı", metin durur) → Devam → Bitir; menüden de Duraklat/Devam.
 - [ ] Bitir'e basınca panel "Bitiriliyor…", ardından kendiliğinden toplantı sayfasına geçiyor; en üstte "Senin görevlerin".
 - [ ] PDF düğmesi: İndirilenler'de temiz PDF (görevler, özet, kararlar, sözlük, transkript; sayfa numaraları); "Finder'da göster" çalışıyor; PDF'ten kopyalanan metin doğru.
-- [ ] Ayarlar, Toplantılar ve Kurulum ayrı pencere açmıyor; hepsi panelin içinde, geri düğmesiyle dönülüyor; kayıt sürerken "Kayıtta" ile canlıya dönülüyor.
 - [ ] Panel ayarlarda yazı alırken (anahtar, ad, model) başka uygulama önde kalıyor ama yazılabiliyor; anahtar ⌘V ile ya da "Yapıştır" düğmesiyle yapıştırılabiliyor.
 - [ ] İlk PDF/Markdown dışa aktarmada macOS'un tek seferlik "İndirilenler klasörüne erişim" izni çıkabilir (sistem penceresi; uygulamanın değil).
 - [ ] Toplantıda soruya soruyu tekrar ederek cevap ver ("Joo, teen diat perjantaiksi"): cevabın "Sen" olarak canlıda ve notta duruyor.
@@ -87,7 +86,7 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 - [ ] Ayarlar › Genel › Arayüz dili: English → "Şimdi yeniden başlat": menü, panel, Ayarlar, Toplantılar, Kurulum, hata mesajları, PDF/Markdown başlıkları İngilizce; tarihler İngilizce; not içeriği ve çeviri Türkçe kalıyor. Türkçe/Sistem'e dönüş çalışıyor.
 - [ ] Mikrofon/sistem sesi izin pencerelerindeki açıklama arayüz diline göre.
 - [ ] Ayarlar › LLM: çeviri modeli Sonnet 5.5 / effort Yüksek, not modeli Fable 5.1 / Orta seç → "Bağlantıyı dene" ve kayıtta çeviri ile not çalışıyor.
-- [ ] Ayarlar › Görünüm: tema Koyu/Açık, vurgu rengi, arka plan "Koyu cam"/"Opak", yazı tipi, metin boyutu, satır aralığı, alt boşluk panelde anında değişiyor; "Varsayılana döndür" çalışıyor; ada kapatılınca kayıtta çentikte görünmüyor.
+- [ ] Ayarlar › Görünüm: tema Koyu/Açık, vurgu rengi, yazı tipi, metin boyutu, satır aralığı, alt boşluk panelde anında değişiyor; "Varsayılana döndür" çalışıyor; ada kapatılınca kayıtta çentikte görünmüyor.
 - [ ] Panel köşeleri dört köşede de yuvarlak; kenar ve gölge dikdörtgen değil.
 - [ ] Konuşma akarken transkript kendiliğinden en alta iniyor ve altta boşluk var; yukarı kaydırınca yerinde kalıyor, "Yeni metin" düğmesi çıkıyor.
 - [ ] Panel başlığındaki ve sayfalardaki düğmelerin üzerine gelince açıklama çıkıyor (uygulama arka plandayken de).
@@ -110,3 +109,52 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 
 ## Ekran paylaşımı
 - [ ] "Ekran görüntülerinde gizle" açık/kapalı: ⌘⇧3/⌘⇧4, ⌘⇧5 kayıt, Zoom tüm ekran paylaşımında panelin görünüp görünmediği (macOS 26'da ekran görüntüsünde göründüğü biliniyor).
+
+## Ana pencere: kayıt ekranı ve arama
+- [ ] Kayıt başlayınca ana pencerenin içeriği bulanıklaşıyor (koyu perde yok); ortada büyük ses ölçer, süre, Duraklat/Devam, "Paneli göster" ve kırmızı "Bitir". Açık ve koyu temada yazılar okunuyor.
+- [ ] "Uygulamaya dön" ya da Esc ekranı kapatıyor; üst çubuktaki "Kayıtta" hapı geri açıyor. Ekran açıkken yazılan tuşlar ve Return arkadaki alanlara (Sor kutusu) gitmiyor.
+- [ ] Kayıt ekranı açık ve boştayken Etkinlik Monitörü'nde CPU düşük (ana sayfadaki kayıt simgesi bulanıklığın altında titremiyor).
+- [ ] ⌘K ve ⌘F arama penceresini açıyor: arkası buzlu cam gibi açık bulanıklaşıyor; ↑↓ seçiyor, Return toplantıyı açıyor, "Tüm sonuçları listede göster" aramayı listeye uyguluyor; Esc ya da dışarı tıklama kapatıyor.
+- [ ] En dar pencerede üst çubuk taşmıyor: başlık tek satır, arama hapı daralıyor.
+
+## Kurulum
+- [ ] İlk açılışta kurulum: soldaki film gradyanlı panelde yazılar koyu ve okunuyor; sağda içerik üstte, düğmelerin üstünde adımların yol haritası (biten adım onaylı, şimdiki vurgulu). Biten adıma tıklayınca o adıma dönülüyor.
+- [ ] İngilizce arayüz ve %115 boyutta, en küçük pencerede yol haritası kesilmiyor (yer darsa önce açıklamalar gizleniyor).
+
+## iPhone uygulaması
+- [ ] İlk açılış: kurulum, mikrofon izni; Kayıt sekmesinden yüz yüze toplantı kaydı, canlı metin ve (açıksa) Türkçe çeviri.
+- [ ] Kilit ekranında ve Dynamic Island'da Live Activity; Kısayollar ve Denetim Merkezi düğmesiyle kayıt başlatılıp bitiriliyor.
+- [ ] Kayıt bitince not hazırlanıyor; Toplantılar, Görevlerim ve Sor sekmeleri çalışıyor; toplantı çalınıyor.
+- [ ] Inter yazı tipi her ekranda; İngilizce arayüzde metinler kesilmiyor.
+
+## iCloud eşitleme (iki cihaz)
+- [ ] Mac'te Ayarlar'dan iCloud eşitlemesini aç: biten toplantılar iCloud Drive'a taşınıyor, iPhone'da görünüyor.
+- [ ] iPhone'da kaydedilen toplantı Mac'te görünüyor; birinde ad, görev ya da not düzenlemesi ötekine geçiyor.
+- [ ] Anahtarlar iCloud Anahtar Zinciri ile iPhone'a gönderilince iPhone anahtar sormadan not hazırlıyor.
+- [ ] Bir cihazda silinen toplantı ötekinden de kalkıyor; kayıt ya da işleme sürerken eşitleme toplantıyı bozmuyor.
+- [ ] Eşitleme kapalıyken toplantılar yalnızca `~/Library/Application Support/AINotepad` altında.
+
+## Kanallar (birden çok hedef)
+- [ ] Ayarlar › Bağlantılar: Slack, Teams, Discord, Zoom, Notion, webhook, Apple Notlar ve klasör kartlarında marka logoları; açık ve koyu temada okunuyor.
+- [ ] İngilizce arayüz ve %115 boyutta kartlar kesilmiyor (dar alanda tek sütun); "N bağlı" rozeti başlığın altında.
+- [ ] Aynı anda iki hedef (ör. Slack ve Discord) bağlı: her birinin kendiliğinden gönderimi ayrı açılıp kapanıyor; toplantı bitince ikisine de gidiyor.
+- [ ] "Deneme mesajı gönder": gönderilirken kâğıt uçak sakince atıyor; "gönderildi" birkaç saniyede, hata biraz daha sonra kendiliğinden kayboluyor.
+- [ ] Toplantı sayfası › ⋯ › Kanala gönder: "Kanala gönderiliyor…" sonra "Not kanala gönderildi"; sonuç satırı birkaç saniyede kayboluyor.
+- [ ] Oturumu düşen hedefte "yeniden bağlan" uyarısı kalıyor; "Yeniden bağlan" ile düzeliyor.
+
+## Notion, Linear ve Jira (MCP)
+- [ ] Notion: tarayıcıda izin verince bağlanıyor; not seçilen özel sayfaya yeni sayfa olarak gidiyor; "Vazgeç" girişi iptal ediyor.
+- [ ] Linear ve Jira: Ayarlar › Bağlantılar › Görev araçları'ndan bağlan; toplantı sayfası › ⋯ › Görevleri gönder işleri açıyor, özet satırında açılan işler.
+- [ ] Kısmi başarısızlıkta yeniden gönderince yalnızca kalan görevler gidiyor.
+
+## Yerel MCP sunucusu ve Skill
+- [ ] Ayarlar › Bağlantılar: Claude Desktop, Cursor ve VS Code kartlarından "Bağla" yapılandırmaya AI-Notepad'i ekliyor (diğer ayarlar korunuyor); "Kaldır" çıkarıyor.
+- [ ] Claude Desktop'ta toplantılar listeleniyor, aranıyor ve okunuyor (salt okunur); uygulama kapalıyken de çalışıyor.
+- [ ] `skills/ai-notepad-meetings` Claude'a yüklenince haftalık özet ve takip e-postası istekleri MCP üzerinden çalışıyor.
+- [ ] Başka araç için yazılmış bir Skill içe aktarılıyor ve Sor'da `/` ile çalışıyor.
+
+## Dağıtım: DMG ve Gatekeeper
+- [ ] `scripts/release.sh` `AI-Notepad-0.1.3.dmg` üretiyor (adda tek sürüm), noter onayı ekli.
+- [ ] Temiz bir kullanıcı hesabında DMG'yi aç, uygulamayı Uygulamalar'a sürükle, aç: Gatekeeper uyarısız açıyor (`spctl --assess` geçiyor).
+- [ ] Uygulamanın içinde lisanslar var: `Contents/Resources/NOTICE`, `WhisperKit-LICENSE.txt`, `WhisperKit-NOTICES.txt`, `Inter-OFL.txt`.
+- [ ] Güncelleme kurulumunda izinler (mikrofon, sistem sesi) korunuyor; `scripts/install-app.sh` kayıt ya da işleme sürerken kurmayı reddediyor.

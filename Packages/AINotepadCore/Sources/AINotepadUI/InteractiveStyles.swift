@@ -38,13 +38,6 @@ private struct HoverSurface: ViewModifier {
     }
 }
 
-public extension View {
-    /// Düğme olmayan tıklanabilir öğe (ör. dokununca çalan paragraf): el imleci ve hover arka planı.
-    func hoverHighlight(cornerRadius: CGFloat) -> some View {
-        modifier(HoverSurface(cornerRadius: cornerRadius, isPressed: false))
-    }
-}
-
 /// Çerçevesiz düğme (satırlar, simgeler, metin bağlantıları): el imleci ve fare üstündeyken hafif arka plan.
 public struct HoverPlainButtonStyle: ButtonStyle {
     let cornerRadius: CGFloat

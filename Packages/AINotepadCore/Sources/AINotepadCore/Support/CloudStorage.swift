@@ -253,20 +253,9 @@ public func prepareCloudStorage() async throws {
     }.value
 }
 
-/// Çakışan sürümlerin kullanıcı işaretlerini birleştirir: son yazılan sürüm temeldir, diğer cihazda tamamlanan ya da
-/// Anımsatıcılar'a eklenen görevler kaybolmaz (ör. iPhone'da işaretlenen görev, Mac notu yeniden yazarken). Saf
-/// fonksiyondur.
-public func mergedConflictRecord(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
-    let union: ([String]?, [[String]?]) -> [String] = { (base: [String]?, extra: [[String]?]) -> [String] in
-        extra.reduce(base ?? []) { (result: [String], keys: [String]?) -> [String] in result + (keys ?? []).filter { !result.contains($0) } }
-    }
-    let completed: [String] = union(current.completedTasks, others.map(\.completedTasks))
-    let reminded: [String] = union(current.remindedTasks, others.map(\.remindedTasks))
-    return current.with(completedTasks: completed).with(remindedTasks: reminded)
-}
-
-/// Toplantı dosyasındaki iCloud çakışmalarını çözer: son yazılan sürüm kalır, diğer sürümlerdeki görev işaretleri ona
-/// eklenir (bkz. `mergedConflictRecord`), diğer sürümler kaldırılır ve loglanır. Çakışma yoksa bir şey yapmaz.
+/// Toplantı dosyasındaki iCloud çakışmalarını çözer: son yazılan sürüm kalır, diğer sürümlerdeki kullanıcı işaretleri
+/// (görevler, gönderimler) ona eklenir (bkz. `mergingUserMarks`; ör. iPhone'da işaretlenen görev, Mac notu yeniden
+/// yazarken), diğer sürümler kaldırılır ve loglanır. Çakışma yoksa bir şey yapmaz.
 public func resolveCloudConflicts(file: URL) throws {
     guard let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: file), !conflicts.isEmpty else {
         return
@@ -276,7 +265,7 @@ public func resolveCloudConflicts(file: URL) throws {
         let others: [MeetingRecord] = try conflicts.map { (version: NSFileVersion) throws -> MeetingRecord in
             try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: version.url))
         }
-        let merged: MeetingRecord = mergedConflictRecord(current: current, others: others)
+        let merged: MeetingRecord = mergingUserMarks(current: current, others: others)
         if merged != current {
             try saveMeeting(record: merged, directory: file.deletingLastPathComponent())
         }
@@ -360,11 +349,19 @@ public final class CloudSyncController {
                 state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
             } else {
                 let result: CloudMoveResult = try await copyAllMeetingsToLocalInBackground()
+                // Kopyalanamayan toplantı varken yerele geçilirse o toplantılar bu cihazda görünmez olur: eşitleme
+                // açık kalır, neden gösterilir; kullanıcı yeniden dener.
+                guard result.failures.isEmpty else {
+                    cloudLogger.error("iCloud eşitlemesi kapatılamadı, kopyalanamayan: \(result.failures.count, privacy: .public), kopyalanan: \(result.moved.count, privacy: .public)")
+                    state = .failed(copyFailureSummary(failures: result.failures))
+                    onChange()
+                    return
+                }
                 watcher.stop()
                 isReady = false
                 save(location: .local)
                 cloudLogger.info("iCloud eşitlemesi kapatıldı, kopyalanan: \(result.moved.count, privacy: .public)")
-                state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
+                state = .idle
             }
         } catch {
             cloudLogger.error("iCloud eşitlemesi değiştirilemedi, hata: \(String(describing: error), privacy: .public)")
@@ -419,6 +416,11 @@ public final class CloudSyncController {
 /// Taşınamayan toplantıların özeti (ayarlarda gösterilir). Saf fonksiyondur.
 func failureSummary(failures: [MeetingLoadFailure]) -> String {
     String(localized: "\(failures.count) toplantı taşınamadı: \(failures.first?.reason ?? "")")
+}
+
+/// Eşitleme kapatılırken bu cihaza kopyalanamayan toplantıların özeti (ayarlarda gösterilir). Saf fonksiyondur.
+func copyFailureSummary(failures: [MeetingLoadFailure]) -> String {
+    String(localized: "\(failures.count) toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: \(failures.first?.reason ?? "")")
 }
 
 public extension AppPaths {

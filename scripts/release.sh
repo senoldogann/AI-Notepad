@@ -34,8 +34,25 @@ notes="$1"
 notes="$(cd "$(dirname "$notes")" && pwd)/$(basename "$notes")"
 
 profile="AINotepad"
-version="$(grep -E '^\s+MARKETING_VERSION:' project.yml | head -1 | sed -E 's/.*"(.*)".*/\1/')"
-build="$(grep -E '^\s+CURRENT_PROJECT_VERSION:' project.yml | head -1 | sed -E 's/.*"(.*)".*/\1/')"
+# Sürüm project.yml'den: üç hedef (Mac, iPhone, widget) aynı sürümü taşımalı; farklıysa ya da biçim bozuksa durulur
+# (önceden üç satır birleşip bozuk DMG adı çıkıyordu).
+versions="$(grep -E '^[[:space:]]+MARKETING_VERSION:' project.yml | sed -E 's/.*"(.*)".*/\1/' | sort -u)"
+[[ -n "$versions" ]] || { echo "project.yml'de MARKETING_VERSION yok." >&2; exit 1; }
+[[ "$(printf '%s\n' "$versions" | wc -l | tr -d '[:space:]')" == "1" ]] || {
+    echo "project.yml'deki hedeflerin MARKETING_VERSION değerleri farklı: $(printf '%s ' $versions)" >&2
+    exit 1
+}
+version="$versions"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Geçersiz sürüm: '$version'" >&2; exit 1; }
+# Derleme numarası da üç hedefte aynı olmalı: Sparkle sürümleri CFBundleVersion ile karşılaştırır.
+builds="$(grep -E '^[[:space:]]+CURRENT_PROJECT_VERSION:' project.yml | sed -E 's/.*"(.*)".*/\1/' | sort -u)"
+[[ -n "$builds" ]] || { echo "project.yml'de CURRENT_PROJECT_VERSION yok." >&2; exit 1; }
+[[ "$(printf '%s\n' "$builds" | wc -l | tr -d '[:space:]')" == "1" ]] || {
+    echo "project.yml'deki hedeflerin CURRENT_PROJECT_VERSION değerleri farklı: $(printf '%s ' $builds)" >&2
+    exit 1
+}
+build="$builds"
+[[ "$build" =~ ^[0-9]+$ ]] || { echo "Geçersiz derleme numarası: '$build'" >&2; exit 1; }
 repo="senoldogann/AI-Notepad"
 archive_dir="release-archive"
 out=".build/release"

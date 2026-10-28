@@ -22,6 +22,8 @@ public struct PanelActions {
     public let onRetryTranslations: @MainActor ([SegmentID]) -> Void
     /// Kayıt sırasında toplantı dilini değiştir.
     public let onSetLanguage: @MainActor (MeetingLanguage) -> Void
+    /// Kayıt yokken bir sonraki kaydın dilini seç (otomatik ya da sabit).
+    public let onChooseLanguageMode: @MainActor (LanguageMode) -> Void
     /// Bir bloğun bölümlerini verilen konuşmacıya ata (otomatik ayırma yanıldıysa).
     public let onReassignBlock: @MainActor ([SegmentID], Int) -> Void
     /// Bir konuşmacının tümünü (geçmiş ve gelecek) diğeriyle birleştir.
@@ -42,6 +44,7 @@ public struct PanelActions {
         onCloseCard: @escaping @MainActor () -> Void,
         onRetryTranslations: @escaping @MainActor ([SegmentID]) -> Void,
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void,
+        onChooseLanguageMode: @escaping @MainActor (LanguageMode) -> Void,
         onReassignBlock: @escaping @MainActor ([SegmentID], Int) -> Void,
         onMergePerson: @escaping @MainActor (Int, Int) -> Void,
         onBookmark: @escaping @MainActor () -> Void
@@ -58,6 +61,7 @@ public struct PanelActions {
         self.onCloseCard = onCloseCard
         self.onRetryTranslations = onRetryTranslations
         self.onSetLanguage = onSetLanguage
+        self.onChooseLanguageMode = onChooseLanguageMode
         self.onReassignBlock = onReassignBlock
         self.onMergePerson = onMergePerson
         self.onBookmark = onBookmark
@@ -127,44 +131,46 @@ public struct TranscriptPanel: View {
         .frame(minWidth: 300, minHeight: 240)
     }
 
+    /// Üst çubuk: solda durum (kayıtta nokta + süre ve ses ölçer) ve dil çipi; sağda kayıt denetimleri tek kapsülde,
+    /// ayrı kırmızı "Bitir", gezinme eylemlerini toplayan ⋯ menüsü ve gizle.
     private var header: some View {
         HStack(spacing: DesignTokens.Spacing.s) {
-            // Dar panelde durum metni tek satırda kısalır; düğmeler ve dil çipi her zaman tam görünür.
-            StatusLabel(state: state)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                // Durum hiç görünmez olmasın: önce düğmeler menüye toplanır, durum en son kısalır.
-                // Kayıtta yalnızca nokta + süre (kısa); boşta "Hazır · Deepgram" gibi daha uzun.
-                .frame(minWidth: state.isRecording ? 60 : 96, alignment: .leading)
-                .layoutPriority(-1)
-            if state.isRecording && !state.isPaused {
-                LevelMeter(levels: levels)
-                    .transition(.opacity)
-            }
-            Spacer(minLength: DesignTokens.Spacing.s)
-            // Genişlik daraldıkça önce gezinme düğmeleri, sonra dil çipi "⋯" menüsüne toplanır; kayıt denetimleri
-            // ve gizle her zaman görünür.
+            // Yer daraldıkça sırayla: işaretle/notlarım ⋯'e iner, ses ölçer gizlenir, dil çipi ⋯'e iner. Süre, kayıt
+            // denetimleri ve gizle hep görünür.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: DesignTokens.Spacing.s) {
+                    statusView
+                    meterView
                     languageChip
-                    recordingControls
-                    IconButton(symbol: "doc.on.doc", help: "Tümünü kopyala", action: copyAll)
-                        .disabled(state.blocks.isEmpty)
-                    IconButton(symbol: "list.bullet.rectangle", help: "Toplantılar", action: actions.onOpenMeetings)
-                    IconButton(symbol: "gearshape", help: "Ayarlar", action: actions.onOpenSettings)
-                }
-                HStack(spacing: DesignTokens.Spacing.s) {
-                    languageChip
-                    recordingControls
+                    Spacer(minLength: DesignTokens.Spacing.s)
+                    fullControls
                     overflowMenu { overflowItems }
                 }
                 HStack(spacing: DesignTokens.Spacing.s) {
-                    recordingControls
+                    statusView
+                    meterView
+                    languageChip
+                    Spacer(minLength: DesignTokens.Spacing.s)
+                    compactControls
+                    compactMenu
+                }
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    statusView
+                    languageChip
+                    Spacer(minLength: DesignTokens.Spacing.s)
+                    compactControls
+                    compactMenu
+                }
+                HStack(spacing: DesignTokens.Spacing.s) {
+                    statusView
+                    Spacer(minLength: DesignTokens.Spacing.s)
+                    compactControls
                     overflowMenu {
+                        languageMenuItem
+                        Divider()
                         if state.isRecording {
-                            Menu("Dili değiştir") {
-                                LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
-                            }
+                            recordingExtraItems
+                            Divider()
                         }
                         overflowItems
                     }
@@ -174,11 +180,60 @@ public struct TranscriptPanel: View {
         }
     }
 
+    /// Kayıtta nokta ve süre (hep tam); boşta yalnızca bir sorun ya da bekleme varsa durum (önce bu kısalır).
+    @ViewBuilder
+    private var statusView: some View {
+        if state.isRecording || state.phase == .finishing {
+            StatusLabel(state: state)
+                .lineLimit(1)
+                .fixedSize()
+        } else if !state.statusText.isEmpty {
+            StatusLabel(state: state)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
+        }
+    }
+
+    @ViewBuilder
+    private var meterView: some View {
+        if state.isRecording && !state.isPaused {
+            LevelMeter(levels: levels)
+                .transition(.opacity)
+        }
+    }
+
+    /// Dar panelin ⋯ menüsü: kayıtta işaretle ve notlarım da içinde.
+    private var compactMenu: some View {
+        overflowMenu {
+            if state.isRecording {
+                recordingExtraItems
+                Divider()
+            }
+            overflowItems
+        }
+    }
+
+    /// Çok dar panelde dil seçimi ⋯ menüsünde: kayıtta değiştir, boşta bir sonraki kaydın dilini seç.
+    @ViewBuilder
+    private var languageMenuItem: some View {
+        if state.isRecording {
+            Menu("Dili değiştir") {
+                LanguageMenuItems(onSetLanguage: actions.onSetLanguage)
+            }
+        } else if state.phase == .idle {
+            Menu("Dili seç") {
+                Button("Otomatik") { actions.onChooseLanguageMode(.automatic) }
+                LanguageMenuItems { (language: MeetingLanguage) -> Void in actions.onChooseLanguageMode(.fixed(language)) }
+            }
+        }
+    }
+
     private func copyAll() {
         copyToPasteboard(text: plainText(blocks: state.blocks))
     }
 
-    /// Dar panelde sığmayan gezinme eylemleri.
+    /// ⋯ menüsündeki gezinme eylemleri.
     @ViewBuilder
     private var overflowItems: some View {
         Button("Tümünü kopyala", systemImage: "doc.on.doc", action: copyAll)
@@ -187,18 +242,27 @@ public struct TranscriptPanel: View {
         Button("Ayarlar", systemImage: "gearshape", action: actions.onOpenSettings)
     }
 
-    /// "⋯" menüsü; içeriği genişliğe göre değişir (çok darda dil de içinde).
+    /// Dar panelde kapsülden ⋯ menüsüne inen kayıt eylemleri.
+    @ViewBuilder
+    private var recordingExtraItems: some View {
+        Button("Bu anı işaretle", systemImage: "bookmark", action: actions.onBookmark)
+        Button(isNotesOpen ? "Notlarımı kapat" : "Notlarım", systemImage: "square.and.pencil") {
+            withAnimation(.smooth(duration: 0.25)) { isNotesOpen.toggle() }
+        }
+    }
+
+    /// "⋯" menüsü.
     private func overflowMenu(@ViewBuilder items: () -> some View) -> some View {
         Menu {
             items()
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .appFont(size: 12, weight: .medium)
-                .frame(width: 22, height: 22)
+            Image(systemName: "ellipsis")
+                .appFont(size: 12, weight: .semibold)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)
-        .buttonStyle(.hoverPlain)
+        .buttonStyle(.hoverCapsule)
         .menuIndicator(.hidden)
         .fixedSize()
         .foregroundStyle(.secondary)
@@ -206,50 +270,109 @@ public struct TranscriptPanel: View {
         .accessibilityLabel("Diğer")
     }
 
-    /// Kayıt yokken mikrofon seçimi ve "Başlat"; kayıtta duraklat/devam, mikrofon ve "Bitir"; bitirilirken hiçbiri.
+    /// Geniş panelde denetimler: kayıtta tüm kayıt eylemleri kapsülde ve "Bitir"; boşta mikrofon ve "Başlat".
     @ViewBuilder
-    private var recordingControls: some View {
+    private var fullControls: some View {
         switch state.phase {
         case .idle:
-            IconButton(
-                symbol: state.isMicMuted ? "mic.slash" : "mic",
-                help: state.isMicMuted ? "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)" : "Kendi sesin de kaydedilecek (tıkla: yalnızca karşı taraf)",
-                action: actions.onToggleMic
-            )
-            Button(action: actions.onStart) {
-                Label("Başlat", systemImage: "record.circle")
-                    .appFont(size: 12, weight: .medium)
-                    .padding(.horizontal, DesignTokens.Spacing.s)
-                    .padding(.vertical, 3)
-                    .background(Theme.primary, in: Capsule())
-                    .foregroundStyle(Theme.onPrimary)
-            }
-            .buttonStyle(.hoverCapsule)
-            .disabled(!state.canStart)
-            .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
+            idleControls
         case .recording:
-            IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
-            if state.isInPerson {
-                // Yüz yüze: mikrofon tek kaynak ve odadaki herkesi kaydediyor.
-                IconButton(symbol: "person.3", help: "Yüz yüze: mikrofon odadaki herkesi kaydediyor", action: actions.onToggleMic)
-                    .disabled(true)
-            } else if state.canToggleMic {
-                IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
-            } else {
-                // Kayıt mikrofonsuz başladı: mikrofon hiç açılmadı, bu kayıtta açılamaz.
-                IconButton(symbol: "mic.slash", help: "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor", action: actions.onToggleMic)
-                    .disabled(true)
+            controlCapsule {
+                pauseButton
+                micButton
+                IconButton(symbol: "bookmark", help: "Bu anı işaretle (notta öne çıkar)", action: actions.onBookmark)
+                IconButton(
+                    symbol: isNotesOpen ? "square.and.pencil.circle.fill" : "square.and.pencil",
+                    help: "Notlarım: kendi notunu yaz, not onu öncelik sayar",
+                    action: { withAnimation(.smooth(duration: 0.25)) { isNotesOpen.toggle() } }
+                )
             }
-            IconButton(symbol: "bookmark", help: "Bu anı işaretle (notta öne çıkar)", action: actions.onBookmark)
-            IconButton(
-                symbol: isNotesOpen ? "square.and.pencil.circle.fill" : "square.and.pencil",
-                help: "Notlarım: kendi notunu yaz, not onu öncelik sayar",
-                action: { withAnimation(.smooth(duration: 0.25)) { isNotesOpen.toggle() } }
-            )
-            IconButton(symbol: "stop.fill", help: "Bitir", action: actions.onStop)
+            stopButton
         case .finishing:
             EmptyView()
         }
+    }
+
+    /// Dar panelde denetimler: kayıtta yalnızca duraklat, mikrofon ve "Bitir".
+    @ViewBuilder
+    private var compactControls: some View {
+        switch state.phase {
+        case .idle:
+            idleControls
+        case .recording:
+            controlCapsule {
+                pauseButton
+                micButton
+            }
+            stopButton
+        case .finishing:
+            EmptyView()
+        }
+    }
+
+    /// Kayıt yokken: mikrofon seçimi ve "Başlat".
+    @ViewBuilder
+    private var idleControls: some View {
+        IconButton(
+            symbol: state.isMicMuted ? "mic.slash" : "mic",
+            help: state.isMicMuted ? "Yalnızca karşı taraf kaydedilecek (tıkla: kendi sesin de)" : "Kendi sesin de kaydedilecek (tıkla: yalnızca karşı taraf)",
+            action: actions.onToggleMic
+        )
+        Button(action: actions.onStart) {
+            Label("Başlat", systemImage: "record.circle")
+                .appFont(size: 12, weight: .medium)
+                .padding(.horizontal, DesignTokens.Spacing.s)
+                .padding(.vertical, 4)
+                .background(Theme.primary, in: Capsule())
+                .foregroundStyle(Theme.onPrimary)
+        }
+        .buttonStyle(.hoverCapsule)
+        .disabled(!state.canStart)
+        .hoverHint("Kaydı başlat", alignment: .center, edge: .bottom)
+    }
+
+    /// Kayıt eylemlerini tek yumuşak kapsülde toplar.
+    private func controlCapsule(@ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 0) {
+            content()
+        }
+        .padding(.horizontal, 3)
+        .padding(.vertical, 2)
+        .background(Theme.soft, in: Capsule())
+    }
+
+    private var pauseButton: some View {
+        IconButton(symbol: state.isPaused ? "play.fill" : "pause.fill", help: state.isPaused ? "Devam ettir" : "Duraklat", action: actions.onTogglePause)
+    }
+
+    @ViewBuilder
+    private var micButton: some View {
+        if state.isInPerson {
+            // Yüz yüze: mikrofon tek kaynak ve odadaki herkesi kaydediyor.
+            IconButton(symbol: "person.3", help: "Yüz yüze: mikrofon odadaki herkesi kaydediyor", action: actions.onToggleMic)
+                .disabled(true)
+        } else if state.canToggleMic {
+            IconButton(symbol: state.isMicMuted ? "mic.slash" : "mic", help: state.isMicMuted ? "Mikrofonu aç (Sen)" : "Mikrofonu kapat (yalnızca dinliyorum)", action: actions.onToggleMic)
+        } else {
+            // Kayıt mikrofonsuz başladı: mikrofon hiç açılmadı, bu kayıtta açılamaz.
+            IconButton(symbol: "mic.slash", help: "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor", action: actions.onToggleMic)
+                .disabled(true)
+        }
+    }
+
+    /// Kaydı bitirir: ayrı, kırmızı yuvarlak düğme (yanlışlıkla diğer eylemlerle karışmasın).
+    private var stopButton: some View {
+        Button(action: actions.onStop) {
+            Image(systemName: "stop.fill")
+                .appFont(size: 9, weight: .bold)
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(Color.red, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.hoverCapsule)
+        .hoverHint("Bitir", alignment: .trailing, edge: .bottom)
+        .accessibilityLabel("Bitir")
     }
 
     /// Dil etiketi; kayıt sırasında dokununca dil değiştirilebilir (otomatik algılama yanılırsa).
@@ -274,6 +397,20 @@ public struct TranscriptPanel: View {
             .fixedSize()
             .hoverHint("Toplantı dilini değiştir", alignment: .center, edge: .bottom)
             .accessibilityLabel("Toplantı dili: \(state.languageText). Değiştir")
+        } else if state.phase == .idle {
+            // Kayıt yokken bir sonraki kaydın dili seçilir.
+            Menu {
+                Button("Otomatik") { actions.onChooseLanguageMode(.automatic) }
+                LanguageMenuItems { (language: MeetingLanguage) -> Void in actions.onChooseLanguageMode(.fixed(language)) }
+            } label: {
+                chip
+            }
+            .menuStyle(.button)
+            .buttonStyle(.hoverCapsule)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .hoverHint("Toplantının dilini seç", alignment: .center, edge: .bottom)
+            .accessibilityLabel("Toplantı dili: \(state.languageText). Seç")
         } else {
             chip
         }
@@ -510,7 +647,7 @@ struct StatusLabel: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Kayıtta")
-        } else {
+        } else if !state.statusText.isEmpty {
             Text(state.statusText)
                 .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.secondary)
