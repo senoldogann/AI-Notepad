@@ -9,7 +9,7 @@ public struct TranscriptParagraph: Sendable, Equatable, Identifiable {
     public let startSec: Double
     public let endSec: Double
     public let text: String
-    /// Bölümlerin Türkçeleri sırayla; hiç yoksa nil.
+    /// Bölümlerin not dilindeki çevirileri sırayla; hiç yoksa nil.
     public let turkish: String?
     /// Çalarken vurgulanacak kelimeler: son geçişin gerçek zamanları, yoksa bölüm süresine göre tahmin.
     public let words: [StoredWord]
@@ -196,6 +196,15 @@ public func paragraphLabel(paragraph: TranscriptParagraph, speakerNames: [Int: S
         return name
     }
     return speakerLabel(speaker: paragraph.speaker, person: paragraph.person)
+}
+
+/// Konuşmacı adlarına düzenlemeler uygulanır ("Konuşmacı 2 = Aino"): ad kırpılır, boş ad kişinin adını kaldırır
+/// ("Konuşmacı N" etiketi geri gelir); düzenlenmeyen kişilerin adları kalır. Saf fonksiyondur.
+public func renamingSpeakers(names: [Int: String], edits: [Int: String]) -> [Int: String] {
+    edits.reduce(into: names) { (result: inout [Int: String], edit: (key: Int, value: String)) -> Void in
+        let trimmed: String = edit.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        result[edit.key] = trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 /// Toplantı dilinin arayüz dilindeki adı. Saf fonksiyondur.

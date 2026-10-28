@@ -13,7 +13,12 @@ targets:
   AINotepad:
     type: application
     platform: macOS
-    sources: [App]
+    sources:
+      # App/Licenses (WhisperKit/SpeakerKit MIT lisansı ve bildirimleri) ve App/Fonts/Inter-OFL.txt da kaynaklarla gelir.
+      - App
+      # Üçüncü taraf bildirimi uygulamanın içinde de (Resources/NOTICE).
+      - path: NOTICE
+        buildPhase: resources
     dependencies:
       - package: AINotepadCore
         product: AINotepadCore
@@ -53,17 +58,27 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/AINotepad.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.1.3"
+        CURRENT_PROJECT_VERSION: "4"
   AINotepadiOS:
     type: application
     platform: iOS
     sources:
+      # iPhone'un izin metinleri (InfoPlist.xcstrings, tr/en) ve gizlilik bildirimi (PrivacyInfo.xcprivacy) bu klasörde.
       - iOS
       # Ortak metin kataloğu ve gömülü Inter yazı tipi Mac uygulamasıyla paylaşılır.
       - path: App/Localizable.xcstrings
       - path: App/Fonts/InterVariable.ttf
         buildPhase: resources
+      - path: App/Fonts/Inter-OFL.txt
+        buildPhase: resources
+      # iPhone da WhisperKit'i bağlar; lisansı ve bildirimleri onunla gelir.
+      - path: App/Licenses
+        buildPhase: resources
+      - path: NOTICE
+        buildPhase: resources
+      # Takvim bağlantısı (EventKit) Mac'le aynı.
+      - path: App/EventKitConnector.swift
     dependencies:
       - package: AINotepadCore
         product: AINotepadCore
@@ -90,8 +105,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad yüz yüze toplantıyı yazıya dökmek için mikrofonu kullanır."
         CODE_SIGN_ENTITLEMENTS: iOS/AINotepad.entitlements
-        MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.1.3"
+        CURRENT_PROJECT_VERSION: "4"
     info:
       path: iOS/Info.plist
       properties:
@@ -100,6 +115,8 @@ targets:
         # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
         UIBackgroundModes: [audio]
         UIAppFonts: [InterVariable.ttf]
+        # Takvim yalnızca Ayarlar'da açılınca okunur (sıradaki toplantılar, kaydı süren etkinliğe bağlama).
+        NSCalendarsFullAccessUsageDescription: "AI-Notepad sıradaki toplantılarını gösterir ve kaydı süren toplantının adı ve katılımcılarıyla kaydeder."
         # Kayıt kilit ekranında ve Dynamic Island'da canlı etkinlik olarak görünür.
         NSSupportsLiveActivities: true
         # Kayıttan sonra işleme uygulamadan çıkılsa da sürer (BGContinuedProcessingTask); kimlik
@@ -129,8 +146,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         # Niyetlerin gövdesi eklentide boş derlenir (bkz. iOS/Shared/RecordingIntents.swift).
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
-        MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.1.3"
+        CURRENT_PROJECT_VERSION: "4"
     info:
       path: iOSWidgets/Info.plist
       properties:

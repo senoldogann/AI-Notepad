@@ -132,7 +132,7 @@ public func webhookText(record: MeetingRecord, note: MeetingNote) -> String {
     return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-/// Gönderilecek gövde: servise uygun biçimde webhook metni (Türkçe), genel webhook'ta ayrıca yapılandırılmış toplantı.
+/// Gönderilecek gövde: servise uygun biçimde webhook metni (notun dilinde), genel webhook'ta ayrıca yapılandırılmış toplantı.
 /// Saf fonksiyondur.
 public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote) throws -> Data {
     let markdown: String = webhookText(record: record, note: note)
@@ -311,6 +311,10 @@ public func sendWebhook(url: URL, payload: Data) async throws {
             if (200..<300).contains(status) {
                 return
             }
+            if status >= 500 {
+                // Sunucu isteği işlemiş olabilir: yeniden gönderim notu iki kez düşürürdü.
+                throw DeliveryUncertainError(host: host, reason: "HTTP \(status)")
+            }
             let error: WebhookError = .http(host: host, status: status, body: String(decoding: data.prefix(500), as: UTF8.self))
             guard status == 429 else {
                 throw error
@@ -319,7 +323,7 @@ public func sendWebhook(url: URL, payload: Data) async throws {
         } catch let error as URLError where isSafeToRetryPost(code: error.code) {
             lastError = .network(host: host, reason: error.localizedDescription)
         } catch let error as URLError where error.code != .cancelled {
-            throw WebhookError.network(host: host, reason: error.localizedDescription)
+            throw DeliveryUncertainError(host: host, reason: error.localizedDescription)
         }
         webhookLogger.warning("Webhook gönderilemedi, deneme: \(attempt, privacy: .public), sunucu: \(host, privacy: .public), hata: \(String(describing: lastError), privacy: .private)")
         if attempt < webhookAttempts {

@@ -8,7 +8,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 profile="AINotepad"
-version="$(grep -E '^\s+MARKETING_VERSION:' project.yml | sed -E 's/.*"(.*)".*/\1/')"
+# Sürüm project.yml'den: üç hedef (Mac, iPhone, widget) aynı sürümü taşımalı; farklıysa ya da biçim bozuksa durulur
+# (önceden üç satır birleşip bozuk DMG adı çıkıyordu).
+versions="$(grep -E '^[[:space:]]+MARKETING_VERSION:' project.yml | sed -E 's/.*"(.*)".*/\1/' | sort -u)"
+[[ -n "$versions" ]] || { echo "project.yml'de MARKETING_VERSION yok." >&2; exit 1; }
+[[ "$(printf '%s\n' "$versions" | wc -l | tr -d '[:space:]')" == "1" ]] || {
+    echo "project.yml'deki hedeflerin MARKETING_VERSION değerleri farklı: $(printf '%s ' $versions)" >&2
+    exit 1
+}
+version="$versions"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Geçersiz sürüm: '$version'" >&2; exit 1; }
 out=".build/release"
 app="$out/export/AINotepad.app"
 dmg="$out/AI-Notepad-$version.dmg"

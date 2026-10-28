@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Ana sayfanın banner'ı: yavaşça akan film gradyanı (ElevenLabs kapakları gibi), içerik ortada, beyaz yazı.
+/// Gradyan pano: durgun, açık tonlu film gradyanı (ElevenLabs gradyanları gibi); içerik koyu yazıyla, her temada açık
+/// görünümde çizilir.
 public struct GradientBanner<Content: View>: View {
     let palette: FilmPalette
     let seed: String
@@ -18,10 +19,9 @@ public struct GradientBanner<Content: View>: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 34)
             .padding(.horizontal, DesignTokens.Spacing.xl)
-            .background { LivingFilmGradient(seed: seed, palette: palette) }
+            .background { FilmGradient(seed: seed, palette: palette) }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.10)))
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, .light)
     }
 }
 

@@ -323,7 +323,7 @@ public func writeMeetingNote(
         let note: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
             try parseMeetingNote(text: text)
         }
-        return withNormalizedTasks(note: note, userName: userName)
+        return withNormalizedTasks(note: note, userName: userName).with(language: language)
     }
     let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: noteChunkMaxChars)
     let fingerprint: String = noteFingerprint(
@@ -360,10 +360,10 @@ public func writeMeetingNote(
     } catch {
         noteLogger.error("Not ilerleme dosyası silinemedi, hata: \(String(describing: error), privacy: .public)")
     }
-    return withNormalizedTasks(note: note, userName: userName)
+    return withNormalizedTasks(note: note, userName: userName).with(language: language)
 }
 
-/// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`). Saf fonksiyondur.
+/// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`); konu akışı ve dil korunur. Saf fonksiyondur.
 func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
     let normalized: MeetingNote = MeetingNote(
         title: note.title, summary: note.summary, decisions: note.decisions,
@@ -376,7 +376,8 @@ func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
             },
         glossary: note.glossary
     )
-    return note.outline.map { normalized.with(outline: $0) } ?? normalized
+    let outlined: MeetingNote = note.outline.map { normalized.with(outline: $0) } ?? normalized
+    return note.language.map { outlined.with(language: $0) } ?? outlined
 }
 
 // Şemadaki Türkçe alan adları.

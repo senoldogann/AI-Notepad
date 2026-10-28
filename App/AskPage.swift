@@ -59,7 +59,8 @@ struct AskPage: View {
                     }
                     .animation(.smooth(duration: 0.35), value: model.archiveExchanges.map(\.id))
                     .padding(.horizontal, 40)
-                    .padding(.top, 28)
+                    // Sağ üstteki Geçmiş / Yeni sohbet düğmeleri görünürken ilk soru balonu onların altında kalmasın.
+                    .padding(.top, hasCornerButtons ? 76 : 28)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 780, alignment: .leading)
                     .frame(maxWidth: .infinity)
@@ -123,6 +124,11 @@ struct AskPage: View {
     }
 
     private let bottomID: String = "ask-bottom"
+
+    /// Sağ üst köşede Geçmiş ya da Yeni sohbet düğmesi var mı.
+    private var hasCornerButtons: Bool {
+        !model.askConversations.isEmpty || !model.archiveExchanges.isEmpty
+    }
 
     private var composer: some View {
         let isEmpty: Bool = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -393,6 +399,8 @@ private struct AskHistoryRow: View {
 private struct AskIntro: View {
     let meetings: [MeetingRecord]
     let onAsk: @MainActor (String) -> Void
+    /// Not ve çeviri dili (Ayarlar › Genel): cevapların dili metinde adıyla geçer.
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     /// Kartların sıcak film gradyanları (temanın turuncu ailesi).
     private let examplePalettes: [FilmPalette] = [.sunset, .rose, .sunset, .rose]
@@ -408,27 +416,32 @@ private struct AskIntro: View {
     var body: some View {
         let minutes: Int = meetings.compactMap { meetingDurationMinutes(record: $0) }.reduce(0, +)
         VStack(alignment: .leading, spacing: 22) {
-            // Doküman gibi sade giriş: başlık, kısa açıklama ve arşivin büyüklüğü.
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Toplantılarına sor")
-                    .appFont(size: 28, weight: .regular)
-                    .tracking(-0.5)
-                    .foregroundStyle(Theme.ink)
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, not dilinde cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
-                    .appFont(size: 14, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("\(meetings.count) toplantı · \(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+            GradientBanner(palette: .violet, seed: "ask") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .appFont(size: 22, weight: .medium)
+                        .foregroundStyle(Color.black.opacity(0.7))
+                    Text("Toplantılarına sor")
+                        .appFont(size: 32, weight: .semibold)
+                        .tracking(-0.8)
+                        .foregroundStyle(Color.black)
+                    Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, \(storedNoteLanguage(value: noteLanguage).interfaceName) cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Color.black.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        IntroStat(text: Text("\(meetings.count) toplantı"))
+                        IntroStat(text: Text("\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"))
+                    }
+                    .padding(.top, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 24)
             Text("ÖRNEK SORULAR")
                 .appFont(size: 11, weight: .semibold)
                 .tracking(DesignTokens.labelTracking)
                 .foregroundStyle(Theme.muted)
-            VStack(spacing: 8) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in
                     ExampleQuestionCard(
                         symbol: item.element.symbol, question: LocalizedStringKey(item.element.text), hint: exampleHint,
@@ -442,3 +455,16 @@ private struct AskIntro: View {
     }
 }
 
+/// Giriş bannerındaki küçük cam etiket.
+private struct IntroStat: View {
+    let text: Text
+
+    var body: some View {
+        text
+            .appFont(size: 12, weight: .medium)
+            .foregroundStyle(Color.black.opacity(0.75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.white.opacity(0.55), in: Capsule())
+    }
+}

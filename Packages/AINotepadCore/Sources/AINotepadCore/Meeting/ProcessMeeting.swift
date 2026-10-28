@@ -29,7 +29,7 @@ public enum ProcessingStep: Int, Sendable, Equatable, CaseIterable {
     case convertingAudio
     /// Kaydın tamamından son geçiş (konuşmacılar).
     case finalPass
-    /// Türkçe not.
+    /// Not (not ve çeviri dilinde).
     case writingNote
 }
 

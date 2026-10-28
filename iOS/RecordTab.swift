@@ -2,19 +2,20 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Kayıt sekmesi: boştayken tarih, büyük başlık, canlı film gradyanlı kayıt kartı, görevler ve son toplantılar; kayıtta
+/// Kayıt sekmesi: boştayken tarih, büyük başlık, durağan pastel film gradyanlı kayıt kartı, görevler ve son toplantılar; kayıtta
 /// süre, ses dalgası, konuşmacılı canlı metin ve Türkçesi, "İşaretle" ve "Bitir"; bitince hazırlanma adımları.
 struct RecordTab: View {
     let recorder: PhoneRecorder
     let store: PhoneStore
     let router: PhoneRouter
+    let calendar: PhoneCalendar
 
     var body: some View {
         NavigationStack {
             Group {
                 switch recorder.phase {
                 case .idle, .starting:
-                    RecordHome(recorder: recorder, store: store, router: router)
+                    RecordHome(recorder: recorder, store: store, router: router, calendar: calendar)
                 case .recording, .finishing:
                     LiveRecordingView(recorder: recorder)
                 }
@@ -30,6 +31,7 @@ private struct RecordHome: View {
     let recorder: PhoneRecorder
     let store: PhoneStore
     let router: PhoneRouter
+    let calendar: PhoneCalendar
 
     var body: some View {
         let openTasks: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: store.meetings).filter { !isTaskDone(record: $0.record, task: $0.task) }
@@ -40,9 +42,9 @@ private struct RecordHome: View {
                         .appFont(size: 12, weight: .semibold)
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(Theme.muted)
-                    Text(greeting(name: UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? "", hour: Calendar.current.component(.hour, from: Date())))
+                    Text("Bugün hangi toplantıyı dinleyelim?")
                         .appFont(size: 30, weight: .regular)
-                        .tracking(-0.6)
+                        .tracking(-0.8)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 8)
@@ -51,10 +53,14 @@ private struct RecordHome: View {
                 if let id = recorder.lastMeetingID, let step = recorder.processingSteps[id] {
                     PreparingCard(step: step)
                 }
+                UpcomingCalendarSection(calendar: calendar, router: router)
                 if !openTasks.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         PhoneSectionHeader(title: "Sana düşen görevler", actionTitle: "Tümü") { router.tab = .tasks }
-                        ForEach(openTasks.prefix(3), id: \.task.trackingKey) { (item: (record: MeetingRecord, task: NoteTask)) in
+                        // Görev anahtarı toplantılar arasında yinelenebilir: kimlik toplantıyla birlikte.
+                        ForEach(openTasks.prefix(3).map { (item: (record: MeetingRecord, task: NoteTask)) -> (key: String, record: MeetingRecord, task: NoteTask) in
+                            (key: "\(item.record.id)|\(item.task.trackingKey)", record: item.record, task: item.task)
+                        }, id: \.key) { (item: (key: String, record: MeetingRecord, task: NoteTask)) in
                             PhoneTaskRow(record: item.record, task: item.task, showsMeeting: true) {
                                 withAnimation(.smooth(duration: 0.25)) { store.toggleTask(meetingID: item.record.id, task: item.task) }
                             }
@@ -64,21 +70,24 @@ private struct RecordHome: View {
                 if !store.meetings.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         PhoneSectionHeader(title: "Son toplantılar", actionTitle: "Tümünü gör") { router.tab = .meetings }
-                        VStack(spacing: 0) {
-                            ForEach(Array(store.meetings.prefix(5).enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
-                                if item.offset > 0 {
-                                    Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 62)
+                        ScrollView(.horizontal) {
+                            LazyHStack(spacing: 12) {
+                                ForEach(store.meetings.prefix(6), id: \.id) { (record: MeetingRecord) in
+                                    Button {
+                                        router.open(meetingID: record.id)
+                                    } label: {
+                                        PhoneMeetingCard(record: record, height: 150)
+                                            .frame(width: 250)
+                                    }
+                                    .buttonStyle(PressableCardStyle())
                                 }
-                                Button {
-                                    router.open(meetingID: item.element.id)
-                                } label: {
-                                    PhoneMeetingRow(record: item.element)
-                                }
-                                .buttonStyle(.plain)
                             }
+                            .scrollTargetLayout()
                         }
-                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+                        .scrollTargetBehavior(.viewAligned)
+                        .scrollIndicators(.hidden)
+                        .contentMargins(.horizontal, 20, for: .scrollContent)
+                        .padding(.horizontal, -20)
                     }
                 }
                 Label("Telefondaki Teams/Zoom görüşmeleri kaydedilemez (iOS izin vermez); onlar için Mac'i kullan.", systemImage: "info.circle")
@@ -102,10 +111,12 @@ func longDayTitle(date: Date, locale: Locale) -> String {
     return formatter.string(from: date)
 }
 
-/// Kayıt kartı: sade kart üstünde dil seçimi, vurgu renkli büyük kayıt düğmesi ve kısa açıklama.
+/// Kayıt kartı: durağan açık pastel film gradyanı üstünde dil seçimi, büyük kayıt düğmesi (sabit hale) ve kısa açıklama.
+/// Gradyan açık tonlu olduğundan yazılar koyu mürekkeptir (Mac'teki kayıt kartı gibi).
 private struct RecordHeroCard: View {
     let recorder: PhoneRecorder
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    /// Not ve çeviri dili (Ayarlar): canlı çevirinin dili adıyla geçer.
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         VStack(spacing: 18) {
@@ -118,32 +129,33 @@ private struct RecordHeroCard: View {
                         Text(languageText(locked: nil, mode: recorder.languageMode, isRecording: false))
                         Image(systemName: "chevron.down").appFont(size: 10, weight: .bold)
                     }
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.ink)
+                    .appFont(size: 13, weight: .semibold)
+                    .foregroundStyle(Color.black.opacity(0.8))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(Theme.soft, in: Capsule())
+                    .background(Color.white.opacity(0.9), in: Capsule())
                 }
                 Spacer()
-                Label("Yüz yüze", systemImage: "person.2")
-                    .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+                PastelChip(text: String(localized: "Yüz yüze"), systemImage: "person.2.fill")
             }
             Button {
                 Task { await recorder.start() }
             } label: {
                 ZStack {
+                    RecordButtonHalo()
                     Circle()
-                        .fill(appearance.accent.color)
-                        .frame(width: 88, height: 88)
+                        .fill(.white)
+                        .frame(width: 104, height: 104)
+                        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
                     if recorder.phase == .starting {
-                        ProgressView().controlSize(.large).tint(.white)
+                        ProgressView().controlSize(.large).tint(.black)
                     } else {
                         Image(systemName: "mic.fill")
-                            .appFont(size: 32, weight: .medium)
-                            .foregroundStyle(.white)
+                            .appFont(size: 38, weight: .medium)
+                            .foregroundStyle(Color(red: 0.91, green: 0.36, blue: 0.11))
                     }
                 }
+                .frame(width: 150, height: 150)
                 .contentShape(Circle())
             }
             .buttonStyle(PressableCardStyle())
@@ -151,21 +163,41 @@ private struct RecordHeroCard: View {
             .accessibilityLabel("Kaydı başlat")
             VStack(spacing: 4) {
                 Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
-                    .appFont(size: 17, weight: .semibold)
-                    .foregroundStyle(Theme.ink)
-                Text("Odadaki herkes konuşmacılara ayrılır, çevirisi canlı akar; bitince notu yazar.")
+                    .appFont(size: 20, weight: .semibold)
+                    .tracking(-0.3)
+                    .foregroundStyle(Color.black.opacity(0.8))
+                Text("Odadaki herkes konuşmacılara ayrılır, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) çevirisi canlı akar; bitince notu yazar.")
                     .appFont(size: 13, weight: .regular)
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(Color.black.opacity(0.6))
                     .multilineTextAlignment(.center)
             }
         }
         .padding(20)
+        .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.line))
+        .background { FilmGradient(seed: "kayit", palette: .sunset) }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.10)))
+        // Açık gradyan her temada açık görünümle çizilir (koyu temada menü ve gösterge de koyu mürekkeple kalsın).
+        .environment(\.colorScheme, .light)
     }
 }
 
+/// Kayıt düğmesinin çevresindeki durağan beyaz hale. Hareketsizdir: boştayken saniyede 30 kez yeniden çizim pil
+/// tüketiyordu.
+private struct RecordButtonHalo: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.14))
+                .frame(width: 137, height: 137)
+            Circle()
+                .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                .frame(width: 145, height: 145)
+        }
+        .accessibilityHidden(true)
+    }
+}
 
 /// Basınca hafifçe küçülen kart/düğme.
 struct PressableCardStyle: ButtonStyle {

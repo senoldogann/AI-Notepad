@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Karşılamanın film gradyanlı paneli (ElevenLabs kapakları gibi): üstte uygulama işareti, ortada adımın görseli
-/// (cam kutularda simgeler), altta beyaz başlık, kısa tanıtım ve adım noktaları. Adım değişince gradyan ve içerik
-/// yumuşakça geçer.
+/// (cam kutularda simgeler), altta koyu mürekkeple başlık, kısa tanıtım ve adım noktaları (pastel zeminde beyaz yazı
+/// okunmuyordu). Adım değişince gradyan ve içerik yumuşakça geçer.
 public struct OnboardingPanel: View {
     let palette: FilmPalette
     let seed: String
@@ -55,7 +55,7 @@ public struct OnboardingPanel: View {
                 .transition(.opacity)
             Text(subtitle)
                 .appFont(size: 14, weight: .regular)
-                .opacity(0.85)
+                .foregroundStyle(Color.black.opacity(0.6))
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
@@ -64,25 +64,24 @@ public struct OnboardingPanel: View {
             HStack(spacing: 6) {
                 ForEach(0..<stepCount, id: \.self) { (index: Int) in
                     Capsule()
-                        .fill(.white.opacity(index == stepIndex ? 0.95 : 0.35))
+                        .fill(Color.black.opacity(index == stepIndex ? 0.8 : 0.2))
                         .frame(width: index == stepIndex ? 22 : 7, height: 7)
                 }
             }
             .padding(.top, 22)
             .accessibilityHidden(true)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.black.opacity(0.8))
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background { LivingFilmGradient(seed: seed, palette: palette) }
+        .background { FilmGradient(seed: seed, palette: palette) }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.10)))
-        .environment(\.colorScheme, .dark)
         .animation(.smooth(duration: 0.45), value: seed)
     }
 }
 
-/// Özellik kartı: film gradyanlı simge kutusu, başlık ve tek cümle (karşılama ve tanıtım ekranları).
+/// Özellik kartı: film gradyanlı simge kutusu (koyu mürekkep simge), başlık ve tek cümle (karşılama ve tanıtım ekranları).
 public struct FeatureTile: View {
     let symbol: String
     let title: LocalizedStringKey
@@ -100,7 +99,7 @@ public struct FeatureTile: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
                 .appFont(size: 15, weight: .semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.black.opacity(0.8))
                 .frame(width: 38, height: 38)
                 .background { FilmGradient(seed: "ozellik-\(symbol)", palette: palette) }
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))

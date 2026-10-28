@@ -233,6 +233,8 @@ struct AskTab: View {
     @FocusState private var isFocused: Bool
     /// Sohbet geçmişi listesi açık (gezinme yığınında).
     @State private var isShowingHistory: Bool = false
+    /// Not ve çeviri dili (Ayarlar): cevapların dili metinde adıyla geçer.
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     private let examples: [(symbol: String, text: String)] = [
         ("checklist", "Bana hangi görevler verildi?"),
@@ -338,16 +340,30 @@ struct AskTab: View {
     private var intro: some View {
         let minutes: Int = store.meetings.compactMap { meetingDurationMinutes(record: $0) }.reduce(0, +)
         return VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, not dilinde cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
-                    .appFont(size: 15, weight: .regular)
-                    .foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .appFont(size: 20, weight: .medium)
+                    .foregroundStyle(Color.black.opacity(0.7))
+                // Açık pastel gradyan: yazılar koyu mürekkep (Mac'teki Sor sayfası gibi).
+                Text("Toplantılarına sor")
+                    .appFont(size: 28, weight: .regular)
+                    .tracking(-0.5)
+                    .foregroundStyle(Color.black.opacity(0.8))
+                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                    .appFont(size: 14, weight: .regular)
+                    .foregroundStyle(Color.black.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(store.meetings.count) toplantı · \(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+                HStack(spacing: 8) {
+                    PastelChip(text: String(localized: "\(store.meetings.count) toplantı"), systemImage: nil)
+                    PastelChip(text: String(localized: "\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"), systemImage: nil)
+                }
+                .padding(.top, 2)
             }
+            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background { FilmGradient(seed: "ask", palette: .violet) }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .environment(\.colorScheme, .light)
             PhoneSectionHeader(title: "Örnek sorular", actionTitle: nil, action: nil)
                 .padding(.top, 4)
             ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in

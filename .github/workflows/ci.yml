@@ -7,6 +7,10 @@ on:
   push:
     branches: [main]
 
+# İş yalnızca kodu okur; GITHUB_TOKEN'ın başka yetkisi yok.
+permissions:
+  contents: read
+
 jobs:
   test-and-build:
     runs-on: macos-26
@@ -20,9 +24,17 @@ jobs:
       - name: Hızlı testler (macOS)
         run: swift test --package-path Packages/AINotepadCore
       - name: Projeyi üret
+        # XcodeGen sürümü sabit: Homebrew'un güncel sürümü yerine GitHub sürümü indirilir ve özeti doğrulanır;
+        # üretilen proje sessizce değişmez. Sürümü yükseltirken özeti de güncelle.
+        env:
+          XCODEGEN_VERSION: "2.45.3"
+          XCODEGEN_SHA256: "0c90f4d28ca57335f9fa78cf5bf6dabfe20a232036dabe36de2eef79cb7c0878"
         run: |
-          brew install xcodegen
-          xcodegen generate
+          curl -sSfL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate
       - name: Mac uygulaması
         run: >
           xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug

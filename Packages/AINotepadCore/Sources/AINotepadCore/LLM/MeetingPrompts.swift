@@ -32,6 +32,25 @@ public func transcriptLines(segments: [LiveSegment]) -> String {
         .joined(separator: "\n")
 }
 
+/// Toplantı canlı çevrilmeli mi: konuşulan dil biliniyor ve not diliyle aynıysa metin zaten okunacak dildedir; aynı
+/// dile "çeviri" yapılmaz (LLM'e gitmez, panelde aynı cümle iki kez görünmez). Dil henüz bilinmiyorsa (otomatik algılama
+/// kilitlenmedi) çevrilir. Saf fonksiyondur.
+public func needsLiveTranslation(spoken: MeetingLanguage?, noteLanguage: ShareLanguage) -> Bool {
+    guard let spoken else {
+        return true
+    }
+    return spoken != noteLanguage.meetingLanguage
+}
+
+/// Çeviri saklanmaya değer mi: model cümleyi aynen döndürdüyse (karışık dilli toplantıda cümle zaten not dilindeydi)
+/// saklanmaz, panelde ve transkriptte orijinal tek başına görünür. Büyük/küçük harf ve baştaki/sondaki boşluk
+/// sayılmaz. Saf fonksiyondur.
+public func isDistinctTranslation(original: String, translated: String) -> Bool {
+    let normalizedOriginal: String = original.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let normalizedTranslated: String = translated.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalizedOriginal != normalizedTranslated
+}
+
 /// Tek cümlelik canlı çeviri isteği (not diline); önceki cümleler yalnızca bağlam. Saf fonksiyondur.
 public func translationRequest(sentence: String, context: [String], language: ShareLanguage) -> LLMRequest {
     let contextText: String = context.isEmpty ? "(yok)" : context.joined(separator: "\n")

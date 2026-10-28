@@ -5,8 +5,8 @@
 <h1 align="center">AI-Notepad</h1>
 
 <p align="center">
-  A native macOS meeting notepad: live Finnish/English transcription, optional Turkish translation,
-  and a Turkish post-meeting note that starts with <b>what you have to do</b>.
+  A native meeting notepad for macOS and iPhone: live transcription in Finnish, English and 33 more languages,
+  optional Turkish translation, and a Turkish post-meeting note that starts with <b>what you have to do</b>.
 </p>
 
 ---
@@ -21,8 +21,12 @@
   Long meetings (hours) are processed part by part, so no task gets lost.
 - **Meeting library:** search, a Spotify-style player that highlights the spoken word, PDF/Markdown export,
   speaker naming, merging and AI suggestions ("Review speakers").
+- **Recording screen:** while recording, the main window blurs behind a large level meter, the timer and
+  pause/finish buttons; "Back to the app" (or Esc) hides it, the "Recording" pill in the top bar brings it back.
+- **Search window (⌘K or ⌘F):** a centred search over all meetings; arrow keys pick, Return opens, or apply the search
+  to the meeting list.
 - **Assistant during the meeting:** "What did I miss?" and free questions about the conversation.
-- **Ask your meetings:** questions across all notes and Finnish/English transcripts, answered in Turkish
+- **Ask your meetings:** questions across all notes and transcripts, answered in Turkish
   with links to the source meetings.
 - **Speakers recognised by voice (off by default):** name someone once and they are named in later meetings.
   Voiceprints are biometric data: when on, a print of everyone who speaks for more than 8 seconds is stored with the
@@ -78,6 +82,8 @@ cp Config/Local.xcconfig.example Config/Local.xcconfig   # put your DEVELOPMENT_
 xcodegen generate
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug \
   -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64' build
+xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debug \
+  -derivedDataPath .build/xcode-ios -destination 'platform=iOS Simulator,name=iPhone 17' build   # iPhone app
 scripts/install-app.sh          # Release build into /Applications (permissions persist)
 ```
 
@@ -96,10 +102,11 @@ Project layout: all logic lives in the Swift package `Packages/AINotepadCore` (w
 
 ## Türkçe
 
-AI-Notepad, Fince/İngilizce toplantıları canlı yazıya döken, istersen Türkçeye çeviren ve toplantı sonunda
-**sana düşen görevlerle başlayan** Türkçe not hazırlayan bir macOS uygulamasıdır. Kurulum için
+AI-Notepad, toplantıları (Fince, İngilizce ve 33 dil daha) canlı yazıya döken, istersen Türkçeye çeviren ve toplantı
+sonunda **sana düşen görevlerle başlayan** Türkçe not hazırlayan bir macOS ve iPhone uygulamasıdır. Kurulum için
 [Releases](../../releases) sayfasından DMG'yi indir, uygulamayı Uygulamalar klasörüne sürükle ve kurulum
-sayfasındaki adımları izle. Anahtarlar yalnızca macOS Keychain'de, kayıtlar yalnızca Mac'inde tutulur.
+sayfasındaki adımları izle. Anahtarlar yalnızca Anahtar Zinciri'nde tutulur. Kayıtlar varsayılan olarak yalnızca
+Mac'indedir; istersen iCloud eşitlemesini açarsın, biten toplantılar iCloud Drive'ına taşınıp Mac ve iPhone'da görünür.
 
 ## License
 

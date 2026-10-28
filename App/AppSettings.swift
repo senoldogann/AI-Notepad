@@ -60,6 +60,9 @@ enum SettingsKey {
     static let micSuggestions: String = "calendar.micSuggestions"
     /// Not hazır olunca webhook'a kendiliğinden gönder.
     static let webhookAutoSend: String = "integrations.webhookAutoSend"
+    /// Sonucu belirsiz gönderimler ("toplantı|hedef"): sunucu yanıt vermedi, not gitmiş olabilir; kendiliğinden yeniden
+    /// gönderilmez. Bu cihaza özeldir.
+    static let uncertainSends: String = "integrations.uncertainSends"
     /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
     static let primaryMeetingLanguage: String = "language.primary"
     /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri, "Ne kaçırdım?" ve Sor cevapları bu dilde yazılır.
@@ -80,6 +83,8 @@ enum SettingsKey {
     static let folders: String = "folders"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
+    /// Kişiler sayfasındaki liste açık (varsayılan kapalı: sayfa kişinin kendisine yer açar).
+    static let peopleListVisible: String = "people.listVisible"
     /// Konuşmacıları sesinden tanıma (ses izleri yalnızca bu Mac'te).
     static let voiceRecognition: String = "voiceRecognition"
     /// Görünüm.
@@ -225,6 +230,7 @@ func registerDefaultSettings() {
         SettingsKey.voiceRecognition: false,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
+        SettingsKey.peopleListVisible: false,
         SettingsKey.inPersonMode: false,
         SettingsKey.appleNotesAutoSend: false,
         SettingsKey.markdownFolder: "",
@@ -256,9 +262,14 @@ func clampedSetting(key: String, range: ClosedRange<Int>) -> Int {
     min(max(UserDefaults.standard.integer(forKey: key), range.lowerBound), range.upperBound)
 }
 
-/// Not ve çeviri dili; kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+/// Not ve çeviri dili (Ayarlar › Genel); kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
 func selectedNoteLanguage() -> ShareLanguage {
-    let stored: String = UserDefaults.standard.string(forKey: SettingsKey.noteLanguage) ?? ""
+    storedNoteLanguage(value: UserDefaults.standard.string(forKey: SettingsKey.noteLanguage) ?? "")
+}
+
+/// Ayarın ham değerinden not dili (görünümlerdeki `@AppStorage(SettingsKey.noteLanguage)` için: dil değişince etiketler
+/// de güncellenir); tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func storedNoteLanguage(value stored: String) -> ShareLanguage {
     guard let language = ShareLanguage(rawValue: stored) else {
         settingsLogger.error("Not dili tanınmadı, varsayılan kullanılıyor, değer: \(stored, privacy: .public)")
         return defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations)

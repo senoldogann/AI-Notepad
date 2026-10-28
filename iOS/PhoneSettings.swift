@@ -2,7 +2,8 @@ import AINotepadCore
 import Foundation
 import os
 
-/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır (eşitleme aşamasında ortaklaşır).
+/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır. Ayarlar cihazda kalır (iCloud yalnızca toplantıları ve
+/// paylaşılan anahtarları eşitler).
 enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri ve Sor cevapları bu dilde yazılır.
@@ -16,6 +17,8 @@ enum PhoneSettingsKey {
     static let onboardingCompleted: String = "onboardingCompleted"
     /// Tema takımı (Mac'teki ayarla aynı ad; bkz. `AppTheme`).
     static let theme: String = "appearance.theme"
+    /// Takvim (sıradaki toplantılar, kaydı süren etkinliğe bağlama); varsayılan kapalı, açılınca izin istenir.
+    static let calendarEnabled: String = "calendar.enabled"
 }
 
 /// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).
@@ -41,9 +44,14 @@ func phonePrimaryMeetingLanguage() -> MeetingLanguage {
     return language
 }
 
-/// Not ve çeviri dili; kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+/// Not ve çeviri dili (Ayarlar); kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
 func phoneNoteLanguage() -> ShareLanguage {
-    let stored: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.noteLanguage) ?? ""
+    phoneStoredNoteLanguage(value: UserDefaults.standard.string(forKey: PhoneSettingsKey.noteLanguage) ?? "")
+}
+
+/// Ayarın ham değerinden not dili (görünümlerdeki `@AppStorage(PhoneSettingsKey.noteLanguage)` için: dil değişince
+/// etiketler de güncellenir); tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func phoneStoredNoteLanguage(value stored: String) -> ShareLanguage {
     guard let language = ShareLanguage(rawValue: stored) else {
         phoneSettingsLogger.error("Not dili tanınmadı, varsayılan kullanılıyor, değer: \(stored, privacy: .public)")
         return defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations)

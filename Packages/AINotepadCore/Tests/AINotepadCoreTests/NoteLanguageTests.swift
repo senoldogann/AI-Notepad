@@ -33,7 +33,7 @@ private func noteLanguagePrompts(language: ShareLanguage) throws -> [(name: Stri
             segments: saved, speakerNames: [:], userName: "Doğan", attendees: [], language: language
         )).system),
         ("görev aracı", trackerAgentRequest(
-            service: .linear, target: "", tasks: note.tasks, meetingTitle: "Diat", tools: [], transcript: [], language: language
+            service: .linear, target: "", tasks: note.tasks, created: [], meetingTitle: "Diat", tools: [], transcript: [], language: language
         ).system),
     ]
 }
@@ -54,6 +54,47 @@ private func noteLanguagePrompts(language: ShareLanguage) throws -> [(name: Stri
         for prompt in try noteLanguagePrompts(language: .turkish) {
             #expect(prompt.system.contains("Turkish (Türkçe)"), "dil adı yok: \(prompt.name)")
         }
+    }
+
+    // MCP sunucusunun yönergeleri ve araç açıklamaları notların dilini adıyla anar.
+    @Test func mcpTextNamesNoteLanguage() throws {
+        let descriptions: String = mcpTools(noteLanguage: .german).map(\.description).joined(separator: "\n")
+        #expect(descriptions.contains("German (Deutsch)"))
+        #expect(!descriptions.contains("Türkçe") && !descriptions.contains("Turkish"))
+        let initialize: String = try #require(handleMCPMessage(
+            line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, loadRecords: { [] }, version: "test", noteLanguage: .german
+        ))
+        #expect(initialize.contains("German (Deutsch)"))
+        #expect(!initialize.contains("Türkçe"))
+    }
+
+    // Toplantı not dilindeyse canlı çeviri yapılmaz; dil bilinmiyorsa ya da farklıysa çevrilir. Norveççe Bokmål ve
+    // Çincenin yazımları toplantı diliyle eşleşir.
+    @Test func liveTranslationSkipsSameLanguage() {
+        #expect(!needsLiveTranslation(spoken: .english, noteLanguage: .english))
+        #expect(!needsLiveTranslation(spoken: .turkish, noteLanguage: .turkish))
+        #expect(!needsLiveTranslation(spoken: .norwegian, noteLanguage: .norwegian))
+        #expect(!needsLiveTranslation(spoken: .chinese, noteLanguage: .chineseTraditional))
+        #expect(needsLiveTranslation(spoken: .finnish, noteLanguage: .english))
+        #expect(needsLiveTranslation(spoken: nil, noteLanguage: .english))
+    }
+
+    // Model cümleyi aynen döndürdüyse (cümle zaten not dilindeydi) çeviri saklanmaz.
+    @Test func identicalTranslationIsNotDistinct() {
+        #expect(!isDistinctTranslation(original: "Let's start.", translated: " let's start.\n"))
+        #expect(isDistinctTranslation(original: "Aloitetaan.", translated: "Let's start."))
+    }
+
+    // Dil kaydı olmayan eski not Türkçe sayılır; yeni not dilini saklar, başlık değişince dil korunur.
+    @Test func noteRemembersWrittenLanguage() throws {
+        let legacy: MeetingNote = try JSONDecoder().decode(
+            MeetingNote.self, from: Data(#"{"title":"T","summary":"S","decisions":[],"tasks":[],"glossary":[]}"#.utf8)
+        )
+        #expect(legacy.language == nil)
+        #expect(legacy.writtenLanguage == .turkish)
+        let english: MeetingNote = legacy.with(language: .english).with(title: "Budget")
+        let decoded: MeetingNote = try JSONDecoder().decode(MeetingNote.self, from: JSONEncoder().encode(english))
+        #expect(decoded.writtenLanguage == .english)
     }
 
     // Arama terimleri not dilinde ve toplantı dillerinde istenir; not diliyle aynı toplantı dili tekrarlanmaz.

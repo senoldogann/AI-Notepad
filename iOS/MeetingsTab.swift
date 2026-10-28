@@ -54,9 +54,7 @@ struct MeetingsTab: View {
                             .padding(.top, 10)
                         ForEach(section.meetings, id: \.id) { (record: MeetingRecord) in
                             NavigationLink(value: record.id) {
-                                PhoneMeetingRow(record: record)
-                                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.line))
+                                PhoneMeetingCard(record: record, height: 132)
                                     .matchedTransitionSource(id: record.id, in: cardTransition)
                             }
                             .buttonStyle(PressableCardStyle())
@@ -80,9 +78,15 @@ struct MeetingsTab: View {
                         pendingDelete = record
                     }
                     .navigationTransition(.zoom(sourceID: id, in: cardTransition))
+                } else {
+                    // Toplantı silindi (ör. Mac'ten): boş sayfa yerine neden görünür.
+                    EmptyStateCard(symbol: "doc.questionmark", title: "Toplantı bulunamadı", message: "Bu toplantı silinmiş olabilir.")
+                        .padding(20)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(Theme.background)
                 }
             }
-            .refreshable { store.reload() }
+            .refreshable { await store.reloadAndWait() }
             .confirmationDialog(
                 "Toplantı silinsin mi?", isPresented: Binding<Bool>(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                 titleVisibility: .visible, presenting: pendingDelete
@@ -125,6 +129,13 @@ struct MeetingReadView: View {
     let onDelete: @MainActor () -> Void
     @State private var pane: MeetingPane = .summary
     @State private var errorMessage: String?
+    /// Konuşmacılara ad verme sayfası açık.
+    @State private var isNamingSpeakers: Bool = false
+
+    /// Not ve adlar değiştirilebilir: kayıtta, işlenen ya da notu yazılan toplantıda değil.
+    private var isEditable: Bool {
+        record.status != .recording && record.status != .processing && !store.regeneratingIDs.contains(record.id)
+    }
 
     var body: some View {
         let paragraphs: [TranscriptParagraph] = transcriptParagraphs(record: record)
@@ -145,7 +156,10 @@ struct MeetingReadView: View {
                     PillTabs(selection: $pane, options: [(MeetingPane.summary, "Özet"), (MeetingPane.transcript, "Transkript")])
                     switch pane {
                     case .summary:
-                        MeetingSummary(record: record, paragraphs: paragraphs, store: store, canPlay: canPlay) { (startSec: Double) -> Void in
+                        MeetingSummary(
+                            record: record, paragraphs: paragraphs, store: store, canPlay: canPlay, isEditable: isEditable,
+                            onNameSpeakers: { isNamingSpeakers = true }
+                        ) { (startSec: Double) -> Void in
                             play(from: startSec)
                         }
                         .transition(.opacity)
@@ -179,6 +193,10 @@ struct MeetingReadView: View {
                             Label("Transkripti paylaş", systemImage: "text.alignleft")
                         }
                     }
+                    if paragraphs.contains(where: { $0.person != nil }) {
+                        Button("Konuşmacılara ad ver", systemImage: "person.text.rectangle") { isNamingSpeakers = true }
+                            .disabled(!isEditable)
+                    }
                     Button(store.regeneratingIDs.contains(record.id) ? "Not yazılıyor…" : "Notu yenile", systemImage: "arrow.clockwise") {
                         Task { await store.regenerateNote(meetingID: record.id) }
                     }
@@ -203,12 +221,21 @@ struct MeetingReadView: View {
                 .accessibilityLabel("Diğer")
             }
         }
+        .sheet(isPresented: $isNamingSpeakers) {
+            SpeakerNamingSheet(shares: speakerShares(paragraphs: paragraphs), speakerNames: record.speakerNames) { (names: [Int: String]) throws -> Void in
+                try store.renameSpeakers(meetingID: record.id, names: names)
+            }
+        }
         #if DEBUG
         .task {
             // `--cal <sn>` (yalnız Debug, görsel kontrol): transkripti açıp o saniyeden çalar.
             if let index = CommandLine.arguments.firstIndex(of: "--cal"), CommandLine.arguments.indices.contains(index + 1),
                let startSec = Double(CommandLine.arguments[index + 1]), player.meetingID == nil {
                 play(from: startSec)
+            }
+            // `--konusmacilar` (yalnız Debug, görsel kontrol): konuşmacılara ad verme sayfasını açar.
+            if CommandLine.arguments.contains("--konusmacilar") {
+                isNamingSpeakers = true
             }
         }
         #endif
@@ -290,7 +317,10 @@ struct MeetingReadView: View {
         .foregroundStyle(.white)
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .bottomLeading)
-        .background { LivingCoverBackground(seed: record.id) }
+        .background {
+            CoverBackground(seed: record.id)
+                .overlay { CoverScrim() }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .environment(\.colorScheme, .dark)
     }
@@ -331,6 +361,9 @@ private struct MeetingSummary: View {
     let paragraphs: [TranscriptParagraph]
     let store: PhoneStore
     let canPlay: Bool
+    /// Not ve konuşmacı adları değiştirilebilir (kayıtta, işlenen ya da notu yazılan toplantıda değil).
+    let isEditable: Bool
+    let onNameSpeakers: @MainActor () -> Void
     let onPlay: @MainActor (Double) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
@@ -376,6 +409,9 @@ private struct MeetingSummary: View {
                             .frame(width: 3)
                     }
                 }
+                PhoneNoteEditBar(isWorking: store.regeneratingIDs.contains(record.id), isEnabled: isEditable) { (instruction: String) -> Void in
+                    Task { await store.editNote(meetingID: record.id, instruction: instruction) }
+                }
                 Text(note.summary)
                     .font(appearance.readingFont(size: 18, weight: .regular))
                     .lineSpacing(6)
@@ -387,7 +423,13 @@ private struct MeetingSummary: View {
                     PhoneStatTile(value: "\(mine.count)", label: "senin görevin")
                 }
                 if shares.count > 1 {
-                    section(title: "Kim ne kadar konuştu") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Adı verilebilecek konuşmacı varsa başlıkta "Ad ver" (transkript ve not adlarla görünür).
+                        PhoneSectionHeader(
+                            title: "Kim ne kadar konuştu",
+                            actionTitle: isEditable && shares.contains(where: { $0.key.person != nil }) ? "Ad ver" : nil,
+                            action: onNameSpeakers
+                        )
                         ForEach(Array(shares.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
                             ShareRow(share: item.element, speakerNames: record.speakerNames)
                         }

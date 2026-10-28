@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Toplantı dosyası adı.
 public let meetingFileName: String = "meeting.json"
@@ -59,7 +60,25 @@ public func saveMeeting(record: MeetingRecord, directory: URL) throws {
     }
 }
 
-/// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
+/// Klasördeki `meeting.json`'u dosya koordinatörüyle okur: başka cihazdan (iCloud) gelmiş en güncel hali. Bellekteki
+/// kopyanın üzerine yazmadan önce değişiklik buna uygulanır.
+public func loadMeeting(directory: URL) throws -> MeetingRecord {
+    let file: URL = directory.appending(path: meetingFileName)
+    var coordinationError: NSError?
+    var result: Result<Data, any Error> = .failure(StorageError.readFailed(path: file.path, reason: "okunmadı"))
+    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: file, options: [], error: &coordinationError) { (url: URL) -> Void in
+        result = Result { try Data(contentsOf: url) }
+    }
+    if let coordinationError {
+        throw StorageError.readFailed(path: file.path, reason: coordinationError.localizedDescription)
+    }
+    do {
+        return try meetingDecoder().decode(MeetingRecord.self, from: try result.get())
+    } catch {
+        throw StorageError.readFailed(path: file.path, reason: error.localizedDescription)
+    }
+}
+
 /// Toplantının klasörünü (meeting.json ve ses dosyaları) Çöp Sepeti'ne taşır: yanlışlıkla silinen toplantı Finder'dan
 /// geri alınabilir. Taşınamazsa `deleteFailed`.
 public func trashMeetingDirectory(directory: URL) throws {
@@ -70,10 +89,15 @@ public func trashMeetingDirectory(directory: URL) throws {
     }
 }
 
+/// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
+/// iCloud'dan inmemiş dosya (yalnızca ".ad.icloud" yer tutucusu var) da koordineli silinir: yoksa kayıt "ses silindi"
+/// diye saklanırken ses iCloud'da kalırdı.
 public func deleteAudioFiles(directory: URL) throws {
     for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
         let file: URL = directory.appending(path: name)
-        guard FileManager.default.fileExists(atPath: file.path) else {
+        let exists: Bool = FileManager.default.fileExists(atPath: file.path)
+            || FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path)
+        guard exists else {
             continue
         }
         try coordinatedRemoveItem(at: file)
@@ -112,6 +136,8 @@ public func loadMeetings(directories: [URL]) -> MeetingLoadResult {
 
 /// `Sessions` altındaki tüm `meeting.json`'ları okur (yeniden eskiye). `meeting.json`'u olmayan klasörler atlanır.
 /// iCloud'dan henüz inmemiş dosyanın indirmesi başlatılır ve `downloading`'e yazılır (okuma beklemez, arayüz donmaz).
+/// Klasörler paralel okunur (büyük arşivde çözümleme süresi çekirdeklere bölünür); sonuçların sırası klasör sırasıdır.
+/// Ana iş parçacığında çağrılmaz (bkz. `loadMeetingsInBackground`).
 public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
     // Henüz hiç kayıt yapılmadıysa klasör yoktur: boş liste doğru sonuçtur.
     guard FileManager.default.fileExists(atPath: sessionsDirectory.path) else {
@@ -120,39 +146,73 @@ public func loadMeetings(sessionsDirectory: URL) -> MeetingLoadResult {
     let folders: [URL]
     do {
         folders = try FileManager.default.contentsOfDirectory(at: sessionsDirectory, includingPropertiesForKeys: nil)
+            .sorted { (left: URL, right: URL) -> Bool in left.lastPathComponent > right.lastPathComponent }
     } catch {
         return MeetingLoadResult(meetings: [], failures: [MeetingLoadFailure(folder: sessionsDirectory.lastPathComponent, reason: String(describing: error))], downloading: [])
     }
-    var meetings: [MeetingRecord] = []
-    var failures: [MeetingLoadFailure] = []
-    var downloading: [String] = []
-    for folder in folders.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
-        let file: URL = folder.appending(path: meetingFileName)
-        guard FileManager.default.fileExists(atPath: file.path) else {
-            // iPhone'da inmemiş iCloud dosyası yerine ".meeting.json.icloud" yer tutucusu durur: indirmesi başlatılır
-            // (yoksa Mac'in toplantısı iPhone'da hiç görünmüyordu).
-            if FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path) {
-                do {
-                    try FileManager.default.startDownloadingUbiquitousItem(at: file)
-                    downloading.append(folder.lastPathComponent)
-                } catch {
-                    failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
-                }
-            }
-            continue
+    let outcomes: Mutex<[FolderLoadOutcome]> = Mutex(Array(repeating: FolderLoadOutcome.skipped, count: folders.count))
+    DispatchQueue.concurrentPerform(iterations: folders.count) { (index: Int) -> Void in
+        let outcome: FolderLoadOutcome = loadMeetingFolder(folder: folders[index])
+        outcomes.withLock { (values: inout [FolderLoadOutcome]) -> Void in values[index] = outcome }
+    }
+    let ordered: [FolderLoadOutcome] = outcomes.withLock { (values: inout [FolderLoadOutcome]) -> [FolderLoadOutcome] in values }
+    return MeetingLoadResult(
+        meetings: newestFirst(records: ordered.compactMap { (outcome: FolderLoadOutcome) -> MeetingRecord? in
+            if case .meeting(let record) = outcome { record } else { nil }
+        }),
+        failures: ordered.compactMap { (outcome: FolderLoadOutcome) -> MeetingLoadFailure? in
+            if case .failure(let failure) = outcome { failure } else { nil }
+        },
+        downloading: ordered.compactMap { (outcome: FolderLoadOutcome) -> String? in
+            if case .downloading(let folder) = outcome { folder } else { nil }
+        }
+    )
+}
+
+/// Bir toplantı klasörünün okuma sonucu.
+private enum FolderLoadOutcome: Sendable {
+    case meeting(MeetingRecord)
+    case failure(MeetingLoadFailure)
+    /// iCloud'dan iniyor (indirmesi başlatıldı); değer klasör adıdır.
+    case downloading(String)
+    /// `meeting.json`'u olmayan klasör.
+    case skipped
+}
+
+/// Tek bir toplantı klasörünü okur: inmemiş iCloud dosyasının indirmesini başlatır, iCloud çakışmalarını birleştirir.
+private func loadMeetingFolder(folder: URL) -> FolderLoadOutcome {
+    let file: URL = folder.appending(path: meetingFileName)
+    guard FileManager.default.fileExists(atPath: file.path) else {
+        // iPhone'da inmemiş iCloud dosyası yerine ".meeting.json.icloud" yer tutucusu durur: indirmesi başlatılır
+        // (yoksa Mac'in toplantısı iPhone'da hiç görünmüyordu).
+        guard FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path) else {
+            return .skipped
         }
         do {
-            guard try isDownloaded(file: file) else {
-                downloading.append(folder.lastPathComponent)
-                continue
-            }
-            try resolveCloudConflicts(file: file)
-            meetings.append(try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: file)))
+            try FileManager.default.startDownloadingUbiquitousItem(at: file)
+            return .downloading(folder.lastPathComponent)
         } catch {
-            failures.append(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
+            return .failure(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
         }
     }
-    return MeetingLoadResult(meetings: newestFirst(records: meetings), failures: failures, downloading: downloading)
+    do {
+        guard try isDownloaded(file: file) else {
+            return .downloading(folder.lastPathComponent)
+        }
+        try resolveCloudConflicts(file: file)
+        return .meeting(try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: file)))
+    } catch {
+        return .failure(MeetingLoadFailure(folder: folder.lastPathComponent, reason: String(describing: error)))
+    }
+}
+
+/// Toplantıları ana iş parçacığını bekletmeden okur: klasörler (iCloud kapsayıcısının yolu dahil; ilk çözümü yavaş
+/// olabilir) ve dosyalar arka planda okunur. Sonuç `loadMeetings(directories:)` ile aynıdır. Klasör çözülemezse
+/// (ör. iCloud kullanılamıyor) hata fırlatır.
+public func loadMeetingsInBackground(location: StorageLocation) async throws -> MeetingLoadResult {
+    try await Task.detached(priority: .userInitiated) { () throws -> MeetingLoadResult in
+        loadMeetings(directories: try AppPaths.meetingDirectories(location: location))
+    }.value
 }
 
 /// iCloud'dan inmemiş dosyanın iPhone'daki yer tutucusu (".ad.icloud"). Saf fonksiyondur.
@@ -176,22 +236,28 @@ public func startDownloadingCloudAudio(directory: URL) throws -> Bool {
     return started
 }
 
-/// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. İnmemişse indirmesi başlatılır ve false döner.
+/// Dosya okunabilir mi: yerel dosya ya da iCloud'dan inmiş dosya. Sunucuda daha yeni sürümü olan dosya (`.downloaded`)
+/// da okunabilir: yeni sürümün indirmesi arka planda başlatılır ve true döner (toplantı listeden kaybolmaz; yeni sürüm
+/// inince değişiklik bildirimiyle yeniden okunur). Hiç inmemişse indirmesi başlatılır ve false döner.
 public func isDownloaded(file: URL) throws -> Bool {
     let values: URLResourceValues = try file.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
     guard values.isUbiquitousItem == true, values.ubiquitousItemDownloadingStatus != .current else {
         return true
     }
     try FileManager.default.startDownloadingUbiquitousItem(at: file)
-    return false
+    return values.ubiquitousItemDownloadingStatus == .downloaded
 }
 
-/// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Saf fonksiyondur.
+/// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Kayıt
+/// sırasında kapananın "Sen" canlı metni son kontrol noktasında kalmıştır: "Sen" bölümü varsa (mikrofon açıktı)
+/// "Tekrar işle"de "Sen" kaydı da yazıya dökülür. Saf fonksiyondur.
 public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord] {
     records
         .filter { (record: MeetingRecord) -> Bool in record.status == .recording || record.status == .processing }
         .map { (record: MeetingRecord) -> MeetingRecord in
-            let interrupted: MeetingRecord = record.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
+            let hadMicrophone: Bool = record.liveSegments.contains { $0.speaker == .me }
+            let marked: MeetingRecord = record.status == .recording && hadMicrophone ? record.with(meNeedsFinalPass: true) : record
+            let interrupted: MeetingRecord = marked.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
             // Yarıda kalan kaydın bitişi bilinmez: son konuşmanın sonu kabul edilir (süre "–" görünmesin).
             guard record.endedAt == nil, let lastSec = (record.liveSegments + record.finalSegments).map(\.endSec).max() else {
                 return interrupted
@@ -223,12 +289,20 @@ public func deleteMeetingDirectory(directory: URL) throws {
     try coordinatedRemoveItem(at: directory)
 }
 
+/// Aramada alanları ayıran karakter (birim ayırıcı): kullanıcının sorgusunda bulunmaz.
+private let searchFieldSeparator: String = "\u{1F}"
+
+/// Aramada katlama: büyük/küçük harf ve aksan duyarsız. Yerel ayardan bağımsız (`locale: nil`): Türkçe yerel ayarda
+/// "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
+private let searchFolding: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+
 /// Başlık, not ve transkriptte büyük/küçük harf duyarsız arama; boş sorgu hepsini döndürür. Saf fonksiyondur.
 public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingRecord] {
     let needle: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty else {
         return records
     }
+    let folded: String = needle.folding(options: searchFolding, locale: nil)
     return records.filter { (record: MeetingRecord) -> Bool in
         // Listede görünen başlık notun başlığıdır; görevler, konuşmacı adları ve kendi notların da aranır.
         let haystack: [String] = [record.title, record.note?.title ?? "", record.note?.summary ?? "", record.myNotes ?? ""]
@@ -237,10 +311,12 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
             + Array(record.speakerNames.values)
             + (record.liveSegments + record.finalSegments).map(\.text)
             + Array(record.translations.values)
-        // Yerel ayardan bağımsız: Türkçe yerel ayarda "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
-        return haystack.contains { (text: String) -> Bool in
-            text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
-        }
+        // Alanlar tek metinde birleşir, büyük/küçük harf ve aksanlar bir kez katlanır, sonra düz karşılaştırılır
+        // (her bölümde ayrı harf duyarsız arama 500 toplantıda tuş başına saniyeyi aşıyordu). Ayırıcı sorguda
+        // bulunmayan bir denetim karakteridir, eşleşme iki alanın sınırını aşamaz.
+        return haystack.joined(separator: searchFieldSeparator)
+            .folding(options: searchFolding, locale: nil)
+            .range(of: folded, options: .literal) != nil
     }
 }
 

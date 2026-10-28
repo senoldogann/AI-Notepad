@@ -28,13 +28,14 @@ import AINotepadCore
             let state: LiveViewState = makeLiveViewState(
                 transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
                 phase: .recording, newPersonNumber: 3, isPaused: false, isMicMuted: false, canToggleMic: true, isInPerson: false, canStart: false, startedAt: nil,
-                statusText: "", languageText: "", errors: []
+                statusText: "", languageText: "", noteLanguageText: "Türkçe", errors: []
             )
             return (state: state, elapsed: ContinuousClock.now - started)
         }
         let elapsed: Duration = runs.map(\.elapsed).min() ?? .zero
         let state: LiveViewState = runs[0].state
-        #expect(elapsed < .milliseconds(100), "güncelleme \(elapsed) sürdü")
+        // Sınır geniş: amaç karesel büyümeyi yakalamak (o zaman saniyeler sürer), yüklü CI makinesinde titremek değil.
+        #expect(elapsed < .milliseconds(500), "güncelleme \(elapsed) sürdü")
         #expect(state.blocks.allSatisfy { ($0.segments.last?.startSec ?? 0) - $0.startSec < 60 })
     }
 }

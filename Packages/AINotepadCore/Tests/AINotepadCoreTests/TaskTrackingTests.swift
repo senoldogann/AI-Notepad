@@ -45,20 +45,65 @@ import Testing
         #expect(carriedTaskKeys(oldTasks: old, newTasks: [new[2]], keys: old.map(taskKey)).isEmpty)
     }
 
+    // Not yeniden yazılınca araca gönderildi işareti de (araç başına) benzer yeni göreve geçer: görev Linear'da ikinci
+    // kez açılmaz. Değişmeyen görev kendi kimliğini korur.
+    @Test func sentTaskMarksSurviveRewrite() {
+        let old: [NoteTask] = [
+            NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true),
+            NoteTask(owner: "Aino", description: "Bütçeyi onaylamak", dueDate: nil, isMine: false),
+        ]
+        let new: [NoteTask] = [
+            NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: "Perşembe", isMine: true),
+            old[1],
+        ]
+        let marked: MeetingRecord = record(tasks: old)
+            .markingTaskSent(trackerID: "linear", task: old[0])
+            .markingTaskSent(trackerID: "jira", task: old[1])
+        let rewritten: MeetingRecord = record(tasks: new)
+        let carried: MeetingRecord = withCarriedTaskMarks(old: marked, new: rewritten)
+        #expect(carried.sentTaskKeys == ["linear": [taskKey(task: new[0])], "jira": [taskKey(task: old[1])]])
+        #expect(withCarriedTaskMarks(old: rewritten, new: rewritten).sentTaskKeys == nil)
+    }
+
+    // Uzun not işi sürerken diğer cihazda konan işaretler (eski notun görevlerine) işin sonucuna taşınır; gönderim
+    // işaretleri eklenir, Apple Notlar anının en eskisi kalır.
+    @Test func jobResultKeepsMarksMadeDuringJob() {
+        let oldTask: NoteTask = NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let newTask: NoteTask = NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let start: MeetingRecord = record(tasks: [oldTask])
+        let early: Date = Date(timeIntervalSince1970: 1_000)
+        let onDisk: MeetingRecord = togglingTask(record: start, task: oldTask)
+            .markingSent(destinationID: "slack")
+            .markingTaskSent(trackerID: "linear", task: oldTask)
+            .with(notesSentAt: early)
+        let result: MeetingRecord = record(tasks: [newTask]).with(notesSentAt: Date(timeIntervalSince1970: 2_000))
+        let saved: MeetingRecord = withJobMarks(old: mergingUserMarks(current: start, others: [onDisk]), result: result)
+        #expect(saved.note?.tasks == [newTask])
+        #expect(saved.completedTasks == [taskKey(task: newTask)])
+        #expect(saved.sentTaskKeys == ["linear": [taskKey(task: newTask)]])
+        #expect(saved.sentDestinationIDs == ["slack"])
+        #expect(saved.notesSentAt == early)
+    }
+
     // Serbest metin tarihleri: ISO, gün.ay.yıl, yılsız (toplantıdan önceyse gelecek yıl); göreli ve geçersizler nil.
     @Test func dueDatesParseOnlyWhenExplicit() {
         let meeting: Date = calendar.date(from: DateComponents(year: 2026, month: 12, day: 15))!
-        #expect(parseDueDate(text: "2027-01-08", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 1, day: 8))
-        #expect(parseDueDate(text: "perjantaihin 18.12.2026 mennessä", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 18))
-        #expect(parseDueDate(text: "3.1.", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 1, day: 3))
-        #expect(parseDueDate(text: "20.12.", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 20))
-        #expect(parseDueDate(text: "perjantai", meetingDate: meeting, calendar: calendar) == nil)
-        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 11, day: 5))
-        #expect(parseDueDate(text: "18 Aralık 2026'ya kadar", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 18))
-        #expect(parseDueDate(text: "Cuma", meetingDate: meeting, calendar: calendar) == nil)
-        #expect(parseDueDate(text: "31.2.2027", meetingDate: meeting, calendar: calendar) == nil)
+        #expect(parseDueDate(text: "2027-01-08", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 1, day: 8))
+        #expect(parseDueDate(text: "perjantaihin 18.12.2026 mennessä", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "3.1.", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 1, day: 3))
+        #expect(parseDueDate(text: "20.12.", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 20))
+        #expect(parseDueDate(text: "perjantai", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 11, day: 5))
+        #expect(parseDueDate(text: "18 Aralık 2026'ya kadar", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "Cuma", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        #expect(parseDueDate(text: "31.2.2027", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        // Ay adları notun dilinde okunur: İngilizce ay-gün, Fince çekimli ay adı.
+        #expect(parseDueDate(text: "by November 5, 2027", meetingDate: meeting, calendar: calendar, language: .english) == DateComponents(year: 2027, month: 11, day: 5))
+        #expect(parseDueDate(text: "5 Dec", meetingDate: meeting, calendar: calendar, language: .english) == DateComponents(year: 2027, month: 12, day: 5))
+        #expect(parseDueDate(text: "18. joulukuuta", meetingDate: meeting, calendar: calendar, language: .finnish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar, language: .english) == nil)
         let task: NoteTask = NoteTask(owner: "Aino", description: "Esitys", dueDate: "3.1.", isMine: false)
-        let draft: ReminderDraft = reminderDraft(record: record(tasks: [task]), task: task, calendar: calendar)
+        let draft: ReminderDraft = reminderDraft(record: record(tasks: [task]), task: task, language: .turkish, calendar: calendar)
         #expect(draft.title == "Esitys")
         #expect(draft.due == DateComponents(year: 2027, month: 1, day: 3))
         #expect(draft.notes.contains("Bütçe") && draft.notes.contains("Aino"))
@@ -149,7 +194,7 @@ extension CloudTests {
         ).with(completedTasks: [taskKey(task: task)])
         let edited: MeetingRecord = try await editMeetingNote(
             record: record, instruction: "Özeti tek cümleye indir.", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
-            userName: "Senol", language: .turkish
+            userName: "Senol"
         )
         let newNote: MeetingNote = try #require(edited.note)
         #expect(newNote.summary.count < note.summary.count, "\(newNote.summary)")

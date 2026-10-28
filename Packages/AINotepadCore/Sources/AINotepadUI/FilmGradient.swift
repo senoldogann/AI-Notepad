@@ -1,8 +1,8 @@
 import CoreGraphics
 import SwiftUI
 
-/// Film gradyanının renk ailesi (ElevenLabs kapakları gibi: sıcak, yumuşak, biraz soluk tonlar). Her ailede zemin ve
-/// üç bulut rengi; aynı ton ailesinden farklı renkler.
+/// Film gradyanının renk ailesi (ElevenLabs gradyanları gibi: açık, pastel, fotoğrafik ışık). Her ailede pastel zemin
+/// ve bulutlar; koyu gölge yok, ışık krem beyazı.
 public enum FilmPalette: CaseIterable, Sendable {
     case sunset
     case coral
@@ -11,20 +11,20 @@ public enum FilmPalette: CaseIterable, Sendable {
     case rose
     case violet
 
-    /// Zemin, sonra bulutlar (açık, orta, karşıt renk).
+    /// Zemin, sonra bulutlar: açık ton, krem ışık, karşıt pastel, derin (ama yine açık) ton.
     var colors: (base: Color, clouds: [Color]) {
         switch self {
-        case .sunset: (rgb(0xE0623A), [rgb(0xF6B37E), rgb(0xF2D4A4), rgb(0x8E6CB0), rgb(0xD9472F)])
-        case .coral: (rgb(0xD6533E), [rgb(0xF29A7A), rgb(0xF3C9B5), rgb(0x3F8C52), rgb(0xB8402F)])
-        case .ocean: (rgb(0x3B6CB3), [rgb(0x9EC4E8), rgb(0xE79B7C), rgb(0x2C3D7A), rgb(0x6F95D4)])
-        case .mint: (rgb(0x4C9A83), [rgb(0xBEE2C8), rgb(0xE9C47C), rgb(0x2B5D58), rgb(0x7DBFA4)])
-        case .rose: (rgb(0xC04F79), [rgb(0xF3B6C6), rgb(0xF5D7A2), rgb(0x775AA6), rgb(0xA63A63)])
-        case .violet: (rgb(0x6A5AC2), [rgb(0xCABAF1), rgb(0xE8906C), rgb(0x2F2A6A), rgb(0x9A86E0)])
+        case .sunset: (rgb(0xF0AE92), [rgb(0xF7CDB8), rgb(0xFFF3E6), rgb(0xC9A3E0), rgb(0xE9896A)])
+        case .coral: (rgb(0xF0C49B), [rgb(0xF7DCC0), rgb(0xFFF6E8), rgb(0xF2A7B4), rgb(0xE0A36F)])
+        case .ocean: (rgb(0xA9BCEE), [rgb(0xCBD6F6), rgb(0xF4F1FF), rgb(0xE9B9D6), rgb(0x8EA3E6)])
+        case .mint: (rgb(0xA9CDB8), [rgb(0xCCE3D4), rgb(0xF6F7EA), rgb(0xE9D7A8), rgb(0x7FB096)])
+        case .rose: (rgb(0xEBA7B5), [rgb(0xF6CBD4), rgb(0xFFF1EC), rgb(0xB9C9F0), rgb(0xDE8AA3)])
+        case .violet: (rgb(0xC7B3EC), [rgb(0xDED1F5), rgb(0xFFF4EE), rgb(0xF4C0A8), rgb(0xA98BDB)])
         }
     }
 }
 
-/// Bir bulut: konum ve boyut (0...1, alana göre), dönüş, renk; yavaş sürüklenme hızı ve evresi.
+/// Bir bulut: konum ve boyut (0...1, alana göre), dönüş, renk ve küçük konum kayması evresi.
 struct FilmCloud: Equatable {
     let x: Double
     let y: Double
@@ -33,7 +33,6 @@ struct FilmCloud: Equatable {
     let angle: Double
     let colorIndex: Int
     let opacity: Double
-    let speed: Double
     let phase: Double
 }
 
@@ -50,7 +49,7 @@ enum FilmStyle: Equatable {
     case streaks
 }
 
-/// Tohumdan sabit film düzeni (her çizimde aynı; yalnızca sürüklenme zamanla değişir). Bulutların rolleri sabit,
+/// Tohumdan sabit film düzeni (her çizimde aynı). Bulutların rolleri sabit,
 /// yerleri tohuma göre: kenarda büyük koyu gölge, karşı tarafta küçük açık ışık, üstte derin renk, arada açık ton —
 /// zemin doygun kalır, açık renkler alanı kaplamaz (ElevenLabs kapaklarındaki gibi). Saf fonksiyondur.
 func filmLayout(seed: String, palette: FilmPalette) -> FilmLayout {
@@ -63,13 +62,13 @@ func filmLayout(seed: String, palette: FilmPalette) -> FilmLayout {
     // Gölge solda mı sağda mı; ışık karşı tarafta.
     let shadowLeft: Bool = next() < 0.5
     let side: (Double) -> Double = { (offset: Double) -> Double in shadowLeft ? offset : 1 - offset }
-    let drift: () -> (speed: Double, phase: Double) = { (0.05 + next() * 0.07, next() * 2 * .pi) }
+    let drift: () -> Double = { next() * 2 * .pi }
     // Doku tutamları: küçük, yarı saydam, açık ve derin tonlar karışık; her biçimde aynı.
     let wisps: [FilmCloud] = (0..<10).map { (index: Int) -> FilmCloud in
-        let motion: (speed: Double, phase: Double) = drift()
+        let phase: Double = drift()
         return FilmCloud(
             x: next(), y: next(), width: 0.22 + next() * 0.25, height: 0.07 + next() * 0.1, angle: next() * .pi,
-            colorIndex: [0, 3, 1, 0, 3, 2, 0, 3, 1, 0][index], opacity: 0.14 + next() * 0.16, speed: motion.speed * 1.5, phase: motion.phase
+            colorIndex: [0, 3, 1, 0, 3, 2, 0, 3, 1, 0][index], opacity: 0.14 + next() * 0.16, phase: phase
         )
     }
     switch style {
@@ -85,8 +84,8 @@ func filmLayout(seed: String, palette: FilmPalette) -> FilmLayout {
             (side(0.02 + next() * 0.12), 0.75 + next() * 0.3, 0.75, 0.6, 2, 0.9),
         ]
         return FilmLayout(style: style, clouds: roles.map { (role: (x: Double, y: Double, width: Double, height: Double, color: Int, opacity: Double)) -> FilmCloud in
-            let motion: (speed: Double, phase: Double) = drift()
-            return FilmCloud(x: role.x, y: role.y, width: role.width, height: role.height, angle: next() * .pi, colorIndex: role.color, opacity: role.opacity, speed: motion.speed, phase: motion.phase)
+            let phase: Double = drift()
+            return FilmCloud(x: role.x, y: role.y, width: role.width, height: role.height, angle: next() * .pi, colorIndex: role.color, opacity: role.opacity, phase: phase)
         }, wisps: wisps)
     case .streaks:
         // Çapraz ışık süzmeleri: aynı eğim, altta koyu şerit, ortada ince açık şerit, üstte derin şerit.
@@ -98,8 +97,8 @@ func filmLayout(seed: String, palette: FilmPalette) -> FilmLayout {
             (0.95 + next() * 0.15, 0.45, 2, 0.9),
         ]
         return FilmLayout(style: style, clouds: roles.map { (role: (y: Double, height: Double, color: Int, opacity: Double)) -> FilmCloud in
-            let motion: (speed: Double, phase: Double) = drift()
-            return FilmCloud(x: 0.5, y: role.y, width: 1.8, height: role.height, angle: tilt, colorIndex: role.color, opacity: role.opacity, speed: motion.speed, phase: motion.phase)
+            let phase: Double = drift()
+            return FilmCloud(x: 0.5, y: role.y, width: 1.8, height: role.height, angle: tilt, colorIndex: role.color, opacity: role.opacity, phase: phase)
         }, wisps: wisps)
     }
 }
@@ -110,9 +109,9 @@ public func filmPalette(seed: String) -> FilmPalette {
     return FilmPalette.allCases[index]
 }
 
-/// Film gradyanı (ElevenLabs kapaklarının görünümü): büyük, çok bulanık renk bulutları ya da çapraz ışık süzmeleri,
-/// ince film greni, hafif soluklaştırma (siyahlar biraz açık, kontrast ve doygunluk biraz düşük) ve kenar kararması.
-/// Durgun; hareketli sürümü `LivingFilmGradient`.
+/// Film gradyanı (ElevenLabs gradyanlarının görünümü): pastel zeminde büyük, çok bulanık renk bulutları ya da çapraz
+/// ışık süzmeleri, krem ışık, ince film greni ve çok hafif sıcak kenar kararması.
+/// Durgundur: akan sürüm her karede ekran dışı yüzey açıp sistemi yoruyordu (boşta bile yüksek işlemci).
 public struct FilmGradient: View {
     let seed: String
     let palette: FilmPalette
@@ -123,51 +122,26 @@ public struct FilmGradient: View {
     }
 
     public var body: some View {
-        FilmLayers(seed: seed, palette: palette, time: 0)
-    }
-}
-
-/// Yavaşça akan film gradyanı (banner ve toplantı kapağı); "Hareketi azalt" açıksa durgun.
-public struct LivingFilmGradient: View {
-    let seed: String
-    let palette: FilmPalette
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
-
-    public init(seed: String, palette: FilmPalette) {
-        self.seed = seed
-        self.palette = palette
-    }
-
-    /// Görünür alanın dışına kaydırılınca (ör. transkript okunurken kapak yukarıda kaldı) akış durur: ekranda
-    /// olmayan kapak için her karede bulanıklık çizilmez, ses çalarken kareler düşmez.
-    @State private var isOnScreen: Bool = true
-
-    public var body: some View {
-        let isPaused: Bool = reduceMotion || !isOnScreen
-        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: isPaused)) { (context: TimelineViewDefaultContext) in
-            FilmLayers(seed: seed, palette: palette, time: reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate)
-        }
-        .onScrollVisibilityChange(threshold: 0.05) { (visible: Bool) -> Void in isOnScreen = visible }
+        FilmLayers(seed: seed, palette: palette)
     }
 }
 
 /// Bulanık bulut katmanı bu kat küçük çizilip büyütülür: bulanıklığın bedeli piksel sayısıyla büyür, bulanık görüntüde
-/// çözünürlük kaybı görünmez (16 kat daha ucuz; akan kapak ses çalarken kareleri düşürmesin).
+/// çözünürlük kaybı görünmez (16 kat daha ucuz).
 let cloudDownscale: CGFloat = 4
 
 /// Katmanlar: bulanık bulutlar → soluklaştırma → gren → kenar kararması.
 private struct FilmLayers: View {
     let seed: String
     let palette: FilmPalette
-    let time: Double
 
-    /// Bulutları (konum, dönüş, yavaş sürüklenme) verilen bağlama çizer.
+    /// Bulutları (konum, dönüş, evreye göre küçük kayma) verilen bağlama çizer.
     private func drawClouds(context: GraphicsContext, clouds: [FilmCloud], size: CGSize, heightScale: Double) {
         let colors: [Color] = palette.colors.clouds
         for cloud in clouds {
-            let drift: Double = sin(time * cloud.speed + cloud.phase)
+            let drift: Double = sin(cloud.phase)
             var layer: GraphicsContext = context
-            layer.translateBy(x: (cloud.x + drift * 0.08) * size.width, y: (cloud.y + cos(time * cloud.speed * 0.8 + cloud.phase) * 0.06) * size.height)
+            layer.translateBy(x: (cloud.x + drift * 0.08) * size.width, y: (cloud.y + cos(cloud.phase) * 0.06) * size.height)
             layer.rotate(by: .radians(cloud.angle + drift * 0.05))
             let width: Double = cloud.width * size.width
             let height: Double = cloud.height * heightScale
@@ -202,14 +176,12 @@ private struct FilmLayers: View {
                 .drawingGroup()
                 .scaleEffect(cloudDownscale, anchor: .topLeading)
             }
-            // 90'lar filmi gibi hafif soluk: siyahlar biraz açık.
-            Color.white.opacity(0.035).blendMode(.screen)
             FilmGrain()
-            RadialGradient(colors: [.clear, .black.opacity(0.22)], center: .center, startRadius: 40, endRadius: 700)
+            // Fotoğraf objektifi gibi çok hafif, sıcak kenar kararması.
+            RadialGradient(colors: [.clear, rgb(0x5A3A2A).opacity(0.12)], center: .center, startRadius: 60, endRadius: 720)
                 .blendMode(.multiply)
         }
-        .saturation(0.96)
-        .contrast(0.95)
+        .saturation(0.94)
         .drawingGroup()
         .allowsHitTesting(false)
     }
@@ -221,7 +193,7 @@ struct FilmGrain: View {
         Rectangle()
             .fill(ImagePaint(image: Image(decorative: filmGrainImage, scale: 2)))
             .blendMode(.overlay)
-            .opacity(0.55)
+            .opacity(0.42)
             .allowsHitTesting(false)
     }
 }

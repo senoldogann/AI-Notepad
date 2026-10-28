@@ -2,8 +2,8 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Sekme çubuğunun üstündeki mini çalar (Apple Müzik gibi): toplantı adı ve o anki konuşmacı, ilerleme, 15 sn geri,
-/// oynat/duraklat, kapat. Ada dokununca toplantı açılır.
+/// Sekme çubuğunun üstündeki mini çalar (Apple Müzik gibi): toplantı adı, süre ve 15 sn geri (sekme çubuğu
+/// küçülünce gizlenir), oynat/duraklat, kapat. Ada dokununca toplantı açılır.
 struct MiniPlayer: View {
     let player: MeetingAudioPlayer
     let store: PhoneStore

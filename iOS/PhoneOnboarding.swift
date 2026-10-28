@@ -20,7 +20,7 @@ private enum PhoneOnboardingPage: Int, CaseIterable {
 
     var subtitle: LocalizedStringKey {
         switch self {
-        case .welcome: "Yüz yüze toplantılar canlı yazıya dökülür, çevirisi altında akar; bitince not hazır, en üstte senin görevlerin."
+        case .welcome: "Yüz yüze toplantılar canlı yazıya dökülür, \(phoneNoteLanguage().interfaceName) çevirisi altında akar; bitince not hazır, en üstte senin görevlerin."
         case .profile: "Adın notta sana düşen görevleri ayırır; ana dil canlı metnin hangi dille başlayacağını belirler."
         case .keys: "Mac'teki anahtarlar iCloud Anahtar Zinciri ile gelir ya da burada girersin; hiçbir yere gönderilmez."
         case .ready: "Kilit ekranında süre ve son cümle; Denetim Merkezi ya da Eylem düğmesiyle tek dokunuşla kayıt."
@@ -61,7 +61,7 @@ struct PhoneOnboarding: View {
                 switch page {
                 case .welcome:
                     VStack(spacing: 10) {
-                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "35 dil; konuşmacılar ayrılır, çevirisi altında akar.", palette: .sunset)
+                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "35 dil; konuşmacılar ayrılır, \(phoneNoteLanguage().interfaceName) çevirisi altında akar.", palette: .sunset)
                         FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar ve özet.", palette: .rose)
                     }
                 case .profile:

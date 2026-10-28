@@ -39,6 +39,7 @@ extension CloudTests {
             switch event {
             case .final(let text, let start, _): finals.append((text, start))
             case .failed(let message): failures.append(message)
+            case .incomplete(let untranscribedSec): failures.append("sesin sonu yazıya dökülmedi: \(untranscribedSec) sn")
             case .partial: break
             }
         }

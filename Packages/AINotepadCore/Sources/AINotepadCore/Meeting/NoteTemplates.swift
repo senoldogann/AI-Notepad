@@ -177,6 +177,12 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         englishName == nativeName ? englishName : "\(englishName) (\(nativeName))"
     }
 
+    /// Arayüz etiketlerindeki adı, arayüz dilinde (Türkçe arayüzde "İngilizce", İngilizce arayüzde "English"). Ad
+    /// sistemin dil verisinden gelir; sistem kodu tanımazsa (bu listedeki kodlarda olmaz) dilin kendi adı yazılır.
+    public var interfaceName: String {
+        interfaceLocale().localizedString(forIdentifier: rawValue) ?? nativeName
+    }
+
     /// Aynı dilin toplantı dili karşılığı (toplantı not diliyle aynıysa canlı çeviri gerekmez); Azerice konuşma dili
     /// olarak desteklenmez (nil). Norveççe Bokmål "nb" toplantıda "no", Çincenin iki yazımı toplantıda "zh"dir.
     public var meetingLanguage: MeetingLanguage? {

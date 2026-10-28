@@ -82,7 +82,7 @@ public struct GlossaryEntry: Sendable, Equatable, Codable {
     }
 }
 
-/// Toplantı sonrası Türkçe not.
+/// Toplantı sonrası not (not ve çeviri dilinde; bkz. `language`).
 public struct MeetingNote: Sendable, Equatable, Codable {
     public let title: String
     public let summary: String
@@ -91,6 +91,9 @@ public struct MeetingNote: Sendable, Equatable, Codable {
     public let glossary: [GlossaryEntry]
     /// Konu akışı: toplantının bölümleri, başladıkları anla (eski notlarda nil).
     public private(set) var outline: [OutlineItem]?
+    /// Notun yazıldığı dil (Ayarlar › "Not ve çeviri dili"); dil seçimi gelmeden yazılan eski notlarda nil (bkz.
+    /// `writtenLanguage`).
+    public private(set) var language: ShareLanguage?
 
     public init(title: String, summary: String, decisions: [String], tasks: [NoteTask], glossary: [GlossaryEntry]) {
         self.title = title
@@ -107,11 +110,25 @@ public struct MeetingNote: Sendable, Equatable, Codable {
         return copy
     }
 
-    /// Başlığı değişmiş kopya (konu akışı korunur).
+    /// Başlığı değişmiş kopya (konu akışı ve dil korunur).
     public func with(title newTitle: String) -> MeetingNote {
         var copy: MeetingNote = MeetingNote(title: newTitle, summary: summary, decisions: decisions, tasks: tasks, glossary: glossary)
         copy.outline = outline
+        copy.language = language
         return copy
+    }
+
+    /// Yazıldığı dil işaretli kopya.
+    public func with(language newLanguage: ShareLanguage) -> MeetingNote {
+        var copy: MeetingNote = self
+        copy.language = newLanguage
+        return copy
+    }
+
+    /// Notun yazıldığı dil: dil kaydı olmayan notlar Türkçedir (dil seçimi gelmeden önceki sürümler notu hep Türkçe
+    /// yazardı).
+    public var writtenLanguage: ShareLanguage {
+        language ?? .turkish
     }
 }
 
@@ -147,7 +164,7 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var failureMessage: String?
     public private(set) var liveSegments: [StoredSegment]
     public private(set) var finalSegments: [StoredSegment]
-    /// Bölüm anahtarı → Türkçe.
+    /// Bölüm anahtarı → not dilindeki canlı çevirisi.
     public private(set) var translations: [String: String]
     /// Kişi numarası → kullanıcının verdiği ad.
     public private(set) var speakerNames: [Int: String]
@@ -241,6 +258,23 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Notun gönderim işaretleri (hedefler, Apple Notlar ve webhook anları) değişmiş kopya; iki kaydın işaretlerini
+    /// birleştirirken kullanılır (nil: işaret yok).
+    public func with(sentDestinationIDs newIDs: [String]?, notesSentAt newNotesDate: Date?, webhookSentAt newWebhookDate: Date?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.sentDestinationIDs = newIDs
+        copy.notesSentAt = newNotesDate
+        copy.webhookSentAt = newWebhookDate
+        return copy
+    }
+
+    /// Araca gönderilen görevleri değişmiş kopya.
+    public func with(sentTaskKeys newTaskKeys: [String: [String]]) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.sentTaskKeys = newTaskKeys
+        return copy
+    }
+
     /// Kendi notları değişmiş kopya (boş metin nil olur).
     public func with(myNotes newNotes: String) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -298,7 +332,7 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
-    /// Türkçeleri değişmiş kopya.
+    /// Çevirileri değişmiş kopya.
     public func with(translations newTranslations: [String: String]) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.translations = newTranslations
@@ -397,6 +431,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public func with(notice newNotice: String?) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.notice = newNotice
+        return copy
+    }
+
+    /// "Sen" son geçiş işareti değişmiş kopya.
+    public func with(meNeedsFinalPass newValue: Bool?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.meNeedsFinalPass = newValue
         return copy
     }
 }
