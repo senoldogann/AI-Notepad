@@ -30,11 +30,23 @@ AINOTEPAD_SERVER_LIVE_TESTS=1 LIVE_ANTHROPIC_API_KEY=... LIVE_STRIPE_SECRET_KEY=
 
 Gizli olmayan ayarlar `wrangler.jsonc` içindeki `vars`'tadır (deneme sayısı, aylık sınır, bütçeler, fiyat kimliği,
 App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 internal_error` ve `config_invalid` logu verir.
+Üretimde yer tutucu kalmışsa da öyledir (`TEAMID…` uygulama kimliği, `placeholder` içeren fiyat kimliği, `example.com` ya
+da `localhost` adresleri): log `ConfigPlaceholderError` ve ayar adlarını taşır, değerleri değil. Yerelde ve testlerde
+yer tutucular geçerlidir.
 
 ## Göçler
 
 `migrations/` altındaki SQL dosyaları sırayla uygulanır: yerelde `npm run migrate:local`, üretimde
 `npm run migrate:production`. Yeni şema değişikliği yeni bir numaralı dosyadır; uygulanmış dosya değiştirilmez.
+
+## Zamanlanmış temizlik
+
+`wrangler.jsonc` → `triggers.crons` her gün 03:17 UTC'de `scheduled` işleyicisini çalıştırır (`src/cleanup.ts`). Silinenler:
+süresi dolmuş Apple nonce'ları, süresi dolmuş ya da kullanılmış e-posta bağlantıları ve cihaz meydan okumaları, süresi
+dolmuş ya da ailesi düşürülmüş yenileme jetonları ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük
+harcama, bugünden eski deneme başlangıçları, 2 günden eski kullanıcı günlük kullanımı. Silme tablo başına 1000 satırlık
+en çok 4 turdur; kalan ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev --test-scheduled`,
+sonra `curl "http://localhost:8787/__scheduled?cron=17+3+*+*+*"`.
 
 ## İlk dağıtım (sahibin bir kez yapacakları)
 
@@ -60,13 +72,14 @@ App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 in
 | `POST /v1/auth/email/verify` | — | `{token}` (bağlantının `#token=` parçası) |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür |
 | `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |
+| `DELETE /v1/me` | Bearer | hesabı siler (GDPR), `204`: önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (başarısızsa hiçbir şey silinmez, `502`); sonra kimlikler, oturumlar, giriş bağlantıları, cihazlar, toplantılar, kullanım, abonelik ve Stripe müşteri eşlemesi, deneme kayıtları tek işlemde silinir. Bugünkü deneme başlangıcı IP özeti başına günlük sayaçta hesap bağı olmadan kalır. Stripe'taki müşteri ve faturalar vergi kayıtları için Stripe'ta kalır. Tekrarı (aynı jetonla) `204` |
 | `POST /v1/device/challenge` | Bearer | `{purpose: "attest" \| "assert"}` |
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |
-| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3; kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır |
+| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3; kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır, reddedilen başlatma açık toplantıya dokunmaz ve sayılmaz |
 | `POST /v1/meetings/{id}/end` | Bearer | |
 | `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE; toplantı bütçesi + kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=`. Süre önceden ayrılır: WAV (PCM) başlıktan kesin, m4a/aac/mp3 en düşük 8 kbit/s, ogg/webm 6 kbit/s varsayımıyla; toplantının sesi en çok toplantının süresi kadar. FLAC kabul edilmez. Uzun toplantıda WAV parçalar halinde gönderilir |
-| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner |
-| `POST /v1/billing/webhook` | Stripe imzası | |
+| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
+| `POST /v1/billing/webhook` | Stripe imzası | kullanıcı başına tek geçerli abonelik: başka bir aboneliğin olayı onu yalnızca geçerli olan bitmişse ya da gelen `active`/`trialing` iken geçerli olan öyle değilse değiştirir |
 
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir. Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner.

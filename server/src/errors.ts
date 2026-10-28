@@ -17,6 +17,7 @@ export type ErrorCode =
   | "assertion_invalid"
   | "challenge_invalid"
   | "subscription_required"
+  | "subscription_exists"
   | "trial_exhausted"
   | "trial_ip_limit"
   | "monthly_cap_reached"
@@ -49,6 +50,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   assertion_invalid: 403,
   challenge_invalid: 400,
   subscription_required: 402,
+  subscription_exists: 409,
   trial_exhausted: 402,
   trial_ip_limit: 429,
   monthly_cap_reached: 403,

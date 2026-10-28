@@ -127,23 +127,6 @@ export function settleTokenStatements(
   ];
 }
 
-/** Günlük toplantı başlatma hakkından bir tane ayırır; sınır aşılırsa `daily_cap_reached`. */
-export async function reserveMeetingStart(db: D1Database, config: Config, userId: string, now: Date): Promise<void> {
-  const day: string = dayKey(now);
-  await reserveAll(db, [
-    {
-      reserve: [
-        db.prepare("INSERT OR IGNORE INTO daily_usage (user_id, day) VALUES (?, ?)").bind(userId, day),
-        db
-          .prepare("UPDATE daily_usage SET meetings_started = meetings_started + 1 WHERE user_id = ? AND day = ? AND meetings_started < ?")
-          .bind(userId, day, config.maxMeetingStartsPerDay),
-      ],
-      release: db.prepare("UPDATE daily_usage SET meetings_started = MAX(0, meetings_started - 1) WHERE user_id = ? AND day = ?").bind(userId, day),
-      error: new ApiError("daily_cap_reached", `Bugün en çok ${config.maxMeetingStartsPerDay} toplantı başlatılabilir; yarın yeniden dene.`),
-    },
-  ]);
-}
-
 /**
  * Ses ayırma adımları: toplantının ses süresi sınırı (en uzun süresi; ses hakkı kapanmamış olmalı) ve kullanıcının
  * aylık süre sınırı. Aylık adım deneme toplantılarında da uygulanır (deneme toplamı 3 × 90 dk sınırın altındadır);

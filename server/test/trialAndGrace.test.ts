@@ -1,4 +1,6 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { cleanupExpiredRows } from "../src/cleanup";
 import { type Harness, type Session, type StartedMeetingBody, defaultHarness, expectError, grantSubscription, refreshed, req, signIn } from "./helpers";
 
 interface MeBody {
@@ -37,6 +39,32 @@ describe("IP başına günlük yeni deneme sınırı", () => {
     harness.clock.nowMs += 86_400_000;
     const fifth: Session = await signIn(harness);
     expect((await startFrom(harness, fifth, ip)).status).toBe(201);
+  });
+});
+
+describe("eski deneme kayıtları temizlendikten sonra", () => {
+  it("denemeye başlamış hesap IP sınırına takılmaz ve yeniden sayılmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const ip: string = "203.0.113.90";
+    const accounts: Session[] = [await signIn(harness), await signIn(harness), await signIn(harness)];
+    for (const account of accounts) {
+      expect((await startFrom(harness, account, ip)).status).toBe(201);
+    }
+    harness.clock.nowMs += 86_400_000;
+    await cleanupExpiredRows(env.DB, new Date(harness.clock.nowMs), { batchSize: 100, maxBatchesPerTable: 10 });
+    const remaining = await env.DB.prepare("SELECT COUNT(*) AS count FROM trial_starts WHERE day < ?")
+      .bind(new Date(harness.clock.nowMs).toISOString().slice(0, 10))
+      .first<{ count: number }>();
+    expect(remaining?.count).toBe(0);
+
+    const returning: Session = await refreshed(harness, accounts[0] as Session);
+    const second: StartedMeetingBody = await (await startFrom(harness, returning, ip)).json<StartedMeetingBody>();
+    expect(second).toMatchObject({ kind: "trial", trialMeetingsLeft: 1 });
+    // Bugün bu IP'den yeni hesaplar için 3 hak hâlâ duruyor.
+    for (let index: number = 0; index < 3; index += 1) {
+      expect((await startFrom(harness, await signIn(harness), ip)).status).toBe(201);
+    }
+    await expectError(await startFrom(harness, await signIn(harness), ip), 429, "trial_ip_limit");
   });
 });
 
