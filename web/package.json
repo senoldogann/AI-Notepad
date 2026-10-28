@@ -7,11 +7,18 @@
     "typecheck": "PUBLIC_WEB_TARGET=production astro check",
     "build": "PUBLIC_WEB_TARGET=production astro build",
     "build:local": "PUBLIC_WEB_TARGET=local astro build",
-    "preview": "astro preview --port 8788"
+    "preview": "astro preview --port 8788",
+    "serve": "node scripts/serve.ts 8788",
+    "screenshots": "node scripts/screenshots.ts"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@types/node": "26.6.6",
     "astro": "7.4.4",
+    "playwright-core": "1.64.1",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=26"
   }
 }
