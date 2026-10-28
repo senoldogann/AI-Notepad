@@ -5,7 +5,8 @@ import os
 import SwiftUI
 
 /// iPhone uygulaması: sekmeler (Kayıt, Toplantılar, Sor, Görevler, Ayarlar). Mac'le aynı çekirdeği ve görünümü
-/// kullanır; toplantılar aynı klasör yapısındadır (eşitleme aşamasında iCloud kapsayıcısına taşınır).
+/// kullanır; toplantılar aynı klasör yapısındadır. iCloud eşitlemesi açıksa biten toplantılar iCloud kapsayıcısına
+/// taşınır ve Mac'tekilerle birlikte listelenir.
 @main
 struct AINotepadiOSApp: App {
     @State private var store: PhoneStore
@@ -129,6 +130,8 @@ struct RootView: View {
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
     @Environment(\.scenePhase) private var scenePhase: ScenePhase
+    /// Uygulama arka plana geçti: öne dönünce yarım kalan işleme sürdürülür.
+    @State private var wasInBackground: Bool = false
 
     var body: some View {
         TabView(selection: $router.tab) {
@@ -178,11 +181,19 @@ struct RootView: View {
             if phase == .active {
                 calendar.start()
             }
+            // Arka planda süresi dolup iptal edilen işleme öne dönünce sürer (yoksa toplantı bir sonraki açılışa dek
+            // "Hazırlanıyor"da kalırdı). Açılıştaki ilk çağrı `.task`'tadır; işlenmekte olanlar atlanır.
+            if phase == .background {
+                wasInBackground = true
+            } else if phase == .active, wasInBackground {
+                wasInBackground = false
+                Task { await recorder.resumeUnfinished() }
+            }
         }
     }
 }
 
-/// Yerel toplantı arşivi (cihazdaki `Sessions` klasörü); eşitleme aşamasında iCloud kapsayıcısı olur.
+/// Toplantı arşivi: cihazdaki `Sessions` klasörü ve iCloud eşitlemesi açıksa iCloud kapsayıcısındaki toplantılar.
 @MainActor
 @Observable
 final class PhoneStore {
@@ -238,14 +249,16 @@ final class PhoneStore {
         upsert(record: updated)
     }
 
-    /// Görevin tamamlandı işaretini değiştirir ve toplantıyı saklar.
+    /// Görevin tamamlandı işaretini değiştirir ve toplantıyı saklar. Değişiklik diskteki en güncel kayda uygulanır
+    /// (Mac'te iCloud'la gelmiş düzenlemeler bellekteki eski kopyayla ezilmesin).
     func toggleTask(meetingID: String, task: NoteTask) {
         guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing else {
             return
         }
-        let updated: MeetingRecord = togglingTask(record: record, task: task)
         do {
-            try saveMeeting(record: updated, directory: try sessionDirectory(id: meetingID))
+            let directory: URL = try sessionDirectory(id: meetingID)
+            let updated: MeetingRecord = togglingTask(record: try loadMeeting(directory: directory), task: task)
+            try saveMeeting(record: updated, directory: directory)
             upsert(record: updated)
         } catch {
             problems = appendUnique(messages: problems, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
@@ -268,13 +281,11 @@ final class PhoneStore {
         let days: Int = min(365, max(7, UserDefaults.standard.integer(forKey: PhoneSettingsKey.audioRetentionDays)))
         // iCloud'daki toplantılar da (eşitleme açıkken biten her toplantı iCloud'a taşınır); çalan toplantının sesi kalır.
         for id in audioToDelete(records: meetings.filter { $0.id != playingMeetingID }, now: now, retentionDays: days) {
-            guard let record = meetings.first(where: { $0.id == id }) else {
-                continue
-            }
             do {
                 let directory: URL = try sessionDirectory(id: id)
                 try deleteAudioFiles(directory: directory)
-                let updated: MeetingRecord = record.withAudioDeleted().with(voiceprints: nil)
+                // Diskteki en güncel kayda uygulanır: Mac'te yapılan düzenlemeler bellekteki eski kopyayla ezilmesin.
+                let updated: MeetingRecord = try loadMeeting(directory: directory).withAudioDeleted().with(voiceprints: nil)
                 try saveMeeting(record: updated, directory: directory)
                 upsert(record: updated)
             } catch {
@@ -299,8 +310,11 @@ final class PhoneStore {
             let directory: URL = try sessionDirectory(id: meetingID)
             let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
             let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+            // Not yazılırken Mac'te değişmiş olabilir: yeni not diskteki güncel kayda uygulanır, işaretler oradan taşınır.
+            let fresh: MeetingRecord = try loadMeeting(directory: directory)
+            let merged: MeetingRecord = applyingRegeneratedNote(result: result, original: record, fresh: fresh)
             // Eski not geçmişe girer (⋯ › Önceki sürümler).
-            let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Not yenilendi"), savedAt: Date())
+            let versioned: MeetingRecord = withNoteVersion(updated: merged, previous: fresh, reason: String(localized: "Not yenilendi"), savedAt: Date())
             try saveMeeting(record: versioned, directory: directory)
             upsert(record: versioned)
         } catch {
@@ -364,4 +378,15 @@ final class PhoneStore {
         let directory: URL = try sessionDirectory(id: record.id)
         return [Speaker.others, Speaker.me].compactMap { meetingAudioURL(directory: directory, speaker: $0) }
     }
+}
+
+/// Yeniden yazılan notu (`result`, bellekteki `original`'dan üretildi) diskteki güncel kayda (`fresh`) uygular: Mac'te bu
+/// arada yapılan düzenlemeler (ad, başlık, görev işaretleri) korunur, işaretler yeni görevlere taşınır. Not bu yenilemede
+/// değişmediyse (ör. LLM hatası) diskteki not olduğu gibi kalır, yalnızca durum ve hata yazılır. Saf fonksiyondur.
+func applyingRegeneratedNote(result: MeetingRecord, original: MeetingRecord, fresh: MeetingRecord) -> MeetingRecord {
+    let withStatus: MeetingRecord = fresh.with(status: result.status, failureMessage: result.failureMessage)
+    guard let note = result.note, note != original.note else {
+        return withStatus
+    }
+    return withCarriedTaskMarks(old: fresh, new: withStatus.with(note: note))
 }

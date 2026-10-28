@@ -118,6 +118,8 @@ struct AINotepadApp: App {
         }
         QuitGuard.shared.onBlocked = {
             router.quitWarning = true
+            // Kayıt odağı ekranı uyarıyı örtmesin (⌘Q tepkisiz görünüyordu).
+            router.isRecordingFocusDismissed = true
             openMainWindow(router: router, section: .home)
         }
         panel.attach {

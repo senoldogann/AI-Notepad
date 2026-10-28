@@ -204,7 +204,7 @@ private struct GeneralSettings: View {
                     (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
-                .disabled(model.isRecording)
+                .disabled(model.isRecording || model.isStarting)
             }
             SettingsRow(title: Text("Ana toplantı dili")) {
                 Text("Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.")

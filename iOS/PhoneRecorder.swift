@@ -131,9 +131,14 @@ final class PhoneRecorder {
         }
         levels.start()
         let levels: AudioLevels = levels
+        // En yüksek seviye kilitli kutuda birikir; ana aktöre en fazla 100 ms'de bir geçilir (her parça için görev açılmaz).
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: 0.1)
         let metered: AsyncStream<[Float]> = meteredStream(audio: audio) { (level: Float) -> Void in
+            guard let peak = throttle.add(level: level) else {
+                return
+            }
             let now: Date = Date()
-            Task { @MainActor in levels.record(level: level, at: now) }
+            Task { @MainActor in levels.record(level: peak, at: now) }
         }
         let handle: LiveSessionHandle = runCloudLiveSession(
             config: CloudSessionConfig(
@@ -297,6 +302,9 @@ final class PhoneRecorder {
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Ses diske yazılamadı: \(message)"))
         case .streamFailed(_, let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Canlı metin durdu: \(message)"))
+        case .streamIncomplete(let speaker, let untranscribedSec):
+            // iPhone'da ses "Diğerleri" akışındadır ve son geçişten her zaman geçer: eksik kalan son metin orada tamamlanır.
+            Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         case .speakersAssigned:

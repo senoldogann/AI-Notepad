@@ -2476,6 +2476,16 @@
         }
       }
     },
+    "Bu toplantı silinmiş olabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting may have been deleted."
+          }
+        }
+      }
+    },
     "Bu toplantıda sana düşen görev yok": {
       "localizations": {
         "en": {
@@ -5983,6 +5993,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lithuanian"
+          }
+        }
+      }
+    },
+    "Mac uykuya geçtiği için kayıt bitirildi; not hazırlanıyor.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording stopped because the Mac went to sleep; the note is being prepared."
           }
         }
       }

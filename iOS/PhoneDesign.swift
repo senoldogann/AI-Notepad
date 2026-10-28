@@ -120,7 +120,7 @@ struct PillTabs<Value: Hashable>: View {
     }
 }
 
-/// Kapak (film gradyanı) üstündeki cam çip: beyaz yazı, yarı saydam zemin.
+/// Toplantı kapağı (`CoverBackground`) üstündeki çip: beyaz yazı, koyu yarı saydam zemin (açık kapakta da okunur).
 struct GlassChip: View {
     let text: String
     let systemImage: String?
@@ -136,8 +136,36 @@ struct GlassChip: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(.white.opacity(0.16), in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.24)))
+        .background(.black.opacity(0.28), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.20)))
+    }
+}
+
+/// Açık pastel film gradyanı (kayıt ve Sor kartları) üstündeki çip: koyu yazı, beyaz zemin (Mac'teki kayıt kartı gibi).
+struct PastelChip: View {
+    let text: String
+    let systemImage: String?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage).appFont(size: 11, weight: .semibold)
+            }
+            Text(text)
+        }
+        .appFont(size: 12, weight: .medium)
+        .foregroundStyle(Color.black.opacity(0.8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.9), in: Capsule())
+    }
+}
+
+/// Kapak üstündeki beyaz yazının okunması için alttan koyulaşan katman (ortak `CoverBackground` Mac'te de kullanıldığı
+/// için iPhone kapaklarına ayrıca eklenir).
+struct CoverScrim: View {
+    var body: some View {
+        LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
     }
 }
 
@@ -207,7 +235,10 @@ struct PhoneMeetingCard: View {
         .foregroundStyle(.white)
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .bottomLeading)
-        .background { CoverBackground(seed: record.id) }
+        .background {
+            CoverBackground(seed: record.id)
+                .overlay { CoverScrim() }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }

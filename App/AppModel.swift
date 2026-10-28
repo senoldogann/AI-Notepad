@@ -193,11 +193,14 @@ final class AppModel {
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
+    /// Uyku ve çıkış bildirimlerinin gözlemcileri (uygulama boyunca yaşar).
+    @ObservationIgnored private var systemObservers: [any NSObjectProtocol] = []
 
     init(liveEngine: LiveEngine, displayMode: DisplayMode, player: MeetingAudioPlayer) {
         self.liveEngine = liveEngine
         self.displayMode = displayMode
         self.player = player
+        observeSleepAndTermination()
     }
 
     /// Uygulamanın tek oynatıcısı: kayıt başlarken durdurulur (çalan ses mikrofona girip yeni kayda karışmasın).
@@ -389,7 +392,12 @@ final class AppModel {
     }
 
     private func translate(segment: LiveSegment, context: [String], provider: LLMProvider, generation: Int) async {
-        guard !translationDisabled, generation == recordingGeneration else {
+        guard generation == recordingGeneration else {
+            return
+        }
+        guard !translationDisabled else {
+            // Anahtar reddedildi (401/403) ya da kayıt sonu süresi doldu: sıradaki cümle kaybolmasın, "Tekrar dene"de kalsın.
+            failedTranslations.insert(segment.id)
             return
         }
         do {
@@ -538,6 +546,9 @@ final class AppModel {
         }
         isStarting = true
         defer { isStarting = false }
+        // Motor bir kez okunur: izin pencereleri açıkken ayar değişse de bulut/yerel kararı ile kaydın motoru aynı kalır
+        // (yerel toplantı bulut sayılıp son geçişte buluta gönderilmesin).
+        let engineAtStart: LiveEngine = liveEngine
         player.stop()
         transcript = []
         speakerCorrections = .none
@@ -562,7 +573,7 @@ final class AppModel {
 
         // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz; eksiklerin hepsi bildirilir.
         let cloudKeys: (deepgram: String, elevenLabs: String)?
-        switch liveEngine {
+        switch engineAtStart {
         case .deepgram:
             let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
             let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
@@ -645,12 +656,17 @@ final class AppModel {
             return
         }
 
-        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer.
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
+        // kilitli kutuda birikir, ana aktöre en fazla 100 ms'de bir geçilir (her parça için ayrı görev açılmaz).
         audioLevels.start()
         let levels: AudioLevels = audioLevels
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: 0.1)
         let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
+            guard let peak = throttle.add(level: level) else {
+                return
+            }
             let now: Date = Date()
-            Task { @MainActor in levels.record(level: level, at: now) }
+            Task { @MainActor in levels.record(level: peak, at: now) }
         }
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
@@ -704,13 +720,13 @@ final class AppModel {
         // Yeni bitirme için hazırlanma kartı yeniden gösterilir.
         finishingCardDismissed = false
         recordingStartedAt = startedAt
-        session = RecordingSession(directory: directory, startedAt: startedAt, engine: liveEngine, handle: handle, pauseGate: pauseGate, micGate: micGate)
+        session = RecordingSession(directory: directory, startedAt: startedAt, engine: engineAtStart, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
         keepAwake(meetingID: directory.lastPathComponent)
         startCheckpoints(directory: directory, startedAt: startedAt)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
         saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
-        Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(self.liveEngine.rawValue, privacy: .public)")
+        Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(engineAtStart.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in handle.events {
                 self?.handle(event: event)
@@ -803,6 +819,11 @@ final class AppModel {
             // "Sen"in metni bu kayıtta eksik kalır; toplantı sonunda "Sen" kaydı da yazıya dökülür.
             meStreamFailed = meStreamFailed || speaker == .me
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)"))
+        case .streamIncomplete(let speaker, let untranscribedSec):
+            // Kapanışta sesin sonu yazıya dökülemedi: "Sen" kaydı toplantı sonunda yazıya dökülür (kullanıcıya hata
+            // gösterilmez; metin son geçişte tamamlanır). "Diğerleri" son geçişten zaten geçer.
+            meStreamFailed = meStreamFailed || speaker == .me
+            Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }
@@ -943,6 +964,46 @@ final class AppModel {
                 await cloud.moveFinishedMeetings(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
             }
         }
+    }
+
+    /// Mac uykuya geçerken kaydı bitirir; uygulama kapanırken süren kaydın son halini saklar.
+    private func observeSleepAndTermination() {
+        let sleep: any NSObjectProtocol = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.finishRecordingBeforeSleep()
+            }
+        }
+        let terminate: any NSObjectProtocol = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.saveCheckpointBeforeQuit()
+            }
+        }
+        systemObservers = [sleep, terminate]
+    }
+
+    /// Kapak kapandı ya da Mac uyuyor: kayıt temiz biçimde bitirilir. Uykuda saat ilerlediği için sürdürülen kayıt
+    /// uyanınca uyku süresi kadar sessizlik (saatlik uykuda yüzlerce MB) üretip buluta yüklerdi.
+    private func finishRecordingBeforeSleep() {
+        guard isRecording, !isFinishing else {
+            return
+        }
+        Self.logger.info("Mac uykuya geçiyor, kayıt bitiriliyor")
+        stopRecording()
+        errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Mac uykuya geçtiği için kayıt bitirildi; not hazırlanıyor."))
+    }
+
+    /// "Yine de çık": süren kaydın son transkripti saklanır (son kontrol noktasından sonraki metin kaybolmasın);
+    /// toplantı açılışta "Yarıda kaldı" olarak bulunur.
+    private func saveCheckpointBeforeQuit() {
+        guard isRecording, let session else {
+            return
+        }
+        Self.logger.info("Kayıt sürerken uygulama kapanıyor, son durum saklanıyor, klasör: \(session.directory.lastPathComponent, privacy: .public)")
+        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, status: .recording, endedAt: nil), directory: session.directory)
     }
 
     /// Toplantının kaydı ya da işlenmesi sürerken boşta uykuyu engeller (kapak kapatma yine uyutur).

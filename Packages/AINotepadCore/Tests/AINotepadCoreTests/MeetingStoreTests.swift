@@ -61,6 +61,20 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         let changed: [MeetingRecord] = staleStatusesToInterrupt(records: records)
         #expect(changed.map(\.id) == ["a", "b"])
         #expect(changed.allSatisfy { $0.status == .interrupted })
+        // Mikrofonsuz kayıt ("Sen" bölümü yok) "Sen" son geçişi istemez.
+        #expect(changed.allSatisfy { $0.meNeedsFinalPass == nil })
+    }
+
+    // Kayıt sırasında kapanan ve "Sen" bölümü olan toplantıda "Sen" kaydı da yeniden yazıya dökülür; işlemede kapanan değişmez.
+    @Test func interruptedRecordingWithMicrophoneNeedsMeFinalPass() {
+        let me: StoredSegment = StoredSegment(key: "me-0", speaker: .me, person: nil, startSec: 0, endSec: 1, text: "Moi", words: nil)
+        let recording: MeetingRecord = record(id: "a", startedAt: Date(), status: .recording, audioDeleted: false)
+        let processing: MeetingRecord = record(id: "b", startedAt: Date(), status: .processing, audioDeleted: false)
+        let changed: [MeetingRecord] = staleStatusesToInterrupt(records: [
+            recording.with(liveSegments: recording.liveSegments + [me]),
+            processing.with(liveSegments: processing.liveSegments + [me]),
+        ])
+        #expect(changed.map(\.meNeedsFinalPass) == [true, nil])
     }
 
     @Test func retentionDeletesOnlyOldAudio() {

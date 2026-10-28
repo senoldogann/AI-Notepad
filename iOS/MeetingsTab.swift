@@ -78,6 +78,12 @@ struct MeetingsTab: View {
                         pendingDelete = record
                     }
                     .navigationTransition(.zoom(sourceID: id, in: cardTransition))
+                } else {
+                    // Toplantı silindi (ör. Mac'ten): boş sayfa yerine neden görünür.
+                    EmptyStateCard(symbol: "doc.questionmark", title: "Toplantı bulunamadı", message: "Bu toplantı silinmiş olabilir.")
+                        .padding(20)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(Theme.background)
                 }
             }
             .refreshable { await store.reloadAndWait() }
@@ -311,7 +317,10 @@ struct MeetingReadView: View {
         .foregroundStyle(.white)
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .bottomLeading)
-        .background { CoverBackground(seed: record.id) }
+        .background {
+            CoverBackground(seed: record.id)
+                .overlay { CoverScrim() }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .environment(\.colorScheme, .dark)
     }

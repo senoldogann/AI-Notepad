@@ -304,6 +304,8 @@ private func consumeTranscripts(
             index += 1
         case .failed(let message):
             events.yield(.streamFailed(speaker: speaker, message: message))
+        case .incomplete(let untranscribedSec):
+            events.yield(.streamIncomplete(speaker: speaker, untranscribedSec: untranscribedSec))
         }
     }
 }

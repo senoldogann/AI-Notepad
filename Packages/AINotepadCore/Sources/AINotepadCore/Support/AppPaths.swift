@@ -28,17 +28,24 @@ public enum AppPaths {
         try ensureDirectory(url: applicationSupport().appending(path: "AskHistory", directoryHint: .isDirectory))
     }
 
-    /// Yeni bir kayıt oturumu klasörü: `Sessions/<yyyyMMdd-HHmmss>`.
+    /// Yeni bir kayıt oturumu klasörü: `Sessions/<yyyyMMdd-HHmmss>`. Klasör yalnızca yoksa oluşturulur (aynı saniyedeki
+    /// bir içe aktarmayla paylaşılmasın); o ad alınmışsa sonraki saniyeler denenir. İçe aktarma geriye gittiği için ikisi
+    /// aynı adı istemez.
     public static func newSessionDirectory(startedAt: Date) throws -> URL {
-        try ensureDirectory(url: sessionsDirectory().appending(path: sessionFolderName(startedAt: startedAt), directoryHint: .isDirectory))
+        try claimSessionDirectory(startedAt: startedAt, stepSec: 1).url
     }
 
     /// İçe aktarma için yeni oturum klasörü: klasör yalnızca yoksa oluşturulur; o saniyede başka toplantı varsa bir önceki
     /// saniye denenir (geriye gidilir: o anda başlayacak bir kayıtla çakışmasın). Klasör ve başlangıç zamanını döndürür.
     public static func newExclusiveSessionDirectory(startedAt: Date) throws -> (url: URL, startedAt: Date) {
+        try claimSessionDirectory(startedAt: startedAt, stepSec: -1)
+    }
+
+    /// `startedAt`'ten başlayıp `stepSec` adımlarla ilerleyen ilk boş oturum klasörünü oluşturur (yalnızca yoksa).
+    private static func claimSessionDirectory(startedAt: Date, stepSec: Double) throws -> (url: URL, startedAt: Date) {
         let sessions: URL = try sessionsDirectory()
         for offset in 0..<600 {
-            let candidate: Date = startedAt.addingTimeInterval(-Double(offset))
+            let candidate: Date = startedAt.addingTimeInterval(Double(offset) * stepSec)
             let url: URL = sessions.appending(path: sessionFolderName(startedAt: candidate), directoryHint: .isDirectory)
             do {
                 try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)

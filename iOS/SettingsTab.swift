@@ -2,7 +2,8 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Ayarlar: bulut anahtarları, toplantı dili, ad ve sürüm (iCloud eşitleme aşama 4'te).
+/// Ayarlar: görünüm, iCloud eşitlemesi, bulut anahtarları, kayıt (rıza hatırlatması, ses saklama), takvim, toplantı
+/// dili ve ad, sürüm.
 struct PhoneSettingsTab: View {
     let store: PhoneStore
     let calendar: PhoneCalendar
