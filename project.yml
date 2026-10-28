@@ -9,6 +9,10 @@ options:
 packages:
   AINotepadCore:
     path: Packages/AINotepadCore
+  # Mac uygulamasının kendi kendini güncellemesi (yalnız macOS hedefi; iPhone uygulaması App Store/TestFlight'tan gelir).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 targets:
   AINotepad:
     type: application
@@ -24,6 +28,7 @@ targets:
         product: AINotepadCore
       - package: AINotepadCore
         product: AINotepadUI
+      - package: Sparkle
     info:
       path: App/Info.plist
       properties:
@@ -39,6 +44,12 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.senoldogan.AINotepad.oauth
             CFBundleURLSchemes: [com.senoldogan.ainotepad]
+        # Sparkle: güncelleme akışı en son GitHub sürümündeki appcast.xml; imza anahtarı Config/Signing.xcconfig'te.
+        # Anahtar boşsa güncelleme kapalıdır (bkz. App/AppUpdater.swift). Otomatik denetim baştan açık: Sparkle ikinci
+        # açılışta izin sormaz (açılır pencere yok).
+        SUFeedURL: "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml"
+        SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
+        SUEnableAutomaticChecks: true
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig

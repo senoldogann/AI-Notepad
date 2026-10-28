@@ -974,6 +974,16 @@
         }
       }
     },
+    "AI-Notepad beklenmedik şekilde kapandı — raporu gönder?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad quit unexpectedly — send the report?"
+          }
+        }
+      }
+    },
     "AI-Notepad geçici bir konumdan çalışıyor. Uygulamayı Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.": {
       "localizations": {
         "en": {
@@ -1772,6 +1782,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read connections: %@"
+          }
+        }
+      }
+    },
+    "Bağlantıyla paylaş…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share with Link…"
           }
         }
       }
@@ -3228,6 +3248,16 @@
         }
       }
     },
+    "Donma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hang"
+          }
+        }
+      }
+    },
     "Dosya okunamadı: %@.": {
       "extractionState": "stale",
       "localizations": {
@@ -3752,6 +3782,16 @@
         }
       }
     },
+    "GitHub'da bildir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report on GitHub"
+          }
+        }
+      }
+    },
     "Grafit": {
       "localizations": {
         "en": {
@@ -3978,6 +4018,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update"
+          }
+        }
+      }
+    },
+    "Güncellemeleri denetle…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for Updates…"
           }
         }
       }
@@ -4932,6 +4982,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved · paste to replace"
+          }
+        }
+      }
+    },
+    "Kayıtlı çökme raporu yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved crash reports."
           }
         }
       }
@@ -6731,6 +6791,16 @@
         }
       }
     },
+    "Okunamayan çökme raporu: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreadable crash report: %@"
+          }
+        }
+      }
+    },
     "Okunan": {
       "localizations": {
         "en": {
@@ -6861,6 +6931,16 @@
         }
       }
     },
+    "Otomatik olarak güncelle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update automatically"
+          }
+        }
+      }
+    },
     "Oturumun süresi doldu; yeniden bağlan": {
       "localizations": {
         "en": {
@@ -6887,6 +6967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDF iCloud Drive'a kaydedildi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF saved to iCloud Drive: %@"
           }
         }
       }
@@ -6983,6 +7073,16 @@
         }
       }
     },
+    "Paylaşım penceresi açılamadı; PDF iCloud Drive'da: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't open the share window; the PDF is in iCloud Drive: %@"
+          }
+        }
+      }
+    },
     "Pembe": {
       "localizations": {
         "en": {
@@ -7019,6 +7119,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Draft a project plan"
+          }
+        }
+      }
+    },
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. Göndermeden önce GitHub'da görürsün.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report contains the version, the system and where the error happened; no meeting content and no keys. You see it on GitHub before sending."
           }
         }
       }
@@ -9396,6 +9506,16 @@
         }
       }
     },
+    "Yeni sürüm GitHub'dan günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New versions are checked on GitHub once a day. When on, they download in the background and install when you quit the app; when off, you are only notified."
+          }
+        }
+      }
+    },
     "Yeni toplantıların notu bu türe göre yazılır; bir toplantının notunu sonradan başka şablonla yeniden yazabilirsin (⋯ menüsü).": {
       "localizations": {
         "en": {
@@ -9677,6 +9797,16 @@
         }
       }
     },
+    "iOS'un topladığı çökme ve donma raporları yalnızca bu iPhone'da saklanır; hiçbiri kendiliğinden gönderilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by iOS are kept only on this iPhone; none are sent automatically."
+          }
+        }
+      }
+    },
     "iPhone'a gönder": {
       "localizations": {
         "en": {
@@ -9763,6 +9893,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by macOS are kept only on this Mac; none are sent automatically."
           }
         }
       }
@@ -10004,6 +10144,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Very high"
+          }
+        }
+      }
+    },
+    "Çökme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash"
+          }
+        }
+      }
+    },
+    "Çökme raporları": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporlarını gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporlarını göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporundan GitHub bağlantısı oluşturulamadı; raporu Ayarlar › Genel'den silip yenisini bekle.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't create a GitHub link from the crash report; delete it in Settings › General and wait for a new one."
           }
         }
       }

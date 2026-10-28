@@ -15,6 +15,8 @@ struct AINotepadiOSApp: App {
     @State private var router: PhoneRouter
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
     @State private var calendar: PhoneCalendar
+    /// Çökme raporları (MetricKit; yalnız bu iPhone'da, Ayarlar'da gösterilir).
+    @State private var crashReports: CrashReportCenter = CrashReportCenter()
 
     init() {
         registerPhoneDefaults()
@@ -47,11 +49,12 @@ struct AINotepadiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, calendar: calendar)
+            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, calendar: calendar, crashReports: crashReports)
                 .environment(\.panelAppearance, .standard)
                 .font(PanelAppearance.standard.font(size: 15, weight: .regular))
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
+                    crashReports.start()
                     // Saklama süresi ve yarım kalan kayıtlar listeye bakar: okuma bitince sürer.
                     await store.reloadAndWait()
                     ask.loadRecipes()
@@ -126,6 +129,7 @@ struct RootView: View {
     @Bindable var router: PhoneRouter
     let player: MeetingAudioPlayer
     let calendar: PhoneCalendar
+    let crashReports: CrashReportCenter
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
@@ -148,7 +152,7 @@ struct RootView: View {
                 TasksTab(store: store, router: router)
             }
             Tab("Ayarlar", systemImage: "gearshape", value: PhoneTab.settings) {
-                PhoneSettingsTab(store: store, calendar: calendar, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
+                PhoneSettingsTab(store: store, calendar: calendar, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }), crashReports: crashReports)
             }
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {

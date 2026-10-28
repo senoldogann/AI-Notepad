@@ -9,6 +9,7 @@ struct PhoneSettingsTab: View {
     let calendar: PhoneCalendar
     /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
     let excludedFromMoves: Set<String>
+    let crashReports: CrashReportCenter
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
     @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
@@ -19,6 +20,7 @@ struct PhoneSettingsTab: View {
     var body: some View {
         NavigationStack {
             List {
+                CrashReportNotice(center: crashReports)
                 Section {
                     Picker("Tema", selection: $theme) {
                         ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
@@ -101,6 +103,7 @@ struct PhoneSettingsTab: View {
                 Section("Uygulama") {
                     LabeledContent("Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
                     LabeledContent("Toplantılar", value: "\(store.meetings.count)")
+                    CrashReportsLink(center: crashReports)
                 }
             }
             .navigationTitle("Ayarlar")

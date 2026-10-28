@@ -39,5 +39,11 @@
 	<string>AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_KEY)</string>
 </dict>
 </plist>

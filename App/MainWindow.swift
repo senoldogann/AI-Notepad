@@ -143,6 +143,8 @@ struct MainWindowView: View {
     let router: MainWindowRouter
     let shortcuts: ShortcutController
     let player: MeetingAudioPlayer
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     let onStartRecording: @MainActor () -> Void
     let onShowPanel: @MainActor () -> Void
 
@@ -165,6 +167,10 @@ struct MainWindowView: View {
                         // yalnızca canlı panelde çıkıyordu.
                         if !model.errorMessages.isEmpty {
                             ErrorBanner(messages: model.errorMessages) { model.dismissErrors() }
+                        }
+                        // Önceki açılışta çöktüyse bir kez sorulur (rapor yalnızca bu Mac'te; gönderen kullanıcı).
+                        if let report = crashReports.reportToAnnounce {
+                            CrashReportBanner(center: crashReports, report: report)
                         }
                         detail
                             .id(router.section)
@@ -243,7 +249,7 @@ struct MainWindowView: View {
         case .settings:
             // Geniş pencerede form satırları ekran boyu uzamasın.
             // Genişlik sınırı sayfanın içinde: kaydırma çubuğu pencerenin sağ kenarında kalır.
-            SettingsPage(model: model, shortcuts: shortcuts) { router.section = .setup }
+            SettingsPage(model: model, shortcuts: shortcuts, updater: updater, crashReports: crashReports) { router.section = .setup }
                 .scrollContentBackground(.hidden)
         case .setup:
             // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.

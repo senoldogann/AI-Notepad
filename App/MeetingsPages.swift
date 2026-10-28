@@ -810,11 +810,13 @@ struct MeetingDetailPage: View {
             .disabled(!hasTranscript)
     }
 
-    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
+    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…), paylaşılabilir web sayfası olarak kaydeder
+    /// ya da PDF'ini iCloud bağlantısıyla paylaşır. Geniş ve dar düzenin ikisinde de menüdedir.
     @ViewBuilder
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
+        Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
         // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
         Menu("Kanala gönder", systemImage: "paperplane") {
             if model.destinations.isEmpty {
@@ -1073,6 +1075,48 @@ struct MeetingDetailPage: View {
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu (seçili dilde) PDF olarak iCloud Drive'daki AI-Notepad klasörüne (`Documents/Shared`) koyar ve paylaşım
+    /// seçicisini açar: iCloud'un "Ortak çalış / Bağlantıyı kopyala" seçeneği ya da başka bir servis. iCloud yoksa
+    /// dosya başka yere yazılmaz, hata gösterilir. Dosya önce geçici klasöre yazılıp iCloud'a taşınır (`setUbiquitous`).
+    private func shareViaLink() {
+        let pdf: Data
+        do {
+            pdf = try meetingPDF(record: shownRecord)
+        } catch {
+            meetingsLogger.error("Paylaşılacak PDF oluşturulamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: error))
+            return
+        }
+        let title: String = shownRecord.note?.title ?? record.title
+        let startedAt: Date = record.startedAt
+        Task {
+            do {
+                let url: URL = try await Task.detached(priority: .userInitiated) { () throws -> URL in
+                    let destination: URL = try exportFileURL(directory: try AppPaths.cloudSharedDirectory(), title: title, startedAt: startedAt, fileExtension: "pdf")
+                    let temporary: URL = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).pdf", directoryHint: .notDirectory)
+                    do {
+                        try pdf.write(to: temporary, options: .atomic)
+                        try FileManager.default.setUbiquitous(true, itemAt: temporary, destinationURL: destination)
+                    } catch {
+                        throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+                    }
+                    return destination
+                }.value
+                guard let view = NSApp.keyWindow?.contentView else {
+                    export = .failed(String(localized: "Paylaşım penceresi açılamadı; PDF iCloud Drive'da: \(url.lastPathComponent)"))
+                    return
+                }
+                // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
+                let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
+                NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+                export = .done(String(localized: "PDF iCloud Drive'a kaydedildi: \(url.lastPathComponent)"))
+            } catch {
+                meetingsLogger.error("Bağlantıyla paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
+                export = .failed(userFacingMessage(error: error))
+            }
         }
     }
 

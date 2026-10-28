@@ -49,6 +49,8 @@ private enum SettingsSection: CaseIterable {
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     /// Karşılama ve kurulum ekranını yeniden açar.
     let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
@@ -67,7 +69,7 @@ struct SettingsPage: View {
                     .padding(.top, 20)
                 Group {
                     switch section {
-                    case .general: GeneralSettings(model: model, onShowSetup: onShowSetup)
+                    case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
                     case .llm: LLMSettings(model: model)
                     case .keys: KeySettings(model: model)
@@ -138,6 +140,8 @@ private struct SettingsTabs: View {
 /// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     let onShowSetup: @MainActor () -> Void
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
@@ -402,6 +406,8 @@ private struct GeneralSettings: View {
                 model.applyRetention()
             }
             CloudSyncRow(model: model)
+            UpdateSettingsRow(updater: updater)
+            CrashReportsSettings(center: crashReports)
         }
     }
 }

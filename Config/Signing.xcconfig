@@ -1,3 +1,10 @@
 // İmzalama ayarları. Takım kimliği repoya girmeyen Local.xcconfig dosyasından gelir.
 CODE_SIGN_STYLE = Automatic
+
+// Sparkle güncelleme imzasının açık anahtarı (EdDSA, base64; Info.plist'te SUPublicEDKey olur). Sürümü yayınlayan kişi
+// bir kez Sparkle'ın `generate_keys` aracını çalıştırır (gizli anahtar giriş Anahtar Zinciri'ne kaydedilir), aracın
+// yazdığı açık anahtarı buraya yazar ve repoya işler. Gizli anahtar asla repoya girmez. Boşken uygulama güncelleme
+// denetlemez, güncelleme menüsü ve ayarı gizlenir (bkz. App/AppUpdater.swift); scripts/release.sh de durur.
+SPARKLE_PUBLIC_KEY =
+
 #include? "Local.xcconfig"

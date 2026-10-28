@@ -75,6 +75,8 @@ struct AINotepadApp: App {
     @State private var shortcuts: ShortcutController
     @State private var router: MainWindowRouter
     @State private var player: MeetingAudioPlayer
+    @State private var updater: AppUpdater
+    @State private var crashReports: CrashReportCenter
 
     init() {
         registerDefaultSettings()
@@ -88,6 +90,10 @@ struct AINotepadApp: App {
         // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
         let player: MeetingAudioPlayer = MeetingAudioPlayer()
         _player = State(initialValue: player)
+        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün.
+        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main)))
+        let crashReports: CrashReportCenter = CrashReportCenter()
+        _crashReports = State(initialValue: crashReports)
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode, player: player)
         _model = State(initialValue: model)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
@@ -132,6 +138,8 @@ struct AINotepadApp: App {
                 applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
                 island.install()
                 model.performStartupMaintenance()
+                // Önceki açılışın çökme raporları (MetricKit) okunur ve yenileri dinlenir.
+                crashReports.start()
                 shortcuts.registerAll()
                 // Kurulum yalnızca ilk açılışta bir kez (tam pencere); sonra ayarlar Ayarlar'dan değişir.
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
@@ -177,7 +185,7 @@ struct AINotepadApp: App {
         // Açılışta ana pencere; kapatılınca uygulama menü çubuğunda sürer, Dock simgesi ya da menü yeniden açar.
         Window("AI-Notepad", id: mainWindowID) {
             MainWindowView(
-                model: model, router: router, shortcuts: shortcuts, player: player,
+                model: model, router: router, shortcuts: shortcuts, player: player, updater: updater, crashReports: crashReports,
                 onStartRecording: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
                 onShowPanel: {
                     panel.show(page: .live)
@@ -192,6 +200,13 @@ struct AINotepadApp: App {
         // Başlık çubuğu gizli: ElevenLabs gibi kendi kenar çubuğu ve üst çubuğu pencerenin tepesine kadar.
         .windowStyle(.hiddenTitleBar)
         .commands {
+            // Uygulama menüsünde "Hakkında"nın altında; güncelleme kapalıysa (imza anahtarı yok) görünmez.
+            CommandGroup(after: .appInfo) {
+                if updater.isEnabled {
+                    Button("Güncellemeleri denetle…") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheckForUpdates)
+                }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Ayarlar…") { openMainWindow(router: router, section: .settings) }
                     .keyboardShortcut(",", modifiers: .command)
@@ -218,7 +233,7 @@ struct AINotepadApp: App {
             }
         }
         MenuBarExtra {
-            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router)
+            MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router, updater: updater)
         } label: {
             MenuBarLabel(symbol: menuSymbol)
         }
@@ -267,6 +282,7 @@ private struct MenuContent: View {
     let island: IslandController
     let shortcuts: ShortcutController
     let router: MainWindowRouter
+    let updater: AppUpdater
     @AppStorage(SettingsKey.hideFromScreenCapture) private var hideFromCapture: Bool = true
 
     var body: some View {
@@ -339,6 +355,12 @@ private struct MenuContent: View {
 
         Button("Ayarlar", systemImage: "gearshape") {
             openMainWindow(router: router, section: .settings)
+        }
+        if updater.isEnabled {
+            Button("Güncellemeleri denetle…", systemImage: "arrow.down.circle") {
+                updater.checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
         }
 
         if model.liveEngine == .whisperKit {
