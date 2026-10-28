@@ -153,7 +153,7 @@ export async function signIn(harness: Harness): Promise<Session> {
   const identityToken: string = await appleIdentityToken({
     subject: `apple-${randomId()}`,
     nonceClaim: await sha256Hex(nonce),
-    audience: "com.senoldogan.AINotepadHosted",
+    audience: "com.senoldogan.AINotepad.hosted",
     issuer: appleIssuer,
     expiresInSeconds: 600,
     nowMs: harness.clock.nowMs,

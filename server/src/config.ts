@@ -42,6 +42,8 @@ export interface Config {
   readonly maxMeetingStartsPerDay: number;
   readonly llm: {
     readonly maxTokens: number;
+    /** Toplantıya bağlı olmayan (hesap) çağrının en çok `max_tokens`'ı. */
+    readonly accountMaxTokens: number;
     readonly maxRequestBytes: number;
     readonly maxInputTokens: number;
   };
@@ -154,6 +156,7 @@ const envSchema = z.object({
   DAILY_TOKEN_CAP: positiveInt,
   MAX_MEETING_STARTS_PER_DAY: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
+  LLM_ACCOUNT_MAX_TOKENS: positiveInt,
   LLM_MAX_REQUEST_BYTES: positiveInt,
   LLM_MAX_INPUT_TOKENS: positiveInt,
   TRANSCRIBE_MAX_BYTES: positiveInt.max(95_000_000),
@@ -190,6 +193,9 @@ export function parseConfig(env: Env): Config {
   if (categories.some((category: number): boolean => !Number.isInteger(category) || category <= 0)) {
     throw new ConfigError(["APP_ATTEST_ALLOWED_CATEGORIES"]);
   }
+  if (value.LLM_ACCOUNT_MAX_TOKENS > value.LLM_MAX_TOKENS) {
+    throw new ConfigError(["LLM_ACCOUNT_MAX_TOKENS"]);
+  }
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
   }
@@ -223,6 +229,7 @@ export function parseConfig(env: Env): Config {
     maxMeetingStartsPerDay: value.MAX_MEETING_STARTS_PER_DAY,
     llm: {
       maxTokens: value.LLM_MAX_TOKENS,
+      accountMaxTokens: value.LLM_ACCOUNT_MAX_TOKENS,
       maxRequestBytes: value.LLM_MAX_REQUEST_BYTES,
       maxInputTokens: value.LLM_MAX_INPUT_TOKENS,
     },

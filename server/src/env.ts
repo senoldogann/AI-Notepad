@@ -26,6 +26,7 @@ export interface Env {
   readonly DAILY_TOKEN_CAP: string;
   readonly MAX_MEETING_STARTS_PER_DAY: string;
   readonly LLM_MAX_TOKENS: string;
+  readonly LLM_ACCOUNT_MAX_TOKENS: string;
   readonly LLM_MAX_REQUEST_BYTES: string;
   readonly LLM_MAX_INPUT_TOKENS: string;
   readonly TRANSCRIBE_MAX_BYTES: string;

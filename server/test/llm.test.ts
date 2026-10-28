@@ -1,7 +1,18 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import { type Harness, type Session, type StartedMeetingBody, defaultHarness, envWith, expectError, req, signIn, startMeeting } from "./helpers";
+import {
+  type Harness,
+  type Session,
+  type StartedMeetingBody,
+  defaultHarness,
+  envWith,
+  expectError,
+  grantSubscription,
+  req,
+  signIn,
+  startMeeting,
+} from "./helpers";
 
 const anthropicUrl: string = "https://api.anthropic.com/v1/messages";
 
@@ -82,10 +93,10 @@ describe("LLM vekili: izin listesi", () => {
     expect(context.harness.outbound.length).toBe(before);
   });
 
-  it("x-meeting-id olmadan çağrılamaz", async () => {
+  it("geçersiz x-meeting-id reddedilir", async () => {
     const context: Context = await setup();
     await expectError(
-      await context.harness.call(req("POST", "/v1/llm/messages", { token: context.session.accessToken, json: basic })),
+      await context.harness.call(req("POST", "/v1/llm/messages", { token: context.session.accessToken, headers: { "x-meeting-id": "toplanti" }, json: basic })),
       400,
       "bad_request",
     );
@@ -218,5 +229,99 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
 
     await env.DB.prepare("UPDATE meeting_sessions SET tokens_used = token_budget - 500 WHERE id = ?").bind(context.meeting.meetingId).run();
     await expectError(await llm(context, basic, null), 429, "meeting_budget_exhausted");
+  });
+});
+
+describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
+  /** Toplantı kimliği olmadan çağrı. */
+  function accountLLM(harness: Harness, session: Session, json: object, environment: Env | null): Promise<Response> {
+    return harness.call(req("POST", "/v1/llm/messages", { token: session.accessToken, json, env: environment }));
+  }
+
+  /** Kullanıcının deneme toplantılarını harcar (başlatır, hemen sonrakine geçer). */
+  async function useAllTrials(harness: Harness, session: Session): Promise<void> {
+    for (let index: number = 0; index < Number(env.TRIAL_MEETINGS); index += 1) {
+      expect((await startMeeting(harness, session)).status).toBe(201);
+    }
+  }
+
+  async function userTokens(userId: string): Promise<{ monthly: number; daily: number }> {
+    const monthly = await env.DB.prepare("SELECT input_tokens + output_tokens AS used FROM monthly_usage WHERE user_id = ?").bind(userId).first<{ used: number }>();
+    const daily = await env.DB.prepare("SELECT tokens_used AS used FROM daily_usage WHERE user_id = ?").bind(userId).first<{ used: number }>();
+    return { monthly: monthly?.used ?? 0, daily: daily?.used ?? 0 };
+  }
+
+  it("denemesi kalan yeni hesap toplantısız çağırabilir; max_tokens küçük sınırla kısılır, kullanıcı sınırına sayılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    let maxTokens: number = 0;
+    harness.stub(anthropicUrl, async (request: Request): Promise<Response> => {
+      maxTokens = (await request.json<{ max_tokens: number }>()).max_tokens;
+      return Response.json(message(120, 30));
+    });
+    const response: Response = await accountLLM(harness, session, { ...basic, effort: "medium", max_tokens: 16_000 }, null);
+    expect(response.status).toBe(200);
+    expect(maxTokens).toBe(Number(env.LLM_ACCOUNT_MAX_TOKENS));
+    expect(maxTokens).toBeLessThan(Number(env.LLM_MAX_TOKENS));
+    expect(await userTokens(session.userId)).toEqual({ monthly: 150, daily: 150 });
+    // Hiçbir toplantı açılmadı ve deneme hakkı düşmedi.
+    const meetings = await env.DB.prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ?").bind(session.userId).first<{ count: number }>();
+    expect(meetings?.count).toBe(0);
+  });
+
+  it("akışlı toplantısız çağrı aktarılır ve kullanıcıya sayılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    harness.stub(anthropicUrl, async (): Promise<Response> => new Response(sse(streamEvents), { headers: { "content-type": "text/event-stream" } }));
+    const response: Response = await accountLLM(harness, session, { ...basic, stream: true }, null);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("event: message_stop");
+    await harness.drain();
+    expect(await userTokens(session.userId)).toEqual({ monthly: 240, daily: 240 });
+  });
+
+  it("denemesi bitmiş ve aboneliği olmayan hesap reddedilir, dışarı istek gitmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    await useAllTrials(harness, session);
+    const before: number = harness.outbound.length;
+    await expectError(await accountLLM(harness, session, basic, null), 402, "subscription_required");
+    expect(harness.outbound.length).toBe(before);
+  });
+
+  it("denemesi bitmiş abone (ek süre dahil) çağırabilir; erişimi bitmiş abonelik reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    const active: Session = await signIn(harness);
+    await useAllTrials(harness, active);
+    await grantSubscription(active.userId, "active", harness.clock.nowMs + 86_400_000);
+    expect((await accountLLM(harness, active, basic, null)).status).toBe(200);
+
+    const pastDue: Session = await signIn(harness);
+    await useAllTrials(harness, pastDue);
+    await grantSubscription(pastDue.userId, "past_due", harness.clock.nowMs - 86_400_000);
+    expect((await accountLLM(harness, pastDue, basic, null)).status).toBe(200);
+
+    const canceled: Session = await signIn(harness);
+    await useAllTrials(harness, canceled);
+    await grantSubscription(canceled.userId, "canceled", harness.clock.nowMs + 86_400_000);
+    await expectError(await accountLLM(harness, canceled, basic, null), 402, "subscription_required");
+  });
+
+  it("günlük ve aylık token sınırı ve harcama tavanı toplantısız çağrıda da geçerli", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    await expectError(await accountLLM(harness, session, basic, envWith({ DAILY_TOKEN_CAP: "500" })), 429, "daily_cap_reached");
+    await expectError(await accountLLM(harness, session, basic, envWith({ MONTHLY_TOKEN_CAP: "500" })), 403, "monthly_cap_reached");
+    await expectError(await accountLLM(harness, session, basic, envWith({ DAILY_SPEND_CEILING_USD: "0.000001" })), 503, "spend_ceiling_reached");
+    expect(await userTokens(session.userId)).toEqual({ monthly: 0, daily: 0 });
+  });
+
+  it("toplantıya bağlı çağrı değişmeden toplantı bütçesinden düşer", async () => {
+    const context: Context = await setup();
+    context.harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    expect((await llm(context, basic, null)).status).toBe(200);
+    expect(await meetingTokens(context.meeting.meetingId)).toBe(15);
   });
 });
