@@ -62,7 +62,7 @@
       }
     },
     "\"Sen\" kaydı yazıya dökülemedi: %@ Canlı metin eksik olabilir; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -73,7 +73,7 @@
       }
     },
     "\"Sen\" metni eksik: kayıt sırasında akış koptu ve \"Sen\" sesi kaydedilmemiş.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -84,7 +84,7 @@
       }
     },
     "%@ / %@": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -105,7 +105,7 @@
       }
     },
     "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -116,23 +116,12 @@
       }
     },
     "%@ anahtarı kayıtlı değil. Ayarlar'dan ekle.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "No %@ key saved. Add it in Settings."
-          }
-        }
-      }
-    },
-    "%@ anından çal": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Play from %@"
           }
         }
       }
@@ -198,7 +187,7 @@
       }
     },
     "%@ beklenmeyen bir yanıt verdi.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -329,7 +318,7 @@
       }
     },
     "%@ isteği başarısız (HTTP %lld). Biraz sonra tekrar dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -390,7 +379,7 @@
       }
     },
     "%@ kotası doldu. Hesabından kota ekle ya da Ayarlar'dan Mac'te motorunu seç.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -441,7 +430,7 @@
       }
     },
     "%@ servisine bağlanılamadı; internet bağlantını kontrol et.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -522,7 +511,7 @@
       }
     },
     "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -533,7 +522,7 @@
       }
     },
     "%@ yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -614,7 +603,7 @@
       }
     },
     "%@%@": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1365,7 +1354,7 @@
       }
     },
     "Anahtar Keychain'den okunamadı (%@, kod %lld). İzin penceresinde \"Her Zaman İzin Ver\"i seç.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1856,7 +1845,7 @@
       }
     },
     "Ağ hatası (%lld); internet bağlantını kontrol et ve tekrar dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2017,7 +2006,7 @@
       }
     },
     "Başlat": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2068,7 +2057,7 @@
       }
     },
     "Beklenmeyen hata: %@.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2299,7 +2288,7 @@
       }
     },
     "Bitir": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2350,7 +2339,7 @@
       }
     },
     "Boşluk": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2481,7 +2470,7 @@
       }
     },
     "Bu bölüm yazıya dökülemedi.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2492,7 +2481,7 @@
       }
     },
     "Bu bölümü ata": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2813,7 +2802,7 @@
       }
     },
     "CEVAP": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3244,7 +3233,7 @@
       }
     },
     "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3375,7 +3364,7 @@
       }
     },
     "Dil algılanıyor…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3396,7 +3385,7 @@
       }
     },
     "Dil: Otomatik": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3547,7 +3536,7 @@
       }
     },
     "Diğer görevler": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3568,7 +3557,7 @@
       }
     },
     "Diğerleri": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3609,7 +3598,7 @@
       }
     },
     "Dosya okunamadı: %@.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3620,7 +3609,7 @@
       }
     },
     "Dosya silinemedi: %@.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3631,7 +3620,7 @@
       }
     },
     "Dosya yazılamadı: %@. Disk alanını kontrol et.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3662,7 +3651,7 @@
       }
     },
     "Duraklatıldı": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4373,7 +4362,7 @@
       }
     },
     "HATA": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4404,7 +4393,7 @@
       }
     },
     "Hata var": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4895,7 +4884,7 @@
       }
     },
     "Kararlar": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5066,7 +5055,7 @@
       }
     },
     "Kaydı durdur": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5677,7 +5666,7 @@
       }
     },
     "Klasöre erişilemedi: %@.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5808,7 +5797,7 @@
       }
     },
     "Konuşma tanıma modeli (%@) yüklenemedi. İnternet bağlantını ve disk alanını kontrol edip uygulamayı yeniden aç.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5869,7 +5858,7 @@
       }
     },
     "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5930,7 +5919,7 @@
       }
     },
     "Konuşmacılar ayrılamadı (%@); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6001,7 +5990,7 @@
       }
     },
     "Konuşmacıyı düzelt": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6252,7 +6241,7 @@
       }
     },
     "LLM ayarı eksik: %@. Ayarlar'dan tamamla.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6553,7 +6542,7 @@
       }
     },
     "Mikrofon başlatılamadı (kod %lld). Giriş cihazını kontrol edip kaydı yeniden başlat.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6574,7 +6563,7 @@
       }
     },
     "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6615,7 +6604,7 @@
       }
     },
     "Mikrofonu aç (Sen)": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6626,7 +6615,7 @@
       }
     },
     "Mikrofonu kapat (yalnızca dinliyorum)": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6647,7 +6636,7 @@
       }
     },
     "Model bu isteği yanıtlamadı (güvenlik denetimi).": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6678,7 +6667,7 @@
       }
     },
     "Modelden beklenmeyen yanıt geldi. Tekrar dene.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6729,7 +6718,7 @@
       }
     },
     "NE KAÇIRDIM?": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6910,7 +6899,7 @@
       }
     },
     "Not oluşturulamadı": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6921,7 +6910,7 @@
       }
     },
     "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7512,7 +7501,7 @@
       }
     },
     "Paneli göster / gizle": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7523,7 +7512,7 @@
       }
     },
     "Paneli gösterir ya da gizler": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7764,7 +7753,7 @@
       }
     },
     "Sayfa %lld / %lld": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7805,7 +7794,7 @@
       }
     },
     "Senden istenenler": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7826,7 +7815,7 @@
       }
     },
     "Senin görevlerin": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7857,7 +7846,7 @@
       }
     },
     "Ses biçimi dönüştürülemedi. Çıkış/giriş cihazını değiştirip kaydı yeniden başlat.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7898,7 +7887,7 @@
       }
     },
     "Ses dosyası işlenemedi: %@. Disk alanını kontrol et.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7909,7 +7898,7 @@
       }
     },
     "Ses dönüştürülemedi": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7970,7 +7959,7 @@
       }
     },
     "Ses yakalama zaten çalışıyor.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8141,7 +8130,7 @@
       }
     },
     "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8152,7 +8141,7 @@
       }
     },
     "Sistem sesi yakalanamadı (%@, kod %lld). Çıkış cihazını kontrol edip kaydı yeniden başlat.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8273,7 +8262,7 @@
       }
     },
     "Son geçiş başarısız: %@ Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8284,7 +8273,7 @@
       }
     },
     "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8295,7 +8284,7 @@
       }
     },
     "Son geçiş yapılmadı: %@ Canlı metin kullanıldı.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8396,7 +8385,7 @@
       }
     },
     "Sözlük": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8507,7 +8496,7 @@
       }
     },
     "TRANSKRİPT": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8968,7 +8957,7 @@
       }
     },
     "Toplantı dili: %@. Değiştir": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8989,7 +8978,7 @@
       }
     },
     "Toplantı dilini değiştir": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9010,7 +8999,7 @@
       }
     },
     "Toplantı hakkında sor…": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9531,7 +9520,7 @@
       }
     },
     "Tümünü birleştir: %@ →": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9562,7 +9551,7 @@
       }
     },
     "Tümünü kopyala": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9643,7 +9632,7 @@
       }
     },
     "Uygulama kayıt ya da işleme sırasında kapandı.": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9964,7 +9953,7 @@
       }
     },
     "Yazıya dökülemedi: %@": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9985,7 +9974,7 @@
       }
     },
     "Yeni konuşmacı": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9996,7 +9985,7 @@
       }
     },
     "Yeni metin": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -10257,7 +10246,7 @@
       }
     },
     "geçerli bir temel adres (ör. http://localhost:11434/v1)": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -10558,7 +10547,7 @@
       }
     },
     "Çeviri alınamadı · Tekrar dene": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -11009,7 +10998,7 @@
       }
     },
     "çeviri modeli": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -11020,7 +11009,7 @@
       }
     },
     "çeviri ve özet modeli adları": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -11061,7 +11050,7 @@
       }
     },
     "özet modeli": {
-      "extractionState": "stale",
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
