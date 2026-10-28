@@ -9090,6 +9090,26 @@
         }
       }
     },
+    "Toplantı listesini gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide meeting list"
+          }
+        }
+      }
+    },
+    "Toplantı listesini göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show meeting list"
+          }
+        }
+      }
+    },
     "Toplantı notları, canlı çeviri ve Sor cevapları not ve çeviri dilinde yazılır; toplantı zaten bu dildeyse çevrilmez. Önceki notlar yazıldıkları dilde kalır.": {
       "localizations": {
         "en": {

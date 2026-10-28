@@ -637,7 +637,7 @@ struct MeetingDetailPage: View {
                     .padding(.trailing, 4)
                     .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
                 }
-                ForEach(heroChips(paragraphs: paragraphs), id: \.self) { (chip: String) in
+                ForEach(heroChips(), id: \.self) { (chip: String) in
                     Text(chip)
                         .appFont(size: 12, weight: .medium)
                         .foregroundStyle(Theme.muted)
@@ -695,16 +695,11 @@ struct MeetingDetailPage: View {
         .hoverHint("Notu iş arkadaşların için 30'dan fazla dilden birine çevir", alignment: .trailing, edge: .bottom)
     }
 
-    /// Kapaktaki çipler: süre, dil, konuşmacı, karar ve terim sayısı (olanlar).
-    private func heroChips(paragraphs: [TranscriptParagraph]) -> [String] {
-        let speakers: Int = speakerShares(paragraphs: paragraphs).count
-        let decisions: Int = record.note?.decisions.count ?? 0
+    /// Kapaktaki çipler: dil ve terim sayısı (olanlar). Süre, konuşmacı ve karar sayısı burada yinelenmez: konuşmacılar
+    /// yanındaki rozetlerde, süre konuşmacı şeridinin sonunda, hepsi yan sütundaki "bir bakışta" kartında.
+    private func heroChips() -> [String] {
         let terms: Int = record.note?.glossary.count ?? 0
-        return (meetingDurationMinutes(record: record).map { [String(localized: "\($0) dk")] } ?? [])
-            + (record.language.map { [meetingLanguageName(language: $0)] } ?? [])
-            // İngilizcede tekil ayrı yazılır ("1 speaker").
-            + (speakers == 1 ? [String(localized: "1 konuşmacı")] : speakers > 1 ? [String(localized: "\(speakers) konuşmacı")] : [])
-            + (decisions == 1 ? [String(localized: "1 karar")] : decisions > 1 ? [String(localized: "\(decisions) karar")] : [])
+        return (record.language.map { [meetingLanguageName(language: $0)] } ?? [])
             + (terms == 1 ? [String(localized: "1 terim")] : terms > 1 ? [String(localized: "\(terms) terim")] : [])
     }
 

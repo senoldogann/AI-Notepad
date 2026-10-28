@@ -359,8 +359,23 @@ private struct TopBar: View {
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
 
+    @AppStorage(SettingsKey.meetingsListVisible) private var meetingsListVisible: Bool = true
+
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
+            // Toplantılarda listeyi gizle/göster (Kişiler'deki gibi); toplantı seçili değilken liste hep görünür.
+            if router.section == .meetings, router.selectedMeetingID != nil {
+                Button {
+                    meetingsListVisible.toggle()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .appFont(size: 14, weight: .medium)
+                        .frame(width: 30, height: 28)
+                }
+                .buttonStyle(.hoverPlain)
+                .accessibilityLabel(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster")
+                .hoverHint(meetingsListVisible ? "Toplantı listesini gizle" : "Toplantı listesini göster", alignment: .leading, edge: .bottom)
+            }
             // En dar pencerede başlık tek satırda kalır, arama hapı daralır; çubuk taşmaz.
             Text(title)
                 .appFont(size: 14, weight: .medium)
@@ -1240,35 +1255,40 @@ private struct MeetingsSplit: View {
     let model: AppModel
     let router: MainWindowRouter
     let player: MeetingAudioPlayer
+    @AppStorage(SettingsKey.meetingsListVisible) private var listVisible: Bool = true
 
     var body: some View {
         HStack(spacing: 0) {
-            MeetingsListPage(
-                model: model, selectedID: router.selectedMeetingID, query: router.searchQuery, folder: router.folderFilter,
-                onClearFolder: { router.folderFilter = nil },
-                onOpen: { (id: String) -> Void in router.selectedMeetingID = id },
-                onDeleted: { (ids: Set<String>) -> Void in
-                    if let open = router.selectedMeetingID, ids.contains(open) {
-                        router.selectedMeetingID = nil
+            // Liste üst çubuktaki düğmeyle gizlenir; toplantı seçili değilken seçecek bir şey kalmasın diye hep görünür.
+            if listVisible || router.selectedMeetingID == nil {
+                MeetingsListPage(
+                    model: model, selectedID: router.selectedMeetingID, query: router.searchQuery, folder: router.folderFilter,
+                    onClearFolder: { router.folderFilter = nil },
+                    onOpen: { (id: String) -> Void in router.selectedMeetingID = id },
+                    onDeleted: { (ids: Set<String>) -> Void in
+                        if let open = router.selectedMeetingID, ids.contains(open) {
+                            router.selectedMeetingID = nil
+                        }
                     }
-                }
-            )
-            .frame(width: 300)
-            // Ses/video dosyası listeye bırakılınca toplantı olarak içe aktarılır.
-            .dropDestination(for: URL.self) { (urls: [URL], _: CGPoint) -> Bool in
-                let media: [URL] = urls.filter { (url: URL) -> Bool in
-                    guard let type = UTType(filenameExtension: url.pathExtension) else {
+                )
+                .frame(width: 300)
+                // Ses/video dosyası listeye bırakılınca toplantı olarak içe aktarılır.
+                .dropDestination(for: URL.self) { (urls: [URL], _: CGPoint) -> Bool in
+                    let media: [URL] = urls.filter { (url: URL) -> Bool in
+                        guard let type = UTType(filenameExtension: url.pathExtension) else {
+                            return false
+                        }
+                        return type.conforms(to: .audio) || type.conforms(to: .audiovisualContent)
+                    }
+                    guard !media.isEmpty else {
                         return false
                     }
-                    return type.conforms(to: .audio) || type.conforms(to: .audiovisualContent)
+                    model.importMedia(urls: media)
+                    return true
                 }
-                guard !media.isEmpty else {
-                    return false
-                }
-                model.importMedia(urls: media)
-                return true
+                .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
-            .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
             ZStack {
                 if let id = router.selectedMeetingID, let record = model.meetings.first(where: { $0.id == id }) {
                     MeetingDetailPage(model: model, player: player, record: record) {
@@ -1312,6 +1332,7 @@ private struct MeetingsSplit: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.smooth(duration: 0.25), value: router.selectedMeetingID)
         }
+        .animation(.smooth(duration: 0.25), value: listVisible)
     }
 }
 
