@@ -260,6 +260,80 @@ struct MeetingsListPage: View {
     }
 }
 
+/// Gönderim durumu satırı (kanal ya da görev aracı). Gönderilirken kâğıt uçak sakince nabız atar; sonuç (gitti ya da
+/// hata) bir süre sonra yumuşakça kaybolur. Durum modelde kalır; gizleme yalnızca bu görünümdedir: gizlenen değer
+/// tutulur, yeni bir durum gelince satır yeniden görünür ve zamanlayıcı baştan başlar.
+private struct SendStatusLine: View {
+    let state: WebhookSendState?
+    let sending: LocalizedStringKey
+    let sent: LocalizedStringKey
+    @State private var dismissed: WebhookSendState?
+
+    var body: some View {
+        if let state, state != dismissed {
+            line(state: state)
+                .transition(.opacity)
+                .task(id: state) { await fade(shown: state) }
+        }
+    }
+
+    /// Görünen durum sonuçsa süresi dolunca gizler. Satır görünüyorsa önceki gizleme geçersizdir (aynı sonuç yeniden
+    /// gelirse de görünsün diye sıfırlanır).
+    private func fade(shown: WebhookSendState) async {
+        dismissed = nil
+        guard let delay = sendResultFadeDelay(state: shown) else {
+            return
+        }
+        do {
+            try await Task.sleep(for: delay)
+        } catch {
+            // Yalnızca iptal: yeni bir durum geldi, eski sonucun zamanlayıcısı bir şey gizlemez.
+            return
+        }
+        withAnimation(.easeOut(duration: 0.4)) { dismissed = shown }
+    }
+
+    @ViewBuilder
+    private func line(state: WebhookSendState) -> some View {
+        switch state {
+        case .sending:
+            Label {
+                Text(sending)
+            } icon: {
+                Image(systemName: "paperplane").symbolEffect(.pulse)
+            }
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(.secondary)
+        case .sent:
+            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
+        case .done(let summary):
+            Label(summary, systemImage: "checkmark.circle")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+        }
+    }
+}
+
+/// Gönderim sonucunun kaybolma süresi: gitti 3,5 sn, hata 5 sn; gönderilirken kalır. Saf fonksiyondur.
+private func sendResultFadeDelay(state: WebhookSendState) -> Duration? {
+    switch state {
+    case .sending: nil
+    case .sent, .done: .seconds(3.5)
+    case .failed: .seconds(5)
+    }
+}
+
+/// Dışa aktarma hatasının kullanıcı metni: boş dosya adı kalmadıysa ne yapılacağını söyler. Saf fonksiyondur.
+private func exportFailureMessage(error: any Error) -> String {
+    if case ExportFileError.allNamesTaken = error {
+        return String(localized: "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.")
+    }
+    return userFacingMessage(error: error)
+}
+
 /// Liste satırı: başlık, tarih, süre, durum ve varsa senin görev sayın.
 struct MeetingRow: View {
     let record: MeetingRecord
@@ -273,17 +347,11 @@ struct MeetingRow: View {
                 Text(record.note?.title ?? record.title)
                     .appFont(size: 13, weight: .semibold)
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
-                    if let minutes = meetingDurationMinutes(record: record) {
-                        Text("· " + String(localized: "\(minutes) dk"))
-                    }
-                    if let status = statusText(record: record, isProcessing: isProcessing) {
-                        Text("· " + status).foregroundStyle(record.status == .failed ? .red : .secondary)
-                    }
-                }
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.secondary)
+                // Tek metin, tek satır: dar listede tarih, süre ve durum ayrı sütunlara bölünüp alt alta kaymaz.
+                infoLine
+                    .appFont(size: 11, weight: .regular)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
             let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
@@ -291,7 +359,7 @@ struct MeetingRow: View {
                 Label("\(mine)", systemImage: "star.fill")
                     .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(.tint)
-                    .help("Sana düşen görev sayısı")
+                    .hoverHint("Sana düşen görev sayısı", alignment: .trailing, edge: .bottom)
             }
             Image(systemName: "chevron.right")
                 .appFont(size: 10, weight: .semibold)
@@ -304,6 +372,22 @@ struct MeetingRow: View {
             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
         )
         .contentShape(Rectangle())
+    }
+
+    /// "tarih · süre · durum" tek metin olarak; hata durumu kırmızı.
+    private var infoLine: Text {
+        var line: AttributedString = AttributedString(record.startedAt.formatted(interfaceDate(date: .abbreviated)))
+        if let minutes = meetingDurationMinutes(record: record) {
+            line += AttributedString(" · " + String(localized: "\(minutes) dk"))
+        }
+        if let status = statusText(record: record, isProcessing: isProcessing) {
+            var part: AttributedString = AttributedString(" · " + status)
+            if record.status == .failed {
+                part.foregroundColor = Color.red
+            }
+            line += part
+        }
+        return Text(line)
     }
 }
 
@@ -481,8 +565,8 @@ struct MeetingDetailPage: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
-        sendStatus(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
-        sendStatus(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
+        SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
+        SendStatusLine(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
         if let notice = record.notice {
             Label(notice, systemImage: "info.circle")
                 .appFont(size: 12, weight: .regular)
@@ -871,26 +955,6 @@ struct MeetingDetailPage: View {
             .disabled(isLocked)
     }
 
-    /// Gönderim durumu satırı (kanal ya da görev aracı).
-    @ViewBuilder
-    private func sendStatus(state: WebhookSendState?, sending: LocalizedStringKey, sent: LocalizedStringKey) -> some View {
-        switch state {
-        case .sending:
-            Label(sending, systemImage: "paperplane").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .sent:
-            Label(sent, systemImage: "checkmark.circle").appFont(size: 12, weight: .regular).foregroundStyle(.secondary)
-        case .done(let summary):
-            Label(summary, systemImage: "checkmark.circle")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
-        case nil:
-            EmptyView()
-        }
-    }
-
     /// Notun önceki sürümleri: son değişikliği geri al ve sürüm listesi (tarih ve neden); geri yükleme de geri alınabilir.
     @ViewBuilder
     private var noteVersionItems: some View {
@@ -1049,13 +1113,13 @@ struct MeetingDetailPage: View {
         Task {
             do {
                 let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                let url: URL = exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
+                let url: URL = try exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
                 let range: (start: Double, end: Double) = clipRange(startSec: paragraph.startSec, endSec: paragraph.endSec)
                 try await exportAudioClip(sources: sources, startSec: range.start, endSec: range.end, destination: url)
                 export = .saved(url)
             } catch {
                 meetingsLogger.error("Klip kaydedilemedi, hata: \(String(describing: error), privacy: .private)")
-                export = .failed(userFacingMessage(error: error))
+                export = .failed(exportFailureMessage(error: error))
             }
         }
     }
@@ -1104,7 +1168,7 @@ struct MeetingDetailPage: View {
     private func saveExport(fileExtension: String, write: (URL) throws -> Void) -> ExportStatus {
         do {
             let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            let url: URL = exportFileURL(directory: downloads, title: record.note?.title ?? record.title, startedAt: record.startedAt, fileExtension: fileExtension)
+            let url: URL = try exportFileURL(directory: downloads, title: record.note?.title ?? record.title, startedAt: record.startedAt, fileExtension: fileExtension)
             do {
                 try write(url)
             } catch {
@@ -1113,7 +1177,7 @@ struct MeetingDetailPage: View {
             return .saved(url)
         } catch {
             meetingsLogger.error("Dışa aktarılamadı, uzantı: \(fileExtension, privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            return .failed(userFacingMessage(error: error))
+            return .failed(exportFailureMessage(error: error))
         }
     }
 
@@ -1870,7 +1934,7 @@ struct TaskCheckbox: View {
     var body: some View {
         Button(action: onToggle) {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 17, weight: .regular))
+                .appFont(size: 17, weight: .regular)
                 .foregroundStyle(isDone ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
                 .contentTransition(.symbolEffect(.replace.magic(fallback: .replace)))
                 .frame(width: 22, height: 22)

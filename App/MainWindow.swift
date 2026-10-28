@@ -147,6 +147,10 @@ struct MainWindowView: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
+        let isRecordingFocusVisible: Bool = model.phase == .recording && !router.isRecordingFocusDismissed && router.section != .setup
+        // Arama penceresi ya da kayıt ekranı açıkken içerik bulanıklaşır (koyu perde yok, açık buzlu cam; toplantı
+        // hazırlanırken çıkan kart gibi) ve tıklamaları almaz.
+        let isContentCovered: Bool = router.isSearchPresented || isRecordingFocusVisible
         ZStack {
             // İlk açılışta bir kez: tam pencere, kenar çubuğu yok, içerik ortada.
             if router.section == .setup {
@@ -181,6 +185,9 @@ struct MainWindowView: View {
             }
         }
         .animation(.smooth(duration: 0.35), value: router.section == .setup)
+        .blur(radius: isContentCovered ? 10 : 0)
+        .allowsHitTesting(!isContentCovered)
+        .animation(.easeInOut(duration: 0.25), value: isContentCovered)
         // Açılış ekranı: uygulama her açıldığında bir kez (pencere kapatılıp açılınca tekrarlanmaz).
         .overlay {
             if !router.hasShownSplash {
@@ -191,12 +198,12 @@ struct MainWindowView: View {
             }
         }
         .overlay {
-            if model.phase == .recording, !router.isRecordingFocusDismissed, router.section != .setup {
+            if isRecordingFocusVisible {
                 RecordingFocus(model: model, router: router, onShowPanel: onShowPanel)
                     .transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.3), value: model.phase == .recording && !router.isRecordingFocusDismissed)
+        .animation(.easeInOut(duration: 0.25), value: isRecordingFocusVisible)
         .onChange(of: model.phase) { (old: RecordingPhase, new: RecordingPhase) -> Void in
             if old == .idle, new == .recording {
                 router.isRecordingFocusDismissed = false
@@ -208,7 +215,7 @@ struct MainWindowView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.2), value: router.isSearchPresented)
+        .animation(.easeInOut(duration: 0.25), value: router.isSearchPresented)
         .foregroundStyle(Theme.ink)
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
@@ -346,7 +353,11 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
-            Text(title).appFont(size: 14, weight: .medium)
+            // En dar pencerede başlık tek satırda kalır, arama hapı daralır; çubuk taşmaz.
+            Text(title)
+                .appFont(size: 14, weight: .medium)
+                .lineLimit(1)
+                .layoutPriority(1)
             // Kayıt ekranı kapatıldıysa "Kayıtta" hapı onu yeniden açar.
             if model.phase == .recording, router.isRecordingFocusDismissed {
                 Button {
@@ -398,17 +409,18 @@ private struct TopBar: View {
             }
             .appFont(size: 13, weight: .regular)
             .padding(.horizontal, 10)
-            .frame(width: 320, height: 32)
+            .frame(minWidth: 180, idealWidth: 320, maxWidth: 320)
+            .frame(height: 32)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
             .linkPointer(isEnabled: true)
             .background {
                 // ⌘K ve ⌘F arama penceresini açar.
-                Button("") { router.isSearchPresented = true }
+                Button { router.isSearchPresented = true } label: { Text(verbatim: "") }
                     .keyboardShortcut("k", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
-                Button("") { router.isSearchPresented = true }
+                Button { router.isSearchPresented = true } label: { Text(verbatim: "") }
                     .keyboardShortcut("f", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
@@ -449,7 +461,7 @@ private struct SetupScreen: View {
             router.section = .home
         }
             .padding(.top, 28)
-            .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: true).ignoresSafeArea() }
+            .background { FlowingLines(seed: "kurulum", lineCount: 14, isAnimated: false).ignoresSafeArea() }
     }
 }
 
@@ -549,7 +561,8 @@ private struct HomePage: View {
             HStack(spacing: 12) {
                 Image(systemName: "record.circle.fill")
                     .foregroundStyle(.red)
-                    .symbolEffect(.pulse, isActive: !model.isPaused)
+                    // Kayıt ekranı açıkken bulanıklığın altında boşuna titreşmesin.
+                    .symbolEffect(.pulse, isActive: !model.isPaused && router.isRecordingFocusDismissed)
                 if let startedAt = model.recordingStartedAt {
                     Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
                         .monospacedDigit()
@@ -715,14 +728,15 @@ private struct RecordBar: View {
             Button("Otomatik") { model.languageMode = .automatic }
             LanguageMenuItems { (language: MeetingLanguage) -> Void in model.languageMode = .fixed(language) }
         } label: {
+            // Kart her temada açık pastel: yazı temanın mürekkebini değil siyahı alır (koyu temada beyaz kalıp kayboluyordu).
             languageTitle
                 .appFont(size: 12, weight: .medium)
+                .foregroundStyle(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.white.opacity(0.9), in: Capsule())
         }
         .menuStyle(.button)
-        .buttonStyle(.hoverCapsule)
+        .buttonStyle(HeroChipButtonStyle(fillOpacity: 0.9))
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -745,10 +759,38 @@ private struct RecordBar: View {
             .foregroundStyle(isOn ? Color.black : Color.black.opacity(0.62))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(isOn ? 0.9 : 0.45), in: Capsule())
         }
-        .buttonStyle(.hoverCapsule)
+        .buttonStyle(HeroChipButtonStyle(fillOpacity: isOn ? 0.9 : 0.45))
         .fixedSize()
+    }
+}
+
+/// Kayıt kartındaki seçenek hapı: pastel zeminde beyaz kapsül. Fare üstündeyken beyaz dolgu parlar (temanın koyu
+/// hover tonu pastel kartta kirli bir hale çiziyordu), basılınca hafifçe küçülür; el imleci gösterir.
+private struct HeroChipButtonStyle: ButtonStyle {
+    let fillOpacity: Double
+
+    func makeBody(configuration: Configuration) -> some View {
+        HeroChipBody(configuration: configuration, fillOpacity: fillOpacity)
+    }
+}
+
+private struct HeroChipBody: View {
+    let configuration: ButtonStyleConfiguration
+    let fillOpacity: Double
+    @Environment(\.isEnabled) private var isEnabled: Bool
+    @State private var isHovering: Bool = false
+
+    var body: some View {
+        configuration.label
+            .background(Color.white.opacity(isEnabled && isHovering ? min(fillOpacity + 0.25, 1) : fillOpacity), in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled ? 1 : 0.4)
+            .onHover { (hovering: Bool) -> Void in isHovering = hovering }
+            .linkPointer(isEnabled: isEnabled)
+            .animation(.easeOut(duration: 0.12), value: isHovering)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -1405,9 +1447,9 @@ private struct SearchComposer: View {
         let trimmed: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let results: [MeetingRecord] = Array((trimmed.isEmpty ? model.meetings : filterMeetings(records: model.meetings, query: trimmed)).prefix(8))
         ZStack(alignment: .top) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.18))
+            // Arkadaki içerik pencerede bulanıklaşır; burada yalnızca dışarı tıklayınca kapatan saydam katman.
+            Color.clear
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { close() }
             VStack(spacing: 0) {
@@ -1578,12 +1620,16 @@ private struct RecordingFocus: View {
     let model: AppModel
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
+    // Ekran açılınca odak buraya alınır: tuşlar ve Return arkadaki gizli alanlara (ör. Sor kutusu) gitmesin.
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.22))
+            // Arkadaki içerik pencerede bulanıklaşır; koyu perde yok. Temanın zemin rengiyle hafif bir örtü yazıyı
+            // açık ve koyu temada okunur tutar, tıklamaları da arkaya geçirmez.
+            Theme.background
+                .opacity(0.35)
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
             VStack(spacing: 22) {
                 LargeLevelMeter(levels: model.audioLevels)
@@ -1619,6 +1665,7 @@ private struct RecordingFocus: View {
                     .buttonStyle(.hoverCapsule)
                 }
                 Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
+                    .keyboardShortcut(.cancelAction)
                     .buttonStyle(.hoverPlain)
                     .foregroundStyle(Theme.muted)
                     .appFont(size: 12, weight: .medium)
@@ -1626,6 +1673,10 @@ private struct RecordingFocus: View {
             }
             .padding(36)
         }
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onAppear { isFocused = true }
         .onExitCommand { router.isRecordingFocusDismissed = true }
     }
 }

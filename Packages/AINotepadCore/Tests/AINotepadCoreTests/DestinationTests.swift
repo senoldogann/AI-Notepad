@@ -118,13 +118,18 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
 
     @Test func removedDuringRefreshStaysRemoved() async throws {
         try deleteSecret(service: service, account: .destinations)
+        // Yenileme başlayınca haber verir: kaldırma sabit bir beklemeyle değil, yenileme gerçekten sürerken yapılır
+        // (yüklü makinede 50 ms yetmeyebiliyordu).
+        let (started, startedSignal): (AsyncStream<Void>, AsyncStream<Void>.Continuation) = AsyncStream<Void>.makeStream()
         let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in
+            startedSignal.yield()
             try await Task.sleep(for: .milliseconds(300))
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
         let refresh: Task<ChannelConnection, any Error> = Task { try await vault.connection(id: "d", force: false) }
-        try await Task.sleep(for: .milliseconds(50))
+        var signals: AsyncStream<Void>.Iterator = started.makeAsyncIterator()
+        await signals.next()
         _ = try await vault.remove(id: "d")
         _ = await refresh.result
         #expect(try await vault.all().isEmpty)

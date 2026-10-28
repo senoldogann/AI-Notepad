@@ -7,6 +7,10 @@ on:
   push:
     branches: [main]
 
+# İş yalnızca kodu okur; GITHUB_TOKEN'ın başka yetkisi yok.
+permissions:
+  contents: read
+
 jobs:
   test-and-build:
     runs-on: macos-26
@@ -20,8 +24,16 @@ jobs:
       - name: Hızlı testler (macOS)
         run: swift test --package-path Packages/AINotepadCore
       - name: Projeyi üret
+        # XcodeGen sürümü sabit: Homebrew başka sürüm kurarsa üretilen proje sessizce değişmesin, iş dursun.
+        env:
+          XCODEGEN_VERSION: "2.45.3"
         run: |
           brew install xcodegen
+          installed="$(xcodegen --version | sed -E 's/^Version: //')"
+          if [ "$installed" != "$XCODEGEN_VERSION" ]; then
+            echo "XcodeGen $installed kuruldu, $XCODEGEN_VERSION bekleniyordu; ci.yml'deki sürümü güncelle." >&2
+            exit 1
+          fi
           xcodegen generate
       - name: Mac uygulaması
         run: >
