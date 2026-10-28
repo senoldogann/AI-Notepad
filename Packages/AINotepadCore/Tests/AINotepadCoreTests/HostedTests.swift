@@ -296,6 +296,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
     }
 }
 
+/// İmzasız, JWT biçiminde deneme jetonu (imza sunucuda doğrulanır; burada yalnızca biçim ve nonce).
+private func googleTestToken(claims: String) -> String {
+    func base64URL(_ text: String) -> String {
+        Data(text.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+    return "\(base64URL(#"{"alg":"RS256","typ":"JWT"}"#)).\(base64URL(claims)).imza"
+}
+
 @Suite struct HostedConfigTests {
     @Test func baseURLValidation() throws {
         #expect(try parseHostedBaseURL(value: "http://localhost:8787").absoluteString == "http://localhost:8787")
@@ -308,16 +317,46 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         try requireSecureHostedBaseURL(url: try parseHostedBaseURL(value: "https://api.ornek.fi"))
     }
 
-    @Test func emailLinkToken() throws {
-        let token: String = "Ab3_-" + String(repeating: "x", count: 38)
-        #expect(try hostedEmailLinkToken(url: try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/email?token=\(token)"))) == token)
+    // Giriş sayfası adresi: site kökü + /sign-in, app=1 ve nonce'un SHA-256'sı.
+    @Test func googleSignInPage() throws {
+        let page: URL = hostedGoogleSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"))
+        #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
+    // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür.
+    @Test func googleCallbackResolution() throws {
+        let started: Date = Date(timeIntervalSince1970: 1_000_000)
+        let attempt: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "ham-nonce", startedAt: started)
+        let token: String = googleTestToken(claims: #"{"sub":"1","nonce":"\#(hostedNonceHash(nonce: "ham-nonce"))"}"#)
+        let url: URL = try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)"))
+        let resolved: HostedGoogleSignInCallback = try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(599), lifetimeSec: hostedGoogleSignInLifetimeSec)
+        #expect(resolved == HostedGoogleSignInCallback(identityToken: token, rawNonce: "ham-nonce"))
+        #expect(throws: HostedGoogleSignInError.noPendingAttempt) {
+            try resolveHostedGoogleCallback(url: url, pending: nil, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        }
+        #expect(throws: HostedGoogleSignInError.attemptExpired) {
+            try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(601), lifetimeSec: hostedGoogleSignInLifetimeSec)
+        }
+        let other: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "baska-nonce", startedAt: started)
+        #expect(throws: HostedGoogleSignInError.nonceMismatch) {
+            try resolveHostedGoogleCallback(url: url, pending: other, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        }
+        let noNonce: String = googleTestToken(claims: #"{"sub":"1"}"#)
         for bad in [
-            "com.senoldogan.ainotepad://auth/email?token=\(token)",
-            "com.senoldogan.ainotepad.hosted://auth/apple?token=\(token)",
-            "com.senoldogan.ainotepad.hosted://auth/email?token=kisa",
-            "com.senoldogan.ainotepad.hosted://auth/email",
+            "com.senoldogan.ainotepad://auth/google#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/email#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/google?idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/google?x=1#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)&extra=1",
+            "com.senoldogan.ainotepad.hosted://auth/google#token=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/google#idToken=a.b",
+            "com.senoldogan.ainotepad.hosted://auth/google#idToken=a.b%2B.c",
+            "com.senoldogan.ainotepad.hosted://auth/google",
+            "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(noNonce)",
         ] {
-            #expect(throws: HostedClientError.invalidSignInLink) { try hostedEmailLinkToken(url: try #require(URL(string: bad))) }
+            #expect(throws: HostedGoogleSignInError.self) {
+                try resolveHostedGoogleCallback(url: try #require(URL(string: bad)), pending: attempt, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+            }
         }
     }
 

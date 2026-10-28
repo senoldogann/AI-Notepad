@@ -42,7 +42,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .profile: "Adın ve canlı metin motoru"
         #endif
         #if HOSTED_EDITION
-        case .keys: "Apple ile ya da e-postayla giriş"
+        case .keys: "Apple ya da Google ile giriş"
         #else
         case .keys: "Bulut ve Claude anahtarları"
         #endif

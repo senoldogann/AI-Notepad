@@ -1,15 +1,6 @@
 import Foundation
 
-/// GitHub'da yeni konu (issue) açma adresi; çökme raporu buraya önceden doldurulmuş olarak gider.
-public let crashIssueBaseURL: String = "https://github.com/senoldogann/AI-Notepad/issues/new"
-
-/// GitHub'ın kabul ettiği güvenli adres uzunluğu (daha uzun adreslerde "414 URI Too Long" döner).
-public let crashIssueURLLimit: Int = 7000
-
-/// Konuya en fazla bu kadar yığın çerçevesi yazılır; adres sığmazsa daha azı.
-private let crashIssueMaxFrames: Int = 20
-
-/// Sonlandırma nedeni bu uzunlukta kesilir (dosya yolu gibi uzun ayrıntılar adresi şişirmesin).
+/// Sonlandırma nedeni bu uzunlukta kesilir (dosya yolu gibi uzun ayrıntılar arayüzü şişirmesin).
 private let terminationReasonLimit: Int = 200
 
 /// Teşhisin türü.
@@ -65,12 +56,6 @@ public struct CrashReport: Sendable, Equatable, Identifiable {
 public struct CrashReportLoadResult: Sendable, Equatable {
     public let reports: [CrashReport]
     public let unreadableFiles: [String]
-}
-
-/// Çökme raporu hataları.
-public enum CrashReportError: Error, Equatable {
-    /// Rapordan GitHub adresi oluşturulamadı (kodlanamayan metin).
-    case issueURLInvalid(length: Int)
 }
 
 // MARK: MetricKit JSON (MXDiagnosticPayload.jsonRepresentation())
@@ -224,69 +209,6 @@ public func crashCause(diagnostic: CrashDiagnostic) -> String {
     case .hang:
         return diagnostic.hangDuration ?? ""
     }
-}
-
-/// GitHub konusunun başlığı (İngilizce; depo herkese açık), ör. "Crash: EXC_BAD_ACCESS · SIGSEGV (0.1.2, build 3)".
-/// Saf fonksiyondur.
-public func crashIssueTitle(diagnostic: CrashDiagnostic) -> String {
-    let kind: String = diagnostic.kind == .crash ? "Crash" : "Hang"
-    let cause: String = crashCause(diagnostic: diagnostic)
-    let version: String = "(\(diagnostic.appVersion), build \(diagnostic.appBuild))"
-    return cause.isEmpty ? "\(kind) \(version)" : "\(kind): \(cause) \(version)"
-}
-
-/// GitHub konusunun gövdesi (Markdown): sürüm, sistem, istisna ve ilk `frameCount` çerçeve. Toplantı içeriği ve
-/// anahtar içermez. Saf fonksiyondur.
-public func crashIssueBody(diagnostic: CrashDiagnostic, frameCount: Int) -> String {
-    let exception: [String] = [
-        diagnostic.exceptionType.map { "\(machExceptionName(type: $0)) (\($0))" },
-        diagnostic.exceptionCode.map { "code \($0)" },
-        diagnostic.signal.map { "signal \(signalName(signal: $0)) (\($0))" },
-    ].compactMap { $0 }
-    let lines: [String?] = [
-        "**Kind:** \(diagnostic.kind == .crash ? "crash" : "hang")",
-        "**App version:** \(diagnostic.appVersion) (build \(diagnostic.appBuild))",
-        "**OS:** \(diagnostic.osVersion)",
-        diagnostic.architecture.map { "**Architecture:** \($0)" },
-        exception.isEmpty ? nil : "**Exception:** \(exception.joined(separator: ", "))",
-        diagnostic.terminationReason.map { "**Termination reason:** \($0)" },
-        diagnostic.hangDuration.map { "**Hang duration:** \($0)" },
-    ]
-    let frames: [String] = diagnostic.topFrames.prefix(frameCount).enumerated().map { (item: (offset: Int, element: String)) -> String in
-        "\(item.offset)  \(item.element)"
-    }
-    let stack: String = frames.isEmpty
-        ? "_No call stack in the report._"
-        : "Top frames of the affected thread (MetricKit, unsymbolicated):\n\n```\n\(frames.joined(separator: "\n"))\n```"
-    return lines.compactMap { $0 }.joined(separator: "\n") + "\n\n" + stack + "\n\n"
-        + "_Sent from AI-Notepad's crash report. It contains no meeting content and no keys._\n"
-}
-
-/// Önceden doldurulmuş "yeni konu" adresi: başlık ve gövde; adres `maxLength` karakteri aşarsa sığana dek daha az
-/// çerçeve yazılır (en kötü durumda çerçevesiz). Değerler yalnız harf, rakam ve `-._~` açık bırakılarak kodlanır (`+`
-/// GitHub'da boşluk sayılmasın). Saf fonksiyondur.
-public func crashIssueURL(diagnostic: CrashDiagnostic, maxLength: Int) throws -> URL {
-    let title: String = crashIssueTitle(diagnostic: diagnostic)
-    var frameCount: Int = min(diagnostic.topFrames.count, crashIssueMaxFrames)
-    while true {
-        let text: String = "\(crashIssueBaseURL)?title=\(try queryEncoded(text: title))&body=\(try queryEncoded(text: crashIssueBody(diagnostic: diagnostic, frameCount: frameCount)))"
-        guard let url = URL(string: text) else {
-            throw CrashReportError.issueURLInvalid(length: text.count)
-        }
-        if text.count <= maxLength || frameCount == 0 {
-            return url
-        }
-        frameCount -= 1
-    }
-}
-
-/// Sorgu değerini kodlar: yalnız ASCII harf, rakam ve `-._~` olduğu gibi kalır.
-private func queryEncoded(text: String) throws -> String {
-    let allowed: CharacterSet = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-    guard let encoded = text.addingPercentEncoding(withAllowedCharacters: allowed) else {
-        throw CrashReportError.issueURLInvalid(length: text.count)
-    }
-    return encoded
 }
 
 /// Raporların hangisinin bildirim şeridinde gösterileceği: görülmemiş, çökme içeren en yeni rapor (yalnız donma

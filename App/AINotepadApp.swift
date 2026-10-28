@@ -287,7 +287,7 @@ struct AINotepadApp: App {
                 }
             )
             #if HOSTED_EDITION
-            // E-posta giriş bağlantısı (com.senoldogan.ainotepad.hosted://auth/email?token=…) uygulamayı açar.
+            // Google girişinin dönüşü (com.senoldogan.ainotepad.hosted://auth/google#idToken=…) uygulamayı açar.
             .onOpenURL { (url: URL) in
                 Task {
                     await HostedAccount.shared.handle(url: url)

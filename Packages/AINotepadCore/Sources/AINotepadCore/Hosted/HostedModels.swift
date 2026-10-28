@@ -1,6 +1,6 @@
 import Foundation
 
-/// `POST /v1/auth/apple`, `/v1/auth/email/verify` ve `/v1/auth/refresh` yanıtı.
+/// `POST /v1/auth/apple`, `/v1/auth/google` ve `/v1/auth/refresh` yanıtı.
 public struct HostedSessionResponse: Decodable, Sendable, Equatable {
     public let accessToken: String
     public let refreshToken: String

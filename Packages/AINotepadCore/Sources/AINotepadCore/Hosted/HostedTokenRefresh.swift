@@ -74,7 +74,7 @@ public func isRetryableRepeatableRequest(failure: HostedAttemptFailure) -> Bool 
     }
 }
 
-/// Tekrarı zararlı olabilecek istekler (yenileme jetonu döndürme, tek kullanımlık giriş bağlantısı, toplantı başlatma):
+/// Tekrarı zararlı olabilecek istekler (yenileme jetonu döndürme, tek kullanımlık nonce ile giriş, toplantı başlatma):
 /// yalnızca sunucunun isteği hiç işlemediği kesin olan durumlar yeniden denenir (bağlantı kurulamadı ya da hız
 /// sınırı). Zaman aşımında istek işlenmiş olabilir: yenileme jetonunu ikinci kez göndermek tüm oturumları kapatır,
 /// toplantıyı ikinci kez başlatmak bir deneme hakkı daha harcar. Saf fonksiyondur.
