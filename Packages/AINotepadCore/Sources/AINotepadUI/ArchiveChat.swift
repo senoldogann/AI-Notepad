@@ -846,7 +846,6 @@ public struct RecipeSuggestions: View {
     let highlighted: Int
     let onPick: @MainActor (Recipe) -> Void
     let onDelete: @MainActor (Recipe) -> Void
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     public init(recipes: [Recipe], highlighted: Int, onPick: @escaping @MainActor (Recipe) -> Void, onDelete: @escaping @MainActor (Recipe) -> Void) {
         self.recipes = recipes
@@ -871,11 +870,13 @@ public struct RecipeSuggestions: View {
                     onPick(item.element)
                 } label: {
                     HStack(spacing: 10) {
+                        // Her tarif kendi sabit gradyan ailesinde (ElevenLabs simge kutuları gibi), koyu simgeyle.
                         Image(systemName: item.element.symbol)
                             .appFont(size: 12, weight: .semibold)
-                            .foregroundStyle(appearance.accent.color)
-                            .frame(width: 24, height: 24)
-                            .background(appearance.accent.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .foregroundStyle(Color.black.opacity(0.78))
+                            .frame(width: 28, height: 28)
+                            .background { FilmGradient(seed: "tarif-\(item.element.id)", palette: filmPalette(seed: item.element.id)) }
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         Text(verbatim: "/" + item.element.title)
                             .appFont(size: 14, weight: .regular)
                             .foregroundStyle(Theme.ink)
