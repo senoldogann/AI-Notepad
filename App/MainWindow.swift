@@ -1672,10 +1672,11 @@ private struct RecordingFocus: View {
                     }
                     .buttonStyle(.hoverCapsule)
                 }
+                // Bulanık zeminde soluk renk okunmuyordu: koyu yazı.
                 Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
                     .keyboardShortcut(.cancelAction)
                     .buttonStyle(.hoverPlain)
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(Theme.ink.opacity(0.8))
                     .appFont(size: 12, weight: .medium)
                     .padding(.top, 4)
             }

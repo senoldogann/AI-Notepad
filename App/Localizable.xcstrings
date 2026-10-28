@@ -521,16 +521,6 @@
         }
       }
     },
-    "%@ yeniden bağlandı; eski bağlantının izni %@ tarafında geri alınamadı (%@). Eski erişimi %@ ayarlarından kaldırabilirsin.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ reconnected, but the old connection's access couldn't be revoked on the %@ side (%@). You can remove the old access in your %@ settings."
-          }
-        }
-      }
-    },
     "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
       "extractionState": "stale",
       "localizations": {
@@ -549,6 +539,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The %@ response hit the output limit and was cut off. Lower the effort in Settings › LLM and try again."
+          }
+        }
+      }
+    },
+    "%@ yeniden bağlandı; eski bağlantının izni %@ tarafında geri alınamadı (%@). Eski erişimi %@ ayarlarından kaldırabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ reconnected, but the old connection's access couldn't be revoked on the %@ side (%@). You can remove the old access in your %@ settings."
           }
         }
       }
@@ -650,6 +650,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: %@"
+          }
+        }
+      }
+    },
+    "%@: %lld görev açıldı": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld tasks created"
           }
         }
       }

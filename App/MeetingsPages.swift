@@ -517,6 +517,20 @@ struct MeetingDetailPage: View {
                let startSec = Double(CommandLine.arguments[index + 1]) {
                 play(from: startSec)
             }
+            #if DEBUG
+            // "--test-paylas": "Bağlantıyla paylaş…"ı açar (kabul testi; yalnız Debug). Pencere öne gelince açılsın diye
+            // kısa bir gecikmeyle.
+            if CommandLine.arguments.contains("--test-paylas") {
+                Task {
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        return
+                    }
+                    shareViaLink()
+                }
+            }
+            #endif
         }
     }
 
