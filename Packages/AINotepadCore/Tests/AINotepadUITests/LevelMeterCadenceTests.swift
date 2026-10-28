@@ -24,16 +24,21 @@ import Testing
         #expect(levels.values == [0, 0, 0, 0])
     }
 
-    // Gerçek saat: ~1 sn'de 100 ms'lik aralıkla ~10 kayma (seviye yalnız başta gelse de). Değer her adımda yarılanır,
-    // sıfıra inmez: sıfır olmayan çubuk sayısı kayma sayısıdır. Yüklü makinede sapmaya pay bırakılır.
+    // Gerçek saat: kayma sayısı geçen süreyle orantılı (100 ms'de bir). Değer her adımda yarılanır, sıfıra inmez: sıfır
+    // olmayan çubuk sayısı kayma sayısıdır. Beklenen sayı ölçülen süreden hesaplanır: yüklü makinede (CI) uyku uzasa da
+    // test kırılmaz, saat durursa ya da fazla kayarsa yakalanır.
     @Test func clockAdvancesSteadily() async throws {
-        let levels: AudioLevels = AudioLevels(count: 40, interval: 0.1)
+        let levels: AudioLevels = AudioLevels(count: 60, interval: 0.1)
+        let clock: ContinuousClock = ContinuousClock()
+        let started: ContinuousClock.Instant = clock.now
         levels.start()
         levels.record(level: 1)
         try await Task.sleep(for: .milliseconds(1_050))
         let shifts: Int = levels.values.filter { $0 > 0 }.count
+        let duration: Duration = clock.now - started
+        let elapsed: Double = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
         levels.stop()
-        // Yük altında (CI, düşük öncelik) uyanmalar gecikebilir; saat yine de durmadan ilerlemeli.
-        #expect((6...11).contains(shifts))
+        let expected: Double = elapsed / 0.1
+        #expect(Double(shifts) >= expected * 0.5 && Double(shifts) <= expected + 1, "kayma: \(shifts), süre: \(elapsed) sn")
     }
 }
