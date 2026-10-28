@@ -123,6 +123,12 @@ MainActor.assumeIsolated {
         )
         print("\(name) \(number)")
     }
+    // Kayıt ekranının ortasındaki büyük ses ölçer.
+    let largeMeter: Int = showWindow(
+        view: LargeLevelMeter(levels: levels).padding(30).background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 20)),
+        frame: NSRect(x: 200, y: 300, width: 260, height: 160)
+    )
+    print("large-meter \(largeMeter)")
     let confetti: Int = showWindow(
         view: EmptyStateHero(symbol: "party.popper.fill", title: "Açık görevin kalmadı", message: "Hepsi tamamlandı.", palette: .sunset, steps: []) {
             EmptyView()

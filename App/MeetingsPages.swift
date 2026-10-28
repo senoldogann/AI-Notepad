@@ -507,6 +507,8 @@ struct MeetingDetailPage: View {
         return VStack(alignment: .leading, spacing: 0) {
             // Kapak şeridi: toplantının gradyanı (yazı altta, beyaz zeminde).
             CoverImage(seed: record.id)
+                // Ana sayfa kartlarındaki gibi ortada toplantıya özgü ses dalgası.
+                .overlay { CoverWaveform(seed: record.id) }
                 .frame(height: 132)
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous))
                 .padding(EdgeInsets(top: -24, leading: -26, bottom: 18, trailing: -26))
@@ -1309,7 +1311,7 @@ private struct SummaryTab: View {
             ("\(note.tasks.filter(\.isMine).count)", "senin görevin"),
         ]
         let symbols: [String] = ["clock", "person.2", "checkmark.seal", "checklist"]
-        return asideCard(title: "BİR BAKIŞTA", symbol: "chart.bar.xaxis") {
+        return asideCard {
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 14) {
                 ForEach(Array(stats.enumerated()), id: \.offset) { (item: (offset: Int, element: (value: String, label: LocalizedStringKey))) in
                     HStack(alignment: .center, spacing: 10) {
@@ -1330,7 +1332,7 @@ private struct SummaryTab: View {
 
     /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde.
     private func talkShare(shares: [SpeakerShare]) -> some View {
-        asideCard(title: "KİM NE KADAR KONUŞTU", symbol: "waveform") {
+        asideCard {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(shares, id: \.key) { (share: SpeakerShare) in
                     // Ad ve yüzde üstte, pay çubuğu altta tam genişlikte: dar yan sütunda ad kesilmez.
@@ -1372,16 +1374,10 @@ private struct SummaryTab: View {
         }
     }
 
-    /// Yan sütun kartı: üstte toplantının kapağından ince film gradyanı şerit, simgeli küçük başlık, içerik.
-    private func asideCard(title: LocalizedStringKey, symbol: String, @ViewBuilder content: () -> some View) -> some View {
+    /// Yan sütun kartı: üstte toplantının kapağından ince film gradyanı şerit ve içerik (başlık etiketi yok; içerik
+    /// kendini anlatır).
+    private func asideCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(title).tracking(DesignTokens.labelTracking)
-            } icon: {
-                Image(systemName: symbol)
-            }
-            .appFont(size: 11, weight: .semibold)
-            .foregroundStyle(Theme.muted)
             content()
         }
         .padding(16)
