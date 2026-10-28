@@ -39,7 +39,7 @@ const integrations: readonly string[] = ["Notion", "Slack", "Linear", "Jira", "M
         </a>
         <a class="button button--secondary" href={pagePath("pricing", lang)}>{text.secondaryCta}</a>
       </div>
-      <p class="hero__offer small"><strong>{common.offer}</strong><span class="muted"> · {common.requirementsShort}</span></p>
+      <p class="hero__offer small"><strong>{common.offer}</strong><span class="muted">{common.requirementsShort}</span></p>
     </div>
 
     <Film palette="sunset" layout="clouds-left" class="hero__cover">
@@ -229,7 +229,7 @@ const integrations: readonly string[] = ["Notion", "Slack", "Linear", "Jira", "M
   .hero__offer {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 6px;
+    gap: 2px 14px;
   }
 
   .hero__offer strong {

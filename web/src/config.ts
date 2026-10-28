@@ -56,13 +56,15 @@ const productionConfig: SiteConfig = {
 };
 
 /**
- * Yerel uçtan uca deneme: sunucu `npm run dev` ile 8787'de, site 8788'de (sunucunun geliştirme SITE_ORIGIN'i).
+ * Yerel uçtan uca deneme: sunucu `npm run dev -- --ip 127.0.0.1` ile 127.0.0.1:8787'de, site localhost:8788'de
+ * (sunucunun geliştirme SITE_ORIGIN'i). API adresi IPv4'e sabittir: `localhost` IPv6'ya çözülüp aynı kapıdaki başka bir
+ * sürece gidebilir.
  * Turnstile Cloudflare'in her zaman geçen deneme anahtarıyla çalışır; Apple ile giriş yerelde çalışmaz (Apple yalnızca
  * kayıtlı HTTPS alan adlarına izin verir).
  */
 const localConfig: SiteConfig = {
   siteOrigin: "http://localhost:8788",
-  apiBase: "http://localhost:8787",
+  apiBase: "http://127.0.0.1:8787",
   turnstileSiteKey: "1x00000000000000000000AA",
   appleServiceId: "com.senoldogan.AINotepad.web",
   dmgUrl,

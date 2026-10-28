@@ -51,7 +51,7 @@ const common: CommonCopy = copy[lang].common;
             <label for="email">{text.emailLabel}</label>
             <input id="email" class="input" type="email" name="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder={text.emailPlaceholder} />
           </div>
-          <div id="turnstile" class="turnstile" aria-label={text.turnstileLabel}></div>
+          <div id="turnstile" class="turnstile" role="group" aria-label={text.turnstileLabel}></div>
           <button id="email-submit" class="button button--primary button--block" type="submit" disabled>{text.emailSubmit}</button>
           <p class="small muted">{text.emailHelp}</p>
         </form>
@@ -64,7 +64,7 @@ const common: CommonCopy = copy[lang].common;
       </div>
 
       <p class="small muted legal">
-        {text.legal}
+        {text.legal}{" "}
         <a href={pagePath("terms", lang)}>{common.nav.terms}</a> · <a href={pagePath("privacy", lang)}>{common.nav.privacy}</a>
       </p>
     </div>
