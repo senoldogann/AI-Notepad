@@ -31,7 +31,7 @@ export interface AttestationOptions {
   readonly aclBlob: Uint8Array;
 }
 
-export const testAppId: string = "TEAMID0000.com.senoldogan.AINotepadHosted";
+export const testAppId: string = "TEAMID0000.com.senoldogan.AINotepad.hosted";
 export const developmentAaguid: Uint8Array = utf8("appattestdevelop");
 export const productionAaguid: Uint8Array = concatBytes([utf8("appattest"), new Uint8Array(7)]);
 export const macAclBlob: Uint8Array = base64Decode(macAclBlobBase64);

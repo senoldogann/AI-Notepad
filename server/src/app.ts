@@ -18,12 +18,12 @@ import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAss
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex, sha256Hex } from "./crypto";
-import { entitlements } from "./entitlements";
+import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
 import { bearerToken, errorResponse, jsonResponse, readBodyBytes, readJsonBody } from "./http";
 import { llmRequestSchema } from "./llm/request";
-import { proxyLLM } from "./llm/proxy";
+import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
 import { endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
 import { requireSpendHeadroom } from "./usage";
@@ -107,9 +107,21 @@ async function enforceLimit(limiter: RateLimit, key: string): Promise<void> {
 
 /** Toplantı kimliği başlığı (`x-meeting-id`, UUID). */
 function meetingIdHeader(request: Request): string {
-  const value: string | null = request.headers.get("x-meeting-id");
-  if (value === null || !z.uuid().safeParse(value).success) {
+  const value: string | null = optionalMeetingIdHeader(request);
+  if (value === null) {
     throw new ApiError("bad_request", "x-meeting-id başlığı (toplantı oturumu kimliği) gerekli.");
+  }
+  return value;
+}
+
+/** İsteğe bağlı toplantı kimliği başlığı; yoksa null, varsa UUID olmalı (değilse `bad_request`). */
+function optionalMeetingIdHeader(request: Request): string | null {
+  const value: string | null = request.headers.get("x-meeting-id");
+  if (value === null) {
+    return null;
+  }
+  if (!z.uuid().safeParse(value).success) {
+    throw new ApiError("bad_request", "x-meeting-id başlığı geçerli bir toplantı oturumu kimliği olmalı.");
   }
   return value;
 }
@@ -262,10 +274,18 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/llm/messages" && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
-    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    // Toplantı kimliği varsa çağrı o toplantının bütçesinden düşer; yoksa hesap çağrısıdır (deneme ya da abonelik
+    // hakkı gerekir, kullanıcının günlük ve aylık sınırı geçerlidir).
+    const meetingId: string | null = optionalMeetingIdHeader(request);
+    let scope: LLMScope;
+    if (meetingId === null) {
+      scope = { kind: "account", userId: user.userId, access: await requireAccountLLMAccess(db, config, user.userId, now) };
+    } else {
+      scope = { kind: "meeting", userId: user.userId, meeting: await requireUsableMeeting(db, config, user.userId, meetingId, now) };
+    }
     await requireSpendHeadroom(db, config, now);
     const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
-    return proxyLLM(db, context, config, meeting, body);
+    return proxyLLM(db, context, config, scope, body);
   }
   if (path === "/v1/transcribe" && method === "POST") {
     const user: AuthedUser = await authed();

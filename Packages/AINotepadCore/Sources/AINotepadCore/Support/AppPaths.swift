@@ -1,8 +1,23 @@
 import Foundation
 
+/// Uygulamanın verisinin `~/Library/Application Support` altındaki klasör adını taşıyan Info.plist anahtarı. Her hedef
+/// açıkça yazar: geliştirici sürümü ve iPhone `AINotepad`, abonelik sürümü `AINotepad Hosted` (iki Mac uygulaması
+/// birbirinin toplantılarına, seslerine, modellerine dokunmaz).
+public let dataFolderInfoKey: String = "AINotepadDataFolderName"
+
 /// Uygulamanın diskte kullandığı klasörler. Her fonksiyon klasörü yoksa oluşturur.
 public enum AppPaths {
-    /// `~/Library/Application Support/AINotepad`
+    /// Paketin Info.plist'indeki veri klasörü adı; yoksa ya da geçersizse (boş, `/` içeren, `.`/`..`)
+    /// `dataFolderNotConfigured`.
+    public static func dataFolderName(bundle: Bundle) throws -> String {
+        guard let name = bundle.object(forInfoDictionaryKey: dataFolderInfoKey) as? String,
+              !name.trimmingCharacters(in: .whitespaces).isEmpty, !name.contains("/"), name != ".", name != ".." else {
+            throw StorageError.dataFolderNotConfigured(key: dataFolderInfoKey, bundle: bundle.bundleIdentifier ?? bundle.bundlePath)
+        }
+        return name
+    }
+
+    /// `~/Library/Application Support/<veri klasörü>` (bkz. `dataFolderInfoKey`).
     public static func applicationSupport() throws -> URL {
         let base: URL
         do {
@@ -10,7 +25,7 @@ public enum AppPaths {
         } catch {
             throw StorageError.directoryUnavailable(path: "~/Library/Application Support", reason: error.localizedDescription)
         }
-        return try ensureDirectory(url: base.appending(path: "AINotepad", directoryHint: .isDirectory))
+        return try ensureDirectory(url: base.appending(path: try dataFolderName(bundle: .main), directoryHint: .isDirectory))
     }
 
     /// WhisperKit modellerinin indirildiği klasör.

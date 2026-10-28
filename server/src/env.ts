@@ -14,6 +14,7 @@ export interface Env {
   readonly APP_ATTEST_APP_IDS: string;
   readonly APP_ATTEST_ALLOWED_CATEGORIES: string;
   readonly TRIAL_MEETINGS: string;
+  readonly TRIAL_ACCOUNT_DAILY_TOKENS: string;
   readonly TRIAL_ACCOUNTS_PER_IP_PER_DAY: string;
   readonly TRIAL_MAX_MEETING_MINUTES: string;
   readonly SUBSCRIBER_MAX_MEETING_MINUTES: string;
@@ -26,6 +27,7 @@ export interface Env {
   readonly DAILY_TOKEN_CAP: string;
   readonly MAX_MEETING_STARTS_PER_DAY: string;
   readonly LLM_MAX_TOKENS: string;
+  readonly LLM_ACCOUNT_MAX_TOKENS: string;
   readonly LLM_MAX_REQUEST_BYTES: string;
   readonly LLM_MAX_INPUT_TOKENS: string;
   readonly TRANSCRIBE_MAX_BYTES: string;

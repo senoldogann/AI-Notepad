@@ -1,0 +1,350 @@
+import AVFoundation
+import Foundation
+import Testing
+@testable import AINotepadCore
+
+/// Verilen süre ve hızda stereo sinüs kaydı (Float32) yazar; dosya yolu döner.
+private func writeSineRecording(directory: URL, seconds: Double, sampleRate: Double) throws -> URL {
+    let url: URL = directory.appending(path: "kayit.caf")
+    let format: AVAudioFormat = try #require(AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2))
+    let frames: AVAudioFrameCount = AVAudioFrameCount(seconds * sampleRate)
+    let buffer: AVAudioPCMBuffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+    buffer.frameLength = frames
+    for channel in 0..<2 {
+        let samples: UnsafeMutablePointer<Float> = try #require(buffer.floatChannelData?[channel])
+        for frame in 0..<Int(frames) {
+            samples[frame] = 0.3 * sin(2 * Float.pi * 440 * Float(frame) / Float(sampleRate))
+        }
+    }
+    let file: AVAudioFile = try AVAudioFile(forWriting: url, settings: format.settings)
+    try file.write(from: buffer)
+    return url
+}
+
+/// Küçük uçlu tam sayı okur.
+private func littleEndian32(_ data: Data, at offset: Int) -> Int {
+    data[offset..<(offset + 4)].enumerated().reduce(0) { (sum: Int, item: (offset: Int, element: UInt8)) -> Int in
+        sum | Int(item.element) << (8 * item.offset)
+    }
+}
+
+private func word(_ text: String, _ start: Double, _ end: Double, _ speaker: String) -> DiarizedWord {
+    DiarizedWord(text: text, startSec: start, endSec: end, speaker: speaker)
+}
+
+private func tokens(accessExpiresAt: Date) -> HostedTokens {
+    HostedTokens(accessToken: "erisim", refreshToken: "yenileme", accessExpiresAt: accessExpiresAt, userId: "kullanici")
+}
+
+private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
+    LLMRequest(tier: tier, system: "sistem", userText: "metin", maxTokens: 2048, jsonSchema: schema, timeoutSec: 20)
+}
+
+@Suite struct HostedAudioTests {
+    @Test func chunkSpansCoverRecordingWithoutGaps() {
+        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4) == [
+            WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 4, sampleCount: 4), WavChunkSpan(startSample: 8, sampleCount: 2),
+        ])
+        #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4).isEmpty)
+        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+    }
+
+    // 95 MB'lık WAV, 16 kHz mono 16 bitte ~49 dakikadır; başlıkla birlikte sınırı aşmaz.
+    @Test func chunkLimitFitsServerMaximum() {
+        let samples: Int = maxSamplesPerWavChunk(maxBytes: hostedTranscribeMaxBytes)
+        #expect(44 + samples * 2 <= hostedTranscribeMaxBytes)
+        let minutes: Double = Double(samples) / Double(hostedTranscribeSampleRate) / 60
+        #expect(minutes > 49 && minutes < 50)
+    }
+
+    // 48 kHz stereo kayıt 16 kHz mono WAV parçalarına bölünür: her parça sınırda, başlık gerçek boyutu taşır, konumlar ardışık.
+    @Test func recordingIsWrittenAsBoundedWavChunks() throws {
+        let directory: URL = FileManager.default.temporaryDirectory.appending(path: "hosted-wav-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let source: URL = try writeSineRecording(directory: directory, seconds: 2.5, sampleRate: 48000)
+        let maxBytes: Int = 44 + 16000 * 2
+        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes)
+        #expect(chunks.count == 3)
+        var expectedStart: Int = 0
+        for chunk in chunks {
+            let data: Data = try Data(contentsOf: chunk.url)
+            #expect(data.count <= maxBytes)
+            #expect(data.count == 44 + chunk.span.sampleCount * 2)
+            #expect(String(decoding: data[0..<4], as: UTF8.self) == "RIFF")
+            #expect(littleEndian32(data, at: 4) == data.count - 8)
+            #expect(littleEndian32(data, at: 24) == hostedTranscribeSampleRate)
+            #expect(littleEndian32(data, at: 40) == chunk.span.sampleCount * 2)
+            #expect(chunk.span.startSample == expectedStart)
+            expectedStart += chunk.span.sampleCount
+        }
+        #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 1])
+        // Örnek hızı dönüştürücüsü uçlarda birkaç örnek oynatabilir.
+        #expect(abs(expectedStart - 40000) < 200)
+        try FileManager.default.removeItem(at: directory)
+    }
+
+    // Parça sonuçları kaydın zamanına kaydırılır; konuşmacılar parçalar arasında karışmaz; dil en olası parçanınki.
+    @Test func chunkResultsMergeWithOffsets() {
+        let merged: DiarizationResult = mergeChunkTranscriptions(chunks: [
+            ChunkTranscription(offsetSec: 0, result: DiarizationResult(words: [word("Hei", 0.5, 0.9, "speaker_0")], languageCode: "fin", languageProbability: 0.6)),
+            ChunkTranscription(offsetSec: 2968.5, result: DiarizationResult(
+                words: [word("Moi", 1, 1.4, "speaker_0"), word("Joo", 2, 2.2, "speaker_1")], languageCode: "swe", languageProbability: 0.9
+            )),
+        ])
+        #expect(merged.words == [
+            word("Hei", 0.5, 0.9, "speaker_0"), word("Moi", 2969.5, 2969.9, "2:speaker_0"), word("Joo", 2970.5, 2970.7, "2:speaker_1"),
+        ])
+        #expect(merged.languageCode == "swe")
+        #expect(merged.languageProbability == 0.9)
+        // Son geçiş bölümlerinde ikinci parçanın konuşmacısı ilkinden ayrı kişidir.
+        #expect(finalSegments(words: merged.words, gapSec: 1.5).map(\.person) == [1, 2, 3])
+    }
+
+    @Test func keytermsMatchServerRules() {
+        #expect(hostedKeyterms(terms: [" Aino ", "aino", "", "a{b}", String(repeating: "x", count: 50), "bir iki üç dört beş altı", "Kone Oyj"], limit: 5) == ["Aino", "Kone Oyj"])
+        #expect(hostedKeyterms(terms: ["a", "b", "c"], limit: 2) == ["a", "b"])
+    }
+
+    @Test func transcribeURLEncodesQuery() throws {
+        let url: URL = hostedTranscribeURL(baseURL: try #require(URL(string: "http://localhost:8787")), languageCode: "fin", keyterms: ["C++ & Go", "Aino"])
+        #expect(url.absoluteString == "http://localhost:8787/v1/transcribe?language_code=fin&diarize=true&keyterms=C%2B%2B%20%26%20Go&keyterms=Aino")
+    }
+}
+
+@Suite struct HostedErrorTests {
+    @Test func everyServerCodeHasActionableMessage() {
+        for code in HostedErrorCode.allCases {
+            let message: String = hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: 400, serverMessage: "", path: "/v1/x"))
+            #expect(!message.isEmpty, "mesaj yok: \(code.rawValue)")
+        }
+    }
+
+    @Test func specificCodesSayWhatToDo() {
+        func message(_ code: HostedErrorCode, _ status: Int) -> String {
+            hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: status, serverMessage: "", path: "/v1/meetings/start"))
+        }
+        #expect(message(.trialExhausted, 402).contains("abone ol"))
+        #expect(message(.trialIPLimit, 429).contains("Yarın"))
+        #expect(message(.monthlyCapReached, 429).contains("ay başında"))
+        #expect(message(.subscriptionExists, 409).contains("Hesabı yönet"))
+        #expect(message(.spendCeilingReached, 503).contains("yoğun"))
+        #expect(message(.meetingNotActive, 409).contains("Yeni bir toplantı"))
+        #expect(message(.transcriptionClosed, 409).contains("Canlı metin"))
+    }
+
+    @Test func parsesServerErrorBody() {
+        let error: HostedAPIError = parseHostedAPIError(status: 402, data: Data(#"{"error":{"code":"trial_exhausted","message":"Deneme bitti."}}"#.utf8), path: "/v1/meetings/start")
+        #expect(error == HostedAPIError(code: .trialExhausted, rawCode: "trial_exhausted", status: 402, serverMessage: "Deneme bitti.", path: "/v1/meetings/start"))
+        let unknown: HostedAPIError = parseHostedAPIError(status: 418, data: Data(#"{"error":{"code":"yeni_kod","message":"?"}}"#.utf8), path: "/v1/me")
+        #expect(unknown.code == nil && unknown.rawCode == "yeni_kod")
+        let proxy: HostedAPIError = parseHostedAPIError(status: 502, data: Data("<html>Bad gateway</html>".utf8), path: "/v1/me")
+        #expect(proxy.code == nil && proxy.rawCode == "http_502" && proxy.serverMessage.contains("Bad gateway"))
+        #expect(hostedErrorMessage(error: proxy).contains("502"))
+    }
+
+    // Hız sınırı ve geçici sunucu hataları yeniden denenir; harcama tavanı (503) ve kotalar denenmez.
+    @Test func onlyTransientErrorsRetry() {
+        func error(_ code: HostedErrorCode?, _ status: Int) -> HostedAPIError {
+            HostedAPIError(code: code, rawCode: code?.rawValue ?? "http_\(status)", status: status, serverMessage: "", path: "/v1/llm/messages")
+        }
+        #expect(isRetryableHostedError(error: error(.rateLimited, 429)))
+        #expect(isRetryableHostedError(error: error(.upstreamUnavailable, 502)))
+        #expect(isRetryableHostedError(error: error(nil, 503)))
+        #expect(!isRetryableHostedError(error: error(.spendCeilingReached, 503)))
+        #expect(!isRetryableHostedError(error: error(.monthlyCapReached, 429)))
+        #expect(!isRetryableHostedError(error: error(.meetingNotActive, 409)))
+    }
+
+    @Test func closedAccessStopsLiveTranslation() {
+        func hosted(_ code: HostedErrorCode) -> LLMError {
+            .hosted(HostedAPIError(code: code, rawCode: code.rawValue, status: 409, serverMessage: "", path: "/v1/llm/messages"))
+        }
+        #expect(stopsLiveTranslation(error: hosted(.meetingBudgetExhausted)))
+        #expect(stopsLiveTranslation(error: hosted(.spendCeilingReached)))
+        #expect(stopsLiveTranslation(error: HostedClientError.noActiveMeeting))
+        #expect(stopsLiveTranslation(error: LLMError.http(status: 401, body: "", model: "m", requestID: nil)))
+        #expect(!stopsLiveTranslation(error: hosted(.upstreamUnavailable)))
+        #expect(!stopsLiveTranslation(error: HostedClientError.network(path: "/v1/llm/messages", reason: "zaman aşımı")))
+        #expect(!stopsLiveTranslation(error: LLMError.http(status: 500, body: "", model: "m", requestID: nil)))
+    }
+}
+
+@Suite struct HostedLLMTests {
+    // Canlı çeviri, "Ne kaçırdım?" ve toplantı sorusu `low`; not ve düzenleme `medium` (sunucu yalnızca ikisini kabul eder).
+    @Test func effortFollowsTier() {
+        #expect(hostedEffort(tier: .fast) == .low)
+        #expect(hostedEffort(tier: .live) == .low)
+        #expect(hostedEffort(tier: .smart) == .medium)
+        #expect(translationRequest(sentence: "Hei", context: [], language: .turkish).tier == .fast)
+    }
+
+    @Test func requestCarriesEffortMeetingAndAllowedFieldsOnly() throws {
+        let schema: String = #"{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":false}"#
+        let urlRequest: URLRequest = try hostedLLMURLRequest(
+            baseURL: try #require(URL(string: "http://localhost:8787")),
+            credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: "6f1c2b8e-1d2a-4c55-9a9e-2b6a0f4d8c11"),
+            request: llmRequest(tier: .smart, schema: schema)
+        )
+        #expect(urlRequest.url?.absoluteString == "http://localhost:8787/v1/llm/messages")
+        #expect(urlRequest.httpMethod == "POST")
+        #expect(urlRequest.value(forHTTPHeaderField: "authorization") == "Bearer jeton")
+        #expect(urlRequest.value(forHTTPHeaderField: "x-meeting-id") == "6f1c2b8e-1d2a-4c55-9a9e-2b6a0f4d8c11")
+        let body: [String: Any] = try jsonObject(try #require(urlRequest.httpBody))
+        #expect(Set(body.keys) == ["effort", "system", "messages", "max_tokens", "output_config", "stream"])
+        #expect(body["effort"] as? String == "medium")
+        #expect(body["stream"] as? Bool == true)
+        #expect(body["max_tokens"] as? Int == 2048)
+        let messages: [[String: Any]] = try #require(body["messages"] as? [[String: Any]])
+        #expect(messages.count == 1 && messages[0]["role"] as? String == "user")
+        let format: [String: Any] = try #require((body["output_config"] as? [String: Any])?["format"] as? [String: Any])
+        #expect(format["type"] as? String == "json_schema")
+
+        let live: URLRequest = try hostedLLMURLRequest(
+            baseURL: try #require(URL(string: "https://api.ornek.fi")),
+            credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: "m"),
+            request: llmRequest(tier: .live, schema: nil)
+        )
+        let liveBody: [String: Any] = try jsonObject(try #require(live.httpBody))
+        #expect(liveBody["effort"] as? String == "low")
+        #expect(liveBody["output_config"] == nil)
+
+        // Hesap çağrısı (Sor, notu yeniden yazma…) toplantı başlığı taşımaz.
+        let account: URLRequest = try hostedLLMURLRequest(
+            baseURL: try #require(URL(string: "https://api.ornek.fi")),
+            credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: nil),
+            request: llmRequest(tier: .smart, schema: nil)
+        )
+        #expect(account.value(forHTTPHeaderField: "x-meeting-id") == nil)
+        #expect(account.value(forHTTPHeaderField: "authorization") == "Bearer jeton")
+    }
+
+    // Sunucu Anthropic akışını aynen iletir; hata gövdesi sunucunun kodudur.
+    @Test func classifiesProxiedStreamAndServerErrors() {
+        let ok: LLMOutcome = classifyHostedLLMResponse(status: 200, data: completeStream(texts: ["Mer", "haba"], stopReason: "end_turn"), requestID: nil)
+        #expect(ok == .success("Merhaba"))
+        let budget: LLMOutcome = classifyHostedLLMResponse(status: 402, data: Data(#"{"error":{"code":"meeting_budget_exhausted","message":"x"}}"#.utf8), requestID: nil)
+        guard case .final(.hosted(let error)) = budget else {
+            Issue.record("bütçe hatası kesin olmalı: \(budget)")
+            return
+        }
+        #expect(error.code == .meetingBudgetExhausted)
+        let limited: LLMOutcome = classifyHostedLLMResponse(status: 429, data: Data(#"{"error":{"code":"rate_limited","message":"x"}}"#.utf8), requestID: nil)
+        guard case .retryable(.hosted) = limited else {
+            Issue.record("hız sınırı yeniden denenmeli: \(limited)")
+            return
+        }
+    }
+}
+
+@Suite struct HostedTokenTests {
+    @Test func actionDependsOnExpiry() {
+        let now: Date = Date(timeIntervalSince1970: 1_000_000)
+        #expect(hostedTokenAction(tokens: nil, now: now, leewaySec: 60) == .signedOut)
+        #expect(hostedTokenAction(tokens: tokens(accessExpiresAt: now.addingTimeInterval(600)), now: now, leewaySec: 60) == .use(accessToken: "erisim"))
+        #expect(hostedTokenAction(tokens: tokens(accessExpiresAt: now.addingTimeInterval(30)), now: now, leewaySec: 60) == .refresh(refreshToken: "yenileme"))
+        #expect(hostedTokenAction(tokens: tokens(accessExpiresAt: now.addingTimeInterval(-5)), now: now, leewaySec: 60) == .refresh(refreshToken: "yenileme"))
+    }
+
+    // Yeni jetonlar saklanır; 401 (süresi dolmuş, çıkılmış ya da yeniden kullanıldığı için tüm aile düşmüş) oturumu
+    // bitirir; geçici hata oturumu korur.
+    @Test func refreshOutcomes() throws {
+        let received: Date = Date(timeIntervalSince1970: 2_000_000)
+        let body: Data = Data(#"{"accessToken":"a2","refreshToken":"r2","tokenType":"Bearer","expiresIn":900,"userId":"u"}"#.utf8)
+        #expect(try hostedRefreshResult(status: 200, data: body, receivedAt: received)
+            == .refreshed(HostedTokens(accessToken: "a2", refreshToken: "r2", accessExpiresAt: received.addingTimeInterval(900), userId: "u")))
+        let reused: HostedRefreshResult = try hostedRefreshResult(status: 401, data: Data(#"{"error":{"code":"invalid_token","message":"x"}}"#.utf8), receivedAt: received)
+        guard case .revoked(let error) = reused else {
+            Issue.record("401 oturumu bitirmeli: \(reused)")
+            return
+        }
+        #expect(error.code == .invalidToken)
+        guard case .failed = try hostedRefreshResult(status: 503, data: Data(#"{"error":{"code":"internal_error","message":"x"}}"#.utf8), receivedAt: received) else {
+            Issue.record("geçici hata oturumu korumalı")
+            return
+        }
+        #expect(throws: HostedClientError.self) {
+            try hostedRefreshResult(status: 200, data: Data("{}".utf8), receivedAt: received)
+        }
+    }
+
+    // Yenileme ve toplantı başlatma zaman aşımında yinelenmez (jeton ikinci kez gönderilirse tüm oturumlar düşer).
+    @Test func oneShotRequestsRetryOnlyWhenNotSent() {
+        #expect(isRetryableOneShotRequest(failure: .network(.cannotConnectToHost)))
+        #expect(!isRetryableOneShotRequest(failure: .network(.timedOut)))
+        #expect(isRetryableOneShotRequest(failure: .server(HostedAPIError(code: .rateLimited, rawCode: "rate_limited", status: 429, serverMessage: "", path: "/v1/auth/refresh"))))
+        #expect(!isRetryableOneShotRequest(failure: .server(HostedAPIError(code: .internalError, rawCode: "internal_error", status: 500, serverMessage: "", path: "/v1/auth/refresh"))))
+        #expect(isRetryableRepeatableRequest(failure: .network(.timedOut)))
+        #expect(!isRetryableRepeatableRequest(failure: .network(.cancelled)))
+    }
+
+    @Test func entitlementsDecodeAndStatus() throws {
+        let json: String = #"""
+        {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":1,"accountTrialMeetingsLeft":1,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":2.5,"monthlyHoursCap":10,
+         "subscription":{"status":"past_due","currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z"}}
+        """#
+        let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
+        #expect(entitlements.monthlyHoursUsed == 2.5)
+        #expect(hostedPlanStatus(entitlements: entitlements) == .grace(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-08T00:00:00Z")))
+        let trial: String = json.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trial.utf8))) == .trial(left: 1, total: 3))
+    }
+}
+
+@Suite struct HostedConfigTests {
+    @Test func baseURLValidation() throws {
+        #expect(try parseHostedBaseURL(value: "http://localhost:8787").absoluteString == "http://localhost:8787")
+        #expect(throws: HostedClientError.invalidBaseURL(value: "https://api.example.invalid")) { try parseHostedBaseURL(value: "https://api.example.invalid") }
+        #expect(throws: HostedClientError.self) { try parseHostedBaseURL(value: "ftp://ornek.fi") }
+        #expect(throws: HostedClientError.self) { try parseHostedBaseURL(value: "") }
+        #expect(throws: HostedClientError.insecureBaseURL(url: "http://localhost:8787")) {
+            try requireSecureHostedBaseURL(url: try parseHostedBaseURL(value: "http://localhost:8787"))
+        }
+        try requireSecureHostedBaseURL(url: try parseHostedBaseURL(value: "https://api.ornek.fi"))
+    }
+
+    @Test func emailLinkToken() throws {
+        let token: String = "Ab3_-" + String(repeating: "x", count: 38)
+        #expect(try hostedEmailLinkToken(url: try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/email?token=\(token)"))) == token)
+        for bad in [
+            "com.senoldogan.ainotepad://auth/email?token=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/apple?token=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/email?token=kisa",
+            "com.senoldogan.ainotepad.hosted://auth/email",
+        ] {
+            #expect(throws: HostedClientError.invalidSignInLink) { try hostedEmailLinkToken(url: try #require(URL(string: bad))) }
+        }
+    }
+
+    @Test func nonceHashIsLowercaseSHA256Hex() throws {
+        #expect(hostedNonceHash(nonce: "abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        let nonce: String = try makeHostedNonce()
+        #expect(nonce.count == 64)
+        #expect(try makeHostedNonce() != nonce)
+    }
+}
+
+@Suite struct HostedRecordingLimitTests {
+    @Test func deadlineIsEarlierOfServerAndLocalLimit() {
+        let requested: Date = Date(timeIntervalSince1970: 1_000_000)
+        // Sunucunun saati 2 dk geride: yerel hesap (90 dk) daha erken.
+        #expect(hostedRecordingDeadline(requestedAt: requested, maxDurationMinutes: 90, serverEndsAt: requested.addingTimeInterval(92 * 60))
+            == requested.addingTimeInterval(90 * 60))
+        // Sunucunun saati ileride: sunucunun bitişi daha erken.
+        #expect(hostedRecordingDeadline(requestedAt: requested, maxDurationMinutes: 90, serverEndsAt: requested.addingTimeInterval(89 * 60))
+            == requested.addingTimeInterval(89 * 60))
+    }
+
+    @Test func warnsFiveMinutesBeforeAndStopsAtLimit() {
+        let deadline: Date = Date(timeIntervalSince1970: 2_000_000)
+        func state(_ secondsBefore: Double) -> HostedRecordingLimitState {
+            hostedRecordingLimitState(now: deadline.addingTimeInterval(-secondsBefore), deadline: deadline, warningLeadSec: hostedLimitWarningLeadSec)
+        }
+        #expect(state(3600) == .running)
+        #expect(state(300.5) == .running)
+        #expect(state(300) == .warning)
+        #expect(state(1) == .warning)
+        #expect(state(0) == .reached)
+        #expect(state(-10) == .reached)
+    }
+}

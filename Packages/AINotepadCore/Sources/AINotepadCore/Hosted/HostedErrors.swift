@@ -1,0 +1,220 @@
+import Foundation
+
+/// Abonelik sunucusunun hata kodları; `server/src/errors.ts` ile birebir aynıdır.
+public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
+    case badRequest = "bad_request"
+    case invalidBody = "invalid_body"
+    case unauthorized
+    case invalidToken = "invalid_token"
+    case forbidden
+    case notFound = "not_found"
+    case methodNotAllowed = "method_not_allowed"
+    case lengthRequired = "length_required"
+    case payloadTooLarge = "payload_too_large"
+    case unsupportedMediaType = "unsupported_media_type"
+    case rateLimited = "rate_limited"
+    case turnstileFailed = "turnstile_failed"
+    case attestationRequired = "attestation_required"
+    case attestationInvalid = "attestation_invalid"
+    case assertionInvalid = "assertion_invalid"
+    case challengeInvalid = "challenge_invalid"
+    case subscriptionRequired = "subscription_required"
+    case subscriptionExists = "subscription_exists"
+    case trialExhausted = "trial_exhausted"
+    case trialIPLimit = "trial_ip_limit"
+    case monthlyCapReached = "monthly_cap_reached"
+    case dailyCapReached = "daily_cap_reached"
+    case transcriptionClosed = "transcription_closed"
+    case meetingNotActive = "meeting_not_active"
+    case meetingBudgetExhausted = "meeting_budget_exhausted"
+    case audioTooLong = "audio_too_long"
+    case upstreamRejected = "upstream_rejected"
+    case upstreamUnavailable = "upstream_unavailable"
+    case spendCeilingReached = "spend_ceiling_reached"
+    case webhookInvalid = "webhook_invalid"
+    case internalError = "internal_error"
+}
+
+/// Sunucunun döndürdüğü hata (`{"error": {"code", "message"}}`). Kod tanınmıyorsa ya da gövde bu biçimde değilse
+/// `code` nil'dir; `rawCode` sunucunun yazdığı kod (ya da `http_<durum>`).
+public struct HostedAPIError: Error, Sendable, Equatable {
+    public let code: HostedErrorCode?
+    public let rawCode: String
+    public let status: Int
+    /// Sunucunun açıklaması; yalnızca hata ayıklama içindir (arayüz kendi yerelleştirilmiş metnini gösterir).
+    public let serverMessage: String
+    /// İsteğin yolu (ör. `/v1/meetings/start`).
+    public let path: String
+
+    public init(code: HostedErrorCode?, rawCode: String, status: Int, serverMessage: String, path: String) {
+        self.code = code
+        self.rawCode = rawCode
+        self.status = status
+        self.serverMessage = serverMessage
+        self.path = path
+    }
+}
+
+/// İstemci tarafında oturum, adres ya da yanıt sorunu. Jetonlar hiçbir zaman hataya girmez.
+public enum HostedClientError: Error, Sendable, Equatable {
+    /// Kayıtlı oturum yok.
+    case notSignedIn
+    /// Sunucu yenileme jetonunu reddetti (süresi doldu, çıkış yapıldı ya da jeton yeniden kullanıldığı için tüm
+    /// oturumlar kapatıldı); yerel oturum silindi.
+    case sessionEnded
+    /// Yayın derlemesinde https olmayan sunucu adresi.
+    case insecureBaseURL(url: String)
+    /// Info.plist'teki adres eksik ya da geçersiz.
+    case invalidBaseURL(value: String)
+    /// Yapay zekâ çağrısı için açık toplantı oturumu yok.
+    case noActiveMeeting
+    /// Sunucuya ulaşılamadı.
+    case network(path: String, reason: String)
+    /// Yanıt beklenen biçimde değil; gövde hata ayıklama içindir (jeton içermez).
+    case malformedResponse(path: String, status: Int, body: String)
+    /// Giriş bağlantısı uygulamanın beklediği biçimde değil.
+    case invalidSignInLink
+}
+
+/// Sunucu hata gövdesinin biçimi.
+private struct RawHostedErrorBody: Decodable {
+    struct Detail: Decodable {
+        let code: String
+        let message: String
+    }
+
+    let error: Detail
+}
+
+/// Başarısız yanıttan hata üretir: gövde `{"error": {...}}` değilse kod `http_<durum>`, mesaj gövdenin ilk 500
+/// karakteri olur. Saf fonksiyondur.
+public func parseHostedAPIError(status: Int, data: Data, path: String) -> HostedAPIError {
+    let body: RawHostedErrorBody
+    do {
+        body = try JSONDecoder().decode(RawHostedErrorBody.self, from: data)
+    } catch {
+        // Sunucu dışından (ör. vekil, Cloudflare sayfası) gelen gövde: durum ve gövdenin başı hatada kalır.
+        return HostedAPIError(code: nil, rawCode: "http_\(status)", status: status, serverMessage: String(String(decoding: data, as: UTF8.self).prefix(500)), path: path)
+    }
+    return HostedAPIError(code: HostedErrorCode(rawValue: body.error.code), rawCode: body.error.code, status: status, serverMessage: body.error.message, path: path)
+}
+
+/// Aynı istek bir süre sonra başarılı olabilir mi: hız sınırı, üst servis kesintisi ve sunucu hatası. Günlük harcama
+/// tavanı (503), kotalar ve ret kodları kalıcıdır. Saf fonksiyondur.
+public func isRetryableHostedError(error: HostedAPIError) -> Bool {
+    switch error.code {
+    case .rateLimited, .upstreamUnavailable, .internalError:
+        return true
+    case .none:
+        return error.status == 408 || error.status >= 500
+    default:
+        return false
+    }
+}
+
+/// Sunucu hatasının kullanıcıya gösterilen, ne yapılacağını söyleyen metni. Saf fonksiyondur.
+public func hostedErrorMessage(error: HostedAPIError) -> String {
+    guard let code = error.code else {
+        return String(localized: "AI-Notepad sunucusu beklenmeyen bir yanıt verdi (HTTP \(error.status)). Biraz sonra yeniden dene.")
+    }
+    switch code {
+    case .trialExhausted:
+        return String(localized: "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.")
+    case .trialIPLimit:
+        return String(localized: "Bu ağdan bugün çok fazla yeni deneme başlatıldı. Yarın yeniden dene ya da abone ol.")
+    case .monthlyCapReached:
+        return String(localized: "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")
+    case .dailyCapReached:
+        return String(localized: "Bugünkü kullanım sınırına ulaştın; yarın yeniden dene.")
+    case .subscriptionRequired:
+        return String(localized: "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.")
+    case .subscriptionExists:
+        return String(localized: "Zaten bir aboneliğin var; \"Hesabı yönet\" ile düzenleyebilirsin.")
+    case .spendCeilingReached:
+        return String(localized: "Servis bugün çok yoğun; yeni toplantılar ve yapay zekâ istekleri geçici olarak durduruldu. Biraz sonra yeniden dene.")
+    case .meetingNotActive:
+        return String(localized: "Toplantı oturumu kapandı: yapay zekâ özellikleri toplantı sırasında ve bittikten kısa süre sonrasına kadar açıktır. Yeni bir toplantı başlat.")
+    case .transcriptionClosed:
+        return String(localized: "Bu toplantının ses işleme hakkı kapandı (gönderilen ses toplantının süresini aştı). Canlı metin kullanılır.")
+    case .meetingBudgetExhausted:
+        return String(localized: "Bu toplantının yapay zekâ kullanım hakkı doldu.")
+    case .audioTooLong:
+        return String(localized: "Ses, toplantının süresinden ya da bu ay kalan süreden uzun; gönderilemedi.")
+    case .unauthorized, .invalidToken:
+        return String(localized: "Oturumun sona erdi; Ayarlar › Hesap'tan yeniden giriş yap.")
+    case .rateLimited:
+        return String(localized: "Çok fazla istek gönderildi; biraz bekleyip yeniden dene.")
+    case .turnstileFailed:
+        return String(localized: "İnsan doğrulaması başarısız; giriş sayfasını yenileyip yeniden dene.")
+    case .attestationRequired:
+        return String(localized: "Bu sürüm cihaz doğrulaması istiyor; AI-Notepad'i güncelle.")
+    case .attestationInvalid, .assertionInvalid, .challengeInvalid:
+        return String(localized: "Bu Mac doğrulanamadı; uygulamayı yeniden açıp tekrar dene.")
+    case .upstreamRejected:
+        return String(localized: "Yapay zekâ ya da konuşma tanıma servisi isteği reddetti. Sorun sürerse bize yaz.")
+    case .upstreamUnavailable:
+        return String(localized: "Yapay zekâ ya da konuşma tanıma servisi şu an yanıt vermiyor; biraz sonra yeniden dene.")
+    case .payloadTooLarge:
+        return String(localized: "Gönderilen veri sunucunun sınırını aşıyor.")
+    case .forbidden:
+        return String(localized: "Bu işleme izin yok.")
+    case .internalError:
+        return String(localized: "AI-Notepad sunucusunda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
+    case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid:
+        return String(localized: "Sunucu isteği anlamadı (\(error.rawCode)); AI-Notepad'i güncelleyip yeniden dene.")
+    }
+}
+
+/// İstemci hatasının kullanıcıya gösterilen metni. Saf fonksiyondur.
+public func hostedClientMessage(error: HostedClientError) -> String {
+    switch error {
+    case .notSignedIn:
+        String(localized: "Giriş yapılmamış. Ayarlar › Hesap'tan Apple ile ya da e-postayla giriş yap.")
+    case .sessionEnded:
+        String(localized: "Oturumun kapandı (çıkış yapılmış ya da güvenlik nedeniyle tüm oturumlar kapatılmış). Yeniden giriş yap.")
+    case .insecureBaseURL(let url):
+        String(localized: "Sunucu adresi güvenli değil (https olmalı): \(url)")
+    case .invalidBaseURL(let value):
+        String(localized: "Sunucu adresi geçersiz: \(value)")
+    case .noActiveMeeting:
+        String(localized: "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.")
+    case .network:
+        String(localized: "AI-Notepad sunucusuna ulaşılamadı; internet bağlantını kontrol et.")
+    case .malformedResponse(_, let status, _):
+        String(localized: "AI-Notepad sunucusundan beklenmeyen yanıt geldi (HTTP \(status)). Uygulamayı güncelleyip yeniden dene.")
+    case .invalidSignInLink:
+        String(localized: "Giriş bağlantısı geçersiz. E-postadaki son bağlantıyı aç ya da yeni bağlantı iste.")
+    }
+}
+
+/// Canlı çeviri bu kayıtta durmalı mı: anahtar reddedildi (401/403) ya da abonelik sunucusu toplantının yapay zekâ
+/// hakkını kapattı (oturum yok, toplantı kapalı, bütçe ya da sınır doldu, harcama tavanı). Her cümle aynı hatayı
+/// almasın diye çeviri durur; cümleler "Tekrar dene"de kalır. Saf fonksiyondur.
+public func stopsLiveTranslation(error: any Error) -> Bool {
+    switch error {
+    case LLMError.http(let status, _, _, _):
+        return status == 401 || status == 403
+    case LLMError.hosted(let hosted):
+        return isClosedHostedAccess(error: hosted)
+    case let client as HostedClientError:
+        switch client {
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL:
+            return true
+        case .network, .malformedResponse, .invalidSignInLink:
+            return false
+        }
+    default:
+        return false
+    }
+}
+
+/// Sunucu bu kullanıcının yapay zekâ erişimini şimdilik kapattı mı (yeniden denemek aynı sonucu verir). Saf fonksiyondur.
+private func isClosedHostedAccess(error: HostedAPIError) -> Bool {
+    switch error.code {
+    case .unauthorized, .invalidToken, .forbidden, .subscriptionRequired, .trialExhausted, .monthlyCapReached, .dailyCapReached,
+         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached:
+        return true
+    default:
+        return false
+    }
+}

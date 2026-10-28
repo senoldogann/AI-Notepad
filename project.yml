@@ -19,7 +19,9 @@ targets:
     platform: macOS
     sources:
       # App/Licenses (WhisperKit/SpeakerKit MIT lisansı ve bildirimleri) ve App/Fonts/Inter-OFL.txt da kaynaklarla gelir.
-      - App
+      # App/Hosted yalnızca abonelik sürümünündür (AINotepadHosted).
+      - path: App
+        excludes: ["Hosted/**"]
       # Üçüncü taraf bildirimi uygulamanın içinde de (Resources/NOTICE).
       - path: NOTICE
         buildPhase: resources
@@ -36,6 +38,8 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Gömülü Inter (App/Fonts; Resources köküne kopyalanır).
         ATSApplicationFontsPath: "."
+        # Veri klasörü: ~/Library/Application Support/AINotepad (bkz. AppPaths.dataFolderName).
+        AINotepadDataFolderName: AINotepad
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
@@ -71,6 +75,76 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
         MARKETING_VERSION: "0.1.3"
         CURRENT_PROJECT_VERSION: "4"
+  # Abonelik sürümü: anahtarsız; yapay zekâ ve son geçiş bizim sunucumuz (server/) üzerinden, canlı metin WhisperKit.
+  # Geliştirici sürümüyle aynı kaynaklar + App/Hosted; farklar yalnızca `HOSTED_EDITION` bayrağıyla birkaç noktada.
+  # Ayrı paket kimliği, Anahtar Zinciri servisi ve adres şeması: iki uygulama aynı Mac'te yan yana durur.
+  AINotepadHosted:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - path: NOTICE
+        buildPhase: resources
+    dependencies:
+      - package: AINotepadCore
+        product: AINotepadCore
+      - package: AINotepadCore
+        product: AINotepadUI
+      # Güncelleyici bağlanır ama abonelik sürümünün akışı ve imza anahtarı henüz yok: Info.plist'te SUPublicEDKey
+      # olmadığı için kapalıdır (bkz. App/AppUpdater.swift). Geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı.
+      - package: Sparkle
+    info:
+      path: App/Hosted/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        ATSApplicationFontsPath: "."
+        # Kendi veri klasörü: geliştirici sürümünün ~/Library/Application Support/AINotepad'ine hiç dokunulmaz.
+        AINotepadDataFolderName: "AINotepad Hosted"
+        NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
+        NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
+        NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
+        NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
+        # E-posta giriş bağlantısı (sitedeki giriş sayfası) uygulamayı açar:
+        # com.senoldogan.ainotepad.hosted://auth/email?token=… (bkz. App/Hosted/HostedAccount.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.senoldogan.AINotepad.hosted.auth
+            CFBundleURLSchemes: [com.senoldogan.ainotepad.hosted]
+        # Sunucu ve site adresleri derleme ayarlarından (aşağıda `configs`).
+        HostedAPIBase: "$(HOSTED_API_BASE)"
+        HostedSiteBase: "$(HOSTED_SITE_BASE)"
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.senoldogan.AINotepad.hosted
+        PRODUCT_NAME: AINotepadHosted
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) HOSTED_EDITION"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+        # Geliştirici sürümünün yetkileri + Apple ile giriş; iCloud yok (eşitleme bu sürümde kapalı).
+        CODE_SIGN_ENTITLEMENTS: App/Hosted/AINotepadHosted.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
+        MARKETING_VERSION: "0.1.3"
+        CURRENT_PROJECT_VERSION: "4"
+      configs:
+        # Yerel sunucu: `cd server && npm run dev` (http yalnızca Debug'da kabul edilir).
+        Debug:
+          HOSTED_API_BASE: "http://localhost:8787"
+          HOSTED_SITE_BASE: "http://localhost:8788"
+        # Yer tutucu: Worker dağıtılınca gerçek adres (ör. https://ainotepad-server-production.<hesap>.workers.dev ya da
+        # alan adı) yazılır. `.invalid` adres uygulamada "sunucu adresi ayarlanmamış" hatası verir; Release https
+        # dışındaki adresi reddeder. Site adresi sunucunun SITE_ORIGIN'iyle aynı olmalı.
+        Release:
+          HOSTED_API_BASE: "https://api.example.invalid"
+          HOSTED_SITE_BASE: "https://ainotepad.pages.dev"
   AINotepadiOS:
     type: application
     platform: iOS
@@ -123,6 +197,8 @@ targets:
       properties:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Veri klasörü (uygulamanın kendi kabında): Application Support/AINotepad.
+        AINotepadDataFolderName: AINotepad
         # Kayıt ekran kilitliyken ve uygulama arka plandayken sürer.
         UIBackgroundModes: [audio]
         UIAppFonts: [InterVariable.ttf]

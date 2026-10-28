@@ -49,5 +49,7 @@ public func llmModelDisplayName(provider: LLMProvider, tier: LLMTier) -> String 
         openAIModel(config: config, tier: tier)
     case .onDevice:
         String(localized: "Apple Intelligence (cihaz içi)")
+    case .hosted:
+        "Claude Haiku 5.5"
     }
 }

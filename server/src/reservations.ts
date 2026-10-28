@@ -37,6 +37,50 @@ export interface TokenHeadroom {
   readonly daily: number;
 }
 
+/** Deneme kullanıcısının toplantısız çağrılarının bugünkü kalanı (kesinleşmiş + ayrılmış düşülür). */
+export async function trialAccountHeadroom(db: D1Database, config: Config, userId: string, now: Date): Promise<number> {
+  const row: { used: number } | null = await db
+    .prepare("SELECT trial_account_tokens_used + trial_account_tokens_reserved AS used FROM daily_usage WHERE user_id = ? AND day = ?")
+    .bind(userId, dayKey(now))
+    .first<{ used: number }>();
+  return config.trialAccountDailyTokens - (row?.used ?? 0);
+}
+
+/** Deneme kullanıcısının toplantısız günlük sınırı aşıldığında. */
+export function trialAccountCapError(): ApiError {
+  return new ApiError("daily_cap_reached", "Denemede toplantı dışı yapay zekâ kullanımının bugünkü sınırına ulaştın; yarın yeniden dene ya da abone ol.");
+}
+
+/** Deneme kullanıcısının toplantısız günlük sınırına ayırma adımı. */
+export function trialAccountTokenStep(db: D1Database, config: Config, userId: string, tokens: number, now: Date): ReservationStep {
+  const day: string = dayKey(now);
+  return {
+    reserve: [
+      db.prepare("INSERT OR IGNORE INTO daily_usage (user_id, day) VALUES (?, ?)").bind(userId, day),
+      db
+        .prepare(
+          `UPDATE daily_usage SET trial_account_tokens_reserved = trial_account_tokens_reserved + ?
+           WHERE user_id = ? AND day = ? AND trial_account_tokens_used + trial_account_tokens_reserved + ? <= ?`,
+        )
+        .bind(tokens, userId, day, tokens, config.trialAccountDailyTokens),
+    ],
+    release: db
+      .prepare("UPDATE daily_usage SET trial_account_tokens_reserved = MAX(0, trial_account_tokens_reserved - ?) WHERE user_id = ? AND day = ?")
+      .bind(tokens, userId, day),
+    error: trialAccountCapError(),
+  };
+}
+
+/** Deneme kullanıcısının toplantısız sınırında ayrılan tokenı gerçek kullanımla değiştiren ifade. */
+export function settleTrialAccountTokenStatement(db: D1Database, userId: string, reserved: number, actual: number, now: Date): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE daily_usage SET trial_account_tokens_reserved = MAX(0, trial_account_tokens_reserved - ?),
+         trial_account_tokens_used = trial_account_tokens_used + ? WHERE user_id = ? AND day = ?`,
+    )
+    .bind(reserved, actual, userId, dayKey(now));
+}
+
 /** Aylık ve günlük token kalanı. */
 export async function tokenHeadroom(db: D1Database, config: Config, userId: string, now: Date): Promise<TokenHeadroom> {
   const [monthly, daily]: [{ used: number } | null, { used: number } | null] = await Promise.all([
@@ -52,20 +96,24 @@ export async function tokenHeadroom(db: D1Database, config: Config, userId: stri
   return { monthly: config.monthlyTokenCap - (monthly?.used ?? 0), daily: config.dailyTokenCap - (daily?.used ?? 0) };
 }
 
-/** Token ayırma adımları: toplantı bütçesi, kullanıcının aylık ve günlük token sınırı. */
-export function tokenReservationSteps(db: D1Database, config: Config, meetingId: string, userId: string, tokens: number, now: Date): ReservationStep[] {
+/** Toplantı bütçesine token ayırma adımı (toplantıya bağlı çağrılar). */
+export function meetingTokenStep(db: D1Database, meetingId: string, tokens: number): ReservationStep {
+  return {
+    reserve: [
+      db
+        .prepare("UPDATE meeting_sessions SET tokens_used = tokens_used + ? WHERE id = ? AND tokens_used + ? <= token_budget")
+        .bind(tokens, meetingId, tokens),
+    ],
+    release: db.prepare("UPDATE meeting_sessions SET tokens_used = MAX(0, tokens_used - ?) WHERE id = ?").bind(tokens, meetingId),
+    error: new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu."),
+  };
+}
+
+/** Kullanıcının aylık ve günlük token sınırına ayırma adımları (her çağrıda). */
+export function userTokenSteps(db: D1Database, config: Config, userId: string, tokens: number, now: Date): ReservationStep[] {
   const month: string = monthKey(now);
   const day: string = dayKey(now);
   return [
-    {
-      reserve: [
-        db
-          .prepare("UPDATE meeting_sessions SET tokens_used = tokens_used + ? WHERE id = ? AND tokens_used + ? <= token_budget")
-          .bind(tokens, meetingId, tokens),
-      ],
-      release: db.prepare("UPDATE meeting_sessions SET tokens_used = MAX(0, tokens_used - ?) WHERE id = ?").bind(tokens, meetingId),
-      error: new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu."),
-    },
     {
       reserve: [
         db.prepare("INSERT OR IGNORE INTO monthly_usage (user_id, month) VALUES (?, ?)").bind(userId, month),
@@ -99,22 +147,24 @@ export function tokenReservationSteps(db: D1Database, config: Config, meetingId:
   ];
 }
 
+/** Toplantıda ayrılan tokenı gerçek kullanımla değiştiren ifade. */
+export function settleMeetingTokenStatement(db: D1Database, meetingId: string, reserved: number, actual: number): D1PreparedStatement {
+  return db.prepare("UPDATE meeting_sessions SET tokens_used = MAX(0, tokens_used - ? + ?) WHERE id = ?").bind(reserved, actual, meetingId);
+}
+
 /**
- * Ayrılan tokenı gerçek kullanımla değiştiren ifadeler (toplantı, aylık, günlük). Ayırma ile aynı `now` verilmelidir
- * (aynı ay/gün satırı).
+ * Kullanıcının aylık ve günlük sınırında ayrılan tokenı gerçek kullanımla değiştiren ifadeler. Ayırma ile aynı `now`
+ * verilmelidir (aynı ay/gün satırı).
  */
-export function settleTokenStatements(
+export function settleUserTokenStatements(
   db: D1Database,
-  meetingId: string,
   userId: string,
   reserved: number,
   inputTokens: number,
   outputTokens: number,
   now: Date,
 ): D1PreparedStatement[] {
-  const actual: number = inputTokens + outputTokens;
   return [
-    db.prepare("UPDATE meeting_sessions SET tokens_used = MAX(0, tokens_used - ? + ?) WHERE id = ?").bind(reserved, actual, meetingId),
     db
       .prepare(
         `UPDATE monthly_usage SET tokens_reserved = MAX(0, tokens_reserved - ?), input_tokens = input_tokens + ?,
@@ -123,7 +173,7 @@ export function settleTokenStatements(
       .bind(reserved, inputTokens, outputTokens, userId, monthKey(now)),
     db
       .prepare("UPDATE daily_usage SET tokens_reserved = MAX(0, tokens_reserved - ?), tokens_used = tokens_used + ? WHERE user_id = ? AND day = ?")
-      .bind(reserved, actual, userId, dayKey(now)),
+      .bind(reserved, inputTokens + outputTokens, userId, dayKey(now)),
   ];
 }
 

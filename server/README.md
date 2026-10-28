@@ -52,8 +52,11 @@ sonra `curl "http://localhost:8787/__scheduled?cron=17+3+*+*+*"`.
 
 1. `npx wrangler login`
 2. `npx wrangler d1 create ainotepad-production` → çıkan `database_id`'yi `wrangler.jsonc` → `env.production` içine yaz.
-3. `wrangler.jsonc` → `env.production.vars`: `SITE_ORIGIN`, `APPLE_CLIENT_IDS` (uygulama paket kimliği ve web Services
-   ID), `APP_ATTEST_APP_IDS` (`TEAMID.imzalama-kimliği`), `EMAIL_FROM`, `EMAIL_LINK_URL`, `STRIPE_PRICE_ID`.
+3. `wrangler.jsonc` → `env.production.vars`: `SITE_ORIGIN`, `APP_ATTEST_APP_IDS` (`TEAMID.com.senoldogan.AINotepad.hosted`),
+   `EMAIL_FROM`, `EMAIL_LINK_URL`, `STRIPE_PRICE_ID`. `APPLE_CLIENT_IDS` hazırdır:
+   `com.senoldogan.AINotepad.hosted` (abonelik uygulamasının paket kimliği) ve `com.senoldogan.AINotepad.web` (sitenin
+   Apple ile giriş Services ID'si). Apple Developer'da Services ID tam olarak `com.senoldogan.AINotepad.web` adıyla
+   oluşturulur (bkz. `web/README.md`); başka ad seçilirse bu liste ve sitenin `appleServiceId`'si birlikte değişir.
 4. Yukarıdaki gizli değerleri `wrangler secret put … --env production` ile gir.
 5. `npm run migrate:production`
 6. `npm run deploy`
@@ -77,7 +80,7 @@ sonra `curl "http://localhost:8787/__scheduled?cron=17+3+*+*+*"`.
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |
 | `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}}`; clientData = `{"action":"meetings.start","challenge":…}`; yeni hesabın ilk denemesi IP başına günde 3; kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır, reddedilen başlatma açık toplantıya dokunmaz ve sayılmaz |
 | `POST /v1/meetings/{id}/end` | Bearer | |
-| `POST /v1/llm/messages` | Bearer + `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE; toplantı bütçesi + kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı |
+| `POST /v1/llm/messages` | Bearer, isteğe bağlı `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE. `x-meeting-id` varsa (kayıt sırasındaki çeviri, "Ne kaçırdım?", soru) toplantı açık ya da ek sürede olmalı, toplantı bütçesinden düşer, çağrı başı `LLM_MAX_TOKENS`. Yoksa hesap çağrısıdır (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı): erişimi olan abonelik ya da kullanılmamış deneme gerekir (yoksa `402 subscription_required`), çağrı başı daha küçük `LLM_ACCOUNT_MAX_TOKENS`; aboneliği olmayan kullanıcıda bu çağrılar ayrıca günlük `TRIAL_ACCOUNT_DAILY_TOKENS` (300 K; türetme `wrangler.jsonc`'ta) ile sınırlıdır (`429 daily_cap_reached`). Her iki durumda kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı ve harcama tavanı |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham ses (`Content-Type: audio/…`, `Content-Length`); `?language_code=&diarize=&keyterms=`. Süre önceden ayrılır: WAV (PCM) başlıktan kesin, m4a/aac/mp3 en düşük 8 kbit/s, ogg/webm 6 kbit/s varsayımıyla; toplantının sesi en çok toplantının süresi kadar. FLAC kabul edilmez. Uzun toplantıda WAV parçalar halinde gönderilir |
 | `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
 | `POST /v1/billing/webhook` | Stripe imzası | kullanıcı başına tek geçerli abonelik: başka bir aboneliğin olayı onu yalnızca geçerli olan bitmişse ya da gelen `active`/`trialing` iken geçerli olan öyle değilse değiştirir |

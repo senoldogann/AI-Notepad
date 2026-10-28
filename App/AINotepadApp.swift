@@ -26,6 +26,15 @@ private func writeAcceptanceResult(line: String) {
 @main
 enum AppEntry {
     static func main() {
+        // Veri klasörü adı Info.plist'ten gelir; yoksa uygulama başka bir uygulamanın verisine yazmasın diye açılmaz.
+        do {
+            _ = try AppPaths.dataFolderName(bundle: .main)
+        } catch {
+            let message: String = userFacingMessage(error: error)
+            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+            FileHandle.standardError.write(Data("AI-Notepad: \(message)\n".utf8))
+            fatalError(message)
+        }
         #if DEBUG
         if CommandLine.arguments.contains("--icloud-yokla") {
             probeICloud()
@@ -102,7 +111,12 @@ struct AINotepadApp: App {
         if migrateSmartEffort(defaults: .standard) {
             appLogger.info("Not effort'u high'a taşındı (xhigh/max notu kesiyordu)")
         }
+        #if HOSTED_EDITION
+        // Abonelik sürümünde motor seçimi yok: canlı metin Mac'te (WhisperKit).
+        let engine: LiveEngine = hostedLiveEngine
+        #else
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
+        #endif
         let displayMode: DisplayMode = DisplayMode(rawValue: UserDefaults.standard.string(forKey: SettingsKey.displayMode) ?? "") ?? .bilingual
         // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
         let player: MeetingAudioPlayer = MeetingAudioPlayer()
@@ -241,12 +255,18 @@ struct AINotepadApp: App {
         }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir; ilk açılışta anahtar yoksa cihaz içi mod seçilir.
         Task {
+            #if HOSTED_EDITION
+            // Abonelik: hesap ve hak durumu açılışta okunur; kurulum eksikleri (giriş) güncellenir.
+            await HostedAccount.shared.refresh()
+            await model.refreshSetupProblems()
+            #else
             if await chooseOnDeviceOnFirstRun(defaults: .standard) {
                 appLogger.info("İlk açılış: anahtar yok, cihaz içi mod seçildi")
                 await model.selectEngine(engine: .appleSpeech)
                 model.settingsChanged()
                 return
             }
+            #endif
             switch engine {
             case .deepgram: break
             case .whisperKit: await model.loadModel()
@@ -266,6 +286,15 @@ struct AINotepadApp: App {
                     island.show()
                 }
             )
+            #if HOSTED_EDITION
+            // E-posta giriş bağlantısı (com.senoldogan.ainotepad.hosted://auth/email?token=…) uygulamayı açar.
+            .onOpenURL { (url: URL) in
+                Task {
+                    await HostedAccount.shared.handle(url: url)
+                    await model.refreshSetupProblems()
+                }
+            }
+            #endif
         }
         .defaultSize(width: 1180, height: 780)
         // Açılışta her zaman görünür: son oturumda pencere kapatılmışsa durum geri yükleme onu kapalı açıyordu

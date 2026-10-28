@@ -50,11 +50,14 @@ export interface NeutralRoute {
 
 /**
  * Sunucunun sabit yazdığı adresler (server/src/billing.ts ve `EMAIL_LINK_URL`): Stripe Checkout dönüşü `/hesap`,
- * Checkout iptali `/fiyat`, Müşteri Portalı dönüşü `/hesap`, giriş bağlantısı `/giris/eposta#token=…`. Bu sayfalar
+ * Checkout iptali `/fiyat`, Müşteri Portalı dönüşü `/hesap`, giriş bağlantısı `/giris/eposta#token=…`; Mac uygulaması
+ * giriş sayfasını `/giris?app=1` ile açar. Bu sayfalar
  * sorgu dizgisini ve `#` parçasını koruyarak okuyanın dilindeki sayfaya geçer.
  */
 export const neutralRoutes: readonly NeutralRoute[] = [
   { path: "/hesap", page: "account" },
   { path: "/fiyat", page: "pricing" },
   { path: "/giris/eposta", page: "emailLink" },
+  // Mac uygulamasının açtığı giriş sayfası (`/giris?app=1`).
+  { path: "/giris", page: "signIn" },
 ];

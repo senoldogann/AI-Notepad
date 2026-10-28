@@ -53,5 +53,14 @@ struct ModelTests {}
 
 /// Model testlerinin paylaştığı motor; ilk kullanımda bir kez yüklenir.
 let sharedTestEngine: Task<WhisperKitEngine, any Error> = Task {
-    try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: AppPaths.modelsDirectory())
+    try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: testModelsDirectory())
+}
+
+/// Model testlerinin modelleri: geliştirici sürümünün model klasörü (`~/Library/Application Support/AINotepad/Models`;
+/// test paketinin Info.plist'inde veri klasörü adı olmadığı için `AppPaths` kullanılmaz). Klasör yoksa oluşturulur.
+func testModelsDirectory() throws -> URL {
+    let base: URL = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    let models: URL = base.appending(path: "AINotepad", directoryHint: .isDirectory).appending(path: "Models", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: models, withIntermediateDirectories: true)
+    return models
 }

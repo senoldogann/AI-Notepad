@@ -16,7 +16,7 @@ import {
   signIn,
 } from "./helpers";
 
-const clientId: string = "com.senoldogan.AINotepadHosted";
+const clientId: string = "com.senoldogan.AINotepad.hosted";
 
 async function appleLogin(harness: Harness, overrides: { audience: string; issuer: string; nonceClaimFor: string; nonce: string; expiresInSeconds: number }): Promise<Response> {
   const identityToken: string = await appleIdentityToken({

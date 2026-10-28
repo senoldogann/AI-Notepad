@@ -8,7 +8,7 @@ const productionWithPlaceholders: Env = envWith({
   ENVIRONMENT: "production",
   SITE_ORIGIN: "https://ainotepad.pages.dev",
   APP_ATTEST_ENVIRONMENT: "production",
-  APP_ATTEST_APP_IDS: "TEAMID0000.com.senoldogan.AINotepadHosted",
+  APP_ATTEST_APP_IDS: "TEAMID0000.com.senoldogan.AINotepad.hosted",
   EMAIL_SENDER: "resend",
   EMAIL_FROM: "AI-Notepad <giris@example.com>",
   EMAIL_LINK_URL: "https://ainotepad.pages.dev/giris/eposta",
@@ -18,7 +18,7 @@ const productionWithPlaceholders: Env = envWith({
 /** Gerçek görünen değerlerle üretim ortamı. */
 const productionFilledIn: Env = envWith({
   ...productionWithPlaceholders,
-  APP_ATTEST_APP_IDS: "A1B2C3D4E5.com.senoldogan.AINotepadHosted",
+  APP_ATTEST_APP_IDS: "A1B2C3D4E5.com.senoldogan.AINotepad.hosted",
   EMAIL_FROM: "AI-Notepad <giris@ainotepad.app>",
   STRIPE_PRICE_ID: "price_1QabcDEFghiJKL",
 });

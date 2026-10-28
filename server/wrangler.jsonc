@@ -28,12 +28,19 @@
   "vars": {
     "ENVIRONMENT": "development",
     "SITE_ORIGIN": "http://localhost:8788",
-    "APPLE_CLIENT_IDS": "com.senoldogan.AINotepadHosted",
+    "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
     "APP_ATTEST_POLICY": "optional",
     "APP_ATTEST_ENVIRONMENT": "development",
-    "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
+    "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
     "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
     "TRIAL_MEETINGS": "3",
+    // Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev
+    // aracı) için günlük token sınırı. Türetme: 90 dakikalık toplantının notunu yeniden yazmak ~100 K token (aşağıdaki
+    // bütçe açıklaması), bir Sor cevabı ~10–30 K. 300 K ≈ günde 3 not yenileme ya da ~10–20 soru: denemeyi değerlendirmeye
+    // yeter. Maliyet üst sınırı (girdi ağırlıklı, 0,10 $/M girdi, 0,50 $/M çıktı): ≤ ~0,06 $/gün/hesap; yeni hesap
+    // açarak (IP başına günde 3) kötüye kullanım günlük harcama tavanıyla da sınırlı. Aboneler kullanıcı sınırlarını
+    // (DAILY_TOKEN_CAP, MONTHLY_TOKEN_CAP) kullanır.
+    "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
     "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
     "TRIAL_MAX_MEETING_MINUTES": "90",
     "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
@@ -61,6 +68,8 @@
     "DAILY_TOKEN_CAP": "3000000",
     "MAX_MEETING_STARTS_PER_DAY": "20",
     "LLM_MAX_TOKENS": "8192",
+    // Toplantıya bağlı olmayan çağrı (Sor, notu yeniden yazma, düzenleme, görev aracı): daha küçük çağrı başı sınır.
+    "LLM_ACCOUNT_MAX_TOKENS": "6144",
     "LLM_MAX_REQUEST_BYTES": "400000",
     "LLM_MAX_INPUT_TOKENS": "100000",
     "TRANSCRIBE_MAX_BYTES": "95000000",
@@ -94,12 +103,14 @@
       "vars": {
         "ENVIRONMENT": "production",
         "SITE_ORIGIN": "https://ainotepad.pages.dev",
-        "APPLE_CLIENT_IDS": "com.senoldogan.AINotepadHosted",
+        "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
         "APP_ATTEST_POLICY": "optional",
         "APP_ATTEST_ENVIRONMENT": "production",
-        "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepadHosted",
+        "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
         "TRIAL_MEETINGS": "3",
+        // Türetme: üstteki geliştirme `vars` açıklaması.
+        "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
         "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
         "TRIAL_MAX_MEETING_MINUTES": "90",
         "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
@@ -113,7 +124,9 @@
         "DAILY_TOKEN_CAP": "3000000",
         "MAX_MEETING_STARTS_PER_DAY": "20",
         "LLM_MAX_TOKENS": "8192",
-            "LLM_MAX_REQUEST_BYTES": "400000",
+        // Toplantıya bağlı olmayan çağrı (Sor, notu yeniden yazma, düzenleme, görev aracı): daha küçük çağrı başı sınır.
+        "LLM_ACCOUNT_MAX_TOKENS": "6144",
+        "LLM_MAX_REQUEST_BYTES": "400000",
         "LLM_MAX_INPUT_TOKENS": "100000",
         "TRANSCRIBE_MAX_BYTES": "95000000",
         "TRANSCRIBE_MAX_KEYTERMS": "100",

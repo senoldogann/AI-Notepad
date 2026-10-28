@@ -79,7 +79,7 @@ public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, window
         return nil
     }
     return LLMRequest(
-        tier: .smart,
+        tier: .live,
         system: """
         Toplantıyı takip etmekte zorlanan bir kullanıcıya yardım ediyorsun. Transkriptte "Sen" kullanıcıdır.
         Son dakikalarda konuşulanları \(language.promptName) dilinde, kısa ve net özetle: konu (1–2 cümle), alınan kararlar ve kullanıcıdan istenenler.
@@ -123,7 +123,7 @@ public func questionRequest(segments: [LiveSegment], question: String, language:
         return nil
     }
     return LLMRequest(
-        tier: .smart,
+        tier: .live,
         system: """
         Toplantıyı takip etmekte zorlanan bir kullanıcının sorusunu yalnızca transkripte dayanarak cevapla.
         "Sen" kullanıcıdır. \(language.promptName) dilinde, kısa cevap ver ve ilgili anların zaman damgalarını [mm:ss] biçiminde belirt.

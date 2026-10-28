@@ -5,8 +5,11 @@ import os
 public enum LLMTier: String, Sendable {
     /// Canlı cümle çevirisi: hızlı ve ucuz (Claude Haiku).
     case fast
-    /// "Ne kaçırdım?", soru-cevap ve toplantı notu (Claude Opus).
+    /// Toplantı notu, not düzenleme ve arşiv soruları (Claude Opus).
     case smart
+    /// Kayıt sırasında kullanıcının beklediği akıllı istekler: "Ne kaçırdım?" ve toplantı sorusu. Kendi anahtarlı
+    /// sağlayıcılar bunu `smart` gibi işler; abonelik sürümü daha düşük effort'la (hızlı yanıt) gönderir.
+    case live
 }
 
 /// Tek turlu LLM isteği; sağlayıcıdan bağımsız.
@@ -46,6 +49,8 @@ public enum LLMError: Error, Equatable {
     case invalidSchema(schema: String)
     /// Sağlayıcı ayarı eksik ya da geçersiz (ör. adres yok).
     case notConfigured(detail: String)
+    /// Abonelik sunucusu isteği reddetti (deneme bitti, aylık sınır, toplantı kapalı…).
+    case hosted(HostedAPIError)
 }
 
 /// Model düşünürken / akıl yürütürken çıktı sınırı en az bu kadar: düşünme de bu sınırdan harcar; `max` effort'ta kısa
@@ -118,6 +123,8 @@ public enum LLMProvider: Sendable, Equatable {
     case openAICompatible(OpenAICompatibleConfig)
     /// Apple Intelligence (cihaz içi): anahtarsız, ücretsiz, internetsiz; küçük bağlam penceresi.
     case onDevice(OnDeviceConfig)
+    /// Abonelik sürümünün sunucusu (Claude Haiku 5.5 vekili). Yalnızca abonelik hedefi seçer; ayarlarda görünmez.
+    case hosted(HostedLLMConfig)
 }
 
 /// HTTP yanıtının sonucu: başarı, yeniden denenebilir hata (408/429/5xx) ya da kesin hata.
@@ -167,6 +174,8 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
         call = try prepareOpenAICall(config: config, request: request)
     case .onDevice(let config):
         return try await sendOnDevice(config: config, request: request)
+    case .hosted(let config):
+        call = try await prepareHostedCall(config: config, request: request)
     }
     var lastError: any Error = LLMError.empty
     for attempt in 1...llmAttempts {

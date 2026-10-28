@@ -155,6 +155,12 @@ export interface SignInCopy {
   readonly linkWorking: string;
   readonly linkFailedTitle: string;
   readonly linkRetry: string;
+  /** Giriş sayfası uygulamadan açıldığında. */
+  readonly appNote: string;
+  /** E-posta bağlantısı uygulamaya iletilirken. */
+  readonly linkApp: string;
+  readonly linkAppHelp: string;
+  readonly linkAppOpen: string;
 }
 
 /** Hesap sayfası. */
@@ -433,6 +439,10 @@ const tr: Copy = {
     linkWorking: "Giriş yapılıyor…",
     linkFailedTitle: "Giriş yapılamadı",
     linkRetry: "Yeni bağlantı iste",
+    appNote: "AI-Notepad uygulaması için giriş: e-postadaki bağlantıyı bu tarayıcıda açınca uygulama açılır ve girişi tamamlar.",
+    linkApp: "Uygulamaya dönülüyor…",
+    linkAppHelp: "AI-Notepad açılmadıysa aşağıdaki düğmeye bas.",
+    linkAppOpen: "AI-Notepad'i aç",
   },
   account: {
     meta: { title: "Hesabım — AI-Notepad", description: "AI-Notepad hesabın: plan, deneme, aylık kullanım ve abonelik." },
@@ -697,6 +707,10 @@ const en: Copy = {
     linkWorking: "Signing you in…",
     linkFailedTitle: "Couldn't sign you in",
     linkRetry: "Request a new link",
+    appNote: "Signing in to the AI-Notepad app: open the link from your email in this browser and the app opens and finishes signing in.",
+    linkApp: "Returning to the app…",
+    linkAppHelp: "If AI-Notepad didn't open, press the button below.",
+    linkAppOpen: "Open AI-Notepad",
   },
   account: {
     meta: { title: "Account — AI-Notepad", description: "Your AI-Notepad account: plan, trial, monthly usage and subscription." },

@@ -17,8 +17,16 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: "Hoş geldin"
         case .permissions: "İzinler"
+        #if HOSTED_EDITION
+        case .profile: "Sen"
+        #else
         case .profile: "Sen ve motor"
+        #endif
+        #if HOSTED_EDITION
+        case .keys: "Hesap"
+        #else
         case .keys: "Anahtarlar"
+        #endif
         case .ready: "Hazırsın"
         }
     }
@@ -28,8 +36,16 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: "Uygulamanın yapabildikleri"
         case .permissions: "Mikrofon ve sistem sesi"
+        #if HOSTED_EDITION
+        case .profile: "Adın"
+        #else
         case .profile: "Adın ve canlı metin motoru"
+        #endif
+        #if HOSTED_EDITION
+        case .keys: "Apple ile ya da e-postayla giriş"
+        #else
         case .keys: "Bulut ve Claude anahtarları"
+        #endif
         case .ready: "Kısayollar ve ilk kayıt"
         }
     }
@@ -40,7 +56,11 @@ private enum OnboardingStep: Int, CaseIterable {
         case .welcome: "Toplantılarını dinler, notunu yazar"
         case .permissions: "İki ses, tek kayıt"
         case .profile: "Sana göre ayarlanır"
+        #if HOSTED_EDITION
+        case .keys: "3 toplantı ücretsiz"
+        #else
         case .keys: "Anahtarlar yalnız sende"
+        #endif
         case .ready: "Bir kısayol uzağında"
         }
     }
@@ -50,8 +70,16 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince \(selectedNoteLanguage().interfaceName) not hazır, en üstte senin görevlerin."
         case .permissions: "Mikrofon senin sesin, sistem sesi karşı taraf. İkisi ayrı kaydedilir, konuşmacılar ayrılır."
+        #if HOSTED_EDITION
+        case .profile: "Adın notta sana düşen görevleri ayırır; canlı metin bu Mac'te yazılır."
+        #else
         case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
+        #endif
+        #if HOSTED_EDITION
+        case .keys: "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma AI-Notepad sunucusundan. İlk 3 toplantı ücretsiz."
+        #else
         case .keys: "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider."
+        #endif
         case .ready: "Kaydı kısayolla başlat; toplantı bitince notun ve görevlerin hazır."
         }
     }
@@ -101,7 +129,11 @@ struct SetupPage: View {
                             case .welcome: WelcomeStep()
                             case .permissions: PermissionsStep(model: model)
                             case .profile: ProfileStep(model: model)
+                            #if HOSTED_EDITION
+                            case .keys: HostedSignInStep(account: .shared)
+                            #else
                             case .keys: KeysStep(model: model)
+                            #endif
                             case .ready: ReadyStep(shortcuts: shortcuts)
                             }
                         }
@@ -439,6 +471,7 @@ private struct ProfileStep: View {
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
             }
+            #if !HOSTED_EDITION
             VStack(alignment: .leading, spacing: 8) {
                 Text("Nasıl başlamak istersin?").appFont(size: 13, weight: .semibold)
                 HStack(alignment: .top, spacing: 12) {
@@ -503,6 +536,7 @@ private struct ProfileStep: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            #endif
         }
     }
 

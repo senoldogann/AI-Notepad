@@ -20,11 +20,18 @@ private func launchSettingsSection(arguments: [String]) -> SettingsSection {
     case "anahtarlar": return .keys
     case "baglantilar": return .connections
     case "kisayollar": return .shortcuts
+    #if HOSTED_EDITION
+    case "hesap": return .account
+    #endif
     default: return .general
     }
 }
 
 private enum SettingsSection: CaseIterable {
+    #if HOSTED_EDITION
+    /// Abonelik hesabı: giriş, deneme ya da abonelik, kullanım (bkz. App/Hosted).
+    case account
+    #endif
     case general
     case appearance
     case llm
@@ -32,8 +39,20 @@ private enum SettingsSection: CaseIterable {
     case connections
     case shortcuts
 
+    /// Sekme çubuğundaki sekmeler: abonelik sürümünde LLM ve Anahtarlar yok (model ve anahtar sunucudadır).
+    static var visible: [SettingsSection] {
+        #if HOSTED_EDITION
+        allCases.filter { (section: SettingsSection) -> Bool in section != .llm && section != .keys }
+        #else
+        allCases
+        #endif
+    }
+
     var title: LocalizedStringKey {
         switch self {
+        #if HOSTED_EDITION
+        case .account: "Hesap"
+        #endif
         case .general: "Genel"
         case .appearance: "Görünüm"
         case .llm: "LLM"
@@ -69,6 +88,12 @@ struct SettingsPage: View {
                     .padding(.top, 20)
                 Group {
                     switch section {
+                    #if HOSTED_EDITION
+                    case .account:
+                        HostedAccountSettings(account: .shared)
+                            // Giriş ya da çıkışta kurulum eksikleri (menüdeki "giriş yapılmamış") yenilenir.
+                            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
+                    #endif
                     case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
                     case .llm: LLMSettings(model: model)
@@ -99,7 +124,7 @@ private struct SettingsTabs: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                ForEach(SettingsSection.allCases, id: \.self) { (item: SettingsSection) in
+                ForEach(SettingsSection.visible, id: \.self) { (item: SettingsSection) in
                     let isSelected: Bool = item == selection
                     Button {
                         selection = item
@@ -208,6 +233,7 @@ private struct GeneralSettings: View {
             .onChange(of: noteLanguage) { (_: String, _: String) in
                 model.settingsChanged()
             }
+            #if !HOSTED_EDITION
             SettingsRow(title: Text("Canlı metin")) {
                 switch model.liveEngine {
                 case .deepgram: Text("Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.")
@@ -227,6 +253,7 @@ private struct GeneralSettings: View {
                 ])
                 .disabled(model.isRecording || model.isStarting)
             }
+            #endif
             SettingsRow(title: Text("Ana toplantı dili")) {
                 Text("Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.")
             } control: {
@@ -415,7 +442,10 @@ private struct GeneralSettings: View {
             .onChange(of: retentionDays) { (_: Int, _: Int) in
                 model.applyRetention()
             }
+            #if !HOSTED_EDITION
+            // Abonelik sürümünde iCloud yetkisi yok (eşitleme geliştirici sürümünün kapsayıcısıyla karışmasın).
             CloudSyncRow(model: model)
+            #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
         }
