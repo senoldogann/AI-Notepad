@@ -466,6 +466,15 @@ public func sendTasksToTracker(tracker: TaskTracker, persist: @Sendable (MCPConn
                     service: service, created: created.sorted(), uncertainTask: createIndex, taskTitle: tasks[createIndex].description,
                     total: tasks.count, reason: reason
                 )
+            } catch let error as CancellationError {
+                // İş açma isteği gönderildikten sonra iptal edildi: sunucuya ulaşmış olabilir, sonuç belirsizdir.
+                guard let createIndex else {
+                    throw error
+                }
+                throw TaskTrackerError.uncertain(
+                    service: service, created: created.sorted(), uncertainTask: createIndex, taskTitle: tasks[createIndex].description,
+                    total: tasks.count, reason: String(localized: "İstek iptal edildi")
+                )
             }
         }
     } catch let error as TaskTrackerError {

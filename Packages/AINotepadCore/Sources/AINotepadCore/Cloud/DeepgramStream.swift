@@ -12,6 +12,10 @@ public enum StreamingEvent: Sendable, Equatable {
     case incomplete(untranscribedSec: Double)
 }
 
+/// Kapanışta yazıya dökülemeyen son sesin bu süreyi aşması "Sen" kaydının toplantı sonunda yeniden yazıya dökülmesini
+/// gerektirir; daha kısası (çoğunlukla durdurma anındaki sessizlik) için tüm kayıt yeniden işlenmez.
+public let incompleteTailFinalPassSec: Double = 1.5
+
 /// Kapanışta yazıya dökülmeden kalan sesin süresi; kapanış temiz bittiyse (son sonuçlar alındı) ya da ses kalmadıysa nil.
 /// Saf fonksiyondur.
 public func untranscribedTailSec(remainingSamples: Int, closedCleanly: Bool, sampleRate: Int) -> Double? {
@@ -133,6 +137,8 @@ private actor DeepgramConnection {
     private var isClosing: Bool = false
     /// Kapanış süresi doldu: yeniden bağlanma denemeleri bırakılır.
     private var closeDeadlinePassed: Bool = false
+    /// Kapanışta alma bağlantı hatasıyla bitti: Deepgram son sonuçları vermemiş olabilir.
+    private var receiveFailedWhileClosing: Bool = false
     private var hasFailed: Bool = false
 
     /// Adlar ve terimler; dil değişince yeni adrese de eklenir.
@@ -356,8 +362,13 @@ private actor DeepgramConnection {
             do {
                 message = try await task.receive()
             } catch {
-                // Kapanışta ya da yeniden bağlanmada eski bağlantının hatası yok sayılır.
+                // Kapanışta ya da yeniden bağlanmada eski bağlantının hatası yok sayılır; kapanıştaki hata ise
+                // temiz kapanış sayılmasın diye işaretlenir.
                 guard !isClosing, task === socket else {
+                    if isClosing, task === socket {
+                        receiveFailedWhileClosing = true
+                        deepgramLogger.warning("Kapanışta bağlantı hatası: \(String(describing: error), privacy: .private)")
+                    }
                     return
                 }
                 await handleDisconnect(error: error)
@@ -441,8 +452,8 @@ private actor DeepgramConnection {
                 let unprocessedSec: Double = Double(unacknowledged.count) / Double(deepgramSampleRate)
                 deadline = closeDeadline(seconds: closeDeadlineSec + unprocessedSec * 0.5)
                 await receiver?.value
-                // Süre dolmadan bağlantı kapandıysa Deepgram son sonuçları vermiştir.
-                closedCleanly = !closeDeadlinePassed
+                // Süre dolmadan, hatasız ve gönderilmemiş ses kalmadan kapandıysa Deepgram son sonuçları vermiştir.
+                closedCleanly = !closeDeadlinePassed && !receiveFailedWhileClosing && pending.isEmpty
             } catch {
                 deepgramLogger.error("CloseStream gönderilemedi: \(String(describing: error), privacy: .private)")
             }

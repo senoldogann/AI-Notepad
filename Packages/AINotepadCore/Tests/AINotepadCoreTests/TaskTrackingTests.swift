@@ -77,12 +77,37 @@ import Testing
             .markingTaskSent(trackerID: "linear", task: oldTask)
             .with(notesSentAt: early)
         let result: MeetingRecord = record(tasks: [newTask]).with(notesSentAt: Date(timeIntervalSince1970: 2_000))
-        let saved: MeetingRecord = withJobMarks(old: mergingUserMarks(current: start, others: [onDisk]), result: result)
+        let saved: MeetingRecord = withJobMarks(old: onDisk, result: result)
         #expect(saved.note?.tasks == [newTask])
         #expect(saved.completedTasks == [taskKey(task: newTask)])
         #expect(saved.sentTaskKeys == ["linear": [taskKey(task: newTask)]])
         #expect(saved.sentDestinationIDs == ["slack"])
         #expect(saved.notesSentAt == early)
+    }
+
+    // İş sürerken diğer cihazda kaldırılan işaret işin sonucunda geri gelmez: diskteki kayıt esastır.
+    @Test func jobResultKeepsMarkRemovedDuringJob() {
+        let task: NoteTask = NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let start: MeetingRecord = togglingTask(record: record(tasks: [task]), task: task)
+        let onDisk: MeetingRecord = togglingTask(record: start, task: task)
+        let saved: MeetingRecord = withJobMarks(old: onDisk, result: record(tasks: [task]))
+        #expect(saved.completedTasks ?? [] == [])
+    }
+
+    // iCloud çakışması: iPhone eski notun görevini işaretleyip gönderirken Mac notu yeniden yazdı. İşaretler yeni notun
+    // benzer görevine taşınır, notun gönderim işaretleri kalır.
+    @Test func conflictCarriesMarksOntoRewrittenNote() {
+        let oldTask: NoteTask = NoteTask(owner: "Sen", description: "Sunum slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let newTask: NoteTask = NoteTask(owner: "Senol", description: "Sunumun slaytlarını hazırlamak", dueDate: nil, isMine: true)
+        let phone: MeetingRecord = togglingTask(record: record(tasks: [oldTask]), task: oldTask)
+            .markingTaskSent(trackerID: "linear", task: oldTask)
+            .markingSent(destinationID: "slack")
+        let mac: MeetingRecord = record(tasks: [newTask])
+        let merged: MeetingRecord = mergingConflictVersions(current: mac, others: [phone])
+        #expect(merged.note?.tasks == [newTask])
+        #expect(merged.completedTasks == [taskKey(task: newTask)])
+        #expect(merged.sentTaskKeys == ["linear": [taskKey(task: newTask)]])
+        #expect(merged.sentDestinationIDs == ["slack"])
     }
 
     // Serbest metin tarihleri: ISO, gün.ay.yıl, yılsız (toplantıdan önceyse gelecek yıl); göreli ve geçersizler nil.

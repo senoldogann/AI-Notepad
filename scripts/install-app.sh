@@ -12,33 +12,7 @@ if pgrep -lf "AINotepad\.app/Contents/MacOS/AINotepad" | grep -v -e "--mcp" >/de
     echo "AI-Notepad açık: önce menüden çık (kayıt sürüyorsa bitmesini bekle), sonra yeniden çalıştır." >&2
     exit 1
 fi
-
-# En son toplantı kayıtta ya da işlemedeyse kurulmaz (yerel ve iCloud klasörleri; yalnızca okunur, uygulama kapatılmaz).
-# Uygulama kapalıyken bu durum, yarıda kalmış bir toplantı demektir: uygulamayı açınca "yarıda kaldı" olarak kapanır.
-latest="$(python3 -I - "$HOME/Library/Application Support/AINotepad/Sessions" \
-    "$HOME/Library/Mobile Documents/iCloud~com~senoldogan~AINotepad/Documents/Sessions" <<'PY'
-import json
-import pathlib
-import sys
-
-meetings = []
-for root in sys.argv[1:]:
-    folder = pathlib.Path(root)
-    if not folder.is_dir():
-        continue
-    for path in folder.glob("*/meeting.json"):
-        record = json.loads(path.read_text(encoding="utf-8"))
-        meetings.append((record["startedAt"], record["status"], str(path)))
-if meetings:
-    started, status, path = max(meetings)
-    print(f"{status}\t{path}")
-PY
-)"
-latest_status="${latest%%$'\t'*}"
-if [[ "$latest_status" == "recording" || "$latest_status" == "processing" ]]; then
-    echo "En son toplantının durumu '$latest_status' (${latest#*$'\t'}): bitmesini bekle, sonra yeniden çalıştır." >&2
-    exit 1
-fi
+# Uygulama kapalıysa kayıt sürüyor olamaz: yarıda kalmış toplantı uygulama açılınca "yarıda kaldı" olarak kapanır.
 
 xcodegen generate
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Release \
