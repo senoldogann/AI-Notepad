@@ -7,6 +7,18 @@ public enum StreamingEvent: Sendable, Equatable {
     case final(text: String, startSec: Double, endSec: Double)
     /// Akış kalıcı olarak durdu; bundan sonra olay gelmez.
     case failed(message: String)
+    /// Kapanış süresi doldu ve sesin sonu yazıya dökülemedi (gönderilmemiş ya da kesin sonucu gelmemiş ses kaldı);
+    /// son olaydır. Ses dosyada durduğu için toplantı sonunda kayıttan yazıya dökülmelidir.
+    case incomplete(untranscribedSec: Double)
+}
+
+/// Kapanışta yazıya dökülmeden kalan sesin süresi; kapanış temiz bittiyse (son sonuçlar alındı) ya da ses kalmadıysa nil.
+/// Saf fonksiyondur.
+public func untranscribedTailSec(remainingSamples: Int, closedCleanly: Bool, sampleRate: Int) -> Double? {
+    guard !closedCleanly, remainingSamples > 0 else {
+        return nil
+    }
+    return Double(remainingSamples) / Double(sampleRate)
 }
 
 /// Deepgram'ın bağlantı başına sıfırdan başlayan zamanını akışın mutlak zamanına çevirir.
@@ -408,13 +420,17 @@ private actor DeepgramConnection {
                 break
             }
         }
+        var closedCleanly: Bool = false
         if let socket, isConnected, !hasFailed, !closeDeadlinePassed {
             while !pending.isEmpty {
                 let chunk: [Float] = Array(pending.prefix(maxSendSamples))
                 pending.removeFirst(chunk.count)
                 do {
                     try await socket.send(.data(linear16Data(samples: chunk)))
+                    // Kesin sonucu gelene dek yazıya dökülmemiş sayılır (kapanış süresi dolarsa eksik bildirilir).
+                    unacknowledged += chunk
                 } catch {
+                    pending = chunk + pending
                     deepgramLogger.error("Kapanışta ses gönderilemedi: \(String(describing: error), privacy: .private)")
                     break
                 }
@@ -425,6 +441,8 @@ private actor DeepgramConnection {
                 let unprocessedSec: Double = Double(unacknowledged.count) / Double(deepgramSampleRate)
                 deadline = closeDeadline(seconds: closeDeadlineSec + unprocessedSec * 0.5)
                 await receiver?.value
+                // Süre dolmadan bağlantı kapandıysa Deepgram son sonuçları vermiştir.
+                closedCleanly = !closeDeadlinePassed
             } catch {
                 deepgramLogger.error("CloseStream gönderilemedi: \(String(describing: error), privacy: .private)")
             }
@@ -434,6 +452,12 @@ private actor DeepgramConnection {
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
         session.finishTasksAndInvalidate()
+        // Kalıcı hata zaten bildirildi; değilse yazıya dökülmeden kalan son ses bildirilir ki son geçiş onu kapsasın.
+        let remaining: Int = unacknowledged.count + inFlight.count + pending.count
+        if !hasFailed, let tailSec = untranscribedTailSec(remainingSamples: remaining, closedCleanly: closedCleanly, sampleRate: deepgramSampleRate) {
+            deepgramLogger.warning("Kapanışta sesin sonu yazıya dökülemedi, süre: \(tailSec, privacy: .public)")
+            events.yield(.incomplete(untranscribedSec: tailSec))
+        }
         events.finish()
     }
 

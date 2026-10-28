@@ -59,7 +59,7 @@ func finalOthersText(events: [LiveSessionEvent]) -> String {
 func failures(events: [LiveSessionEvent]) -> [LiveSessionEvent] {
     events.filter { (event: LiveSessionEvent) -> Bool in
         switch event {
-        case .streamFailed, .diarizationFailed, .recordingFailed: true
+        case .streamFailed, .streamIncomplete, .diarizationFailed, .recordingFailed: true
         default: false
         }
     }

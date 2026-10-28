@@ -56,7 +56,7 @@ public final class MicrophoneCapture {
             queue: .main
         ) { [weak self] (_: Notification) -> Void in
             Task { @MainActor in
-                await self?.restartAfterConfigurationChange()
+                await self?.handleConfigurationChange()
             }
         }
         #if os(iOS)
@@ -186,6 +186,16 @@ public final class MicrophoneCapture {
     private func stopEngine() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+    }
+
+    /// Cihaz değişti: kesinti sürerken (telefon çağrısı) yeniden kurulmaz, denemeler tükenip akış bitmesin; kesinti
+    /// bitince `resumeAfterInterruption` motoru yeniden kurar.
+    private func handleConfigurationChange() async {
+        guard !isInterrupted else {
+            Self.logger.info("Kesinti sürerken cihaz değişti; yeniden kurma kesinti bitince yapılacak")
+            return
+        }
+        await restartAfterConfigurationChange()
     }
 
     /// Cihaz değişince motoru yeni formatla yeniden kurar; yeni cihaz henüz hazır olmayabileceği

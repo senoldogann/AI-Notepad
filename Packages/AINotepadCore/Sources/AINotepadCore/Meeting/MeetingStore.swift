@@ -79,7 +79,6 @@ public func loadMeeting(directory: URL) throws -> MeetingRecord {
     }
 }
 
-/// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
 /// Toplantının klasörünü (meeting.json ve ses dosyaları) Çöp Sepeti'ne taşır: yanlışlıkla silinen toplantı Finder'dan
 /// geri alınabilir. Taşınamazsa `deleteFailed`.
 public func trashMeetingDirectory(directory: URL) throws {
@@ -90,10 +89,15 @@ public func trashMeetingDirectory(directory: URL) throws {
     }
 }
 
+/// Bir toplantının ses dosyalarını (`.m4a`, `.caf`) siler; biri silinemezse hata fırlatır. Metin ve not kalır.
+/// iCloud'dan inmemiş dosya (yalnızca ".ad.icloud" yer tutucusu var) da koordineli silinir: yoksa kayıt "ses silindi"
+/// diye saklanırken ses iCloud'da kalırdı.
 public func deleteAudioFiles(directory: URL) throws {
     for name in ["me.m4a", "others.m4a", "me.caf", "others.caf"] {
         let file: URL = directory.appending(path: name)
-        guard FileManager.default.fileExists(atPath: file.path) else {
+        let exists: Bool = FileManager.default.fileExists(atPath: file.path)
+            || FileManager.default.fileExists(atPath: cloudPlaceholder(file: file).path)
+        guard exists else {
             continue
         }
         try coordinatedRemoveItem(at: file)
@@ -242,12 +246,16 @@ public func isDownloaded(file: URL) throws -> Bool {
     return false
 }
 
-/// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Saf fonksiyondur.
+/// Açılışta hâlâ kayıtta ya da işlemede görünen (uygulama yarıda kapanmış) toplantılar `interrupted` olur. Kayıt
+/// sırasında kapananın "Sen" canlı metni son kontrol noktasında kalmıştır: "Sen" bölümü varsa (mikrofon açıktı)
+/// "Tekrar işle"de "Sen" kaydı da yazıya dökülür. Saf fonksiyondur.
 public func staleStatusesToInterrupt(records: [MeetingRecord]) -> [MeetingRecord] {
     records
         .filter { (record: MeetingRecord) -> Bool in record.status == .recording || record.status == .processing }
         .map { (record: MeetingRecord) -> MeetingRecord in
-            let interrupted: MeetingRecord = record.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
+            let hadMicrophone: Bool = record.liveSegments.contains { $0.speaker == .me }
+            let marked: MeetingRecord = record.status == .recording && hadMicrophone ? record.with(meNeedsFinalPass: true) : record
+            let interrupted: MeetingRecord = marked.with(status: .interrupted, failureMessage: String(localized: "Uygulama kayıt ya da işleme sırasında kapandı."))
             // Yarıda kalan kaydın bitişi bilinmez: son konuşmanın sonu kabul edilir (süre "–" görünmesin).
             guard record.endedAt == nil, let lastSec = (record.liveSegments + record.finalSegments).map(\.endSec).max() else {
                 return interrupted

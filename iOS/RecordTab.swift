@@ -2,7 +2,7 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Kayıt sekmesi: boştayken tarih, büyük başlık, canlı film gradyanlı kayıt kartı, görevler ve son toplantılar; kayıtta
+/// Kayıt sekmesi: boştayken tarih, büyük başlık, durağan pastel film gradyanlı kayıt kartı, görevler ve son toplantılar; kayıtta
 /// süre, ses dalgası, konuşmacılı canlı metin ve Türkçesi, "İşaretle" ve "Bitir"; bitince hazırlanma adımları.
 struct RecordTab: View {
     let recorder: PhoneRecorder
@@ -57,7 +57,10 @@ private struct RecordHome: View {
                 if !openTasks.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         PhoneSectionHeader(title: "Sana düşen görevler", actionTitle: "Tümü") { router.tab = .tasks }
-                        ForEach(openTasks.prefix(3), id: \.task.trackingKey) { (item: (record: MeetingRecord, task: NoteTask)) in
+                        // Görev anahtarı toplantılar arasında yinelenebilir: kimlik toplantıyla birlikte.
+                        ForEach(openTasks.prefix(3).map { (item: (record: MeetingRecord, task: NoteTask)) -> (key: String, record: MeetingRecord, task: NoteTask) in
+                            (key: "\(item.record.id)|\(item.task.trackingKey)", record: item.record, task: item.task)
+                        }, id: \.key) { (item: (key: String, record: MeetingRecord, task: NoteTask)) in
                             PhoneTaskRow(record: item.record, task: item.task, showsMeeting: true) {
                                 withAnimation(.smooth(duration: 0.25)) { store.toggleTask(meetingID: item.record.id, task: item.task) }
                             }
@@ -108,10 +111,10 @@ func longDayTitle(date: Date, locale: Locale) -> String {
     return formatter.string(from: date)
 }
 
-/// Kayıt kartı: yavaşça akan film gradyanı üstünde dil seçimi, büyük cam kayıt düğmesi (nefes alan halka) ve kısa açıklama.
+/// Kayıt kartı: durağan açık pastel film gradyanı üstünde dil seçimi, büyük kayıt düğmesi (sabit hale) ve kısa açıklama.
+/// Gradyan açık tonlu olduğundan yazılar koyu mürekkeptir (Mac'teki kayıt kartı gibi).
 private struct RecordHeroCard: View {
     let recorder: PhoneRecorder
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
         VStack(spacing: 18) {
@@ -125,20 +128,19 @@ private struct RecordHeroCard: View {
                         Image(systemName: "chevron.down").appFont(size: 10, weight: .bold)
                     }
                     .appFont(size: 13, weight: .semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.black.opacity(0.8))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(.white.opacity(0.18), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.28)))
+                    .background(Color.white.opacity(0.9), in: Capsule())
                 }
                 Spacer()
-                GlassChip(text: String(localized: "Yüz yüze"), systemImage: "person.2.fill")
+                PastelChip(text: String(localized: "Yüz yüze"), systemImage: "person.2.fill")
             }
             Button {
                 Task { await recorder.start() }
             } label: {
                 ZStack {
-                    BreathingRing(isActive: !reduceMotion && recorder.phase == .idle)
+                    RecordButtonHalo()
                     Circle()
                         .fill(.white)
                         .frame(width: 104, height: 104)
@@ -161,13 +163,12 @@ private struct RecordHeroCard: View {
                 Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
                     .appFont(size: 20, weight: .semibold)
                     .tracking(-0.3)
+                    .foregroundStyle(Color.black.opacity(0.8))
                 Text("Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
                     .appFont(size: 13, weight: .regular)
-                    .opacity(0.85)
+                    .foregroundStyle(Color.black.opacity(0.6))
                     .multilineTextAlignment(.center)
             }
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.15), radius: 6, y: 1)
         }
         .padding(20)
         .padding(.bottom, 6)
@@ -175,25 +176,22 @@ private struct RecordHeroCard: View {
         .background { FilmGradient(seed: "kayit", palette: .sunset) }
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.10)))
-        .environment(\.colorScheme, .dark)
+        // Açık gradyan her temada açık görünümle çizilir (koyu temada menü ve gösterge de koyu mürekkeple kalsın).
+        .environment(\.colorScheme, .light)
     }
 }
 
-/// Kayıt düğmesinin çevresinde yavaşça nefes alan beyaz halka.
-private struct BreathingRing: View {
-    let isActive: Bool
-
+/// Kayıt düğmesinin çevresindeki durağan beyaz hale. Hareketsizdir: boştayken saniyede 30 kez yeniden çizim pil
+/// tüketiyordu.
+private struct RecordButtonHalo: View {
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isActive)) { (context: TimelineViewDefaultContext) in
-            let phase: Double = isActive ? (sin(context.date.timeIntervalSinceReferenceDate * 1.6) + 1) / 2 : 0.5
-            ZStack {
-                Circle()
-                    .fill(.white.opacity(0.10 + phase * 0.08))
-                    .frame(width: 128 + phase * 18, height: 128 + phase * 18)
-                Circle()
-                    .strokeBorder(.white.opacity(0.35 - phase * 0.2), lineWidth: 1)
-                    .frame(width: 140 + phase * 10, height: 140 + phase * 10)
-            }
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.14))
+                .frame(width: 137, height: 137)
+            Circle()
+                .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                .frame(width: 145, height: 145)
         }
         .accessibilityHidden(true)
     }

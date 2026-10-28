@@ -399,6 +399,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         copy.notice = newNotice
         return copy
     }
+
+    /// "Sen" son geçiş işareti değişmiş kopya.
+    public func with(meNeedsFinalPass newValue: Bool?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.meNeedsFinalPass = newValue
+        return copy
+    }
 }
 
 /// Canlı bölümün saklama anahtarı: "me-0", "others-3".

@@ -2,7 +2,8 @@ import AINotepadCore
 import Foundation
 import os
 
-/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır (eşitleme aşamasında ortaklaşır).
+/// iPhone ayar anahtarları; adlar Mac'tekilerle aynıdır. Ayarlar cihazda kalır (iCloud yalnızca toplantıları ve
+/// paylaşılan anahtarları eşitler).
 enum PhoneSettingsKey {
     static let primaryMeetingLanguage: String = "language.primary"
     static let userName: String = "userName"

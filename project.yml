@@ -59,6 +59,7 @@ targets:
     type: application
     platform: iOS
     sources:
+      # iPhone'un izin metinleri (InfoPlist.xcstrings, tr/en) ve gizlilik bildirimi (PrivacyInfo.xcprivacy) bu klasörde.
       - iOS
       # Ortak metin kataloğu ve gömülü Inter yazı tipi Mac uygulamasıyla paylaşılır.
       - path: App/Localizable.xcstrings

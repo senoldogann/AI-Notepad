@@ -341,18 +341,19 @@ struct AskTab: View {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "sparkle.magnifyingglass")
                     .appFont(size: 20, weight: .medium)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Color.black.opacity(0.7))
+                // Açık pastel gradyan: yazılar koyu mürekkep (Mac'teki Sor sayfası gibi).
                 Text("Toplantılarına sor")
                     .appFont(size: 28, weight: .regular)
                     .tracking(-0.5)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.black.opacity(0.8))
                 Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                     .appFont(size: 14, weight: .regular)
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Color.black.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
-                    GlassChip(text: String(localized: "\(store.meetings.count) toplantı"), systemImage: nil)
-                    GlassChip(text: String(localized: "\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"), systemImage: nil)
+                    PastelChip(text: String(localized: "\(store.meetings.count) toplantı"), systemImage: nil)
+                    PastelChip(text: String(localized: "\(max(0, minutes / 60)) sa \(minutes % 60) dk konuşma"), systemImage: nil)
                 }
                 .padding(.top, 2)
             }
@@ -360,7 +361,7 @@ struct AskTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background { FilmGradient(seed: "ask", palette: .violet) }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, .light)
             PhoneSectionHeader(title: "Örnek sorular", actionTitle: nil, action: nil)
                 .padding(.top, 4)
             ForEach(Array(examples.enumerated()), id: \.element.text) { (item: (offset: Int, element: (symbol: String, text: String))) in
