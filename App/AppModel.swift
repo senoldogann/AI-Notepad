@@ -734,10 +734,11 @@ final class AppModel {
         }
 
         // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
-        // kilitli kutuda birikir, ana aktöre en fazla 100 ms'de bir geçilir (her parça için ayrı görev açılmaz).
+        // kilitli kutuda birikir, ana aktöre çubuk aralığının dörtte birinde bir geçilir (her parça için ayrı görev
+        // açılmaz; bkz. `levelThrottleInterval`).
         audioLevels.start()
         let levels: AudioLevels = audioLevels
-        let throttle: LevelThrottle = LevelThrottle(intervalSec: levels.interval)
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: levelThrottleInterval(barInterval: levels.interval))
         let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
             guard let peak = throttle.add(level: level) else {
                 return
