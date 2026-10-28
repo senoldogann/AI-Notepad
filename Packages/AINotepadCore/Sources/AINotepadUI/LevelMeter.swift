@@ -74,3 +74,27 @@ public struct LevelMeter: View {
         .accessibilityHidden(true)
     }
 }
+
+/// Paneldeki ses ölçerin büyük eşi (kayıt ekranının ortası): aynı canlı seviyeler, kalın yuvarlak çubuklar, ortadan
+/// büyür; sessizlikte ince bir çizgi kalır.
+public struct LargeLevelMeter: View {
+    let levels: AudioLevels
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    public init(levels: AudioLevels) {
+        self.levels = levels
+    }
+
+    public var body: some View {
+        HStack(alignment: .center, spacing: 7) {
+            ForEach(Array(levels.values.enumerated()), id: \.offset) { (item: (offset: Int, element: Float)) in
+                Capsule()
+                    .fill(appearance.accent.color.opacity(0.4 + Double(item.element) * 0.6))
+                    .frame(width: 7, height: 8 + CGFloat(item.element) * 82)
+            }
+        }
+        .frame(height: 90)
+        .animation(.easeOut(duration: 0.12), value: levels.values)
+        .accessibilityHidden(true)
+    }
+}

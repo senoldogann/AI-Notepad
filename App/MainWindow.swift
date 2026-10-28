@@ -35,6 +35,9 @@ final class MainWindowRouter {
     var searchQuery: String = ""
     /// Orta ekrandaki arama penceresi açık.
     var isSearchPresented: Bool = false
+    /// Kayıt ekranı bu kayıt için kapatıldı ("Uygulamaya dön"); üst çubuktaki "Kayıtta" hapı yeniden açar. Her yeni
+    /// kayıtta sıfırlanır.
+    var isRecordingFocusDismissed: Bool = false
     /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
     var quitWarning: Bool = false
     /// Açılış ekranı bu açılışta gösterildi.
@@ -153,7 +156,7 @@ struct MainWindowView: View {
                 HStack(spacing: 0) {
                     Sidebar(model: model, router: router)
                     VStack(spacing: 0) {
-                        TopBar(router: router, onShowPanel: onShowPanel)
+                        TopBar(model: model, router: router, onShowPanel: onShowPanel)
                         // Ana penceredeki eylemlerin hataları (not düzenleme, tarif, ses silme…) burada görünür; önceden
                         // yalnızca canlı panelde çıkıyordu.
                         if !model.errorMessages.isEmpty {
@@ -185,6 +188,18 @@ struct MainWindowView: View {
                     withAnimation(.smooth(duration: 0.45)) { router.hasShownSplash = true }
                 }
                 .transition(.opacity.combined(with: .scale(scale: 1.02)))
+            }
+        }
+        .overlay {
+            if model.phase == .recording, !router.isRecordingFocusDismissed, router.section != .setup {
+                RecordingFocus(model: model, router: router, onShowPanel: onShowPanel)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: model.phase == .recording && !router.isRecordingFocusDismissed)
+        .onChange(of: model.phase) { (old: RecordingPhase, new: RecordingPhase) -> Void in
+            if old == .idle, new == .recording {
+                router.isRecordingFocusDismissed = false
             }
         }
         .overlay {
@@ -325,12 +340,29 @@ private struct Sidebar: View {
 /// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
 /// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
 private struct TopBar: View {
+    let model: AppModel
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
             Text(title).appFont(size: 14, weight: .medium)
+            // Kayıt ekranı kapatıldıysa "Kayıtta" hapı onu yeniden açar.
+            if model.phase == .recording, router.isRecordingFocusDismissed {
+                Button {
+                    router.isRecordingFocusDismissed = false
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.red).frame(width: 7, height: 7)
+                        Text("Kayıtta").appFont(size: 12, weight: .medium)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.red.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.hoverCapsule)
+                .hoverHint("Kayıt ekranını aç", alignment: .leading, edge: .bottom)
+            }
             Spacer(minLength: DesignTokens.Spacing.m)
             HStack(spacing: 8) {
                 Button {
@@ -1536,5 +1568,64 @@ private struct ShortcutCardBackground: View {
                 .clipShape(shape)
             shape.strokeBorder(Theme.line)
         }
+    }
+}
+
+/// Kayıt ekranı: kayıt sürerken ana pencerenin arkası bulanıklaşır, ortada paneldeki ses ölçerin büyük eşi, süre ve
+/// durum; altında duraklat/devam, paneli göster ve kırmızı "Bitir". "Uygulamaya dön" (ya da Esc) ekranı bu kayıt için
+/// kapatır; üst çubuktaki "Kayıtta" hapı geri açar.
+private struct RecordingFocus: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    let onShowPanel: @MainActor () -> Void
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.22))
+                .ignoresSafeArea()
+            VStack(spacing: 22) {
+                LargeLevelMeter(levels: model.audioLevels)
+                    .opacity(model.isPaused ? 0.35 : 1)
+                VStack(spacing: 6) {
+                    if let startedAt = model.recordingStartedAt {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
+                            Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
+                                .appFont(size: 40, weight: .semibold)
+                                .monospacedDigit()
+                                .tracking(-1)
+                        }
+                    }
+                    Text(model.isPaused ? "Duraklatıldı" : "Dinleniyor — konuşmalar canlı panelde yazıya dökülüyor")
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                HStack(spacing: 10) {
+                    Button(model.isPaused ? "Devam ettir" : "Duraklat", systemImage: model.isPaused ? "play.fill" : "pause.fill") { model.togglePause() }
+                        .buttonStyle(.pill)
+                    Button("Paneli göster", systemImage: "rectangle.on.rectangle") { onShowPanel() }
+                        .buttonStyle(.pill)
+                    Button {
+                        model.stopRecording()
+                    } label: {
+                        Label("Bitir", systemImage: "stop.fill")
+                            .appFont(size: 13, weight: .semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(Color.red, in: Capsule())
+                    }
+                    .buttonStyle(.hoverCapsule)
+                }
+                Button("Uygulamaya dön") { router.isRecordingFocusDismissed = true }
+                    .buttonStyle(.hoverPlain)
+                    .foregroundStyle(Theme.muted)
+                    .appFont(size: 12, weight: .medium)
+                    .padding(.top, 4)
+            }
+            .padding(36)
+        }
+        .onExitCommand { router.isRecordingFocusDismissed = true }
     }
 }

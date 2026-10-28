@@ -3050,6 +3050,16 @@
         }
       }
     },
+    "Dinleniyor — konuşmalar canlı panelde yazıya dökülüyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening — the conversation is transcribed in the live panel"
+          }
+        }
+      }
+    },
     "Dinleniyor…": {
       "localizations": {
         "en": {
@@ -4767,6 +4777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording paused"
+          }
+        }
+      }
+    },
+    "Kayıt ekranını aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the recording screen"
           }
         }
       }
@@ -9106,6 +9126,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the app's configuration (%@); it may be corrupted. Fix the file and try again; it was not overwritten."
+          }
+        }
+      }
+    },
+    "Uygulamaya dön": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to the app"
           }
         }
       }
