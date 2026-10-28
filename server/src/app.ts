@@ -1,0 +1,283 @@
+import { z } from "zod";
+import { appleIdentitySchema, emailStartSchema, emailVerifySchema, refreshSchema } from "./auth/schemas";
+import { verifyAppleIdentityToken } from "./auth/apple";
+import { consumeEmailLogin, emailSender, normalizeEmail, startEmailLogin } from "./auth/email";
+import { type AuthedUser, type SessionTokens, authenticate, logout, rotateRefreshToken, startSession } from "./auth/tokens";
+import { verifyTurnstile } from "./auth/turnstile";
+import { findOrCreateUser } from "./auth/users";
+import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
+import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
+import { type Config, ConfigError, parseConfig } from "./config";
+import { sha256Hex } from "./crypto";
+import { entitlements } from "./entitlements";
+import type { Env } from "./env";
+import { ApiError, UpstreamError } from "./errors";
+import { bearerToken, errorResponse, jsonResponse, readBodyBytes, readJsonBody } from "./http";
+import { llmRequestSchema } from "./llm/request";
+import { proxyLLM } from "./llm/proxy";
+import { errorName, log } from "./log";
+import { endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import type { RequestContext } from "./platform";
+import { parseTranscribeParams, proxyTranscription } from "./transcribe";
+
+/** Küçük JSON gövdeleri için üst sınır. */
+const smallBodyBytes: number = 16 * 1024;
+/** Stripe webhook gövdesi üst sınırı. */
+const webhookBodyBytes: number = 512 * 1024;
+
+/** Site kaynağından (CORS) çağrılabilen uçlar; geri kalanı yalnızca uygulamadan (bearer, çerezsiz) çağrılır. */
+const webRoutes: ReadonlySet<string> = new Set([
+  "/v1/health",
+  "/v1/auth/apple",
+  "/v1/auth/email/start",
+  "/v1/auth/email/verify",
+  "/v1/auth/refresh",
+  "/v1/auth/logout",
+  "/v1/me",
+  "/v1/billing/checkout",
+  "/v1/billing/portal",
+]);
+
+/** Her yanıta eklenen güvenlik başlıkları. */
+const securityHeaders: Readonly<Record<string, string>> = {
+  "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "cross-origin-resource-policy": "same-site",
+  "permissions-policy": "()",
+};
+
+/** Yanıta güvenlik başlıklarını ve (izinli kaynaktan gelen web isteğinde) CORS başlıklarını ekler. */
+function finalizeResponse(response: Response, corsOrigin: string | null): Response {
+  const headers: Headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(securityHeaders)) {
+    headers.set(name, value);
+  }
+  if (!headers.has("cache-control")) {
+    headers.set("cache-control", "no-store");
+  }
+  if (corsOrigin !== null) {
+    headers.set("access-control-allow-origin", corsOrigin);
+    headers.set("vary", "Origin");
+  }
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/** İstek web kaynağındansa ve uç web'e açıksa izinli kaynak; değilse null. Saf fonksiyondur. */
+export function allowedCorsOrigin(origin: string | null, path: string, siteOrigin: string): string | null {
+  return origin !== null && origin === siteOrigin && webRoutes.has(path) ? origin : null;
+}
+
+/** CORS ön kontrol yanıtı; izinli değilse 403. Saf fonksiyondur. */
+function preflight(request: Request, path: string, siteOrigin: string): Response {
+  const origin: string | null = allowedCorsOrigin(request.headers.get("origin"), path, siteOrigin);
+  if (origin === null) {
+    return finalizeResponse(errorResponse(new ApiError("forbidden", "Bu kaynaktan erişime izin yok.")), null);
+  }
+  const response: Response = new Response(null, {
+    status: 204,
+    headers: {
+      "access-control-allow-methods": "GET, POST",
+      "access-control-allow-headers": "authorization, content-type",
+      "access-control-max-age": "600",
+    },
+  });
+  return finalizeResponse(response, origin);
+}
+
+/** Hız sınırı: aşılırsa `rate_limited`. */
+async function enforceLimit(limiter: RateLimit, key: string): Promise<void> {
+  const outcome: RateLimitOutcome = await limiter.limit({ key });
+  if (!outcome.success) {
+    throw new ApiError("rate_limited", "Çok fazla istek; biraz bekleyip yeniden dene.");
+  }
+}
+
+/** Toplantı kimliği başlığı (`x-meeting-id`, UUID). */
+function meetingIdHeader(request: Request): string {
+  const value: string | null = request.headers.get("x-meeting-id");
+  if (value === null || !z.uuid().safeParse(value).success) {
+    throw new ApiError("bad_request", "x-meeting-id başlığı (toplantı oturumu kimliği) gerekli.");
+  }
+  return value;
+}
+
+/** Oturum yanıtı gövdesi. Saf fonksiyondur. */
+function sessionBody(tokens: SessionTokens): object {
+  return {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    tokenType: "Bearer",
+    expiresIn: tokens.expiresIn,
+    userId: tokens.userId,
+  };
+}
+
+const deviceChallengeSchema = z.strictObject({ purpose: z.enum(["attest", "assert"]) });
+const deviceAttestSchema = z.strictObject({
+  keyId: z.string().min(1).max(128),
+  attestation: z.string().min(1).max(32_768),
+  challenge: z.string().min(16).max(128),
+});
+const meetingStartSchema = z.strictObject({ device: deviceAssertionSchema.optional() });
+const meetingEndPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/end$/;
+
+/** İstek bağlamı ve yapılandırmayla yönlendirme. */
+async function route(request: Request, env: Env, config: Config, context: RequestContext, path: string): Promise<Response> {
+  const db: D1Database = env.DB;
+  const now: Date = context.platform.now();
+  const method: string = request.method;
+  const authed = async (): Promise<AuthedUser> => authenticate(db, config, bearerToken(request), context.platform.now());
+
+  if (path === "/v1/health" && method === "GET") {
+    return jsonResponse(200, { status: "ok" });
+  }
+  if (path === "/v1/billing/webhook" && method === "POST") {
+    const signature: string | null = request.headers.get("stripe-signature");
+    if (signature === null) {
+      throw new ApiError("webhook_invalid", "Stripe-Signature başlığı gerekli.");
+    }
+    const payload: string = new TextDecoder().decode(await readBodyBytes(request, webhookBodyBytes));
+    const result: { duplicate: boolean } = await handleStripeWebhook(db, context.platform, config, payload, signature);
+    return jsonResponse(200, { received: true, duplicate: result.duplicate });
+  }
+
+  await enforceLimit(env.API_IP_LIMITER, `ip:${context.clientIp}`);
+
+  if (path.startsWith("/v1/auth/") && method === "POST") {
+    await enforceLimit(env.AUTH_IP_LIMITER, `ip:${context.clientIp}`);
+    if (path === "/v1/auth/apple") {
+      const body = await readJsonBody(request, appleIdentitySchema, smallBodyBytes);
+      const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
+      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identity.email, now);
+      log("info", "login", { provider: "apple", userId });
+      return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
+    }
+    if (path === "/v1/auth/email/start") {
+      const body = await readJsonBody(request, emailStartSchema, smallBodyBytes);
+      const email: string = normalizeEmail(body.email);
+      await enforceLimit(env.AUTH_IP_LIMITER, `email:${await sha256Hex(email)}`);
+      await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
+      await startEmailLogin(db, emailSender(context.platform, config.email), config.email.linkUrl, email, now);
+      // Adresin kayıtlı olup olmadığı yanıttan anlaşılmaz.
+      return jsonResponse(202, { status: "sent" });
+    }
+    if (path === "/v1/auth/email/verify") {
+      const body = await readJsonBody(request, emailVerifySchema, smallBodyBytes);
+      const email: string = await consumeEmailLogin(db, body.token, now);
+      const userId: string = await findOrCreateUser(db, "email", email, email, now);
+      log("info", "login", { provider: "email", userId });
+      return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
+    }
+    if (path === "/v1/auth/refresh") {
+      const body = await readJsonBody(request, refreshSchema, smallBodyBytes);
+      return jsonResponse(200, sessionBody(await rotateRefreshToken(db, config, body.refreshToken, now)));
+    }
+    if (path === "/v1/auth/logout") {
+      const body = await readJsonBody(request, refreshSchema, smallBodyBytes);
+      await logout(db, body.refreshToken, now);
+      return jsonResponse(200, { status: "logged_out" });
+    }
+  }
+
+  if (path === "/v1/me" && method === "GET") {
+    const user: AuthedUser = await authed();
+    return jsonResponse(200, await entitlements(db, config, user.userId, now));
+  }
+
+  if (path === "/v1/device/challenge" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    const body = await readJsonBody(request, deviceChallengeSchema, smallBodyBytes);
+    const challenge: string = await createChallenge(db, user.userId, body.purpose, now);
+    return jsonResponse(200, { challenge, expiresInSeconds: 300 });
+  }
+  if (path === "/v1/device/attest" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    const body = await readJsonBody(request, deviceAttestSchema, 64 * 1024);
+    const deviceId: string = await registerDevice(db, context.platform, config, user.userId, body);
+    return jsonResponse(201, { deviceId });
+  }
+
+  if (path === "/v1/meetings/start" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    const body = await readJsonBody(request, meetingStartSchema, smallBodyBytes);
+    if (body.device === undefined && config.attest.policy === "required") {
+      throw new ApiError("attestation_required", "Bu sürüm cihaz doğrulaması (App Attest) gerektiriyor.");
+    }
+    const deviceId: string | null =
+      body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
+    return jsonResponse(201, await startMeeting(db, config, user.userId, deviceId, now));
+  }
+  const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
+  if (endMatch !== null && endMatch[1] !== undefined && method === "POST") {
+    const user: AuthedUser = await authed();
+    const row = await endMeeting(db, user.userId, endMatch[1], now);
+    return jsonResponse(200, { meetingId: row.id, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
+  }
+
+  if (path === "/v1/llm/messages" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
+    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
+    return proxyLLM(db, context, config, meeting, body);
+  }
+  if (path === "/v1/transcribe" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
+    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    const params = parseTranscribeParams(new URL(request.url), config.transcribe.maxKeyterms);
+    return proxyTranscription(db, context, config, meeting, request, params);
+  }
+
+  if (path === "/v1/billing/checkout" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    return jsonResponse(200, { url: await createCheckout(db, context.platform, config, user.userId) });
+  }
+  if (path === "/v1/billing/portal" && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    return jsonResponse(200, { url: await createPortal(db, context.platform, config, user.userId) });
+  }
+
+  throw new ApiError("not_found", "Böyle bir uç yok.");
+}
+
+/** Worker'ın istek işleyicisi: yapılandırma, CORS, yönlendirme, tek tip hata ve güvenlik başlıkları. */
+export async function handleRequest(request: Request, env: Env, context: RequestContext): Promise<Response> {
+  const url: URL = new URL(request.url);
+  const path: string = url.pathname;
+  let config: Config;
+  try {
+    config = parseConfig(env);
+  } catch (error: unknown) {
+    if (error instanceof ConfigError) {
+      log("error", "config_invalid", { fields: error.fields.join(",") });
+      return finalizeResponse(errorResponse(new ApiError("internal_error", "Sunucu yapılandırması eksik.")), null);
+    }
+    throw error;
+  }
+  if (request.method === "OPTIONS") {
+    return preflight(request, path, config.siteOrigin);
+  }
+  const corsOrigin: string | null = allowedCorsOrigin(request.headers.get("origin"), path, config.siteOrigin);
+  try {
+    return finalizeResponse(await route(request, env, config, context, path), corsOrigin);
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      return finalizeResponse(errorResponse(error), corsOrigin);
+    }
+    if (error instanceof UpstreamError) {
+      log("error", "upstream_failed", { path, service: error.service, status: error.status });
+      return finalizeResponse(errorResponse(new ApiError("upstream_unavailable", "Bağlı bir servis şu an yanıt vermiyor; biraz sonra yeniden dene.")), corsOrigin);
+    }
+    log("error", "unhandled_error", { path, error: errorName(error) });
+    return finalizeResponse(errorResponse(new ApiError("internal_error", "Beklenmeyen bir sunucu hatası oluştu.")), corsOrigin);
+  }
+}
