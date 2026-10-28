@@ -62,6 +62,8 @@ enum SettingsKey {
     static let webhookAutoSend: String = "integrations.webhookAutoSend"
     /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
     static let primaryMeetingLanguage: String = "language.primary"
+    /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri, "Ne kaçırdım?" ve Sor cevapları bu dilde yazılır.
+    static let noteLanguage: String = "language.note"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
@@ -231,6 +233,8 @@ func registerDefaultSettings() {
         SettingsKey.micSuggestions: true,
         SettingsKey.webhookAutoSend: false,
         SettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
+        // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
+        SettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
         SettingsKey.autoRecord: false,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
         SettingsKey.customTemplate: "",
@@ -250,6 +254,16 @@ func registerDefaultSettings() {
 /// Kayıtlı ayarın değeri, aralığa sıkıştırılmış.
 func clampedSetting(key: String, range: ClosedRange<Int>) -> Int {
     min(max(UserDefaults.standard.integer(forKey: key), range.lowerBound), range.upperBound)
+}
+
+/// Not ve çeviri dili; kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func selectedNoteLanguage() -> ShareLanguage {
+    let stored: String = UserDefaults.standard.string(forKey: SettingsKey.noteLanguage) ?? ""
+    guard let language = ShareLanguage(rawValue: stored) else {
+        settingsLogger.error("Not dili tanınmadı, varsayılan kullanılıyor, değer: \(stored, privacy: .public)")
+        return defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations)
+    }
+    return language
 }
 
 /// Seçili LLM sağlayıcı türü.

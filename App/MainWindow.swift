@@ -979,7 +979,7 @@ private struct TasksPage: View {
                             palette: .sunset,
                             steps: [
                                 EmptyStateStep(symbol: "record.circle", title: "Toplantıyı kaydet"),
-                                EmptyStateStep(symbol: "sparkles", title: "Türkçe not yazılır"),
+                                EmptyStateStep(symbol: "sparkles", title: "Not yazılır"),
                                 EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
                             ]
                         ) {

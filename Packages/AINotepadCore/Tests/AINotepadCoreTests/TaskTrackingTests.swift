@@ -100,11 +100,11 @@ extension CloudTests {
             tasks: [NoteTask(owner: "Senol", description: "Aikataulun lähettäminen tiimille", dueDate: "perjantai", isMine: true)],
             glossary: []
         )
-        let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general)
+        let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general, language: .turkish)
         try JSONEncoder().encode(ChunkedNoteProgress(fingerprint: fingerprint, completedParts: parts, state: saved)).write(to: file)
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: segments, speakerNames: [:], userName: "Senol", template: .general, myNotes: "",
-            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
+            language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
         ))
         #expect(parts > 1)
         #expect(note.tasks.map(\.description) == ["Aikataulun lähettäminen tiimille"])
@@ -124,7 +124,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: segments, speakerNames: [:], userName: "Senol", template: .general,
-            myNotes: "## Bana önemli\n- park yeri azalıyor → kiralık yer sor", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
+            myNotes: "## Bana önemli\n- park yeri azalıyor → kiralık yer sor", language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ") + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
@@ -149,7 +149,7 @@ extension CloudTests {
         ).with(completedTasks: [taskKey(task: task)])
         let edited: MeetingRecord = try await editMeetingNote(
             record: record, instruction: "Özeti tek cümleye indir.", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
-            userName: "Senol"
+            userName: "Senol", language: .turkish
         )
         let newNote: MeetingNote = try #require(edited.note)
         #expect(newNote.summary.count < note.summary.count, "\(newNote.summary)")
@@ -169,7 +169,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20, endSec: nil)]), speakerNames: [:], userName: "Senol",
-            template: .general, myNotes: "", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
+            template: .general, myNotes: "", language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()
         #expect(text.contains("kahve"), "\(text)")

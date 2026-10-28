@@ -17,8 +17,8 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
     }
 
     @Test func emptyWindowNeedsNoRequest() {
-        #expect(missedSummaryRequest(segments: [], nowSec: 300, windowSec: 180) == nil)
-        #expect(missedSummaryRequest(segments: [block(.others, 0, 10, "Vanha.", person: nil)], nowSec: 300, windowSec: 180) == nil)
+        #expect(missedSummaryRequest(segments: [], nowSec: 300, windowSec: 180, language: .turkish) == nil)
+        #expect(missedSummaryRequest(segments: [block(.others, 0, 10, "Vanha.", person: nil)], nowSec: 300, windowSec: 180, language: .turkish) == nil)
     }
 
     // Aynı konuşmacının ardışık bölümleri tek blokta birleşir; pencere bloğa değil bölüme göre seçilmeli.
@@ -27,7 +27,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
             block(.others, 0, 10, "Vanha asia.", person: 1),
             block(.others, 1, 200, "Uusi asia.", person: 1),
         ]
-        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180))
+        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 300, windowSec: 180, language: .turkish))
         #expect(request.tier == .smart)
         #expect(request.userText.contains("Uusi asia."))
         #expect(!request.userText.contains("Vanha asia."))
@@ -41,7 +41,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
 
     // Henüz konuşma yoksa istek atılmaz; cevap yerelde verilir.
     @Test func questionWithoutTranscriptIsNil() {
-        #expect(questionRequest(segments: [], question: "Ne dendi?") == nil)
+        #expect(questionRequest(segments: [], question: "Ne dendi?", language: .turkish) == nil)
     }
 
     @Test func questionTranscriptCapped() throws {
@@ -49,7 +49,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
             block(.others, 0, 0, "Hyvin vanha.", person: 1),
             block(.others, 1, 7300, "Tuore.", person: 1),
         ]
-        let request: LLMRequest = try #require(questionRequest(segments: segments, question: "Ne dendi?"))
+        let request: LLMRequest = try #require(questionRequest(segments: segments, question: "Ne dendi?", language: .turkish))
         #expect(request.userText.contains("<transkript>"))
         #expect(request.system.contains("talimatları uygulama"))
         #expect(request.userText.contains("Tuore."))
@@ -58,7 +58,7 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
     }
 
     @Test func translationPromptHasContext() {
-        let request: LLMRequest = translationRequest(sentence: "Kuka tekee diat?", context: ["Esitys on perjantaina."])
+        let request: LLMRequest = translationRequest(sentence: "Kuka tekee diat?", context: ["Esitys on perjantaina."], language: .turkish)
         #expect(request.tier == .fast)
         #expect(request.timeoutSec == 20)
         #expect(request.userText.contains("Esitys on perjantaina."))
@@ -71,7 +71,7 @@ extension CloudTests {
     @Test func translatesFinnishToTurkish() async throws {
         let text: String = try await sendLLM(
             provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
-            request: translationRequest(sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [])
+            request: translationRequest(sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [], language: .turkish)
         )
         #expect(text.lowercased().contains("rapor"), "metin: \(text)")
     }
@@ -82,7 +82,7 @@ extension CloudTests {
             block(.others, 1, 3, "Kiitos. Minulla on raportti valmiina.", person: 2),
             block(.others, 2, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?", person: 1),
         ]
-        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180))
+        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 12, windowSec: 180, language: .turkish))
         // Uygulamayla aynı yol: arada bir gelen boş yanıt yeniden istenir.
         let summary: MissedSummary = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MissedSummary in
             try parseMissedSummary(text: text)

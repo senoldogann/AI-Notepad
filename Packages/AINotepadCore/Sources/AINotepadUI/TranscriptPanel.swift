@@ -411,9 +411,9 @@ public struct TranscriptPanel: View {
         }
         .buttonStyle(.hoverCapsule)
         .disabled(!isEnabled)
-        .hoverHint("Son dakikaların Türkçe özeti", alignment: .leading, edge: .top)
+        .hoverHint("Son dakikaların özeti", alignment: .leading, edge: .top)
         .accessibilityLabel("Ne kaçırdım?")
-        .accessibilityHint("Son dakikaların Türkçe özetini gösterir")
+        .accessibilityHint("Son dakikaların özetini gösterir")
     }
 
     private var questionField: some View {

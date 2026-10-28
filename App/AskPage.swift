@@ -414,7 +414,7 @@ private struct AskIntro: View {
                     .appFont(size: 28, weight: .regular)
                     .tracking(-0.5)
                     .foregroundStyle(Theme.ink)
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, not dilinde cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                     .appFont(size: 14, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

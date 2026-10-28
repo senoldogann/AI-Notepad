@@ -153,7 +153,7 @@ private struct RecordHeroCard: View {
                 Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
                     .appFont(size: 17, weight: .semibold)
                     .foregroundStyle(Theme.ink)
-                Text("Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
+                Text("Odadaki herkes konuşmacılara ayrılır, çevirisi canlı akar; bitince notu yazar.")
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)

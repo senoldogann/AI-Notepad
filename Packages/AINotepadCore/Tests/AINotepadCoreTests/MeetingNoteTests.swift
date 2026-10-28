@@ -13,7 +13,7 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
             speakerNames: [1: "Aino"],
             userName: "Doğan",
             template: .general,
-            myNotes: ""
+            myNotes: "", language: .turkish
         ))
         #expect(request.tier == .smart)
         #expect(request.jsonSchema?.contains("gorevler") == true)
@@ -23,12 +23,12 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
         // Kendi notları istemde öncelik olarak yer alır.
         let withNotes: LLMRequest = try #require(meetingNoteRequest(
             segments: [stored("final-0", .others, 1, 5, "Voisitko tehdä diat?")], speakerNames: [:], userName: "Doğan",
-            template: .general, myNotes: "- diat perjantaihin\n## Riskit"
+            template: .general, myNotes: "- diat perjantaihin\n## Riskit", language: .turkish
         ))
         #expect(withNotes.userText.hasPrefix("<benim_notlarim>\n- diat perjantaihin"))
         #expect(withNotes.system.contains("önceliğidir"))
         #expect(request.system.contains("Doğan"))
-        #expect(meetingNoteRequest(segments: [], speakerNames: [:], userName: "Doğan", template: .general, myNotes: "") == nil)
+        #expect(meetingNoteRequest(segments: [], speakerNames: [:], userName: "Doğan", template: .general, myNotes: "", language: .turkish) == nil)
     }
 
     @Test func parseMeetingNoteJSON() throws {
@@ -72,20 +72,37 @@ func stored(_ key: String, _ speaker: Speaker, _ person: Int?, _ start: Double, 
     }
 }
 
+/// Bulut not testlerinin kısa Fince diyaloğu (kullanıcıya bir görev düşer).
+private let finnishDialog: [StoredSegment] = [
+    stored("final-0", .others, 1, 0, "Hyvää huomenta, aloitetaan palaveri."),
+    stored("final-1", .others, 2, 3, "Kiitos. Minulla on raportti valmiina."),
+    stored("final-2", .others, 1, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?"),
+    stored("me-0", .me, nil, 10, "Kyllä, teen diat torstaihin mennessä."),
+]
+
 extension CloudTests {
 @Suite struct MeetingNoteCloudTests {
+    // Not dili İngilizceyken not İngilizce yazılır: Türkçeye özgü harf yok, görev kullanıcınındır.
+    @Test func englishNoteFromDialog() async throws {
+        let request: LLMRequest = try #require(meetingNoteRequest(
+            segments: finnishDialog, speakerNames: [1: "Aino"], userName: "Doğan", template: .general, myNotes: "", language: .english
+        ))
+        let note: MeetingNote = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MeetingNote in
+            try parseMeetingNote(text: text)
+        }
+        let written: String = ([note.title, note.summary] + note.decisions + note.tasks.map(\.description)).joined(separator: " ")
+        #expect(!written.contains { "ıİşŞçÇ".contains($0) }, "Türkçe görünüyor: \(written)")
+        #expect(written.lowercased().contains("slide"), "İngilizce değil: \(written)")
+        #expect(note.tasks.contains { $0.isMine }, "görevler: \(note.tasks)")
+    }
+
     @Test func noteFromDialog() async throws {
         let request: LLMRequest = try #require(meetingNoteRequest(
-            segments: [
-                stored("final-0", .others, 1, 0, "Hyvää huomenta, aloitetaan palaveri."),
-                stored("final-1", .others, 2, 3, "Kiitos. Minulla on raportti valmiina."),
-                stored("final-2", .others, 1, 7, "Hienoa, esitys on perjantaina. Voisitko sinä tehdä diat?"),
-                stored("me-0", .me, nil, 10, "Kyllä, teen diat torstaihin mennessä."),
-            ],
+            segments: finnishDialog,
             speakerNames: [1: "Aino"],
             userName: "Doğan",
             template: .general,
-            myNotes: ""
+            myNotes: "", language: .turkish
         ))
         // Uygulamayla aynı yol: arada bir gelen boş yanıt yeniden istenir.
         let note: MeetingNote = try await requestStructured(provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), request: request) { (text: String) throws -> MeetingNote in

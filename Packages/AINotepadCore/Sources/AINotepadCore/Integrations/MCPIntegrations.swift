@@ -182,7 +182,9 @@ func trackerAgentTools(tools: [MCPRemoteTool], service: MCPService) -> [MCPRemot
 }
 
 /// Ajanın istemi: hedef, görevler, araçlar ve şimdiye dek yapılanlar. Saf fonksiyondur.
-func trackerAgentRequest(service: MCPService, target: String, tasks: [NoteTask], meetingTitle: String, tools: [MCPRemoteTool], transcript: [String]) -> LLMRequest {
+func trackerAgentRequest(
+    service: MCPService, target: String, tasks: [NoteTask], meetingTitle: String, tools: [MCPRemoteTool], transcript: [String], language: ShareLanguage
+) -> LLMRequest {
     let toolText: String = tools.map { (tool: MCPRemoteTool) -> String in
         "- \(tool.name): \(String(tool.description.prefix(300)))\n  input_schema: \(String(jsonText(value: tool.inputSchema).prefix(1500)))"
     }
@@ -196,8 +198,8 @@ func trackerAgentRequest(service: MCPService, target: String, tasks: [NoteTask],
     first find the right \(service == .atlassian ? "Jira site (cloudId) and project" : "team") \(target.isEmpty ? "(if there are several, use the first one the user can access)" : "named or matching \"\(target)\""), \
     then create exactly one issue per task with a short title (the task) and a description that mentions the owner, due date \
     and the meeting title. Never delete or modify existing items. Reply with one JSON object per step: action "call" with the \
-    tool name and its arguments as a JSON string, or action "done" with an empty tool, "{}" and a Turkish summary listing the \
-    created issue keys or links. If something is impossible, return "done" and explain in Turkish.
+    tool name and its arguments as a JSON string, or action "done" with an empty tool, "{}" and a summary in \(language.promptName) listing \
+    the created issue keys or links. If something is impossible, return "done" and explain in \(language.promptName).
     """
     let user: String = """
     Toplantı: \(meetingTitle)
@@ -223,14 +225,14 @@ public enum TaskTrackerError: Error, Equatable {
 
 /// Görevleri araçta iş olarak açar: araçlar listelenir, LLM her adımda bir araç seçer (en çok 10 adım), sonuçlar ona
 /// geri verilir. Yalnızca görev açmakla ilgili araçlar görünür; silme/güncelleme araçları hiç sunulmaz. Özet ve
-/// (yenilendiyse) bağlantı döner.
-public func sendTasksToTracker(tracker: TaskTracker, tasks: [NoteTask], meetingTitle: String, llm: LLMProvider) async throws -> (summary: String, connection: MCPConnection) {
+/// (yenilendiyse) bağlantı döner; özet `language` dilindedir.
+public func sendTasksToTracker(tracker: TaskTracker, tasks: [NoteTask], meetingTitle: String, language: ShareLanguage, llm: LLMProvider) async throws -> (summary: String, connection: MCPConnection) {
     let opened: (session: MCPRemoteSession, connection: MCPConnection) = try await openMCPSession(connection: tracker.connection)
     let tools: [MCPRemoteTool] = trackerAgentTools(tools: try await opened.session.listTools(), service: tracker.service)
     let allowed: Set<String> = Set(tools.map(\.name))
     var transcript: [String] = []
     for step in 1...10 {
-        let request: LLMRequest = trackerAgentRequest(service: tracker.service, target: tracker.target, tasks: tasks, meetingTitle: meetingTitle, tools: tools, transcript: transcript)
+        let request: LLMRequest = trackerAgentRequest(service: tracker.service, target: tracker.target, tasks: tasks, meetingTitle: meetingTitle, tools: tools, transcript: transcript, language: language)
         let next: TrackerAgentStep = try await requestStructured(provider: llm, request: request) { (text: String) throws -> TrackerAgentStep in
             try JSONDecoder().decode(TrackerAgentStep.self, from: Data(text.utf8))
         }

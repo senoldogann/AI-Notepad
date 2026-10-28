@@ -360,7 +360,7 @@ struct MeetingDetailPage: View {
     let onRunRecipe: @MainActor (Recipe) -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
-    /// Özetin gösterildiği dil: nil Türkçe not, değilse paylaşım sürümü.
+    /// Özetin gösterildiği dil: nil asıl not (yazıldığı dilde), değilse paylaşım sürümü.
     @State private var noteLanguage: ShareLanguage?
     /// Başlık düzenleniyor (çift tıklama ya da "Yeniden adlandır").
     @State private var isRenaming: Bool = false
@@ -399,7 +399,7 @@ struct MeetingDetailPage: View {
                                     [.finnish, .english].contains(language) ? nil : [(value: language, title: LocalizedStringKey(language.nativeName))]
                                 } ?? []
                                 PillPicker(selection: $noteLanguage, options: [
-                                    (value: nil, title: "Türkçe"), (value: ShareLanguage.finnish, title: "Suomi"), (value: ShareLanguage.english, title: "English"),
+                                    (value: nil, title: "Orijinal"), (value: ShareLanguage.finnish, title: "Suomi"), (value: ShareLanguage.english, title: "English"),
                                 ] + others)
                                 .fixedSize()
                                 .hoverHint("İş arkadaşlarına göndermek için notun başka dildeki sürümü", alignment: .leading, edge: .bottom)

@@ -354,7 +354,7 @@ final class PhoneRecorder {
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: finalPass, llm: keys.llm,
                 languageMode: record.language.map { LanguageMode.fixed($0) } ?? .automatic, userName: phoneUserName(),
-                voiceEmbedder: nil, registry: []
+                noteLanguage: phoneNoteLanguage(), voiceEmbedder: nil, registry: []
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
                 self.continuedTasks[record.id]?.progress.completedUnitCount = continuedProcessingCompletedUnits(step: step)
@@ -558,9 +558,9 @@ final class PhoneRecorder {
 
     // MARK: Çeviri
 
-    /// Kesinleşmiş bölümü Türkçeye çevirmek üzere sıraya alır; Türkçe toplantıda metin olduğu gibi kalır.
+    /// Kesinleşmiş bölümü not diline çevirmek üzere sıraya alır; toplantı not dilindeyse metin olduğu gibi kalır.
     private func enqueueTranslation(segment: LiveSegment) {
-        if lockedLanguage ?? fixedMeetingLanguage(mode: languageMode) == .turkish {
+        if let spoken = lockedLanguage ?? fixedMeetingLanguage(mode: languageMode), spoken == phoneNoteLanguage().meetingLanguage {
             translations[segment.id] = segment.text
             return
         }
@@ -585,9 +585,9 @@ final class PhoneRecorder {
             translationsInFlight += 1
             Task {
                 do {
-                    let turkish: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context))
+                    let translated: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context, language: phoneNoteLanguage()))
                     if requestGeneration == generation {
-                        translations[id] = turkish
+                        translations[id] = translated
                     }
                 } catch {
                     Self.logger.error("Çeviri başarısız, bölüm: \(segmentKey(id: id), privacy: .public), hata: \(String(describing: error), privacy: .private)")

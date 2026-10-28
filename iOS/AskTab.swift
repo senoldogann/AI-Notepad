@@ -88,12 +88,12 @@ final class PhoneAsk {
                 }
                 if scoped.isEmpty {
                     _ = try await askArchive(
-                        question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: records, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
                         now: Date(), onProgress: onProgress
                     )
                 } else {
                     _ = try await askAboutMeetings(
-                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
                         now: Date(), onProgress: onProgress
                     )
                 }
@@ -339,7 +339,7 @@ struct AskTab: View {
         let minutes: Int = store.meetings.compactMap { meetingDurationMinutes(record: $0) }.reduce(0, +)
         return VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
+                Text("Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, not dilinde cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.")
                     .appFont(size: 15, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

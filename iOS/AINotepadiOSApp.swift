@@ -257,7 +257,7 @@ final class PhoneStore {
             let llm: LLMProvider = try await phoneLLMProvider()
             let directory: URL = try sessionDirectory(id: meetingID)
             let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
-            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName, language: phoneNoteLanguage())
             // Eski not geçmişe girer (⋯ › Önceki sürümler).
             let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Not yenilendi"), savedAt: Date())
             try saveMeeting(record: versioned, directory: directory)

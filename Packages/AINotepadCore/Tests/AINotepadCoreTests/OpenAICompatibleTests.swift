@@ -58,7 +58,7 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
     @Test func missingModelIsNotConfigured() async {
         let config: OpenAICompatibleConfig = OpenAICompatibleConfig(baseURL: sampleConfig.baseURL, apiKey: nil, fastModel: "", smartModel: "akilli", fastEffort: nil, smartEffort: nil)
         await #expect(throws: LLMError.notConfigured(detail: "çeviri modeli")) {
-            _ = try await sendLLM(provider: .openAICompatible(config), request: translationRequest(sentence: "Hei", context: []))
+            _ = try await sendLLM(provider: .openAICompatible(config), request: translationRequest(sentence: "Hei", context: [], language: .turkish))
         }
     }
 }
@@ -99,7 +99,7 @@ struct OllamaTests {
             LiveSegment(id: SegmentID(speaker: .others, index: 0), startSec: 0, endSec: 4, text: "Päätimme, että raportti valmistuu perjantaina.", isFinal: true, failureMessage: nil, person: 1),
             LiveSegment(id: SegmentID(speaker: .others, index: 1), startSec: 5, endSec: 9, text: "Doğan, voisitko tehdä diat?", isFinal: true, failureMessage: nil, person: 1),
         ]
-        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 10, windowSec: 180))
+        let request: LLMRequest = try #require(missedSummaryRequest(segments: segments, nowSec: 10, windowSec: 180, language: .turkish))
         // Uygulamayla aynı yol: şemaya uymayan yanıt (yerel modeller arada bir alan atlar) yeniden istenir.
         let summary: MissedSummary = try await requestStructured(provider: .openAICompatible(try config()), request: request) { (text: String) throws -> MissedSummary in
             try parseMissedSummary(text: text)

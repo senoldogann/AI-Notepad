@@ -3,11 +3,11 @@ import Foundation
 
 /// Çevirinin panelde gösterilişi.
 public enum DisplayMode: String, Sendable, CaseIterable {
-    /// Orijinal (soluk) + Türkçe.
+    /// Orijinal (soluk) + not dilindeki çeviri.
     case bilingual
-    /// Yalnızca Türkçe; çevirisi olmayan metin orijinal haliyle soluk.
+    /// Yalnızca çeviri (ham değer eski sürümlerle uyumlu kalsın diye "turkishOnly"); çevirisi olmayan metin orijinal haliyle soluk.
     case turkishOnly
-    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu Türkçe not yine üretilir.
+    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu not yine üretilir.
     case originalOnly
 
     /// Bu görünümde canlı çeviri gerekir mi.

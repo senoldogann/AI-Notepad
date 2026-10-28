@@ -8,6 +8,7 @@ struct PhoneSettingsTab: View {
     /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
     let excludedFromMoves: Set<String>
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
@@ -79,6 +80,12 @@ struct PhoneSettingsTab: View {
                     Picker("Ana toplantı dili", selection: $primaryLanguage) {
                         ForEach(MeetingLanguage.allCases, id: \.rawValue) { (language: MeetingLanguage) in
                             Text(languageName(language: language)).tag(language.rawValue)
+                        }
+                    }
+                    // Not, canlı çeviri ve Sor cevapları bu dilde yazılır; önceki notlar yazıldıkları dilde kalır.
+                    Picker("Not ve çeviri dili", selection: $noteLanguage) {
+                        ForEach(ShareLanguage.allCases, id: \.rawValue) { (language: ShareLanguage) in
+                            Text(verbatim: language.nativeName).tag(language.rawValue)
                         }
                     }
                     TextField("Adın (notta senin görevlerin için)", text: $userName)
