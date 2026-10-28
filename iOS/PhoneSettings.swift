@@ -19,6 +19,16 @@ enum PhoneSettingsKey {
     static let theme: String = "appearance.theme"
     /// Takvim (sıradaki toplantılar, kaydı süren etkinliğe bağlama); varsayılan kapalı, açılınca izin istenir.
     static let calendarEnabled: String = "calendar.enabled"
+    /// Yazıya dökme ve notun yapıldığı yer (bkz. `PhoneEngine`).
+    static let engine: String = "phone.engine"
+}
+
+/// iPhone'da yazıya dökme ve not: bulut (kendi anahtarlarınla) ya da cihaz içi (Apple, anahtarsız).
+enum PhoneEngine: String, CaseIterable {
+    /// Deepgram + ElevenLabs + Claude: konuşmacılar ayrılır, not daha ayrıntılı.
+    case cloud
+    /// Apple konuşma tanıma + Apple Intelligence: ücretsiz, anahtarsız, internetsiz; konuşmacılar ayrılmaz.
+    case onDevice
 }
 
 /// iPhone ayarlarının varsayılanları (Mac'tekilerle aynı).
@@ -27,9 +37,63 @@ func registerPhoneDefaults() {
         PhoneSettingsKey.consentReminder: true,
         PhoneSettingsKey.audioRetentionDays: 30,
         PhoneSettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
+        // Mevcut kullanıcılar bulutta kalır; ilk açılışta anahtar yoksa cihaz içi seçilir (`choosePhoneOnDeviceOnFirstRun`).
+        PhoneSettingsKey.engine: PhoneEngine.cloud.rawValue,
         // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
         PhoneSettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
     ])
+}
+
+/// Seçili motor; tanınmayan değer bulut sayılır ve hata loglanır.
+func phoneEngine() -> PhoneEngine {
+    let stored: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.engine) ?? PhoneEngine.cloud.rawValue
+    guard let engine = PhoneEngine(rawValue: stored) else {
+        phoneSettingsLogger.error("Motor ayarı tanınmadı, değer: \(stored, privacy: .public)")
+        return .cloud
+    }
+    return engine
+}
+
+/// İlk açılışta (karşılama bitmemiş, motor hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence
+/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Ana toplantı dili kayıtlı
+/// değilse cihazın dili (modelde varsa) ya da İngilizce olur (bkz. `onDeviceDefaultMeetingLanguage`). Anahtarı olan
+/// kullanıcıya dokunulmaz. Seçim yapıldıysa true.
+func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
+    // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        phoneSettingsLogger.error("İlk açılışta paket kimliği yok, cihaz içi mod seçilmedi")
+        return false
+    }
+    guard !defaults.bool(forKey: PhoneSettingsKey.onboardingCompleted), defaults.persistentDomain(forName: bundleID)?[PhoneSettingsKey.engine] == nil else {
+        return false
+    }
+    for account in [SecretAccount.deepgram, .elevenlabs, .anthropic] {
+        do {
+            if try await Task.detached(operation: { try secretExists(service: keychainService, account: account) }).value {
+                return false
+            }
+        } catch {
+            // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
+            phoneSettingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+    let config: OnDeviceConfig
+    do {
+        config = try onDeviceConfig()
+    } catch {
+        phoneSettingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        return false
+    }
+    // Kayıtlı ana toplantı dili korunur (karşılamada bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
+    // (varsayılan Fince modelde yok) cihazın dili ya da İngilizce.
+    if defaults.persistentDomain(forName: bundleID)?[PhoneSettingsKey.primaryMeetingLanguage] == nil {
+        let language: MeetingLanguage = onDeviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages, languageCodes: config.languageCodes)
+        defaults.set(language.rawValue, forKey: PhoneSettingsKey.primaryMeetingLanguage)
+        phoneSettingsLogger.info("İlk açılışta ana toplantı dili seçildi, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(PhoneEngine.onDevice.rawValue, forKey: PhoneSettingsKey.engine)
+    return true
 }
 
 private let phoneSettingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "PhoneSettings")
@@ -64,10 +128,16 @@ func phoneUserName() -> String {
     UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
 }
 
-/// Telefonda not ve çeviri Claude ile yazılır; modeller Mac'in varsayılanlarıdır (Haiku: çeviri düşük, not yüksek effort).
+/// Telefonda not ve çeviri: cihaz içi modda Apple Intelligence; bulutta Claude, modeller Mac'in varsayılanlarıdır
+/// (Haiku: çeviri düşük, not yüksek effort).
 func phoneLLMProvider() async throws -> LLMProvider {
-    .anthropic(AnthropicConfig(
-        apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),
-        fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .high
-    ))
+    switch phoneEngine() {
+    case .onDevice:
+        return .onDevice(try onDeviceConfig())
+    case .cloud:
+        return .anthropic(AnthropicConfig(
+            apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),
+            fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .high
+        ))
+    }
 }

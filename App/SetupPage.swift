@@ -416,10 +416,13 @@ private func openPrivacySettings(anchor: String) {
     NSWorkspace.shared.open(url)
 }
 
-/// Ad ve canlı metin motoru.
+/// Ad, başlama yolu (cihaz içi ya da kendi anahtarlarınla) ve canlı metin motoru.
 private struct ProfileStep: View {
     let model: AppModel
     @AppStorage(SettingsKey.userName) private var userName: String = ""
+    @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -437,25 +440,84 @@ private struct ProfileStep: View {
                     .foregroundStyle(Theme.muted)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("Canlı metin").appFont(size: 13, weight: .semibold)
+                Text("Nasıl başlamak istersin?").appFont(size: 13, weight: .semibold)
                 HStack(alignment: .top, spacing: 12) {
                     ChoiceCard(
-                        symbol: "cloud.fill", title: "Bulut (en hızlı)",
-                        text: "Deepgram ve ElevenLabs; konuşmacılar canlı ayrılır. İki anahtar gerekir.",
-                        isSelected: model.liveEngine == .deepgram
+                        symbol: "cpu", title: "Hemen başla (cihaz içi)",
+                        text: "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır.",
+                        isSelected: isOnDevice
                     ) {
-                        Task { await model.selectEngine(engine: .deepgram) }
+                        provider = LLMProviderKind.onDevice.rawValue
+                        Task { await model.selectEngine(engine: .appleSpeech) }
                     }
                     ChoiceCard(
-                        symbol: "laptopcomputer", title: "Bu Mac'te",
-                        text: "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.",
-                        isSelected: model.liveEngine == .whisperKit
+                        symbol: "key.fill", title: "Kendi anahtarlarımla",
+                        text: "Daha yüksek kalite: Claude ile not, konuşmacılar ayrılır. Sonraki adımda anahtarları girersin.",
+                        isSelected: !isOnDevice
                     ) {
-                        Task { await model.selectEngine(engine: .whisperKit) }
+                        provider = LLMProviderKind.anthropic.rawValue
+                        Task { await model.selectEngine(engine: .deepgram) }
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
+                if isOnDevice {
+                    // Cihaz içi tanıma dil algılamaz ve model her dili yazamaz: toplantıların dili burada seçilir.
+                    HStack(spacing: 10) {
+                        Text("Ana toplantı dili").appFont(size: 13, weight: .regular)
+                        Spacer(minLength: 8)
+                        SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
+                            (language.rawValue, Text(verbatim: languageName(language: language)))
+                        })
+                    }
+                    .padding(.top, 4)
+                    .onChange(of: primaryLanguage) { (_: String, _: String) in
+                        model.primaryLanguageChanged()
+                    }
+                }
+                if isOnDevice, let problem = onDeviceProblem {
+                    Text(verbatim: problem)
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            if !isOnDevice {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Canlı metin").appFont(size: 13, weight: .semibold)
+                    HStack(alignment: .top, spacing: 12) {
+                        ChoiceCard(
+                            symbol: "cloud.fill", title: "Bulut (en hızlı)",
+                            text: "Deepgram ve ElevenLabs; konuşmacılar canlı ayrılır. İki anahtar gerekir.",
+                            isSelected: model.liveEngine == .deepgram
+                        ) {
+                            Task { await model.selectEngine(engine: .deepgram) }
+                        }
+                        ChoiceCard(
+                            symbol: "laptopcomputer", title: "Bu Mac'te",
+                            text: "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.",
+                            isSelected: model.liveEngine == .whisperKit
+                        ) {
+                            Task { await model.selectEngine(engine: .whisperKit) }
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// Cihaz içi mod seçili: Apple konuşma tanıma ve Apple Intelligence.
+    private var isOnDevice: Bool {
+        model.liveEngine == .appleSpeech && provider == LLMProviderKind.onDevice.rawValue
+    }
+
+    /// Cihaz içi model kullanılamıyorsa nedeni ve ne yapılacağı; kullanılabiliyorsa nil.
+    private var onDeviceProblem: String? {
+        do {
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage(), outputLanguage: storedNoteLanguage(value: noteLanguage))
+        } catch {
+            return userFacingMessage(error: error)
         }
     }
 }
@@ -463,20 +525,28 @@ private struct ProfileStep: View {
 /// Seçili motorun ve LLM'in anahtarları.
 private struct KeysStep: View {
     let model: AppModel
+    @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if model.liveEngine == .deepgram {
-                SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
-                SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
+            if provider == LLMProviderKind.onDevice.rawValue, model.liveEngine == .appleSpeech {
+                Text("Cihaz içi modda anahtar gerekmez; bu adımı atlayabilirsin. Daha yüksek kalite istersen anahtarları sonra Ayarlar'dan ekleyip sağlayıcıyı değiştirirsin.")
+                    .appFont(size: 13, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                if model.liveEngine == .deepgram {
+                    SecretField(title: "Deepgram", account: .deepgram, onChange: model.settingsChanged)
+                    SecretField(title: "ElevenLabs", account: .elevenlabs, onChange: model.settingsChanged)
+                }
+                SecretField(title: "Anthropic (Claude)", account: .anthropic, onChange: model.settingsChanged)
+                LocalLLMSetup(model: model)
+                Text("Çeviri, özet ve not için Claude kullanılır; anahtarsız istersen Mac'teki Ollama'yı seç. OpenAI ve OpenCode Go Ayarlar › LLM'de.")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
             }
-            SecretField(title: "Anthropic (Claude)", account: .anthropic, onChange: model.settingsChanged)
-            LocalLLMSetup(model: model)
-            Text("Çeviri, özet ve not için Claude kullanılır; anahtarsız istersen Mac'teki Ollama'yı seç. OpenAI ve OpenCode Go Ayarlar › LLM'de.")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 12)
         }
     }
 }

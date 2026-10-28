@@ -254,6 +254,8 @@ public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvid
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
+        // Cihaz içi modelde toplantının ya da notun dili desteklenmiyorsa not yazılmaz (bozuk not yerine açık hata).
+        try requireOnDeviceLanguages(provider: llm, meetingLanguages: record.language.map { [$0] } ?? [], outputLanguage: language)
         guard let note = try await writeMeetingNote(
             segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general,
             myNotes: record.myNotes ?? "", language: language, llm: llm,

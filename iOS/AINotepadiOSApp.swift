@@ -167,6 +167,10 @@ struct RootView: View {
             }
         }
         .preferredColorScheme((AppTheme(rawValue: theme) ?? .system).isDark.map { $0 ? ColorScheme.dark : ColorScheme.light })
+        // İlk açılışta anahtar yoksa cihaz içi mod seçilir (karşılama seçimi gösterir).
+        .task {
+            _ = await choosePhoneOnDeviceOnFirstRun(defaults: .standard)
+        }
         .onChange(of: theme) { (_: String, value: String) in
             let selected: AppTheme = AppTheme(rawValue: value) ?? .system
             ThemeStore.shared.set(light: selected.colorSets.light, dark: selected.colorSets.dark)

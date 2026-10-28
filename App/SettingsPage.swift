@@ -204,10 +204,16 @@ private struct GeneralSettings: View {
                     (language.rawValue, Text(verbatim: language.nativeName))
                 })
             }
+            // Cihaz içi modelin bu dili yazıp yazamadığı uyarısı yenilensin.
+            .onChange(of: noteLanguage) { (_: String, _: String) in
+                model.settingsChanged()
+            }
             SettingsRow(title: Text("Canlı metin")) {
-                Text(model.liveEngine == .deepgram
-                    ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
-                    : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                switch model.liveEngine {
+                case .deepgram: Text("Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.")
+                case .whisperKit: Text("Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                case .appleSpeech: Text("Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.")
+                }
             } control: {
                 SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
@@ -215,6 +221,7 @@ private struct GeneralSettings: View {
                         Task { await model.selectEngine(engine: engine) }
                     }
                 ), options: [
+                    (LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
@@ -226,6 +233,9 @@ private struct GeneralSettings: View {
                 SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
                     (language.rawValue, Text(verbatim: languageName(language: language)))
                 })
+            }
+            .onChange(of: primaryLanguage) { (_: String, _: String) in
+                model.primaryLanguageChanged()
             }
             SettingsRow(title: Text("Kurulum")) {
                 Text("İzinler, anahtarlar ve kısayollar adım adım.")
@@ -688,7 +698,51 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
-/// LLM sağlayıcısı: Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
+/// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı, desteklenen diller ve ana toplantı
+/// dili ya da not dili desteklenmiyorsa uyarı.
+private struct OnDeviceLLMStatus: View {
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
+
+    var body: some View {
+        switch onDeviceStatus() {
+        case .success(let config):
+            SettingsRow(title: Text("Apple Intelligence")) {
+                Text("Not, çeviri ve soru bu cihazda yazılır: ücretsiz, anahtarsız, internetsiz. Model küçüktür (4 bin token bağlam): uzun toplantılar parça parça işlenir, not kendi anahtarınla seçilen modellerden daha kısa olur.")
+            } control: {
+                Label("Hazır", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+            }
+            SettingsRow(title: Text("Desteklenen diller")) {
+                Text(verbatim: onDeviceLanguageNames(config: config).joined(separator: ", "))
+            } control: {
+                EmptyView()
+            }
+            // Ana toplantı dili ya da not dili modelde yoksa uyarı.
+            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ (language: MeetingLanguage) -> String? in
+                onDeviceModeWarning(config: config, primaryLanguage: language, outputLanguage: storedNoteLanguage(value: noteLanguage))
+            }) {
+                SettingsRow(title: Text("Ana toplantı dili")) {
+                    Text(verbatim: warning)
+                } control: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+                }
+            }
+        case .failure(let error):
+            SettingsRow(title: Text("Apple Intelligence")) {
+                Text(verbatim: userFacingMessage(error: error))
+            } control: {
+                Label("Kullanılamıyor", systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    /// Modelin ayarı (kullanılabiliyorsa) ya da neden kullanılamadığı.
+    private func onDeviceStatus() -> Result<OnDeviceConfig, any Error> {
+        Result { () throws -> OnDeviceConfig in try onDeviceConfig() }
+    }
+}
+
+/// LLM sağlayıcısı: cihaz içi, Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
 private struct LLMSettings: View {
     let model: AppModel
     @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
@@ -712,11 +766,14 @@ private struct LLMSettings: View {
                 EmptyView()
             } control: {
                 SettingsMenu(selection: $provider, options: [
+                    (LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
                     (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
                 ])
             }
-            if provider == LLMProviderKind.anthropic.rawValue {
+            if provider == LLMProviderKind.onDevice.rawValue {
+                OnDeviceLLMStatus()
+            } else if provider == LLMProviderKind.anthropic.rawValue {
                 SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
                 SettingsGroupHeader(title: "Canlı çeviri")
                 SettingsRow(title: Text("Model")) {
@@ -866,7 +923,7 @@ private func testConnection() async -> ConnectionTest {
     }
     let reply: String
     do {
-        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: [], language: selectedNoteLanguage()))
+        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: connectionTestSentence(provider: provider), context: [], language: selectedNoteLanguage()))
     } catch {
         return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
     }
@@ -878,6 +935,14 @@ private func testConnection() async -> ConnectionTest {
         return .failed(String(localized: "Not modeli: \(userFacingMessage(error: error))"))
     }
     return .succeeded(reply)
+}
+
+/// Bağlantı denemesinde çevrilen cümle: Fince; cihaz içi model Fince anlamadığı için orada İngilizce. Saf fonksiyondur.
+private func connectionTestSentence(provider: LLMProvider) -> String {
+    guard case .onDevice = provider else {
+        return "Hyvää huomenta."
+    }
+    return "Good morning."
 }
 
 /// Bulut konuşma tanıma anahtarları.

@@ -16,11 +16,28 @@ struct PhoneSettingsTab: View {
     @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(PhoneSettingsKey.engine) private var engine: String = PhoneEngine.cloud.rawValue
 
     var body: some View {
         NavigationStack {
             List {
                 CrashReportNotice(center: crashReports)
+                Section {
+                    Picker("Yazıya dökme ve not", selection: $engine) {
+                        Text("Cihaz içi (ücretsiz, anahtarsız)").tag(PhoneEngine.onDevice.rawValue)
+                        Text("Bulut (kendi anahtarlarınla)").tag(PhoneEngine.cloud.rawValue)
+                    }
+                    if engine == PhoneEngine.onDevice.rawValue, let problem = onDeviceProblem {
+                        Label(problem, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                } header: {
+                    Text("Motor")
+                } footer: {
+                    Text(engine == PhoneEngine.onDevice.rawValue
+                        ? "Apple'ın konuşma tanıması ve Apple Intelligence: ses ve metin telefondan çıkmaz. Konuşmacılar ayrılmaz; not, bulut modellerinden daha kısadır."
+                        : "Deepgram canlı metni, ElevenLabs konuşmacıları, Claude notu yazar; aşağıdaki anahtarlar gerekir.")
+                }
                 Section {
                     Picker("Tema", selection: $theme) {
                         ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
@@ -107,6 +124,16 @@ struct PhoneSettingsTab: View {
                 }
             }
             .navigationTitle("Ayarlar")
+        }
+    }
+
+    /// Cihaz içi model kullanılamıyorsa ya da ana toplantı dilini desteklemiyorsa ne yapılacağı; sorun yoksa nil.
+    private var onDeviceProblem: String? {
+        do {
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return onDeviceModeWarning(config: config, primaryLanguage: phonePrimaryMeetingLanguage(), outputLanguage: phoneStoredNoteLanguage(value: noteLanguage))
+        } catch {
+            return userFacingMessage(error: error)
         }
     }
 }

@@ -37,6 +37,8 @@ public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTex
     case .openAICompatible(let config):
         call = try prepareOpenAIStreamCall(config: config, request: request)
         textDelta = { (line: Substring) -> String? in openAITextDelta(line: line) }
+    case .onDevice(let config):
+        return try await streamOnDevice(config: config, request: request, onText: onText)
     }
     var lastError: any Error = LLMError.empty
     for attempt in 1...streamAttempts {

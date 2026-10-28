@@ -87,13 +87,18 @@ final class PhoneAsk {
                     await self?.apply(progress: progress, id: id)
                 }
                 if scoped.isEmpty {
+                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz; model satırında hangileri yazılır.
+                    let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider, outputLanguage: phoneNoteLanguage())
+                    self?.update(id: id) { $0.modelName = askModelName(provider: provider, readable: readable) }
                     _ = try await askArchive(
-                        question: trimmed, history: history, records: records, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
-                        now: Date(), onProgress: onProgress
+                        question: trimmed, history: history, records: readable.records, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider,
+                        maxChars: noteLimits(provider: provider).archiveChars, now: Date(), onProgress: onProgress
                     )
                 } else {
+                    try requireOnDeviceLanguages(provider: provider, meetingLanguages: scoped.compactMap(\.language), outputLanguage: phoneNoteLanguage())
                     _ = try await askAboutMeetings(
-                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider,
+                        maxChars: noteLimits(provider: provider).archiveChars,
                         now: Date(), onProgress: onProgress
                     )
                 }

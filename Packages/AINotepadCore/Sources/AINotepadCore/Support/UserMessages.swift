@@ -10,6 +10,10 @@ public func userFacingMessage(error: any Error) -> String {
         return keychainMessage(error: error)
     case let error as LLMError:
         return llmMessage(error: error)
+    case let error as OnDeviceLLMError:
+        return onDeviceMessage(error: error)
+    case let error as AppleSpeechError:
+        return appleSpeechMessage(error: error)
     case let error as CloudSTTError:
         return cloudMessage(error: error)
     case let error as StorageError:

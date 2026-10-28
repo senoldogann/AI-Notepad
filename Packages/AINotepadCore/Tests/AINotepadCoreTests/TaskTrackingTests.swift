@@ -170,7 +170,10 @@ extension CloudTests {
             tasks: [NoteTask(owner: "Senol", description: "Aikataulun lähettäminen tiimille", dueDate: "perjantai", isMine: true)],
             glossary: []
         )
-        let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general, language: .turkish)
+        // `writeMeetingNote` parmak izine kendi notlarını ve parça boyutunu da katar.
+        let fingerprint: String = noteFingerprint(
+            segments: segments, speakerNames: [:], userName: "Senol\u{1F}\u{1F}\(noteChunkMaxChars)", template: .general, language: .turkish
+        )
         try JSONEncoder().encode(ChunkedNoteProgress(fingerprint: fingerprint, completedParts: parts, state: saved)).write(to: file)
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: segments, speakerNames: [:], userName: "Senol", template: .general, myNotes: "",

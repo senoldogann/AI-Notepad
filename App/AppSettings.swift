@@ -11,12 +11,14 @@ private let settingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 enum LiveEngine: String, CaseIterable {
     case deepgram
     case whisperKit
+    /// Apple'ın cihaz içi konuşma tanıması (SpeechAnalyzer): anahtarsız, büyük model indirmesi yok.
+    case appleSpeech
 
     /// Bu motorla kaydedilen toplantının son geçiş türü.
     var recordingEngine: RecordingEngine {
         switch self {
         case .deepgram: .cloud
-        case .whisperKit: .local
+        case .whisperKit, .appleSpeech: .local
         }
     }
 }
@@ -315,7 +317,53 @@ func resolveLLMProvider() async throws -> LLMProvider {
         ))
     case .openAICompatible:
         return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
+    case .onDevice:
+        return .onDevice(try onDeviceConfig())
     }
+}
+
+/// İlk açılışta (kurulum bitmemiş, motor ve LLM hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence
+/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Ana toplantı dili kayıtlı
+/// değilse cihazın dili (modelde varsa) ya da İngilizce olur (bkz. `onDeviceDefaultMeetingLanguage`). Anahtarı olan ya
+/// da kurulumu bitirmiş kullanıcıya dokunulmaz. Seçim yapıldıysa true.
+func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
+    // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("İlk açılışta paket kimliği yok, cihaz içi mod seçilmedi")
+        return false
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    guard !defaults.bool(forKey: SettingsKey.onboardingCompleted), stored[SettingsKey.liveEngine] == nil, stored[SettingsKey.llmProvider] == nil else {
+        return false
+    }
+    for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
+        do {
+            if try await Task.detached(operation: { try secretExists(service: keychainService, account: account) }).value {
+                return false
+            }
+        } catch {
+            // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
+            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+    let config: OnDeviceConfig
+    do {
+        config = try onDeviceConfig()
+    } catch {
+        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        return false
+    }
+    // Kayıtlı ana toplantı dili korunur (kurulumda bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
+    // (varsayılan Fince modelde yok) cihazın dili ya da İngilizce.
+    if defaults.persistentDomain(forName: bundleID)?[SettingsKey.primaryMeetingLanguage] == nil {
+        let language: MeetingLanguage = onDeviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages, languageCodes: config.languageCodes)
+        defaults.set(language.rawValue, forKey: SettingsKey.primaryMeetingLanguage)
+        settingsLogger.info("İlk açılışta ana toplantı dili seçildi, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(LiveEngine.appleSpeech.rawValue, forKey: SettingsKey.liveEngine)
+    defaults.set(LLMProviderKind.onDevice.rawValue, forKey: SettingsKey.llmProvider)
+    return true
 }
 
 /// Kayıtlı OpenAI uyumlu ayar; adres ya da model eksikse `LLMError.notConfigured`.

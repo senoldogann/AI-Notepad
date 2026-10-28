@@ -162,11 +162,17 @@ private struct RecordHeroCard: View {
             .disabled(recorder.phase == .starting)
             .accessibilityLabel("Kaydı başlat")
             VStack(spacing: 4) {
-                Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
+                Text(startTitle)
                     .appFont(size: 20, weight: .semibold)
                     .tracking(-0.3)
                     .foregroundStyle(Color.black.opacity(0.8))
-                Text("Odadaki herkes konuşmacılara ayrılır, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) çevirisi canlı akar; bitince notu yazar.")
+                Group {
+                    if phoneEngine() == .onDevice {
+                        Text("Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz.")
+                    } else {
+                        Text("Odadaki herkes konuşmacılara ayrılır, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) çevirisi canlı akar; bitince notu yazar.")
+                    }
+                }
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Color.black.opacity(0.6))
                     .multilineTextAlignment(.center)
@@ -180,6 +186,16 @@ private struct RecordHeroCard: View {
         .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.10)))
         // Açık gradyan her temada açık görünümle çizilir (koyu temada menü ve gösterge de koyu mürekkeple kalsın).
         .environment(\.colorScheme, .light)
+    }
+
+    /// Düğmenin altındaki başlık: başlarken (cihaz içi konuşma modeli iniyorsa ilerlemesiyle) ya da davet.
+    private var startTitle: String {
+        guard recorder.phase == .starting else {
+            return String(localized: "Dokun, dinlemeye başlasın")
+        }
+        return recorder.speechModelProgress.map { (fraction: Double) -> String in
+            String(localized: "Konuşma modeli indiriliyor… \(fraction.formatted(.percent.precision(.fractionLength(0))))")
+        } ?? String(localized: "Başlatılıyor…")
     }
 }
 

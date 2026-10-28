@@ -175,9 +175,19 @@ struct AINotepadApp: App {
                 shortcuts.unregisterAll()
             }
         }
-        // WhisperKit modeli yalnızca o motor seçiliyse yüklenir.
-        if engine == .whisperKit {
-            Task { await model.loadModel() }
+        // WhisperKit modeli yalnızca o motor seçiliyse yüklenir; ilk açılışta anahtar yoksa cihaz içi mod seçilir.
+        Task {
+            if await chooseOnDeviceOnFirstRun(defaults: .standard) {
+                appLogger.info("İlk açılış: anahtar yok, cihaz içi mod seçildi")
+                await model.selectEngine(engine: .appleSpeech)
+                model.settingsChanged()
+                return
+            }
+            switch engine {
+            case .deepgram: break
+            case .whisperKit: await model.loadModel()
+            case .appleSpeech: await model.prepareSpeechModel()
+            }
         }
     }
 
@@ -363,6 +373,13 @@ private struct MenuContent: View {
             .disabled(!updater.canCheckForUpdates)
         }
 
+        if model.liveEngine == .appleSpeech, case .failed(let message) = model.modelStatus {
+            Divider()
+            Text(message).foregroundStyle(.red)
+            Button("Konuşma modelini yeniden hazırla", systemImage: "arrow.clockwise") {
+                Task { await model.prepareSpeechModel() }
+            }
+        }
         if model.liveEngine == .whisperKit {
             switch model.modelStatus {
             case .loading:
