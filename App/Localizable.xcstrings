@@ -6576,6 +6576,16 @@
         }
       }
     },
+    "Notlarımı kapat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close my notes"
+          }
+        }
+      }
+    },
     "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)": {
       "localizations": {
         "en": {
