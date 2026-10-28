@@ -31,8 +31,10 @@ enum MainSection: Hashable {
 final class MainWindowRouter {
     var section: MainSection = .home
     var selectedMeetingID: String?
-    /// Üst çubuktaki arama (Toplantılar listesini süzer).
+    /// Toplantılar listesini süzen arama (arama penceresinde ↩ ile uygulanır; üst çubukta görünür, × ile temizlenir).
     var searchQuery: String = ""
+    /// Orta ekrandaki arama penceresi açık.
+    var isSearchPresented: Bool = false
     /// Kayıt ya da işleme sürerken çıkış istendi: Ana sayfada satır içi soru gösterilir.
     var quitWarning: Bool = false
     /// Açılış ekranı bu açılışta gösterildi.
@@ -185,6 +187,13 @@ struct MainWindowView: View {
                 .transition(.opacity.combined(with: .scale(scale: 1.02)))
             }
         }
+        .overlay {
+            if router.isSearchPresented {
+                SearchComposer(model: model, router: router)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.2), value: router.isSearchPresented)
         .foregroundStyle(Theme.ink)
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
@@ -313,49 +322,61 @@ private struct Sidebar: View {
     }
 }
 
-/// Üst çubuk: sayfa adı, toplantılarda arama (⌘K; yazınca Toplantılar açılır), "Canlı panel".
+/// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
+/// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
 private struct TopBar: View {
     let router: MainWindowRouter
     let onShowPanel: @MainActor () -> Void
-    @FocusState private var isSearching: Bool
 
     var body: some View {
         HStack(spacing: DesignTokens.Spacing.m) {
             Text(title).appFont(size: 14, weight: .medium)
             Spacer(minLength: DesignTokens.Spacing.m)
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
-                TextField("Toplantılarda ara…", text: Binding<String>(
-                    get: { router.searchQuery },
-                    set: { (value: String) -> Void in
-                        router.searchQuery = value
-                        if !value.isEmpty {
-                            router.section = .meetings
+                Button {
+                    router.isSearchPresented = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(Theme.muted)
+                        if router.searchQuery.isEmpty {
+                            Text("Toplantılarda ara…").foregroundStyle(Theme.muted)
+                        } else {
+                            Text(verbatim: router.searchQuery).foregroundStyle(Theme.ink).lineLimit(1)
                         }
+                        Spacer(minLength: 0)
                     }
-                ))
-                .textFieldStyle(.plain)
-                .focused($isSearching)
-                // Pencere açılınca arama kutusu kendiliğinden odak almaz (imleç yanıp sönmesin).
-                .defaultFocus($isSearching, false)
-                Text("⌘K")
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .padding(.horizontal, 5)
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if router.searchQuery.isEmpty {
+                    Text("⌘K")
+                        .appFont(size: 11, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 5)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                } else {
+                    Button {
+                        router.searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Aramayı temizle")
+                }
             }
             .appFont(size: 13, weight: .regular)
             .padding(.horizontal, 10)
             .frame(width: 320, height: 32)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isSearching ? Theme.ink.opacity(0.35) : Theme.line))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
+            .linkPointer(isEnabled: true)
             .background {
-                // ⌘K ve ⌘F aramaya odaklanır.
-                Button("") { isSearching = true }
+                // ⌘K ve ⌘F arama penceresini açar.
+                Button("") { router.isSearchPresented = true }
                     .keyboardShortcut("k", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
-                Button("") { isSearching = true }
+                Button("") { router.isSearchPresented = true }
                     .keyboardShortcut("f", modifiers: .command)
                     .opacity(0)
                     .accessibilityHidden(true)
@@ -1336,4 +1357,169 @@ func homeGreeting(name: String, hour: Int) -> String {
     }
     let first: String = name.split(separator: " ").first.map(String.init) ?? ""
     return first.isEmpty ? base : "\(base), \(first)"
+}
+
+/// Orta ekrandaki arama penceresi (Spotlight gibi): arka plan bulanıklaşır ve kararır; büyük arama alanı yazıldıkça
+/// toplantıları anında süzer (başlık, not, görevler, adlar, transkript). ↑↓ seçer, ↩ seçileni açar (seçim yoksa aramayı
+/// Toplantılar listesine uygular), Esc ya da dışarı tıklama kapatır.
+private struct SearchComposer: View {
+    let model: AppModel
+    let router: MainWindowRouter
+    @State private var query: String = ""
+    @State private var highlighted: Int = 0
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        let trimmed: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let results: [MeetingRecord] = Array((trimmed.isEmpty ? model.meetings : filterMeetings(records: model.meetings, query: trimmed)).prefix(8))
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.18))
+                .ignoresSafeArea()
+                .onTapGesture { close() }
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .appFont(size: 18, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                    TextField("Toplantılarda ara…", text: $query)
+                        .textFieldStyle(.plain)
+                        .appFont(size: 20, weight: .regular)
+                        .focused($isFocused)
+                        .onSubmit { open(results: results) }
+                    Text("esc")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.line))
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 60)
+                Rectangle().fill(Theme.line).frame(height: 1)
+                if results.isEmpty {
+                    Text("Eşleşen toplantı yok")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(trimmed.isEmpty ? "Son toplantılar" : "Toplantılar")
+                            .appFont(size: 11, weight: .semibold)
+                            .tracking(DesignTokens.labelTracking)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                            .padding(.bottom, 4)
+                        ForEach(Array(results.enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
+                            row(record: item.element, isHighlighted: item.offset == min(highlighted, results.count - 1))
+                                .onHover { (hovering: Bool) -> Void in
+                                    if hovering {
+                                        highlighted = item.offset
+                                    }
+                                }
+                        }
+                    }
+                    .padding(8)
+                }
+                Rectangle().fill(Theme.line).frame(height: 1)
+                HStack(spacing: 14) {
+                    Text("↑↓ seç")
+                    Text("↩ aç")
+                    Spacer(minLength: 0)
+                    if !trimmed.isEmpty {
+                        Button("Tüm sonuçları listede göster") { applyToList() }
+                            .buttonStyle(.hoverPlain)
+                    }
+                }
+                .appFont(size: 11, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 16)
+                .frame(height: 34)
+            }
+            .frame(width: 600)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+            .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
+            .padding(.top, 96)
+        }
+        .onAppear {
+            query = router.searchQuery
+            isFocused = true
+        }
+        .onChange(of: query) { (_: String, _: String) -> Void in highlighted = 0 }
+        .onKeyPress(.downArrow) {
+            highlighted = min(highlighted + 1, max(0, results.count - 1))
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            highlighted = max(highlighted - 1, 0)
+            return .handled
+        }
+        .onExitCommand { close() }
+    }
+
+    private func row(record: MeetingRecord, isHighlighted: Bool) -> some View {
+        Button {
+            openMeeting(id: record.id)
+        } label: {
+            HStack(spacing: 12) {
+                CoverImage(seed: record.id)
+                    .frame(width: 40, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(record.note?.title ?? record.title)
+                        .appFont(size: 14, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                    Text(record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale())))
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer(minLength: 0)
+                if isHighlighted {
+                    Image(systemName: "return")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isHighlighted ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// ↩: vurgulanan toplantıyı açar; sonuç yoksa aramayı listeye uygular.
+    private func open(results: [MeetingRecord]) {
+        guard !results.isEmpty else {
+            applyToList()
+            return
+        }
+        openMeeting(id: results[min(highlighted, results.count - 1)].id)
+    }
+
+    private func openMeeting(id: String) {
+        router.searchQuery = ""
+        router.folderFilter = nil
+        router.selectedMeetingID = id
+        router.section = .meetings
+        close()
+    }
+
+    /// Aramayı Toplantılar listesine uygular (üst çubukta görünür, × ile temizlenir).
+    private func applyToList() {
+        router.searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        router.folderFilter = nil
+        router.section = .meetings
+        close()
+    }
+
+    private func close() {
+        router.isSearchPresented = false
+    }
 }

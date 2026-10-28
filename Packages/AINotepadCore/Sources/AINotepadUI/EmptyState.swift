@@ -123,7 +123,7 @@ public struct EmptyStateHero<Actions: View>: View {
 
     public var body: some View {
         VStack(spacing: 22) {
-            EmptyStateOrb(symbol: symbol, palette: palette, isAnimated: !reduceMotion)
+            EmptyStateOrb(symbol: symbol, palette: palette)
                 .frame(width: 180, height: 170)
                 .scaleEffect(isShown ? 1 : 0.94)
                 .opacity(isShown ? 1 : 0)
@@ -155,9 +155,10 @@ public struct EmptyStateHero<Actions: View>: View {
         .padding(.vertical, 28)
         .padding(.horizontal, DesignTokens.Spacing.l)
         .frame(maxWidth: .infinity)
-        // Arkada ince, soluk eğriler (kâğıt dokusu); kenarlara doğru söner.
+        // Arkada ince, soluk, durgun eğriler (kâğıt dokusu); kenarlara doğru söner. Kaymaz: boş sayfa açık kalırken
+        // sürekli çizim yapılmasın.
         .background {
-            FlowingLines(seed: "bos-\(symbol)", lineCount: 9, isAnimated: !reduceMotion)
+            FlowingLines(seed: "bos-\(symbol)", lineCount: 9, isAnimated: false)
                 .mask(RadialGradient(colors: [.black, .clear], center: .center, startRadius: 60, endRadius: 520))
                 .padding(-80)
         }
@@ -202,12 +203,11 @@ private struct EmptyStateSteps: View {
     }
 }
 
-/// Sahnenin küresi: ElevenLabs kapakları gibi yavaşça akan film gradyanı (paletin bulutları, grenli doku) daire
-/// içinde, arkasında aynı renklerin yumuşak parıltısı; ortada beyaz simge. Hareket yalnızca gradyanın sakin akışıdır.
+/// Sahnenin küresi: durgun film gradyanı (paletin bulutları, grenli doku) daire içinde, arkasında aynı renklerin
+/// yumuşak parıltısı; ortada beyaz simge.
 struct EmptyStateOrb: View {
     let symbol: String
     let palette: FilmPalette
-    let isAnimated: Bool
 
     var body: some View {
         ZStack {
@@ -215,16 +215,10 @@ struct EmptyStateOrb: View {
                 .fill(palette.colors.base.opacity(0.22))
                 .frame(width: 150, height: 150)
                 .blur(radius: 34)
-            Group {
-                if isAnimated {
-                    FilmGradient(seed: "bos-\(symbol)", palette: palette)
-                } else {
-                    FilmGradient(seed: "bos-\(symbol)", palette: palette)
-                }
-            }
-            .frame(width: 116, height: 116)
-            .clipShape(Circle())
-            .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+            FilmGradient(seed: "bos-\(symbol)", palette: palette)
+                .frame(width: 116, height: 116)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
             Image(systemName: symbol)
                 .font(.system(size: 38, weight: .medium))
                 .foregroundStyle(.white)
