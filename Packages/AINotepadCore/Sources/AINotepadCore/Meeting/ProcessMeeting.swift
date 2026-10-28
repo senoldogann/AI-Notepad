@@ -29,7 +29,7 @@ public enum ProcessingStep: Int, Sendable, Equatable, CaseIterable {
     case convertingAudio
     /// Kaydın tamamından son geçiş (konuşmacılar).
     case finalPass
-    /// Türkçe not.
+    /// Not (not ve çeviri dilinde).
     case writingNote
 }
 
@@ -79,7 +79,7 @@ public func audioDurationSec(url: URL) throws -> Double {
 }
 
 /// Toplantı sonrası işleme: (1) `.caf` → `.m4a`, (2) kaydın tamamından son geçiş (bulut ya da yerel; atlanır ya da
-/// başarısız olursa toplantıda uyarı, canlı metin kullanılır), (3) Türkçe not. Bir adım başarısız olursa o ana kadarki ilerleme korunur, durum `failed` olur;
+/// başarısız olursa toplantıda uyarı, canlı metin kullanılır), (3) not dilinde (`noteLanguage`) not. Bir adım başarısız olursa o ana kadarki ilerleme korunur, durum `failed` olur;
 /// ses dosyaları kaldığı için yeniden işlenebilir.
 public func processMeeting(
     record: MeetingRecord,
@@ -88,6 +88,7 @@ public func processMeeting(
     llm: LLMProvider?,
     languageMode: LanguageMode,
     userName: String,
+    noteLanguage: ShareLanguage,
     voiceEmbedder: (any VoiceEmbedder)?,
     registry: [RegisteredVoice],
     onStep: @escaping @MainActor @Sendable (ProcessingStep) async -> Void
@@ -123,7 +124,7 @@ public func processMeeting(
     }
 
     await onStep(.writingNote)
-    return await regenerateNote(record: current, directory: directory, llm: llm, userName: userName)
+    return await regenerateNote(record: current, directory: directory, llm: llm, userName: userName, language: noteLanguage)
 }
 
 /// Sesinden tanıma: kişilerin ses izleri "Diğerleri" kaydından çıkarılır, adı olmayan kişilere kayıtlı seslerden emin
@@ -238,9 +239,9 @@ private func joinedNotice(_ first: String?, _ second: String) -> String {
 let noteProgressFileName: String = "note-progress.json"
 
 /// Yalnızca notu (yeniden) üretir: saklı bölümler ve güncel konuşmacı adlarıyla. Ses gerekmez; ad verdikten
-/// sonra notta da adlar görünsün diye kullanılır. Uzun notun ilerlemesi toplantı klasörüne yazılır (bkz.
-/// `writeMeetingNote`).
-public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvider?, userName: String) async -> MeetingRecord {
+/// sonra notta da adlar görünsün diye kullanılır. Not `language` dilinde yazılır. Uzun notun ilerlemesi toplantı
+/// klasörüne yazılır (bkz. `writeMeetingNote`).
+public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvider?, userName: String, language: ShareLanguage) async -> MeetingRecord {
     // Son geçiş "Diğerleri"ni kapsar; "Sen" için canlı bölümler; hoparlör yankısı nota girmez.
     // İşaretli anlar istemde "★" ile öne çıkar.
     let segments: [StoredSegment] = markingHighlights(segments: meetingSegments(record: record), highlights: record.highlights ?? [])
@@ -253,9 +254,11 @@ public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvid
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {
+        // Cihaz içi modelde toplantının ya da notun dili desteklenmiyorsa not yazılmaz (bozuk not yerine açık hata).
+        try requireOnDeviceLanguages(provider: llm, meetingLanguages: record.language.map { [$0] } ?? [], outputLanguage: language)
         guard let note = try await writeMeetingNote(
             segments: segments, speakerNames: record.speakerNames, userName: userName, template: record.template ?? .general,
-            myNotes: record.myNotes ?? "", llm: llm,
+            myNotes: record.myNotes ?? "", language: language, llm: llm,
             progressFile: directory.appending(path: noteProgressFileName)
         ) else {
             return record.with(status: .done, failureMessage: nil)

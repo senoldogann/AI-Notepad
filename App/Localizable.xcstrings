@@ -400,6 +400,16 @@
         }
       }
     },
+    "%@ not yazılır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note is written in %@"
+          }
+        }
+      }
+    },
     "%@ oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -539,6 +549,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · Click to start listening."
+          }
+        }
+      }
+    },
+    "%@ · okunmadı: %@ toplantılar (cihaz içi model bu dilleri desteklemiyor)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · not read: %@ meetings (the on-device model doesn't support these languages)"
           }
         }
       }
@@ -934,12 +954,12 @@
         }
       }
     },
-    "35 dil; konuşmacılar ayrılır, Türkçesi altında akar.": {
+    "35 dil; konuşmacılar ayrılır, %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "35 languages; speakers separated, Turkish underneath."
+            "value": "35 languages; speakers separated, %@ translation underneath."
           }
         }
       }
@@ -960,6 +980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "AI-Notepad connection test"
+          }
+        }
+      }
+    },
+    "AI-Notepad beklenmedik şekilde kapandı — raporu gönder?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-Notepad quit unexpectedly — send the report?"
           }
         }
       }
@@ -1335,6 +1365,16 @@
         }
       }
     },
+    "Anahtarları burada gir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter keys here"
+          }
+        }
+      }
+    },
     "Anahtarı yapıştır": {
       "localizations": {
         "en": {
@@ -1415,6 +1455,76 @@
         }
       }
     },
+    "Apple Intelligence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Apple Intelligence (cihaz içi)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence (on-device)"
+          }
+        }
+      }
+    },
+    "Apple Intelligence güvenlik denetimi bu metni işlemedi. Kendi anahtarınla bir sağlayıcı seçip yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence's safety check didn't process this text. Choose a provider with your own key and try again."
+          }
+        }
+      }
+    },
+    "Apple Intelligence kapalı. Mac'te Sistem Ayarları, iPhone'da Ayarlar › Apple Intelligence ve Siri'den aç; model indirilince cihaz içi not hazır olur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence is off. Turn it on in System Settings on the Mac or Settings › Apple Intelligence & Siri on the iPhone; on-device notes are ready once the model downloads."
+          }
+        }
+      }
+    },
+    "Apple Intelligence modeli henüz hazır değil (indiriliyor). Cihazı Wi‑Fi'ye ve güce bağlı bırakıp birkaç dakika sonra yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Apple Intelligence model isn't ready yet (downloading). Keep the device on Wi‑Fi and power, then try again in a few minutes."
+          }
+        }
+      }
+    },
+    "Apple Intelligence modeli şu an kullanılamıyor (indiriliyor ya da disk dolu). Birkaç dakika sonra yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Apple Intelligence model isn't available right now (downloading or the disk is full). Try again in a few minutes."
+          }
+        }
+      }
+    },
+    "Apple Intelligence şu an kullanılamıyor (%@). Cihazı yeniden başlatıp tekrar dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence isn't available right now (%@). Restart the device and try again."
+          }
+        }
+      }
+    },
     "Apple Notlar": {
       "localizations": {
         "en": {
@@ -1441,6 +1551,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't write to Apple Notes: %@. Allow Notes for AI-Notepad in System Settings › Privacy & Security › Automation."
+          }
+        }
+      }
+    },
+    "Apple'ın konuşma tanıması ve Apple Intelligence: ses ve metin telefondan çıkmaz. Konuşmacılar ayrılmaz; not, bulut modellerinden daha kısadır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple's speech recognition and Apple Intelligence: audio and text never leave the phone. Speakers aren't separated; notes are shorter than with cloud models."
+          }
+        }
+      }
+    },
+    "Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple's speech recognition; audio never leaves the Mac, no keys or large model download needed. The language isn't detected (it starts with the main meeting language) and speakers aren't separated."
           }
         }
       }
@@ -1762,6 +1892,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read connections: %@"
+          }
+        }
+      }
+    },
+    "Bağlantıyla paylaş…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share with Link…"
           }
         }
       }
@@ -2290,6 +2430,16 @@
         }
       }
     },
+    "Bu bölüm cihaz içi konuşma tanımayla yazıya dökülemedi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This part couldn't be transcribed with on-device speech recognition."
+          }
+        }
+      }
+    },
     "Bu bölüm yazıya dökülemedi.": {
       "extractionState": "stale",
       "localizations": {
@@ -2308,6 +2458,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assign this part to"
+          }
+        }
+      }
+    },
+    "Bu cihaz Apple Intelligence'ı desteklemiyor; cihaz içi not yazılamaz. Ayarlar'da kendi anahtarınla bir sağlayıcı seç (ör. Anthropic).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device doesn't support Apple Intelligence, so on-device notes can't be written. Choose a provider with your own key in Settings (e.g. Anthropic)."
           }
         }
       }
@@ -2562,6 +2722,16 @@
         }
       }
     },
+    "Bulut (kendi anahtarlarınla)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud (with your own keys)"
+          }
+        }
+      }
+    },
     "Bulut ve Claude anahtarları": {
       "localizations": {
         "en": {
@@ -2663,12 +2833,12 @@
         }
       }
     },
-    "Canlı metin ve Türkçesi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+    "Canlı metin ve %@ çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Live text and its Turkish, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+            "value": "Live text and its %@ translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
           }
         }
       }
@@ -2679,6 +2849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live text and translation"
+          }
+        }
+      }
+    },
+    "Canlı metin ve çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and its translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
           }
         }
       }
@@ -2739,6 +2919,136 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing answer"
+          }
+        }
+      }
+    },
+    "Cihaz içi (ücretsiz, anahtarsız)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device (free, no keys)"
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma modeli indirilemedi. İnternete bağlanıp yeniden dene; disk alanını kontrol et.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't download the on-device speech model. Connect to the internet and try again; check your disk space."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma bu dili desteklemiyor (%@). Başka bir toplantı dili seç ya da Ayarlar'dan bulut motorunu (Deepgram) seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition doesn't support this language (%@). Choose another meeting language, or choose the cloud engine (Deepgram) in Settings."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma dili kendisi algılamaz; toplantı dilini seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition doesn't detect the language by itself; choose the meeting language."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma konuşmacıları ayırmaz; konuşmacılar ayrılsın istersen Ayarlar'dan bulut motorunu seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition doesn't separate speakers; to separate speakers, choose the cloud engine in Settings."
+          }
+        }
+      }
+    },
+    "Cihaz içi modda anahtar gerekmez; bu adımı atlayabilirsin. Daha yüksek kalite istersen anahtarları sonra Ayarlar'dan ekleyip sağlayıcıyı değiştirirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device mode needs no keys, so you can skip this step. For higher quality, add keys later in Settings and switch the provider."
+          }
+        }
+      }
+    },
+    "Cihaz içi model %@ desteklemiyor: %@ toplantılar yazıya dökülür ama not ve çeviri yazılmaz. Bu toplantılar için Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur); toplantıların başka dildeyse ana toplantı dilini değiştir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model doesn't support %@: %@ meetings are transcribed, but no notes or translations are written. For these meetings, choose a model with your own key in Settings (Ollama on the Mac also works without a key); if your meetings are in another language, change the main meeting language."
+          }
+        }
+      }
+    },
+    "Cihaz içi model %@ desteklemiyor; bu toplantı için Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur), sonra \"Notu yenile\"ye bas.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model doesn't support %@. For this meeting, choose a model with your own key in Settings (Ollama on the Mac also works without a key), then click \"Refresh note\"."
+          }
+        }
+      }
+    },
+    "Cihaz içi model %@ yazamıyor; not dilini değiştir ya da Ayarlar'da kendi anahtarınla bir model seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model can't write %@. Change the note language or choose a model with your own key in Settings."
+          }
+        }
+      }
+    },
+    "Cihaz içi model bu toplantının dilini desteklemiyor (ör. Fince). Bu toplantı için Ayarlar'da kendi anahtarınla bir sağlayıcı seçip \"Notu yenile\"ye bas.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model doesn't support this meeting's language (e.g. Finnish). For this meeting, choose a provider with your own key in Settings and click \"Refresh note\"."
+          }
+        }
+      }
+    },
+    "Cihaz içi model yanıt üretemedi. Tekrar dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model couldn't produce a response. Try again."
+          }
+        }
+      }
+    },
+    "Cihaz içi model şu an meşgul (uygulama arka plandayken sistem kısıtlar). Uygulamayı açık tutup yeniden dene.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model is busy right now (the system limits it while the app is in the background). Keep the app open and try again."
+          }
+        }
+      }
+    },
+    "Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device: free and keyless, audio never leaves the phone; writes the note when you finish. Speakers aren't separated."
           }
         }
       }
@@ -2823,6 +3133,26 @@
         }
       }
     },
+    "Daha yüksek kalite: Claude ile not, konuşmacılar ayrılır. Sonraki adımda anahtarları girersin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Higher quality: notes by Claude, speakers separated. You'll enter the keys in the next step."
+          }
+        }
+      }
+    },
+    "Daha yüksek kalite: konuşmacılar ayrılır, Claude notu yazar. Anahtarlar Mac'ten gelir ya da burada girilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Higher quality: speakers are separated and Claude writes the note. Keys come from your Mac or are entered here."
+          }
+        }
+      }
+    },
     "Danca": {
       "localizations": {
         "en": {
@@ -2849,6 +3179,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deepgram (cloud, ~1 s)"
+          }
+        }
+      }
+    },
+    "Deepgram canlı metni, ElevenLabs konuşmacıları, Claude notu yazar; aşağıdaki anahtarlar gerekir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deepgram writes the live text, ElevenLabs separates speakers and Claude writes the note; the keys below are required."
           }
         }
       }
@@ -2930,6 +3270,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lecture / training"
+          }
+        }
+      }
+    },
+    "Desteklenen diller": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supported languages"
           }
         }
       }
@@ -3204,6 +3554,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Solid"
+          }
+        }
+      }
+    },
+    "Donma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hang"
           }
         }
       }
@@ -3612,12 +3972,12 @@
         }
       }
     },
-    "Fince, İngilizce ve 33 dil daha; Türkçesi altında akar.": {
+    "Fince, İngilizce ve 33 dil daha; %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finnish, English and 33 more languages; Turkish flows underneath."
+            "value": "Finnish, English and 33 more languages; the %@ translation flows underneath."
           }
         }
       }
@@ -3728,6 +4088,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go"
+          }
+        }
+      }
+    },
+    "GitHub'da bildir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report on GitHub"
           }
         }
       }
@@ -3962,6 +4332,16 @@
         }
       }
     },
+    "Güncellemeleri denetle…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for Updates…"
+          }
+        }
+      }
+    },
     "HATA": {
       "extractionState": "stale",
       "localizations": {
@@ -4024,6 +4404,26 @@
         }
       }
     },
+    "Hazır": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready"
+          }
+        }
+      }
+    },
+    "Hazır · Cihaz içi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready · On-device"
+          }
+        }
+      }
+    },
     "Hazır · Deepgram": {
       "localizations": {
         "en": {
@@ -4050,6 +4450,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "You're all set"
+          }
+        }
+      }
+    },
+    "Hemen başla (cihaz içi)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start now (on-device)"
+          }
+        }
+      }
+    },
+    "Hemen cihaz içi başla ya da kendi anahtarlarınla daha yüksek kalite al; sonra Ayarlar'dan değişir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start right away on-device, or get higher quality with your own keys; you can change this later in Settings."
           }
         }
       }
@@ -4154,12 +4574,12 @@
         }
       }
     },
-    "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır.": {
+    "Her cümle kayıt sırasında %@ diline çevrilir (LLM çağrısı); toplantı zaten bu dildeyse çevrilmez. Toplantı bitince %@ not (görevler, kararlar, özet) hazırlanır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Each sentence is translated while recording (one LLM call each). After the meeting a Turkish note (tasks, decisions, summary) is prepared."
+            "value": "Each sentence is translated into %@ while recording (one LLM call each); a meeting already in that language is not translated. After the meeting a note in %@ (tasks, decisions, summary) is prepared."
           }
         }
       }
@@ -4796,12 +5216,12 @@
         }
       }
     },
-    "Kayıt sırasında Türkçeye çevir": {
+    "Kayıt sırasında %@ diline çevir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Translate to Turkish while recording"
+            "value": "Translate to %@ while recording"
           }
         }
       }
@@ -4846,12 +5266,12 @@
         }
       }
     },
-    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.": {
+    "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince %@ not (görevler, kararlar, özet) yine hazırlanır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nothing is translated while recording; only the original text is shown. A Turkish note (tasks, decisions, summary) is still prepared after the meeting."
+            "value": "Nothing is translated while recording; only the original text is shown. A note in %@ (tasks, decisions, summary) is still prepared after the meeting."
           }
         }
       }
@@ -4916,6 +5336,16 @@
         }
       }
     },
+    "Kayıtlı çökme raporu yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved crash reports."
+          }
+        }
+      }
+    },
     "Kayıtta": {
       "localizations": {
         "en": {
@@ -4962,6 +5392,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "As you, to the channel you pick"
+          }
+        }
+      }
+    },
+    "Kendi anahtarlarımla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With my own keys"
           }
         }
       }
@@ -5307,6 +5747,36 @@
         }
       }
     },
+    "Konuşma modeli hazırlanıyor…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing speech model…"
+          }
+        }
+      }
+    },
+    "Konuşma modeli indiriliyor… %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading speech model… %@"
+          }
+        }
+      }
+    },
+    "Konuşma modelini yeniden hazırla": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare speech model again"
+          }
+        }
+      }
+    },
     "Konuşma tanıma modeli (%@) yüklenemedi. İnternet bağlantını ve disk alanını kontrol edip uygulamayı yeniden aç.": {
       "extractionState": "stale",
       "localizations": {
@@ -5587,6 +6057,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use"
+          }
+        }
+      }
+    },
+    "Kullanılamıyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
           }
         }
       }
@@ -5982,12 +6462,32 @@
         }
       }
     },
+    "Menülerin ve ayarların dili.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language of menus and settings."
+          }
+        }
+      }
+    },
     "Metin boyutu: %lld pt": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Text size: %lld pt"
+          }
+        }
+      }
+    },
+    "Metin cihaz içi model için çok uzun. Daha kısa bir soru dene ya da Ayarlar'da kendi anahtarınla bir sağlayıcı seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text is too long for the on-device model. Try a shorter question or choose a provider with your own key in Settings."
           }
         }
       }
@@ -6178,6 +6678,16 @@
         }
       }
     },
+    "Motor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine"
+          }
+        }
+      }
+    },
     "Müşteri görüşmesi": {
       "localizations": {
         "en": {
@@ -6205,6 +6715,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "MY NOTES"
+          }
+        }
+      }
+    },
+    "Nasıl başlamak istersin?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How do you want to start?"
           }
         }
       }
@@ -6391,12 +6911,12 @@
         }
       }
     },
-    "Not yazılır": {
+    "Not ve çeviri dili": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Note is written"
+            "value": "Note and translation language"
           }
         }
       }
@@ -6457,6 +6977,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The note, transcript and audio are deleted permanently; this can't be undone."
+          }
+        }
+      }
+    },
+    "Not, çeviri ve soru bu cihazda yazılır: ücretsiz, anahtarsız, internetsiz. Model küçüktür (4 bin token bağlam): uzun toplantılar parça parça işlenir, not kendi anahtarınla seçilen modellerden daha kısa olur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes, translations and answers are written on this device: free, keyless, offline. The model is small (4K-token context): long meetings are processed in parts, and notes are shorter than with models you use with your own key."
           }
         }
       }
@@ -6561,12 +7091,12 @@
         }
       }
     },
-    "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, Türkçe cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
+    "Notların ve transkriptlerin (hangi dilde konuşulduysa) arasında arar, %@ cevaplar; her bilginin hangi toplantıdan geldiğini gösterir.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Searches your notes and transcripts (in whatever language was spoken), answers in Turkish and shows which meeting each fact came from."
+            "value": "Searches your notes and transcripts (in whatever language was spoken), answers in %@ and shows which meeting each fact came from."
           }
         }
       }
@@ -6691,12 +7221,22 @@
         }
       }
     },
-    "Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.": {
+    "Odadaki herkes konuşmacılara ayrılır, %@ çevirisi canlı akar; bitince notu yazar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Everyone in the room is separated into speakers with live Turkish; the note is written when you finish."
+            "value": "Everyone in the room is separated into speakers with a live %@ translation; the note is written when you finish."
+          }
+        }
+      }
+    },
+    "Okunamayan çökme raporu: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreadable crash report: %@"
           }
         }
       }
@@ -6771,6 +7311,16 @@
         }
       }
     },
+    "Orijinal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        }
+      }
+    },
     "Orta": {
       "localizations": {
         "en": {
@@ -6821,6 +7371,16 @@
         }
       }
     },
+    "Otomatik olarak güncelle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update automatically"
+          }
+        }
+      }
+    },
     "Oturumun süresi doldu; yeniden bağlan": {
       "localizations": {
         "en": {
@@ -6847,6 +7407,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDF iCloud Drive'a kaydedildi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF saved to iCloud Drive: %@"
           }
         }
       }
@@ -6943,6 +7513,16 @@
         }
       }
     },
+    "Paylaşım penceresi açılamadı; PDF iCloud Drive'da: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't open the share window; the PDF is in iCloud Drive: %@"
+          }
+        }
+      }
+    },
     "Pembe": {
       "localizations": {
         "en": {
@@ -6979,6 +7559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Draft a project plan"
+          }
+        }
+      }
+    },
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. Göndermeden önce GitHub'da görürsün.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report contains the version, the system and where the error happened; no meeting content and no keys. You see it on GitHub before sending."
           }
         }
       }
@@ -7063,12 +7653,12 @@
         }
       }
     },
-    "Sadece Türkçe": {
+    "Sadece %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turkish only"
+            "value": "%@ only"
           }
         }
       }
@@ -7243,6 +7833,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The audio format couldn't be converted. Change the output/input device and restart the recording."
+          }
+        }
+      }
+    },
+    "Ses cihaz içi konuşma tanımaya uygun biçime çevrilemedi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't convert the audio to a format on-device speech recognition accepts."
           }
         }
       }
@@ -7612,34 +8212,32 @@
         }
       }
     },
-    "Son dakikaların Türkçe özeti": {
-      "extractionState": "stale",
+    "Son dakikaların %@ özeti": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turkish summary of the last minutes"
+            "value": "Summary of the last minutes in %@"
           }
         }
       }
     },
-    "Son dakikaların Türkçe özeti, toplantıya soru.": {
+    "Son dakikaların %@ özeti, toplantıya soru.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A Turkish summary of the last minutes, questions about the meeting."
+            "value": "A summary of the last minutes in %@, questions about the meeting."
           }
         }
       }
     },
-    "Son dakikaların Türkçe özetini gösterir": {
-      "extractionState": "stale",
+    "Son dakikaların %@ özetini gösterir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows a Turkish summary of the last minutes"
+            "value": "Shows a summary of the last minutes in %@"
           }
         }
       }
@@ -8189,12 +8787,12 @@
         }
       }
     },
-    "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince Türkçe not hazır, en üstte senin görevlerin.": {
+    "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince %@ not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the Turkish note is ready, with your tasks on top."
+            "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the note in %@ is ready, with your tasks on top."
           }
         }
       }
@@ -8462,12 +9060,22 @@
         }
       }
     },
-    "Toplantı notları ve canlı çeviri her zaman Türkçedir.": {
+    "Toplantı notları, canlı çeviri ve Sor cevapları not ve çeviri dilinde yazılır; toplantı zaten bu dildeyse çevrilmez. Önceki notlar yazıldıkları dilde kalır.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meeting notes and live translation are always in Turkish."
+            "value": "Meeting notes, live translation and Ask answers are written in the note and translation language; a meeting already in that language is not translated. Earlier notes stay in the language they were written in."
+          }
+        }
+      }
+    },
+    "Toplantı notları, canlı çeviri, \"Ne kaçırdım?\" özeti ve Sor cevapları bu dilde yazılır. Önceki notlar yazıldıkları dilde kalır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting notes, live translation, \"What did I miss?\" summaries and Ask answers are written in this language. Earlier notes stay in the language they were written in."
           }
         }
       }
@@ -8934,16 +9542,6 @@
         }
       }
     },
-    "Türkçe not yazılır": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A Turkish note is written"
-          }
-        }
-      }
-    },
     "Tırnaklı (New York)": {
       "localizations": {
         "en": {
@@ -9305,6 +9903,16 @@
         }
       }
     },
+    "Yazıya dökme ve not": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription and notes"
+          }
+        }
+      }
+    },
     "Yazıya dökülemedi: %@": {
       "extractionState": "stale",
       "localizations": {
@@ -9354,6 +9962,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "New chat"
+          }
+        }
+      }
+    },
+    "Yeni sürüm GitHub'dan günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New versions are checked on GitHub once a day. When on, they download in the background and install when you quit the app; when off, you are only notified."
           }
         }
       }
@@ -9508,12 +10126,12 @@
         }
       }
     },
-    "Yüz yüze toplantılar canlı yazıya dökülür, Türkçesi altında akar; bitince not hazır, en üstte senin görevlerin.": {
+    "Yüz yüze toplantılar canlı yazıya dökülür, %@ çevirisi altında akar; bitince not hazır, en üstte senin görevlerin.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "In-person meetings are transcribed live with Turkish underneath; when they end the note is ready, your tasks on top."
+            "value": "In-person meetings are transcribed live with the %@ translation underneath; when they end the note is ready, your tasks on top."
           }
         }
       }
@@ -9639,6 +10257,16 @@
         }
       }
     },
+    "iOS'un topladığı çökme ve donma raporları yalnızca bu iPhone'da saklanır; hiçbiri kendiliğinden gönderilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by iOS are kept only on this iPhone; none are sent automatically."
+          }
+        }
+      }
+    },
     "iPhone'a gönder": {
       "localizations": {
         "en": {
@@ -9725,6 +10353,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS doesn't show this permission's status; it is requested by trying"
+          }
+        }
+      }
+    },
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by macOS are kept only on this Mac; none are sent automatically."
           }
         }
       }
@@ -9966,6 +10604,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Very high"
+          }
+        }
+      }
+    },
+    "Çökme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash"
+          }
+        }
+      }
+    },
+    "Çökme raporları": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporlarını gizle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporlarını göster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show crash reports"
+          }
+        }
+      }
+    },
+    "Çökme raporundan GitHub bağlantısı oluşturulamadı; raporu Ayarlar › Genel'den silip yenisini bekle.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't create a GitHub link from the crash report; delete it in Settings › General and wait for a new one."
           }
         }
       }
@@ -10240,6 +10928,26 @@
         }
       }
     },
+    "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free and keyless: transcription and notes with Apple Intelligence on this Mac. Speakers aren't separated and notes are shorter."
+          }
+        }
+      }
+    },
+    "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu iPhone'da. Konuşmacılar ayrılmaz.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free and keyless: transcription and notes with Apple Intelligence on this iPhone. Speakers aren't separated."
+          }
+        }
+      }
+    },
     "Ünvan ya da kurum": {
       "localizations": {
         "en": {
@@ -10323,12 +11031,12 @@
         }
       }
     },
-    "İki dil (orijinal + Türkçe)": {
+    "İki dil (orijinal + %@)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Both languages (original + Turkish)"
+            "value": "Both languages (original + %@)"
           }
         }
       }

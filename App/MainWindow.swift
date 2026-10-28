@@ -143,6 +143,8 @@ struct MainWindowView: View {
     let router: MainWindowRouter
     let shortcuts: ShortcutController
     let player: MeetingAudioPlayer
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     let onStartRecording: @MainActor () -> Void
     let onShowPanel: @MainActor () -> Void
 
@@ -165,6 +167,10 @@ struct MainWindowView: View {
                         // yalnızca canlı panelde çıkıyordu.
                         if !model.errorMessages.isEmpty {
                             ErrorBanner(messages: model.errorMessages) { model.dismissErrors() }
+                        }
+                        // Önceki açılışta çöktüyse bir kez sorulur (rapor yalnızca bu Mac'te; gönderen kullanıcı).
+                        if let report = crashReports.reportToAnnounce {
+                            CrashReportBanner(center: crashReports, report: report)
                         }
                         detail
                             .id(router.section)
@@ -243,7 +249,7 @@ struct MainWindowView: View {
         case .settings:
             // Geniş pencerede form satırları ekran boyu uzamasın.
             // Genişlik sınırı sayfanın içinde: kaydırma çubuğu pencerenin sağ kenarında kalır.
-            SettingsPage(model: model, shortcuts: shortcuts) { router.section = .setup }
+            SettingsPage(model: model, shortcuts: shortcuts, updater: updater, crashReports: crashReports) { router.section = .setup }
                 .scrollContentBackground(.hidden)
         case .setup:
             // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
@@ -1129,6 +1135,8 @@ private struct TasksPage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var showsDone: Bool = false
+    /// Not ve çeviri dili (Ayarlar › Genel): boş durumda notun dili adıyla geçer.
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
 
     var body: some View {
         let all: [(record: MeetingRecord, task: NoteTask)] = myTasks(meetings: model.meetings)
@@ -1172,7 +1180,7 @@ private struct TasksPage: View {
                             palette: .sunset,
                             steps: [
                                 EmptyStateStep(symbol: "record.circle", title: "Toplantıyı kaydet"),
-                                EmptyStateStep(symbol: "sparkles", title: "Türkçe not yazılır"),
+                                EmptyStateStep(symbol: "sparkles", title: "\(storedNoteLanguage(value: noteLanguage).interfaceName) not yazılır"),
                                 EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
                             ]
                         ) {

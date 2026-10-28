@@ -34,16 +34,28 @@ public extension AppPaths {
     /// iCloud Drive kapalıysa ya da uygulamanın iCloud yetkisi yoksa `StorageError.iCloudUnavailable`. İlk çağrı
     /// yavaş olabilir; uygulama açılırken arka planda bir kez çağrılır.
     static func cloudSessionsDirectory() throws -> URL {
+        try cloudDocumentsSubdirectory(name: "Sessions")
+    }
+
+    /// Bağlantıyla paylaşılan dışa aktarımların (PDF) iCloud Drive klasörü: `<kapsayıcı>/Documents/Shared`. iCloud
+    /// kullanılamıyorsa `StorageError.iCloudUnavailable` (yerel klasöre düşülmez). İlk çağrı yavaş olabilir; ana iş
+    /// parçacığında çağrılmaz.
+    static func cloudSharedDirectory() throws -> URL {
+        try cloudDocumentsSubdirectory(name: "Shared")
+    }
+
+    /// iCloud kapsayıcısının `Documents` altındaki klasörü; yoksa oluşturur.
+    private static func cloudDocumentsSubdirectory(name: String) throws -> URL {
         guard let container = FileManager.default.url(forUbiquityContainerIdentifier: iCloudContainerIdentifier) else {
             throw StorageError.iCloudUnavailable
         }
-        let sessions: URL = container.appending(path: "Documents", directoryHint: .isDirectory).appending(path: "Sessions", directoryHint: .isDirectory)
+        let directory: URL = container.appending(path: "Documents", directoryHint: .isDirectory).appending(path: name, directoryHint: .isDirectory)
         do {
-            try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
-            throw StorageError.directoryUnavailable(path: sessions.path, reason: error.localizedDescription)
+            throw StorageError.directoryUnavailable(path: directory.path, reason: error.localizedDescription)
         }
-        return sessions
+        return directory
     }
 
     /// Toplantıların okunduğu klasörler: yerel her zaman (önce); iCloud seçiliyse iCloud'daki de.

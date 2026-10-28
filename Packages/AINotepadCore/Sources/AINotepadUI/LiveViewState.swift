@@ -3,11 +3,11 @@ import Foundation
 
 /// Çevirinin panelde gösterilişi.
 public enum DisplayMode: String, Sendable, CaseIterable {
-    /// Orijinal (soluk) + Türkçe.
+    /// Orijinal (soluk) + not dilindeki çeviri.
     case bilingual
-    /// Yalnızca Türkçe; çevirisi olmayan metin orijinal haliyle soluk.
+    /// Yalnızca çeviri (ham değer eski sürümlerle uyumlu kalsın diye "turkishOnly"); çevirisi olmayan metin orijinal haliyle soluk.
     case turkishOnly
-    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu Türkçe not yine üretilir.
+    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu not yine üretilir.
     case originalOnly
 
     /// Bu görünümde canlı çeviri gerekir mi.
@@ -50,9 +50,11 @@ public struct LiveViewState: Equatable, Sendable {
     /// Kayıt yokken gösterilen durum; yalnızca bir sorun ya da bekleme varsa dolu (ör. "Model hazırlanıyor…").
     public let statusText: String
     public let languageText: String
+    /// Not ve çeviri dilinin arayüz dilindeki adı ("Ne kaçırdım?" ipucunda).
+    public let noteLanguageText: String
     /// Yankısı süzülmüş, konuşmacıya göre gruplanmış transkript.
     public let blocks: [SpeakerBlock]
-    /// "Diğerleri" bölümlerinin Türkçesi.
+    /// "Diğerleri" bölümlerinin not dilindeki çevirisi.
     public let translations: [SegmentID: String]
     /// Çevirisi başarısız olan bölümler; panelde "Tekrar dene" gösterilir.
     public let failedTranslations: Set<SegmentID>
@@ -60,7 +62,7 @@ public struct LiveViewState: Equatable, Sendable {
     public let assistantCard: AssistantCard?
     /// En son en fazla 3 hata.
     public let errors: [String]
-    /// Adada gösterilen son konuşma (konuşmacı, Türkçesi ve canlı orijinali); konuşma yoksa nil.
+    /// Adada gösterilen son konuşma (konuşmacı, çevirisi ve canlı orijinali); konuşma yoksa nil.
     public let islandLine: IslandLine?
     /// Transkriptteki kişi numaraları (konuşmacı düzeltme menüsü için).
     public let persons: [Int]
@@ -78,11 +80,11 @@ public struct LiveViewState: Equatable, Sendable {
     }
 }
 
-/// Adanın açık hâlindeki satırlar: kim konuşuyor, ne dedi (Türkçesi), şu an ne diyor (orijinal, canlı).
+/// Adanın açık hâlindeki satırlar: kim konuşuyor, ne dedi (çevirisi), şu an ne diyor (orijinal, canlı).
 public struct IslandLine: Sendable, Equatable {
     public let speaker: Speaker
     public let person: Int?
-    /// Ana satır: son cümlelerin Türkçesi; çeviri yoksa (ya da "Sadece orijinal"de) orijinali.
+    /// Ana satır: son cümlelerin çevirisi; çeviri yoksa (ya da "Sadece orijinal"de) orijinali.
     public let primary: String
     /// Ana satır henüz çeviri değil (çeviri bekleniyor): biraz soluk gösterilir.
     public let primaryIsOriginal: Bool
@@ -132,6 +134,7 @@ public func makeLiveViewState(
     startedAt: Date?,
     statusText: String,
     languageText: String,
+    noteLanguageText: String,
     errors: [String]
 ) -> LiveViewState {
     let blocks: [SpeakerBlock] = groupBySpeaker(transcript: suppressEchoes(transcript: transcript))
@@ -148,6 +151,7 @@ public func makeLiveViewState(
         startedAt: startedAt,
         statusText: statusText,
         languageText: languageText,
+        noteLanguageText: noteLanguageText,
         blocks: blocks,
         translations: translations,
         failedTranslations: failedTranslations,
@@ -171,13 +175,13 @@ public func truncateFromStart(text: String, maxCharacters: Int) -> String {
     text.count <= maxCharacters ? text : "…" + String(text.suffix(maxCharacters))
 }
 
-/// Bloktaki bölümlerin Türkçelerini sırayla birleştirir; hiç çeviri yoksa nil. Saf fonksiyondur.
+/// Bloktaki bölümlerin çevirilerini sırayla birleştirir; hiç çeviri yoksa nil. Saf fonksiyondur.
 public func blockTurkishText(block: SpeakerBlock, translations: [SegmentID: String]) -> String? {
     let parts: [String] = block.segments.compactMap { (segment: LiveSegment) -> String? in translations[segment.id] }
     return parts.isEmpty ? nil : parts.joined(separator: " ")
 }
 
-/// "Sadece Türkçe" görünümünde bir bloğun parçası.
+/// "Sadece çeviri" görünümünde bir bloğun parçası.
 public struct DisplayPart: Sendable, Equatable {
     public let text: String
     public let isTranslated: Bool
@@ -190,7 +194,7 @@ public struct DisplayPart: Sendable, Equatable {
     }
 }
 
-/// "Sadece Türkçe": çevirisi olan bölüm Türkçe, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;
+/// "Sadece çeviri": çevirisi olan bölüm çevirisiyle, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;
 /// böylece canlı konuşma çeviri gelene kadar da görünür. Saf fonksiyondur.
 public func turkishOnlyParts(block: SpeakerBlock, translations: [SegmentID: String]) -> [DisplayPart] {
     block.segments

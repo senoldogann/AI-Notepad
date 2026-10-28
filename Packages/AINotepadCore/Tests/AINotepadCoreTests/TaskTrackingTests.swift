@@ -113,17 +113,22 @@ import Testing
     // Serbest metin tarihleri: ISO, gün.ay.yıl, yılsız (toplantıdan önceyse gelecek yıl); göreli ve geçersizler nil.
     @Test func dueDatesParseOnlyWhenExplicit() {
         let meeting: Date = calendar.date(from: DateComponents(year: 2026, month: 12, day: 15))!
-        #expect(parseDueDate(text: "2027-01-08", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 1, day: 8))
-        #expect(parseDueDate(text: "perjantaihin 18.12.2026 mennessä", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 18))
-        #expect(parseDueDate(text: "3.1.", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 1, day: 3))
-        #expect(parseDueDate(text: "20.12.", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 20))
-        #expect(parseDueDate(text: "perjantai", meetingDate: meeting, calendar: calendar) == nil)
-        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2027, month: 11, day: 5))
-        #expect(parseDueDate(text: "18 Aralık 2026'ya kadar", meetingDate: meeting, calendar: calendar) == DateComponents(year: 2026, month: 12, day: 18))
-        #expect(parseDueDate(text: "Cuma", meetingDate: meeting, calendar: calendar) == nil)
-        #expect(parseDueDate(text: "31.2.2027", meetingDate: meeting, calendar: calendar) == nil)
+        #expect(parseDueDate(text: "2027-01-08", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 1, day: 8))
+        #expect(parseDueDate(text: "perjantaihin 18.12.2026 mennessä", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "3.1.", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 1, day: 3))
+        #expect(parseDueDate(text: "20.12.", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 20))
+        #expect(parseDueDate(text: "perjantai", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2027, month: 11, day: 5))
+        #expect(parseDueDate(text: "18 Aralık 2026'ya kadar", meetingDate: meeting, calendar: calendar, language: .turkish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "Cuma", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        #expect(parseDueDate(text: "31.2.2027", meetingDate: meeting, calendar: calendar, language: .turkish) == nil)
+        // Ay adları notun dilinde okunur: İngilizce ay-gün, Fince çekimli ay adı.
+        #expect(parseDueDate(text: "by November 5, 2027", meetingDate: meeting, calendar: calendar, language: .english) == DateComponents(year: 2027, month: 11, day: 5))
+        #expect(parseDueDate(text: "5 Dec", meetingDate: meeting, calendar: calendar, language: .english) == DateComponents(year: 2027, month: 12, day: 5))
+        #expect(parseDueDate(text: "18. joulukuuta", meetingDate: meeting, calendar: calendar, language: .finnish) == DateComponents(year: 2026, month: 12, day: 18))
+        #expect(parseDueDate(text: "5 Kasım", meetingDate: meeting, calendar: calendar, language: .english) == nil)
         let task: NoteTask = NoteTask(owner: "Aino", description: "Esitys", dueDate: "3.1.", isMine: false)
-        let draft: ReminderDraft = reminderDraft(record: record(tasks: [task]), task: task, calendar: calendar)
+        let draft: ReminderDraft = reminderDraft(record: record(tasks: [task]), task: task, language: .turkish, calendar: calendar)
         #expect(draft.title == "Esitys")
         #expect(draft.due == DateComponents(year: 2027, month: 1, day: 3))
         #expect(draft.notes.contains("Bütçe") && draft.notes.contains("Aino"))
@@ -165,11 +170,14 @@ extension CloudTests {
             tasks: [NoteTask(owner: "Senol", description: "Aikataulun lähettäminen tiimille", dueDate: "perjantai", isMine: true)],
             glossary: []
         )
-        let fingerprint: String = noteFingerprint(segments: segments, speakerNames: [:], userName: "Senol", template: .general)
+        // `writeMeetingNote` parmak izine kendi notlarını ve parça boyutunu da katar.
+        let fingerprint: String = noteFingerprint(
+            segments: segments, speakerNames: [:], userName: "Senol\u{1F}\u{1F}\(noteChunkMaxChars)", template: .general, language: .turkish
+        )
         try JSONEncoder().encode(ChunkedNoteProgress(fingerprint: fingerprint, completedParts: parts, state: saved)).write(to: file)
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: segments, speakerNames: [:], userName: "Senol", template: .general, myNotes: "",
-            llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
+            language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: file
         ))
         #expect(parts > 1)
         #expect(note.tasks.map(\.description) == ["Aikataulun lähettäminen tiimille"])
@@ -189,7 +197,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: segments, speakerNames: [:], userName: "Senol", template: .general,
-            myNotes: "## Bana önemli\n- park yeri azalıyor → kiralık yer sor", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
+            myNotes: "## Bana önemli\n- park yeri azalıyor → kiralık yer sor", language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
             progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ") + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
@@ -234,7 +242,7 @@ extension CloudTests {
         ]
         let note: MeetingNote = try #require(try await writeMeetingNote(
             segments: markingHighlights(segments: segments, highlights: [Highlight(startSec: 20, endSec: nil)]), speakerNames: [:], userName: "Senol",
-            template: .general, myNotes: "", llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
+            template: .general, myNotes: "", language: .turkish, llm: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))), progressFile: try temporaryDirectory().appending(path: "note-progress.json")
         ))
         let text: String = (note.summary + " " + note.decisions.joined(separator: " ")).lowercased()
         #expect(text.contains("kahve"), "\(text)")

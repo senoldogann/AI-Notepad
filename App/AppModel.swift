@@ -39,6 +39,7 @@ private struct ViewStateInputs: Equatable {
     let startedAt: Date?
     let statusText: String
     let languageText: String
+    let noteLanguageText: String
     let errors: [String]
 }
 
@@ -123,7 +124,7 @@ final class AppModel {
     var shortcutError: String?
     /// Eksik anahtar/ayar (menüde kırmızı; kayıt başlamadan görünür).
     var setupProblems: [String] = []
-    /// "Diğerleri" bölümlerinin Türkçesi.
+    /// "Diğerleri" bölümlerinin not dilindeki çevirisi.
     var translations: [SegmentID: String] = [:]
     /// Çevirisi başarısız bölümler (panelde "Tekrar dene").
     var failedTranslations: Set<SegmentID> = []
@@ -190,6 +191,10 @@ final class AppModel {
     @ObservationIgnored private var viewStateCache: (inputs: ViewStateInputs, state: LiveViewState)?
 
     @ObservationIgnored private var engine: WhisperKitEngine?
+    /// Cihaz içi konuşma tanıma (Apple); model indirildiyse hazır.
+    @ObservationIgnored private var speechEngine: AppleSpeechEngine?
+    /// Cihaz içi konuşma modelinin indirme ilerlemesi (0…1); indirme yoksa nil.
+    var speechModelProgress: Double?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
@@ -212,7 +217,7 @@ final class AppModel {
         isFinishing ? .finishing : (isRecording ? .recording : .idle)
     }
 
-    /// Kayıt başlatılabilir mi: önceki kayıt bitmiş olmalı; Deepgram'da her zaman, WhisperKit'te model hazırsa.
+    /// Kayıt başlatılabilir mi: önceki kayıt bitmiş olmalı; Deepgram'da her zaman, yerel motorlarda model hazırsa.
     var isReadyToRecord: Bool {
         !isFinishing && (liveEngine == .deepgram || modelStatus == .ready)
     }
@@ -225,7 +230,8 @@ final class AppModel {
             newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
-            languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording), errors: errorMessages
+            languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording),
+            noteLanguageText: selectedNoteLanguage().interfaceName, errors: errorMessages
         )
         if let cache = viewStateCache, cache.inputs == inputs {
             return cache.state
@@ -233,7 +239,7 @@ final class AppModel {
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
             failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
-            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, isInPerson: inputs.isInPerson, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, errors: inputs.errors
+            newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, isInPerson: inputs.isInPerson, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, noteLanguageText: inputs.noteLanguageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
         return state
@@ -247,6 +253,9 @@ final class AppModel {
         case (.deepgram, _), (.whisperKit, .ready): ""
         case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
         case (.whisperKit, .failed(let message)): message
+        case (.appleSpeech, .loading): speechModelProgress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") } ?? String(localized: "Konuşma modeli hazırlanıyor…")
+        case (.appleSpeech, .ready): String(localized: "Hazır · Cihaz içi")
+        case (.appleSpeech, .failed(let message)): message
         }
     }
 
@@ -280,7 +289,7 @@ final class AppModel {
         let resumesTranslation: Bool = mode.needsLiveTranslation && !displayMode.needsLiveTranslation
         displayMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: SettingsKey.displayMode)
-        // "Sadece orijinal"den dönünce o sırada çevrilmeyen cümleler de çevrilir (toplantıda Türkçesi eksik kalmasın).
+        // "Sadece orijinal"den dönünce o sırada çevrilmeyen cümleler de çevrilir (toplantıda çevirisi eksik kalmasın).
         if resumesTranslation, isRecording {
             for segment in transcript where segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty
                 && translations[segment.id] == nil && !failedTranslations.contains(segment.id) {
@@ -291,12 +300,12 @@ final class AppModel {
 
     // MARK: Asistan
 
-    /// Son N dakikanın (Ayarlar) Türkçe özeti.
+    /// Son N dakikanın (Ayarlar) not dilinde özeti.
     func askWhatIMissed() {
         let minutes: Int = clampedSetting(key: SettingsKey.missedWindowMinutes, range: SettingsRange.missedWindowMinutes)
         let segments: [LiveSegment] = suppressEchoes(transcript: correctedTranscript)
         let nowSec: Double = transcript.map(\.endSec).max() ?? 0
-        guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: Double(minutes * 60)) else {
+        guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: Double(minutes * 60), language: selectedNoteLanguage()) else {
             cancelAssistant()
             assistantCard = .summary(MissedSummary(topic: String(localized: "Son \(minutes) dakikada konuşma yok."), decisions: [], askedOfYou: []))
             return
@@ -306,9 +315,9 @@ final class AppModel {
         }
     }
 
-    /// Toplantı hakkında Türkçe soru; henüz konuşma yoksa istek atılmaz.
+    /// Toplantı hakkında soru (cevap not dilinde); henüz konuşma yoksa istek atılmaz.
     func ask(question: String) {
-        guard let request = questionRequest(segments: suppressEchoes(transcript: correctedTranscript), question: question) else {
+        guard let request = questionRequest(segments: suppressEchoes(transcript: correctedTranscript), question: question, language: selectedNoteLanguage()) else {
             cancelAssistant()
             assistantCard = .answer(question: question, text: String(localized: "Henüz konuşma yok; sorular toplantıda konuşulanlara göre cevaplanır."))
             return
@@ -329,10 +338,13 @@ final class AppModel {
         cancelAssistant()
         let requestID: Int = assistantRequestID
         assistantCard = .loading(title: title)
+        let languages: [MeetingLanguage] = liveMeetingLanguages()
+        let noteLanguage: ShareLanguage = selectedNoteLanguage()
         assistantTask = Task { [weak self] in
             let card: AssistantCard
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
+                try requireOnDeviceLanguages(provider: provider, meetingLanguages: languages, outputLanguage: noteLanguage)
                 card = try await requestStructured(provider: provider, request: request, parse: makeCard)
             } catch {
                 card = .failed(message: userFacingMessage(error: error))
@@ -352,20 +364,32 @@ final class AppModel {
 
     // MARK: Çeviri
 
-    /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp Türkçeye çevirir (hızlı model).
+    /// Süren kaydın bilinen dili (kilitlenen ya da sabit seçilen); otomatik modda kilitlenmeden önce boş.
+    private func liveMeetingLanguages() -> [MeetingLanguage] {
+        (lockedLanguage ?? fixedLanguage(mode: languageMode)).map { [$0] } ?? []
+    }
+
+    /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp not diline çevirir (hızlı model).
     private func enqueueTranslation(segment: LiveSegment) {
-        // "Sadece orijinal" görünümünde canlı çeviri yapılmaz (maliyet); toplantı sonu Türkçe not yine üretilir.
+        // "Sadece orijinal" görünümünde canlı çeviri yapılmaz (maliyet); toplantı sonu not yine üretilir.
         guard displayMode.needsLiveTranslation else {
             return
         }
-        // Türkçe toplantıda çeviri gerekmez: cümle olduğu gibi Türkçesidir (LLM'e gitmez, maliyet yok).
-        if (lockedLanguage ?? fixedLanguage(mode: languageMode)) == .turkish {
-            translations[segment.id] = segment.text
+        // Toplantı not dilindeyse aynı dile çeviri yapılmaz: orijinal tek başına görünür (LLM'e gitmez, maliyet yok).
+        guard needsLiveTranslation(spoken: lockedLanguage ?? fixedLanguage(mode: languageMode), noteLanguage: selectedNoteLanguage()) else {
             return
         }
         guard !translationDisabled, let provider = llmProvider else {
             // Çeviri şu an yapılamıyor (anahtar reddedildi ya da sağlayıcı yok): cümle kaybolmasın, "Tekrar dene"de kalsın.
             failedTranslations.insert(segment.id)
+            return
+        }
+        do {
+            try requireOnDeviceLanguages(provider: provider, meetingLanguages: liveMeetingLanguages(), outputLanguage: selectedNoteLanguage())
+        } catch {
+            // Cihaz içi model bu dili anlamıyor: bozuk çeviri yerine açık mesaj; sağlayıcı değişince "Tekrar dene"de çevrilir.
+            failedTranslations.insert(segment.id)
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
             return
         }
         let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
@@ -401,12 +425,15 @@ final class AppModel {
             return
         }
         do {
-            let turkish: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context))
+            let translated: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context, language: selectedNoteLanguage()))
             // Bu arada yeni kayıt başladıysa sonuç başka bir toplantının aynı numaralı bölümüne yazılmaz.
             guard generation == recordingGeneration else {
                 return
             }
-            translations[segment.id] = turkish
+            // Cümle zaten not dilindeyse (model aynen döndürdü) çeviri saklanmaz: aynı cümle iki kez görünmesin.
+            if isDistinctTranslation(original: segment.text, translated: translated) {
+                translations[segment.id] = translated
+            }
             failedTranslations.remove(segment.id)
         } catch {
             guard generation == recordingGeneration else {
@@ -498,6 +525,16 @@ final class AppModel {
                 problems.append(userFacingMessage(error: error))
             }
         }
+        if kind == .onDevice {
+            do {
+                let config: OnDeviceConfig = try onDeviceConfig()
+                if let warning = onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage(), outputLanguage: selectedNoteLanguage()) {
+                    problems.append(warning)
+                }
+            } catch {
+                problems.append(userFacingMessage(error: error))
+            }
+        }
         setupProblems = problems
     }
 
@@ -508,8 +545,48 @@ final class AppModel {
         liveEngine = engine
         UserDefaults.standard.set(engine.rawValue, forKey: SettingsKey.liveEngine)
         await refreshSetupProblems()
-        if engine == .whisperKit, self.engine == nil {
-            await loadModel()
+        switch engine {
+        case .deepgram:
+            break
+        case .whisperKit:
+            if self.engine == nil {
+                await loadModel()
+            } else {
+                modelStatus = .ready
+            }
+        case .appleSpeech:
+            await prepareSpeechModel()
+        }
+    }
+
+    /// Ana toplantı dili değişti: uyarılar yenilenir; cihaz içi tanımada yeni dilin modeli kayıttan önce hazırlanır
+    /// (yoksa ilk bölüm indirmeyi beklerdi).
+    func primaryLanguageChanged() {
+        Task {
+            await refreshSetupProblems()
+            if liveEngine == .appleSpeech, !isRecording, !isStarting {
+                await prepareSpeechModel()
+            }
+        }
+    }
+
+    /// Cihaz içi konuşma modelini ana toplantı dili için hazırlar (yüklü değilse indirir, ilerleme durumda görünür).
+    func prepareSpeechModel() async {
+        modelStatus = .loading
+        speechModelProgress = nil
+        do {
+            _ = try await prepareAppleSpeech(language: primaryMeetingLanguage()) { [weak self] (fraction: Double) -> Void in
+                Task { @MainActor in
+                    self?.speechModelProgress = fraction < 1 ? fraction : nil
+                }
+            }
+            speechEngine = speechEngine ?? AppleSpeechEngine()
+            speechModelProgress = nil
+            modelStatus = .ready
+        } catch {
+            Self.logger.error("Cihaz içi konuşma modeli hazırlanamadı, hata: \(String(describing: error), privacy: .public)")
+            speechModelProgress = nil
+            modelStatus = .failed(userFacingMessage(error: error))
         }
     }
 
@@ -584,7 +661,7 @@ final class AppModel {
                 return
             }
             cloudKeys = (deepgramKey, elevenLabsKey)
-        case .whisperKit:
+        case .whisperKit, .appleSpeech:
             cloudKeys = nil
         }
 
@@ -690,7 +767,26 @@ final class AppModel {
                 meAudio: meteredMe,
                 othersAudio: meteredOthers
             )
-        } else if let engine {
+        } else if liveEngine == .appleSpeech, let speechEngine {
+            // Cihaz içi tanıma dil algılamaz: otomatikte ana toplantı diliyle başlar; dil panelden değiştirilebilir.
+            let language: MeetingLanguage = appleSpeechLanguage(mode: languageMode, primary: primaryMeetingLanguage())
+            handle = runLiveSession(
+                config: LiveSessionConfig(
+                    languageMode: .fixed(language),
+                    segmenter: .live,
+                    recordingDirectory: directory,
+                    partialIntervalSec: 1.5,
+                    minPartialSpeechSec: 1.0,
+                    languageLockAfterSec: 30,
+                    candidateLanguages: [language]
+                ),
+                engine: speechEngine,
+                meAudio: meteredMe,
+                othersAudio: meteredOthers
+            )
+            // Panelde dil görünsün (sabit dilde oturum kilit olayı yayınlamaz).
+            await handle.setLanguage(language)
+        } else if liveEngine == .whisperKit, let engine {
             handle = runLiveSession(
                 config: LiveSessionConfig(
                     languageMode: languageMode,
@@ -706,7 +802,7 @@ final class AppModel {
                 othersAudio: meteredOthers
             )
         } else {
-            // isReadyToRecord WhisperKit'te motoru garanti eder; buraya gelinmesi programlama hatasıdır.
+            // isReadyToRecord yerel motorlarda motoru garanti eder; buraya gelinmesi programlama hatasıdır.
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşma tanıma modeli hazır değil."))
             microphone.stop()
             systemAudio.stop()
@@ -949,7 +1045,7 @@ final class AppModel {
             let llm: LLMProvider? = await optionalLLMProvider()
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName,
-                voiceEmbedder: voiceEmbedderIfEnabled(), registry: registeredVoices
+                noteLanguage: selectedNoteLanguage(), voiceEmbedder: voiceEmbedderIfEnabled(), registry: registeredVoices
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
             }
@@ -1045,6 +1141,9 @@ final class AppModel {
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
         switch record.engine ?? .cloud {
+        case .local where liveEngine == .appleSpeech:
+            // Cihaz içi modda WhisperKit (~630 MB) indirilmez: kayıt Apple'ın konuşma tanımasıyla yeniden yazılır.
+            return .run(AppleSpeechFinalTranscriber(primaryLanguage: primaryMeetingLanguage()))
         case .local:
             do {
                 return .run(LocalFinalTranscriber(
@@ -1156,8 +1255,12 @@ final class AppModel {
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         do {
             let provider: LLMProvider = try await resolveLLMProvider()
+            // Not kendi dilinde okunur, paylaşım dilinde yazılır: ikisi de cihaz içi modelde olmalı.
+            try requireOnDeviceLanguages(
+                provider: provider, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language
+            )
             let shared: MeetingNote = try await requestStructured(provider: provider, request: sharedNoteRequest(note: note, language: language, userName: userName)) { (text: String) throws -> MeetingNote in
-                try parseSharedNote(text: text, original: note)
+                try parseSharedNote(text: text, original: note).with(language: language)
             }
             // Çeviri sürerken not yeniden yazıldıysa eski notun çevirisi saklanmaz.
             guard let current = meetings.first(where: { $0.id == meetingID }), current.note == note, !isLocked(meetingID: meetingID) else {
@@ -1192,7 +1295,7 @@ final class AppModel {
             }
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
-                let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+                let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName, language: selectedNoteLanguage())
                 let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: reason, savedAt: Date())
                 saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                 processingMeetingIDs.remove(meetingID)
@@ -1572,13 +1675,18 @@ final class AppModel {
                     await self?.apply(progress: progress, id: id)
                 }
                 if scoped.isEmpty {
+                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz; model satırında hangileri yazılır.
+                    let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider, outputLanguage: selectedNoteLanguage())
+                    self?.updateExchange(id: id) { $0.modelName = askModelName(provider: provider, readable: readable) }
                     _ = try await AINotepadCore.askArchive(
-                        question: trimmed, history: history, records: records, userName: userName, llm: provider, maxChars: 60_000, now: Date(),
-                        onProgress: onProgress
+                        question: trimmed, history: history, records: readable.records, userName: userName, language: selectedNoteLanguage(), llm: provider,
+                        maxChars: noteLimits(provider: provider).archiveChars, now: Date(), onProgress: onProgress
                     )
                 } else {
+                    try requireOnDeviceLanguages(provider: provider, meetingLanguages: scoped.compactMap(\.language), outputLanguage: selectedNoteLanguage())
                     _ = try await askAboutMeetings(
-                        question: trimmed, history: history, records: scoped, userName: userName, llm: provider, maxChars: 60_000, now: Date(),
+                        question: trimmed, history: history, records: scoped, userName: userName, language: selectedNoteLanguage(), llm: provider,
+                        maxChars: noteLimits(provider: provider).archiveChars, now: Date(),
                         onProgress: onProgress
                     )
                 }
@@ -1776,11 +1884,11 @@ final class AppModel {
 
     /// Görevi Apple Anımsatıcılar'a ekler; hata varsa kullanıcı metni döner.
     func addToReminders(meetingID: String, task: NoteTask) async -> String? {
-        guard let record = meetings.first(where: { $0.id == meetingID }) else {
+        guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
             return nil
         }
         do {
-            try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, calendar: Calendar.current))
+            try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, language: note.writtenLanguage, calendar: Calendar.current))
         } catch {
             Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             return eventKitMessage(error: error)
@@ -2188,9 +2296,11 @@ final class AppModel {
         do {
             let llm: LLMProvider = try await resolveLLMProvider()
             let title: String = note.title
+            let language: ShareLanguage = selectedNoteLanguage()
+            try requireOnDeviceLanguages(provider: llm, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language)
             let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
-                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, llm: llm)
+                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
             markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: result.createdTaskIndices.map { tasks[$0] })
             showSendState(state: .done(result.summary), meetingID: meetingID, states: \.trackerStates)
@@ -2461,7 +2571,7 @@ final class AppModel {
         }
         let segments: [StoredSegment] = meetingSegments(record: record)
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
-        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName, attendees: record.attendees ?? []) else {
+        guard let request = speakerReviewRequest(segments: segments, speakerNames: record.speakerNames, userName: userName, attendees: record.attendees ?? [], language: selectedNoteLanguage()) else {
             return
         }
         let persons: Set<Int> = Set(segments.compactMap(\.person))
@@ -2471,6 +2581,7 @@ final class AppModel {
             let state: SpeakerReviewState
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
+                try requireOnDeviceLanguages(provider: provider, meetingLanguages: record.language.map { [$0] } ?? [], outputLanguage: selectedNoteLanguage())
                 let names: [Int: String] = record.speakerNames
                 let review: SpeakerReview = try await requestStructured(provider: provider, request: request) { (text: String) throws -> SpeakerReview in
                     try parseSpeakerReview(text: text, persons: persons, speakerNames: names)

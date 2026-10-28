@@ -15,9 +15,12 @@ struct AINotepadiOSApp: App {
     @State private var router: PhoneRouter
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
     @State private var calendar: PhoneCalendar
+    /// Çökme raporları (MetricKit; yalnız bu iPhone'da, Ayarlar'da gösterilir).
+    @State private var crashReports: CrashReportCenter = CrashReportCenter()
 
     init() {
         registerPhoneDefaults()
+        keepPhoneLegacyNoteLanguage(defaults: .standard)
         // Tema ilk kareden önce uygulanır.
         let theme: AppTheme = AppTheme(rawValue: UserDefaults.standard.string(forKey: PhoneSettingsKey.theme) ?? "") ?? .system
         ThemeStore.shared.set(light: theme.colorSets.light, dark: theme.colorSets.dark)
@@ -47,11 +50,12 @@ struct AINotepadiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, calendar: calendar)
+            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, calendar: calendar, crashReports: crashReports)
                 .environment(\.panelAppearance, .standard)
                 .font(PanelAppearance.standard.font(size: 15, weight: .regular))
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
+                    crashReports.start()
                     // Saklama süresi ve yarım kalan kayıtlar listeye bakar: okuma bitince sürer.
                     await store.reloadAndWait()
                     ask.loadRecipes()
@@ -126,6 +130,7 @@ struct RootView: View {
     @Bindable var router: PhoneRouter
     let player: MeetingAudioPlayer
     let calendar: PhoneCalendar
+    let crashReports: CrashReportCenter
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
@@ -148,7 +153,7 @@ struct RootView: View {
                 TasksTab(store: store, router: router)
             }
             Tab("Ayarlar", systemImage: "gearshape", value: PhoneTab.settings) {
-                PhoneSettingsTab(store: store, calendar: calendar, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
+                PhoneSettingsTab(store: store, calendar: calendar, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }), crashReports: crashReports)
             }
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {
@@ -163,6 +168,10 @@ struct RootView: View {
             }
         }
         .preferredColorScheme((AppTheme(rawValue: theme) ?? .system).isDark.map { $0 ? ColorScheme.dark : ColorScheme.light })
+        // İlk açılışta anahtar yoksa cihaz içi mod seçilir (karşılama seçimi gösterir).
+        .task {
+            _ = await choosePhoneOnDeviceOnFirstRun(defaults: .standard)
+        }
         .onChange(of: theme) { (_: String, value: String) in
             let selected: AppTheme = AppTheme(rawValue: value) ?? .system
             ThemeStore.shared.set(light: selected.colorSets.light, dark: selected.colorSets.dark)
@@ -309,7 +318,7 @@ final class PhoneStore {
             let llm: LLMProvider = try await phoneLLMProvider()
             let directory: URL = try sessionDirectory(id: meetingID)
             let userName: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.userName) ?? ""
-            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName)
+            let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName, language: phoneNoteLanguage())
             // Not yazılırken Mac'te değişmiş olabilir: yeni not diskteki güncel kayda uygulanır, işaretler oradan taşınır.
             let fresh: MeetingRecord = try loadMeeting(directory: directory)
             let merged: MeetingRecord = applyingRegeneratedNote(result: result, original: record, fresh: fresh)

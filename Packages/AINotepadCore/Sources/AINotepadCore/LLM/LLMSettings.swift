@@ -4,6 +4,8 @@ import Foundation
 public enum LLMProviderKind: String, Sendable, CaseIterable {
     case anthropic
     case openAICompatible
+    /// Apple Intelligence (cihaz içi, anahtarsız).
+    case onDevice
 }
 
 /// Bu bilgisayarı gösteren ana bilgisayar adları (şifresiz http'ye yalnızca bunlarda izin verilir).
@@ -45,5 +47,7 @@ public func llmModelDisplayName(provider: LLMProvider, tier: LLMTier) -> String 
         }
     case .openAICompatible(let config):
         openAIModel(config: config, tier: tier)
+    case .onDevice:
+        String(localized: "Apple Intelligence (cihaz içi)")
     }
 }

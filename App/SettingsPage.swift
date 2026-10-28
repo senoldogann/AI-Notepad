@@ -49,6 +49,8 @@ private enum SettingsSection: CaseIterable {
 struct SettingsPage: View {
     let model: AppModel
     let shortcuts: ShortcutController
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     /// Karşılama ve kurulum ekranını yeniden açar.
     let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
@@ -67,7 +69,7 @@ struct SettingsPage: View {
                     .padding(.top, 20)
                 Group {
                     switch section {
-                    case .general: GeneralSettings(model: model, onShowSetup: onShowSetup)
+                    case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
                     case .llm: LLMSettings(model: model)
                     case .keys: KeySettings(model: model)
@@ -135,9 +137,11 @@ private struct SettingsTabs: View {
     }
 }
 
-/// Motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
+/// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
+    let updater: AppUpdater
+    let crashReports: CrashReportCenter
     let onShowSetup: @MainActor () -> Void
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.missedWindowMinutes) private var missedMinutes: Int = 3
@@ -152,15 +156,18 @@ private struct GeneralSettings: View {
     @AppStorage(SettingsKey.autoRecord) private var autoRecord: Bool = false
     @AppStorage(SettingsKey.noteTemplate) private var noteTemplate: String = NoteTemplateKind.general.rawValue
     @AppStorage(SettingsKey.customTemplate) private var customTemplate: String = ""
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @State private var interfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
     @State private var relaunchError: String?
 
     var body: some View {
         // Kayıt ya da toplantı işleme sürerken yeniden başlatılırsa o toplantı yarıda kalır.
         let isBusy: Bool = model.isBusy
+        // Seçili not dilinin adı (arayüz dilinde): çeviri ayarlarında geçer.
+        let noteLanguageName: String = storedNoteLanguage(value: noteLanguage).interfaceName
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Arayüz dili")) {
-                Text("Toplantı notları ve canlı çeviri her zaman Türkçedir.")
+                Text("Menülerin ve ayarların dili.")
                 if interfaceLanguage != launchInterfaceLanguage {
                     Text("Yeniden başlatınca uygulanır.").foregroundStyle(Theme.ink)
                 }
@@ -190,10 +197,23 @@ private struct GeneralSettings: View {
             .onChange(of: interfaceLanguage) { (_: InterfaceLanguage, language: InterfaceLanguage) in
                 storeInterfaceLanguage(language: language)
             }
+            SettingsRow(title: Text("Not ve çeviri dili")) {
+                Text("Toplantı notları, canlı çeviri, \"Ne kaçırdım?\" özeti ve Sor cevapları bu dilde yazılır. Önceki notlar yazıldıkları dilde kalır.")
+            } control: {
+                SettingsMenu(selection: $noteLanguage, options: ShareLanguage.allCases.map { (language: ShareLanguage) -> (String, Text) in
+                    (language.rawValue, Text(verbatim: language.nativeName))
+                })
+            }
+            // Cihaz içi modelin bu dili yazıp yazamadığı uyarısı yenilensin.
+            .onChange(of: noteLanguage) { (_: String, _: String) in
+                model.settingsChanged()
+            }
             SettingsRow(title: Text("Canlı metin")) {
-                Text(model.liveEngine == .deepgram
-                    ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
-                    : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                switch model.liveEngine {
+                case .deepgram: Text("Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.")
+                case .whisperKit: Text("Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                case .appleSpeech: Text("Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.")
+                }
             } control: {
                 SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
@@ -201,6 +221,7 @@ private struct GeneralSettings: View {
                         Task { await model.selectEngine(engine: engine) }
                     }
                 ), options: [
+                    (LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
@@ -212,6 +233,9 @@ private struct GeneralSettings: View {
                 SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
                     (language.rawValue, Text(verbatim: languageName(language: language)))
                 })
+            }
+            .onChange(of: primaryLanguage) { (_: String, _: String) in
+                model.primaryLanguageChanged()
             }
             SettingsRow(title: Text("Kurulum")) {
                 Text("İzinler, anahtarlar ve kısayollar adım adım.")
@@ -312,12 +336,12 @@ private struct GeneralSettings: View {
                 .padding(.vertical, 12)
                 SettingsDivider()
             }
-            SettingsRow(title: Text("Kayıt sırasında Türkçeye çevir")) {
+            SettingsRow(title: Text("Kayıt sırasında \(noteLanguageName) diline çevir")) {
                 Text(model.displayMode.needsLiveTranslation
-                    ? "Her cümle kayıt sırasında çevrilir (LLM çağrısı). Toplantı bitince Türkçe not (görevler, kararlar, özet) hazırlanır."
-                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince Türkçe not (görevler, kararlar, özet) yine hazırlanır.")
+                    ? "Her cümle kayıt sırasında \(noteLanguageName) diline çevrilir (LLM çağrısı); toplantı zaten bu dildeyse çevrilmez. Toplantı bitince \(noteLanguageName) not (görevler, kararlar, özet) hazırlanır."
+                    : "Kayıt sırasında çeviri yapılmaz, yalnızca orijinal metin görünür. Toplantı bitince \(noteLanguageName) not (görevler, kararlar, özet) yine hazırlanır.")
             } control: {
-                Toggle("Kayıt sırasında Türkçeye çevir", isOn: Binding<Bool>(
+                Toggle("Kayıt sırasında \(noteLanguageName) diline çevir", isOn: Binding<Bool>(
                     get: { model.displayMode.needsLiveTranslation },
                     set: { (enabled: Bool) -> Void in model.selectDisplayMode(mode: enabled ? .bilingual : .originalOnly) }
                 ))
@@ -331,8 +355,8 @@ private struct GeneralSettings: View {
                         get: { model.displayMode },
                         set: { (mode: DisplayMode) -> Void in model.selectDisplayMode(mode: mode) }
                     ), options: [
-                        (DisplayMode.bilingual, Text("İki dil (orijinal + Türkçe)")),
-                        (DisplayMode.turkishOnly, Text("Sadece Türkçe")),
+                        (DisplayMode.bilingual, Text("İki dil (orijinal + \(noteLanguageName))")),
+                        (DisplayMode.turkishOnly, Text("Sadece \(noteLanguageName)")),
                     ])
                 }
             }
@@ -392,6 +416,8 @@ private struct GeneralSettings: View {
                 model.applyRetention()
             }
             CloudSyncRow(model: model)
+            UpdateSettingsRow(updater: updater)
+            CrashReportsSettings(center: crashReports)
         }
     }
 }
@@ -672,7 +698,51 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
-/// LLM sağlayıcısı: Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
+/// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı, desteklenen diller ve ana toplantı
+/// dili ya da not dili desteklenmiyorsa uyarı.
+private struct OnDeviceLLMStatus: View {
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(SettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
+
+    var body: some View {
+        switch onDeviceStatus() {
+        case .success(let config):
+            SettingsRow(title: Text("Apple Intelligence")) {
+                Text("Not, çeviri ve soru bu cihazda yazılır: ücretsiz, anahtarsız, internetsiz. Model küçüktür (4 bin token bağlam): uzun toplantılar parça parça işlenir, not kendi anahtarınla seçilen modellerden daha kısa olur.")
+            } control: {
+                Label("Hazır", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
+            }
+            SettingsRow(title: Text("Desteklenen diller")) {
+                Text(verbatim: onDeviceLanguageNames(config: config).joined(separator: ", "))
+            } control: {
+                EmptyView()
+            }
+            // Ana toplantı dili ya da not dili modelde yoksa uyarı.
+            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ (language: MeetingLanguage) -> String? in
+                onDeviceModeWarning(config: config, primaryLanguage: language, outputLanguage: storedNoteLanguage(value: noteLanguage))
+            }) {
+                SettingsRow(title: Text("Ana toplantı dili")) {
+                    Text(verbatim: warning)
+                } control: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+                }
+            }
+        case .failure(let error):
+            SettingsRow(title: Text("Apple Intelligence")) {
+                Text(verbatim: userFacingMessage(error: error))
+            } control: {
+                Label("Kullanılamıyor", systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    /// Modelin ayarı (kullanılabiliyorsa) ya da neden kullanılamadığı.
+    private func onDeviceStatus() -> Result<OnDeviceConfig, any Error> {
+        Result { () throws -> OnDeviceConfig in try onDeviceConfig() }
+    }
+}
+
+/// LLM sağlayıcısı: cihaz içi, Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
 private struct LLMSettings: View {
     let model: AppModel
     @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
@@ -696,11 +766,14 @@ private struct LLMSettings: View {
                 EmptyView()
             } control: {
                 SettingsMenu(selection: $provider, options: [
+                    (LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
                     (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
                 ])
             }
-            if provider == LLMProviderKind.anthropic.rawValue {
+            if provider == LLMProviderKind.onDevice.rawValue {
+                OnDeviceLLMStatus()
+            } else if provider == LLMProviderKind.anthropic.rawValue {
                 SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
                 SettingsGroupHeader(title: "Canlı çeviri")
                 SettingsRow(title: Text("Model")) {
@@ -850,7 +923,7 @@ private func testConnection() async -> ConnectionTest {
     }
     let reply: String
     do {
-        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: []))
+        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: connectionTestSentence(provider: provider), context: [], language: selectedNoteLanguage()))
     } catch {
         return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
     }
@@ -862,6 +935,14 @@ private func testConnection() async -> ConnectionTest {
         return .failed(String(localized: "Not modeli: \(userFacingMessage(error: error))"))
     }
     return .succeeded(reply)
+}
+
+/// Bağlantı denemesinde çevrilen cümle: Fince; cihaz içi model Fince anlamadığı için orada İngilizce. Saf fonksiyondur.
+private func connectionTestSentence(provider: LLMProvider) -> String {
+    guard case .onDevice = provider else {
+        return "Hyvää huomenta."
+    }
+    return "Good morning."
 }
 
 /// Bulut konuşma tanıma anahtarları.

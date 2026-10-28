@@ -11,12 +11,14 @@ private let settingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 enum LiveEngine: String, CaseIterable {
     case deepgram
     case whisperKit
+    /// Apple'ın cihaz içi konuşma tanıması (SpeechAnalyzer): anahtarsız, büyük model indirmesi yok.
+    case appleSpeech
 
     /// Bu motorla kaydedilen toplantının son geçiş türü.
     var recordingEngine: RecordingEngine {
         switch self {
         case .deepgram: .cloud
-        case .whisperKit: .local
+        case .whisperKit, .appleSpeech: .local
         }
     }
 }
@@ -65,6 +67,10 @@ enum SettingsKey {
     static let uncertainSends: String = "integrations.uncertainSends"
     /// Ana toplantı dili: otomatik algılama bu dille başlar (ve Mac'te bununla İngilizce arasında seçer).
     static let primaryMeetingLanguage: String = "language.primary"
+    /// Not ve çeviri dili (`ShareLanguage`): not, canlı çeviri, "Ne kaçırdım?" ve Sor cevapları bu dilde yazılır.
+    static let noteLanguage: String = "language.note"
+    /// Not dili ayarından önceki sürümlerin kullanıcısına Türkçe bir kez yazıldı (`legacyNoteLanguage`).
+    static let noteLanguageMigrated: String = "migration.noteLanguage"
     /// Takvimdeki çevrim içi görüşme sürerken mikrofon başka uygulamada açılınca kayıt kendiliğinden başlar.
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
@@ -237,6 +243,8 @@ func registerDefaultSettings() {
         SettingsKey.micSuggestions: true,
         SettingsKey.webhookAutoSend: false,
         SettingsKey.primaryMeetingLanguage: MeetingLanguage.finnish.rawValue,
+        // Arayüz dili: Türkçe arayüzde mevcut kullanıcıların notu eskisi gibi Türkçe sürer.
+        SettingsKey.noteLanguage: defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue,
         SettingsKey.autoRecord: false,
         SettingsKey.noteTemplate: NoteTemplateKind.general.rawValue,
         SettingsKey.customTemplate: "",
@@ -253,9 +261,44 @@ func registerDefaultSettings() {
     ])
 }
 
+/// Not dili ayarından önceki sürümlerden gelen kullanıcının notları Türkçe kalır (bkz. `legacyNoteLanguage`); bu sürümün
+/// ilk açılışında bir kez çalışır. Varsayılanlar değil, yalnız kayıtlı değerler okunur.
+func keepLegacyNoteLanguage(defaults: UserDefaults) {
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("Paket kimliği yok, not dili taşınmadı")
+        return
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    let language: ShareLanguage? = legacyNoteLanguage(
+        storedNoteLanguage: stored[SettingsKey.noteLanguage] as? String,
+        onboardingCompleted: stored[SettingsKey.onboardingCompleted] as? Bool ?? false,
+        alreadyMigrated: stored[SettingsKey.noteLanguageMigrated] as? Bool ?? false
+    )
+    if let language {
+        defaults.set(language.rawValue, forKey: SettingsKey.noteLanguage)
+        settingsLogger.info("Önceki sürümün kullanıcısı: not dili korundu, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(true, forKey: SettingsKey.noteLanguageMigrated)
+}
+
 /// Kayıtlı ayarın değeri, aralığa sıkıştırılmış.
 func clampedSetting(key: String, range: ClosedRange<Int>) -> Int {
     min(max(UserDefaults.standard.integer(forKey: key), range.lowerBound), range.upperBound)
+}
+
+/// Not ve çeviri dili (Ayarlar › Genel); kayıtlı değer tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func selectedNoteLanguage() -> ShareLanguage {
+    storedNoteLanguage(value: UserDefaults.standard.string(forKey: SettingsKey.noteLanguage) ?? "")
+}
+
+/// Ayarın ham değerinden not dili (görünümlerdeki `@AppStorage(SettingsKey.noteLanguage)` için: dil değişince etiketler
+/// de güncellenir); tanınmıyorsa (loglanır) arayüz dilinin varsayılanı.
+func storedNoteLanguage(value stored: String) -> ShareLanguage {
+    guard let language = ShareLanguage(rawValue: stored) else {
+        settingsLogger.error("Not dili tanınmadı, varsayılan kullanılıyor, değer: \(stored, privacy: .public)")
+        return defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations)
+    }
+    return language
 }
 
 /// Seçili LLM sağlayıcı türü.
@@ -296,7 +339,53 @@ func resolveLLMProvider() async throws -> LLMProvider {
         ))
     case .openAICompatible:
         return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
+    case .onDevice:
+        return .onDevice(try onDeviceConfig())
     }
+}
+
+/// İlk açılışta (kurulum bitmemiş, motor ve LLM hiç seçilmemiş) hiçbir anahtar yoksa ve Apple Intelligence
+/// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Ana toplantı dili kayıtlı
+/// değilse cihazın dili (modelde varsa) ya da İngilizce olur (bkz. `onDeviceDefaultMeetingLanguage`). Anahtarı olan ya
+/// da kurulumu bitirmiş kullanıcıya dokunulmaz. Seçim yapıldıysa true.
+func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
+    // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("İlk açılışta paket kimliği yok, cihaz içi mod seçilmedi")
+        return false
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    guard !defaults.bool(forKey: SettingsKey.onboardingCompleted), stored[SettingsKey.liveEngine] == nil, stored[SettingsKey.llmProvider] == nil else {
+        return false
+    }
+    for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
+        do {
+            if try await Task.detached(operation: { try secretExists(service: keychainService, account: account) }).value {
+                return false
+            }
+        } catch {
+            // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
+            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+    let config: OnDeviceConfig
+    do {
+        config = try onDeviceConfig()
+    } catch {
+        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        return false
+    }
+    // Kayıtlı ana toplantı dili korunur (kurulumda bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
+    // (varsayılan Fince modelde yok) cihazın dili ya da İngilizce.
+    if defaults.persistentDomain(forName: bundleID)?[SettingsKey.primaryMeetingLanguage] == nil {
+        let language: MeetingLanguage = onDeviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages, languageCodes: config.languageCodes)
+        defaults.set(language.rawValue, forKey: SettingsKey.primaryMeetingLanguage)
+        settingsLogger.info("İlk açılışta ana toplantı dili seçildi, dil: \(language.rawValue, privacy: .public)")
+    }
+    defaults.set(LiveEngine.appleSpeech.rawValue, forKey: SettingsKey.liveEngine)
+    defaults.set(LLMProviderKind.onDevice.rawValue, forKey: SettingsKey.llmProvider)
+    return true
 }
 
 /// Kayıtlı OpenAI uyumlu ayar; adres ya da model eksikse `LLMError.notConfigured`.

@@ -418,7 +418,7 @@ struct MeetingDetailPage: View {
     let onRunRecipe: @MainActor (Recipe) -> Void
     @State private var export: ExportStatus = .none
     @State private var tab: MeetingTab = .summary
-    /// Özetin gösterildiği dil: nil Türkçe not, değilse paylaşım sürümü.
+    /// Özetin gösterildiği dil: nil asıl not (yazıldığı dilde), değilse paylaşım sürümü.
     @State private var noteLanguage: ShareLanguage?
     /// Başlık düzenleniyor (çift tıklama ya da "Yeniden adlandır").
     @State private var isRenaming: Bool = false
@@ -450,8 +450,8 @@ struct MeetingDetailPage: View {
                         PillPicker(selection: $tab, options: [(MeetingTab.summary, "Özet"), (MeetingTab.transcript, "Transkript")])
                             .frame(maxWidth: 260)
                         Spacer(minLength: 8)
-                        if tab == .summary, record.note != nil {
-                            noteLanguageMenu
+                        if tab == .summary, let note = record.note {
+                            noteLanguageMenu(original: note.writtenLanguage)
                         }
                     }
                     Group {
@@ -641,25 +641,24 @@ struct MeetingDetailPage: View {
         }
     }
 
-    /// Notun dili: Türkçe (asıl not), sık kullanılan Fince ve İngilizce, sonra diğer diller.
-    private var noteLanguageMenu: some View {
-        Menu {
-            Button("Türkçe") { noteLanguage = nil }
-            Button(ShareLanguage.finnish.nativeName) { noteLanguage = .finnish }
-            Button(ShareLanguage.english.nativeName) { noteLanguage = .english }
+    /// Notun dili: asıl not (yazıldığı dil, `original`), sık kullanılan Fince ve İngilizce, sonra diğer diller. Asıl
+    /// notun dili paylaşım dili olarak yinelenmez.
+    private func noteLanguageMenu(original: ShareLanguage) -> some View {
+        let featured: [ShareLanguage] = [ShareLanguage.finnish, .english].filter { $0 != original }
+        return Menu {
+            Button(original.nativeName) { noteLanguage = nil }
+            ForEach(featured, id: \.self) { (language: ShareLanguage) in
+                Button(language.nativeName) { noteLanguage = language }
+            }
             Divider()
             Menu("Diğer diller") {
-                ForEach(ShareLanguage.allCases.filter { ![.finnish, .english].contains($0) }, id: \.self) { (language: ShareLanguage) in
+                ForEach(ShareLanguage.allCases.filter { ![.finnish, .english, original].contains($0) }, id: \.self) { (language: ShareLanguage) in
                     Button(language.nativeName) { noteLanguage = language }
                 }
             }
         } label: {
             Label {
-                if let language = noteLanguage {
-                    Text(verbatim: language.nativeName)
-                } else {
-                    Text("Türkçe")
-                }
+                Text(verbatim: (noteLanguage ?? original).nativeName)
             } icon: {
                 Image(systemName: "globe")
             }
@@ -811,11 +810,13 @@ struct MeetingDetailPage: View {
             .disabled(!hasTranscript)
     }
 
-    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
+    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…), paylaşılabilir web sayfası olarak kaydeder
+    /// ya da PDF'ini iCloud bağlantısıyla paylaşır. Geniş ve dar düzenin ikisinde de menüdedir.
     @ViewBuilder
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
+        Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
         // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
         Menu("Kanala gönder", systemImage: "paperplane") {
             if model.destinations.isEmpty {
@@ -950,7 +951,7 @@ struct MeetingDetailPage: View {
         }
     }
 
-    /// Paylaşılacak metin: seçili dildeki not (paylaşım sürümü henüz yoksa Türkçe); not yoksa nil.
+    /// Paylaşılacak metin: seçili dildeki not (paylaşım sürümü henüz yoksa asıl not); not yoksa nil.
     private var displayedShareText: String? {
         guard let note = record.note else {
             return nil
@@ -1074,6 +1075,48 @@ struct MeetingDetailPage: View {
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu (seçili dilde) PDF olarak iCloud Drive'daki AI-Notepad klasörüne (`Documents/Shared`) koyar ve paylaşım
+    /// seçicisini açar: iCloud'un "Ortak çalış / Bağlantıyı kopyala" seçeneği ya da başka bir servis. iCloud yoksa
+    /// dosya başka yere yazılmaz, hata gösterilir. Dosya önce geçici klasöre yazılıp iCloud'a taşınır (`setUbiquitous`).
+    private func shareViaLink() {
+        let pdf: Data
+        do {
+            pdf = try meetingPDF(record: shownRecord)
+        } catch {
+            meetingsLogger.error("Paylaşılacak PDF oluşturulamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: error))
+            return
+        }
+        let title: String = shownRecord.note?.title ?? record.title
+        let startedAt: Date = record.startedAt
+        Task {
+            do {
+                let url: URL = try await Task.detached(priority: .userInitiated) { () throws -> URL in
+                    let destination: URL = try exportFileURL(directory: try AppPaths.cloudSharedDirectory(), title: title, startedAt: startedAt, fileExtension: "pdf")
+                    let temporary: URL = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).pdf", directoryHint: .notDirectory)
+                    do {
+                        try pdf.write(to: temporary, options: .atomic)
+                        try FileManager.default.setUbiquitous(true, itemAt: temporary, destinationURL: destination)
+                    } catch {
+                        throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+                    }
+                    return destination
+                }.value
+                guard let view = NSApp.keyWindow?.contentView else {
+                    export = .failed(String(localized: "Paylaşım penceresi açılamadı; PDF iCloud Drive'da: \(url.lastPathComponent)"))
+                    return
+                }
+                // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
+                let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
+                NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+                export = .done(String(localized: "PDF iCloud Drive'a kaydedildi: \(url.lastPathComponent)"))
+            } catch {
+                meetingsLogger.error("Bağlantıyla paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
+                export = .failed(userFacingMessage(error: error))
+            }
         }
     }
 
@@ -1970,10 +2013,13 @@ private func ownerInitial(owner: String) -> String {
     return owner.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
 }
 
-/// Not "Konuşmacı N" yazdıysa N (not her zaman Türkçe yazılır). Saf fonksiyondur.
+/// Not numaralı konuşmacı etiketi yazdıysa (tek sözcük ve sayı: "Konuşmacı 2", not başka dildeyse "Speaker 2",
+/// "Puhuja 2") numarası. Saf fonksiyondur.
 private func speakerNumber(owner: String) -> Int? {
-    let prefix: String = "Konuşmacı "
-    return owner.hasPrefix(prefix) ? Int(owner.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)) : nil
+    guard let match = owner.trimmingCharacters(in: .whitespaces).wholeMatch(of: /\p{L}+\s+(\d{1,3})/) else {
+        return nil
+    }
+    return Int(match.1)
 }
 
 /// Görev sahibinin rengi: sen mavi, adı verilmiş ya da numaralı konuşmacı kendi rengi, diğerleri addan sabit bir renk.
@@ -2384,7 +2430,7 @@ private struct PlayableTurn: ViewModifier {
     }
 }
 
-/// Paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, yankı süzülmüş); altında Türkçesi.
+/// Paragraflı transkript (aynı konuşmacının art arda bölümleri tek paragraf, yankı süzülmüş); altında çevirisi.
 /// Çalarken şarkı sözü gibi akar: çalan paragrafta söylenen kelimeler parlak, o anki kelime vurgu renginde, gelecek
 /// kelimeler soluk; çalan paragraf ortaya kaydırılır. Paragrafa tıklayınca oradan çalar.
 private struct TranscriptSection: View {

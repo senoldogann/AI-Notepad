@@ -94,7 +94,7 @@ private func numberedTaskLine(number: Int, task: NoteTask) -> String {
 /// olarak verilir; model yalnızca bu parçadaki yenileri ve önceki görevlerdeki değişiklikleri yazar. Saf fonksiyondur.
 public func noteChunkRequest(
     chunk: [StoredSegment], part: Int, partCount: Int, state: ChunkedNoteState, speakerNames: [Int: String], userName: String,
-    template: NoteTemplate, myNotes: String
+    template: NoteTemplate, myNotes: String, language: ShareLanguage
 ) -> LLMRequest {
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let mine: (rule: String, block: String) = myNotesPrompt(myNotes: myNotes)
@@ -105,7 +105,8 @@ public func noteChunkRequest(
     return LLMRequest(
         tier: .smart,
         system: """
-        Uzun bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptini parça parça okuyup Türkçe toplantı notu çıkarıyorsun. Şu an
+        Uzun bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptini parça parça okuyup \(language.promptName)
+        dilinde toplantı notu çıkarıyorsun. Şu an
         \(partCount) parçanın \(part). parçasındasın. Önceki parçaların özetleri ve şimdiye kadar çıkan numaralı görevler bağlam
         olarak verilir; bu parçayı onlarla bağdaştırarak oku (önceden geçen kişi, konu ve işlere yapılan atıflar).
         Kullanıcının adı \(user); transkriptte "Sen" odur. Yalnızca bu parçadan yaz:
@@ -114,8 +115,8 @@ public func noteChunkRequest(
         - yeniGorevler: bu parçada verilen yeni işler. Listede aynı iş (aynı kişi, aynı konu) zaten varsa yeniden yazma;
           başka bir konunun benzer işi yenidir.
         - degisenGorevler: listedeki bir görev bu parçada değiştiyse (tarih, kapsam) ya da iptal edildiyse numarasıyla yaz.
-        - sozluk: bu parçada geçen önemli yabancı dildeki terimler ve Türkçe anlamları.
-        \(noteRules(user: user, template: template))
+        - sozluk: bu parçada geçen önemli yabancı dildeki terimler ve \(language.promptName) dilinde anlamları.
+        \(noteRules(user: user, template: template, language: language))
         \(mine.rule)
         \(transcriptIsDataNote)
         """,
@@ -198,16 +199,16 @@ public func applyNoteChunk(state: ChunkedNoteState, chunk: NoteChunk, startSec: 
 
 /// Parçalar bitince başlık ve tüm toplantının özeti için istek (görev ve kararlar yalnızca bağlam; yeniden yazılmaz).
 /// Saf fonksiyondur.
-public func noteOverviewRequest(state: ChunkedNoteState, userName: String, template: NoteTemplate, myNotes: String) -> LLMRequest {
+public func noteOverviewRequest(state: ChunkedNoteState, userName: String, template: NoteTemplate, myNotes: String, language: ShareLanguage) -> LLMRequest {
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let mine: (rule: String, block: String) = myNotesPrompt(myNotes: myNotes)
     let tasks: String = state.tasks.enumerated().map { numberedTaskLine(number: $0.offset + 1, task: $0.element) }.joined(separator: "\n")
     return LLMRequest(
         tier: .smart,
         system: """
-        Uzun bir toplantının parça parça çıkarılmış Türkçe notları veriliyor. Kullanıcının adı \(user). Tüm toplantı için
+        Uzun bir toplantının parça parça çıkarılmış notları veriliyor. Kullanıcının adı \(user). Tüm toplantı için
         kısa bir başlık ve konuların akışını, alınan ana kararları ve kullanıcıya düşen önemli işleri anlatan birkaç
-        paragraflık Türkçe özet yaz. akis alanına konuların sırasını yaz: her bölümün başladığı [mm:ss] zamanı (parça
+        paragraflık özet yaz. Başlık, özet ve akış \(language.promptName) dilinde olur. akis alanına konuların sırasını yaz: her bölümün başladığı [mm:ss] zamanı (parça
         özetlerindeki aralıklardan), kısa başlığı ve tek cümlelik özeti (5–12 bölüm). Notlarda olmayan bir şey uydurma. \(templateInstructions(template: template))
         \(mine.rule)
         \(transcriptIsDataNote)
@@ -253,7 +254,7 @@ public func parseNoteOverview(text: String, state: ChunkedNoteState) throws -> M
 }
 
 /// Uzun notun kaldığı yer: yazılan parça sayısı ve birikmiş durum. Parmak izi (transkript, adlar, kullanıcı adı,
-/// şablon) tutmazsa baştan başlanır.
+/// şablon, not dili) tutmazsa baştan başlanır.
 public struct ChunkedNoteProgress: Sendable, Equatable, Codable {
     public let fingerprint: String
     public let completedParts: Int
@@ -267,10 +268,10 @@ public struct ChunkedNoteProgress: Sendable, Equatable, Codable {
 }
 
 /// Not girdilerinin parmak izi (ilerlemenin aynı not için olduğunu doğrular). Saf fonksiyondur.
-func noteFingerprint(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate) -> String {
+func noteFingerprint(segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, language: ShareLanguage) -> String {
     let names: String = speakerNames.keys.sorted().map { "\($0)=\(speakerNames[$0] ?? "")" }.joined(separator: ",")
     let text: String = segments.map { "\($0.key)|\($0.person.map(String.init) ?? "")|\($0.text)" }.joined(separator: "\n")
-    let input: String = [text, names, userName, template.kind.rawValue, template.customInstructions].joined(separator: "\u{1F}")
+    let input: String = [text, names, userName, template.kind.rawValue, template.customInstructions, language.rawValue].joined(separator: "\u{1F}")
     return SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
 }
 
@@ -303,35 +304,45 @@ private func saveProgress(progress: ChunkedNoteProgress, file: URL) {
     }
 }
 
-/// Toplantı notunu yazar: kısa transkript tek istekte; uzunu `noteChunkMaxChars`'lık parçalar halinde sırayla (her
+/// Toplantı notunu yazar: kısa transkript tek istekte; uzunu sağlayıcının parça boyutunda (`noteLimits`) sırayla (her
 /// parça öncekilerin özetini ve görevlerini görür), sonra başlık ve genel özet. Her istek boş/bozuk yanıtta yeniden
 /// sorulur. Uzun notta her parçadan sonra ilerleme `progressFile`'a yazılır: bir parça kalıcı olarak başarısız olursa
-/// "Tekrar işle" yazılan parçaları yeniden ödemeden kaldığı yerden sürer; not bitince dosya silinir. Metin yoksa nil.
+/// "Tekrar işle" yazılan parçaları yeniden ödemeden kaldığı yerden sürer; not bitince dosya silinir. Not `language`
+/// dilinde yazılır. Metin yoksa nil.
 public func writeMeetingNote(
-    segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, myNotes: String, llm: LLMProvider,
-    progressFile: URL
+    segments: [StoredSegment], speakerNames: [Int: String], userName: String, template: NoteTemplate, myNotes: String, language: ShareLanguage,
+    llm: LLMProvider, progressFile: URL
 ) async throws -> MeetingNote? {
     let totalChars: Int = segments.map(\.text.count).reduce(0, +)
-    guard totalChars > noteChunkMaxChars else {
-        guard let request = meetingNoteRequest(segments: segments, speakerNames: speakerNames, userName: userName, template: template, myNotes: myNotes) else {
+    let limits: NoteLimits = noteLimits(provider: llm)
+    guard totalChars > limits.chunkChars else {
+        guard let request = meetingNoteRequest(
+            segments: segments, speakerNames: speakerNames, userName: userName, template: template, myNotes: myNotes, language: language
+        ) else {
             return nil
         }
         let note: MeetingNote = try await requestStructured(provider: llm, request: request) { (text: String) throws -> MeetingNote in
             try parseMeetingNote(text: text)
         }
-        return withNormalizedTasks(note: note, userName: userName)
+        return withNormalizedTasks(note: note, userName: userName).with(language: language)
     }
-    let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: noteChunkMaxChars)
-    let fingerprint: String = noteFingerprint(segments: segments, speakerNames: speakerNames, userName: userName + "\u{1F}" + myNotes, template: template)
+    let chunks: [[StoredSegment]] = noteChunks(segments: segments, maxChars: limits.chunkChars)
+    // Parça boyutu da parmak izine girer: sağlayıcı değişince parçalar farklıdır, kalınan yer geçersizdir.
+    let fingerprint: String = noteFingerprint(
+        segments: segments, speakerNames: speakerNames, userName: userName + "\u{1F}" + myNotes + "\u{1F}\(limits.chunkChars)", template: template,
+        language: language
+    )
     let resumed: ChunkedNoteProgress? = loadedProgress(file: progressFile, fingerprint: fingerprint, partCount: chunks.count)
     if let resumed {
         noteLogger.info("Not kaldığı yerden sürüyor, parça: \(resumed.completedParts, privacy: .public)/\(chunks.count, privacy: .public)")
     }
     var state: ChunkedNoteState = resumed?.state ?? .empty
     for (index, chunk) in chunks.enumerated() where index >= resumed?.completedParts ?? 0 {
+        // Küçük bağlamlı modelde önceki parçaların özetleri kısaltılır (görev numaraları değişmez).
+        let promptState: ChunkedNoteState = limits.summaryChars.map { condensedNoteState(state: state, maxChars: $0) } ?? state
         let request: LLMRequest = noteChunkRequest(
-            chunk: chunk, part: index + 1, partCount: chunks.count, state: state, speakerNames: speakerNames, userName: userName,
-            template: template, myNotes: myNotes
+            chunk: chunk, part: index + 1, partCount: chunks.count, state: promptState, speakerNames: speakerNames, userName: userName,
+            template: template, myNotes: myNotes, language: language
         )
         let part: NoteChunk = try await requestStructured(provider: llm, request: request) { (text: String) throws -> NoteChunk in
             try parseNoteChunk(text: text)
@@ -346,7 +357,10 @@ public func writeMeetingNote(
         saveProgress(progress: ChunkedNoteProgress(fingerprint: fingerprint, completedParts: index + 1, state: state), file: progressFile)
     }
     let finalState: ChunkedNoteState = state
-    let note: MeetingNote = try await requestStructured(provider: llm, request: noteOverviewRequest(state: finalState, userName: userName, template: template, myNotes: myNotes)) { (text: String) throws -> MeetingNote in
+    let overviewState: ChunkedNoteState = limits.summaryChars.map { condensedNoteState(state: finalState, maxChars: $0) } ?? finalState
+    let note: MeetingNote = try await requestStructured(
+        provider: llm, request: noteOverviewRequest(state: overviewState, userName: userName, template: template, myNotes: myNotes, language: language)
+    ) { (text: String) throws -> MeetingNote in
         try parseNoteOverview(text: text, state: finalState)
     }
     do {
@@ -354,10 +368,10 @@ public func writeMeetingNote(
     } catch {
         noteLogger.error("Not ilerleme dosyası silinemedi, hata: \(String(describing: error), privacy: .public)")
     }
-    return withNormalizedTasks(note: note, userName: userName)
+    return withNormalizedTasks(note: note, userName: userName).with(language: language)
 }
 
-/// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`). Saf fonksiyondur.
+/// Notun görevlerinde sahibi düzeltilmiş kopya (bkz. `normalizedTask`); konu akışı ve dil korunur. Saf fonksiyondur.
 func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
     let normalized: MeetingNote = MeetingNote(
         title: note.title, summary: note.summary, decisions: note.decisions,
@@ -370,7 +384,8 @@ func withNormalizedTasks(note: MeetingNote, userName: String) -> MeetingNote {
             },
         glossary: note.glossary
     )
-    return note.outline.map { normalized.with(outline: $0) } ?? normalized
+    let outlined: MeetingNote = note.outline.map { normalized.with(outline: $0) } ?? normalized
+    return note.language.map { outlined.with(language: $0) } ?? outlined
 }
 
 // Şemadaki Türkçe alan adları.

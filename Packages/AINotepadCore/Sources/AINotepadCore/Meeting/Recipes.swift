@@ -18,7 +18,7 @@ public struct Recipe: Sendable, Equatable, Codable, Identifiable {
     }
 }
 
-/// Yerleşik tarifler (başlık ve istem arayüz dilinde; cevap her zaman Türkçe). Saf fonksiyondur.
+/// Yerleşik tarifler (başlık ve istem arayüz dilinde; cevap not dilinde). Saf fonksiyondur.
 public func builtInRecipes() -> [Recipe] {
     [
         Recipe(

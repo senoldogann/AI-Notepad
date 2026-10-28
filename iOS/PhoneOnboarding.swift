@@ -13,16 +13,16 @@ private enum PhoneOnboardingPage: Int, CaseIterable {
         switch self {
         case .welcome: "Toplantılarını dinler, notunu yazar"
         case .profile: "Sana göre ayarlanır"
-        case .keys: "Anahtarlar yalnız sende"
+        case .keys: "Nasıl başlamak istersin?"
         case .ready: "Cebinde hazır"
         }
     }
 
     var subtitle: LocalizedStringKey {
         switch self {
-        case .welcome: "Yüz yüze toplantılar canlı yazıya dökülür, Türkçesi altında akar; bitince not hazır, en üstte senin görevlerin."
+        case .welcome: "Yüz yüze toplantılar canlı yazıya dökülür, \(phoneNoteLanguage().interfaceName) çevirisi altında akar; bitince not hazır, en üstte senin görevlerin."
         case .profile: "Adın notta sana düşen görevleri ayırır; ana dil canlı metnin hangi dille başlayacağını belirler."
-        case .keys: "Mac'teki anahtarlar iCloud Anahtar Zinciri ile gelir ya da burada girersin; hiçbir yere gönderilmez."
+        case .keys: "Hemen cihaz içi başla ya da kendi anahtarlarınla daha yüksek kalite al; sonra Ayarlar'dan değişir."
         case .ready: "Kilit ekranında süre ve son cümle; Denetim Merkezi ya da Eylem düğmesiyle tek dokunuşla kayıt."
         }
     }
@@ -31,7 +31,7 @@ private enum PhoneOnboardingPage: Int, CaseIterable {
         switch self {
         case .welcome: ["mic.fill", "captions.bubble.fill", "checklist"]
         case .profile: ["person.fill", "globe"]
-        case .keys: ["key.fill", "icloud.fill"]
+        case .keys: ["cpu", "key.fill"]
         case .ready: ["lock.iphone", "record.circle.fill", "sparkles"]
         }
     }
@@ -49,6 +49,7 @@ struct PhoneOnboarding: View {
     @State private var page: PhoneOnboardingPage = launchOnboardingPage(arguments: CommandLine.arguments)
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(PhoneSettingsKey.engine) private var engine: String = PhoneEngine.cloud.rawValue
 
     var body: some View {
         VStack(spacing: 20) {
@@ -61,7 +62,7 @@ struct PhoneOnboarding: View {
                 switch page {
                 case .welcome:
                     VStack(spacing: 10) {
-                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "35 dil; konuşmacılar ayrılır, Türkçesi altında akar.", palette: .sunset)
+                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "35 dil; konuşmacılar ayrılır, \(phoneNoteLanguage().interfaceName) çevirisi altında akar.", palette: .sunset)
                         FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar ve özet.", palette: .rose)
                     }
                 case .profile:
@@ -90,12 +91,34 @@ struct PhoneOnboarding: View {
                     }
                 case .keys:
                     VStack(spacing: 10) {
-                        FeatureTile(symbol: "laptopcomputer", title: "Mac'ten gönder", text: "Mac'te Ayarlar › Anahtarlar › \"iPhone'a gönder\".", palette: .sunset)
-                        Button("Ya da anahtarları burada gir", systemImage: "key") {
-                            onOpenSettings()
+                        ChoiceCard(
+                            symbol: "cpu", title: "Hemen başla (cihaz içi)",
+                            text: "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu iPhone'da. Konuşmacılar ayrılmaz.",
+                            isSelected: engine == PhoneEngine.onDevice.rawValue
+                        ) {
+                            engine = PhoneEngine.onDevice.rawValue
                         }
-                        .appFont(size: 14, weight: .medium)
-                        .padding(.top, 4)
+                        ChoiceCard(
+                            symbol: "key.fill", title: "Kendi anahtarlarımla",
+                            text: "Daha yüksek kalite: konuşmacılar ayrılır, Claude notu yazar. Anahtarlar Mac'ten gelir ya da burada girilir.",
+                            isSelected: engine == PhoneEngine.cloud.rawValue
+                        ) {
+                            engine = PhoneEngine.cloud.rawValue
+                        }
+                        if engine == PhoneEngine.onDevice.rawValue, let problem = onDeviceProblem {
+                            Label(problem, systemImage: "exclamationmark.triangle")
+                                .appFont(size: 13, weight: .regular)
+                                .foregroundStyle(Theme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 4)
+                        }
+                        if engine == PhoneEngine.cloud.rawValue {
+                            Button("Anahtarları burada gir", systemImage: "key") {
+                                onOpenSettings()
+                            }
+                            .appFont(size: 14, weight: .medium)
+                            .padding(.top, 4)
+                        }
                     }
                 case .ready:
                     VStack(spacing: 10) {
@@ -144,6 +167,19 @@ struct PhoneOnboarding: View {
             .ignoresSafeArea()
         }
         .animation(.smooth(duration: 0.4), value: page)
+    }
+
+    /// Cihaz içi model kullanılamıyorsa ya da ana toplantı dilini (ya da not dilini) yazamıyorsa ne yapılacağı; sorun
+    /// yoksa nil.
+    private var onDeviceProblem: String? {
+        do {
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return MeetingLanguage(rawValue: primaryLanguage).flatMap { (language: MeetingLanguage) -> String? in
+                onDeviceModeWarning(config: config, primaryLanguage: language, outputLanguage: phoneNoteLanguage())
+            }
+        } catch {
+            return userFacingMessage(error: error)
+        }
     }
 
     private func move(by offset: Int) {

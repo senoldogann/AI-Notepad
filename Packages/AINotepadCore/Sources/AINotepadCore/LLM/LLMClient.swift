@@ -116,6 +116,8 @@ public struct OpenAICompatibleConfig: Sendable, Equatable {
 public enum LLMProvider: Sendable, Equatable {
     case anthropic(AnthropicConfig)
     case openAICompatible(OpenAICompatibleConfig)
+    /// Apple Intelligence (cihaz içi): anahtarsız, ücretsiz, internetsiz; küçük bağlam penceresi.
+    case onDevice(OnDeviceConfig)
 }
 
 /// HTTP yanıtının sonucu: başarı, yeniden denenebilir hata (408/429/5xx) ya da kesin hata.
@@ -155,11 +157,16 @@ struct PreparedLLMCall: Sendable {
 }
 
 /// İsteği seçili sağlayıcıya gönderir: 408/429/5xx/ağ hatası 3 deneme (`retry-after`'a uyarak, uyarı logu);
-/// diğer her sonuç kesindir.
+/// diğer her sonuç kesindir. Cihaz içi model kendi kurallarıyla çalışır (bkz. `sendOnDevice`).
 public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> String {
-    let call: PreparedLLMCall = switch provider {
-    case .anthropic(let config): try prepareClaudeCall(config: config, request: request)
-    case .openAICompatible(let config): try prepareOpenAICall(config: config, request: request)
+    let call: PreparedLLMCall
+    switch provider {
+    case .anthropic(let config):
+        call = try prepareClaudeCall(config: config, request: request)
+    case .openAICompatible(let config):
+        call = try prepareOpenAICall(config: config, request: request)
+    case .onDevice(let config):
+        return try await sendOnDevice(config: config, request: request)
     }
     var lastError: any Error = LLMError.empty
     for attempt in 1...llmAttempts {

@@ -9,15 +9,35 @@ struct PhoneSettingsTab: View {
     let calendar: PhoneCalendar
     /// Kayıttaki, işlenen ve çalan toplantılar: eşitleme açılıp kapanırken taşınmaz.
     let excludedFromMoves: Set<String>
+    let crashReports: CrashReportCenter
     @AppStorage(PhoneSettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+    @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
     @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @AppStorage(PhoneSettingsKey.consentReminder) private var consentReminder: Bool = true
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(PhoneSettingsKey.engine) private var engine: String = PhoneEngine.cloud.rawValue
 
     var body: some View {
         NavigationStack {
             List {
+                CrashReportNotice(center: crashReports)
+                Section {
+                    Picker("Yazıya dökme ve not", selection: $engine) {
+                        Text("Cihaz içi (ücretsiz, anahtarsız)").tag(PhoneEngine.onDevice.rawValue)
+                        Text("Bulut (kendi anahtarlarınla)").tag(PhoneEngine.cloud.rawValue)
+                    }
+                    if engine == PhoneEngine.onDevice.rawValue, let problem = onDeviceProblem {
+                        Label(problem, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                } header: {
+                    Text("Motor")
+                } footer: {
+                    Text(engine == PhoneEngine.onDevice.rawValue
+                        ? "Apple'ın konuşma tanıması ve Apple Intelligence: ses ve metin telefondan çıkmaz. Konuşmacılar ayrılmaz; not, bulut modellerinden daha kısadır."
+                        : "Deepgram canlı metni, ElevenLabs konuşmacıları, Claude notu yazar; aşağıdaki anahtarlar gerekir.")
+                }
                 Section {
                     Picker("Tema", selection: $theme) {
                         ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
@@ -78,22 +98,42 @@ struct PhoneSettingsTab: View {
                     Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.")
                 }
                 CalendarSettingsSection(calendar: calendar)
-                Section("Toplantı") {
+                Section {
                     Picker("Ana toplantı dili", selection: $primaryLanguage) {
                         ForEach(MeetingLanguage.allCases, id: \.rawValue) { (language: MeetingLanguage) in
                             Text(languageName(language: language)).tag(language.rawValue)
                         }
                     }
+                    Picker("Not ve çeviri dili", selection: $noteLanguage) {
+                        ForEach(ShareLanguage.allCases, id: \.rawValue) { (language: ShareLanguage) in
+                            Text(verbatim: language.nativeName).tag(language.rawValue)
+                        }
+                    }
                     TextField("Adın (notta senin görevlerin için)", text: $userName)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                } header: {
+                    Text("Toplantı")
+                } footer: {
+                    Text("Toplantı notları, canlı çeviri ve Sor cevapları not ve çeviri dilinde yazılır; toplantı zaten bu dildeyse çevrilmez. Önceki notlar yazıldıkları dilde kalır.")
                 }
                 Section("Uygulama") {
                     LabeledContent("Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
                     LabeledContent("Toplantılar", value: "\(store.meetings.count)")
+                    CrashReportsLink(center: crashReports)
                 }
             }
             .navigationTitle("Ayarlar")
+        }
+    }
+
+    /// Cihaz içi model kullanılamıyorsa ya da ana toplantı dilini desteklemiyorsa ne yapılacağı; sorun yoksa nil.
+    private var onDeviceProblem: String? {
+        do {
+            let config: OnDeviceConfig = try onDeviceConfig()
+            return onDeviceModeWarning(config: config, primaryLanguage: phonePrimaryMeetingLanguage(), outputLanguage: phoneStoredNoteLanguage(value: noteLanguage))
+        } catch {
+            return userFacingMessage(error: error)
         }
     }
 }
