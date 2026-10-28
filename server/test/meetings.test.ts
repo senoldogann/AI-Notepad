@@ -1,10 +1,12 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import type { Env } from "../src/env";
 import {
   type Harness,
   type Session,
   type StartedMeetingBody,
   defaultHarness,
+  envWith,
   expectError,
   grantSubscription,
   refreshed,
@@ -26,6 +28,44 @@ async function me(harness: Harness, session: Session): Promise<MeBody> {
   const response: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
   expect(response.status).toBe(200);
   return response.json<MeBody>();
+}
+
+function stubHaiku(harness: Harness): void {
+  harness.stub("https://api.anthropic.com/v1/messages", async (): Promise<Response> =>
+    Response.json({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-5-5",
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    }),
+  );
+}
+
+function llm(harness: Harness, session: Session, meetingId: string): Promise<Response> {
+  return harness.call(
+    req("POST", "/v1/llm/messages", {
+      token: session.accessToken,
+      headers: { "x-meeting-id": meetingId },
+      json: { effort: "low", max_tokens: 100, messages: [{ role: "user", content: "x" }] },
+    }),
+  );
+}
+
+async function openState(meetingId: string): Promise<{ ended_at: number | null; end_reason: string | null } | null> {
+  return env.DB.prepare("SELECT ended_at, end_reason FROM meeting_sessions WHERE id = ?")
+    .bind(meetingId)
+    .first<{ ended_at: number | null; end_reason: string | null }>();
+}
+
+async function meetingsStartedToday(harness: Harness, userId: string): Promise<number> {
+  const row = await env.DB.prepare("SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?")
+    .bind(userId, new Date(harness.clock.nowMs).toISOString().slice(0, 10))
+    .first<{ meetings_started: number }>();
+  return row?.meetings_started ?? 0;
 }
 
 describe("haklar ve toplantı oturumları", () => {
@@ -139,6 +179,56 @@ describe("haklar ve toplantı oturumları", () => {
 
     await env.DB.prepare("UPDATE monthly_usage SET audio_seconds = ? WHERE user_id = ?").bind(10 * 3600, session.userId).run();
     await expectError(await startMeeting(harness, session), 403, "monthly_cap_reached");
+  });
+
+  it("reddedilen deneme başlatması açık toplantıyı kapatmaz ve günlük başlatma hakkı harcamaz", async () => {
+    const harness: Harness = await defaultHarness();
+    stubHaiku(harness);
+    const session: Session = await signIn(harness);
+    let last: StartedMeetingBody | null = null;
+    for (let index: number = 0; index < 3; index += 1) {
+      last = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    }
+    const open: StartedMeetingBody = last as StartedMeetingBody;
+    await expectError(await startMeeting(harness, session), 402, "trial_exhausted");
+    expect(await openState(open.meetingId)).toEqual({ ended_at: null, end_reason: null });
+    expect(await meetingsStartedToday(harness, session.userId)).toBe(3);
+    expect((await llm(harness, session, open.meetingId)).status).toBe(200);
+  });
+
+  it("aylık sınırda reddedilen abone başlatması açık toplantıyı kapatmaz ve günlük başlatma hakkı harcamaz", async () => {
+    const harness: Harness = await defaultHarness();
+    stubHaiku(harness);
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
+    const open: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)")
+      .bind(session.userId, new Date(harness.clock.nowMs).toISOString().slice(0, 7), 10 * 3600)
+      .run();
+    await expectError(await startMeeting(harness, session), 403, "monthly_cap_reached");
+    expect(await openState(open.meetingId)).toEqual({ ended_at: null, end_reason: null });
+    expect(await meetingsStartedToday(harness, session.userId)).toBe(1);
+    expect((await llm(harness, session, open.meetingId)).status).toBe(200);
+  });
+
+  it("başarılı başlatma eskisini ek süresiz kapatır ve sayılır; günlük sınırda reddedilen açık toplantıya dokunmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    stubHaiku(harness);
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
+    const limited: Env = envWith({ MAX_MEETING_STARTS_PER_DAY: "2" });
+    const start = (): Promise<Response> => harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: {}, env: limited }));
+    const first: StartedMeetingBody = await (await start()).json<StartedMeetingBody>();
+    harness.clock.nowMs += 5 * 60_000;
+    const second: StartedMeetingBody = await (await start()).json<StartedMeetingBody>();
+    expect(await openState(first.meetingId)).toEqual({ ended_at: harness.clock.nowMs, end_reason: "superseded" });
+    await expectError(await llm(harness, session, first.meetingId), 403, "meeting_not_active");
+    expect(await meetingsStartedToday(harness, session.userId)).toBe(2);
+
+    await expectError(await start(), 429, "daily_cap_reached");
+    expect(await openState(second.meetingId)).toEqual({ ended_at: null, end_reason: null });
+    expect(await meetingsStartedToday(harness, session.userId)).toBe(2);
+    expect((await llm(harness, session, second.meetingId)).status).toBe(200);
   });
 
   it("dönemi geçmiş ya da iptal edilmiş abonelik hak vermez", async () => {
