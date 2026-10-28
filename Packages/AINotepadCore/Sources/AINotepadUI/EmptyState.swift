@@ -76,7 +76,7 @@ private struct EmptyStateIcon: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: size * 0.42, weight: .regular))
+            .appFont(size: size * 0.42, weight: .regular)
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(Theme.muted)
             .frame(width: size, height: size)
@@ -97,8 +97,8 @@ public struct EmptyStateStep {
     }
 }
 
-/// Boş sayfanın sahnesi: ElevenLabs film gradyanlı küre (sakin akış) ve simge; altında başlık, açıklama, yol gösteren
-/// adımlar ve eylemler. Sahne yumuşakça belirir. "Hareketi azalt" açıksa gradyan durgundur.
+/// Boş sayfanın sahnesi: durgun film gradyanlı küre ve simge; altında başlık, açıklama, yol gösteren adımlar ve
+/// eylemler. Sahne açılışta bir kez yumuşakça belirir ("Hareketi azalt" açıksa hemen); sonra hiçbir şey kıpırdamaz.
 public struct EmptyStateHero<Actions: View>: View {
     let symbol: String
     let title: LocalizedStringKey
@@ -204,7 +204,7 @@ private struct EmptyStateSteps: View {
 }
 
 /// Sahnenin küresi: durgun film gradyanı (paletin bulutları, grenli doku) daire içinde, arkasında aynı renklerin
-/// yumuşak parıltısı; ortada beyaz simge.
+/// yumuşak parıltısı; ortada koyu mürekkep simge (pastel zeminde beyaz simge kayboluyordu).
 struct EmptyStateOrb: View {
     let symbol: String
     let palette: FilmPalette
@@ -220,9 +220,8 @@ struct EmptyStateOrb: View {
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
             Image(systemName: symbol)
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+                .appFont(size: 38, weight: .medium)
+                .foregroundStyle(Color.black.opacity(0.8))
         }
         .accessibilityHidden(true)
     }

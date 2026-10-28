@@ -765,9 +765,10 @@ public struct ExampleQuestionCard: View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 18, style: .continuous)
         Button(action: onAsk) {
             HStack(spacing: 14) {
+                // Pastel film zemininde koyu mürekkep (marka kutuları gibi): beyaz simge açık tonlarda kayboluyordu.
                 Image(systemName: symbol)
                     .appFont(size: 16, weight: .semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.black.opacity(0.8))
                     .frame(width: 42, height: 42)
                     .background { FilmGradient(seed: "soru-\(symbol)", palette: palette) }
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
