@@ -58,7 +58,7 @@ struct PeoplePage: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
                             ForEach(shown) { (person: PersonSummary) in
-                                row(person: person, isSelected: !isAdding && current?.id == person.id)
+                                row(person: person, isSelected: current?.id == person.id)
                             }
                             if shown.isEmpty, !people.isEmpty {
                                 Text("Eşleşen kişi yok")
@@ -79,16 +79,7 @@ struct PeoplePage: View {
                     toolbar(people: people, current: current)
                 }
                 Group {
-                    if isAdding {
-                        PersonForm(title: "Kişi ekle", initialName: "", lockedName: nil, initialRole: "", initialEmail: "") { (name: String, role: String, email: String) -> Void in
-                            model.savePerson(name: name, role: role, email: email)
-                            selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                            isAdding = false
-                        } onCancel: {
-                            isAdding = false
-                        }
-                        .transition(.opacity)
-                    } else if let current {
+                    if let current {
                         PersonDetail(person: current, router: router) { (name: String, role: String, email: String) -> Void in
                             // Elle eklenen kişinin adı değişebilir (sesi de taşınır); toplantıdan gelen kişinin adı
                             // toplantılarda verildiği için formda kilitlidir, yalnızca ünvan ve e-posta kaydedilir.
@@ -134,6 +125,17 @@ struct PeoplePage: View {
         }
         .animation(.smooth(duration: 0.25), value: selected)
         .animation(.smooth(duration: 0.25), value: isAdding)
+        // "Kişi ekle" ayrı sayfa değil, küçük bir pencere: kullanıcı bulunduğu kişiden ayrılmaz.
+        .sheet(isPresented: $isAdding) {
+            PersonForm(title: "Kişi ekle", initialName: "", lockedName: nil, initialRole: "", initialEmail: "") { (name: String, role: String, email: String) -> Void in
+                model.savePerson(name: name, role: role, email: email)
+                selected = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                isAdding = false
+            } onCancel: {
+                isAdding = false
+            }
+            .frame(width: 460)
+        }
         .animation(.smooth(duration: 0.25), value: listVisible)
     }
 
