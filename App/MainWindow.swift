@@ -370,8 +370,7 @@ private struct TopBar: View {
         HStack(spacing: DesignTokens.Spacing.m) {
             // Sayfanın sol listesini gizle/göster: her bölümde aynı yerde, başlığın solunda.
             switch router.section {
-            case .meetings where router.selectedMeetingID != nil:
-                // Toplantı seçili değilken liste hep görünür (seçecek bir şey kalmasın).
+            case .meetings:
                 listToggle(isVisible: $meetingsListVisible, show: "Toplantı listesini göster", hide: "Toplantı listesini gizle")
             case .people:
                 listToggle(isVisible: $peopleListVisible, show: "Kişi listesini göster", hide: "Kişi listesini gizle")
@@ -1277,8 +1276,8 @@ private struct MeetingsSplit: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Liste üst çubuktaki düğmeyle gizlenir; toplantı seçili değilken seçecek bir şey kalmasın diye hep görünür.
-            if listVisible || router.selectedMeetingID == nil {
+            // Liste üst çubuktaki düğmeyle gizlenir (düğme Toplantılar'da her zaman görünür).
+            if listVisible {
                 MeetingsListPage(
                     model: model, selectedID: router.selectedMeetingID, query: router.searchQuery, folder: router.folderFilter,
                     onClearFolder: { router.folderFilter = nil },

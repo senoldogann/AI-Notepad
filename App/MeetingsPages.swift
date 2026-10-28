@@ -500,9 +500,10 @@ struct MeetingDetailPage: View {
                 .animation(.smooth(duration: 0.25), value: export)
                 .animation(.smooth(duration: 0.3), value: model.speakerReviews[record.id])
                 .padding(DesignTokens.Spacing.l)
-                // Geniş ana pencerede içerik okunur genişlikte kalsın (panelde etkisiz).
+                // Geniş ana pencerede içerik okunur genişlikte kalır ve ortalanır: liste gizlenince sağda büyük boşluk
+                // kalmasın (panelde etkisiz).
                 .frame(maxWidth: 1080, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .onChange(of: tab) { (_: MeetingTab, selected: MeetingTab) -> Void in
