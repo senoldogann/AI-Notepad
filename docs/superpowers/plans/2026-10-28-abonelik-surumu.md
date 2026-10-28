@@ -1,7 +1,7 @@
 # Abonelik sürümü — web sitesi, hesaplar, ödeme, barındırılan servisler
 
 Kullanıcı onayı (2026-10-28):
-- Hibrit maliyet modeli, aylık 2,99 $.
+- Hibrit maliyet modeli, aylık 5,99 $ (2026-10-28: 2,99 $'da aylık sınıra kadar kullanan abonede zarar ediliyordu).
 - Altyapı Cloudflare.
 - Giriş Apple ile giriş ve e-posta bağlantısıyla.
 - Alan adı sonra seçilecek; o zamana dek `*.pages.dev` / `*.workers.dev`.
@@ -10,7 +10,7 @@ Kullanıcı onayı (2026-10-28):
 
 Herkes web sitesinden DMG indirip anahtarsız kullanır.
 - İlk 3 toplantı ücretsizdir.
-- Sonrası Stripe ile aylık 2,99 $ aboneliktir.
+- Sonrası Stripe ile aylık 5,99 $ aboneliktir. Tutar Stripe'taki fiyattadır (`STRIPE_PRICE_ID`); kodda geçmez.
 - Not, çeviri ve konuşmacı ayırma bizim anahtarlarımızla bizim sunucumuz üzerinden yapılır. Anthropic için yalnızca Claude Haiku 5.5, ayrıca ElevenLabs.
 
 **Bugünkü uygulama hiç değişmez.**
@@ -29,6 +29,8 @@ Herkes web sitesinden DMG indirip anahtarsız kullanır.
 Hedef: toplantı saati başına ~0,25 $.
 - Adil kullanım sınırı ayda 10 saattir. Sınıra gelen kullanıcıya açık bir mesaj gösterilir; ay başında sıfırlanır.
 - Deneme hakkı 3 toplantı, toplantı başına en çok 90 dakika.
+- Marj: 5,99 $'dan KDV (%25,5) ve Stripe payı (~%2,9 + 0,30 $) düşünce ~4,3 $ kalır; aylık 10 saatin tamamını kullanan
+  abonenin maliyeti ~2,9 $ (saat başı ~0,29 $, terim listesi dahil). En kötü durumda da kâr kalır.
 - Deepgram bu sürümde kullanılmaz: korunacak bir anahtar ve bir maliyet kalemi daha az.
 - Fiyatlar Deepgram, ElevenLabs ve Anthropic'in resmi sayfalarından doğrulanmalıdır.
 
@@ -104,4 +106,9 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
 
 ## Durum
 
-- [ ] 1–5
+- [x] 1. Sunucu: kimlik, haklar, vekil, Stripe (test modu); güvenlik incelemesi ve düzeltmeleri (PR #66), CI (PR #68).
+- [ ] 2. Mac abonelik sürümü (`AINotepadHosted`). Not: sunucu sıkıştırılmış sesin süresini en kötü bit hızıyla tahmin
+  eder; istemci sesi 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde gönderir.
+- [ ] 3. Web sitesi.
+- [ ] 4. Uçtan uca test (Stripe test kartı).
+- [ ] 5. Hesaplar, alan adı, yayın.

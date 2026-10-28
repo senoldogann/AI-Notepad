@@ -17,6 +17,8 @@ struct PhoneSettingsTab: View {
     @AppStorage(PhoneSettingsKey.audioRetentionDays) private var retentionDays: Int = 30
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
     @AppStorage(PhoneSettingsKey.engine) private var engine: String = PhoneEngine.cloud.rawValue
+    @AppStorage(PhoneSettingsKey.designStyle) private var designStyle: String = DesignLook.standard.style.rawValue
+    @AppStorage(PhoneSettingsKey.glassTint) private var glassTint: String = DesignLook.standard.tint.rawValue
 
     var body: some View {
         NavigationStack {
@@ -43,6 +45,13 @@ struct PhoneSettingsTab: View {
                         ForEach(AppTheme.allCases, id: \.self) { (item: AppTheme) in
                             Text(verbatim: item.displayName).tag(item.rawValue)
                         }
+                    }
+                    Picker("Stil", selection: $designStyle) {
+                        Text("Standart").tag(DesignStyle.standard.rawValue)
+                        Text("Liquid Glass").tag(DesignStyle.liquidGlass.rawValue)
+                    }
+                    if designStyle == DesignStyle.liquidGlass.rawValue {
+                        PhoneGlassTintPicker(selection: $glassTint)
                     }
                 } header: {
                     Text("Görünüm")
@@ -141,6 +150,29 @@ struct PhoneSettingsTab: View {
         } catch {
             return userFacingMessage(error: error)
         }
+    }
+}
+
+/// Liquid Glass'ın cam rengi: başlık, seçili rengin adı ve altında cam örnekleri (Mac'teki Görünüm ayarıyla aynı).
+private struct PhoneGlassTintPicker: View {
+    @Binding var selection: String
+
+    var body: some View {
+        let selected: GlassTint = GlassTint(rawValue: selection) ?? DesignLook.standard.tint
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Cam rengi")
+                Spacer()
+                Text(verbatim: selected.displayName).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                ForEach(GlassTint.allCases, id: \.self) { (item: GlassTint) in
+                    GlassTintSwatch(tint: item, isSelected: item == selected, accent: PanelAppearance.standard.accent.color) { selection = item.rawValue }
+                }
+            }
+            .glassGroup(spacing: 8)
+        }
+        .padding(.vertical, 4)
     }
 }
 

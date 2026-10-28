@@ -134,6 +134,8 @@ struct RootView: View {
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @AppStorage(PhoneSettingsKey.designStyle) private var designStyle: String = DesignLook.standard.style.rawValue
+    @AppStorage(PhoneSettingsKey.glassTint) private var glassTint: String = DesignLook.standard.tint.rawValue
     @Environment(\.scenePhase) private var scenePhase: ScenePhase
     /// Uygulama arka plana geçti: öne dönünce yarım kalan işleme sürdürülür.
     @State private var wasInBackground: Bool = false
@@ -168,6 +170,11 @@ struct RootView: View {
             }
         }
         .preferredColorScheme((AppTheme(rawValue: theme) ?? .system).isDark.map { $0 ? ColorScheme.dark : ColorScheme.light })
+        // Tasarım stili ve cam rengi (Ayarlar › Görünüm); "Saydamlığı azalt" açıksa Standart.
+        .designLook(DesignLook(
+            style: DesignStyle(rawValue: designStyle) ?? DesignLook.standard.style,
+            tint: GlassTint(rawValue: glassTint) ?? DesignLook.standard.tint
+        ))
         // İlk açılışta anahtar yoksa cihaz içi mod seçilir (karşılama seçimi gösterir).
         .task {
             _ = await choosePhoneOnDeviceOnFirstRun(defaults: .standard)

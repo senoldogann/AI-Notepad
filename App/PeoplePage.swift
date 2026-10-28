@@ -207,7 +207,7 @@ struct PeoplePage: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .selectionSurface(isSelected: isSelected, shape: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.hoverPlain)
