@@ -171,8 +171,8 @@ private func unitingNoteSendMarks(current: MeetingRecord, others: [MeetingRecord
 /// Aynı toplantının iki ya da daha çok sürümündeki kullanıcı işaretlerini `current`'a birleştirir: tamamlanan,
 /// Anımsatıcılar'a eklenen ve araca gönderilen (araç başına) görevler ile notun gönderildiği hedefler tekrarsız
 /// birleşir; Apple Notlar ve webhook gönderim anlarının en eskisi kalır. Diğer alanlar `current`'tan gelir. Görev
-/// işaretleri olduğu gibi birleşir: sürümlerin notları farklıysa çağıran ayrıca `withCarriedTaskMarks` ile taşır.
-/// iCloud çakışması ve uzun not işi (diskteki güncel kayıt) bunu kullanır. Saf fonksiyondur.
+/// işaretleri olduğu gibi birleşir: sürümlerin notları farklıysa önce `withCarriedTaskMarks` ile taşınmalıdır
+/// (bkz. `mergingConflictVersions`). Saf fonksiyondur.
 public func mergingUserMarks(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
     let records: [MeetingRecord] = [current] + others
     let completed: MeetingRecord = unitedKeys(lists: records.map(\.completedTasks)).map { current.with(completedTasks: $0) } ?? current
@@ -186,9 +186,21 @@ public func mergingUserMarks(current: MeetingRecord, others: [MeetingRecord]) ->
     return unitingNoteSendMarks(current: sentTasks, others: others)
 }
 
+/// iCloud çakışmasındaki sürümlerin işaretlerini son yazılan sürüme birleştirir. Sürümlerin notları farklı olabilir
+/// (ör. iPhone'da görev işaretlenirken Mac notu yeniden yazdı): her sürümün görev işaretleri önce `current`'ın
+/// görevlerine taşınır (`withCarriedTaskMarks`), notun gönderim işaretleri olduğu gibi kalır; sonra hepsi
+/// `mergingUserMarks` ile birleşir. Saf fonksiyondur.
+public func mergingConflictVersions(current: MeetingRecord, others: [MeetingRecord]) -> MeetingRecord {
+    let carried: [MeetingRecord] = others.map { (other: MeetingRecord) -> MeetingRecord in
+        withCarriedTaskMarks(old: other, new: current)
+            .with(sentDestinationIDs: other.sentDestinationIDs, notesSentAt: other.notesSentAt, webhookSentAt: other.webhookSentAt)
+    }
+    return mergingUserMarks(current: current, others: carried)
+}
+
 /// Uzun not işinin (işleme, düzenleme, yeniden yazma; 30–300 sn) sonucuna eski kaydın işaretlerini uygular: görev
 /// işaretleri benzer yeni görevlere taşınır (`withCarriedTaskMarks`), notun gönderim işaretleri eklenir. `old`: eski
-/// notlu kaydın en güncel işaretli hali (iş sürerken diskteki kayıtla `mergingUserMarks` ile birleşmiş, bekleyen
+/// notlu kaydın en güncel işaretli hali (iş bitince diskten okunan kayıt, bekleyen
 /// işaretleri uygulanmış). Böylece iş sürerken diğer cihazda ya da kendiliğinden gönderimde konan işaretler işin
 /// sonucuyla ezilmez. Saf fonksiyondur.
 public func withJobMarks(old: MeetingRecord, result: MeetingRecord) -> MeetingRecord {

@@ -131,8 +131,9 @@ final class PhoneRecorder {
         }
         levels.start()
         let levels: AudioLevels = levels
-        // En yüksek seviye kilitli kutuda birikir; ana aktöre en fazla 100 ms'de bir geçilir (her parça için görev açılmaz).
-        let throttle: LevelThrottle = LevelThrottle(intervalSec: 0.1)
+        // En yüksek seviye kilitli kutuda birikir; ana aktöre en fazla çubuk aralığında bir geçilir (her parça için görev
+        // açılmaz).
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: levels.interval)
         let metered: AsyncStream<[Float]> = meteredStream(audio: audio) { (level: Float) -> Void in
             guard let peak = throttle.add(level: level) else {
                 return

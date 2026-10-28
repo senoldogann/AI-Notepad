@@ -660,7 +660,7 @@ final class AppModel {
         // kilitli kutuda birikir, ana aktöre en fazla 100 ms'de bir geçilir (her parça için ayrı görev açılmaz).
         audioLevels.start()
         let levels: AudioLevels = audioLevels
-        let throttle: LevelThrottle = LevelThrottle(intervalSec: 0.1)
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: levels.interval)
         let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
             guard let peak = throttle.add(level: level) else {
                 return
@@ -820,9 +820,10 @@ final class AppModel {
             meStreamFailed = meStreamFailed || speaker == .me
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "\(speakerLabel(speaker: speaker, person: nil)) metin akışı durdu: \(message)"))
         case .streamIncomplete(let speaker, let untranscribedSec):
-            // Kapanışta sesin sonu yazıya dökülemedi: "Sen" kaydı toplantı sonunda yazıya dökülür (kullanıcıya hata
-            // gösterilmez; metin son geçişte tamamlanır). "Diğerleri" son geçişten zaten geçer.
-            meStreamFailed = meStreamFailed || speaker == .me
+            // Kapanışta sesin sonu yazıya dökülemedi: kayıp anlamlıysa "Sen" kaydı toplantı sonunda yazıya dökülür
+            // (kullanıcıya hata gösterilmez; metin son geçişte tamamlanır). Durdurma tıkına denk gelen birkaç yüz ms için
+            // tüm kayıt yeniden yazıya dökülmez. "Diğerleri" son geçişten zaten geçer.
+            meStreamFailed = meStreamFailed || (speaker == .me && untranscribedSec >= incompleteTailFinalPassSec)
             Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
@@ -1806,6 +1807,8 @@ final class AppModel {
     private(set) var taskTrackers: [TaskTracker] = []
     /// Toplantı başına görev gönderiminin durumu.
     var trackerStates: [String: WebhookSendState] = [:]
+    /// Gönderim sonuçlarının kalkma zamanlayıcıları (`durum dizisi|toplantı`); yeni durum gelince eskisi iptal edilir.
+    @ObservationIgnored private var sendStateFades: [String: Task<Void, Never>] = [:]
 
     /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
     @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: keychainService, account: .destinations) {
@@ -1945,9 +1948,31 @@ final class AppModel {
         }
     }
 
+    /// Gönderim durumunu yazar. Sonuç (gitti, hata) süresi dolunca kendiliğinden kalkar (gitti 3,5 sn, hata 5 sn): aynı
+    /// sonuç yeniden gelince yine görünür. "Gönderiliyor" sonuç gelene dek kalır.
+    private func showSendState(state: WebhookSendState, meetingID: String, states: ReferenceWritableKeyPath<AppModel, [String: WebhookSendState]>) {
+        let key: String = "\(states)|\(meetingID)"
+        sendStateFades[key]?.cancel()
+        self[keyPath: states][meetingID] = state
+        guard let delay = sendResultFadeDelay(state: state) else {
+            sendStateFades[key] = nil
+            return
+        }
+        sendStateFades[key] = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                // Yalnızca iptal: yeni bir durum geldi, eski sonucun zamanlayıcısı bir şey kaldırmaz.
+                return
+            }
+            self?[keyPath: states][meetingID] = nil
+            self?.sendStateFades[key] = nil
+        }
+    }
+
     /// Notu verilen hedeflere sırayla gönderir; toplantı sayfasındaki durum güncellenir.
     func sendNote(meetingID: String, destinationIDs: [String]) async {
-        webhookStates[meetingID] = .sending
+        showSendState(state: .sending, meetingID: meetingID, states: \.webhookStates)
         var failures: [String] = []
         for id in destinationIDs {
             if let failure = await sendNote(meetingID: meetingID, destinationID: id) {
@@ -1955,7 +1980,7 @@ final class AppModel {
             }
         }
         await refreshDestinationList()
-        webhookStates[meetingID] = failures.isEmpty ? .sent : .failed(failures.joined(separator: "\n"))
+        showSendState(state: failures.isEmpty ? .sent : .failed(failures.joined(separator: "\n")), meetingID: meetingID, states: \.webhookStates)
     }
 
     /// Süren not gönderimleri (`toplantı|hedef`): elle gönderim, kendiliğinden gönderim ve "Tümüne gönder" aynı notu
@@ -2155,10 +2180,10 @@ final class AppModel {
         let sent: [String] = record.sentTaskKeys?[trackerID] ?? []
         let tasks: [NoteTask] = note.tasks.filter { (onlyMine ? $0.isMine : true) && !sent.contains(taskKey(task: $0)) && !isTaskDone(record: record, task: $0) }
         guard !tasks.isEmpty else {
-            trackerStates[meetingID] = .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış)."))
+            showSendState(state: .failed(String(localized: "Gönderilecek açık görev yok (hepsi gönderilmiş ya da tamamlanmış).")), meetingID: meetingID, states: \.trackerStates)
             return
         }
-        trackerStates[meetingID] = .sending
+        showSendState(state: .sending, meetingID: meetingID, states: \.trackerStates)
         defer { Task { await self.refreshTrackerList() } }
         do {
             let llm: LLMProvider = try await resolveLLMProvider()
@@ -2168,13 +2193,13 @@ final class AppModel {
                 try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, llm: llm)
             }
             markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: result.createdTaskIndices.map { tasks[$0] })
-            trackerStates[meetingID] = .done(result.summary)
+            showSendState(state: .done(result.summary), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
             // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
             markTasksSent(meetingID: meetingID, trackerID: trackerID, tasks: created.filter { tasks.indices.contains($0) }.map { tasks[$0] })
             let error: TaskTrackerError = .partial(service: service, created: created, total: total, reason: reason)
             Self.logger.error("Görevlerin bir kısmı açılamadı, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public)")
-            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
+            showSendState(state: .failed(userFacingMessage(error: error)), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.uncertain(let service, let created, let uncertainTask, let taskTitle, let total, let reason) {
             // Kesin açılanlar işaretlenir; sonucu belirsiz görev işaretlenmez (açılmadıysa gönderilebilsin), kullanıcıya
             // yeniden göndermeden önce araçta kontrol etmesi söylenir.
@@ -2183,10 +2208,10 @@ final class AppModel {
                 service: service, created: created, uncertainTask: uncertainTask, taskTitle: taskTitle, total: total, reason: reason
             )
             Self.logger.warning("Görev açmanın sonucu belirsiz, araç: \(tracker.service.rawValue, privacy: .public), açılan: \(created.count, privacy: .public), görev sırası: \(uncertainTask, privacy: .public)")
-            trackerStates[meetingID] = .failed(userFacingMessage(error: error))
+            showSendState(state: .failed(userFacingMessage(error: error)), meetingID: meetingID, states: \.trackerStates)
         } catch {
             Self.logger.error("Görevler araca gönderilemedi, araç: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            trackerStates[meetingID] = .failed(String(localized: "\(tracker.service.displayName): \(userFacingMessage(error: error))"))
+            showSendState(state: .failed(String(localized: "\(tracker.service.displayName): \(userFacingMessage(error: error))")), meetingID: meetingID, states: \.trackerStates)
         }
     }
 
@@ -2295,21 +2320,21 @@ final class AppModel {
     }
 
     /// Uzun not işinin (işleme, düzenleme, yeniden yazma; 30–300 sn) kaydedilecek sonucu. İş, başladığı andaki kaydın
-    /// kopyasıyla çalışır; bu arada diğer cihazda (iCloud) ya da kendiliğinden gönderimde diske yazılan işaretler diskten
-    /// yeniden okunur, bekleyen işaretlerle birlikte eski nota uygulanır ve yeni nota taşınır (`withJobMarks`). Bekleyen
-    /// işaretler eski notun görevlerine göredir: önce eski kayda uygulanır, sonra taşınır. Disk okunamazsa neden
-    /// gösterilir ve işin başındaki işaretlerle kaydedilir (işin sonucu kaybolmaz).
+    /// kopyasıyla çalışır; bu arada diğer cihazda (iCloud) ya da kendiliğinden gönderimde diske yazılan işaretler için
+    /// diskteki kayıt esas alınır (iş başında diske yazılan kaydın güncel hali: orada kaldırılan işaret geri gelmez),
+    /// bekleyen işaretler ona uygulanır ve yeni nota taşınır (`withJobMarks`). Bekleyen işaretler eski notun görevlerine
+    /// göredir: önce eski kayda uygulanır, sonra taşınır. Disk okunamazsa neden gösterilir ve işin başındaki işaretlerle
+    /// kaydedilir (işin sonucu kaybolmaz).
     private func withLatestMarks(result: MeetingRecord, start: MeetingRecord, directory: URL) -> MeetingRecord {
-        let onDisk: [MeetingRecord]
+        let latest: MeetingRecord
         do {
-            onDisk = [try loadMeeting(directory: directory)]
+            latest = try loadMeeting(directory: directory)
         } catch {
             Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: \(userFacingMessage(error: error))"))
-            onDisk = []
+            latest = start
         }
-        let old: MeetingRecord = applyingPendingReminders(record: mergingUserMarks(current: start, others: onDisk))
-        return withJobMarks(old: old, result: result)
+        return withJobMarks(old: applyingPendingReminders(record: latest), result: result)
     }
 
     /// Not işi başarısız oldu: iş sürerken bekletilen işaretler (Anımsatıcılar, gönderimler) diskteki kayda yazılır,
@@ -2821,6 +2846,15 @@ enum WebhookSendState: Equatable {
     /// Bitti, kısa özetle (ör. açılan Linear işleri).
     case done(String)
     case failed(String)
+}
+
+/// Gönderim sonucunun kalkma süresi: gitti 3,5 sn, hata 5 sn; gönderilirken kalır. Saf fonksiyondur.
+private func sendResultFadeDelay(state: WebhookSendState) -> Duration? {
+    switch state {
+    case .sending: nil
+    case .sent, .done: .seconds(3.5)
+    case .failed: .seconds(5)
+    }
 }
 
 /// Sırası bekleyen canlı çeviri.

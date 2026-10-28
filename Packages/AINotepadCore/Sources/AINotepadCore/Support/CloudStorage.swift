@@ -115,7 +115,7 @@ public func copyAllMeetingsToLocal(cloudSessions: URL, localSessions: URL) throw
         var copyError: (any Error)?
         NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: folder, options: [], error: &coordinationError) { (url: URL) -> Void in
             do {
-                try FileManager.default.copyItem(at: url, to: destination)
+                try copyCompletely(from: url, to: destination)
             } catch {
                 copyError = error
             }
@@ -128,6 +128,22 @@ public func copyAllMeetingsToLocal(cloudSessions: URL, localSessions: URL) throw
     }
     cloudLogger.info("iCloud'daki toplantılar bu cihaza kopyalandı, sayı: \(copied.count, privacy: .public), başarısız: \(failures.count, privacy: .public)")
     return CloudMoveResult(moved: copied, failures: failures)
+}
+
+/// Klasörü önce aynı diskteki geçici bir klasöre kopyalar, kopya bitince tek adımda hedefe taşır: yarıda kalan kopya
+/// (inmemiş ses, dolu disk) hedefte "zaten var" sayılıp sonraki denemede atlanmaz. Geçici klasör her durumda silinir.
+private func copyCompletely(from source: URL, to destination: URL) throws {
+    let staging: URL = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true)
+    defer {
+        do {
+            try FileManager.default.removeItem(at: staging)
+        } catch {
+            cloudLogger.error("Geçici kopya klasörü silinemedi, hata: \(String(describing: error), privacy: .public)")
+        }
+    }
+    let staged: URL = staging.appending(path: destination.lastPathComponent, directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: source, to: staged)
+    try FileManager.default.moveItem(at: staged, to: destination)
 }
 
 /// iCloud'daki toplantı klasörünü bu cihaza taşır (gerekirse indirir); yeni yolu döndürür. Hedefte aynı adlı klasör
@@ -242,7 +258,7 @@ public func prepareCloudStorage() async throws {
 }
 
 /// Toplantı dosyasındaki iCloud çakışmalarını çözer: son yazılan sürüm kalır, diğer sürümlerdeki kullanıcı işaretleri
-/// (görevler, gönderimler) ona eklenir (bkz. `mergingUserMarks`; ör. iPhone'da işaretlenen görev, Mac notu yeniden
+/// (görevler, gönderimler) ona eklenir (bkz. `mergingConflictVersions`; ör. iPhone'da işaretlenen görev, Mac notu yeniden
 /// yazarken), diğer sürümler kaldırılır ve loglanır. Çakışma yoksa bir şey yapmaz.
 public func resolveCloudConflicts(file: URL) throws {
     guard let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: file), !conflicts.isEmpty else {
@@ -253,7 +269,7 @@ public func resolveCloudConflicts(file: URL) throws {
         let others: [MeetingRecord] = try conflicts.map { (version: NSFileVersion) throws -> MeetingRecord in
             try meetingDecoder().decode(MeetingRecord.self, from: Data(contentsOf: version.url))
         }
-        let merged: MeetingRecord = mergingUserMarks(current: current, others: others)
+        let merged: MeetingRecord = mergingConflictVersions(current: current, others: others)
         if merged != current {
             try saveMeeting(record: merged, directory: file.deletingLastPathComponent())
         }
