@@ -80,6 +80,15 @@ func request(model: ClaudeModel, schema: String?) -> LLMRequest {
         #expect((format["schema"] as? [String: Any])?["type"] as? String == "object")
     }
 
+    // Şema olduğu gibi gider: tam sayılar tam sayı kalır (ör. `maxItems`); JSON nesnesi olmayan şema reddedilir.
+    @Test func schemaNumbersStayIntegersAndInvalidSchemaIsRejected() throws {
+        let schema: String = #"{"type":"array","maxItems":3,"items":{"type":"number","minimum":0.5}}"#
+        let body: String = String(decoding: try claudeRequestBody(request: request(model: .opus, schema: schema), model: .opus, effort: .medium), as: UTF8.self)
+        #expect(body.contains(#""maxItems":3"#) && body.contains(#""minimum":0.5"#))
+        #expect(throws: LLMError.self) { try claudeRequestBody(request: request(model: .opus, schema: "[1]"), model: .opus, effort: .medium) }
+        #expect(throws: LLMError.self) { try claudeRequestBody(request: request(model: .opus, schema: "{bozuk"), model: .opus, effort: .medium) }
+    }
+
     // Düşünme açıkken `max_tokens` en az 64.000 (düşünme de bu sınırdan harcar); kapalıyken isteğin sınırı.
     @Test func thinkingRaisesTokenLimit() throws {
         let opus: [String: Any] = try jsonObject(claudeRequestBody(request: request(model: .opus, schema: nil), model: .opus, effort: .max))

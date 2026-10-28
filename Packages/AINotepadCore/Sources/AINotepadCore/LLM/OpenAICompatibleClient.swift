@@ -17,41 +17,69 @@ public func openAIChatURL(baseURL: URL) -> URL {
 /// `response_format: json_schema`. Bazı uyumlu sunucular (ör. Ollama'daki modeller) `response_format`'ı
 /// uygulamadığı için şema sistem mesajında da verilir. Örnekleme parametreleri gönderilmez. Saf fonksiyondur.
 public func openAIRequestBody(request: LLMRequest, model: String, effort: LLMEffort?) throws -> Data {
-    var body: [String: Any] = try openAIRequestFields(request: request, model: model, effort: effort)
-    body["stream"] = false
-    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    try llmRequestEncoder().encode(openAIBody(request: request, model: model, effort: effort, stream: false))
 }
 
 /// Akışlı (SSE) Chat Completions gövdesi: `openAIRequestBody` ile aynı alanlar, `stream: true`. Saf fonksiyondur.
 public func openAIStreamRequestBody(request: LLMRequest, model: String, effort: LLMEffort?) throws -> Data {
-    var body: [String: Any] = try openAIRequestFields(request: request, model: model, effort: effort)
-    body["stream"] = true
-    return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    try llmRequestEncoder().encode(openAIBody(request: request, model: model, effort: effort, stream: true))
 }
 
-/// İki gövdenin ortak alanları (akış alanı hariç). Saf fonksiyondur.
-private func openAIRequestFields(request: LLMRequest, model: String, effort: LLMEffort?) throws -> [String: Any] {
+/// Chat Completions isteğinin gövdesi; alan adları API'ninkilerdir. Boş (nil) alanlar gövdeye yazılmaz.
+struct OpenAIRequestBody: Encodable {
+    struct JSONSchemaFormat: Encodable {
+        let name: String
+        let strict: Bool
+        let schema: JSONValue
+    }
+
+    struct ResponseFormat: Encodable {
+        let type: String
+        let jsonSchema: JSONSchemaFormat
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case jsonSchema = "json_schema"
+        }
+    }
+
+    let model: String
+    let maxCompletionTokens: Int
+    let messages: [LLMChatMessage]
+    let reasoningEffort: String?
+    let responseFormat: ResponseFormat?
+    /// Gövdede gönderilen `stream` değeri.
+    let stream: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case maxCompletionTokens = "max_completion_tokens"
+        case messages
+        case reasoningEffort = "reasoning_effort"
+        case responseFormat = "response_format"
+        case stream
+    }
+}
+
+/// İki gövdenin ortak kurulumu; `stream` gövdeye olduğu gibi yazılan alandır. Saf fonksiyondur.
+private func openAIBody(request: LLMRequest, model: String, effort: LLMEffort?, stream: Bool) throws -> OpenAIRequestBody {
     let system: String = request.jsonSchema.map { (schema: String) -> String in
         "\(request.system)\n\nYanıtı yalnızca bu JSON şemasına uyan tek bir JSON nesnesi olarak yaz; Markdown, kod bloğu ya da başka metin ekleme:\n\(schema)"
     } ?? request.system
-    var body: [String: Any] = [
-        "model": model,
-        "max_completion_tokens": openAIMaxTokens(requested: request.maxTokens, effort: effort),
-        "messages": [
-            ["role": "system", "content": system],
-            ["role": "user", "content": request.userText],
-        ],
-    ]
-    if let effort {
-        body["reasoning_effort"] = effort.rawValue
+    let responseFormat: OpenAIRequestBody.ResponseFormat? = try request.jsonSchema.map { (schemaText: String) throws -> OpenAIRequestBody.ResponseFormat in
+        OpenAIRequestBody.ResponseFormat(
+            type: "json_schema",
+            jsonSchema: OpenAIRequestBody.JSONSchemaFormat(name: "yanit", strict: true, schema: try parsedSchema(text: schemaText))
+        )
     }
-    if let schemaText = request.jsonSchema {
-        body["response_format"] = [
-            "type": "json_schema",
-            "json_schema": ["name": "yanit", "strict": true, "schema": try parsedSchema(text: schemaText)],
-        ]
-    }
-    return body
+    return OpenAIRequestBody(
+        model: model,
+        maxCompletionTokens: openAIMaxTokens(requested: request.maxTokens, effort: effort),
+        messages: [LLMChatMessage(role: "system", content: system), LLMChatMessage(role: "user", content: request.userText)],
+        reasoningEffort: effort?.rawValue,
+        responseFormat: responseFormat,
+        stream: stream
+    )
 }
 
 /// Gönderilecek `max_completion_tokens`: effort seçildiyse model akıl yürütür ve bu tokenlar da sınırdan harcanır,
