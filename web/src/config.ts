@@ -29,8 +29,18 @@ export const turnstileOrigin: string = "https://challenges.cloudflare.com";
 /** Kaynak kodun deposu. */
 export const repositoryUrl: string = "https://github.com/senoldogann/AI-Notepad";
 
-/** DMG: GitHub Releases'teki son sürüm sayfası (yayın adı belli olunca doğrudan DMG adresi yazılabilir). */
-const dmgUrl: string = "https://github.com/senoldogann/AI-Notepad/releases/latest";
+/** GitHub Releases'teki en son sürümün sayfası (sürüm notları, geliştirici sürümü); her yayında kendiliğinden güncel. */
+export const latestReleaseUrl: string = `${repositoryUrl}/releases/latest`;
+
+/** Yayınlanmış en son sürüm. Yeni sürüm yayınlanınca bu değer güncellenir (DMG adı sürümü taşır). */
+export const latestVersion: string = "0.1.3";
+
+/**
+ * DMG indirme adresi. `releases/latest/download/<ad>` kalıbı yalnızca dosya adı sabitse sürümler arasında çalışır;
+ * yayın betiği adı `AI-Notepad-<sürüm>.dmg` verdiği için o kalıp bir sonraki sürümde 404 olur. Bu yüzden adres sürümden
+ * üretilir (2026-10-28'de doğrulandı: v0.1.3 varlığı indiriliyor).
+ */
+const dmgUrl: string = `${repositoryUrl}/releases/download/v${latestVersion}/AI-Notepad-${latestVersion}.dmg`;
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {
