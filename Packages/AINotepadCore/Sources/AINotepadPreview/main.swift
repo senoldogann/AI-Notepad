@@ -89,11 +89,8 @@ MainActor.assumeIsolated {
     )
     let layout: IslandLayout = islandLayout(screen: notchScreen, wing: islandWing, expansion: islandExpansion, pillHeight: 32, pillWidth: 360, pillGap: 8)
     // Örnek ses seviyeleri: konuşma sürüyor gibi.
-    let levels: AudioLevels = AudioLevels(count: 14, interval: 0)
-    levels.start()
-    for (index, level) in [0.2, 0.6, 0.35, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.65, 0.45, 0.85, 0.55, 0.75].enumerated() {
-        levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
-    }
+    let levels: AudioLevels = AudioLevels(count: 14, interval: 0.1)
+    levels.showSample(values: [0.2, 0.6, 0.35, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.65, 0.45, 0.85, 0.55, 0.75])
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
             view: IslandView(state: sampleState(phase: .recording), levels: levels, layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),

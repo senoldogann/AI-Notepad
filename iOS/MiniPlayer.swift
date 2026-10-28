@@ -72,7 +72,7 @@ private struct PlayerTime: View {
     let player: MeetingAudioPlayer
 
     var body: some View {
-        Text(verbatim: "\(timestamp(seconds: player.currentTime)) / \(timestamp(seconds: player.duration))")
+        Text(verbatim: "\(timestamp(seconds: Double(player.currentSecond))) / \(timestamp(seconds: player.duration))")
             .appFont(size: 11, weight: .regular)
             .monospacedDigit()
             .foregroundStyle(Theme.muted)

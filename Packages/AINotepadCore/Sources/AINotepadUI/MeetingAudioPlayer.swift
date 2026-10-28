@@ -16,8 +16,12 @@ public func meetingAudioURL(directory: URL, speaker: Speaker) -> URL? {
 /// Seçilebilen çalma hızları (sırayla döner).
 public let playbackRates: [Float] = [1, 1.25, 1.5, 2, 0.75]
 
+/// Çalma konumunun yayınlanma adımı (saniye): konum bu kadar ilerleyince görünümler güncellenir.
+let playbackPublishStep: Double = 0.1
+
 /// Toplantı oynatıcısı: "Sen" ve "Diğerleri" kayıtlarını aynı zaman çizgisinde birlikte çalar (kayıtlar başlangıca
-/// hizalı), duraklatır, sarar, hız değiştirir. Konum saniyede ~30 kez güncellenir (kelime vurgusu akıcı geçsin).
+/// hizalı), duraklatır, sarar, hız değiştirir. Konum ~33 ms'de bir okunur, görünür fark olunca (`playbackPublishStep`,
+/// ~10/sn) yayınlanır: kelime vurgusu akıcı, çalma ekranı hafif.
 @MainActor
 @Observable
 public final class MeetingAudioPlayer {
@@ -25,6 +29,9 @@ public final class MeetingAudioPlayer {
     public private(set) var meetingID: String?
     public private(set) var isPlaying: Bool = false
     public private(set) var currentTime: Double = 0
+    /// Konumun tam saniyesi; yalnızca saniye değişince yayınlanır. Süre etiketleri, konum çubuğu ve şeritteki çizgi
+    /// bunu okur: kapakla aynı karttaki çizgi saniyede 10 kez değişince kart (gradyan kapak dahil) baştan çiziliyordu.
+    public private(set) var currentSecond: Int = 0
     public private(set) var duration: Double = 0
     public private(set) var rate: Float = 1
     public private(set) var errorMessage: String?
@@ -81,6 +88,15 @@ public final class MeetingAudioPlayer {
         }
     }
 
+    /// Konumu yazar; saniye değiştiyse `currentSecond`'ı da.
+    private func setPosition(seconds: Double) {
+        currentTime = seconds
+        let second: Int = Int(seconds)
+        if second != currentSecond {
+            currentSecond = second
+        }
+    }
+
     /// Konuma gider; çalıyorsa oradan sürer.
     public func seek(to seconds: Double) {
         let target: Double = min(max(0, seconds), duration)
@@ -88,7 +104,7 @@ public final class MeetingAudioPlayer {
             start(at: target)
         } else {
             players.forEach { $0.currentTime = target }
-            currentTime = target
+            setPosition(seconds: target)
         }
     }
 
@@ -113,7 +129,7 @@ public final class MeetingAudioPlayer {
         loadedURLs = []
         meetingID = nil
         isPlaying = false
-        currentTime = 0
+        setPosition(seconds: 0)
         duration = 0
     }
 
@@ -131,12 +147,12 @@ public final class MeetingAudioPlayer {
                 player.play(atTime: startAt)
             }
         }
-        currentTime = seconds
+        setPosition(seconds: seconds)
         isPlaying = true
         startTicker()
     }
 
-    /// Konumu çalarken saniyede ~30 kez günceller; tüm kayıtlar bitince durur.
+    /// Konumu çalarken ~33 ms'de bir okur, görünür fark olunca yayınlar; tüm kayıtlar bitince durur.
     private func startTicker() {
         ticker?.cancel()
         // Kullanıcı öncelikli: makine yoğunken (derleme, dışa aktarma) konum güncellemesi arka plan işlerinin
@@ -154,7 +170,11 @@ public final class MeetingAudioPlayer {
                 }
                 let playing: [AVAudioPlayer] = self.players.filter(\.isPlaying)
                 if let position = playing.map(\.currentTime).max() {
-                    self.currentTime = position
+                    // Konum yalnızca görünür bir fark olunca yayınlanır (~10/sn): kelime vurgusu ve süre için yeter;
+                    // her 33 ms'de yayınlamak çalma ekranını boşuna saniyede 30 kez yeniden çizdiriyordu.
+                    if abs(position - self.currentTime) >= playbackPublishStep {
+                        self.setPosition(seconds: position)
+                    }
                 } else {
                     self.isPlaying = false
                     return

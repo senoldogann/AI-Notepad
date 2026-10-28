@@ -2,20 +2,23 @@ import Observation
 import SwiftUI
 
 /// Kayıt sırasında ses seviyesinin son değerleri (panelde canlı ses çubukları). İki kayıt akışından ("Sen" ve
-/// "Diğerleri") beslenir: bir çubuk, `interval` boyunca gelen seviyelerin en yükseğidir (akışlar sırayla düşüp
-/// çubukları tarak gibi titretmesin).
+/// "Diğerleri") beslenir. Çubuklar kendi sabit saatiyle her `interval`'da bir kayar: o aralıkta gelen seviyelerin en
+/// yükseği yeni çubuk olur. Seviye geldikçe kaydırılsaydı akışın parça aralığı (ör. yalnız mikrofonda ~100 ms) çubuk
+/// aralığıyla çakışınca bazı adımlar 200 ms'ye uzar, ölçer takılarak akardı.
 @MainActor
 @Observable
 public final class AudioLevels {
     /// Soldan sağa zaman sırasıyla son `count` seviye (0...1).
     public private(set) var values: [Float]
     private let count: Int
-    /// Çubukların kayma aralığı; seviyeyi biriktiren `LevelThrottle` da bu aralıkla verir.
+    /// Çubukların kayma aralığı.
     public let interval: TimeInterval
     @ObservationIgnored private var pending: Float = 0
-    @ObservationIgnored private var lastPush: Date = .distantPast
+    @ObservationIgnored private var hasPending: Bool = false
     /// Kayıt sürüyor: durduktan sonra akışlardan geç gelen seviyeler çubuklara yazılmaz.
     @ObservationIgnored private var isActive: Bool = false
+    /// Çubukları kaydıran saat; kayıt bitince durur (boştayken hiçbir şey çalışmaz).
+    @ObservationIgnored private var clock: Task<Void, Never>?
 
     public init(count: Int, interval: TimeInterval) {
         self.count = count
@@ -23,32 +26,62 @@ public final class AudioLevels {
         self.values = [Float](repeating: 0, count: count)
     }
 
-    /// Bir akıştan gelen seviye; süre dolunca en yükseği yeni çubuk olur, en eskisi düşer.
-    public func record(level: Float, at now: Date) {
+    /// Bir akıştan gelen seviye; sıradaki çubuk adımına dek en yükseği tutulur.
+    public func record(level: Float) {
         guard isActive else {
             return
         }
         pending = max(pending, level)
-        guard now.timeIntervalSince(lastPush) >= interval else {
-            return
-        }
-        values = Array((values + [pending]).suffix(count))
-        pending = 0
-        lastPush = now
+        hasPending = true
     }
 
-    /// Kayıt başladı: çubuklar sıfırdan dolar.
+    /// Bir çubuk adımı: aralıkta gelen en yüksek seviye yeni çubuk olur, en eskisi düşer. Seviye gelmediyse (ör.
+    /// duraklatıldı) son çubuk yarıya inerek söner; çubuklar donmaz.
+    public func advance() {
+        guard isActive else {
+            return
+        }
+        let next: Float = hasPending ? pending : (values.last ?? 0) * 0.5
+        values = Array((values + [next]).suffix(count))
+        pending = 0
+        hasPending = false
+    }
+
+    /// Kayıt başladı: çubuklar sıfırdan dolar, saat başlar.
     public func start() {
         values = [Float](repeating: 0, count: count)
         pending = 0
-        lastPush = .distantPast
+        hasPending = false
         isActive = true
+        clock?.cancel()
+        let step: Duration = .milliseconds(Int((interval * 1000).rounded()))
+        clock = Task { [weak self] in
+            // Mutlak zamanlı adımlar: uyanma gecikmesi birikmez, kayma aralığı sabit kalır.
+            var next: ContinuousClock.Instant = .now + step
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(until: next, clock: .continuous)
+                } catch {
+                    return
+                }
+                self?.advance()
+                next = max(next + step, .now)
+            }
+        }
     }
 
-    /// Kayıt bitti: çubuklar sıfırlanır, geç gelen seviyeler yok sayılır.
+    /// Örnek çubuklar (önizleme ve ekran görüntüsü kipi): saat başlamaz, değerler olduğu gibi kalır.
+    public func showSample(values sample: [Float]) {
+        values = Array(([Float](repeating: 0, count: count) + sample).suffix(count))
+    }
+
+    /// Kayıt bitti: saat durur, çubuklar sıfırlanır, geç gelen seviyeler yok sayılır.
     public func stop() {
+        clock?.cancel()
+        clock = nil
         values = [Float](repeating: 0, count: count)
         pending = 0
+        hasPending = false
         isActive = false
     }
 }

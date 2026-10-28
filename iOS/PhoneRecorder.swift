@@ -161,15 +161,14 @@ final class PhoneRecorder {
         }
         levels.start()
         let levels: AudioLevels = levels
-        // En yüksek seviye kilitli kutuda birikir; ana aktöre en fazla çubuk aralığında bir geçilir (her parça için görev
-        // açılmaz).
-        let throttle: LevelThrottle = LevelThrottle(intervalSec: levels.interval)
+        // En yüksek seviye kilitli kutuda birikir; ana aktöre çubuk aralığının yarısında bir geçilir (her parça için
+        // görev açılmaz; bkz. `levelThrottleInterval`).
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: levelThrottleInterval(barInterval: levels.interval))
         let metered: AsyncStream<[Float]> = meteredStream(audio: audio) { (level: Float) -> Void in
             guard let peak = throttle.add(level: level) else {
                 return
             }
-            let now: Date = Date()
-            Task { @MainActor in levels.record(level: peak, at: now) }
+            Task { @MainActor in levels.record(level: peak) }
         }
         let handle: LiveSessionHandle
         if let cloudKeys {
@@ -316,10 +315,7 @@ final class PhoneRecorder {
         })
         lockedLanguage = .finnish
         startedAt = Date().addingTimeInterval(-754)
-        levels.start()
-        for (index, level) in [0.1, 0.4, 0.7, 0.5, 0.9, 0.3, 0.6, 0.2, 0.8, 0.5].enumerated() {
-            levels.record(level: Float(level), at: Date().addingTimeInterval(Double(index)))
-        }
+        levels.showSample(values: [0.1, 0.4, 0.7, 0.5, 0.9, 0.3, 0.6, 0.2, 0.8, 0.5])
         phase = .recording
         consentReminderVisible = true
         startActivity(startedAt: startedAt ?? Date())

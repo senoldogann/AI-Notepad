@@ -196,11 +196,13 @@ struct MainWindowView: View {
         .animation(.easeInOut(duration: 0.25), value: isContentCovered)
         // Açılış ekranı: uygulama her açıldığında bir kez (pencere kapatılıp açılınca tekrarlanmaz).
         .overlay {
+            // Animasyonsuz kaldırılır: sönmeyi açılış ekranı kendisi yapar (bkz. `LaunchSplash.play`).
             if !router.hasShownSplash {
                 LaunchSplash {
-                    withAnimation(.smooth(duration: 0.45)) { router.hasShownSplash = true }
+                    var transaction: Transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { router.hasShownSplash = true }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 1.02)))
             }
         }
         .overlay {
@@ -577,6 +579,8 @@ private struct HomePage: View {
                     .foregroundStyle(Theme.muted)
             }
             .appFont(size: 34, weight: .regular)
+            // Kayıt sürerken sayfanın odağı bu satır: ortada durur.
+            .frame(maxWidth: .infinity, alignment: .center)
         case .finishing:
             Text("Bitiriliyor…")
                 .appFont(size: 34, weight: .regular)

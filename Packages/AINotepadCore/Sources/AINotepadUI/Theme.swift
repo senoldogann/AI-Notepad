@@ -112,15 +112,52 @@ public final class ThemeStore {
 
     public private(set) var light: ThemeColorSet = .light
     public private(set) var dark: ThemeColorSet = .dark
+    /// Takımın rolleri için oluşturulmuş renkler. Her erişimde yeni dinamik renk oluşturulsaydı SwiftUI eski ve yeni
+    /// rengi hiç eşit bulmaz, rengi okuyan her görünümü her güncellemede yeniden işlerdi (çalma sırasında saniyede
+    /// onlarca kez tüm pencerenin yerleşimi). Takım değişince boşaltılır.
+    @ObservationIgnored private var colors: [KeyPath<ThemeColorSet, UInt32>: Color] = [:]
 
     private init() {}
 
     /// Takımları değiştirir (ör. Kâğıt: ikisi de kâğıt; Sistem: ElevenLabs açık ve koyu).
     public func set(light: ThemeColorSet, dark: ThemeColorSet) {
+        colors = [:]
         self.light = light
         self.dark = dark
     }
+
+    /// Rolün açık ve koyu görünüme göre değişen rengi; takım başına bir kez oluşturulur. Takımlar her erişimde okunur
+    /// (gözlem): takım değişince rengi okuyan görünümler yenilenir.
+    func color(role: KeyPath<ThemeColorSet, UInt32>) -> Color {
+        let lightHex: UInt32 = light[keyPath: role]
+        let darkHex: UInt32 = dark[keyPath: role]
+        if let cached = colors[role] {
+            return cached
+        }
+        let made: Color = dynamicColor(light: lightHex, dark: darkHex)
+        colors[role] = made
+        return made
+    }
 }
+
+/// Açık ve koyu görünüm için iki renkli dinamik renk.
+private func dynamicColor(light: UInt32, dark: UInt32) -> Color {
+    #if os(macOS)
+    return Color(nsColor: NSColor(name: nil) { (appearance: NSAppearance) -> NSColor in
+        let hex: UInt32 = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        return NSColor(srgbRed: hexRed(hex), green: hexGreen(hex), blue: hexBlue(hex), alpha: 1)
+    })
+    #else
+    return Color(uiColor: UIColor { (traits: UITraitCollection) -> UIColor in
+        let hex: UInt32 = traits.userInterfaceStyle == .dark ? dark : light
+        return UIColor(red: hexRed(hex), green: hexGreen(hex), blue: hexBlue(hex), alpha: 1)
+    })
+    #endif
+}
+
+private func hexRed(_ hex: UInt32) -> CGFloat { CGFloat((hex >> 16) & 0xFF) / 255 }
+private func hexGreen(_ hex: UInt32) -> CGFloat { CGFloat((hex >> 8) & 0xFF) / 255 }
+private func hexBlue(_ hex: UInt32) -> CGFloat { CGFloat(hex & 0xFF) / 255 }
 
 /// ElevenLabs tarzı tasarım değerleri (elevenlabs.io stil dosyalarından): süt beyazı ("eggshell") zemin, beyaz kartlar,
 /// ince çerçeveler, neredeyse siyah yazı, siyah ana düğme; koyu temada aynı düzen ters renklerle. Renkler pencerenin
@@ -147,26 +184,10 @@ public enum Theme {
     /// Gömülü Inter yazı tipinin aile adı (OFL; App/Fonts).
     nonisolated public static let interFamily: String = "Inter Variable"
 
-    /// Seçili takımların verilen rolü: açık ve koyu görünüm için iki renkli dinamik renk.
+    /// Seçili takımların verilen rolü (bkz. `ThemeStore.color`).
     private static func dynamic(_ role: KeyPath<ThemeColorSet, UInt32>) -> Color {
-        let light: UInt32 = ThemeStore.shared.light[keyPath: role]
-        let dark: UInt32 = ThemeStore.shared.dark[keyPath: role]
-        #if os(macOS)
-        return Color(nsColor: NSColor(name: nil) { (appearance: NSAppearance) -> NSColor in
-            let isDark: Bool = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            return NSColor(srgbRed: red(hex: isDark ? dark : light), green: green(hex: isDark ? dark : light), blue: blue(hex: isDark ? dark : light), alpha: 1)
-        })
-        #else
-        return Color(uiColor: UIColor { (traits: UITraitCollection) -> UIColor in
-            let hex: UInt32 = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: red(hex: hex), green: green(hex: hex), blue: blue(hex: hex), alpha: 1)
-        })
-        #endif
+        ThemeStore.shared.color(role: role)
     }
-
-    private static func red(hex: UInt32) -> CGFloat { CGFloat((hex >> 16) & 0xFF) / 255 }
-    private static func green(hex: UInt32) -> CGFloat { CGFloat((hex >> 8) & 0xFF) / 255 }
-    private static func blue(hex: UInt32) -> CGFloat { CGFloat(hex & 0xFF) / 255 }
 }
 
 /// Seçili yazı tipi ailesinde (varsayılan Inter) verilen boyut ve ağırlık.
@@ -199,8 +220,11 @@ public extension View {
     /// Kart yüzeyi: zeminden ayrılan beyaz kart, ince çerçeve, çok hafif gölge.
     func cardSurface(cornerRadius: CGFloat) -> some View {
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        return background(Theme.card, in: shape)
-            .overlay(shape.strokeBorder(Theme.line))
-            .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
+        // Gölge yalnızca sabit zemine: içeriğe uygulansaydı içerik her değiştiğinde (ör. çalma çubuğu saniyede onlarca
+        // kez) gölge baştan hesaplanır, pencere sunucusu boşuna yorulurdu.
+        return background {
+            shape.fill(Theme.card).shadow(color: .black.opacity(0.04), radius: 10, y: 4)
+        }
+        .overlay(shape.strokeBorder(Theme.line))
     }
 }
