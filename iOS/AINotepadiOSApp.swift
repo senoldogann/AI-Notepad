@@ -1,6 +1,7 @@
 import AINotepadCore
 import AINotepadUI
 import AppIntents
+import os
 import SwiftUI
 
 /// iPhone uygulaması: sekmeler (Kayıt, Toplantılar, Sor, Görevler, Ayarlar). Mac'le aynı çekirdeği ve görünümü
@@ -12,6 +13,7 @@ struct AINotepadiOSApp: App {
     @State private var ask: PhoneAsk
     @State private var router: PhoneRouter
     @State private var player: MeetingAudioPlayer = MeetingAudioPlayer()
+    @State private var calendar: PhoneCalendar
 
     init() {
         registerPhoneDefaults()
@@ -26,12 +28,16 @@ struct AINotepadiOSApp: App {
         #endif
         let store: PhoneStore = PhoneStore()
         let recorder: PhoneRecorder = PhoneRecorder(store: store)
+        let calendar: PhoneCalendar = PhoneCalendar()
+        // Kayıt başlarken takvimde süren toplantıya bağlanır (takvim açıksa).
+        recorder.currentCalendarMeeting = { () -> CalendarMeeting? in calendar.meetingForRecording(now: Date()) }
         let router: PhoneRouter = PhoneRouter(
             tab: launchTab(arguments: CommandLine.arguments), meetingsPath: launchMeetingPath(arguments: CommandLine.arguments)
         )
         _store = State(initialValue: store)
         _recorder = State(initialValue: recorder)
         _router = State(initialValue: router)
+        _calendar = State(initialValue: calendar)
         _ask = State(initialValue: PhoneAsk(store: store))
         // Kısayollar, Denetim Merkezi ve canlı etkinlikteki niyetler kaydediciye ve gezinmeye buradan ulaşır.
         AppDependencyManager.shared.add(dependency: recorder)
@@ -40,12 +46,13 @@ struct AINotepadiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player)
+            RootView(store: store, recorder: recorder, ask: ask, router: router, player: player, calendar: calendar)
                 .environment(\.panelAppearance, .standard)
                 .font(PanelAppearance.standard.font(size: 15, weight: .regular))
                 .tint(PanelAppearance.standard.accent.color)
                 .task {
-                    store.reload()
+                    // Saklama süresi ve yarım kalan kayıtlar listeye bakar: okuma bitince sürer.
+                    await store.reloadAndWait()
                     ask.loadRecipes()
                     ask.loadHistory()
                     await store.cloud.start(excluding: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 })) { store.reload() }
@@ -117,14 +124,16 @@ struct RootView: View {
     let ask: PhoneAsk
     @Bindable var router: PhoneRouter
     let player: MeetingAudioPlayer
+    let calendar: PhoneCalendar
     /// İlk açılış karşılaması bitti (`--karsilama` ile Debug'da yeniden gösterilir).
     @AppStorage(PhoneSettingsKey.onboardingCompleted) private var onboardingCompleted: Bool = false
     @AppStorage(PhoneSettingsKey.theme) private var theme: String = AppTheme.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase: ScenePhase
 
     var body: some View {
         TabView(selection: $router.tab) {
             Tab("Kayıt", systemImage: "record.circle", value: PhoneTab.record) {
-                RecordTab(recorder: recorder, store: store, router: router)
+                RecordTab(recorder: recorder, store: store, router: router, calendar: calendar)
             }
             Tab("Toplantılar", systemImage: "list.bullet.rectangle", value: PhoneTab.meetings) {
                 MeetingsTab(store: store, router: router, player: player, isRecording: recorder.phase != .idle)
@@ -136,7 +145,7 @@ struct RootView: View {
                 TasksTab(store: store, router: router)
             }
             Tab("Ayarlar", systemImage: "gearshape", value: PhoneTab.settings) {
-                PhoneSettingsTab(store: store, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
+                PhoneSettingsTab(store: store, calendar: calendar, excludedFromMoves: recorder.busyMeetingIDs.union([player.meetingID].compactMap { $0 }))
             }
         }
         .tabViewBottomAccessory(isEnabled: player.meetingID != nil) {
@@ -164,6 +173,12 @@ struct RootView: View {
                 player.stop()
             }
         }
+        .onChange(of: scenePhase, initial: true) { (_: ScenePhase, phase: ScenePhase) in
+            // Takvim açılışta ve uygulama öne gelince yeniden okunur (izin bu arada geri alınmış olabilir).
+            if phase == .active {
+                calendar.start()
+            }
+        }
     }
 }
 
@@ -171,6 +186,7 @@ struct RootView: View {
 @MainActor
 @Observable
 final class PhoneStore {
+    private static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "PhoneStore")
     private(set) var meetings: [MeetingRecord] = []
     /// Okunamayan klasörler ya da klasöre erişim hatası (kullanıcıya gösterilir).
     private(set) var problems: [String] = []
@@ -181,21 +197,45 @@ final class PhoneStore {
     /// Çalan toplantı: iCloud'a taşınmaz, sesi saklama süresiyle silinmez (dosyaları kullanımda).
     var playingMeetingID: String?
 
-    /// Toplantıları diskten yeniden okur (en yeni önce): bu iPhone'daki ve iCloud açıksa iCloud'daki.
+    /// Listeyi arka planda okur; art arda gelen istekleri (iCloud bildirimleri) birleştirir.
+    @ObservationIgnored private let reloader: MeetingReloader = MeetingReloader()
+
+    /// Toplantıları arka planda yeniden okur (iCloud değişikliği, taşıma); beklemeden döner.
     func reload() {
-        do {
-            let result: MeetingLoadResult = loadMeetings(directories: try AppPaths.meetingDirectories(location: cloud.activeLocation))
-            meetings = result.meetings
-            problems = result.failures.map { "\($0.folder): \($0.reason)" }
-            downloadingCount = result.downloading.count
-        } catch {
-            problems = [userFacingMessage(error: error)]
-        }
+        Task { await reloadAndWait() }
+    }
+
+    /// Toplantıları diskten yeniden okur (en yeni önce): bu iPhone'daki ve iCloud açıksa iCloud'daki. Okuma ana iş
+    /// parçacığının dışında yapılır; liste güncellenince döner.
+    func reloadAndWait() async {
+        await reloader.reload(load: { () async throws -> MeetingLoadResult in
+            try await loadMeetingsInBackground(location: self.cloud.activeLocation)
+        }, apply: { (result: MeetingLoadResult) -> Void in
+            self.meetings = result.meetings
+            self.problems = result.failures.map { (failure: MeetingLoadFailure) -> String in "\(failure.folder): \(failure.reason)" }
+            self.downloadingCount = result.downloading.count
+        }, fail: { (error: any Error) -> Void in
+            self.problems = [userFacingMessage(error: error)]
+        })
     }
 
     /// Kaydedilen toplantıyı listeye yazar (her kayıtta klasör yeniden okunmaz).
     func upsert(record: MeetingRecord) {
         meetings = upsertMeeting(records: meetings, record: record)
+        // Süren arka plan okuması bu yazmayı görmemiş olabilir: sonucu bu kaydı geri almasın.
+        reloader.invalidate()
+    }
+
+    /// Konuşmacılara ad verir ("Konuşmacı 2 = Aino"; boş ad etiketi geri getirir). Kayıttaki, işlenen ya da notu
+    /// yazılan toplantıda yapılmaz (işleme bitince kayıt bütünüyle yazılır, ad kaybolurdu).
+    func renameSpeakers(meetingID: String, names: [Int: String]) throws {
+        guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing,
+              !regeneratingIDs.contains(meetingID) else {
+            throw StorageError.writeFailed(path: meetingID, reason: "kayıtta ya da işleniyor")
+        }
+        let updated: MeetingRecord = record.with(speakerNames: renamingSpeakers(names: record.speakerNames, edits: names))
+        try saveMeeting(record: updated, directory: try sessionDirectory(id: meetingID))
+        upsert(record: updated)
     }
 
     /// Görevin tamamlandı işaretini değiştirir ve toplantıyı saklar.
@@ -219,6 +259,7 @@ final class PhoneStore {
         }
         try deleteMeetingDirectory(directory: try sessionDirectory(id: id))
         meetings.removeAll { $0.id == id }
+        reloader.invalidate()
     }
 
     /// Saklama süresi (Ayarlar) dolan toplantıların sesini ve ses izlerini siler; metin ve not kalır. Silinemeyenin
@@ -264,6 +305,35 @@ final class PhoneStore {
             upsert(record: versioned)
         } catch {
             problems = appendUnique(messages: problems, message: String(localized: "Not yenilenemedi: \(userFacingMessage(error: error))"))
+        }
+    }
+
+    /// Notu kullanıcının isteğine göre düzenler (Mac'teki "Notu değiştir": "özeti kısalt", "görevlere tarih ekle").
+    /// Düzenlenirken toplantı kilitlidir; eski not geçmişe girer (⋯ › Önceki sürümler ile geri alınır). Olmazsa not
+    /// değişmez ve neden sorunlarda görünür.
+    func editNote(meetingID: String, instruction: String) async {
+        let trimmed: String = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let record = meetings.first(where: { $0.id == meetingID }), record.note != nil,
+              record.status != .recording, record.status != .processing, !regeneratingIDs.contains(meetingID) else {
+            return
+        }
+        regeneratingIDs.insert(meetingID)
+        defer { regeneratingIDs.remove(meetingID) }
+        do {
+            let llm: LLMProvider = try await phoneLLMProvider()
+            let directory: URL = try sessionDirectory(id: meetingID)
+            let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: phoneUserName())
+            // Düzenleme sürerken işaretlenen görevler kaybolmasın: işaretler listedeki güncel kayıttan taşınır.
+            let current: MeetingRecord = meetings.first(where: { $0.id == meetingID }) ?? record
+            let versioned: MeetingRecord = withNoteVersion(
+                updated: withCarriedTaskMarks(old: current, new: edited), previous: record,
+                reason: String(localized: "Düzenlendi: \(trimmed)"), savedAt: Date()
+            )
+            try saveMeeting(record: versioned, directory: directory)
+            upsert(record: versioned)
+        } catch {
+            Self.logger.error("Not düzenlenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            problems = appendUnique(messages: problems, message: String(localized: "Not düzenlenemedi: \(userFacingMessage(error: error))"))
         }
     }
 

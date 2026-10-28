@@ -1007,6 +1007,26 @@
         }
       }
     },
+    "Ad transkriptte \"Konuşmacı N\" yerine görünür. Notu yeni adlarla yazmak için ⋯ › Notu yenile.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The name replaces \"Speaker N\" in the transcript. To rewrite the note with the new names, use ⋯ › Refresh note."
+          }
+        }
+      }
+    },
+    "Ad ver": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
+      }
+    },
     "Ad ver ya da başka konuşmacıyla birleştir": {
       "localizations": {
         "en": {
@@ -1043,6 +1063,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show / hide island and panel"
+          }
+        }
+      }
+    },
+    "Adlar kaydedilemedi: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save names: %@"
           }
         }
       }
@@ -1534,6 +1564,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add a channel in Settings › Connections"
+          }
+        }
+      }
+    },
+    "Ayarlar'ı aç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
           }
         }
       }
@@ -3906,6 +3946,16 @@
         }
       }
     },
+    "Görüşmeye katıl: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join call: %@"
+          }
+        }
+      }
+    },
     "Gösterim": {
       "localizations": {
         "en": {
@@ -4781,6 +4831,16 @@
         }
       }
     },
+    "Kayıt ekranında sıradaki toplantılar görünür; süren bir toplantıda başlattığın kayıt onun adını ve katılımcılarını alır (adlar tanımaya da yardım eder).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming meetings appear on the Record screen; a recording you start during a meeting takes its title and attendees (the names also help recognition)."
+          }
+        }
+      }
+    },
     "Kayıt ekranını aç": {
       "localizations": {
         "en": {
@@ -5464,6 +5524,16 @@
         }
       }
     },
+    "Konuşmacılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speakers"
+          }
+        }
+      }
+    },
     "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.": {
       "localizations": {
         "en": {
@@ -5521,6 +5591,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speakers and final pass"
+          }
+        }
+      }
+    },
+    "Konuşmacılara ad ver": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name speakers"
           }
         }
       }
@@ -6682,6 +6762,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit note"
+          }
+        }
+      }
+    },
+    "Notu düzenle: \"özeti kısalt\"…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit note: \"shorten the summary\"…"
           }
         }
       }
@@ -7953,6 +8043,16 @@
         }
       }
     },
+    "Sıradaki toplantılar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming meetings"
+          }
+        }
+      }
+    },
     "TOPLANTILARI": {
       "localizations": {
         "en": {
@@ -7980,6 +8080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Follow-up email"
+          }
+        }
+      }
+    },
+    "Takvim": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendar"
           }
         }
       }
@@ -8044,12 +8154,32 @@
         }
       }
     },
+    "Takvime erişim izni yok. iPhone Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e tam erişim ver.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No calendar access. Give AI-Notepad full access in iPhone Settings › Privacy & Security › Calendars."
+          }
+        }
+      }
+    },
     "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "No access to Calendar: allow AI-Notepad in System Settings › Privacy & Security › Calendars."
+          }
+        }
+      }
+    },
+    "Takvime erişim izni yok; sıradaki toplantılar görünmüyor. Ayarlar'a git.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No calendar access, so upcoming meetings can't be shown. Go to Settings."
           }
         }
       }
@@ -10265,6 +10395,16 @@
         }
       }
     },
+    "Önümüzdeki 12 saatte takvimde toplantı yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meetings in your calendar in the next 12 hours."
+          }
+        }
+      }
+    },
     "Örn. Aino Virtanen": {
       "localizations": {
         "en": {
@@ -10714,6 +10854,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear glass"
+          }
+        }
+      }
+    },
+    "Şimdi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now"
           }
         }
       }
