@@ -176,8 +176,8 @@ export async function startMeeting(
 }
 
 /**
- * Deneme toplantısı. Her hesabın doğrulanmış bir kimliği vardır (Apple `sub` ya da tıklanmış e-posta bağlantısı;
- * hesap başka yoldan oluşmaz). Hak üç koşula bağlıdır:
+ * Deneme toplantısı. Her hesabın doğrulanmış bir kimliği vardır (Apple ya da Google `sub`; hesap başka yoldan
+ * oluşmaz). Hak üç koşula bağlıdır:
  * - hesap başına `trialMeetings` toplantı;
  * - doğrulanmış cihaz bildirildiyse cihaz başına `trialMeetings` toplantı (yeni hesap aynı cihazda yeni deneme almaz);
  * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı (silinmiş hesaplar dahil)

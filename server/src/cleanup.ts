@@ -27,6 +27,8 @@ const stripeEventRetentionMs: number = 90 * dayMs;
 const dailySpendRetentionMs: number = 90 * dayMs;
 /** Kullanıcı başına günlük kullanım 2 gün tutulur (gece yarısını aşan çağrının kesinleştirmesi dünün satırını yazar). */
 const dailyUsageRetentionMs: number = 2 * dayMs;
+/** Raporlar (geri bildirim, çökme, iletişim; durumundan bağımsız) 180 gün tutulur. */
+const reportRetentionMs: number = 180 * dayMs;
 
 /**
  * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 4 × 1000 satır. 10 tablo × 4 tur = en çok 40 sorgu;
@@ -45,7 +47,6 @@ function cleanupTargets(now: Date): CleanupTarget[] {
   const today: string = dayKey(now);
   return [
     { table: "used_nonces", where: "expires_at <= ?", binds: [nowMs] },
-    { table: "email_login_tokens", where: "expires_at <= ? OR used_at IS NOT NULL", binds: [nowMs] },
     { table: "device_challenges", where: "expires_at <= ? OR used_at IS NOT NULL", binds: [nowMs] },
     {
       table: "refresh_tokens",
@@ -62,6 +63,7 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { table: "deleted_trial_starts", where: "day < ?", binds: [today] },
     { table: "daily_spend", where: "day < ?", binds: [dayKey(new Date(nowMs - dailySpendRetentionMs))] },
     { table: "daily_usage", where: "day < ?", binds: [dayKey(new Date(nowMs - dailyUsageRetentionMs))] },
+    { table: "reports", where: "created_at < ?", binds: [nowMs - reportRetentionMs] },
   ];
 }
 

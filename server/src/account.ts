@@ -13,7 +13,10 @@ import { dayKey } from "./usage";
  * - hesabın kaydettiği cihazları başka hesapların toplantıları da göstermiş olabilir: o toplantıların cihaz bağı
  *   kaldırılır (cihaz başına deneme sayacı App Attest anahtarı başınadır ve yeni anahtar her zaman üretilebilir; bu,
  *   o sınırı mevcut durumdan daha fazla zayıflatmaz).
- * `daily_spend` (toplam, kişisel değil), `used_nonces` ve `stripe_events` hesaba bağlı değildir.
+ * Hesaba bağlı raporlar (geri bildirim, çökme) bağı kaldırılarak değil, silinerek gider: serbest metin, e-posta ve
+ * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu,
+ * anonim geri bildirim) hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
+ * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, now: Date): D1PreparedStatement[] {
   return [
@@ -25,9 +28,7 @@ function accountDeletionStatements(db: D1Database, userId: string, now: Date): D
       )
       .bind(userId, dayKey(now)),
     db.prepare("DELETE FROM trial_starts WHERE user_id = ?").bind(userId),
-    db
-      .prepare("DELETE FROM email_login_tokens WHERE email IN (SELECT subject FROM auth_identities WHERE user_id = ? AND provider = 'email')")
-      .bind(userId),
+    db.prepare("DELETE FROM reports WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM refresh_tokens WHERE family_id IN (SELECT id FROM refresh_families WHERE user_id = ?)").bind(userId),
     db.prepare("DELETE FROM refresh_families WHERE user_id = ?").bind(userId),

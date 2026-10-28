@@ -1,17 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { type Config, ConfigPlaceholderError, parseConfig } from "../src/config";
+import { type Config, ConfigError, ConfigPlaceholderError, parseConfig } from "../src/config";
 import type { Env } from "../src/env";
 import { type Harness, defaultHarness, envWith, expectError, req } from "./helpers";
 
-/** `wrangler.jsonc` → `env.production.vars` içindeki yer tutucularla üretim ortamı. */
+/** Yer tutucularla (örnek ve `placeholder` değerler) üretim ortamı. */
 const productionWithPlaceholders: Env = envWith({
   ENVIRONMENT: "production",
-  SITE_ORIGIN: "https://ainotepad.pages.dev",
+  SITE_ORIGIN: "https://gistsmith.com",
   APP_ATTEST_ENVIRONMENT: "production",
   APP_ATTEST_APP_IDS: "TEAMID0000.com.senoldogan.AINotepad.hosted",
-  EMAIL_SENDER: "resend",
-  EMAIL_FROM: "AI-Notepad <giris@example.com>",
-  EMAIL_LINK_URL: "https://ainotepad.pages.dev/giris/eposta",
+  GOOGLE_CLIENT_IDS: "000000000000-placeholder.apps.googleusercontent.com",
   STRIPE_PRICE_ID: "price_placeholder",
 });
 
@@ -19,7 +17,7 @@ const productionWithPlaceholders: Env = envWith({
 const productionFilledIn: Env = envWith({
   ...productionWithPlaceholders,
   APP_ATTEST_APP_IDS: "A1B2C3D4E5.com.senoldogan.AINotepad.hosted",
-  EMAIL_FROM: "AI-Notepad <giris@ainotepad.app>",
+  GOOGLE_CLIENT_IDS: "123456789012-abc.apps.googleusercontent.com,123456789012-web.apps.googleusercontent.com",
   STRIPE_PRICE_ID: "price_1QabcDEFghiJKL",
 });
 
@@ -35,11 +33,23 @@ function placeholderError(env: Env): ConfigPlaceholderError {
   throw new Error("yer tutucu reddedilmedi");
 }
 
+function configErrorFields(env: Env): readonly string[] {
+  try {
+    parseConfig(env);
+  } catch (error: unknown) {
+    if (error instanceof ConfigError) {
+      return error.fields;
+    }
+    throw error;
+  }
+  throw new Error("yapılandırma reddedilmedi");
+}
+
 describe("üretim yapılandırmasında yer tutucular", () => {
   it("yer tutuculu üretim yapılandırması ayar adlarıyla (değerleri olmadan) reddedilir", () => {
     const error: ConfigPlaceholderError = placeholderError(productionWithPlaceholders);
-    expect(error.fields).toEqual(["APP_ATTEST_APP_IDS", "EMAIL_FROM", "STRIPE_PRICE_ID"]);
-    for (const value of ["TEAMID0000", "example.com", "price_placeholder"]) {
+    expect(error.fields).toEqual(["APP_ATTEST_APP_IDS", "GOOGLE_CLIENT_IDS", "STRIPE_PRICE_ID"]);
+    for (const value of ["TEAMID0000", "000000000000-placeholder", "price_placeholder"]) {
       expect(error.message).not.toContain(value);
     }
   });
@@ -48,18 +58,27 @@ describe("üretim yapılandırmasında yer tutucular", () => {
     const local: Env = envWith({
       ...productionFilledIn,
       SITE_ORIGIN: "http://localhost:8788",
-      EMAIL_LINK_URL: "https://www.example.org/giris",
+      DMG_URL: "https://www.example.org/indir.dmg",
     });
-    expect(placeholderError(local).fields).toEqual(["SITE_ORIGIN", "EMAIL_LINK_URL"]);
+    expect(placeholderError(local).fields).toEqual(["SITE_ORIGIN", "DMG_URL"]);
   });
 
   it("doldurulmuş üretim yapılandırması ve yer tutuculu geliştirme yapılandırması kabul edilir", () => {
     const production: Config = parseConfig(productionFilledIn);
     expect(production.environment).toBe("production");
     expect(production.stripePriceId).toBe("price_1QabcDEFghiJKL");
+    expect(production.googleClientIds).toHaveLength(2);
+    expect(production.adminIdentities).toEqual([]);
     const development: Config = parseConfig(envWith({}));
     expect(development.environment).toBe("development");
     expect(development.stripePriceId).toBe("price_placeholder");
+  });
+
+  it("yönetici kimlikleri `apple:` ya da `google:` önekli olmalı; DMG adresi https olmalı", () => {
+    expect(parseConfig(envWith({ ADMIN_IDENTITIES: " google:123 , apple:000.abc " })).adminIdentities).toEqual(["google:123", "apple:000.abc"]);
+    expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "123" }))).toEqual(["ADMIN_IDENTITIES"]);
+    expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "email:kisi@ornek.test" }))).toEqual(["ADMIN_IDENTITIES"]);
+    expect(configErrorFields(envWith({ DMG_URL: "http://indir.ornek.test/a.dmg" }))).toEqual(["DMG_URL"]);
   });
 
   it("yer tutuculu üretim sunucusu her istekte (sağlık dahil) 500 verir ve yalnızca ayar adlarını loglar", async () => {
@@ -73,7 +92,7 @@ describe("üretim yapılandırmasında yer tutucular", () => {
       level: "error",
       event: "config_invalid",
       error: "ConfigPlaceholderError",
-      fields: "APP_ATTEST_APP_IDS,EMAIL_FROM,STRIPE_PRICE_ID",
+      fields: "APP_ATTEST_APP_IDS,GOOGLE_CLIENT_IDS,STRIPE_PRICE_ID",
     });
     expect((await harness.call(req("GET", "/v1/health", { env: productionFilledIn }))).status).toBe(200);
   });
