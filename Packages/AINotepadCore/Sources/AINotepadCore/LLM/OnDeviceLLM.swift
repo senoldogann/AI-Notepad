@@ -449,7 +449,9 @@ private func prepareOnDeviceCall(config: OnDeviceConfig, request: LLMRequest) as
     let maxTokens: Int = try onDeviceResponseTokens(requested: request.maxTokens, promptTokens: tokens, contextTokens: config.contextTokens)
     return PreparedOnDeviceCall(
         model: model, instructions: instructions, prompt: request.userText, schema: schema,
-        options: GenerationOptions(samplingMode: nil, temperature: nil, maximumResponseTokens: maxTokens), promptTokens: tokens
+        // Örnekleme ve sıcaklık sistemin varsayılanı: etiket SDK 26'da `sampling:`, 27'de `samplingMode:`; verilmeyince
+        // ikisinde de derlenir (CI Xcode 26, yerel Xcode 27).
+        options: GenerationOptions(maximumResponseTokens: maxTokens), promptTokens: tokens
     )
 }
 
