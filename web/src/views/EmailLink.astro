@@ -18,6 +18,12 @@ const text: SignInCopy = copy[lang].signIn;
       <span class="spinner" aria-hidden="true"></span>
       <h1 class="title-m">{text.linkWorking}</h1>
     </div>
+    <div id="link-app" class="link-page__working hidden" tabindex="-1" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <h1 class="title-m">{text.linkApp}</h1>
+      <p class="muted">{text.linkAppHelp}</p>
+      <a id="link-app-open" class="button button--primary" href="#">{text.linkAppOpen}</a>
+    </div>
     <div id="link-failed" class="card link-page__failed hidden" tabindex="-1" role="alert">
       <h1 class="title-l">{text.linkFailedTitle}</h1>
       <p id="link-failed-text" class="muted"></p>

@@ -3,6 +3,7 @@
 import { type RawResponse, parseSession, send } from "./api";
 import { dataValue, element, errorText, hideNotice, pageCopy, showNotice } from "./dom";
 import { saveSession } from "./session";
+import { isAppSignInRequest, rememberAppSignIn } from "./app-handoff";
 import { appleAuthScriptUrl, turnstileScriptUrl } from "../config";
 import type { ClientCopy } from "../i18n/client-copy";
 import { siteConfig } from "../site";
@@ -207,6 +208,11 @@ function main(): void {
   const accountPath: string = dataValue(root, "accountPath");
   const redirectUri: string = dataValue(root, "redirectUri");
   const lang: string = document.documentElement.lang;
+  // Mac uygulamasından açıldıysa e-posta bağlantısı uygulamayı açar (bkz. app-handoff.ts).
+  if (isAppSignInRequest(window.location.search)) {
+    rememberAppSignIn(Date.now());
+    element("signin-app-note", HTMLElement).classList.remove("hidden");
+  }
   void setUpApple(text, notice, accountPath, redirectUri);
   setUpEmail(text, notice, lang).catch((error: unknown): void => {
     showNotice(notice, errorText(error, text));

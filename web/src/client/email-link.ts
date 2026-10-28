@@ -3,6 +3,7 @@
 import { ApiRequestError, type RawResponse, parseSession, send } from "./api";
 import { dataValue, element, errorText, pageCopy } from "./dom";
 import { saveSession } from "./session";
+import { appSignInUrl, consumeAppSignIn } from "./app-handoff";
 import type { ClientCopy } from "../i18n/client-copy";
 
 /** Adresin `#` parçasındaki jeton; yoksa null. Saf fonksiyondur. */
@@ -20,6 +21,16 @@ function fail(message: string): void {
   panel.focus();
 }
 
+/** "Uygulamaya dönülüyor…" durumunu ve yedek düğmeyi gösterip uygulamayı açar. */
+function handOffToApp(url: string): void {
+  element("link-working", HTMLElement).classList.add("hidden");
+  element("link-app-open", HTMLAnchorElement).href = url;
+  const panel: HTMLElement = element("link-app", HTMLElement);
+  panel.classList.remove("hidden");
+  panel.focus();
+  window.location.href = url;
+}
+
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
   const root: HTMLElement = element("email-link", HTMLElement);
@@ -28,6 +39,11 @@ async function main(): Promise<void> {
   history.replaceState(null, "", window.location.pathname);
   if (token === null) {
     fail(text.errors.invalidLink);
+    return;
+  }
+  // Giriş Mac uygulamasından başlatıldıysa jeton siteye değil uygulamaya gider (uygulama doğrular).
+  if (consumeAppSignIn(Date.now())) {
+    handOffToApp(appSignInUrl(token));
     return;
   }
   const path: string = "/v1/auth/email/verify";

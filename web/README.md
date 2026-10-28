@@ -45,7 +45,7 @@ Tek kaynak `src/config.ts`; gizli değer yoktur. Yayından önce `productionConf
 | `siteOrigin` | Sitenin alan adı; sunucunun `SITE_ORIGIN`'i ile birebir aynı (CORS) |
 | `apiBase` | Worker adresi; CSP `connect-src` bundan üretilir |
 | `turnstileSiteKey` | Turnstile site anahtarı (şu an Cloudflare'in her zaman geçen deneme anahtarı); alan adı Turnstile panelinde izinli olmalı |
-| `appleServiceId` | Apple Developer'daki web Services ID; sunucunun `APPLE_CLIENT_IDS` listesinde de olmalı |
+| `appleServiceId` | Apple Developer'daki web Services ID: tam olarak `com.senoldogan.AINotepad.web` oluşturulur (sunucunun `APPLE_CLIENT_IDS` listesinde bu adla hazırdır; başka ad seçilirse ikisi birlikte değişir) |
 
 DMG adresi `latestVersion`'dan üretilir: yayın betiği DMG'ye sürümlü ad verdiği için (`AI-Notepad-<sürüm>.dmg`)
 `releases/latest/download/…` kalıbı bir sonraki sürümde 404 olur. Her yayında `latestVersion` güncellenir. Yayın
@@ -53,6 +53,12 @@ sabit adlı bir kopya da yüklerse (ör. `AI-Notepad.dmg`) adres `releases/lates
 
 Yasal metinlerdeki işletmeci bilgileri `src/legal/operator.ts`'tedir ("[DOLDUR: …]" sayfada görünür); "[Doğrula: …]"
 notları hukuki gözden geçirmede kapatılır.
+
+**Mac uygulamasından e-posta girişi.** Abonelik uygulaması giriş sayfasını `<siteOrigin>/giris?app=1` ile açar
+(Turnstile yalnızca sitede çözülebildiği için form burada). Sayfa bunu bu tarayıcıda 15 dakika hatırlar
+(`localStorage`, `src/client/app-handoff.ts`); e-postadaki bağlantı (`/giris/eposta#token=…`) aynı tarayıcıda açılınca
+siteye giriş yapılmaz, jeton `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletilir ("Uygulamaya
+dönülüyor…" ve yedek "AI-Notepad'i aç" düğmesi). Bağlantı başka bir tarayıcıda açılırsa site normal girişi yapar.
 
 Apple Services ID ayarı: alan adı `siteOrigin`'in alan adı, dönüş adresleri `<siteOrigin>/tr/giris` ve
 `<siteOrigin>/en/sign-in` (giriş açılır pencereyle yapılır, Apple yine de adresi denetler).
