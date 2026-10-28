@@ -189,6 +189,10 @@ final class AppModel {
     /// Ses saklama süresini günde bir uygulayan görev.
     @ObservationIgnored private var retentionTask: Task<Void, Never>?
     @ObservationIgnored private var viewStateCache: (inputs: ViewStateInputs, state: LiveViewState)?
+    #if HOSTED_EDITION
+    /// Abonelik: toplantının süre sınırını izleyen görev (bkz. `watchRecordingLimit`).
+    @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
+    #endif
 
     @ObservationIgnored private var engine: WhisperKitEngine?
     /// Cihaz içi konuşma tanıma (Apple); model indirildiyse hazır.
@@ -343,7 +347,7 @@ final class AppModel {
         assistantTask = Task { [weak self] in
             let card: AssistantCard
             do {
-                let provider: LLMProvider = try await resolveLLMProvider()
+                let provider: LLMProvider = try await resolveLiveLLMProvider()
                 try requireOnDeviceLanguages(provider: provider, meetingLanguages: languages, outputLanguage: noteLanguage)
                 card = try await requestStructured(provider: provider, request: request, parse: makeCard)
             } catch {
@@ -476,7 +480,7 @@ final class AppModel {
     /// Kayıt sırasında sağlayıcıyı yeniden çözer ve çeviriyi açar; başarısızsa hata panelde görünür.
     private func refreshLLMProvider() async -> Bool {
         do {
-            llmProvider = try await resolveLLMProvider()
+            llmProvider = try await resolveLiveLLMProvider()
             translationDisabled = false
             return true
         } catch {
@@ -514,9 +518,9 @@ final class AppModel {
         var problems: [String] = []
         for account in required {
             do {
-                let exists: Bool = try await Task.detached { try secretExists(service: keychainService, account: account) }.value
+                let exists: Bool = try await Task.detached { try secretExists(service: appKeychainService, account: account) }.value
                 if !exists {
-                    problems.append(userFacingMessage(error: KeychainError.notFound(service: keychainService, account: account.rawValue)))
+                    problems.append(userFacingMessage(error: KeychainError.notFound(service: appKeychainService, account: account.rawValue)))
                 }
             } catch {
                 problems.append(userFacingMessage(error: error))
@@ -740,8 +744,11 @@ final class AppModel {
         #if HOSTED_EDITION
         // Abonelik: toplantı oturumu ses akışları başladıktan sonra açılır (yakalama başarısızsa deneme hakkı yanmasın);
         // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, nedeni panelde görünür.
+        let meetingDeadline: Date
         do {
-            _ = try await HostedAccount.shared.startMeeting()
+            let requestedAt: Date = Date()
+            let started: HostedStartedMeeting = try await HostedAccount.shared.startMeeting()
+            meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
         } catch {
             Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .public)")
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -827,6 +834,9 @@ final class AppModel {
             return
         }
         isRecording = true
+        #if HOSTED_EDITION
+        watchRecordingLimit(deadline: meetingDeadline)
+        #endif
         liveHighlights = []
         liveMyNotes = ""
         recordingTemplate = defaultNoteTemplate()
@@ -849,10 +859,49 @@ final class AppModel {
         }
     }
 
+    #if HOSTED_EDITION
+    /// Abonelik: toplantının süre sınırından 5 dk önce panelde ve adada uyarı, sınırda kayıt "Bitir"e basılmış gibi
+    /// bitirilir ve normal işlenir. Kayıt bitince (ya da yenisi başlayınca) görev kendiliğinden sona erer.
+    private func watchRecordingLimit(deadline: Date) {
+        recordingLimitTask?.cancel()
+        let generation: Int = recordingGeneration
+        recordingLimitTask = Task { [weak self] in
+            var warned: Bool = false
+            while !Task.isCancelled {
+                guard let self, self.isRecording, !self.isFinishing, generation == self.recordingGeneration else {
+                    return
+                }
+                switch hostedRecordingLimitState(now: Date(), deadline: deadline, warningLeadSec: hostedLimitWarningLeadSec) {
+                case .running:
+                    break
+                case .warning:
+                    if !warned {
+                        warned = true
+                        let time: String = deadline.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
+                        Self.logger.info("Toplantının süre sınırı yaklaşıyor, uyarı gösterildi")
+                        self.errorMessages = appendUnique(messages: self.errorMessages, message: String(localized: "Bu toplantının süre sınırına 5 dakika kaldı; kayıt \(time) itibarıyla bitirilecek."))
+                    }
+                case .reached:
+                    Self.logger.info("Toplantının süre sınırına ulaşıldı, kayıt bitiriliyor")
+                    self.errorMessages = appendUnique(messages: self.errorMessages, message: String(localized: "Bu toplantının süre sınırına ulaşıldı; kayıt bitirildi."))
+                    self.stopRecording()
+                    return
+                }
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    // İptal: kayıt bitti.
+                    return
+                }
+            }
+        }
+    }
+    #endif
+
     /// Anahtarı arka planda okur; sonucu hata dahil döndürür (birden çok eksik birlikte bildirilsin diye).
     private func secretResult(account: SecretAccount) async -> Result<String, any Error> {
         do {
-            return .success(try await readSecretInBackground(service: keychainService, account: account))
+            return .success(try await readSecretInBackground(service: appKeychainService, account: account))
         } catch {
             return .failure(error)
         }
@@ -977,6 +1026,8 @@ final class AppModel {
         audioLevels.stop()
         consentReminderVisible = false
         #if HOSTED_EDITION
+        recordingLimitTask?.cancel()
+        recordingLimitTask = nil
         // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
         do {
             try await HostedAccount.shared.endMeeting()
@@ -992,7 +1043,10 @@ final class AppModel {
         let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
         session = nil
         activeMeetingID = nil
-        process(record: record, directory: finished.directory)
+        // Kaydın hemen ardından not, toplantının sağlayıcısıyla (abonelikte toplantı bütçesi).
+        process(record: record, directory: finished.directory) { [weak self] () async -> LLMProvider? in
+            await self?.optionalProvider(resolve: resolveLiveLLMProvider)
+        }
         lastFinishedMeetingID = record.id
     }
 
@@ -1059,7 +1113,7 @@ final class AppModel {
 
     /// Toplantıyı sonradan işler (son geçiş + not) ve kaydeder. Son geçiş kaydın motoruna göre yapılır
     /// (yerel toplantı buluta gönderilmez); dil kaydın kilitlenmiş dilidir.
-    private func process(record: MeetingRecord, directory: URL) {
+    private func process(record: MeetingRecord, directory: URL, llmProvider resolveLLM: @escaping @MainActor () async -> LLMProvider?) {
         saveRecord(record: record, directory: directory)
         processingMeetingIDs.insert(record.id)
         keepAwake(meetingID: record.id)
@@ -1069,7 +1123,7 @@ final class AppModel {
         let languageMode: LanguageMode = record.language.map { LanguageMode.fixed($0) } ?? .automatic
         Task {
             let plan: FinalPassPlan = await finalPassPlan(record: record)
-            let llm: LLMProvider? = await optionalLLMProvider()
+            let llm: LLMProvider? = await resolveLLM()
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: plan, llm: llm, languageMode: languageMode, userName: userName,
                 noteLanguage: selectedNoteLanguage(), voiceEmbedder: voiceEmbedderIfEnabled(), registry: registeredVoices
@@ -1186,7 +1240,7 @@ final class AppModel {
             }
         case .cloud:
             do {
-                guard let key = try await optionalSecretInBackground(service: keychainService, account: .elevenlabs) else {
+                guard let key = try await optionalSecretInBackground(service: appKeychainService, account: .elevenlabs) else {
                     return .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
                 }
                 return .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: recognitionKeyterms))
@@ -1199,8 +1253,13 @@ final class AppModel {
 
     /// LLM sağlayıcısı; anahtar ya da ayar yoksa nil (not adımı bunu açıkça bildirir), diğer hatalar panelde.
     private func optionalLLMProvider() async -> LLMProvider? {
+        await optionalProvider(resolve: resolveLLMProvider)
+    }
+
+    /// Verilen çözücüyle sağlayıcı; anahtar ya da ayar yoksa nil, diğer hatalar panelde.
+    private func optionalProvider(resolve: () async throws -> LLMProvider) async -> LLMProvider? {
         do {
-            return try await resolveLLMProvider()
+            return try await resolve()
         } catch KeychainError.notFound, LLMError.notConfigured {
             return nil
         } catch {
@@ -1217,7 +1276,9 @@ final class AppModel {
         // Son geçiş konuşmacıları yeniden numaralar; eski öneriler başka kişileri gösterirdi.
         closeSpeakerReview(meetingID: meetingID)
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
-            process(record: record, directory: directory)
+            process(record: record, directory: directory) { [weak self] () async -> LLMProvider? in
+                await self?.optionalLLMProvider()
+            }
         }
     }
 
@@ -1518,7 +1579,9 @@ final class AppModel {
                 engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
             )
             Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
-            process(record: record, directory: session.url)
+            process(record: record, directory: session.url) { [weak self] () async -> LLMProvider? in
+                await self?.optionalLLMProvider()
+            }
         } catch {
             Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
             importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
@@ -1957,12 +2020,12 @@ final class AppModel {
     @ObservationIgnored private var sendStateFades: [String: Task<Void, Never>] = [:]
 
     /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
-    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: keychainService, account: .destinations) {
+    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations) {
         (connection: ChannelConnection) async throws -> ChannelConnection in
         try await refreshConnectionTokens(connection: connection)
     }
     /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
-    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: keychainService)
+    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService)
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
     /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
@@ -1985,9 +2048,9 @@ final class AppModel {
         guard try await destinationVault.all().isEmpty else {
             return
         }
-        let connection: ChannelConnection? = try await optionalSecretInBackground(service: keychainService, account: .channel)
+        let connection: ChannelConnection? = try await optionalSecretInBackground(service: appKeychainService, account: .channel)
             .map { (text: String) throws -> ChannelConnection in try decodeChannelConnection(text: text) }
-        let webhook: URL? = try await optionalSecretInBackground(service: keychainService, account: .webhook).flatMap { URL(string: $0) }
+        let webhook: URL? = try await optionalSecretInBackground(service: appKeychainService, account: .webhook).flatMap { URL(string: $0) }
         let migrated: [NoteDestination] = migratedDestinations(
             connection: connection, webhook: webhook, autoSend: UserDefaults.standard.bool(forKey: SettingsKey.webhookAutoSend), now: Date()
         ) { UUID().uuidString }
@@ -1997,8 +2060,8 @@ final class AppModel {
         for destination in migrated {
             try await destinationVault.upsert(destination)
         }
-        try deleteSecret(service: keychainService, account: .channel)
-        try deleteSecret(service: keychainService, account: .webhook)
+        try deleteSecret(service: appKeychainService, account: .channel)
+        try deleteSecret(service: appKeychainService, account: .webhook)
         Self.logger.info("Eski kanal bağlantısı hedeflere taşındı, sayı: \(migrated.count, privacy: .public)")
     }
 
@@ -3017,12 +3080,12 @@ final class AppModel {
         keySync = .working
         do {
             for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
-                guard let value = try await optionalSecretInBackground(service: keychainService, account: account) else {
+                guard let value = try await optionalSecretInBackground(service: appKeychainService, account: account) else {
                     // Bu Mac'te artık olmayan anahtarın iPhone kopyası da kalkar.
-                    try await Task.detached { try deleteSyncedSecret(service: keychainService, account: account) }.value
+                    try await Task.detached { try deleteSyncedSecret(service: appKeychainService, account: account) }.value
                     continue
                 }
-                try await Task.detached { try saveSyncedSecret(service: keychainService, account: account, value: value) }.value
+                try await Task.detached { try saveSyncedSecret(service: appKeychainService, account: account, value: value) }.value
             }
             keySync = .idle
         } catch {
@@ -3037,7 +3100,7 @@ final class AppModel {
         keySync = .working
         do {
             for account in SecretAccount.allCases {
-                try await Task.detached { try deleteSyncedSecret(service: keychainService, account: account) }.value
+                try await Task.detached { try deleteSyncedSecret(service: appKeychainService, account: account) }.value
             }
             keySync = .idle
         } catch {
@@ -3050,7 +3113,7 @@ final class AppModel {
     func refreshSharedKeys() async {
         do {
             var shared: [SecretAccount] = []
-            for account in SecretAccount.allCases where try await Task.detached(operation: { try syncedSecretExists(service: keychainService, account: account) }).value {
+            for account in SecretAccount.allCases where try await Task.detached(operation: { try syncedSecretExists(service: appKeychainService, account: account) }).value {
                 shared.append(account)
             }
             sharedKeyAccounts = shared

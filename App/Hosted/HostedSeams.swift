@@ -7,10 +7,17 @@ import Foundation
 /// Abonelik sürümünde canlı metin her zaman Mac'te (WhisperKit, ücretsiz); motor seçimi gizlidir.
 let hostedLiveEngine: LiveEngine = .whisperKit
 
-/// Yapay zekâ sağlayıcısı: bizim sunucumuz (Claude Haiku 5.5 vekili). Jeton ve toplantı her çağrıda bağlantıdan alınır.
-func hostedLLMProvider() throws -> LLMProvider {
+/// Kayıt sırasındaki ve kaydın hemen ardındaki yapay zekâ çağrıları: son açılan toplantının bütçesinden düşer.
+func hostedMeetingLLMProvider() throws -> LLMProvider {
     let client: HostedClient = try HostedServices.requireClient()
-    return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client))
+    return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .meeting))
+}
+
+/// Her zaman kullanılabilen yapay zekâ çağrıları (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı):
+/// toplantı kimliği gönderilmez, kullanıcının sınırlarına sayılır.
+func hostedAccountLLMProvider() throws -> LLMProvider {
+    let client: HostedClient = try HostedServices.requireClient()
+    return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .account))
 }
 
 /// Son geçiş: kayıt sunucunun `/v1/transcribe` ucuyla (ElevenLabs Scribe) yazıya dökülür; toplantı oturumu yoksa

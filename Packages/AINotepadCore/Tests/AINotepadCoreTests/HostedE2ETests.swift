@@ -97,7 +97,7 @@ private func randomLinkToken() -> String {
         #expect(started.kind == "trial")
         #expect(started.trialMeetingsLeft == before.trialMeetingsTotal - 1)
         #expect(await client.currentMeetingID() == started.meetingId)
-        let credentials: HostedLLMCredentials = try await client.llmCredentials()
+        let credentials: HostedLLMCredentials = try await client.meetingLLMCredentials()
         #expect(credentials.meetingID == started.meetingId)
 
         let during: HostedEntitlements = try await client.entitlements()

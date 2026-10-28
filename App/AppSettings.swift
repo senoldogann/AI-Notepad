@@ -335,23 +335,34 @@ func storeKeyBinding(key: String, binding: KeyBinding) throws {
 /// `KeychainError.notFound`; OpenAI uyumlu ayar eksikse `LLMError.notConfigured`.
 func resolveLLMProvider() async throws -> LLMProvider {
     #if HOSTED_EDITION
-    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider.
-    return try hostedLLMProvider()
+    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider (toplantıdan bağımsız).
+    return try hostedAccountLLMProvider()
     #else
     switch selectedLLMProviderKind() {
     case .anthropic:
         return .anthropic(AnthropicConfig(
-            apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),
+            apiKey: try await readSecretInBackground(service: appKeychainService, account: .anthropic),
             fastModel: try storedClaudeModel(key: SettingsKey.claudeFastModel),
             smartModel: try storedClaudeModel(key: SettingsKey.claudeSmartModel),
             fastEffort: try requiredEffort(key: SettingsKey.claudeFastEffort),
             smartEffort: try requiredEffort(key: SettingsKey.claudeSmartEffort)
         ))
     case .openAICompatible:
-        return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
+        return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: appKeychainService, account: .openai)))
     case .onDevice:
         return .onDevice(try onDeviceConfig())
     }
+    #endif
+}
+
+/// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) ve kaydın hemen ardından not için
+/// sağlayıcı. Kendi anahtarlı sürümde `resolveLLMProvider` ile aynıdır; abonelik sürümünde son açılan toplantının
+/// bütçesinden düşer.
+func resolveLiveLLMProvider() async throws -> LLMProvider {
+    #if HOSTED_EDITION
+    return try hostedMeetingLLMProvider()
+    #else
+    return try await resolveLLMProvider()
     #endif
 }
 
@@ -371,7 +382,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     }
     for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
         do {
-            if try await Task.detached(operation: { try secretExists(service: keychainService, account: account) }).value {
+            if try await Task.detached(operation: { try secretExists(service: appKeychainService, account: account) }).value {
                 return false
             }
         } catch {
@@ -465,3 +476,13 @@ func primaryMeetingLanguage() -> MeetingLanguage {
     }
     return language
 }
+
+/// Bu uygulamanın Anahtar Zinciri servis adı: geliştirici sürümünde `AINotepad` (iPhone ile paylaşılan), abonelik
+/// sürümünde kendi servisi (kanal ve görev aracı bağlantıları geliştirici sürümünün öğelerine yazılmasın).
+let appKeychainService: String = {
+    #if HOSTED_EDITION
+    hostedKeychainService
+    #else
+    keychainService
+    #endif
+}()

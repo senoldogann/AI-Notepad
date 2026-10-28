@@ -2936,6 +2936,28 @@
         }
       }
     },
+    "Bu toplantının süre sınırına 5 dakika kaldı; kayıt %@ itibarıyla bitirilecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 minutes left before this meeting's time limit; recording will stop at %@."
+          }
+        }
+      }
+    },
+    "Bu toplantının süre sınırına ulaşıldı; kayıt bitirildi.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting reached its time limit; recording was stopped."
+          }
+        }
+      }
+    },
     "Bu toplantının yapay zekâ kullanım hakkı doldu.": {
       "extractionState": "manual",
       "localizations": {
@@ -10252,6 +10274,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies to the whole app; any font installed on your Mac can be chosen."
+          }
+        }
+      }
+    },
+    "Uygulamanın veri klasörü tanımlı değil (%@ Info.plist'inde %@ yok). Uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's data folder isn't defined (%@ Info.plist has no %@). Reinstall the app."
           }
         }
       }

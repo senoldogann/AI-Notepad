@@ -212,8 +212,8 @@ public actor HostedClient: HostedLLMCredentialSource {
         return try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt)
     }
 
-    /// Yapay zekâ çağrısının jetonu ve toplantısı.
-    public func llmCredentials() async throws -> HostedLLMCredentials {
+    /// Toplantıya bağlı yapay zekâ çağrısının jetonu ve toplantısı.
+    public func meetingLLMCredentials() async throws -> HostedLLMCredentials {
         guard let meetingID else {
             throw HostedClientError.noActiveMeeting
         }

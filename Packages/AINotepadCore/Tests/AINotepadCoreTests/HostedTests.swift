@@ -207,6 +207,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let liveBody: [String: Any] = try jsonObject(try #require(live.httpBody))
         #expect(liveBody["effort"] as? String == "low")
         #expect(liveBody["output_config"] == nil)
+
+        // Hesap çağrısı (Sor, notu yeniden yazma…) toplantı başlığı taşımaz.
+        let account: URLRequest = try hostedLLMURLRequest(
+            baseURL: try #require(URL(string: "https://api.ornek.fi")),
+            credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: nil),
+            request: llmRequest(tier: .smart, schema: nil)
+        )
+        #expect(account.value(forHTTPHeaderField: "x-meeting-id") == nil)
+        #expect(account.value(forHTTPHeaderField: "authorization") == "Bearer jeton")
     }
 
     // Sunucu Anthropic akışını aynen iletir; hata gövdesi sunucunun kodudur.
@@ -312,5 +321,30 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let nonce: String = try makeHostedNonce()
         #expect(nonce.count == 64)
         #expect(try makeHostedNonce() != nonce)
+    }
+}
+
+@Suite struct HostedRecordingLimitTests {
+    @Test func deadlineIsEarlierOfServerAndLocalLimit() {
+        let requested: Date = Date(timeIntervalSince1970: 1_000_000)
+        // Sunucunun saati 2 dk geride: yerel hesap (90 dk) daha erken.
+        #expect(hostedRecordingDeadline(requestedAt: requested, maxDurationMinutes: 90, serverEndsAt: requested.addingTimeInterval(92 * 60))
+            == requested.addingTimeInterval(90 * 60))
+        // Sunucunun saati ileride: sunucunun bitişi daha erken.
+        #expect(hostedRecordingDeadline(requestedAt: requested, maxDurationMinutes: 90, serverEndsAt: requested.addingTimeInterval(89 * 60))
+            == requested.addingTimeInterval(89 * 60))
+    }
+
+    @Test func warnsFiveMinutesBeforeAndStopsAtLimit() {
+        let deadline: Date = Date(timeIntervalSince1970: 2_000_000)
+        func state(_ secondsBefore: Double) -> HostedRecordingLimitState {
+            hostedRecordingLimitState(now: deadline.addingTimeInterval(-secondsBefore), deadline: deadline, warningLeadSec: hostedLimitWarningLeadSec)
+        }
+        #expect(state(3600) == .running)
+        #expect(state(300.5) == .running)
+        #expect(state(300) == .warning)
+        #expect(state(1) == .warning)
+        #expect(state(0) == .reached)
+        #expect(state(-10) == .reached)
     }
 }

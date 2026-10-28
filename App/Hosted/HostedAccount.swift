@@ -52,9 +52,10 @@ enum HostedServices {
         try client.get()
     }
 
-    /// E-posta ile giriş sayfası (sitede; Turnstile doğrulaması orada yapılır).
+    /// E-posta ile giriş sayfası (sitede; Turnstile doğrulaması orada yapılır). `app=1`: site, e-postadaki bağlantıyı bu
+    /// uygulamaya iletir (bkz. web/src/client/app-handoff.ts).
     static func emailSignInPage() throws -> URL {
-        try hostedURL(bundle: .main, key: "HostedSiteBase").appending(path: "giris")
+        try hostedURL(bundle: .main, key: "HostedSiteBase").appending(path: "giris").appending(queryItems: [URLQueryItem(name: "app", value: "1")])
     }
 }
 

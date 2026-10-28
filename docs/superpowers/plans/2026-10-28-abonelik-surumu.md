@@ -107,12 +107,21 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
 ## Durum
 
 - [x] 1. Sunucu: kimlik, haklar, vekil, Stripe (test modu); güvenlik incelemesi ve düzeltmeleri (PR #66), CI (PR #68).
-- [x] 2. Mac abonelik sürümü (`AINotepadHosted`, `App/Hosted`, `#if HOSTED_EDITION`). Sunucu sıkıştırılmış sesin
-  süresini en kötü bit hızıyla tahmin eder; istemci sesi 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde
-  gönderir. E-posta girişinin formu sitededir (Turnstile); bağlantı uygulamayı
-  `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile açar, uygulama yalnızca doğrular. Kalan: Apple ile giriş
-  Service ID ve sunucunun `APPLE_CLIENT_IDS`/`APP_ATTEST_APP_IDS` değerleri `com.senoldogan.AINotepad.hosted` olmalı;
-  Release `HOSTED_API_BASE` gerçek adres; güncelleme akışı (Sparkle) bu sürüm için ayrı.
+- [x] 2. Mac abonelik sürümü (`AINotepadHosted`, `App/Hosted`, `#if HOSTED_EDITION`).
+  - Paket kimliği `com.senoldogan.AINotepad.hosted`; sunucunun `APPLE_CLIENT_IDS`'i bu kimlik ve web Services ID
+    `com.senoldogan.AINotepad.web`. Kendi veri klasörü (`~/Library/Application Support/AINotepad Hosted`, Info.plist
+    `AINotepadDataFolderName`), kendi UserDefaults alanı (paket kimliği) ve Anahtar Zinciri servisi (`AINotepadHosted`).
+  - Ses sunucuya 16 kHz mono 16 bit WAV parçaları (≤95 MB, ~49 dk) halinde gider (sunucu sıkıştırılmış sesin süresini
+    en kötü bit hızıyla tahmin eder).
+  - Kayıt sırasındaki yapay zekâ (çeviri, "Ne kaçırdım?", soru) ve kaydın hemen ardındaki not toplantı bütçesinden;
+    Sor, notu yenileme, tekrar işleme, düzenleme, paylaşım çevirisi ve görev aracı her zaman, toplantısız (abonelik ya da
+    kalan deneme; kullanıcının günlük/aylık sınırı, `LLM_ACCOUNT_MAX_TOKENS`).
+  - Süre sınırından 5 dk önce panelde ve adada uyarı; sınırda kayıt bitirilip normal işlenir.
+  - E-posta girişinin formu sitededir (Turnstile): uygulama `/giris?app=1` açar, site e-postadaki bağlantıyı
+    `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletir.
+  - **Yayından önce:** abonelik sürümünün kendi Sparkle akışı (appcast) ve imza anahtarı gerekir; o zamana dek
+    güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı). Release `HOSTED_API_BASE`
+    gerçek Worker adresi olur.
 - [ ] 3. Web sitesi.
 - [ ] 4. Uçtan uca test (Stripe test kartı).
 - [ ] 5. Hesaplar, alan adı, yayın.
