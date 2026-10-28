@@ -64,10 +64,10 @@ out=".build/release"
 app="$out/export/AINotepad.app"
 dmg="$out/AI-Notepad-$version.dmg"
 
-team="$(grep -E '^[[:space:]]*DEVELOPMENT_TEAM' Config/Local.xcconfig | sed -E 's/.*=[[:space:]]*//' | tr -d '[:space:]')"
+team="$(grep -E '^[[:space:]]*DEVELOPMENT_TEAM' Config/Local.xcconfig | sed -E 's/^[^=]*=[[:space:]]*//' | tr -d '[:space:]')"
 [[ -n "$team" ]] || { echo "Config/Local.xcconfig'te DEVELOPMENT_TEAM yok." >&2; exit 1; }
 # Uzun derlemeden önce: açık anahtar yoksa uygulama güncelleme denetlemez, bu sürüm de güncellenemez.
-sparkle_public_key="$(grep -E '^[[:space:]]*SPARKLE_PUBLIC_KEY[[:space:]]*=' Config/Signing.xcconfig | sed -E 's/.*=[[:space:]]*//' | tr -d '[:space:]')"
+sparkle_public_key="$(grep -E '^[[:space:]]*SPARKLE_PUBLIC_KEY[[:space:]]*=' Config/Signing.xcconfig | sed -E 's/^[^=]*=[[:space:]]*//' | tr -d '[:space:]')"
 [[ -n "$sparkle_public_key" ]] || {
     echo "Config/Signing.xcconfig'te SPARKLE_PUBLIC_KEY boş. Bir kez generate_keys çalıştırıp açık anahtarı oraya yaz (bkz. betiğin başı)." >&2
     exit 1
