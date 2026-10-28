@@ -6,7 +6,7 @@ import { type Harness, type Session, type StartedMeetingBody, defaultHarness, ex
 interface MeBody {
   readonly plan: string;
   readonly trialMeetingsLeft: number;
-  readonly subscription: { status: string; currentPeriodEnd: string; access: string; graceEndsAt: string | null } | null;
+  readonly subscription: { status: string; currentPeriodEnd: string; cancelAt: string | null; access: string; graceEndsAt: string | null } | null;
 }
 
 function startFrom(harness: Harness, session: Session, clientIp: string): Promise<Response> {
@@ -80,6 +80,7 @@ describe("past_due ek süresi", () => {
     expect(inGrace.subscription).toEqual({
       status: "past_due",
       currentPeriodEnd: new Date(periodEnd).toISOString(),
+      cancelAt: null,
       access: "grace",
       graceEndsAt: new Date(periodEnd + 7 * 86_400_000).toISOString(),
     });

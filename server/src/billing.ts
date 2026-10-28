@@ -164,6 +164,17 @@ export function subscriptionPeriodEndMs(subscription: Stripe.Subscription): numb
 }
 
 /**
+ * İptal edilmiş aboneliğin biteceği an (ms): Stripe'ın `cancel_at`'ı ya da `cancel_at_period_end` ise dönem sonu.
+ * Yenilenecek abonelikte null. Saf fonksiyondur.
+ */
+export function subscriptionCancelAtMs(subscription: Stripe.Subscription): number | null {
+  if (subscription.cancel_at !== null) {
+    return subscription.cancel_at * 1000;
+  }
+  return subscription.cancel_at_period_end ? subscriptionPeriodEndMs(subscription) : null;
+}
+
+/**
  * Stripe webhook'u: imza `constructEventAsync` ile doğrulanır (5 dakika tolerans). Olay kimliği `stripe_events`
  * tablosuna, abonelik durumu `subscriptions` tablosuna aynı toplu işlemde yazılır: aynı olay ikinci kez gelirse
  * birincil anahtar çakışır, hiçbir şey değişmez. Abonelik durumu yalnızca burada yazılır. Kullanıcı başına tek satır
@@ -204,7 +215,8 @@ export async function handleStripeWebhook(db: D1Database, platform: Platform, co
       .prepare("SELECT user_id FROM stripe_customers WHERE stripe_customer_id = ?")
       .bind(customer)
       .first<{ user_id: string }>();
-    if (owner === null && isTerminalSubscription({ status: subscription.status, currentPeriodEnd: periodEndMs }, platform.now())) {
+    const cancelAtMs: number | null = subscriptionCancelAtMs(subscription);
+    if (owner === null && isTerminalSubscription({ status: subscription.status, currentPeriodEnd: periodEndMs, cancelAt: cancelAtMs }, platform.now())) {
       // Silinmiş hesabın iptali gibi: hak vermeyen durum, yazılacak satır yok; olay işlenmiş sayılır.
       log("info", "stripe_event_unknown_customer_terminal", { eventId: event.id, type: event.type });
     } else if (owner === null) {
@@ -216,12 +228,12 @@ export async function handleStripeWebhook(db: D1Database, platform: Platform, co
       statements.push(
         db
           .prepare(
-            `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at, last_event_created, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id,
                stripe_subscription_id = excluded.stripe_subscription_id, status = excluded.status,
-               current_period_end = excluded.current_period_end, last_event_created = excluded.last_event_created,
-               updated_at = excluded.updated_at
+               current_period_end = excluded.current_period_end, cancel_at = excluded.cancel_at,
+               last_event_created = excluded.last_event_created, updated_at = excluded.updated_at
              WHERE (excluded.stripe_subscription_id = subscriptions.stripe_subscription_id
                  AND excluded.last_event_created >= subscriptions.last_event_created)
                OR (excluded.stripe_subscription_id <> subscriptions.stripe_subscription_id
@@ -229,7 +241,7 @@ export async function handleStripeWebhook(db: D1Database, platform: Platform, co
                    OR (subscriptions.status = 'unpaid' AND subscriptions.current_period_end <= ?)
                    OR (excluded.status IN ('active', 'trialing') AND subscriptions.status NOT IN ('active', 'trialing'))))`,
           )
-          .bind(owner.user_id, customer, subscription.id, subscription.status, periodEndMs, event.created, nowMs, nowMs),
+          .bind(owner.user_id, customer, subscription.id, subscription.status, periodEndMs, cancelAtMs, event.created, nowMs, nowMs),
       );
     }
   }

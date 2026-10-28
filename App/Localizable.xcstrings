@@ -1131,6 +1131,17 @@
         }
       }
     },
+    "Abonelik iptal edildi; %@ tarihine kadar kullanabilirsin, yenilenmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription canceled; you can use it until %@. It won't renew."
+          }
+        }
+      }
+    },
     "Aboneliğin etkin.": {
       "extractionState": "manual",
       "localizations": {

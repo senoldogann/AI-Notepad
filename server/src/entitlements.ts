@@ -6,6 +6,8 @@ import { type MonthlyUsage, monthlyUsage } from "./usage";
 export interface SubscriptionState {
   readonly status: string;
   readonly currentPeriodEnd: number;
+  /** İptal edilmiş aboneliğin biteceği an (ms); yenilenecekse null. */
+  readonly cancelAt: number | null;
 }
 
 /** Kullanıcının planı: deneme ya da abonelik. */
@@ -32,6 +34,8 @@ export interface Entitlements {
   readonly subscription: {
     readonly status: string;
     readonly currentPeriodEnd: string;
+    /** İptal edildiyse erişimin biteceği an (yenilenmez); yenilenecekse null. */
+    readonly cancelAt: string | null;
     readonly access: SubscriptionAccess;
     /** `past_due` ek süresinin bittiği an; ek süre yoksa null. */
     readonly graceEndsAt: string | null;
@@ -75,11 +79,11 @@ export function hasSubscriptionAccess(subscription: SubscriptionState | null, no
 
 /** Kullanıcının abonelik durumu (yoksa null). */
 export async function subscriptionState(db: D1Database, userId: string): Promise<SubscriptionState | null> {
-  const row: { status: string; current_period_end: number } | null = await db
-    .prepare("SELECT status, current_period_end FROM subscriptions WHERE user_id = ?")
+  const row: { status: string; current_period_end: number; cancel_at: number | null } | null = await db
+    .prepare("SELECT status, current_period_end, cancel_at FROM subscriptions WHERE user_id = ?")
     .bind(userId)
-    .first<{ status: string; current_period_end: number }>();
-  return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end };
+    .first<{ status: string; current_period_end: number; cancel_at: number | null }>();
+  return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at };
 }
 
 /** Kullanıcının harcadığı deneme toplantısı sayısı. */
@@ -161,6 +165,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
         : {
             status: subscription.status,
             currentPeriodEnd: new Date(subscription.currentPeriodEnd).toISOString(),
+            cancelAt: subscription.cancelAt === null ? null : new Date(subscription.cancelAt).toISOString(),
             access,
             graceEndsAt: access === "grace" ? new Date(subscription.currentPeriodEnd + config.pastDueGraceMs).toISOString() : null,
           },

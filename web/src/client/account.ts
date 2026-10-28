@@ -43,7 +43,10 @@ export function accountView(me: Entitlements, text: ClientCopy, lang: Lang): Acc
   const subscribed: boolean = me.plan === "subscription";
   let subscriptionText: string = text.subscriptionNone;
   let subscriptionPill: AccountView["subscriptionPill"] = null;
-  if (subscription !== null && subscription.access === "active") {
+  if (subscription !== null && subscription.access === "active" && subscription.cancelAt !== null) {
+    subscriptionText = fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, lang) });
+    subscriptionPill = { text: text.pillCanceling, tone: "warn" };
+  } else if (subscription !== null && subscription.access === "active") {
     subscriptionText = fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, lang) });
     subscriptionPill = { text: text.pillActive, tone: "ok" };
   } else if (subscription !== null && subscription.access === "grace") {
@@ -179,6 +182,8 @@ function bindDeletion(text: ClientCopy, signInPath: string): void {
     clearSession();
     dialog.close();
     element("account-content", HTMLElement).classList.add("hidden");
+    // Oturum yok: çıkış düğmesi de gizlenir.
+    element("signout-button", HTMLButtonElement).classList.add("hidden");
     const deleted: HTMLElement = element("account-deleted", HTMLElement);
     deleted.classList.remove("hidden");
     deleted.focus();

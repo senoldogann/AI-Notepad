@@ -139,11 +139,10 @@ targets:
         Debug:
           HOSTED_API_BASE: "http://localhost:8787"
           HOSTED_SITE_BASE: "http://localhost:8788"
-        # Yer tutucu: Worker dağıtılınca gerçek adres (ör. https://ainotepad-server-production.<hesap>.workers.dev ya da
-        # alan adı) yazılır. `.invalid` adres uygulamada "sunucu adresi ayarlanmamış" hatası verir; Release https
-        # dışındaki adresi reddeder. Site adresi sunucunun SITE_ORIGIN'iyle aynı olmalı.
+        # Üretim Worker'ı ve sitesi; alan adı alınınca ikisi de değişir. Release https dışındaki adresi reddeder. Site
+        # adresi sunucunun SITE_ORIGIN'iyle aynı olmalı.
         Release:
-          HOSTED_API_BASE: "https://api.example.invalid"
+          HOSTED_API_BASE: "https://ainotepad-server-production.senoldogan0233.workers.dev"
           HOSTED_SITE_BASE: "https://ainotepad.pages.dev"
   AINotepadiOS:
     type: application

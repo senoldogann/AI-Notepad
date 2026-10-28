@@ -1,5 +1,4 @@
 // Sitenin tek yapılandırma kaynağı. Burada gizli değer yoktur: hepsi tarayıcıya açık değerlerdir.
-// Yayından önce sahibin dolduracakları `productionConfig` içinde "DOLDUR" yorumuyla işaretlidir.
 
 /** Derleme hedefi: yerel sunucuya karşı geliştirme ya da yayın. */
 export type WebTarget = "local" | "production";
@@ -43,13 +42,13 @@ const dmgUrl: string = `${repositoryUrl}/releases/latest/download/AI-Notepad.dmg
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {
-  // DOLDUR: alan adı alınınca değişir; sunucudaki SITE_ORIGIN ile birebir aynı olmalı.
+  // Alan adı alınınca değişir; sunucudaki SITE_ORIGIN, Apple Services ID alan adı ve Turnstile parçacığıyla birlikte.
   siteOrigin: "https://ainotepad.pages.dev",
-  // DOLDUR: Worker adresi (ör. https://ainotepad-server-production.<hesap>.workers.dev ya da api.<alan adı>).
-  apiBase: "https://api.example.invalid",
-  // DOLDUR: Cloudflare panelindeki Turnstile site anahtarı. Bu değer Cloudflare'in her zaman geçen deneme anahtarıdır.
-  turnstileSiteKey: "1x00000000000000000000AA",
-  // DOLDUR: Apple Developer'daki web Services ID'si.
+  // Üretim Worker'ı (`server/`, `npm run deploy`); alan adı alınınca api.<alan adı> olur.
+  apiBase: "https://ainotepad-server-production.senoldogan0233.workers.dev",
+  // Cloudflare Turnstile parçacığı "ainotepad" (alan adı ainotepad.pages.dev); alan adı değişince parçacığa eklenir.
+  turnstileSiteKey: "0x4AAAAAAFqQUwHe_RGFyX1t",
+  // Apple Developer'daki web Services ID'si (dönüş adresleri: <siteOrigin>/tr/giris, <siteOrigin>/en/sign-in).
   appleServiceId: "com.senoldogan.AINotepad.web",
   dmgUrl,
 };

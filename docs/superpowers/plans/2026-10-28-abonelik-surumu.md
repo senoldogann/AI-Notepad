@@ -120,8 +120,21 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
   - E-posta girişinin formu sitededir (Turnstile): uygulama `/giris?app=1` açar, site e-postadaki bağlantıyı
     `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletir.
   - **Yayından önce:** abonelik sürümünün kendi Sparkle akışı (appcast) ve imza anahtarı gerekir; o zamana dek
-    güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı). Release `HOSTED_API_BASE`
-    gerçek Worker adresi olur.
-- [ ] 3. Web sitesi.
+    güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı).
+- [x] 3. Web sitesi (PR #80).
 - [ ] 4. Uçtan uca test (Stripe test kartı).
+  - [x] Site, üretim sunucusuna karşı (2026-10-29): Apple ile giriş → deneme 3/3 → Checkout (4242) → webhook → abonelik
+    etkin → Portal'dan iptal (sona eriyor, dönem sonuna dek erişim) → hesap silme (Stripe aboneliği iptal, D1'de satır
+    kalmadı).
+  - [ ] Mac abonelik uygulaması, üretim sunucusuna karşı gerçek toplantı (deneme sayacı, çeviri, not, yazıya döküm).
 - [ ] 5. Hesaplar, alan adı, yayın.
+  - Bağlı (test modu): Worker `ainotepad-server-production` (`*.senoldogan0233.workers.dev`), D1
+    `ainotepad-production` (AB yargı alanı), Pages projesi `ainotepad` (ainotepad.pages.dev), Turnstile parçacığı
+    `ainotepad`, Apple Services ID `com.senoldogan.AINotepad.web` (birincil App ID `.hosted`), Stripe test ürünü ve
+    5,99 $/ay fiyatı (KDV hariç, Stripe Tax), müşteri portalı ve webhook (API sürümü SDK'nınkiyle aynı). Anthropic ve
+    ElevenLabs (yalnızca Speech to Text izinli) üretim anahtarları Worker gizli değerlerinde.
+  - Stripe test ortamı başka bir projeyle (HouseStory) paylaşılıyor: Checkout ve Portal'da işletme adı "HouseStory"
+    görünür. Canlıda hesabın genel adı görünür; testte ayrı bir Stripe sandbox'ı daha temiz olur.
+  - **Yayından önce:** alan adı (site, Worker, Apple Services ID ve Turnstile alan adları birlikte değişir); e-posta
+    gönderimi (şimdilik `EMAIL_SENDER=dev`, giriş yalnızca Apple ile); Stripe canlı mod (canlı ürün, fiyat, webhook ve
+    anahtar); abonelik sürümünün Sparkle akışı; yasal metinlerdeki işletmeci bilgileri ve hukuki inceleme.

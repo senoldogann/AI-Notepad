@@ -24,9 +24,12 @@ export interface ClientCopy {
   readonly subscriptionNone: string;
   /** `{date}` tarihle değişir. */
   readonly subscriptionActive: string;
+  /** İptal edilmiş, dönem sonuna dek süren abonelik. */
+  readonly subscriptionCanceling: string;
   readonly subscriptionGrace: string;
   readonly subscriptionEnded: string;
   readonly pillActive: string;
+  readonly pillCanceling: string;
   readonly pillGrace: string;
   readonly pillEnded: string;
   readonly pillTrial: string;
@@ -50,9 +53,11 @@ const tr: ClientCopy = {
   hours: "{used} / {cap} saat",
   subscriptionNone: "Abonelik yok",
   subscriptionActive: "Sonraki yenileme: {date}",
+  subscriptionCanceling: "İptal edildi; {date} tarihine kadar kullanabilirsin, yenilenmez.",
   subscriptionGrace: "Ödeme alınamadı. Kartını {date} tarihine kadar güncelle; o zamana kadar kullanmaya devam edersin.",
   subscriptionEnded: "Aboneliğin sona erdi.",
   pillActive: "Etkin",
+  pillCanceling: "Sona eriyor",
   pillGrace: "Ödeme bekleniyor",
   pillEnded: "Bitti",
   pillTrial: "Deneme",
@@ -76,9 +81,11 @@ const en: ClientCopy = {
   hours: "{used} / {cap} hours",
   subscriptionNone: "No subscription",
   subscriptionActive: "Renews on {date}",
+  subscriptionCanceling: "Canceled; you can use it until {date}. It won't renew.",
   subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
   subscriptionEnded: "Your subscription has ended.",
   pillActive: "Active",
+  pillCanceling: "Ending",
   pillGrace: "Payment due",
   pillEnded: "Ended",
   pillTrial: "Trial",

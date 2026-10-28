@@ -14,10 +14,13 @@ export interface SessionTokens {
 /** Aboneliğin erişim durumu (server/src/entitlements.ts). */
 export type SubscriptionAccess = "active" | "grace" | "none";
 
-/** `GET /v1/me` yanıtındaki abonelik: ek sürenin bitişi yalnızca `grace` durumunda vardır. */
+/**
+ * `GET /v1/me` yanıtındaki abonelik: ek sürenin bitişi yalnızca `grace` durumunda vardır. `cancelAt` iptal edilmiş
+ * aboneliğin biteceği andır; yenilenecekse null.
+ */
 export type SubscriptionInfo =
-  | { readonly status: string; readonly currentPeriodEnd: string; readonly access: "grace"; readonly graceEndsAt: string }
-  | { readonly status: string; readonly currentPeriodEnd: string; readonly access: "active" | "none"; readonly graceEndsAt: null };
+  | { readonly status: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null; readonly access: "grace"; readonly graceEndsAt: string }
+  | { readonly status: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null; readonly access: "active" | "none"; readonly graceEndsAt: null };
 
 /** `GET /v1/me` yanıtı. */
 export interface Entitlements {
@@ -251,13 +254,14 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   }
   const status: string = stringField(value, "status", response, path);
   const currentPeriodEnd: string = stringField(value, "currentPeriodEnd", response, path);
+  const cancelAt: string | null = value["cancelAt"] === null ? null : stringField(value, "cancelAt", response, path);
   if (access === "grace") {
-    return { status, currentPeriodEnd, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
+    return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
   }
   if (value["graceEndsAt"] !== null) {
     throw new ApiResponseError(path, response.status, '"graceEndsAt" ek süre dışında null değil', response.text);
   }
-  return { status, currentPeriodEnd, access, graceEndsAt: null };
+  return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
 }
 
 /** `GET /v1/me` yanıtını okur. */
