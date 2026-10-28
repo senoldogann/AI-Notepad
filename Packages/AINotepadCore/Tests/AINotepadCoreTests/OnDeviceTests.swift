@@ -20,14 +20,96 @@ import Testing
         #expect(userFacingMessage(error: OnDeviceLLMError.unavailable(reason: .modelNotReady)) == messages[2])
     }
 
-    // Model Türkçe ve İngilizceyi destekler, Fince'yi desteklemez (ölçüm: macOS 26.6); Norveççe modelde "nb".
-    @Test func checksMeetingLanguageSupport() {
-        let codes: Set<String> = ["tr", "en", "de", "nb"]
-        #expect(onDeviceSupports(language: .turkish, languageCodes: codes))
-        #expect(onDeviceSupports(language: .norwegian, languageCodes: codes))
-        #expect(!onDeviceSupports(language: .finnish, languageCodes: codes))
-        #expect(onDeviceLanguageWarning(language: .english, languageCodes: codes) == nil)
-        #expect(onDeviceLanguageWarning(language: .finnish, languageCodes: codes) != nil)
+    // Ölçüm (macOS 26.6, 2026-10-28): model 15 dili destekler; Fince, Estonca, Lehçe… yoktur. Norveççe modelde "nb".
+    private let measuredCodes: Set<String> = ["da", "de", "en", "es", "fr", "it", "ja", "ko", "nb", "nl", "pt", "sv", "tr", "vi", "zh"]
+
+    private func config(output: MeetingLanguage) -> OnDeviceConfig {
+        OnDeviceConfig(contextTokens: 4096, languageCodes: measuredCodes, outputLanguage: output)
+    }
+
+    private func meeting(id: String, language: MeetingLanguage?) -> MeetingRecord {
+        MeetingRecord(
+            id: id, title: id, startedAt: Date(timeIntervalSince1970: 0), endedAt: nil, language: language, status: .done, failureMessage: nil,
+            liveSegments: [stored("live-0", .others, 1, 0, "Hei")], finalSegments: [], translations: [:], speakerNames: [:], note: nil,
+            audioDeleted: false, engine: .local, notice: nil, meNeedsFinalPass: nil
+        )
+    }
+
+    @Test func checksLanguageCodes() {
+        #expect(onDeviceSupports(language: .turkish, languageCodes: measuredCodes))
+        #expect(onDeviceSupports(language: .norwegian, languageCodes: measuredCodes))
+        #expect(!onDeviceSupports(language: .finnish, languageCodes: measuredCodes))
+        #expect(onDeviceSupports(languageCode: "zh-Hans", languageCodes: measuredCodes))
+        #expect(onDeviceSupports(languageCode: "nb", languageCodes: measuredCodes))
+        #expect(!onDeviceSupports(languageCode: "et", languageCodes: measuredCodes))
+    }
+
+    // Hem toplantının dili hem çıktı dili denetlenir; önce toplantının dili. Mesaj dili adıyla söyler.
+    @Test func checksMeetingAndOutputLanguage() {
+        let turkish: OnDeviceConfig = config(output: .turkish)
+        #expect(onDeviceLanguageError(config: turkish, meetingLanguages: [.english, .swedish]) == nil)
+        #expect(onDeviceLanguageError(config: turkish, meetingLanguages: [.english, .finnish]) == .meetingLanguageUnsupported(languageName: "Fince"))
+        #expect(onDeviceLanguageError(config: config(output: .finnish), meetingLanguages: [.english]) == .outputLanguageUnsupported(languageName: "Fince"))
+        #expect(onDeviceLanguageError(config: config(output: .finnish), meetingLanguages: [.estonian]) == .meetingLanguageUnsupported(languageName: "Estonca"))
+        #expect(userFacingMessage(error: OnDeviceLLMError.meetingLanguageUnsupported(languageName: "Fince")).contains("Fince desteklemiyor"))
+        #expect(userFacingMessage(error: OnDeviceLLMError.outputLanguageUnsupported(languageName: "Fince")).contains("Fince yazamıyor"))
+    }
+
+    // Denetim yalnız cihaz içi sağlayıcıda: bulut modelleri her dili yazar.
+    @Test func requiresLanguagesOnlyOnDevice() throws {
+        let onDevice: LLMProvider = .onDevice(config(output: .turkish))
+        #expect(throws: OnDeviceLLMError.meetingLanguageUnsupported(languageName: "Fince")) {
+            try requireOnDeviceLanguages(provider: onDevice, meetingLanguages: [.finnish])
+        }
+        try requireOnDeviceLanguages(provider: onDevice, meetingLanguages: [.english])
+        let cloud: LLMProvider = .anthropic(AnthropicConfig(apiKey: "k", fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .high))
+        try requireOnDeviceLanguages(provider: cloud, meetingLanguages: [.finnish])
+        #expect(throws: OnDeviceLLMError.outputLanguageUnsupported(languageName: ShareLanguage.finnish.nativeName)) {
+            try requireOnDeviceShareLanguage(provider: onDevice, language: .finnish)
+        }
+        try requireOnDeviceShareLanguage(provider: onDevice, language: .chineseSimplified)
+        try requireOnDeviceShareLanguage(provider: cloud, language: .finnish)
+    }
+
+    // Mod seçilirken: ana dil desteklenmiyorsa ne olacağı ve ne yapılacağı söylenir.
+    @Test func warnsWhenModeIsPicked() {
+        let warning: String? = onDeviceModeWarning(config: config(output: .turkish), primaryLanguage: .finnish)
+        #expect(warning?.contains("Fince desteklemiyor") == true)
+        #expect(warning?.contains("kendi anahtarınla") == true)
+        #expect(onDeviceModeWarning(config: config(output: .turkish), primaryLanguage: .english) == nil)
+        #expect(onDeviceModeWarning(config: config(output: .finnish), primaryLanguage: .english)?.contains("Fince yazamıyor") == true)
+        #expect(onDeviceLanguageNames(config: config(output: .turkish)).contains("Türkçe"))
+        #expect(!onDeviceLanguageNames(config: config(output: .turkish)).contains("Fince"))
+    }
+
+    // Arşiv sorusu: Fince toplantılar okunmaz ve model satırında yazılır; okunacak toplantı kalmazsa açık hata.
+    @Test func filtersArchiveForAsk() throws {
+        let onDevice: LLMProvider = .onDevice(config(output: .turkish))
+        let records: [MeetingRecord] = [
+            meeting(id: "fi-1", language: .finnish), meeting(id: "en", language: .english), meeting(id: "fi-2", language: .finnish),
+            meeting(id: "unknown", language: nil),
+        ]
+        let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: onDevice)
+        #expect(readable.records.map(\.id) == ["en", "unknown"])
+        #expect(readable.skippedLanguages == [.finnish])
+        #expect(askModelName(provider: onDevice, readable: readable).contains("Fince"))
+        #expect(throws: OnDeviceLLMError.meetingLanguageUnsupported(languageName: "Fince")) {
+            try onDeviceAskableArchive(records: [meeting(id: "fi", language: .finnish)], provider: onDevice)
+        }
+        let cloud: LLMProvider = .anthropic(AnthropicConfig(apiKey: "k", fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .high))
+        #expect(try onDeviceAskableArchive(records: records, provider: cloud).records.count == 4)
+        #expect(askModelName(provider: cloud, readable: OnDeviceReadableRecords(records: records, skippedLanguages: [])) == "Claude Haiku 5.5")
+    }
+
+    // Not başlamadan reddedilir: Fince toplantıda istek gitmez, toplantı açık mesajla "Hata"da kalır.
+    @Test func refusesNoteBeforeRequest() async throws {
+        let result: MeetingRecord = await regenerateNote(
+            record: meeting(id: "fi", language: .finnish).with(status: .processing, failureMessage: nil), directory: try temporaryDirectory(),
+            llm: .onDevice(config(output: .turkish)), userName: "Ada"
+        )
+        #expect(result.status == .failed)
+        #expect(result.failureMessage?.contains("Fince desteklemiyor") == true, "mesaj: \(result.failureMessage ?? "")")
+        #expect(result.note == nil)
     }
 
     @Test func limitsResponseToRemainingContext() throws {
@@ -85,12 +167,12 @@ import Testing
     @Test func sizesChunksByProvider() {
         let cloud: NoteLimits = noteLimits(provider: .anthropic(AnthropicConfig(apiKey: "k", fastModel: .haiku, smartModel: .haiku, fastEffort: .low, smartEffort: .high)))
         #expect(cloud == NoteLimits(chunkChars: 20_000, summaryChars: nil, archiveChars: 60_000))
-        let local: NoteLimits = noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 4096)))
+        let local: NoteLimits = noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 4096, languageCodes: [], outputLanguage: .turkish)))
         #expect((1_500...4_000).contains(local.chunkChars), "parça: \(local.chunkChars)")
         #expect((1_000...3_000).contains(local.summaryChars ?? 0), "özet: \(local.summaryChars ?? 0)")
         #expect((3_000...8_000).contains(local.archiveChars), "arşiv: \(local.archiveChars)")
         // Daha büyük bağlamda parça büyür.
-        #expect(noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 8192))).chunkChars > local.chunkChars)
+        #expect(noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 8192, languageCodes: [], outputLanguage: .turkish))).chunkChars > local.chunkChars)
     }
 
     @Test func condensesPartSummariesButKeepsTasks() {
@@ -128,9 +210,13 @@ let onDeviceTestsEnabled: Bool = ProcessInfo.processInfo.environment["AINOTEPAD_
 @Suite(.enabled(if: onDeviceTestsEnabled), .serialized)
 struct OnDeviceModelTests {
     // Uçtan uca, internetsiz: İngilizce toplantı cihaz içi konuşma tanımayla yazıya dökülür ve cihaz içi modelle Türkçe
-    // not yazılır; Fince diyalog yazıya dökülür ama model Fince'yi desteklemediği için not açık bir hatayla reddedilir.
+    // not yazılır; Fince diyalog yazıya dökülür ama model Fince'yi desteklemediği için not istek gitmeden açık bir
+    // mesajla reddedilir.
     @Test func writesNoteFromFixturesOnDevice() async throws {
-        let llm: LLMProvider = .onDevice(try onDeviceConfig())
+        let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: .turkish)
+        let llm: LLMProvider = .onDevice(config)
+        // Ölçülen diller: Türkçe ve İngilizce var, Fince yok.
+        #expect(config.languageCodes.isSuperset(of: ["tr", "en"]) && !config.languageCodes.contains("fi"), "diller: \(config.languageCodes.sorted())")
         let engine: AppleSpeechEngine = AppleSpeechEngine()
 
         let english: String = try await engine.transcribe(samples: loadFixture(name: "en-meeting"), language: .english)
@@ -143,12 +229,14 @@ struct OnDeviceModelTests {
 
         let finnish: String = try await engine.transcribe(samples: loadFixture(name: "fi-dialog"), language: .finnish)
         #expect(finnish.lowercased().contains("raport"), "metin: \(finnish)")
-        await #expect(throws: OnDeviceLLMError.unsupportedLanguage(detail: "Unsupported language.")) {
-            _ = try await writeMeetingNote(
-                segments: [stored("final-0", .others, 1, 0, finnish)], speakerNames: [:], userName: "Ada", template: .general, myNotes: "",
-                llm: llm, progressFile: try temporaryDirectory().appending(path: "note-progress.json")
-            )
-        }
+        let finnishRecord: MeetingRecord = MeetingRecord(
+            id: "fi", title: "fi", startedAt: Date(), endedAt: nil, language: .finnish, status: .processing, failureMessage: nil,
+            liveSegments: [], finalSegments: [stored("final-0", .others, 1, 0, finnish)], translations: [:], speakerNames: [:], note: nil,
+            audioDeleted: false, engine: .local, notice: nil, meNeedsFinalPass: nil
+        )
+        let refused: MeetingRecord = await regenerateNote(record: finnishRecord, directory: try temporaryDirectory(), llm: llm, userName: "Ada")
+        #expect(refused.status == .failed && refused.note == nil)
+        #expect(refused.failureMessage?.contains("Fince desteklemiyor") == true, "mesaj: \(refused.failureMessage ?? "")")
 
         // Son geçiş (ve içe aktarma) dosyanın tamamını zamanlı bölümlerle yazıya döker.
         let file: URL = try #require(Bundle.module.url(forResource: "fi-dialog", withExtension: "wav", subdirectory: "Fixtures"))

@@ -54,8 +54,12 @@ func phoneEngine() -> PhoneEngine {
 /// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Anahtarı olan kullanıcıya
 /// dokunulmaz. Seçim yapıldıysa true.
 func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
-    guard !defaults.bool(forKey: PhoneSettingsKey.onboardingCompleted),
-          defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[PhoneSettingsKey.engine] == nil else {
+    // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        phoneSettingsLogger.error("İlk açılışta paket kimliği yok, cihaz içi mod seçilmedi")
+        return false
+    }
+    guard !defaults.bool(forKey: PhoneSettingsKey.onboardingCompleted), defaults.persistentDomain(forName: bundleID)?[PhoneSettingsKey.engine] == nil else {
         return false
     }
     for account in [SecretAccount.deepgram, .elevenlabs, .anthropic] {
@@ -70,7 +74,7 @@ func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
         }
     }
     do {
-        _ = try onDeviceConfig()
+        _ = try onDeviceConfig(outputLanguage: noteOutputLanguage)
     } catch {
         phoneSettingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
         return false
@@ -101,7 +105,7 @@ func phoneUserName() -> String {
 func phoneLLMProvider() async throws -> LLMProvider {
     switch phoneEngine() {
     case .onDevice:
-        return .onDevice(try onDeviceConfig())
+        return .onDevice(try onDeviceConfig(outputLanguage: noteOutputLanguage))
     case .cloud:
         return .anthropic(AnthropicConfig(
             apiKey: try await readSecretInBackground(service: keychainService, account: .anthropic),

@@ -105,6 +105,13 @@ struct PhoneOnboarding: View {
                         ) {
                             engine = PhoneEngine.cloud.rawValue
                         }
+                        if engine == PhoneEngine.onDevice.rawValue, let problem = onDeviceProblem {
+                            Label(problem, systemImage: "exclamationmark.triangle")
+                                .appFont(size: 13, weight: .regular)
+                                .foregroundStyle(Theme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 4)
+                        }
                         if engine == PhoneEngine.cloud.rawValue {
                             Button("Anahtarları burada gir", systemImage: "key") {
                                 onOpenSettings()
@@ -160,6 +167,19 @@ struct PhoneOnboarding: View {
             .ignoresSafeArea()
         }
         .animation(.smooth(duration: 0.4), value: page)
+    }
+
+    /// Cihaz içi model kullanılamıyorsa ya da ana toplantı dilini (ya da not dilini) yazamıyorsa ne yapılacağı; sorun
+    /// yoksa nil.
+    private var onDeviceProblem: String? {
+        do {
+            let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
+            return MeetingLanguage(rawValue: primaryLanguage).flatMap { (language: MeetingLanguage) -> String? in
+                onDeviceModeWarning(config: config, primaryLanguage: language)
+            }
+        } catch {
+            return userFacingMessage(error: error)
+        }
     }
 
     private func move(by offset: Int) {

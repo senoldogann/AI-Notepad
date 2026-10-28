@@ -299,7 +299,7 @@ func resolveLLMProvider() async throws -> LLMProvider {
     case .openAICompatible:
         return .openAICompatible(try storedOpenAIConfig(apiKey: try await optionalSecretInBackground(service: keychainService, account: .openai)))
     case .onDevice:
-        return .onDevice(try onDeviceConfig())
+        return .onDevice(try onDeviceConfig(outputLanguage: noteOutputLanguage))
     }
 }
 
@@ -307,9 +307,13 @@ func resolveLLMProvider() async throws -> LLMProvider {
 /// kullanılabiliyorsa cihaz içi mod seçilir: uygulama kurulur kurulmaz anahtarsız çalışır. Anahtarı olan ya da
 /// kurulumu bitirmiş kullanıcıya dokunulmaz. Seçim yapıldıysa true.
 func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
-    guard !defaults.bool(forKey: SettingsKey.onboardingCompleted),
-          defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[SettingsKey.liveEngine] == nil,
-          defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[SettingsKey.llmProvider] == nil else {
+    // Kayıtlı (varsayılan olmayan) değerler yalnız uygulamanın kendi alanında görünür.
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("İlk açılışta paket kimliği yok, cihaz içi mod seçilmedi")
+        return false
+    }
+    let stored: [String: Any] = defaults.persistentDomain(forName: bundleID) ?? [:]
+    guard !defaults.bool(forKey: SettingsKey.onboardingCompleted), stored[SettingsKey.liveEngine] == nil, stored[SettingsKey.llmProvider] == nil else {
         return false
     }
     for account in [SecretAccount.deepgram, .elevenlabs, .anthropic, .openai] {
@@ -324,7 +328,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
         }
     }
     do {
-        _ = try onDeviceConfig()
+        _ = try onDeviceConfig(outputLanguage: noteOutputLanguage)
     } catch {
         settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
         return false

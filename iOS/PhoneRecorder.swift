@@ -127,8 +127,8 @@ final class PhoneRecorder {
             cloudKeys = (deepgramKey, elevenLabsKey)
         case .onDevice:
             do {
-                _ = try await prepareAppleSpeech(language: speechLanguage) { (fraction: Double) -> Void in
-                    Task { @MainActor [weak self] in
+                _ = try await prepareAppleSpeech(language: speechLanguage) { [weak self] (fraction: Double) -> Void in
+                    Task { @MainActor in
                         self?.speechModelProgress = fraction < 1 ? fraction : nil
                     }
                 }
@@ -632,7 +632,15 @@ final class PhoneRecorder {
             translations[segment.id] = segment.text
             return
         }
-        guard active?.keys.llm != nil else {
+        guard let provider = active?.keys.llm else {
+            return
+        }
+        do {
+            let language: MeetingLanguage? = lockedLanguage ?? fixedMeetingLanguage(mode: languageMode)
+            try requireOnDeviceLanguages(provider: provider, meetingLanguages: language.map { [$0] } ?? [])
+        } catch {
+            // Cihaz içi model bu dili anlamıyor: bozuk çeviri yerine açık mesaj (bir kez).
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
             return
         }
         translationQueue.append(segment.id)

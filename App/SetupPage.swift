@@ -419,6 +419,7 @@ private struct ProfileStep: View {
     let model: AppModel
     @AppStorage(SettingsKey.userName) private var userName: String = ""
     @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -456,6 +457,20 @@ private struct ProfileStep: View {
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
+                if isOnDevice {
+                    // Cihaz içi tanıma dil algılamaz ve model her dili yazamaz: toplantıların dili burada seçilir.
+                    HStack(spacing: 10) {
+                        Text("Ana toplantı dili").appFont(size: 13, weight: .regular)
+                        Spacer(minLength: 8)
+                        SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
+                            (language.rawValue, Text(verbatim: languageName(language: language)))
+                        })
+                    }
+                    .padding(.top, 4)
+                    .onChange(of: primaryLanguage) { (_: String, _: String) in
+                        model.primaryLanguageChanged()
+                    }
+                }
                 if isOnDevice, let problem = onDeviceProblem {
                     Text(verbatim: problem)
                         .appFont(size: 12, weight: .regular)
@@ -496,8 +511,8 @@ private struct ProfileStep: View {
     /// Cihaz içi model kullanılamıyorsa nedeni ve ne yapılacağı; kullanılabiliyorsa nil.
     private var onDeviceProblem: String? {
         do {
-            _ = try onDeviceConfig()
-            return onDeviceLanguageWarning(language: primaryMeetingLanguage(), languageCodes: onDeviceLanguageCodes())
+            let config: OnDeviceConfig = try onDeviceConfig(outputLanguage: noteOutputLanguage)
+            return onDeviceModeWarning(config: config, primaryLanguage: primaryMeetingLanguage())
         } catch {
             return userFacingMessage(error: error)
         }

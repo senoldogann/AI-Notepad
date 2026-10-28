@@ -47,6 +47,7 @@ public func editMeetingNote(record: MeetingRecord, instruction: String, llm: LLM
     guard let note = record.note else {
         throw LLMError.empty
     }
+    try requireOnDeviceLanguages(provider: llm, meetingLanguages: record.language.map { [$0] } ?? [])
     let request: LLMRequest = noteEditRequest(
         note: note, instruction: instruction, segments: meetingSegments(record: record), speakerNames: record.speakerNames, userName: userName
     )

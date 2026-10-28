@@ -216,6 +216,9 @@ private struct GeneralSettings: View {
                     (language.rawValue, Text(verbatim: languageName(language: language)))
                 })
             }
+            .onChange(of: primaryLanguage) { (_: String, _: String) in
+                model.primaryLanguageChanged()
+            }
             SettingsRow(title: Text("Kurulum")) {
                 Text("İzinler, anahtarlar ve kısayollar adım adım.")
             } control: {
@@ -675,45 +678,43 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
-/// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı ve desteklenen diller.
+/// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı, desteklenen diller ve ana toplantı
+/// dili ya da not dili desteklenmiyorsa uyarı.
 private struct OnDeviceLLMStatus: View {
     @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
 
     var body: some View {
-        let problem: String? = onDeviceProblem()
-        let codes: Set<String> = onDeviceLanguageCodes()
-        let supported: [String] = MeetingLanguage.allCases
-            .filter { onDeviceSupports(language: $0, languageCodes: codes) }
-            .map { meetingLanguageName(language: $0) }
-        SettingsRow(title: Text("Apple Intelligence")) {
-            if let problem {
-                Text(verbatim: problem)
-            } else {
+        switch onDeviceStatus() {
+        case .success(let config):
+            SettingsRow(title: Text("Apple Intelligence")) {
                 Text("Not, çeviri ve soru bu cihazda yazılır: ücretsiz, anahtarsız, internetsiz. Model küçüktür (4 bin token bağlam): uzun toplantılar parça parça işlenir, not kendi anahtarınla seçilen modellerden daha kısa olur.")
+            } control: {
+                Label("Hazır", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }
-        } control: {
-            Label(problem == nil ? "Hazır" : "Kullanılamıyor", systemImage: problem == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(problem == nil ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
-        }
-        SettingsRow(title: Text("Desteklenen diller")) {
-            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ onDeviceLanguageWarning(language: $0, languageCodes: codes) }) {
-                Text(verbatim: warning)
-            } else {
-                Text(verbatim: supported.joined(separator: ", "))
+            SettingsRow(title: Text("Desteklenen diller")) {
+                Text(verbatim: onDeviceLanguageNames(config: config).joined(separator: ", "))
+            } control: {
+                EmptyView()
             }
-        } control: {
-            EmptyView()
+            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ onDeviceModeWarning(config: config, primaryLanguage: $0) }) {
+                SettingsRow(title: Text("Ana toplantı dili")) {
+                    Text(verbatim: warning)
+                } control: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+                }
+            }
+        case .failure(let error):
+            SettingsRow(title: Text("Apple Intelligence")) {
+                Text(verbatim: userFacingMessage(error: error))
+            } control: {
+                Label("Kullanılamıyor", systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.muted)
+            }
         }
     }
 
-    /// Model kullanılamıyorsa nedeni ve ne yapılacağı; kullanılabiliyorsa nil.
-    private func onDeviceProblem() -> String? {
-        do {
-            _ = try onDeviceConfig()
-            return nil
-        } catch {
-            return userFacingMessage(error: error)
-        }
+    /// Modelin ayarı (kullanılabiliyorsa) ya da neden kullanılamadığı.
+    private func onDeviceStatus() -> Result<OnDeviceConfig, any Error> {
+        Result { () throws -> OnDeviceConfig in try onDeviceConfig(outputLanguage: noteOutputLanguage) }
     }
 }
 
@@ -898,7 +899,7 @@ private func testConnection() async -> ConnectionTest {
     }
     let reply: String
     do {
-        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: "Hyvää huomenta.", context: []))
+        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: connectionTestSentence(provider: provider), context: []))
     } catch {
         return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
     }
@@ -910,6 +911,14 @@ private func testConnection() async -> ConnectionTest {
         return .failed(String(localized: "Not modeli: \(userFacingMessage(error: error))"))
     }
     return .succeeded(reply)
+}
+
+/// Bağlantı denemesinde çevrilen cümle: Fince; cihaz içi model Fince anlamadığı için orada İngilizce. Saf fonksiyondur.
+private func connectionTestSentence(provider: LLMProvider) -> String {
+    guard case .onDevice = provider else {
+        return "Hyvää huomenta."
+    }
+    return "Good morning."
 }
 
 /// Bulut konuşma tanıma anahtarları.
