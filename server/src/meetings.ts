@@ -180,8 +180,8 @@ export async function startMeeting(
  * hesap başka yoldan oluşmaz). Hak üç koşula bağlıdır:
  * - hesap başına `trialMeetings` toplantı;
  * - doğrulanmış cihaz bildirildiyse cihaz başına `trialMeetings` toplantı (yeni hesap aynı cihazda yeni deneme almaz);
- * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı `trialAccountsPerIpPerDay`
- *   altında olmalı.
+ * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı (silinmiş hesaplar dahil)
+ *   `trialAccountsPerIpPerDay` altında olmalı.
  * Koşullar, günlük başlatma sınırı ve ekleme tek toplu işlemdir (D1 işlemi): eşzamanlı istekler sınırları aşamaz.
  */
 async function startTrialMeeting(
@@ -199,8 +199,21 @@ async function startTrialMeeting(
     sql: `(SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') < ?
       AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)
       AND (EXISTS (SELECT 1 FROM trial_starts WHERE user_id = ?)
-        OR (SELECT COUNT(*) FROM trial_starts WHERE ip_hash = ? AND day = ?) < ?)`,
-    binds: [userId, config.trialMeetings, deviceId, deviceId, config.trialMeetings, userId, clientIpHash, day, config.trialAccountsPerIpPerDay],
+        OR (SELECT COUNT(*) FROM trial_starts WHERE ip_hash = ? AND day = ?)
+          + COALESCE((SELECT accounts FROM deleted_trial_starts WHERE ip_hash = ? AND day = ?), 0) < ?)`,
+    binds: [
+      userId,
+      config.trialMeetings,
+      deviceId,
+      deviceId,
+      config.trialMeetings,
+      userId,
+      clientIpHash,
+      day,
+      clientIpHash,
+      day,
+      config.trialAccountsPerIpPerDay,
+    ],
   };
   const recordTrialStart: D1PreparedStatement = db
     .prepare(

@@ -76,6 +76,33 @@ export async function authenticate(db: D1Database, config: Config, token: string
   return user;
 }
 
+/**
+ * Hesap silme için kimlik: `authenticate` ile aynı denetimler; ancak imzası ve süresi geçerli jetonun kullanıcısı artık
+ * yoksa (hesap zaten silinmiş) null döner. Böylece yanıtı kaybolan silme isteği aynı jetonla yeniden denenebilir.
+ * Kullanıcı varken düşürülmüş ya da bilinmeyen oturum `invalid_token` olur.
+ */
+export async function authenticateUnlessDeleted(db: D1Database, config: Config, token: string, now: Date): Promise<AuthedUser | null> {
+  const user: AuthedUser = await verifyAccessToken(config, token, now);
+  const row: { user_exists: number; revoked_at: number | null; family_exists: number } | null = await db
+    .prepare(
+      `SELECT EXISTS (SELECT 1 FROM users WHERE id = ?1) AS user_exists,
+         EXISTS (SELECT 1 FROM refresh_families WHERE id = ?2 AND user_id = ?1) AS family_exists,
+         (SELECT revoked_at FROM refresh_families WHERE id = ?2 AND user_id = ?1) AS revoked_at`,
+    )
+    .bind(user.userId, user.familyId)
+    .first<{ user_exists: number; revoked_at: number | null; family_exists: number }>();
+  if (row === null) {
+    throw new ApiError("internal_error", "Oturum denetlenemedi.");
+  }
+  if (row.user_exists === 0) {
+    return null;
+  }
+  if (row.family_exists === 0 || row.revoked_at !== null) {
+    throw new ApiError("invalid_token", "Oturum kapatılmış; yeniden giriş yap.");
+  }
+  return user;
+}
+
 /** Yeni oturum ailesi ve ilk yenileme jetonu oluşturur. */
 export async function startSession(db: D1Database, config: Config, userId: string, now: Date): Promise<SessionTokens> {
   const familyId: string = randomId();

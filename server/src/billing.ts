@@ -111,6 +111,38 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
   return session.url;
 }
 
+/**
+ * Kullanıcının Stripe'taki tüm bitmemiş aboneliklerini hemen iptal eder (hesap silme). Stripe müşterisi yoksa Stripe
+ * çağrılmaz. Liste Stripe'tan alınır (yalnızca geçerli satır değil): webhook'u henüz gelmemiş ya da geçerli olmayan
+ * abonelik de iptal edilir. Zaten iptal edilmiş abonelik atlanır; tekrar çağrı güvenlidir. İptal edilen sayısını döndürür.
+ */
+export async function cancelAllSubscriptions(db: D1Database, platform: Platform, config: Config, userId: string): Promise<number> {
+  const row: { stripe_customer_id: string } | null = await db
+    .prepare("SELECT stripe_customer_id FROM stripe_customers WHERE user_id = ?")
+    .bind(userId)
+    .first<{ stripe_customer_id: string }>();
+  if (row === null) {
+    return 0;
+  }
+  const stripe: Stripe = stripeClient(platform, config);
+  const page: Stripe.ApiList<Stripe.Subscription> = await callStripe(platform, "subscriptions.list", userId, () =>
+    stripe.subscriptions.list({ customer: row.stripe_customer_id, status: "all", limit: 100 }),
+  );
+  if (page.has_more) {
+    log("alert", "stripe_subscription_list_truncated", { userId, count: page.data.length });
+    throw new ApiError("internal_error", "Abonelikler listelenemedi; hesap silinmedi.");
+  }
+  const live: Stripe.Subscription[] = page.data.filter(
+    (subscription: Stripe.Subscription): boolean => subscription.status !== "canceled" && subscription.status !== "incomplete_expired",
+  );
+  for (const subscription of live) {
+    await callStripe(platform, "subscriptions.cancel", userId, () =>
+      stripe.subscriptions.cancel(subscription.id, {}, { idempotencyKey: `cancel-${subscription.id}` }),
+    );
+  }
+  return live.length;
+}
+
 /** Abonelik olayının aboneliği; diğer olaylar kaydedilir ama durumu değiştirmez (null). Saf fonksiyondur. */
 export function subscriptionFromEvent(event: Stripe.Event): Stripe.Subscription | null {
   switch (event.type) {

@@ -2,7 +2,16 @@ import { z } from "zod";
 import { appleIdentitySchema, emailStartSchema, emailVerifySchema, refreshSchema } from "./auth/schemas";
 import { verifyAppleIdentityToken } from "./auth/apple";
 import { consumeEmailLogin, emailSender, normalizeEmail, startEmailLogin } from "./auth/email";
-import { type AuthedUser, type SessionTokens, authenticate, logout, rotateRefreshToken, startSession } from "./auth/tokens";
+import { deleteAccount } from "./account";
+import {
+  type AuthedUser,
+  type SessionTokens,
+  authenticate,
+  authenticateUnlessDeleted,
+  logout,
+  rotateRefreshToken,
+  startSession,
+} from "./auth/tokens";
 import { verifyTurnstile } from "./auth/turnstile";
 import { findOrCreateUser } from "./auth/users";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
@@ -80,7 +89,7 @@ function preflight(request: Request, path: string, siteOrigin: string): Response
   const response: Response = new Response(null, {
     status: 204,
     headers: {
-      "access-control-allow-methods": "GET, POST",
+      "access-control-allow-methods": "GET, POST, DELETE",
       "access-control-allow-headers": "authorization, content-type",
       "access-control-max-age": "600",
     },
@@ -206,6 +215,14 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/me" && method === "GET") {
     const user: AuthedUser = await authed();
     return jsonResponse(200, await entitlements(db, config, user.userId, deviceKeyIdHeader(request), now));
+  }
+  if (path === "/v1/me" && method === "DELETE") {
+    const user: AuthedUser | null = await authenticateUnlessDeleted(db, config, bearerToken(request), now);
+    if (user !== null) {
+      await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+      await deleteAccount(db, context.platform, config, user.userId, now);
+    }
+    return new Response(null, { status: 204 });
   }
 
   if (path === "/v1/device/challenge" && method === "POST") {
