@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { decodeUtf8Strict } from "./crypto";
-import { ApiError } from "./errors";
+import { ApiError, ForbiddenIdentityError } from "./errors";
 
 /** JSON yanıt; güvenlik başlıkları `app.ts` içinde her yanıta eklenir. */
 export function jsonResponse(status: number, body: object): Response {
@@ -10,9 +10,10 @@ export function jsonResponse(status: number, body: object): Response {
   });
 }
 
-/** Tek tip hata gövdesi: `{error: {code, message}}`. */
+/** Tek tip hata gövdesi: `{error: {code, message}}`; yönetici reddinde ayrıca çağıranın `identity`'si. */
 export function errorResponse(error: ApiError): Response {
-  return jsonResponse(error.status, { error: { code: error.code, message: error.message } });
+  const identity: { identity: string } | Record<string, never> = error instanceof ForbiddenIdentityError ? { identity: error.identity } : {};
+  return jsonResponse(error.status, { error: { code: error.code, message: error.message, ...identity } });
 }
 
 /**
@@ -88,4 +89,12 @@ export function bearerToken(request: Request): string {
     throw new ApiError("unauthorized", "Bearer erişim jetonu gerekli.");
   }
   return match[1];
+}
+
+/**
+ * İsteğe bağlı kimlik: `Authorization` başlığı yoksa null; varsa `bearerToken` gibi geçerli biçimde olmalı (değilse
+ * `unauthorized`; bozuk başlık sessizce anonim sayılmaz). Saf fonksiyondur.
+ */
+export function optionalBearerToken(request: Request): string | null {
+  return request.headers.has("authorization") ? bearerToken(request) : null;
 }

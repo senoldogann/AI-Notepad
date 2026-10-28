@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { appleIssuer } from "../src/auth/apple";
-import { resendUrl } from "../src/auth/email";
-import { turnstileVerifyUrl } from "../src/auth/turnstile";
+import { googleJwksUrl } from "../src/auth/google";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import {
+  type AppleTokenFields,
   type Harness,
   type Session,
   appleIdentityToken,
@@ -12,13 +12,25 @@ import {
   defaultHarness,
   envWith,
   expectError,
+  googleClientId,
+  googleIdentityToken,
   req,
   signIn,
+  signInWithGoogle,
 } from "./helpers";
 
 const clientId: string = "com.senoldogan.AINotepad.hosted";
 
-async function appleLogin(harness: Harness, overrides: { audience: string; issuer: string; nonceClaimFor: string; nonce: string; expiresInSeconds: number }): Promise<Response> {
+/** Kimlik jetonu girişinin değiştirilebilir alanları. */
+interface LoginOverrides {
+  readonly audience: string;
+  readonly issuer: string;
+  readonly nonceClaimFor: string;
+  readonly nonce: string;
+  readonly expiresInSeconds: number;
+}
+
+async function appleLogin(harness: Harness, overrides: LoginOverrides): Promise<Response> {
   const identityToken: string = await appleIdentityToken({
     subject: `apple-${randomId()}`,
     nonceClaim: await sha256Hex(overrides.nonceClaimFor),
@@ -30,27 +42,18 @@ async function appleLogin(harness: Harness, overrides: { audience: string; issue
   return harness.call(req("POST", "/v1/auth/apple", { json: { identityToken, nonce: overrides.nonce } }));
 }
 
-/** Turnstile ve Resend sahteleri; gönderilen bağlantıları toplar. */
-function stubEmail(harness: Harness, turnstileSuccess: boolean): string[] {
-  const links: string[] = [];
-  harness.stub(turnstileVerifyUrl, async (request: Request): Promise<Response> => {
-    const body = await request.json<{ secret: string; response: string }>();
-    expect(body.secret).toBe(env.TURNSTILE_SECRET_KEY);
-    return Response.json({ success: turnstileSuccess, "error-codes": turnstileSuccess ? [] : ["invalid-input-response"] });
-  });
-  harness.stub(resendUrl, async (request: Request): Promise<Response> => {
-    expect(request.headers.get("authorization")).toBe(`Bearer ${env.RESEND_API_KEY}`);
-    const body = await request.json<{ to: string[]; text: string }>();
-    const match: RegExpMatchArray | null = /#token=([A-Za-z0-9_-]+)/.exec(body.text);
-    if (match?.[1] !== undefined) {
-      links.push(match[1]);
-    }
-    return Response.json({ id: "email_1" });
-  });
-  return links;
+async function googleLogin(harness: Harness, subject: string, overrides: LoginOverrides): Promise<Response> {
+  const fields: AppleTokenFields = {
+    subject,
+    nonceClaim: await sha256Hex(overrides.nonceClaimFor),
+    audience: overrides.audience,
+    issuer: overrides.issuer,
+    expiresInSeconds: overrides.expiresInSeconds,
+    nowMs: harness.clock.nowMs,
+  };
+  const identityToken: string = await googleIdentityToken(fields);
+  return harness.call(req("POST", "/v1/auth/google", { json: { identityToken, nonce: overrides.nonce } }));
 }
-
-const resendEnv = envWith({ EMAIL_SENDER: "resend" });
 
 describe("Apple ile giriş", () => {
   it("geçerli jetonla kullanıcı ve oturum oluşturur; aynı Apple kimliği aynı kullanıcıdır", async () => {
@@ -106,54 +109,121 @@ describe("Apple ile giriş", () => {
   });
 });
 
-describe("e-posta bağlantısıyla giriş", () => {
-  it("Turnstile doğrulanınca bağlantı gönderilir; jeton tek kullanımlıktır", async () => {
+describe("Google ile giriş", () => {
+  it("geçerli jetonla kullanıcı ve oturum oluşturur; aynı Google kimliği aynı kullanıcıdır, e-posta saklanmaz", async () => {
     const harness: Harness = await defaultHarness();
-    const links: string[] = stubEmail(harness, true);
-    const email: string = `Kisi.${randomId()}@Example.com`;
-    const start: Response = await harness.call(req("POST", "/v1/auth/email/start", { json: { email, turnstileToken: "tt" }, env: resendEnv }));
-    expect(start.status).toBe(202);
-    expect(links).toHaveLength(1);
-    const token: string = links[0] ?? "";
-    const stored = await env.DB.prepare("SELECT email FROM email_login_tokens WHERE token_hash = ?").bind(await sha256Hex(token)).first<{ email: string }>();
-    expect(stored?.email).toBe(email.toLowerCase());
-
-    const verify: Response = await harness.call(req("POST", "/v1/auth/email/verify", { json: { token } }));
-    expect(verify.status).toBe(200);
-    const session: Session = await verify.json<Session>();
-    await expectError(await harness.call(req("POST", "/v1/auth/email/verify", { json: { token } })), 401, "invalid_token");
-
-    // Aynı adresle ikinci giriş aynı kullanıcıya düşer.
-    await harness.call(req("POST", "/v1/auth/email/start", { json: { email: email.toUpperCase(), turnstileToken: "tt" }, env: resendEnv }));
-    const second: Response = await harness.call(req("POST", "/v1/auth/email/verify", { json: { token: links[1] ?? "" } }));
-    expect((await second.json<Session>()).userId).toBe(session.userId);
+    const subject: string = `google-${randomId()}`;
+    const first: Session = await signInWithGoogle(harness, subject);
+    const me: Response = await harness.call(req("GET", "/v1/me", { token: first.accessToken }));
+    expect(me.status).toBe(200);
+    // Kısa `iss` biçimi de geçerlidir; aynı `sub` aynı kullanıcıya düşer.
+    const nonce: string = randomToken(24);
+    const second: Response = await googleLogin(harness, subject, {
+      audience: googleClientId,
+      issuer: "accounts.google.com",
+      nonceClaimFor: nonce,
+      nonce,
+      expiresInSeconds: 3600,
+    });
+    expect(second.status).toBe(200);
+    expect((await second.json<Session>()).userId).toBe(first.userId);
+    const identity = await env.DB.prepare("SELECT provider, subject, email FROM auth_identities WHERE user_id = ?")
+      .bind(first.userId)
+      .first<{ provider: string; subject: string; email: string | null }>();
+    expect(identity).toEqual({ provider: "google", subject, email: null });
   });
 
-  it("süresi dolmuş bağlantı reddedilir", async () => {
+  it("Apple ve Google'daki aynı `sub` ayrı kullanıcılardır (otomatik bağlama yok)", async () => {
     const harness: Harness = await defaultHarness();
-    const links: string[] = stubEmail(harness, true);
-    await harness.call(req("POST", "/v1/auth/email/start", { json: { email: `${randomId()}@example.com`, turnstileToken: "tt" }, env: resendEnv }));
-    harness.clock.nowMs += 16 * 60_000;
-    await expectError(await harness.call(req("POST", "/v1/auth/email/verify", { json: { token: links[0] ?? "" } })), 401, "invalid_token");
+    const subject: string = `ortak-${randomId()}`;
+    const google: Session = await signInWithGoogle(harness, subject);
+    const nonce: string = randomToken(24);
+    const appleToken: string = await appleIdentityToken({
+      subject,
+      nonceClaim: await sha256Hex(nonce),
+      audience: clientId,
+      issuer: appleIssuer,
+      expiresInSeconds: 600,
+      nowMs: harness.clock.nowMs,
+    });
+    const apple: Response = await harness.call(req("POST", "/v1/auth/apple", { json: { identityToken: appleToken, nonce } }));
+    expect(apple.status).toBe(200);
+    expect((await apple.json<Session>()).userId).not.toBe(google.userId);
   });
 
-  it("Turnstile başarısızsa e-posta gönderilmez", async () => {
+  it("yanlış aud, yanlış iss, Apple iss'i, süresi dolmuş jeton ve yanlış nonce reddedilir", async () => {
     const harness: Harness = await defaultHarness();
-    const links: string[] = stubEmail(harness, false);
+    const nonce: string = randomToken(24);
+    const base: LoginOverrides = { audience: googleClientId, issuer: "https://accounts.google.com", nonceClaimFor: nonce, nonce, expiresInSeconds: 3600 };
+    const subject: string = `google-${randomId()}`;
+    await expectError(await googleLogin(harness, subject, { ...base, audience: "baska.apps.googleusercontent.com" }), 401, "invalid_token");
+    await expectError(await googleLogin(harness, subject, { ...base, audience: clientId }), 401, "invalid_token");
+    await expectError(await googleLogin(harness, subject, { ...base, issuer: "https://evil.example" }), 401, "invalid_token");
+    await expectError(await googleLogin(harness, subject, { ...base, issuer: appleIssuer }), 401, "invalid_token");
+    await expectError(await googleLogin(harness, subject, { ...base, expiresInSeconds: -60 }), 401, "invalid_token");
+    await expectError(await googleLogin(harness, subject, { ...base, nonce: randomToken(24) }), 401, "invalid_token");
+    // Ham nonce'un kendisi (özeti değil) jetonda: reddedilir.
+    const raw: string = randomToken(24);
+    const fields: AppleTokenFields = { subject, nonceClaim: raw, audience: googleClientId, issuer: base.issuer, expiresInSeconds: 3600, nowMs: harness.clock.nowMs };
+    const rawToken: string = await googleIdentityToken(fields);
+    await expectError(await harness.call(req("POST", "/v1/auth/google", { json: { identityToken: rawToken, nonce: raw } })), 401, "invalid_token");
+  });
+
+  it("Apple anahtarıyla imzalanmış jeton Google ucunda reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    const nonce: string = randomToken(24);
+    const identityToken: string = await appleIdentityToken({
+      subject: `google-${randomId()}`,
+      nonceClaim: await sha256Hex(nonce),
+      audience: googleClientId,
+      issuer: "https://accounts.google.com",
+      expiresInSeconds: 600,
+      nowMs: harness.clock.nowMs,
+    });
+    await expectError(await harness.call(req("POST", "/v1/auth/google", { json: { identityToken, nonce } })), 401, "invalid_token");
+  });
+
+  it("aynı nonce ikinci kez kullanılamaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const nonce: string = randomToken(24);
+    const base: LoginOverrides = { audience: googleClientId, issuer: "https://accounts.google.com", nonceClaimFor: nonce, nonce, expiresInSeconds: 3600 };
+    const subject: string = `google-${randomId()}`;
+    expect((await googleLogin(harness, subject, base)).status).toBe(200);
+    await expectError(await googleLogin(harness, subject, base), 401, "invalid_token");
+  });
+
+  it("Google JWKS geçici hatası yeniden denenir", async () => {
+    const harness: Harness = await defaultHarness();
+    let calls: number = 0;
+    harness.stub(googleJwksUrl, async (): Promise<Response> => {
+      calls += 1;
+      return new Response("geçici", { status: 503 });
+    });
+    const nonce: string = randomToken(24);
+    const response: Response = await googleLogin(harness, `google-${randomId()}`, {
+      audience: googleClientId,
+      issuer: "https://accounts.google.com",
+      nonceClaimFor: nonce,
+      nonce,
+      expiresInSeconds: 3600,
+    });
+    await expectError(response, 502, "upstream_unavailable");
+    expect(calls).toBe(3);
+  });
+
+  it("Google girişi de IP başına hız sınırlıdır; e-posta uçları kaldırıldı", async () => {
+    const harness: Harness = await defaultHarness();
+    const limited = envWith({ AUTH_IP_LIMITER: blockingLimiter });
     await expectError(
-      await harness.call(req("POST", "/v1/auth/email/start", { json: { email: `${randomId()}@example.com`, turnstileToken: "kötü" }, env: resendEnv })),
-      403,
-      "turnstile_failed",
+      await harness.call(req("POST", "/v1/auth/google", { json: { identityToken: "x".repeat(30), nonce: randomToken(24) }, env: limited })),
+      429,
+      "rate_limited",
     );
-    expect(links).toHaveLength(0);
-  });
-
-  it("geliştirme göndericisi dışarı istek atmaz", async () => {
-    const harness: Harness = await defaultHarness();
-    stubEmail(harness, true);
-    const response: Response = await harness.call(req("POST", "/v1/auth/email/start", { json: { email: `${randomId()}@example.com`, turnstileToken: "tt" } }));
-    expect(response.status).toBe(202);
-    expect(harness.outbound.map((request: Request): string => request.url)).toEqual([turnstileVerifyUrl]);
+    await expectError(
+      await harness.call(req("POST", "/v1/auth/email/start", { json: { email: "kisi@ornek.test", turnstileToken: "tt" } })),
+      404,
+      "not_found",
+    );
   });
 });
 

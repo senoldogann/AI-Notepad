@@ -4,6 +4,7 @@ import { expect } from "vitest";
 import { handleRequest } from "../src/app";
 import { appleAppAttestationRootPem } from "../src/attest/appleRoot";
 import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
+import { googleJwksUrl } from "../src/auth/google";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import type { Env } from "../src/env";
 import type { Platform } from "../src/platform";
@@ -91,6 +92,8 @@ export async function createHarness(rootPem: string): Promise<Harness> {
   };
   const apple: AppleKeys = await appleKeys();
   harness.stub(appleJwksUrl, async (): Promise<Response> => Response.json({ keys: [apple.publicJwk] }));
+  const google: AppleKeys = await googleKeys();
+  harness.stub(googleJwksUrl, async (): Promise<Response> => Response.json({ keys: [google.publicJwk] }));
   return harness;
 }
 
@@ -138,6 +141,51 @@ export async function appleIdentityToken(fields: AppleTokenFields): Promise<stri
     .setIssuedAt(issuedAt)
     .setExpirationTime(issuedAt + fields.expiresInSeconds)
     .sign(privateKey);
+}
+
+let googleKeysPromise: Promise<AppleKeys> | null = null;
+
+/** Sahte Google imza anahtarı (Apple'ınkinden ayrı; dosya başına bir kez üretilir). */
+async function googleKeys(): Promise<AppleKeys> {
+  googleKeysPromise ??= (async (): Promise<AppleKeys> => {
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const publicJwk: JWK = { ...(await exportJWK(publicKey)), kid: "test-google-key", alg: "RS256", use: "sig" };
+    return { privateKey, publicJwk };
+  })();
+  return googleKeysPromise;
+}
+
+/** Testlerdeki Google istemci kimliği (`wrangler.jsonc` → `GOOGLE_CLIENT_IDS`). */
+export const googleClientId: string = "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com";
+
+/** Sahte Google anahtarıyla imzalı kimlik jetonu (alanlar Apple'ınkiyle aynı). */
+export async function googleIdentityToken(fields: AppleTokenFields): Promise<string> {
+  const { privateKey } = await googleKeys();
+  const issuedAt: number = Math.floor(fields.nowMs / 1000);
+  return new SignJWT({ nonce: fields.nonceClaim, email: `${fields.subject}@gmail.com`, email_verified: true, azp: fields.audience })
+    .setProtectedHeader({ alg: "RS256", kid: "test-google-key" })
+    .setIssuer(fields.issuer)
+    .setAudience(fields.audience)
+    .setSubject(fields.subject)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + fields.expiresInSeconds)
+    .sign(privateKey);
+}
+
+/** Google ile giriş akışının tamamı; `subject` verilen Google kimliğinin oturumu. */
+export async function signInWithGoogle(harness: Harness, subject: string): Promise<Session> {
+  const nonce: string = randomToken(24);
+  const identityToken: string = await googleIdentityToken({
+    subject,
+    nonceClaim: await sha256Hex(nonce),
+    audience: googleClientId,
+    issuer: "https://accounts.google.com",
+    expiresInSeconds: 3600,
+    nowMs: harness.clock.nowMs,
+  });
+  const response: Response = await harness.call(req("POST", "/v1/auth/google", { json: { identityToken, nonce } }));
+  expect(response.status).toBe(200);
+  return response.json<Session>();
 }
 
 /** Oturum yanıtı. */

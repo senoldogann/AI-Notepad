@@ -7,16 +7,21 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
-/** E-posta gönderimi: Resend ya da yalnızca log yazan geliştirme göndericisi. */
-export type EmailConfig =
-  | { readonly kind: "dev"; readonly from: string; readonly linkUrl: string }
-  | { readonly kind: "resend"; readonly from: string; readonly linkUrl: string; readonly apiKey: string };
-
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
   readonly siteOrigin: string;
   readonly appleClientIds: readonly string[];
+  /** Google kimlik jetonunda kabul edilen `aud` değerleri (OAuth istemci kimlikleri). */
+  readonly googleClientIds: readonly string[];
+  /** Yönetici API'sine erişebilen kimlikler (`<sağlayıcı>:<sub>`); boşsa kimse yönetici değildir. */
+  readonly adminIdentities: readonly string[];
+  /** `GET /v1/download/mac` yönlendirmesinin hedefi (DMG). */
+  readonly dmgUrl: string;
+  /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
+  readonly priceUsdMonthly: number;
+  /** Tüm kullanıcılar için günde en çok kabul edilen rapor (geri bildirim, çökme, iletişim). */
+  readonly reportsPerDay: number;
   readonly attest: {
     readonly policy: AttestPolicy;
     readonly environment: AttestEnvironment;
@@ -57,7 +62,6 @@ export interface Config {
   };
   readonly dailySpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
-  readonly email: EmailConfig;
   readonly stripePriceId: string;
   readonly secrets: {
     readonly accessToken: string;
@@ -92,8 +96,8 @@ export class ConfigPlaceholderError extends ConfigError {
 export interface PlaceholderCandidates {
   readonly SITE_ORIGIN: string;
   readonly APP_ATTEST_APP_IDS: readonly string[];
-  readonly EMAIL_FROM: string;
-  readonly EMAIL_LINK_URL: string;
+  readonly GOOGLE_CLIENT_IDS: readonly string[];
+  readonly DMG_URL: string;
   readonly STRIPE_PRICE_ID: string;
 }
 
@@ -107,40 +111,51 @@ function isPlaceholderUrl(url: string): boolean {
   return isPlaceholderHost(new URL(url).hostname);
 }
 
-/** `Ad <adres@alan>` ya da `adres@alan` biçimindeki göndericinin alan adı yer tutucu mu. Saf fonksiyondur. */
-function isPlaceholderSender(from: string): boolean {
-  const domain: string | undefined = /@([^\s>]+)/.exec(from)?.[1];
-  return domain === undefined || isPlaceholderHost(domain.toLowerCase());
+/** Değer `placeholder` içeriyor mu (büyük/küçük harf fark etmez). Saf fonksiyondur. */
+function containsPlaceholder(value: string): boolean {
+  return value.toLowerCase().includes("placeholder");
 }
 
 /**
- * Yer tutucu değer taşıyan ayarların adları: örnek ya da yerel alan adı (`SITE_ORIGIN`, `EMAIL_LINK_URL`,
- * `EMAIL_FROM`), `TEAMID` ile başlayan App Attest uygulama kimliği, `placeholder` içeren Stripe fiyat kimliği. Saf
+ * Yer tutucu değer taşıyan ayarların adları: örnek ya da yerel alan adı (`SITE_ORIGIN`, `DMG_URL`), `TEAMID` ile
+ * başlayan App Attest uygulama kimliği, `placeholder` içeren Google istemci kimliği ya da Stripe fiyat kimliği. Saf
  * fonksiyondur.
  */
 export function placeholderSettings(settings: PlaceholderCandidates): string[] {
   const checks: ReadonlyArray<readonly [string, boolean]> = [
     ["SITE_ORIGIN", isPlaceholderUrl(settings.SITE_ORIGIN)],
     ["APP_ATTEST_APP_IDS", settings.APP_ATTEST_APP_IDS.some((appId: string): boolean => appId.startsWith("TEAMID"))],
-    ["EMAIL_FROM", isPlaceholderSender(settings.EMAIL_FROM)],
-    ["EMAIL_LINK_URL", isPlaceholderUrl(settings.EMAIL_LINK_URL)],
-    ["STRIPE_PRICE_ID", settings.STRIPE_PRICE_ID.toLowerCase().includes("placeholder")],
+    ["GOOGLE_CLIENT_IDS", settings.GOOGLE_CLIENT_IDS.some(containsPlaceholder)],
+    ["DMG_URL", isPlaceholderUrl(settings.DMG_URL)],
+    ["STRIPE_PRICE_ID", containsPlaceholder(settings.STRIPE_PRICE_ID)],
   ];
   return checks.filter(([, placeholder]: readonly [string, boolean]): boolean => placeholder).map(([name]: readonly [string, boolean]): string => name);
+}
+
+/** Virgülle ayrılmış listeyi parçalara böler (boşluklar kırpılır, boş parçalar atılır). Saf fonksiyondur. */
+function splitCsv(value: string): string[] {
+  return value.split(",").map((part: string): string => part.trim()).filter((part: string): boolean => part.length > 0);
 }
 
 const positiveInt = z.coerce.number().int().positive();
 const positiveNumber = z.coerce.number().positive();
 const secret = z.string().min(16);
-const csv = z
+const csv = z.string().min(1).transform(splitCsv);
+/** Yönetici kimlikleri: boş olabilir (kimse yönetici değil); her öğe `apple:<sub>` ya da `google:<sub>`. */
+const adminIdentityList = z
   .string()
-  .min(1)
-  .transform((value: string): string[] => value.split(",").map((part: string): string => part.trim()).filter((part: string): boolean => part.length > 0));
+  .transform(splitCsv)
+  .refine((identities: string[]): boolean => identities.every((identity: string): boolean => /^(apple|google):\S+$/.test(identity)));
 
 const envSchema = z.object({
   ENVIRONMENT: z.enum(["development", "production"]),
   SITE_ORIGIN: z.url(),
   APPLE_CLIENT_IDS: csv,
+  GOOGLE_CLIENT_IDS: csv,
+  ADMIN_IDENTITIES: adminIdentityList,
+  DMG_URL: z.url({ protocol: /^https$/ }),
+  PRICE_USD_MONTHLY: positiveNumber,
+  REPORTS_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
   APP_ATTEST_APP_IDS: csv,
@@ -168,9 +183,6 @@ const envSchema = z.object({
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
   DAILY_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
-  EMAIL_SENDER: z.enum(["dev", "resend"]),
-  EMAIL_FROM: z.string().min(3),
-  EMAIL_LINK_URL: z.url(),
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
@@ -178,7 +190,6 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: secret,
   STRIPE_WEBHOOK_SECRET: secret,
   TURNSTILE_SECRET_KEY: secret,
-  RESEND_API_KEY: z.string().optional(),
 });
 
 /**
@@ -212,6 +223,11 @@ export function parseConfig(env: Env): Config {
     environment: value.ENVIRONMENT,
     siteOrigin: new URL(value.SITE_ORIGIN).origin,
     appleClientIds: value.APPLE_CLIENT_IDS,
+    googleClientIds: value.GOOGLE_CLIENT_IDS,
+    adminIdentities: value.ADMIN_IDENTITIES,
+    dmgUrl: value.DMG_URL,
+    priceUsdMonthly: value.PRICE_USD_MONTHLY,
+    reportsPerDay: value.REPORTS_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,
       environment: value.APP_ATTEST_ENVIRONMENT,
@@ -245,7 +261,6 @@ export function parseConfig(env: Env): Config {
     },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
-    email: emailConfig(value.EMAIL_SENDER, value.EMAIL_FROM, value.EMAIL_LINK_URL, value.RESEND_API_KEY),
     stripePriceId: value.STRIPE_PRICE_ID,
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
@@ -256,15 +271,4 @@ export function parseConfig(env: Env): Config {
       turnstile: value.TURNSTILE_SECRET_KEY,
     },
   };
-}
-
-/** E-posta göndericisi seçimi; Resend için anahtar zorunludur. */
-function emailConfig(sender: "dev" | "resend", from: string, linkUrl: string, resendApiKey: string | undefined): EmailConfig {
-  if (sender === "dev") {
-    return { kind: "dev", from, linkUrl };
-  }
-  if (resendApiKey === undefined || resendApiKey.length < 16) {
-    throw new ConfigError(["RESEND_API_KEY"]);
-  }
-  return { kind: "resend", from, linkUrl, apiKey: resendApiKey };
 }

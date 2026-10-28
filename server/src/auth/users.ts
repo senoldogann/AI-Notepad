@@ -1,7 +1,7 @@
 import { randomId } from "../crypto";
 
 /** Giriş sağlayıcısı. */
-export type IdentityProvider = "apple" | "email";
+export type IdentityProvider = "apple" | "google";
 
 /** Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır. */
 export async function findOrCreateUser(

@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { appleIdentitySchema, emailStartSchema, emailVerifySchema, refreshSchema } from "./auth/schemas";
+import { identityTokenSchema, refreshSchema } from "./auth/schemas";
 import { verifyAppleIdentityToken } from "./auth/apple";
-import { consumeEmailLogin, emailSender, normalizeEmail, startEmailLogin } from "./auth/email";
+import { verifyGoogleIdentityToken } from "./auth/google";
 import { deleteAccount } from "./account";
+import { adminStats, requireAdmin } from "./admin";
 import {
   type AuthedUser,
   type SessionTokens,
@@ -17,15 +18,27 @@ import { findOrCreateUser } from "./auth/users";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
-import { Base64Error, base64Decode, base64Encode, hmacSha256Hex, sha256Hex } from "./crypto";
+import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
+import { countDownload } from "./downloads";
 import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
-import { bearerToken, errorResponse, jsonResponse, readBodyBytes, readJsonBody } from "./http";
+import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBodyBytes, readJsonBody } from "./http";
 import { llmRequestSchema } from "./llm/request";
 import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
 import { endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import {
+  type ReportInput,
+  createReport,
+  getReport,
+  listReports,
+  parseReportFilter,
+  reportBodyMaxBytes,
+  reportSchema,
+  reportStatusUpdateSchema,
+  setReportStatus,
+} from "./reports";
 import { requireSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { parseTranscribeParams, proxyTranscription } from "./transcribe";
@@ -35,18 +48,24 @@ const smallBodyBytes: number = 16 * 1024;
 /** Stripe webhook gövdesi üst sınırı. */
 const webhookBodyBytes: number = 512 * 1024;
 
-/** Site kaynağından (CORS) çağrılabilen uçlar; geri kalanı yalnızca uygulamadan (bearer, çerezsiz) çağrılır. */
+/**
+ * Site kaynağından (CORS) çağrılabilen uçlar; geri kalanı yalnızca uygulamadan (bearer, çerezsiz) çağrılır. Yönetici
+ * uçları (`/v1/admin/…`) da yalnızca site kaynağına açıktır (`allowedCorsOrigin`).
+ */
 const webRoutes: ReadonlySet<string> = new Set([
   "/v1/health",
   "/v1/auth/apple",
-  "/v1/auth/email/start",
-  "/v1/auth/email/verify",
+  "/v1/auth/google",
   "/v1/auth/refresh",
   "/v1/auth/logout",
   "/v1/me",
   "/v1/billing/checkout",
   "/v1/billing/portal",
+  "/v1/reports",
 ]);
+
+/** Yönetici uçlarının ön eki. */
+const adminPrefix: string = "/v1/admin/";
 
 /** Her yanıta eklenen güvenlik başlıkları. */
 const securityHeaders: Readonly<Record<string, string>> = {
@@ -77,7 +96,7 @@ function finalizeResponse(response: Response, corsOrigin: string | null): Respon
 
 /** İstek web kaynağındansa ve uç web'e açıksa izinli kaynak; değilse null. Saf fonksiyondur. */
 export function allowedCorsOrigin(origin: string | null, path: string, siteOrigin: string): string | null {
-  return origin !== null && origin === siteOrigin && webRoutes.has(path) ? origin : null;
+  return origin !== null && origin === siteOrigin && (webRoutes.has(path) || path.startsWith(adminPrefix)) ? origin : null;
 }
 
 /** CORS ön kontrol yanıtı; izinli değilse 403. Saf fonksiyondur. */
@@ -191,26 +210,18 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path.startsWith("/v1/auth/") && method === "POST") {
     await enforceLimit(env.AUTH_IP_LIMITER, `ip:${context.clientIp}`);
     if (path === "/v1/auth/apple") {
-      const body = await readJsonBody(request, appleIdentitySchema, smallBodyBytes);
+      const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
       const userId: string = await findOrCreateUser(db, "apple", identity.subject, identity.email, now);
       log("info", "login", { provider: "apple", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
-    if (path === "/v1/auth/email/start") {
-      const body = await readJsonBody(request, emailStartSchema, smallBodyBytes);
-      const email: string = normalizeEmail(body.email);
-      await enforceLimit(env.AUTH_IP_LIMITER, `email:${await sha256Hex(email)}`);
-      await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
-      await startEmailLogin(db, emailSender(context.platform, config.email), config.email.linkUrl, email, now);
-      // Adresin kayıtlı olup olmadığı yanıttan anlaşılmaz.
-      return jsonResponse(202, { status: "sent" });
-    }
-    if (path === "/v1/auth/email/verify") {
-      const body = await readJsonBody(request, emailVerifySchema, smallBodyBytes);
-      const email: string = await consumeEmailLogin(db, body.token, now);
-      const userId: string = await findOrCreateUser(db, "email", email, email, now);
-      log("info", "login", { provider: "email", userId });
+    if (path === "/v1/auth/google") {
+      const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
+      const identity = await verifyGoogleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
+      // E-posta saklanmaz; Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
+      const userId: string = await findOrCreateUser(db, "google", identity.subject, null, now);
+      log("info", "login", { provider: "google", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
     if (path === "/v1/auth/refresh") {
@@ -307,6 +318,51 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     return jsonResponse(200, { url: await createPortal(db, context.platform, config, user.userId) });
   }
 
+  if (path === "/v1/reports" && method === "POST") {
+    await enforceLimit(env.REPORT_IP_LIMITER, `ip:${context.clientIp}`);
+    // Jeton isteğe bağlıdır; gönderildiyse geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
+    const token: string | null = optionalBearerToken(request);
+    const user: AuthedUser | null = token === null ? null : await authenticate(db, config, token, now);
+    const body: ReportInput = await readJsonBody(request, reportSchema, reportBodyMaxBytes);
+    if (body.kind === "contact") {
+      await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
+    }
+    await createReport(db, config, body, user === null ? null : user.userId, now);
+    return jsonResponse(202, {});
+  }
+  if (path === "/v1/download/mac" && method === "GET") {
+    await countDownload(db, now);
+    return new Response(null, { status: 302, headers: { location: config.dmgUrl } });
+  }
+
+  if (path.startsWith(adminPrefix)) {
+    return routeAdmin(request, db, config, path, await authed(), now);
+  }
+
+  throw new ApiError("not_found", "Böyle bir uç yok.");
+}
+
+const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
+
+/** Yönetici uçları: kimliği doğrulanmış çağıran `ADMIN_IDENTITIES` listesinde olmalı (değilse 403 + kendi kimliği). */
+async function routeAdmin(request: Request, db: D1Database, config: Config, path: string, user: AuthedUser, now: Date): Promise<Response> {
+  await requireAdmin(db, config, user.userId);
+  const method: string = request.method;
+  if (path === "/v1/admin/stats" && method === "GET") {
+    return jsonResponse(200, await adminStats(db, config, now));
+  }
+  if (path === "/v1/admin/reports" && method === "GET") {
+    return jsonResponse(200, await listReports(db, parseReportFilter(new URL(request.url))));
+  }
+  const reportMatch: RegExpExecArray | null = adminReportPath.exec(path);
+  if (reportMatch !== null && reportMatch[1] !== undefined && method === "GET") {
+    return jsonResponse(200, await getReport(db, reportMatch[1]));
+  }
+  if (reportMatch !== null && reportMatch[1] !== undefined && method === "POST") {
+    const body = await readJsonBody(request, reportStatusUpdateSchema, smallBodyBytes);
+    await setReportStatus(db, reportMatch[1], body.status);
+    return new Response(null, { status: 204 });
+  }
   throw new ApiError("not_found", "Böyle bir uç yok.");
 }
 
