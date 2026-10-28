@@ -261,36 +261,19 @@ struct MeetingsListPage: View {
 }
 
 /// Gönderim durumu satırı (kanal ya da görev aracı). Gönderilirken kâğıt uçak sakince nabız atar; sonuç (gitti ya da
-/// hata) bir süre sonra yumuşakça kaybolur. Durum modelde kalır; gizleme yalnızca bu görünümdedir: gizlenen değer
-/// tutulur, yeni bir durum gelince satır yeniden görünür ve zamanlayıcı baştan başlar.
+/// hata) süresi dolunca model durumu kaldırır (`showSendState`) ve satır yumuşakça kaybolur.
 private struct SendStatusLine: View {
     let state: WebhookSendState?
     let sending: LocalizedStringKey
     let sent: LocalizedStringKey
-    @State private var dismissed: WebhookSendState?
 
     var body: some View {
-        if let state, state != dismissed {
-            line(state: state)
-                .transition(.opacity)
-                .task(id: state) { await fade(shown: state) }
+        Group {
+            if let state {
+                line(state: state).transition(.opacity)
+            }
         }
-    }
-
-    /// Görünen durum sonuçsa süresi dolunca gizler. Satır görünüyorsa önceki gizleme geçersizdir (aynı sonuç yeniden
-    /// gelirse de görünsün diye sıfırlanır).
-    private func fade(shown: WebhookSendState) async {
-        dismissed = nil
-        guard let delay = sendResultFadeDelay(state: shown) else {
-            return
-        }
-        do {
-            try await Task.sleep(for: delay)
-        } catch {
-            // Yalnızca iptal: yeni bir durum geldi, eski sonucun zamanlayıcısı bir şey gizlemez.
-            return
-        }
-        withAnimation(.easeOut(duration: 0.4)) { dismissed = shown }
+        .animation(.easeOut(duration: 0.4), value: state)
     }
 
     @ViewBuilder
@@ -314,15 +297,6 @@ private struct SendStatusLine: View {
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
         }
-    }
-}
-
-/// Gönderim sonucunun kaybolma süresi: gitti 3,5 sn, hata 5 sn; gönderilirken kalır. Saf fonksiyondur.
-private func sendResultFadeDelay(state: WebhookSendState) -> Duration? {
-    switch state {
-    case .sending: nil
-    case .sent, .done: .seconds(3.5)
-    case .failed: .seconds(5)
     }
 }
 

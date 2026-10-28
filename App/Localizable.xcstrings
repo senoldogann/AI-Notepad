@@ -10393,6 +10393,16 @@
         }
       }
     },
+    "İstek iptal edildi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request was cancelled"
+          }
+        }
+      }
+    },
     "İsveççe": {
       "localizations": {
         "en": {

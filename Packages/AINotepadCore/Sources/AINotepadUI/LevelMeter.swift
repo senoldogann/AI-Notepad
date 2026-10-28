@@ -10,7 +10,8 @@ public final class AudioLevels {
     /// Soldan sağa zaman sırasıyla son `count` seviye (0...1).
     public private(set) var values: [Float]
     private let count: Int
-    private let interval: TimeInterval
+    /// Çubukların kayma aralığı; seviyeyi biriktiren `LevelThrottle` da bu aralıkla verir.
+    public let interval: TimeInterval
     @ObservationIgnored private var pending: Float = 0
     @ObservationIgnored private var lastPush: Date = .distantPast
     /// Kayıt sürüyor: durduktan sonra akışlardan geç gelen seviyeler çubuklara yazılmaz.
