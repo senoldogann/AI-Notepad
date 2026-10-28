@@ -282,7 +282,7 @@ export async function handleRequest(request: Request, env: Env, context: Request
     config = parseConfig(env);
   } catch (error: unknown) {
     if (error instanceof ConfigError) {
-      log("error", "config_invalid", { fields: error.fields.join(",") });
+      log("error", "config_invalid", { error: error.name, fields: error.fields.join(",") });
       return finalizeResponse(errorResponse(new ApiError("internal_error", "Sunucu yapılandırması eksik.")), null);
     }
     throw error;

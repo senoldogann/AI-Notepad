@@ -30,6 +30,9 @@ AINOTEPAD_SERVER_LIVE_TESTS=1 LIVE_ANTHROPIC_API_KEY=... LIVE_STRIPE_SECRET_KEY=
 
 Gizli olmayan ayarlar `wrangler.jsonc` içindeki `vars`'tadır (deneme sayısı, aylık sınır, bütçeler, fiyat kimliği,
 App Attest politikası…). Eksik ya da geçersiz bir değer her istekte `500 internal_error` ve `config_invalid` logu verir.
+Üretimde yer tutucu kalmışsa da öyledir (`TEAMID…` uygulama kimliği, `placeholder` içeren fiyat kimliği, `example.com` ya
+da `localhost` adresleri): log `ConfigPlaceholderError` ve ayar adlarını taşır, değerleri değil. Yerelde ve testlerde
+yer tutucular geçerlidir.
 
 ## Göçler
 

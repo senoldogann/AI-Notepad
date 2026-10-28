@@ -76,6 +76,55 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * Üretim yapılandırmasında yer tutucu (örnek ya da yerel) değer var: dağıtım tamamlanmamıştır. Yalnızca ayar adlarını
+ * taşır, değerleri değil.
+ */
+export class ConfigPlaceholderError extends ConfigError {
+  override readonly name: string = "ConfigPlaceholderError";
+}
+
+/** Yer tutucu denetiminin baktığı gizli olmayan ayarlar. */
+export interface PlaceholderCandidates {
+  readonly SITE_ORIGIN: string;
+  readonly APP_ATTEST_APP_IDS: readonly string[];
+  readonly EMAIL_FROM: string;
+  readonly EMAIL_LINK_URL: string;
+  readonly STRIPE_PRICE_ID: string;
+}
+
+/** Örnek (RFC 2606) ya da yerel alan adı mı. Saf fonksiyondur. */
+function isPlaceholderHost(host: string): boolean {
+  return host === "localhost" || /(^|\.)example\.(com|org|net)$/i.test(host);
+}
+
+/** URL'nin alan adı yer tutucu mu. Saf fonksiyondur. */
+function isPlaceholderUrl(url: string): boolean {
+  return isPlaceholderHost(new URL(url).hostname);
+}
+
+/** `Ad <adres@alan>` ya da `adres@alan` biçimindeki göndericinin alan adı yer tutucu mu. Saf fonksiyondur. */
+function isPlaceholderSender(from: string): boolean {
+  const domain: string | undefined = /@([^\s>]+)/.exec(from)?.[1];
+  return domain === undefined || isPlaceholderHost(domain.toLowerCase());
+}
+
+/**
+ * Yer tutucu değer taşıyan ayarların adları: örnek ya da yerel alan adı (`SITE_ORIGIN`, `EMAIL_LINK_URL`,
+ * `EMAIL_FROM`), `TEAMID` ile başlayan App Attest uygulama kimliği, `placeholder` içeren Stripe fiyat kimliği. Saf
+ * fonksiyondur.
+ */
+export function placeholderSettings(settings: PlaceholderCandidates): string[] {
+  const checks: ReadonlyArray<readonly [string, boolean]> = [
+    ["SITE_ORIGIN", isPlaceholderUrl(settings.SITE_ORIGIN)],
+    ["APP_ATTEST_APP_IDS", settings.APP_ATTEST_APP_IDS.some((appId: string): boolean => appId.startsWith("TEAMID"))],
+    ["EMAIL_FROM", isPlaceholderSender(settings.EMAIL_FROM)],
+    ["EMAIL_LINK_URL", isPlaceholderUrl(settings.EMAIL_LINK_URL)],
+    ["STRIPE_PRICE_ID", settings.STRIPE_PRICE_ID.toLowerCase().includes("placeholder")],
+  ];
+  return checks.filter(([, placeholder]: readonly [string, boolean]): boolean => placeholder).map(([name]: readonly [string, boolean]): string => name);
+}
+
 const positiveInt = z.coerce.number().int().positive();
 const positiveNumber = z.coerce.number().positive();
 const secret = z.string().min(16);
@@ -126,7 +175,11 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
 });
 
-/** Ortamı doğrular ve tipli yapılandırmaya çevirir; hatada yalnızca alan adlarını taşıyan `ConfigError` fırlatır. */
+/**
+ * Ortamı doğrular ve tipli yapılandırmaya çevirir; hatada yalnızca alan adlarını taşıyan `ConfigError` fırlatır.
+ * Üretimde yer tutucu değer kalmışsa (`placeholderSettings`) `ConfigPlaceholderError`: sunucu ödeme anında değil, ilk
+ * istekte (`/v1/health` dahil) durur. Geliştirme ve testlerde yer tutucular geçerlidir.
+ */
 export function parseConfig(env: Env): Config {
   const parsed = envSchema.safeParse(env);
   if (!parsed.success) {
@@ -139,6 +192,12 @@ export function parseConfig(env: Env): Config {
   }
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
+  }
+  if (value.ENVIRONMENT === "production") {
+    const placeholders: string[] = placeholderSettings(value);
+    if (placeholders.length > 0) {
+      throw new ConfigPlaceholderError(placeholders);
+    }
   }
   return {
     environment: value.ENVIRONMENT,
