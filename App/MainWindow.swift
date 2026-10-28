@@ -998,15 +998,8 @@ private struct MeetingCover: View {
         let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
         VStack(alignment: .leading, spacing: 0) {
             CoverImage(seed: record.id)
-                .overlay {
-                    // Toplantının baş harfleri: kapakları bir bakışta ayırt ettirir (ElevenLabs kartlarındaki simge gibi).
-                    Text(verbatim: meetingMonogram(title: record.note?.title ?? record.title))
-                        .appFont(size: 17, weight: .semibold)
-                        .foregroundStyle(Color.black.opacity(0.75))
-                        .frame(width: 52, height: 52)
-                        .background(Color.white.opacity(0.55), in: Circle())
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.7)))
-                }
+                // Ortada toplantıya özgü ses dalgası, kapağın kendi renginin koyu tonunda.
+                .overlay { CoverWaveform(seed: record.id) }
                 .frame(height: 132)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .tilt3D(maxAngle: 4)
@@ -1343,11 +1336,4 @@ func homeGreeting(name: String, hour: Int) -> String {
     }
     let first: String = name.split(separator: " ").first.map(String.init) ?? ""
     return first.isEmpty ? base : "\(base), \(first)"
-}
-
-/// Toplantı başlığının baş harfleri: ilk iki kelimenin ilk harfi, büyük harfle (ör. "SpaceX Finansal…" → "SF"); tek
-/// kelimede tek harf. Saf fonksiyondur.
-func meetingMonogram(title: String) -> String {
-    let words: [Substring] = title.split { !$0.isLetter && !$0.isNumber }
-    return words.prefix(2).compactMap(\.first).map { String($0).uppercased(with: interfaceLocale()) }.joined()
 }
