@@ -23,7 +23,9 @@
 #
 # release-archive/ (repoya girmez) appcast.xml'in yerel kopyasını tutar; silinmez, her sürüm üstüne eklenir. Önceki
 # sürümlerin DMG'leri release-archive/old_updates/'e taşınır (generate_appcast yalnızca kökteki arşivleri işler; eski
-# öğelerin indirme adresleri olduğu gibi kalır).
+# öğelerin indirme adresleri olduğu gibi kalır). Başka bir Mac'ten yayınlarken önce yayımlanmış appcast indirilir:
+#   mkdir -p release-archive && curl -sSfL -o release-archive/appcast.xml \
+#       https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -80,6 +82,21 @@ mkdir -p "$out/export"
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Release \
     -derivedDataPath .build/xcode-dist -destination 'generic/platform=macOS' ARCHS=arm64 \
     -archivePath "$out/AINotepad.xcarchive" -allowProvisioningUpdates archive -quiet
+# Sparkle: araçlar Sparkle paketinin (SPM) ikili dağıtımında (arşivleme paketi indirdi); SPARKLE_BIN ile başka bir
+# klasör verilebilir. Noter onayından önce denetlenir: anahtar sorunu uzun beklemeden sonra çıkmasın.
+sparkle_bin="${SPARKLE_BIN:-.build/xcode-dist/SourcePackages/artifacts/sparkle/Sparkle/bin}"
+for tool in sign_update generate_appcast generate_keys; do
+    [[ -x "$sparkle_bin/$tool" ]] || { echo "Sparkle aracı bulunamadı: $sparkle_bin/$tool (SPARKLE_BIN ile klasörü ver)." >&2; exit 1; }
+done
+# Anahtar Zinciri'ndeki gizli anahtar uygulamadaki açık anahtarla eşleşmeli; yoksa güncellemenin imzası reddedilir.
+keychain_public_key="$("$sparkle_bin/generate_keys" --account ed25519 -p)" || {
+    echo "Anahtar Zinciri'nde Sparkle anahtarı (hesap: ed25519) yok. Bir kez generate_keys çalıştır (bkz. betiğin başı)." >&2
+    exit 1
+}
+[[ "$keychain_public_key" == "$sparkle_public_key" ]] || {
+    echo "Anahtar Zinciri'ndeki Sparkle anahtarı Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY ile eşleşmiyor." >&2
+    exit 1
+}
 cat > "$out/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -108,6 +125,18 @@ entitlements="$(codesign -d --entitlements - "$app" 2>/dev/null)"
 [[ -f "$app/Contents/embedded.provisionprofile" ]] || { echo "Developer ID profili gömülü değil (iCloud çalışmaz)." >&2; exit 1; }
 # Sparkle gömülü ve açık anahtar uygulamada (yoksa yayınlanan sürüm güncelleme alamaz).
 [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || { echo "Sparkle.framework uygulamaya gömülmemiş." >&2; exit 1; }
+# Sparkle'ın yardımcıları pakette ad-hoc imzalı gelir; Developer ID dışa aktarımı onları yeniden imzalamalı (noter onayı
+# her iç kodda Developer ID, hardened runtime ve zaman damgası ister).
+sparkle_versioned="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
+for helper in "$sparkle_versioned/XPCServices/Installer.xpc" "$sparkle_versioned/XPCServices/Downloader.xpc" \
+    "$sparkle_versioned/Autoupdate" "$sparkle_versioned/Updater.app"; do
+    [[ -e "$helper" ]] || { echo "Sparkle yardımcısı eksik: $helper" >&2; exit 1; }
+    helper_signature="$(codesign -dv --verbose=2 "$helper" 2>&1)"
+    [[ "$helper_signature" == *"Authority=Developer ID Application"* && "$helper_signature" == *"(runtime)"* ]] || {
+        echo "Sparkle yardımcısı Developer ID ve hardened runtime ile imzalı değil: $helper" >&2
+        exit 1
+    }
+done
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist")" == "$sparkle_public_key" ]] || {
     echo "Uygulamanın Info.plist'indeki SUPublicEDKey, Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY ile aynı değil." >&2
     exit 1
@@ -129,20 +158,6 @@ spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg
 shasum -a 256 "$dmg"
 echo "Hazır: $dmg"
 
-# Sparkle: araçlar Sparkle paketinin (SPM) ikili dağıtımında; SPARKLE_BIN ile başka bir klasör verilebilir.
-sparkle_bin="${SPARKLE_BIN:-.build/xcode-dist/SourcePackages/artifacts/sparkle/Sparkle/bin}"
-for tool in sign_update generate_appcast generate_keys; do
-    [[ -x "$sparkle_bin/$tool" ]] || { echo "Sparkle aracı bulunamadı: $sparkle_bin/$tool (SPARKLE_BIN ile klasörü ver)." >&2; exit 1; }
-done
-# Anahtar Zinciri'ndeki gizli anahtar uygulamadaki açık anahtarla eşleşmeli; yoksa güncellemenin imzası reddedilir.
-keychain_public_key="$("$sparkle_bin/generate_keys" --account ed25519 -p)" || {
-    echo "Anahtar Zinciri'nde Sparkle anahtarı (hesap: ed25519) yok. Bir kez generate_keys çalıştır (bkz. betiğin başı)." >&2
-    exit 1
-}
-[[ "$keychain_public_key" == "$sparkle_public_key" ]] || {
-    echo "Anahtar Zinciri'ndeki Sparkle anahtarı Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY ile eşleşmiyor." >&2
-    exit 1
-}
 # Staple'dan sonra imzalanır: staple DMG'yi değiştirir, imza son dosyanın baytlarına aittir.
 sparkle_signature="$("$sparkle_bin/sign_update" --account ed25519 "$dmg")" || {
     echo "DMG Sparkle anahtarıyla imzalanamadı: $dmg" >&2

@@ -835,14 +835,15 @@ struct MeetingDetailPage: View {
             .disabled(!hasTranscript)
         Button("Altyazı olarak kaydet (SRT)", systemImage: "captions.bubble") { exportSRT() }
             .disabled(!hasTranscript)
-        Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
     }
 
-    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…) ya da paylaşılabilir web sayfası olarak kaydeder.
+    /// Notu ayarlardaki webhook'a gönderir (Slack, Teams, Discord, Zapier…), paylaşılabilir web sayfası olarak kaydeder
+    /// ya da PDF'ini iCloud bağlantısıyla paylaşır. Geniş ve dar düzenin ikisinde de menüdedir.
     @ViewBuilder
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
+        Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
         // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
         Menu("Kanala gönder", systemImage: "paperplane") {
             if model.destinations.isEmpty {
@@ -1121,7 +1122,7 @@ struct MeetingDetailPage: View {
         Task {
             do {
                 let url: URL = try await Task.detached(priority: .userInitiated) { () throws -> URL in
-                    let destination: URL = exportFileURL(directory: try AppPaths.cloudSharedDirectory(), title: title, startedAt: startedAt, fileExtension: "pdf")
+                    let destination: URL = try exportFileURL(directory: try AppPaths.cloudSharedDirectory(), title: title, startedAt: startedAt, fileExtension: "pdf")
                     let temporary: URL = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).pdf", directoryHint: .notDirectory)
                     do {
                         try pdf.write(to: temporary, options: .atomic)
