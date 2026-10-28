@@ -150,10 +150,12 @@ private struct RecordHeroCard: View {
             .disabled(recorder.phase == .starting)
             .accessibilityLabel("Kaydı başlat")
             VStack(spacing: 4) {
-                Text(recorder.phase == .starting ? "Başlatılıyor…" : "Dokun, dinlemeye başlasın")
+                Text(startTitle)
                     .appFont(size: 17, weight: .semibold)
                     .foregroundStyle(Theme.ink)
-                Text("Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
+                Text(phoneEngine() == .onDevice
+                    ? "Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz."
+                    : "Odadaki herkes konuşmacılara ayrılır, Türkçesi canlı akar; bitince notu yazar.")
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
@@ -163,6 +165,16 @@ private struct RecordHeroCard: View {
         .frame(maxWidth: .infinity)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.line))
+    }
+
+    /// Düğmenin altındaki başlık: başlarken (cihaz içi konuşma modeli iniyorsa ilerlemesiyle) ya da davet.
+    private var startTitle: String {
+        guard recorder.phase == .starting else {
+            return String(localized: "Dokun, dinlemeye başlasın")
+        }
+        return recorder.speechModelProgress.map { (fraction: Double) -> String in
+            String(localized: "Konuşma modeli indiriliyor… \(fraction.formatted(.percent.precision(.fractionLength(0))))")
+        } ?? String(localized: "Başlatılıyor…")
     }
 }
 

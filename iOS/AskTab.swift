@@ -88,12 +88,12 @@ final class PhoneAsk {
                 }
                 if scoped.isEmpty {
                     _ = try await askArchive(
-                        question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: records, userName: phoneUserName(), llm: provider, maxChars: noteLimits(provider: provider).archiveChars,
                         now: Date(), onProgress: onProgress
                     )
                 } else {
                     _ = try await askAboutMeetings(
-                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), llm: provider, maxChars: 60_000,
+                        question: trimmed, history: history, records: scoped, userName: phoneUserName(), llm: provider, maxChars: noteLimits(provider: provider).archiveChars,
                         now: Date(), onProgress: onProgress
                     )
                 }

@@ -251,7 +251,8 @@ struct ProcessingOverlayHost: ViewModifier {
               !model.dismissedProgressIDs.contains(id) else {
             return nil
         }
-        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local
+        // Cihaz içi modda son geçiş konuşmacı ayırmaz (bkz. `finalPassPlan`).
+        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local && model.liveEngine == .whisperKit
         return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
     }
 }

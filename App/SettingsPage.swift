@@ -191,9 +191,11 @@ private struct GeneralSettings: View {
                 storeInterfaceLanguage(language: language)
             }
             SettingsRow(title: Text("Canlı metin")) {
-                Text(model.liveEngine == .deepgram
-                    ? "Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır."
-                    : "Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                switch model.liveEngine {
+                case .deepgram: Text("Konuşmacılar ElevenLabs ile dakikada bir ayrılır; kayıt bitince ElevenLabs son geçişi yapılır.")
+                case .whisperKit: Text("Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
+                case .appleSpeech: Text("Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.")
+                }
             } control: {
                 SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
@@ -201,6 +203,7 @@ private struct GeneralSettings: View {
                         Task { await model.selectEngine(engine: engine) }
                     }
                 ), options: [
+                    (LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
                     (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
                 ])
@@ -672,7 +675,49 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
-/// LLM sağlayıcısı: Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
+/// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı ve desteklenen diller.
+private struct OnDeviceLLMStatus: View {
+    @AppStorage(SettingsKey.primaryMeetingLanguage) private var primaryLanguage: String = MeetingLanguage.finnish.rawValue
+
+    var body: some View {
+        let problem: String? = onDeviceProblem()
+        let codes: Set<String> = onDeviceLanguageCodes()
+        let supported: [String] = MeetingLanguage.allCases
+            .filter { onDeviceSupports(language: $0, languageCodes: codes) }
+            .map { meetingLanguageName(language: $0) }
+        SettingsRow(title: Text("Apple Intelligence")) {
+            if let problem {
+                Text(verbatim: problem)
+            } else {
+                Text("Not, çeviri ve soru bu cihazda yazılır: ücretsiz, anahtarsız, internetsiz. Model küçüktür (4 bin token bağlam): uzun toplantılar parça parça işlenir, not kendi anahtarınla seçilen modellerden daha kısa olur.")
+            }
+        } control: {
+            Label(problem == nil ? "Hazır" : "Kullanılamıyor", systemImage: problem == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(problem == nil ? AnyShapeStyle(.tint) : AnyShapeStyle(Theme.muted))
+        }
+        SettingsRow(title: Text("Desteklenen diller")) {
+            if let warning = MeetingLanguage(rawValue: primaryLanguage).flatMap({ onDeviceLanguageWarning(language: $0, languageCodes: codes) }) {
+                Text(verbatim: warning)
+            } else {
+                Text(verbatim: supported.joined(separator: ", "))
+            }
+        } control: {
+            EmptyView()
+        }
+    }
+
+    /// Model kullanılamıyorsa nedeni ve ne yapılacağı; kullanılabiliyorsa nil.
+    private func onDeviceProblem() -> String? {
+        do {
+            _ = try onDeviceConfig()
+            return nil
+        } catch {
+            return userFacingMessage(error: error)
+        }
+    }
+}
+
+/// LLM sağlayıcısı: cihaz içi, Anthropic ya da OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…).
 private struct LLMSettings: View {
     let model: AppModel
     @AppStorage(SettingsKey.llmProvider) private var provider: String = LLMProviderKind.anthropic.rawValue
@@ -696,11 +741,14 @@ private struct LLMSettings: View {
                 EmptyView()
             } control: {
                 SettingsMenu(selection: $provider, options: [
+                    (LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)")),
                     (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
                     (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
                 ])
             }
-            if provider == LLMProviderKind.anthropic.rawValue {
+            if provider == LLMProviderKind.onDevice.rawValue {
+                OnDeviceLLMStatus()
+            } else if provider == LLMProviderKind.anthropic.rawValue {
                 SecretField(title: "Anthropic anahtarı", account: .anthropic, onChange: model.settingsChanged)
                 SettingsGroupHeader(title: "Canlı çeviri")
                 SettingsRow(title: Text("Model")) {

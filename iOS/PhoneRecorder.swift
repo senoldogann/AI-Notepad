@@ -29,10 +29,13 @@ private struct ActiveRecording {
     let startedAt: Date
     let handle: LiveSessionHandle
     let keys: ProcessingKeys
+    /// Bulut ya da cihaz içi (Apple konuşma tanıma) kayıt; son geçiş buna göre yapılır.
+    let engine: RecordingEngine
 }
 
-/// iPhone kaydı: yüz yüze toplantı (odadaki herkes telefon mikrofonundan gelir ve konuşmacılara ayrılır). Canlı metin
-/// Deepgram, konuşmacılar ve son geçiş ElevenLabs, çeviri ve not Claude ile; işleme Mac'teki `processMeeting`'dir.
+/// iPhone kaydı: yüz yüze toplantı (odadaki herkes telefon mikrofonundan gelir ve konuşmacılara ayrılır). Bulutta canlı
+/// metin Deepgram, konuşmacılar ve son geçiş ElevenLabs, çeviri ve not Claude ile; cihaz içi modda metin ve son geçiş
+/// Apple'ın konuşma tanımasıyla (konuşmacısız), çeviri ve not Apple Intelligence ile. İşleme Mac'teki `processMeeting`'dir.
 @MainActor
 @Observable
 final class PhoneRecorder {
@@ -63,6 +66,10 @@ final class PhoneRecorder {
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     /// Mikrofon telefon çağrısı ya da alarmla kesildi: kayıt ekranı uyarır, kesinti bitince kayıt sürer.
     private(set) var micInterrupted: Bool = false
+    /// Cihaz içi konuşma modelinin indirme ilerlemesi (0…1) kayıt başlarken; indirme yoksa nil.
+    private(set) var speechModelProgress: Double?
+    /// Cihaz içi konuşma tanıma motoru (model kayıtlar arasında bellekte kalır).
+    @ObservationIgnored private let speechEngine: AppleSpeechEngine = AppleSpeechEngine()
     @ObservationIgnored private var active: ActiveRecording?
     @ObservationIgnored private var translationQueue: [SegmentID] = []
     @ObservationIgnored private var translationsInFlight: Int = 0
@@ -84,7 +91,8 @@ final class PhoneRecorder {
         self.store = store
     }
 
-    /// Kaydı başlatır. Deepgram ve ElevenLabs anahtarı yoksa hiçbir şey başlamaz; eksiklerin hepsi bildirilir.
+    /// Kaydı başlatır. Bulutta Deepgram ve ElevenLabs anahtarı yoksa hiçbir şey başlamaz (eksiklerin hepsi bildirilir);
+    /// cihaz içi modda dilin konuşma modeli gerekirse önce indirilir.
     func start() async {
         guard phase == .idle else {
             return
@@ -98,16 +106,38 @@ final class PhoneRecorder {
         errorMessages = []
         highlights = []
         myNotes = ""
-        let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
-        let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
-        guard case .success(let deepgramKey) = deepgram, case .success(let elevenLabsKey) = elevenLabs else {
-            for case .failure(let error) in [deepgram, elevenLabs] {
-                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        // Cihaz içi tanıma dil algılamaz: otomatikte ana toplantı diliyle başlar; dil kayıt sırasında değiştirilebilir.
+        let speechLanguage: MeetingLanguage = appleSpeechLanguage(mode: languageMode, primary: phonePrimaryMeetingLanguage())
+        let cloudKeys: (deepgram: String, elevenLabs: String)?
+        switch phoneEngine() {
+        case .cloud:
+            let deepgram: Result<String, any Error> = await secretResult(account: .deepgram)
+            let elevenLabs: Result<String, any Error> = await secretResult(account: .elevenlabs)
+            guard case .success(let deepgramKey) = deepgram, case .success(let elevenLabsKey) = elevenLabs else {
+                for case .failure(let error) in [deepgram, elevenLabs] {
+                    errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                }
+                phase = .idle
+                return
             }
-            phase = .idle
-            return
+            cloudKeys = (deepgramKey, elevenLabsKey)
+        case .onDevice:
+            do {
+                _ = try await prepareAppleSpeech(language: speechLanguage) { (fraction: Double) -> Void in
+                    Task { @MainActor [weak self] in
+                        self?.speechModelProgress = fraction < 1 ? fraction : nil
+                    }
+                }
+                speechModelProgress = nil
+            } catch {
+                speechModelProgress = nil
+                errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+                phase = .idle
+                return
+            }
+            cloudKeys = nil
         }
-        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: elevenLabsKey, llm: await llmProviderReportingFailure())
+        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: cloudKeys?.elevenLabs, llm: await llmProviderReportingFailure())
         let started: Date = Date()
         let directory: URL
         let audio: AsyncStream<[Float]>
@@ -129,17 +159,34 @@ final class PhoneRecorder {
             let now: Date = Date()
             Task { @MainActor in levels.record(level: level, at: now) }
         }
-        let handle: LiveSessionHandle = runCloudLiveSession(
-            config: CloudSessionConfig(
-                languageMode: languageMode, recordingDirectory: directory, deepgramKey: deepgramKey, elevenLabsKey: elevenLabsKey,
-                firstDiarizationAfterSec: 15, diarizationIntervalSec: 60, diarizationWindowSec: 120, minDiarizationAudioSec: 5,
-                languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil, automaticStartLanguage: phonePrimaryMeetingLanguage()
-            ),
-            // Yüz yüze: "Sen" akışı yoktur, odadaki herkes "Diğerleri" akışında konuşmacılara ayrılır.
-            meAudio: finishedAudioStream(),
-            othersAudio: metered
+        let handle: LiveSessionHandle
+        if let cloudKeys {
+            handle = runCloudLiveSession(
+                config: CloudSessionConfig(
+                    languageMode: languageMode, recordingDirectory: directory, deepgramKey: cloudKeys.deepgram, elevenLabsKey: cloudKeys.elevenLabs,
+                    firstDiarizationAfterSec: 15, diarizationIntervalSec: 60, diarizationWindowSec: 120, minDiarizationAudioSec: 5,
+                    languageConfidence: 0.8, keyterms: [], voiceEmbedder: nil, automaticStartLanguage: phonePrimaryMeetingLanguage()
+                ),
+                // Yüz yüze: "Sen" akışı yoktur, odadaki herkes "Diğerleri" akışında konuşmacılara ayrılır.
+                meAudio: finishedAudioStream(),
+                othersAudio: metered
+            )
+        } else {
+            handle = runLiveSession(
+                config: LiveSessionConfig(
+                    languageMode: .fixed(speechLanguage), segmenter: .live, recordingDirectory: directory, partialIntervalSec: 1.5,
+                    minPartialSpeechSec: 1.0, languageLockAfterSec: 30, candidateLanguages: [speechLanguage]
+                ),
+                engine: speechEngine,
+                meAudio: finishedAudioStream(),
+                othersAudio: metered
+            )
+            // Ekranda dil görünsün (sabit dilde oturum kilit olayı yayınlamaz).
+            await handle.setLanguage(speechLanguage)
+        }
+        let recording: ActiveRecording = ActiveRecording(
+            directory: directory, startedAt: started, handle: handle, keys: keys, engine: cloudKeys == nil ? .local : .cloud
         )
-        let recording: ActiveRecording = ActiveRecording(directory: directory, startedAt: started, handle: handle, keys: keys)
         active = recording
         startedAt = started
         phase = .recording
@@ -220,7 +267,9 @@ final class PhoneRecorder {
         guard !stale.isEmpty, phase == .idle else {
             return
         }
-        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: await optionalElevenLabsKey(), llm: await llmProviderReportingFailure())
+        // Cihaz içi modda ElevenLabs anahtarı aranmaz (yoksa her açılışta "anahtar yok" görünürdü).
+        let elevenLabs: String? = phoneEngine() == .cloud ? await optionalElevenLabsKey() : nil
+        let keys: ProcessingKeys = ProcessingKeys(elevenLabs: elevenLabs, llm: await llmProviderReportingFailure())
         for record in stale {
             do {
                 let directory: URL = try store.sessionDirectory(id: record.id)
@@ -347,9 +396,12 @@ final class PhoneRecorder {
         saveRecord(record: record, directory: directory)
         processingSteps[record.id] = .convertingAudio
         beginBackgroundTask(id: record.id)
-        let finalPass: FinalPassPlan = keys.elevenLabs.map { (key: String) -> FinalPassPlan in
-            .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: []))
-        } ?? .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
+        // Cihaz içi kayıt buluta gönderilmez: son geçiş Apple'ın konuşma tanımasıyla yapılır.
+        let finalPass: FinalPassPlan = record.engine == .local
+            ? .run(AppleSpeechFinalTranscriber(primaryLanguage: phonePrimaryMeetingLanguage()))
+            : keys.elevenLabs.map { (key: String) -> FinalPassPlan in
+                .run(ElevenLabsFinalTranscriber(apiKey: key, keyterms: []))
+            } ?? .skip(reason: String(localized: "ElevenLabs anahtarı kayıtlı değil."))
         processingTasks[record.id] = Task {
             let result: MeetingRecord = await processMeeting(
                 record: record, directory: directory, finalPass: finalPass, llm: keys.llm,
@@ -614,7 +666,7 @@ final class PhoneRecorder {
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: transcript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
-            speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+            speakerNames: [:], note: nil, audioDeleted: false, engine: recording.engine, notice: nil, meNeedsFinalPass: nil
         )
         .with(highlights: highlights)
         .with(myNotes: myNotes)
@@ -662,7 +714,7 @@ final class PhoneRecorder {
         }
     }
 
-    /// Claude sağlayıcısı; okunamazsa çeviri ve not kapalı kalır ve neden bildirilir.
+    /// LLM sağlayıcısı (Claude ya da cihaz içi); kullanılamazsa çeviri ve not kapalı kalır ve neden bildirilir.
     private func llmProviderReportingFailure() async -> LLMProvider? {
         do {
             return try await phoneLLMProvider()
