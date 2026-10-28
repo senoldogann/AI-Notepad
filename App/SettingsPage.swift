@@ -1891,11 +1891,7 @@ private struct TaskTrackerSettings: View {
         if let tracker = model.taskTrackers.first(where: { $0.service == service }) {
             ConnectionCard(tile: tile(service: service), title: Text(verbatim: service.displayName), detail: Text("Bağlı"), badge: nil) {
                 HStack(spacing: 6) {
-                    TrackerTargetField(
-                        placeholder: service == .atlassian ? "Proje (boş: ilki)" : "Takım (boş: ilki)", saved: tracker.target
-                    ) { (value: String) -> Void in
-                        Task { await model.setTrackerTarget(id: tracker.id, target: value) }
-                    }
+                    TrackerTargetPicker(model: model, tracker: tracker)
                     Menu {
                         Button("Kaldır", systemImage: "trash", role: .destructive) { Task { await model.removeTracker(id: tracker.id) } }
                     } label: {
@@ -1950,36 +1946,67 @@ private struct TaskTrackerSettings: View {
 
 /// Görev aracının takım/proje alanı: yazarken değil, Return'de ya da alandan çıkınca kaydedilir (her tuşta Anahtar
 /// Zinciri'ne yazılmasın, yazılan metin geri gelen eski değerle ezilmesin).
-private struct TrackerTargetField: View {
-    let placeholder: LocalizedStringKey
-    let saved: String
-    let commit: (String) -> Void
-    @State private var text: String = ""
-    @FocusState private var focused: Bool
+/// Görev aracının hedefi (Linear takımı, Jira projesi): araçtaki gerçek seçenekler menüde. Tek seçenek varsa yalnızca
+/// adı görünür (seçilecek bir şey yok); hedef boşsa ilk seçenek kullanılır ve öyle gösterilir. Seçenekler okunamazsa
+/// neden ve "Yeniden dene" görünür.
+private struct TrackerTargetPicker: View {
+    let model: AppModel
+    let tracker: TaskTracker
+    @State private var options: [String]?
+    @State private var errorMessage: String?
 
     var body: some View {
-        TextField(placeholder, text: $text)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 130)
-            .focused($focused)
-            .onAppear { text = saved }
-            .onChange(of: saved) { (_: String, value: String) -> Void in
-                if !focused {
-                    text = value
+        let noun: LocalizedStringKey = tracker.service == .atlassian ? "Proje" : "Takım"
+        let current: String? = tracker.target.isEmpty ? options?.first : tracker.target
+        Group {
+            if let options, options.count > 1 {
+                Menu {
+                    ForEach(options, id: \.self) { (name: String) in
+                        Button {
+                            Task { await model.setTrackerTarget(id: tracker.id, target: name) }
+                        } label: {
+                            if name == current {
+                                Label(name, systemImage: "checkmark")
+                            } else {
+                                Text(verbatim: name)
+                            }
+                        }
+                    }
+                } label: {
+                    targetLabel(noun: noun, name: current ?? "")
                 }
+                .menuStyle(.button)
+                .buttonStyle(.pill)
+                .controlSize(.small)
+                .fixedSize()
+            } else if let current {
+                targetLabel(noun: noun, name: current)
+                    .foregroundStyle(Theme.muted)
+            } else if let errorMessage {
+                Button("Yeniden dene", systemImage: "arrow.clockwise") { Task { await load() } }
+                    .controlSize(.small)
+                    .hoverHint(LocalizedStringKey(errorMessage), alignment: .trailing, edge: .bottom)
+            } else {
+                ProgressView().controlSize(.small)
             }
-            .onSubmit { save() }
-            .onChange(of: focused) { (_: Bool, isFocused: Bool) -> Void in
-                if !isFocused {
-                    save()
-                }
-            }
+        }
+        .task(id: tracker.id) { await load() }
     }
 
-    private func save() {
-        let trimmed: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed != saved {
-            commit(trimmed)
+    private func targetLabel(noun: LocalizedStringKey, name: String) -> some View {
+        HStack(spacing: 4) {
+            Text(noun).foregroundStyle(Theme.muted)
+            Text(verbatim: name).lineLimit(1)
+        }
+        .appFont(size: 12, weight: .medium)
+    }
+
+    private func load() async {
+        errorMessage = nil
+        do {
+            options = try await model.trackerTargets(id: tracker.id)
+        } catch {
+            errorMessage = userFacingMessage(error: error)
         }
     }
 }
