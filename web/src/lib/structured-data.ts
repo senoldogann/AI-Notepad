@@ -1,8 +1,9 @@
-// Ana sayfanın yapılandırılmış verisi (schema.org JSON-LD): uygulama (`SoftwareApplication`) ve onu sunan işletme
-// (`Organization`). Değerler sitenin tek kaynaklarından gelir: ürün adı (config.ts), fiyat ve gereksinimler (copy.ts),
+// Sitenin yapılandırılmış verisi (schema.org JSON-LD): ana sayfada uygulama (`SoftwareApplication`), onu sunan işletme
+// (`Organization`) ve sık sorulan sorular (`FAQPage`); fiyat sayfasında onun soruları. Değerler sitenin tek kaynaklarından
+// gelir: ürün adı (config.ts), fiyat, gereksinimler ve sorular (copy.ts),
 // işletme (legal/operator.ts). `<script type="application/ld+json">` veri bloğudur, çalıştırılmaz; CSP onu engellemez.
 import { productName, type SiteConfig } from "../config";
-import type { CommonCopy, PageMeta } from "../copy";
+import type { CommonCopy, Faq, PageMeta } from "../copy";
 import type { Operator } from "../legal/operator";
 import { pageUrl } from "../routes";
 
@@ -49,10 +50,55 @@ interface SoftwareApplicationNode {
   readonly publisher: { readonly "@id": string };
 }
 
-/** Sayfaya yazılan JSON-LD belgesi. */
+/** Sık sorulan sorunun yanıtı. */
+interface AnswerNode {
+  readonly "@type": "Answer";
+  readonly text: string;
+}
+
+/** Sık sorulan soru. */
+interface QuestionNode {
+  readonly "@type": "Question";
+  readonly name: string;
+  readonly acceptedAnswer: AnswerNode;
+}
+
+/** Sayfadaki sık sorulan sorular (yalnızca sayfada görünen soru ve yanıtlar). */
+interface FaqPageNode {
+  readonly "@type": "FAQPage";
+  readonly "@id": string;
+  readonly url: string;
+  readonly mainEntity: readonly QuestionNode[];
+}
+
+/** Ana sayfaya yazılan JSON-LD belgesi. */
 export interface StructuredDataDocument {
   readonly "@context": "https://schema.org";
-  readonly "@graph": readonly [SoftwareApplicationNode, OrganizationNode];
+  readonly "@graph": readonly [SoftwareApplicationNode, OrganizationNode, FaqPageNode];
+}
+
+/** Yalnızca sık sorulan soruları taşıyan JSON-LD belgesi (fiyat sayfası). */
+export interface FaqDocument {
+  readonly "@context": "https://schema.org";
+  readonly "@graph": readonly [FaqPageNode];
+}
+
+/**
+ * Sayfanın sık sorulan soruları (`FAQPage`): sayfadaki `Faq` bileşeninin gösterdiği aynı `copy.ts` girdilerinden
+ * üretilir, metin kopyalanmaz. Saf fonksiyondur.
+ */
+export function faqPageNode(items: readonly Faq[], url: string): FaqPageNode {
+  return {
+    "@type": "FAQPage",
+    "@id": `${url}#faq`,
+    url,
+    mainEntity: items.map((item: Faq): QuestionNode => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answer } })),
+  };
+}
+
+/** Fiyat sayfasının JSON-LD belgesi: yalnızca o sayfanın sık sorulan soruları. Saf fonksiyondur. */
+export function faqStructuredData(items: readonly Faq[], url: string): FaqDocument {
+  return { "@context": "https://schema.org", "@graph": [faqPageNode(items, url)] };
 }
 
 /** Fiyat ya da gereksinim metni beklenen biçimde değil: copy.ts değişti, yapılandırılmış veri güncellenmeli. */
@@ -93,8 +139,14 @@ function requirements(text: string): Requirements {
   return { operatingSystem, processor };
 }
 
-/** Ana sayfanın JSON-LD belgesi. Saf fonksiyondur. */
-export function homeStructuredData(config: SiteConfig, common: CommonCopy, meta: PageMeta, operator: Operator): StructuredDataDocument {
+/** Ana sayfanın JSON-LD belgesi: uygulama, işletme ve sayfadaki sık sorulan sorular (`faq`). Saf fonksiyondur. */
+export function homeStructuredData(
+  config: SiteConfig,
+  common: CommonCopy,
+  meta: PageMeta,
+  operator: Operator,
+  faq: readonly Faq[],
+): StructuredDataDocument {
   const origin: string = config.siteOrigin;
   const organizationId: string = `${origin}/#organization`;
   const price: UsdPrice = usdPrice(common.price);
@@ -129,6 +181,7 @@ export function homeStructuredData(config: SiteConfig, common: CommonCopy, meta:
         publisher: { "@id": organizationId },
       },
       { "@type": "Organization", "@id": organizationId, name: operator.name, url: origin, email: operator.email },
+      faqPageNode(faq, pageUrl("home", origin)),
     ],
   };
 }
@@ -137,6 +190,6 @@ export function homeStructuredData(config: SiteConfig, common: CommonCopy, meta:
  * JSON-LD belgesini `<script>` içine güvenle yazılacak metne çevirir: `<` kaçırılır, böylece metindeki `</script>`
  * bloğu erken kapatamaz. Saf fonksiyondur.
  */
-export function structuredDataJson(document: StructuredDataDocument): string {
+export function structuredDataJson(document: StructuredDataDocument | FaqDocument): string {
   return JSON.stringify(document).replaceAll("<", "\\u003c");
 }

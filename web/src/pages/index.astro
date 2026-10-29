@@ -58,7 +58,7 @@ const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; r
   { key: "files", icon: "disk", palette: "mint" },
 ];
 /** Arama motorları için uygulama ve işletme bilgisi (JSON-LD). */
-const structuredData: string = structuredDataJson(homeStructuredData(siteConfig, common, text.meta, operator));
+const structuredData: string = structuredDataJson(homeStructuredData(siteConfig, common, text.meta, operator, text.faq));
 ---
 
 <Base page="home" meta={text.meta} indexed={true}>
