@@ -496,7 +496,7 @@ final class HostedAccount {
             await refresh()
         }
         do {
-            let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID)
+            let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: false)
             currentMeeting = started
             isOfflineRecording = false
             addHostedOpenMeetingID(meetingID: started.meetingId)
@@ -522,16 +522,17 @@ final class HostedAccount {
     /// Sunucuda oturum açar. App Attest destekleniyorsa onay eklenir. Apple DeviceCheck jetonu yalnızca hesabın deneme
     /// olduğu biliniyorsa gönderilir; sunucu `device_check_required` derse bir kez jetonla yinelenir (aboneler
     /// DeviceCheck'e hiç takılmaz). Jeton üretilemezse hata fırlar.
-    private func openServerMeeting(client: HostedClient, clientRef: String) async throws -> HostedStartedMeeting {
+    /// `deferred`: sonradan işlenen kayıt (bekleyen, içe aktarılan); sunucu süren canlı toplantıyı kapatmaz.
+    private func openServerMeeting(client: HostedClient, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
         let deviceCheckToken: String? = isKnownTrial ? try await HostedDeviceCheck.token() : nil
         do {
-            return try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef)
+            return try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred)
         } catch let error as HostedAPIError where error.code == .deviceCheckRequired && deviceCheckToken == nil {
             accountLogger.info("Sunucu DeviceCheck istedi, jetonla bir kez yeniden deneniyor")
             // App Attest meydan okuması tek kullanımlık: yeniden denemede yeni onay.
             let retryDevice: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
-            return try await client.startMeeting(device: retryDevice, deviceCheckToken: try await HostedDeviceCheck.token(), clientRef: clientRef)
+            return try await client.startMeeting(device: retryDevice, deviceCheckToken: try await HostedDeviceCheck.token(), clientRef: clientRef, deferred: deferred)
         }
     }
 
@@ -582,9 +583,11 @@ final class HostedAccount {
     }
 
     /// Bekleyen kaydın (çevrimdışı kaydedilmiş ya da içe aktarılmış) sunucu oturumunu hazırlar. Kayıt daha önce bir oturuma bağlandıysa o kullanılır;
-    /// yoksa oturum açılır (sunucu hakları denetler; `clientRef` yinelenen denemenin ikinci oturum açmasını önler), kayda
-    /// bağlanır ve hemen kapatılır: toplantı süresi sayılmaz, aylık kullanıma sesin gerçek süresi yazılır (son geçiş);
-    /// not ve son geçiş sunucunun ek süresinde (30 dk) bu oturumla üretilir.
+    /// yoksa oturum "ertelenmiş" açılır (sunucu hakları denetler, süren canlı kaydın oturumunu kapatmaz; `clientRef`
+    /// yinelenen denemenin ikinci oturum açmasını önler), kayda bağlanır ve hemen kapatılır: toplantı süresi sayılmaz,
+    /// aylık kullanıma sesin gerçek süresi yazılır (son geçiş); not ve son geçiş sunucunun ek süresinde (30 dk) bu
+    /// oturumla üretilir. Bağlı oturumun ek süresi geçtiyse (önceki deneme yarıda kaldı) son geçiş planı oturumu yeniden
+    /// işleme için açar (bkz. `hostedFinalPassPlan`).
     func prepareQueuedMeeting(recordID: String) async -> HostedQueuedMeetingPreparation {
         if case .signedIn(let entitlements) = state, hostedStartBlock(entitlements: entitlements) != nil, hostedServerMeetingIDOrNil(recordID: recordID) == nil {
             return .blocked(reason: queuedBlockReason(entitlements: entitlements))
@@ -595,7 +598,7 @@ final class HostedAccount {
             if let linked = hostedServerMeetingIDOrNil(recordID: recordID) {
                 serverMeetingID = linked
             } else {
-                let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID)
+                let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: true)
                 serverMeetingID = started.meetingId
                 try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: serverMeetingID, createdAt: Date()))
             }

@@ -3278,6 +3278,17 @@
         }
       }
     },
+    "Bu toplantı en çok iki kez yeniden işlenebilir; mevcut metin ve not korunur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting can be reprocessed at most twice; the current transcript and note are kept."
+          }
+        }
+      }
+    },
     "Bu toplantı için katılımcılara gönderilecek kısa bir takip e-postası taslağı yaz: teşekkür, alınan kararlar, kim neyi ne zamana yapacak ve sonraki adım. Konu satırıyla başla. E-postayı toplantının konuşulduğu dilde yaz.": {
       "localizations": {
         "en": {
@@ -3388,6 +3399,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting's audio is already being processed; try again when it finishes."
+          }
+        }
+      }
+    },
+    "Bu toplantının sunucu oturumu kapandı (kayıt bitiminden 30 dakika sonra ya da en çok süre dolunca). Kayıtlı toplantıyı \"Tekrar işle\" ile yeniden işleyebilir ya da yeni bir toplantı başlatabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting's server session has closed (30 minutes after the recording ended, or when the maximum length was reached). You can reprocess the saved meeting with \"Reprocess\" or start a new meeting."
           }
         }
       }
@@ -6487,6 +6509,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start recording with a shortcut; when the meeting ends your note and tasks are ready."
+          }
+        }
+      }
+    },
+    "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
           }
         }
       }
@@ -9746,6 +9779,28 @@
         }
       }
     },
+    "Ses yeniden yazıya dökülemedi: %@ Önceki son geçiş metni korundu, not ondan yazıldı.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio could not be transcribed again: %@ The previous final transcript was kept and the note was written from it."
+          }
+        }
+      }
+    },
+    "Ses yeniden yazıya dökülmedi: %@ Önceki son geçiş metni korundu.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio was not transcribed again: %@ The previous final transcript was kept."
+          }
+        }
+      }
+    },
     "Ses çalınamadı (kod %lld). Başka bir uygulama sesi kullanıyor olabilir; biraz sonra yeniden dene.": {
       "localizations": {
         "en": {
@@ -11196,17 +11251,6 @@
         }
       }
     },
-    "Toplantı oturumu kapandı: yapay zekâ özellikleri toplantı sırasında ve bittikten kısa süre sonrasına kadar açıktır. Yeni bir toplantı başlat.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The meeting session has closed: AI features are available during a meeting and for a short time after it ends. Start a new meeting."
-          }
-        }
-      }
-    },
     "Toplantı oturumu kapatılamadı: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -12562,6 +12606,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zoom URL"
+          }
+        }
+      }
+    },
+    "dosya %lld dakika; bir toplantı şu an en çok %lld dakika işlenebilir. Dosyayı bölüp parçaları ayrı içe aktar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the file is %lld minutes long; a meeting can currently be at most %lld minutes. Split the file and import the parts separately."
           }
         }
       }

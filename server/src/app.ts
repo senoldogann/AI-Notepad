@@ -30,7 +30,7 @@ import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
 import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
-import { type MeetingStartRequest, endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import { type MeetingStartRequest, endMeeting, reprocessMeeting, requireUsableMeeting, startMeeting } from "./meetings";
 import {
   type ReportInput,
   createReport,
@@ -192,8 +192,11 @@ const meetingStartSchema = z.strictObject({
   deviceCheckToken: z.base64().min(1).max(8192).optional(),
   /** İstemcinin kayıt kimliği: aynı kimlikle yinelenen başlatma aynı oturumu döndürür (bkz. `startMeeting`). */
   clientRef: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
+  /** Sonradan işlenen kayıt: açık toplantıyı kapatma (bkz. `MeetingStartRequest.deferred`). */
+  deferred: z.boolean().optional(),
 });
 const meetingEndPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/end$/;
+const meetingReprocessPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/reprocess$/;
 
 /** İstek bağlamı ve yapılandırmayla yönlendirme. */
 async function route(request: Request, env: Env, config: Config, context: RequestContext, path: string): Promise<Response> {
@@ -287,7 +290,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const deviceId: string | null =
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
     const clientIpHash: string = await hmacSha256Hex(config.secrets.trialHash, `trial-ip:${ipKey}`);
-    const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null, clientRef: body.clientRef ?? null };
+    const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null, clientRef: body.clientRef ?? null, deferred: body.deferred ?? false };
     return jsonResponse(201, await startMeeting(db, context.platform, config, user.userId, startRequest, now));
   }
   const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
@@ -295,6 +298,12 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const user: AuthedUser = await authed();
     const row = await endMeeting(db, user.userId, endMatch[1], now);
     return jsonResponse(200, { meetingId: row.id, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
+  }
+  const reprocessMatch: RegExpExecArray | null = meetingReprocessPath.exec(path);
+  if (reprocessMatch !== null && reprocessMatch[1] !== undefined && method === "POST") {
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    return jsonResponse(200, await reprocessMeeting(db, config, user.userId, reprocessMatch[1], now));
   }
 
   if (path === "/v1/llm/messages" && method === "POST") {

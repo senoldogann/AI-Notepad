@@ -71,6 +71,12 @@ export interface Entitlements {
   readonly accountTokensResetsAt: string;
   /** Aylık sınırların (`monthlyHoursCap`, abonede `accountTokensCap`) sıfırlandığı an: sonraki UTC ayının başı (ISO 8601). */
   readonly monthlyResetsAt: string;
+  /**
+   * Şimdi açılacak toplantının en çok süresi (dakika); toplantının ses hakkı da budur (son geçiş en çok bu kadar sesi
+   * yazıya döker). Denemede `TRIAL_MAX_MEETING_MINUTES`, abonede `SUBSCRIBER_MAX_MEETING_MINUTES` ile aylık kalanın
+   * küçüğü (bkz. `subscriberMeetingMaxMinutes`). İstemci içe aktarılacak dosyayı kuyruğa almadan buna göre reddeder.
+   */
+  readonly meetingMaxMinutes: number;
   readonly subscription: {
     readonly status: string;
     readonly currentPeriodEnd: string;
@@ -245,6 +251,11 @@ export async function accountTokenAllowance(db: D1Database, config: Config, user
   };
 }
 
+/** Abonenin yeni toplantısının en çok süresi (dakika): üst sınır ile aylık kalanın küçüğü, en az 1. Saf fonksiyondur. */
+export function subscriberMeetingMaxMinutes(config: Config, remainingSeconds: number): number {
+  return Math.max(1, Math.min(config.subscriberMaxMeetingMinutes, Math.floor(remainingSeconds / 60)));
+}
+
 /** Saatin onda biri hassasiyetle saat. Saf fonksiyondur. */
 export function hoursRoundedUp(seconds: number): number {
   return Math.ceil((seconds / 3600) * 10) / 10;
@@ -286,6 +297,8 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
     accountTokensPeriod: allowance.period,
     accountTokensResetsAt: new Date(allowance.resetsAtMs).toISOString(),
     monthlyResetsAt: new Date(nextMonthStartMs(now)).toISOString(),
+    meetingMaxMinutes:
+      access === "none" ? config.trialMaxMeetingMinutes : subscriberMeetingMaxMinutes(config, config.monthlyCapSeconds - usage.usedSeconds),
     subscription:
       subscription === null
         ? null

@@ -142,6 +142,20 @@ public func hostedStartBlock(entitlements: HostedEntitlements) -> HostedStartBlo
 /// (ödeme sayfasından dönüşte beklemeden; bkz. `HostedAccount.refreshOnActivation`).
 public let hostedStaleRefreshIntervalSec: Double = 60
 
+/// İçe aktarılan dosya, şimdi açılacak toplantının ses hakkından uzun: kuyruğa alınmaz (son geçiş yarıda kesilirdi).
+public enum HostedImportError: Error, Sendable, Equatable {
+    case longerThanMeetingAllowance(durationMinutes: Int, maxMinutes: Int)
+}
+
+/// İçe aktarılacak dosyayı son okunan hak durumuyla karşılaştırır: toplantının ses hakkını (`meetingMaxMinutes`) aşıyorsa
+/// `HostedImportError`. Alanı bilmeyen eski sunucuda denetlenmez (sunucu son geçişte yine reddeder). Saf fonksiyondur.
+public func requireHostedImportFits(durationSec: Double, entitlements: HostedEntitlements) throws {
+    guard let maxMinutes = entitlements.meetingMaxMinutes, durationSec > Double(maxMinutes) * 60 else {
+        return
+    }
+    throw HostedImportError.longerThanMeetingAllowance(durationMinutes: Int((durationSec / 60).rounded(.up)), maxMinutes: maxMinutes)
+}
+
 /// Hak durumu yeniden okunmalı mı: hiç okunmadıysa ya da son okuma `intervalSec`'ten eskiyse. Saf fonksiyondur.
 public func isHostedRefreshDue(lastRefresh: Date?, now: Date, intervalSec: Double) -> Bool {
     guard let lastRefresh else {

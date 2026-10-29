@@ -87,6 +87,8 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let accountTokensResetsAt: Date?
     /// Aylık sınırların sıfırlandığı an (sonraki UTC ayının başı); eski sunucuda nil.
     public let monthlyResetsAt: Date?
+    /// Şimdi açılacak toplantının en çok süresi ve ses hakkı (dakika; abonede aylık kalanla sınırlı); eski sunucuda nil.
+    public let meetingMaxMinutes: Int?
 }
 
 /// Abonelik sürümünde canlı metni üreten motor.
@@ -132,6 +134,13 @@ public struct HostedStartedMeeting: Decodable, Sendable, Equatable {
     public let expiresAt: Date
     /// Deneme toplantısında kalan deneme; abonelikte nil.
     public let trialMeetingsLeft: Int?
+}
+
+/// `POST /v1/meetings/{id}/reprocess` yanıtı.
+public struct HostedReprocessedMeeting: Decodable, Sendable, Equatable {
+    public let meetingId: String
+    public let usableUntil: Date
+    public let reprocessesLeft: Int
 }
 
 /// `POST /v1/meetings/{id}/end` yanıtı.

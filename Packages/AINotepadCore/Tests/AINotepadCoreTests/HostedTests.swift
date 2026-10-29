@@ -141,7 +141,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(message(.subscriptionExists, 409).contains("Hesabı yönet"))
         #expect(message(.spendCeilingReached, 503).contains("yoğun"))
         #expect(message(.trialCapacityReached, 503).contains("abone ol"))
-        #expect(message(.meetingNotActive, 409).contains("Yeni bir toplantı"))
+        #expect(message(.meetingNotActive, 409).contains("Tekrar işle"))
         #expect(message(.transcriptionClosed, 409).contains("Canlı metin"))
     }
 
@@ -331,6 +331,46 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let withTokens: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"accountTokensUsed":250,"accountTokensCap":1000,"#)
         let tokens: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(withTokens.utf8))
         #expect(tokens.accountTokensUsed == 250 && tokens.accountTokensCap == 1000)
+    }
+
+    // İçe aktarma toplantının ses hakkını aşarsa kuyruğa alınmadan reddedilir; eski sunucu (alan yok) denetlenmez.
+    @Test func importLongerThanMeetingAllowanceIsRejected() throws {
+        let json: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":2,"accountTrialMeetingsLeft":2,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"meetingMaxMinutes":90,"subscription":null}
+        """#
+        let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
+        try requireHostedImportFits(durationSec: 90 * 60, entitlements: entitlements)
+        #expect(throws: HostedImportError.longerThanMeetingAllowance(durationMinutes: 91, maxMinutes: 90)) {
+            try requireHostedImportFits(durationSec: 90 * 60 + 1, entitlements: entitlements)
+        }
+        let old: HostedEntitlements = try hostedJSONDecoder().decode(
+            HostedEntitlements.self, from: Data(json.replacingOccurrences(of: #""meetingMaxMinutes":90,"#, with: "").utf8)
+        )
+        try requireHostedImportFits(durationSec: 10 * 3600, entitlements: old)
+    }
+
+    // Son geçiş yapılamadığında uyarı hangi metnin kaldığını doğru söyler: yeniden işlemede önceki son geçiş korunur.
+    @Test func finalPassNoticesTellWhichTranscriptRemains() {
+        #expect(skippedFinalPassNotice(reason: "x", hasFinalTranscript: true).contains("Önceki son geçiş metni korundu"))
+        #expect(skippedFinalPassNotice(reason: "x", hasFinalTranscript: false).contains("Canlı metin kullanıldı"))
+        let error: HostedAPIError = HostedAPIError(code: .reprocessLimitReached, rawCode: "reprocess_limit_reached", status: 409, serverMessage: "", path: "/v1/transcribe")
+        #expect(failedFinalPassNotice(error: error, hasFinalTranscript: true).contains("Önceki son geçiş metni korundu"))
+        #expect(failedFinalPassNotice(error: error, hasFinalTranscript: false).contains("canlı metinden"))
+        let me: StoredSegment = StoredSegment(key: "final-0", speaker: .me, person: nil, startSec: 0, endSec: 1, text: "a", words: nil)
+        let base: MeetingRecord = MeetingRecord(
+            id: "k", title: "T", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil, liveSegments: [],
+            finalSegments: [me], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        #expect(!hasOthersFinalTranscript(record: base))
+    }
+
+    // Yükleme anahtarı sunucunun beklediği biçimde (32 bayt, dolgusuz base64url) ve her parçada farklı.
+    @Test func uploadKeysAreUniqueBase64URL() throws {
+        let first: String = try makeUploadKey()
+        let second: String = try makeUploadKey()
+        #expect(first != second)
+        #expect(first.wholeMatch(of: /[A-Za-z0-9_-]{43}/) != nil)
     }
 
     // Ölçer düzeyleri, ay sıfırlanması (UTC) ve bildirimler: abonede %80 ve %100, denemede son toplantı ve bitiş.

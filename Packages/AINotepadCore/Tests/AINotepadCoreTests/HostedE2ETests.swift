@@ -230,7 +230,7 @@ private func silentWav() -> Data {
         #expect(before.trialEndsAt == nil)
         #expect(before.monthlyHoursCap > 0)
 
-        let started: HostedStartedMeeting = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased())
+        let started: HostedStartedMeeting = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false)
         #expect(started.kind == "trial")
         #expect(started.trialMeetingsLeft == before.trialMeetingsTotal - 1)
         #expect(await client.currentMeetingID() == started.meetingId)
@@ -345,7 +345,7 @@ private func silentWav() -> Data {
         let exhausted: HostedEntitlements = try await client.entitlements()
         #expect(hostedPlanStatus(entitlements: exhausted) == .trial(left: 0, total: exhausted.trialMeetingsTotal))
         #expect(exhausted.trialEndsAt != nil)
-        let exhaustedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
+        let exhaustedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false) }
         #expect(exhaustedStart?.code == .trialExhausted)
         #expect(exhaustedStart?.status == 402)
         let exhaustedAsk: HostedAPIError? = await hostedError { _ = try await sendLLM(provider: account, request: smallRequest()) }
@@ -373,7 +373,7 @@ private func silentWav() -> Data {
         try executeLocalD1(sql: "INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES ('\(user.userID)', '\(utcMonthKey())', \(capSeconds));")
         let capped: HostedEntitlements = try await client.entitlements()
         #expect(capped.monthlyHoursUsed >= capped.monthlyHoursCap)
-        let cappedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
+        let cappedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false) }
         #expect(cappedStart?.code == .monthlyCapReached)
         if let cappedStart {
             #expect(userFacingMessage(error: cappedStart) != genericHostedMessage(status: 403))
@@ -415,7 +415,7 @@ private func silentWav() -> Data {
         let day: String = utcDayKey()
 
         try executeLocalD1(sql: "INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES ('\(day)', 0, \(bump)) ON CONFLICT(day) DO UPDATE SET trial_micro_usd = trial_micro_usd + \(bump);")
-        let trialStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
+        let trialStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false) }
         let trialAsk: HostedAPIError? = await hostedError {
             _ = try await sendLLM(provider: accountLLMProvider(baseURL: baseURL, client: user.client), request: smallRequest())
         }
@@ -428,7 +428,7 @@ private func silentWav() -> Data {
         }
 
         try executeLocalD1(sql: "INSERT INTO daily_spend (day, micro_usd) VALUES ('\(day)', \(bump)) ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + \(bump);")
-        let ceilingStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
+        let ceilingStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false) }
         try executeLocalD1(sql: "UPDATE daily_spend SET micro_usd = micro_usd - \(bump) WHERE day = '\(day)';")
         #expect(ceilingStart?.code == .spendCeilingReached)
         #expect(ceilingStart?.status == 503)
@@ -445,7 +445,7 @@ private func silentWav() -> Data {
         let baseURL: URL = try localServerBase()
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         try markTrialStarted(userID: user.userID, usedMeetings: 1, startedAtMs: nowMs())
-        let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased())
+        let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false)
         let wav: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString).wav", directoryHint: .notDirectory)
         try silentWav().write(to: wav)
         defer { try? FileManager.default.removeItem(at: wav) }
@@ -456,7 +456,7 @@ private func silentWav() -> Data {
             VALUES ('e2e-\(UUID().uuidString.lowercased())', '\(user.userID)', '\(started.meetingId)', 'audio', '\(utcMonthKey())', '\(utcDayKey())', 0, 0, 0, 1, 0, 1, \(now), \(now + 600_000));
             """)
         let inProgress: HostedAPIError? = await hostedError {
-            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], timeoutSec: 30)
+            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
         }
         try executeLocalD1(sql: "DELETE FROM usage_reservations WHERE meeting_id = '\(started.meetingId)';")
         #expect(inProgress?.status == 409)
@@ -469,7 +469,7 @@ private func silentWav() -> Data {
 
         try executeLocalD1(sql: "UPDATE meeting_sessions SET transcription_closed = 1 WHERE id = '\(started.meetingId)';")
         let closed: HostedAPIError? = await hostedError {
-            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], timeoutSec: 30)
+            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
         }
         #expect(closed?.code == .transcriptionClosed)
         _ = try await user.client.endMeeting(meetingID: started.meetingId)
@@ -485,9 +485,9 @@ private func silentWav() -> Data {
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         let before: HostedEntitlements = try await user.client.entitlements()
         let recordID: String = "kayit-\(UUID().uuidString.lowercased())"
-        let first: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID)
+        let first: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID, deferred: true)
         _ = try await user.client.endMeeting(meetingID: first.meetingId)
-        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID)
+        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID, deferred: true)
         #expect(repeated.meetingId == first.meetingId)
         #expect(repeated.maxDurationMinutes == first.maxDurationMinutes)
         let after: HostedEntitlements = try await user.client.entitlements()
@@ -495,9 +495,51 @@ private func silentWav() -> Data {
         // Kapatma tekrarı zararsız; kapalı oturum yapay zekâ çağrısı için ek sürede açık.
         let ended: HostedEndedMeeting = try await user.client.endMeeting(meetingID: first.meetingId)
         #expect(ended.meetingId == first.meetingId)
-        let other: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "kayit-\(UUID().uuidString.lowercased())")
+        let other: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "kayit-\(UUID().uuidString.lowercased())", deferred: false)
         #expect(other.meetingId != first.meetingId)
         _ = try await user.client.endMeeting(meetingID: other.meetingId)
+    }
+
+    // Ek süresi (30 dk) geçmiş toplantı: toplantı kapsamlı çağrı `meeting_not_active` alır; "Tekrar işle" oturumu
+    // yeniden işleme için açar (`reprocessMeeting`, en çok iki kez; yeni deneme düşmez), sonra çağrı yine geçer. Sınır
+    // dolunca `reprocess_limit_reached` ve kullanıcı genel hata değil gerçek nedeni görür.
+    @Test func reprocessAfterGraceAgainstLocalServer() async throws {
+        let baseURL: URL = try localServerBase()
+        let user: SignedInUser = try await signedInUser(baseURL: baseURL)
+        try markTrialStarted(userID: user.userID, usedMeetings: 1, startedAtMs: nowMs())
+        let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false)
+        _ = try await user.client.endMeeting(meetingID: started.meetingId)
+        let stillOpen: HostedReprocessedMeeting = try await user.client.reprocessMeeting(meetingID: started.meetingId)
+        #expect(stillOpen.reprocessesLeft == 2)
+        let before: HostedEntitlements = try await user.client.entitlements()
+        let ageMeeting: String = """
+            UPDATE meeting_sessions SET started_at = started_at - 7200000, max_ends_at = max_ends_at - 7200000,
+              ended_at = ended_at - 7200000, reprocess_until = CASE WHEN reprocess_until IS NULL THEN NULL ELSE reprocess_until - 7200000 END
+            WHERE id = '\(started.meetingId)';
+            """
+        try executeLocalD1(sql: ageMeeting)
+        let wav: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString).wav", directoryHint: .notDirectory)
+        try silentWav().write(to: wav)
+        defer { try? FileManager.default.removeItem(at: wav) }
+        let expired: HostedAPIError? = await hostedError {
+            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
+        }
+        #expect(expired?.code == .meetingNotActive)
+
+        let first: HostedReprocessedMeeting = try await user.client.reprocessMeeting(meetingID: started.meetingId)
+        #expect(first.reprocessesLeft == 1)
+        #expect(first.usableUntil > Date())
+        try executeLocalD1(sql: ageMeeting)
+        let second: HostedReprocessedMeeting = try await user.client.reprocessMeeting(meetingID: started.meetingId)
+        #expect(second.reprocessesLeft == 0)
+        try executeLocalD1(sql: ageMeeting)
+        let limited: HostedAPIError? = await hostedError { _ = try await user.client.reprocessMeeting(meetingID: started.meetingId) }
+        #expect(limited?.code == .reprocessLimitReached)
+        if let limited {
+            #expect(userFacingMessage(error: limited) != genericHostedMessage(status: 409))
+        }
+        let after: HostedEntitlements = try await user.client.entitlements()
+        #expect(after.trialMeetingsLeft == before.trialMeetingsLeft)
     }
 
     // İçe aktarılan dosya kayıt gibi sayılır: kuyruk sunucu oturumunu `clientRef` ile açar, deneme hakkı düşer; deneme
@@ -508,14 +550,14 @@ private func silentWav() -> Data {
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         try markTrialStarted(userID: user.userID, usedMeetings: 2, startedAtMs: nowMs())
         let importID: String = "ice-aktarim-\(UUID().uuidString.lowercased())"
-        let imported: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID)
+        let imported: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID, deferred: true)
         #expect(imported.kind == "trial")
         #expect(imported.trialMeetingsLeft == 0)
         _ = try await user.client.endMeeting(meetingID: imported.meetingId)
-        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID)
+        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID, deferred: true)
         #expect(repeated.meetingId == imported.meetingId)
         let refused: HostedAPIError? = await hostedError {
-            _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "ice-aktarim-\(UUID().uuidString.lowercased())")
+            _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "ice-aktarim-\(UUID().uuidString.lowercased())", deferred: true)
         }
         #expect(refused?.code == .trialExhausted)
         let after: HostedEntitlements = try await user.client.entitlements()

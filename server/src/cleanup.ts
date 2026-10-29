@@ -78,6 +78,7 @@ function cleanupTargets(now: Date): CleanupTarget[] {
   const today: string = dayKey(now);
   return [
     { name: "used_nonces", table: "used_nonces", where: "expires_at <= ?", binds: [nowMs] },
+    { name: "transcription_results", table: "transcription_results", where: "expires_at <= ?", binds: [nowMs] },
     { name: "device_challenges", table: "device_challenges", where: "expires_at <= ? OR used_at IS NOT NULL", binds: [nowMs] },
     {
       name: "refresh_tokens",

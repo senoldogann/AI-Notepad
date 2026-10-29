@@ -29,6 +29,7 @@ export type ErrorCode =
   | "transcription_closed"
   | "transcription_in_progress"
   | "meeting_not_active"
+  | "reprocess_limit_reached"
   | "meeting_budget_exhausted"
   | "audio_too_long"
   | "upstream_rejected"
@@ -70,6 +71,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   transcription_closed: 403,
   transcription_in_progress: 409,
   meeting_not_active: 403,
+  reprocess_limit_reached: 409,
   meeting_budget_exhausted: 429,
   audio_too_long: 413,
   upstream_rejected: 502,

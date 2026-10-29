@@ -8,6 +8,7 @@ import { alertOnElevenLabsCrossing } from "./elevenLabsCapacity";
 import { errorName, log } from "./log";
 import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
+import { cachedTranscription, storeTranscription, uploadKeyFrom } from "./transcriptionCache";
 import {
   type UsageReservation,
   audioReservation,
@@ -325,10 +326,21 @@ export async function proxyTranscription(
   if (declaredBytes === 0 || request.body === null) {
     throw new ApiError("invalid_body", "Ses dosyası boş.");
   }
+  const now: Date = context.platform.now();
+  // Aynı yükleme anahtarıyla tamamlanmış sonuç varsa (önceki yanıt yolda kayboldu) ses yeniden işlenmez ve
+  // faturalanmaz: saklı sonuç döner.
+  const uploadKey: string | null = uploadKeyFrom(request.headers.get("x-upload-key"));
+  if (uploadKey !== null) {
+    const cached: object | null = await cachedTranscription(db, meeting.user_id, meeting.id, uploadKey, now);
+    if (cached !== null) {
+      await request.body.cancel();
+      log("info", "transcription_repeated", { userId: meeting.user_id, meetingId: meeting.id });
+      return jsonResponse(200, cached);
+    }
+  }
   if (meeting.transcription_closed !== 0) {
     throw new ApiError("transcription_closed", "Bu toplantının ses işleme hakkı kapandı.");
   }
-  const now: Date = context.platform.now();
   const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
   const reader: ReadableStreamDefaultReader<Uint8Array> = request.body.getReader();
   let audio: AudioHead;
@@ -347,7 +359,7 @@ export async function proxyTranscription(
   }
   const outcome: CallOutcome<Transcription> = await continueAfterDisconnect(
     context,
-    transcribeAndSettle(db, context, config, meeting, params, contentType, declaredBytes, reader, audio, reservation, usdPerHour, now),
+    transcribeAndSettle(db, context, config, meeting, params, contentType, declaredBytes, reader, audio, reservation, usdPerHour, uploadKey, now),
     "transcription_settle_failed",
     { userId: meeting.user_id, meetingId: meeting.id, reservationId: reservation.id },
   );
@@ -370,6 +382,7 @@ async function transcribeAndSettle(
   audio: AudioHead,
   reservation: UsageReservation,
   usdPerHour: number,
+  uploadKey: string | null,
   now: Date,
 ): Promise<CallOutcome<Transcription>> {
   const result: ElevenLabsResult = await sendToElevenLabs(context, config, meeting, params, contentType, declaredBytes, reader, audio.head);
@@ -392,6 +405,9 @@ async function transcribeAndSettle(
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
   }
   log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
+  if (uploadKey !== null) {
+    await storeTranscription(db, meeting.user_id, meeting.id, uploadKey, result.transcription, now);
+  }
   return { ok: true, value: result.transcription };
 }
 

@@ -27,6 +27,8 @@ private struct MeetingStartBody: Encodable {
     let device: HostedDeviceAssertion?
     let deviceCheckToken: String?
     let clientRef: String
+    /// Sonradan işlenen kayıt: sunucu açık toplantıyı (süren canlı kaydı) kapatmaz.
+    let deferred: Bool
 }
 
 private struct DeviceChallengeBody: Encodable {
@@ -144,9 +146,9 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `trial_device_used`, `monthly_cap_reached`…)
     /// `HostedAPIError`. `deviceCheckToken` (Apple DeviceCheck, base64) denemesi henüz bir Mac'e bağlanmamış hesabın
     /// deneme toplantısında gerekir. Açılan toplantı yapay zekâ çağrılarının toplantısı olur.
-    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String) async throws -> HostedStartedMeeting {
+    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let path: String = "/v1/meetings/start"
-        let body: Data = try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef))
+        let body: Data = try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred))
         let started: HostedStartedMeeting = try decode(
             HostedStartedMeeting.self,
             data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableOneShotRequest),
@@ -155,6 +157,14 @@ public actor HostedClient: HostedLLMCredentialSource {
         meetingID = started.meetingId
         hostedLogger.info("Toplantı oturumu açıldı, tür: \(started.kind, privacy: .public), en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
         return started
+    }
+
+    /// Ek süresi geçmiş toplantıyı yeniden işleme için açar (`POST /v1/meetings/{id}/reprocess`): son geçiş kaydın
+    /// kullanılmamış ses hakkıyla, toplantı kapsamlı yapay zekâ kendi bütçesiyle bir süre daha kullanılabilir. Toplantı
+    /// zaten açıksa hak harcanmaz. Sınır dolduysa `reprocess_limit_reached`.
+    public func reprocessMeeting(meetingID: String) async throws -> HostedReprocessedMeeting {
+        let path: String = "/v1/meetings/\(meetingID)/reprocess"
+        return try decode(HostedReprocessedMeeting.self, data: try await authorized(path: path, method: "POST", body: nil, isRetryable: isRetryableRepeatableRequest), path: path)
     }
 
     /// Toplantıyı bitirir; not ve son geçiş sunucunun ek süresi boyunca aynı toplantıyla sürer.
@@ -217,7 +227,9 @@ public actor HostedClient: HostedLLMCredentialSource {
     // MARK: Ses ve yapay zekâ
 
     /// WAV dosyasını `/v1/transcribe`'a ham gövde olarak gönderir; ElevenLabs yanıtının JSON'unu döndürür.
-    public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], timeoutSec: Double) async throws -> Data {
+    /// `uploadKey`: parçanın yükleme anahtarı (32 bayt base64url; parçanın her yeniden denemesinde aynı): yanıt yolda
+    /// kaybolursa sunucu sesi yeniden işlemeden ve faturalamadan aynı sonucu döndürür.
+    public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], uploadKey: String, timeoutSec: Double) async throws -> Data {
         let path: String = "/v1/transcribe"
         let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode)
         let keytermsHeader: String? = try hostedKeytermsHeader(keyterms: keyterms)
@@ -228,6 +240,7 @@ public actor HostedClient: HostedLLMCredentialSource {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
             request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
             request.setValue("audio/wav", forHTTPHeaderField: "content-type")
+            request.setValue(uploadKey, forHTTPHeaderField: "x-upload-key")
             if let keytermsHeader {
                 request.setValue(keytermsHeader, forHTTPHeaderField: "x-keyterms")
             }

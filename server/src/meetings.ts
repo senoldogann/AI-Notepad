@@ -6,6 +6,7 @@ import {
   deviceTrialMeetingsUsed,
   hasSubscriptionAccess,
   isTrialExpired,
+  subscriberMeetingMaxMinutes,
   subscriptionState,
   trialMeetingsLeft,
   userTrialState,
@@ -42,7 +43,13 @@ export interface MeetingRow {
   readonly transcription_closed: number;
   /** `ended`: kullanıcı bitirdi (not için ek süre); `superseded`: yeni toplantı başlayınca kapandı (ek süre yok). */
   readonly end_reason: "ended" | "superseded" | null;
+  /** Yeniden işleme sayısı ve açıklığın sonu (bkz. `reprocessMeeting`). */
+  readonly reprocess_count: number;
+  readonly reprocess_until: number | null;
 }
+
+/** Bir toplantının en çok yeniden işlenme sayısı. */
+export const maxMeetingReprocesses: number = 2;
 
 /** Toplantı başlatma isteğinin kötüye kullanım bilgileri. */
 export interface MeetingStartRequest {
@@ -54,6 +61,11 @@ export interface MeetingStartRequest {
   readonly deviceCheckToken: string | null;
   /** İstemcinin kayıt kimliği; aynı kullanıcı ve kimlikle açılmış oturum varsa o döner (yeniden düşüm yok). */
   readonly clientRef: string | null;
+  /**
+   * Sonradan işlenen kayıt (çevrimdışı kaydedilmiş ya da içe aktarılmış): açık toplantıyı kapatmaz (süren canlı kaydı
+   * bölmez). Haklar, deneme ve süre normal başlatmadaki gibi denetlenir.
+   */
+  readonly deferred: boolean;
 }
 
 /** SQL bağ değeri. */
@@ -74,6 +86,8 @@ interface NewMeeting {
   readonly maxEndsAt: number;
   readonly tokenBudget: number;
   readonly clientRef: string | null;
+  /** Açık toplantıyı kapatmadan ekle (bkz. `MeetingStartRequest.deferred`). */
+  readonly deferred: boolean;
 }
 
 /** Abonelik toplantısının ek koşulu yoktur: aylık sınır eklemeden önce denetlenir. */
@@ -124,14 +138,15 @@ async function insertMeeting(
          WHERE user_id = ? AND day = ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
       )
       .bind(meeting.userId, day, meeting.id),
+    // Sonradan işlenen kayıt açık toplantıyı kapatmaz (`deferred`): koşul her zaman yanlış olur.
     db
       .prepare(
         `UPDATE meeting_sessions
          SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER),
            end_reason = 'superseded'
-         WHERE user_id = ? AND ended_at IS NULL AND id <> ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
+         WHERE ? = 0 AND user_id = ? AND ended_at IS NULL AND id <> ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
       )
-      .bind(nowMs, nowMs, meeting.userId, meeting.id, meeting.id),
+      .bind(nowMs, nowMs, meeting.deferred ? 1 : 0, meeting.userId, meeting.id, meeting.id),
     ...followUps,
   ]);
   return results[1]?.meta.changes === 1;
@@ -174,7 +189,7 @@ export async function startMeeting(
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
     await requireTrialSpendHeadroom(db, config, now);
     await requireTrialDevice(db, platform, config, userId, request.deviceCheckToken, now);
-    return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, now);
+    return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, request.deferred, now);
   }
   const deviceId: string | null = request.deviceId;
   const usage: MonthlyUsage = await monthlyUsage(db, userId, now);
@@ -183,7 +198,7 @@ export async function startMeeting(
     throw new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.");
   }
   const meetingId: string = randomId();
-  const maxMinutes: number = Math.max(1, Math.min(config.subscriberMaxMeetingMinutes, Math.floor(remainingSeconds / 60)));
+  const maxMinutes: number = subscriberMeetingMaxMinutes(config, remainingSeconds);
   const maxEndsAt: number = now.getTime() + maxMinutes * 60_000;
   const meeting: NewMeeting = {
     id: meetingId,
@@ -193,6 +208,7 @@ export async function startMeeting(
     maxEndsAt,
     tokenBudget: config.subscriberMeetingTokenBudget,
     clientRef: request.clientRef,
+    deferred: request.deferred,
   };
   if (!(await insertMeeting(db, config, meeting, noGate, [], now))) {
     // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner.
@@ -279,6 +295,7 @@ async function startTrialMeeting(
   deviceId: string | null,
   clientIpHash: string,
   clientRef: string | null,
+  deferred: boolean,
   now: Date,
 ): Promise<StartedMeeting> {
   const meetingId: string = randomId();
@@ -327,7 +344,7 @@ async function startTrialMeeting(
   const recordTrialStartedAt: D1PreparedStatement = db
     .prepare("UPDATE users SET trial_started_at = ? WHERE id = ? AND trial_started_at IS NULL AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)")
     .bind(now.getTime(), userId, meetingId);
-  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget, clientRef };
+  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget, clientRef, deferred };
   const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart, recordTrialStartedAt], now);
   if (!inserted) {
     // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner (deneme bir kez düşer).
@@ -430,7 +447,50 @@ async function findMeeting(db: D1Database, userId: string, meetingId: string): P
  */
 export function meetingUsableUntil(row: MeetingRow, graceMs: number): number {
   const end: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
-  return row.end_reason === "superseded" ? end : end + graceMs;
+  const usual: number = row.end_reason === "superseded" ? end : end + graceMs;
+  // Yeniden işleme açıklığı (bkz. `reprocessMeeting`) ek süreden bağımsızdır.
+  return Math.max(usual, row.reprocess_until ?? 0);
+}
+
+/** Yeniden işleme yanıtı. */
+export interface ReprocessedMeeting {
+  readonly meetingId: string;
+  /** Toplantının vekil çağrılarına açık olduğu son an (ISO 8601). */
+  readonly usableUntil: string;
+  /** Kalan yeniden işleme hakkı. */
+  readonly reprocessesLeft: number;
+}
+
+/**
+ * Bitmiş toplantıyı yeniden işleme için açar: son geçiş toplantının kullanılmamış ses hakkıyla, toplantı kapsamlı yapay
+ * zekâ kendi bütçesiyle `meetingGraceMs` boyunca kullanılabilir. Yeni deneme, başlatma ya da toplantı süresi düşmez.
+ * Toplantı zaten açıksa (ek süre içinde) hak harcanmaz. En çok `maxMeetingReprocesses` kez; aşılırsa
+ * `reprocess_limit_reached`. Başkasının ya da olmayan toplantı `not_found`. Sayaç tek koşullu ifadeyle artar
+ * (eşzamanlı istekler sınırı aşamaz).
+ */
+export async function reprocessMeeting(db: D1Database, config: Config, userId: string, meetingId: string, now: Date): Promise<ReprocessedMeeting> {
+  const row: MeetingRow | null = await findMeeting(db, userId, meetingId);
+  if (row === null) {
+    throw new ApiError("not_found", "Toplantı oturumu bulunamadı.");
+  }
+  const nowMs: number = now.getTime();
+  if (nowMs < meetingUsableUntil(row, config.meetingGraceMs)) {
+    return {
+      meetingId,
+      usableUntil: new Date(meetingUsableUntil(row, config.meetingGraceMs)).toISOString(),
+      reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count),
+    };
+  }
+  const until: number = nowMs + config.meetingGraceMs;
+  const updated: D1Result = await db
+    .prepare("UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ? WHERE id = ? AND user_id = ? AND reprocess_count < ?")
+    .bind(until, meetingId, userId, maxMeetingReprocesses)
+    .run();
+  if (updated.meta.changes !== 1) {
+    throw new ApiError("reprocess_limit_reached", `Bu toplantı en çok ${maxMeetingReprocesses} kez yeniden işlenebilir.`);
+  }
+  log("info", "meeting_reprocess_opened", { userId, meetingId, count: row.reprocess_count + 1 });
+  return { meetingId, usableUntil: new Date(until).toISOString(), reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count - 1) };
 }
 
 /** Vekil çağrısı için toplantı: çağırana ait, açık ya da ek süre içinde olmalı; değilse `meeting_not_active`. */

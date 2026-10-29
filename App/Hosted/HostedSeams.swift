@@ -134,9 +134,10 @@ func hostedAccountLLMProvider() throws -> LLMProvider {
 }
 
 /// Son geçiş: kayıt sunucunun `/v1/transcribe` ucuyla (ElevenLabs Scribe) yazıya dökülür; ses yalnızca kaydın kendi
-/// sunucu oturumuna yazılır (bkz. `HostedMeetingLink`), başka bir toplantının bütçesinden düşmez. Kaydın oturumu
-/// yoksa (içe aktarılan dosya, eski kayıt) son geçiş atlanır ve nedeni toplantıda görünür; oturumun ses hakkı kapandıysa
-/// sunucu reddeder ve nedeni yine toplantıda görünür.
+/// sunucu oturumuna yazılır (bkz. `HostedMeetingLink`), başka bir toplantının bütçesinden düşmez. Oturumun ek süresi
+/// (30 dk) geçtiyse önce yeniden işleme için açılır (`reprocessMeeting`; sınırlı sayıda, yeni deneme ya da toplantı süresi
+/// açmaz). Kaydın oturumu yoksa, yeniden açılamıyorsa ya da ses hakkı kapandıysa son geçiş yapılmaz ve nedeni toplantıda
+/// görünür (önceki son geçiş metni varsa korunur).
 func hostedFinalPassPlan(keyterms: [String], recordID: String) async -> FinalPassPlan {
     let client: HostedClient
     let links: [HostedMeetingLink]
@@ -148,6 +149,13 @@ func hostedFinalPassPlan(keyterms: [String], recordID: String) async -> FinalPas
     }
     guard let meetingID = hostedServerMeetingID(recordID: recordID, links: links) else {
         return .skip(reason: String(localized: "Bu toplantı sunucuda bir kayıt oturumuna bağlı değil; konuşmacılar canlı metinden kalır."))
+    }
+    do {
+        let reopened: HostedReprocessedMeeting = try await client.reprocessMeeting(meetingID: meetingID)
+        seamsLogger.info("Kaydın sunucu oturumu işlemeye açık, kalan yeniden işleme: \(reopened.reprocessesLeft, privacy: .public)")
+    } catch {
+        seamsLogger.warning("Kaydın sunucu oturumu yeniden açılamadı, hata: \(String(describing: error), privacy: .private)")
+        return .skip(reason: userFacingMessage(error: error))
     }
     return .run(HostedFinalTranscriber(client: client, meetingID: meetingID, keyterms: keyterms))
 }

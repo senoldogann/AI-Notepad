@@ -1841,6 +1841,13 @@ final class AppModel {
                 id: session.url.lastPathComponent, source: url, startedAt: session.startedAt, durationSec: duration,
                 engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
             )
+            #if HOSTED_EDITION
+            // Toplantının ses hakkını aşan dosya kuyruğa alınmaz: son geçiş yarıda kalır ve bekleyen kayıt hiç
+            // bitmezdi. Hak durumu okunamadıysa sunucu son geçişte denetler (yazıya dökülen parçalar korunur).
+            if case .signedIn(let entitlements) = HostedAccount.shared.state {
+                try requireHostedImportFits(durationSec: duration, entitlements: entitlements)
+            }
+            #endif
             Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
             #if HOSTED_EDITION
             // Abonelik: içe aktarılan dosya da kayıt gibi kendi sunucu oturumuyla işlenir (haklar, deneme ve aylık süre
@@ -3494,6 +3501,8 @@ func mediaImportMessage(error: any Error) -> String {
         String(localized: "okunamadı (\(reason))")
     case MediaImportError.writeFailed(_, let reason):
         String(localized: "kaydedilemedi (\(reason))")
+    case HostedImportError.longerThanMeetingAllowance(let durationMinutes, let maxMinutes):
+        String(localized: "dosya \(durationMinutes) dakika; bir toplantı şu an en çok \(maxMinutes) dakika işlenebilir. Dosyayı bölüp parçaları ayrı içe aktar.")
     default:
         userFacingMessage(error: error)
     }

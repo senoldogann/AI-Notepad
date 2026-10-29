@@ -120,6 +120,33 @@ describe("konuşma tanıma vekili", () => {
     expect(usage?.audio_seconds).toBe(125.5);
   });
 
+  it("aynı yükleme anahtarıyla tekrar (yanıt kayboldu) sonucu yeniden işlemeden ve faturalamadan döndürür", async () => {
+    const context: Context = await setup(true);
+    let calls: number = 0;
+    context.harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      calls += 1;
+      await request.formData();
+      return Response.json({ ...transcription, audio_duration_secs: 2 });
+    });
+    const audio: Uint8Array = wavFile(16_000, 1, 16, 64_000);
+    const key: string = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const first: Response = await uploadWith(context, "", audio, "audio/wav", { "x-upload-key": key });
+    expect(first.status).toBe(200);
+    const repeated: Response = await uploadWith(context, "", audio, "audio/wav", { "x-upload-key": key });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toEqual({ ...transcription, audio_duration_secs: 2 });
+    expect(calls).toBe(1);
+    const usage = await env.DB.prepare("SELECT audio_seconds FROM monthly_usage WHERE user_id = ?").bind(context.session.userId).first<{ audio_seconds: number }>();
+    expect(usage?.audio_seconds).toBe(2);
+    // Saklı sonuç şifrelidir: düz metin yoktur.
+    const stored = await env.DB.prepare("SELECT ciphertext FROM transcription_results").first<{ ciphertext: ArrayBuffer }>();
+    expect(new TextDecoder().decode(new Uint8Array(stored?.ciphertext ?? new ArrayBuffer(0)))).not.toContain("words");
+    // Başka anahtar yeni yüklemedir.
+    const other: Response = await uploadWith(context, "", audio, "audio/wav", { "x-upload-key": base64UrlEncode(crypto.getRandomValues(new Uint8Array(32))) });
+    expect(other.status).toBe(200);
+    expect(calls).toBe(2);
+  });
+
   it("anahtar terimler x-keyterms başlığından (base64url JSON) iletilir; değerler loglanmaz", async () => {
     const context: Context = await setup(true);
     const fields: Array<[string, string]> = stubFormFields(context);

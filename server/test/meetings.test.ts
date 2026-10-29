@@ -89,6 +89,7 @@ describe("haklar ve toplantı oturumları", () => {
       accountTokensPeriod: "day",
       accountTokensResetsAt: "2026-10-16T00:00:00.000Z",
       monthlyResetsAt: "2026-11-01T00:00:00.000Z",
+      meetingMaxMinutes: 90,
       subscription: null,
     });
   });
@@ -112,6 +113,7 @@ describe("haklar ve toplantı oturumları", () => {
       accountTokensPeriod: "month",
       accountTokensResetsAt: "2026-11-01T00:00:00.000Z",
       monthlyResetsAt: "2026-11-01T00:00:00.000Z",
+      meetingMaxMinutes: 240,
     });
   });
 
@@ -188,6 +190,59 @@ describe("haklar ve toplantı oturumları", () => {
       403,
       "meeting_not_active",
     );
+  });
+
+  it("ek süresi geçmiş toplantı sınırlı sayıda yeniden işlenmek için açılır; deneme ve başlatma düşmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    await harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/end`, { token: session.accessToken }));
+    let current: Session = session;
+    const call = (): Promise<Response> =>
+      harness.call(
+        req("POST", "/v1/llm/messages", {
+          token: current.accessToken,
+          headers: { "x-meeting-id": meeting.meetingId },
+          json: { max_tokens: 100, messages: [{ role: "user", content: "x" }], tools: [] },
+        }),
+      );
+    const reprocess = (): Promise<Response> =>
+      harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/reprocess`, { token: current.accessToken }));
+    // Ek süre içinde açılış hak harcamaz.
+    expect(await (await reprocess()).json()).toMatchObject({ meetingId: meeting.meetingId, reprocessesLeft: 2 });
+    harness.clock.nowMs += 31 * 60_000;
+    current = await refreshed(harness, current);
+    await expectError(await call(), 403, "meeting_not_active");
+    expect(await (await reprocess()).json()).toMatchObject({ reprocessesLeft: 1 });
+    // Açıldı: vekil çağrısı gövde doğrulamasına kadar ilerler.
+    await expectError(await call(), 400, "invalid_body");
+    harness.clock.nowMs += 31 * 60_000;
+    current = await refreshed(harness, current);
+    await expectError(await call(), 403, "meeting_not_active");
+    expect(await (await reprocess()).json()).toMatchObject({ reprocessesLeft: 0 });
+    harness.clock.nowMs += 31 * 60_000;
+    current = await refreshed(harness, current);
+    await expectError(await reprocess(), 409, "reprocess_limit_reached");
+    // Yeniden işleme yeni deneme ya da başlatma saymaz.
+    expect((await me(harness, current)).trialMeetingsLeft).toBe(2);
+    expect(await meetingsStartedToday(harness, session.userId)).toBe(1);
+    // Başkasının toplantısı yeniden açılamaz.
+    const other: Session = await signIn(harness);
+    await expectError(await harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/reprocess`, { token: other.accessToken })), 404, "not_found");
+  });
+
+  it("sonradan işlenen kayıt (deferred) açık toplantıyı kapatmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const live: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    const deferred: Response = await harness.call(
+      req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef: "bekleyen-1", deferred: true } }),
+    );
+    expect(deferred.status).toBe(201);
+    expect((await openState(live.meetingId))?.ended_at).toBeNull();
+    // Normal başlatma ise açık toplantıyı kapatır.
+    await startMeeting(harness, session);
+    expect((await openState(live.meetingId))?.end_reason).toBe("superseded");
   });
 
   it("toplantı bittikten sonra 30 dakika not için açık kalır, sonra kapanır", async () => {
