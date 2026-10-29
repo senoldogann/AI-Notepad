@@ -647,26 +647,28 @@ private struct AppearanceSettings: View {
             SettingsRow(title: Text("Arayüz boyutu: \(Int((uiScale * 100).rounded()))%")) {
                 Text("Menüler, başlıklar ve düğmeler dahil tüm yazılar.")
             } control: {
-                HStack(spacing: 10) {
-                    Image(systemName: "textformat.size.smaller").foregroundStyle(Theme.muted)
-                    Slider(value: $uiScale, in: SettingsRange.uiScale, step: 0.05).frame(width: 200)
-                    Image(systemName: "textformat.size.larger").foregroundStyle(Theme.muted)
-                }
+                SettingsSlider(value: $uiScale, range: SettingsRange.uiScale, step: 0.05, minSymbol: "textformat.size.smaller", maxSymbol: "textformat.size.larger")
             }
             SettingsRow(title: Text("Metin boyutu: \(Int(textSize)) pt")) {
-                EmptyView()
+                Text("Canlı metin ve notlar.")
             } control: {
-                Slider(value: $textSize, in: SettingsRange.textSize, step: 1).frame(width: 240)
+                SettingsSlider(value: $textSize, range: SettingsRange.textSize, step: 1, minSymbol: "textformat.size.smaller", maxSymbol: "textformat.size.larger")
             }
             SettingsRow(title: Text("Satır aralığı: \(Int(lineSpacing))")) {
                 EmptyView()
             } control: {
-                Slider(value: $lineSpacing, in: SettingsRange.lineSpacing, step: 1).frame(width: 240)
+                SettingsSlider(
+                    value: $lineSpacing, range: SettingsRange.lineSpacing, step: 1,
+                    minSymbol: "arrow.down.right.and.arrow.up.left", maxSymbol: "arrow.up.left.and.arrow.down.right"
+                )
             }
             SettingsRow(title: Text("Alt boşluk: \(Int(bottomSpacing)) pt")) {
                 EmptyView()
             } control: {
-                Slider(value: $bottomSpacing, in: SettingsRange.bottomSpacing, step: 4).frame(width: 240)
+                SettingsSlider(
+                    value: $bottomSpacing, range: SettingsRange.bottomSpacing, step: 4,
+                    minSymbol: "arrow.down.right.and.arrow.up.left", maxSymbol: "arrow.up.left.and.arrow.down.right"
+                )
             }
             // Önizleme seçilen yazı tipi ve boyutla.
             VStack(alignment: .leading, spacing: 4) {
@@ -1231,7 +1233,9 @@ private struct ConnectionCard<Action: View>: View {
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+        // Satırdaki en uzun kart kadar uzar: Apple Notlar'daki anahtar ya da iki satırlık açıklama yanındaki kartı
+        // kısa bırakmasın.
+        .frame(maxWidth: .infinity, minHeight: 70, maxHeight: .infinity, alignment: .leading)
         .background(Theme.card, in: shape)
         .overlay(shape.strokeBorder(Theme.line))
     }
@@ -2264,6 +2268,30 @@ struct SettingsRow<Detail: View, Control: View>: View {
             }
             .padding(.vertical, 16)
             SettingsDivider()
+        }
+    }
+}
+
+/// Ayar kaydırıcısı: iki ucunda küçük ve büyük ucu gösteren soluk simgeler, hepsinde aynı genişlik (Görünüm'deki
+/// kaydırıcılar alt alta hizalı dursun).
+private struct SettingsSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let minSymbol: String
+    let maxSymbol: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: minSymbol)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            Slider(value: $value, in: range, step: step).frame(width: 220)
+            Image(systemName: maxSymbol)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18)
+                .accessibilityHidden(true)
         }
     }
 }

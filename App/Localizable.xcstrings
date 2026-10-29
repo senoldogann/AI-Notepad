@@ -15360,6 +15360,36 @@
           }
         }
       }
+    },
+    "Kişi seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose person"
+          }
+        }
+      }
+    },
+    "Konuşma payı %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of talk"
+          }
+        }
+      }
+    },
+    "Canlı metin ve notlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and notes."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

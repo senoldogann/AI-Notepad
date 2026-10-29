@@ -440,6 +440,8 @@ struct HostedUpsellSheet: View {
             .padding(.bottom, 24)
         }
         .frame(width: 440)
+        // Sayfa zemini uygulamanınki: koyu temada sistemin gri sayfa zemini uygulamanın siyahıyla uyuşmuyordu.
+        .presentationBackground(Theme.background)
     }
 
     private var title: LocalizedStringKey {
