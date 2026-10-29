@@ -1840,6 +1840,17 @@
         }
       }
     },
+    "Apple ya da Google hesabınla; giriş penceresi uygulamanın içinde açılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With your Apple or Google account; the sign-in window opens inside the app."
+          }
+        }
+      }
+    },
     "Apple ya da Google ile giriş": {
       "extractionState": "manual",
       "localizations": {
@@ -4962,6 +4973,17 @@
         }
       }
     },
+    "Giriş yap…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in…"
+          }
+        }
+      }
+    },
     "Girişten dönen bağlantı geçersiz. \"Giriş yap\"a yeniden bas.": {
       "extractionState": "manual",
       "localizations": {
@@ -4979,6 +5001,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go"
+          }
+        }
+      }
+    },
+    "Gizlilik": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
           }
         }
       }
@@ -7166,6 +7199,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dark"
+          }
+        }
+      }
+    },
+    "Koşullar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms"
           }
         }
       }
@@ -10438,6 +10482,17 @@
         }
       }
     },
+    "Teams, Zoom ve yüz yüze toplantılarını canlı yazıya döker; bitince notun hazır, görevlerin en üstte.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes your Teams, Zoom and in-person meetings live; when they end, your note is ready with your tasks on top."
+          }
+        }
+      }
+    },
     "Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.": {
       "localizations": {
         "en": {
@@ -12746,6 +12801,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your tasks first"
+          }
+        }
+      }
+    },
+    "Önce uygulamayı açıp giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the app and sign in first."
           }
         }
       }

@@ -128,6 +128,9 @@ final class HostedAccount {
     /// Ana penceredeki kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti). Her biri dönem başına bir
     /// kez gösterilir (UserDefaults'ta `hostedNoticeStorageKey` ile işaretlenir); kapatılınca ya da durum değişince kalkar.
     private(set) var visibleNotice: HostedUsageNotice?
+    /// Bu Mac'te kayıtlı oturum var mı: açılışta Anahtar Zinciri'nden (ağsız) okunur, her yenilemede ve çıkışta
+    /// güncellenir; okunamadıysa nil. Giriş kapısı buna bakar (bkz. `requiresSignIn`).
+    private(set) var hasSession: Bool?
     @ObservationIgnored private var isRefreshing: Bool = false
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
     /// Ağ geri gelince hak durumu yeniden okunur (bkz. `retryUnknownStatus`).
@@ -137,9 +140,17 @@ final class HostedAccount {
     @ObservationIgnored private let presenter: HostedWebSignInPresenter = HostedWebSignInPresenter()
 
     private init() {
+        do {
+            hasSession = try hostedHasStoredSession(bundle: .main)
+        } catch {
+            // Kapı kapalı kalır; ilk yenileme hesabı "kullanılamıyor" yapar ve nedeni kapıda görünür.
+            accountLogger.error("Kayıtlı oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
+            hasSession = nil
+        }
         observers.append(NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
             MainActor.assumeIsolated {
                 self?.currentMeeting = nil
+                self?.hasSession = false
                 self?.state = .signedOut
                 self?.errorMessage = userFacingMessage(error: HostedClientError.sessionEnded)
             }
@@ -161,6 +172,18 @@ final class HostedAccount {
             }
         }
         pathMonitor.start(queue: DispatchQueue(label: "com.senoldogan.AINotepad.hosted.path"))
+    }
+
+    /// Giriş kapısı kapalı mı: bu Mac'te oturum yoksa (ya da okunamadıysa) ana arayüz, kayıt, kısayollar ve menü
+    /// eylemleri açılmaz. Oturum varken hak durumu bilinmese de (çevrimdışı) kapı açıktır. Tanıtım modu (yalnız Debug)
+    /// sunucuya bağlanmadığı için kapıya takılmaz.
+    var requiresSignIn: Bool {
+        #if DEBUG
+        if isDemoMode {
+            return false
+        }
+        #endif
+        return hasSession != true
     }
 
     /// Bu Mac'te oturum var mı (hak durumu okunmuş olsun ya da olmasın).
@@ -200,6 +223,7 @@ final class HostedAccount {
             state = .unavailable(message: userFacingMessage(error: error))
             return
         }
+        self.hasSession = hasSession
         guard hasSession else {
             state = .signedOut
             return
@@ -210,6 +234,7 @@ final class HostedAccount {
             state = .signedIn(entitlements)
             updateNotice(entitlements: entitlements, now: Date())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
+            self.hasSession = false
             state = .signedOut
         } catch {
             accountLogger.error("Hak durumu okunamadı, hata: \(String(describing: error), privacy: .private)")

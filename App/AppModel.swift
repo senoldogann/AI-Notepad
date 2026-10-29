@@ -642,6 +642,13 @@ final class AppModel {
         guard !isRecording, !isStarting, isReadyToRecord else {
             return
         }
+        #if HOSTED_EDITION
+        // Giriş kapısı (ikinci savunma; kayıt yolları `toggleRecordingFlow`'da da kapılı): oturum yoksa kayıt başlamaz.
+        guard !HostedAccount.shared.requiresSignIn else {
+            Self.logger.info("Giriş yapılmadan kayıt istendi, başlatılmadı")
+            return
+        }
+        #endif
         isStarting = true
         defer { isStarting = false }
         // Motor bir kez okunur: izin pencereleri açıkken ayar değişse de bulut/yerel kararı ile kaydın motoru aynı kalır
