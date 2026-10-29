@@ -136,8 +136,8 @@ struct AINotepadApp: App {
             appLogger.info("Not effort'u high'a taşındı (xhigh/max notu kesiyordu)")
         }
         #if HOSTED_EDITION
-        // Abonelik sürümünde motor seçimi yok: canlı metin Mac'te (WhisperKit).
-        let engine: LiveEngine = hostedLiveEngine
+        // Abonelik sürümünde motor seçimi yok: yerel motor WhisperKit; kaydın canlı motoru sunucuya göre seçilir.
+        let engine: LiveEngine = hostedLocalEngine
         #else
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
         #endif
@@ -297,11 +297,13 @@ struct AINotepadApp: App {
             }
             #endif
             #if HOSTED_EDITION
-            // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Konuşma modeli
-            // bunu beklemeden, paralel yüklenir (sunucu yavaşsa ya da ağ yoksa model gecikmesin).
-            Task {
-                await HostedAccount.shared.refresh()
-                await model.refreshSetupProblems()
+            // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Mac modeli (~630 MB)
+            // yalnızca sunucu bulut canlı metnini önermiyorsa ya da hak durumu okunamadıysa yüklenir; bulut
+            // kullanılabiliyorsa ilk Mac'e geçişte iner (bkz. `hostedPreloadsLocalModel`).
+            await HostedAccount.shared.refresh()
+            await model.refreshSetupProblems()
+            if hostedPreloadsLocalModel(account: .shared) {
+                await model.loadModel()
             }
             #else
             if await chooseOnDeviceOnFirstRun(defaults: .standard) {
@@ -310,12 +312,12 @@ struct AINotepadApp: App {
                 model.settingsChanged()
                 return
             }
-            #endif
             switch engine {
             case .deepgram: break
             case .whisperKit: await model.loadModel()
             case .appleSpeech: await model.prepareSpeechModel()
             }
+            #endif
         }
     }
 
@@ -529,6 +531,8 @@ private struct MenuContent: View {
         }
         if model.liveEngine == .whisperKit {
             switch model.modelStatus {
+            case .notLoaded:
+                EmptyView()
             case .loading:
                 Divider()
                 Text("Model hazırlanıyor… İlk açılışta birkaç dakika sürebilir.")

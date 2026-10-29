@@ -29,6 +29,7 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case monthlyCapReached = "monthly_cap_reached"
     case dailyCapReached = "daily_cap_reached"
     case transcriptionClosed = "transcription_closed"
+    case transcriptionInProgress = "transcription_in_progress"
     case meetingNotActive = "meeting_not_active"
     case meetingBudgetExhausted = "meeting_budget_exhausted"
     case audioTooLong = "audio_too_long"
@@ -36,6 +37,8 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case upstreamUnavailable = "upstream_unavailable"
     case spendCeilingReached = "spend_ceiling_reached"
     case trialCapacityReached = "trial_capacity_reached"
+    case deepgramUnavailable = "deepgram_unavailable"
+    case deepgramGrantLimit = "deepgram_grant_limit"
     case webhookInvalid = "webhook_invalid"
     case internalError = "internal_error"
 }
@@ -159,6 +162,12 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Toplantı oturumu kapandı: yapay zekâ özellikleri toplantı sırasında ve bittikten kısa süre sonrasına kadar açıktır. Yeni bir toplantı başlat.")
     case .transcriptionClosed:
         return String(localized: "Bu toplantının ses işleme hakkı kapandı (gönderilen ses toplantının süresini aştı). Canlı metin kullanılır.")
+    case .transcriptionInProgress:
+        return String(localized: "Bu toplantının sesi zaten işleniyor; bitince yeniden dene.")
+    case .deepgramUnavailable:
+        return String(localized: "Bulut canlı metni şu an kullanılamıyor; canlı metin bu Mac'te üretiliyor.")
+    case .deepgramGrantLimit:
+        return String(localized: "Bulut canlı metnine bu toplantıda çok sık yeniden bağlanıldı; canlı metin bu Mac'te sürüyor.")
     case .meetingBudgetExhausted:
         return String(localized: "Bu toplantının yapay zekâ kullanım hakkı doldu.")
     case .audioTooLong:

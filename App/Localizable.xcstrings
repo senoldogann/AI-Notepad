@@ -2526,6 +2526,16 @@
         }
       }
     },
+    "Bitince kayıt başlatılabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can start recording when it's done."
+          }
+        }
+      }
+    },
     "Bitince not: görevler, kararlar ve özet.": {
       "localizations": {
         "en": {
@@ -3126,6 +3136,17 @@
         }
       }
     },
+    "Bu toplantının sesi zaten işleniyor; bitince yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting's audio is already being processed; try again when it finishes."
+          }
+        }
+      }
+    },
     "Bu toplantının süre sınırına 5 dakika kaldı; kayıt %@ itibarıyla bitirilecek.": {
       "extractionState": "manual",
       "localizations": {
@@ -3266,6 +3287,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cloud (with your own keys)"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni durdu; canlı metin bu Mac'te sürüyor, kayıt kesilmedi. (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript stopped; the live transcript continues on this Mac and the recording wasn't interrupted. (%@)"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni için jeton alınamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't get access for the cloud live transcript: %@"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni kayıt sırasında durdu: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript stopped during the recording: %@"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni şu an kullanılamıyor; canlı metin bu Mac'te üretiliyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript isn't available right now; the live transcript is being produced on this Mac."
+          }
+        }
+      }
+    },
+    "Bulut canlı metnine bu toplantıda çok sık yeniden bağlanıldı; canlı metin bu Mac'te sürüyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript reconnected too often in this meeting; the live transcript continues on this Mac."
           }
         }
       }
@@ -3718,6 +3791,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deepgram"
+          }
+        }
+      }
+    },
+    "Deepgram (bulut)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deepgram (cloud)"
           }
         }
       }
@@ -5546,6 +5629,26 @@
         }
       }
     },
+    "Hesap durumu okunamadı (sunucuya ulaşılamıyor)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read the account status (the server can't be reached)"
+          }
+        }
+      }
+    },
+    "Hesap durumu okunuyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the account status"
+          }
+        }
+      }
+    },
     "Hesap durumu şu an okunamıyor; bağlantı gelince kendiliğinden yenilenir.": {
       "extractionState": "manual",
       "localizations": {
@@ -6159,6 +6262,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open the recording screen"
+          }
+        }
+      }
+    },
+    "Kayıt hemen başlayabilir; canlı metin model hazır olunca gelir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can start recording now; the live transcript appears once the model is ready."
           }
         }
       }
@@ -9713,6 +9826,36 @@
         }
       }
     },
+    "Sunucu bulut canlı metnine izin verdi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server allowed the cloud live transcript"
+          }
+        }
+      }
+    },
+    "Sunucu bulut canlı metnine izin veriyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server allows the cloud live transcript"
+          }
+        }
+      }
+    },
+    "Sunucu bulut canlı metnini kapattı ya da ayrılan kapasite doldu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server turned off the cloud live transcript or its capacity is used up"
+          }
+        }
+      }
+    },
     "Sunucu isteği anlamadı (%@); uygulamayı güncelleyip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -11317,6 +11460,16 @@
         }
       }
     },
+    "WhisperKit (bu Mac'te)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperKit (on this Mac)"
+          }
+        }
+      }
+    },
     "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.": {
       "localizations": {
         "en": {
@@ -12533,6 +12686,16 @@
         }
       }
     },
+    "Önce bir toplantı kaydet: ücretsiz deneme ilk toplantıyla başlar, sonra toplantılarına soru sorabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record a meeting first: your free trial starts with your first meeting, then you can ask about your meetings."
+          }
+        }
+      }
+    },
     "Önce haber ver": {
       "localizations": {
         "en": {
@@ -12958,6 +13121,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Downloading or loading"
+          }
+        }
+      }
+    },
+    "İndirilmedi; Mac'te canlı metin gerekince indirilir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not downloaded; it's downloaded when the live transcript needs to run on this Mac"
           }
         }
       }

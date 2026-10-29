@@ -140,6 +140,8 @@ private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
     switch (model.liveEngine, model.modelStatus) {
     case (.deepgram, _):
         status = String(localized: "Bulut; model gerekmez")
+    case (_, .notLoaded):
+        status = String(localized: "İndirilmedi; Mac'te canlı metin gerekince indirilir")
     case (_, .loading):
         status = String(localized: "İndiriliyor ya da yükleniyor")
     case (_, .ready):
@@ -147,10 +149,17 @@ private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
     case (_, .failed(let message)):
         status = String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))")
     }
+    #if HOSTED_EDITION
+    // Abonelik: motor her kayıtta sunucuya göre seçilir (Deepgram ya da Mac); "Model" Mac'teki WhisperKit modelidir.
+    return DiagnosticsSection(title: String(localized: "Canlı metin"), items: hostedLiveEngineDiagnostics(model: model, account: .shared) + [
+        DiagnosticsItem(label: String(localized: "Mac modeli"), value: status),
+    ])
+    #else
     return DiagnosticsSection(title: String(localized: "Canlı metin"), items: [
         DiagnosticsItem(label: String(localized: "Motor"), value: model.liveEngine.rawValue),
         DiagnosticsItem(label: String(localized: "Model"), value: status),
     ])
+    #endif
 }
 
 /// Güncelleme bölümü: son denetim, otomatik indirme ve bekleyen güncelleme.

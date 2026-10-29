@@ -52,6 +52,24 @@ private func hostedPlanDiagnostics(entitlements: HostedEntitlements) -> [Diagnos
     }
 }
 
+/// Canlı metnin motoru ve nedeni: bu açılışta kayıt yapıldıysa son kaydınki (Mac'e geçiş dahil), yoksa sunucunun
+/// önerisi. Jeton yazılmaz.
+@MainActor
+func hostedLiveEngineDiagnostics(model: AppModel, account: HostedAccount) -> [DiagnosticsItem] {
+    let status: HostedLiveStatus = model.hostedLiveStatus ?? hostedExpectedLiveStatus(account: account)
+    let engine: String
+    switch status.engine {
+    case .deepgram:
+        engine = String(localized: "Deepgram (bulut)")
+    case .whisperKit:
+        engine = String(localized: "WhisperKit (bu Mac'te)")
+    }
+    return [
+        DiagnosticsItem(label: String(localized: "Motor"), value: engine),
+        DiagnosticsItem(label: String(localized: "Neden"), value: redactedDiagnosticText(text: status.reason, userNames: diagnosticsUserNames())),
+    ]
+}
+
 /// Tanılamada denetlenen sunucu: hesabın sunucusu.
 func hostedDiagnosticsAPIBase() throws -> URL {
     try HostedServices.requireClient().baseURL

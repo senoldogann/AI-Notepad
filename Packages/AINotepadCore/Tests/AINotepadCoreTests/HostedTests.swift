@@ -298,6 +298,12 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         """#
         let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
         #expect(entitlements.monthlyHoursUsed == 2.5)
+        // Eski sunucu `liveEngine` göndermez: Deepgram açılmaz.
+        #expect(hostedLiveEngine(entitlements: entitlements) == .whisperKit)
+        let deepgram: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"liveEngine":"deepgram","accountTokensUsed":15,"accountTokensCap":1500000,"accountTokensPeriod":"month","accountTokensResetsAt":"2026-11-01T00:00:00.000Z","monthlyResetsAt":"2026-11-01T00:00:00.000Z","#)
+        let withEngine: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(deepgram.utf8))
+        #expect(hostedLiveEngine(entitlements: withEngine) == .deepgram)
+        #expect(withEngine.accountTokensUsed == 15 && withEngine.accountTokensCap == 1_500_000)
         // Eski sunucu `trialEndsAt` göndermez; yeni sunucu ISO 8601 gönderir.
         #expect(entitlements.trialEndsAt == nil)
         let withEnd: String = json.replacingOccurrences(of: #""deviceTrialMeetingsLeft":null"#, with: #""deviceTrialMeetingsLeft":null,"trialEndsAt":"2026-11-05T12:00:00.000Z""#)

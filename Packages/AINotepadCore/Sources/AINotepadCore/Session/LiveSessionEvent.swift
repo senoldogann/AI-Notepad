@@ -18,6 +18,9 @@ public enum LiveSessionEvent: Sendable, Equatable {
     case streamIncomplete(speaker: Speaker, untranscribedSec: Double)
     /// Bir konuşmacı ayırma penceresi başarısız oldu; sonraki pencere denenir.
     case diarizationFailed(message: String)
+    /// Bulut canlı metni (Deepgram) durdu; canlı metin bu andan sonra Mac'te (WhisperKit) sürer. Ses kaydı kesilmez;
+    /// geçiş sırasında kesinleşmemiş metin toplantı sonunda kayıttan yazıya dökülür. `message` nedeni söyler.
+    case liveEngineFellBack(message: String)
 }
 
 /// Çalışan canlı oturum: olay akışı ve kayıt sırasında verilebilen komutlar.

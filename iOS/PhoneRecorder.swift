@@ -356,6 +356,9 @@ final class PhoneRecorder {
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         case .speakersAssigned:
             break
+        case .liveEngineFellBack(let message):
+            // iPhone hibrit oturum kullanmaz; olay gelirse yine görünür.
+            errorMessages = appendUnique(messages: errorMessages, message: message)
         }
     }
 

@@ -652,6 +652,46 @@ private struct HomePage: View {
     }
 }
 
+/// Kayıt kartında konuşma modelinin durumu: indiriliyorsa ilerleme, hazırlanamadıysa neden ve "Yeniden dene".
+/// Geliştirici sürümünde "Dinlemeye başla" neden kapalı, abonelikte canlı metin neden gecikecek, kart söyler.
+private struct LocalModelNoticeView: View {
+    let notice: LocalModelNotice
+    let onRetry: @MainActor () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            switch notice {
+            case .preparing(let progress):
+                if let progress {
+                    ProgressView(value: progress).frame(width: 80)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Text(verbatim: localModelNoticeText(progress: progress) + " " + preparingHint)
+                    .foregroundStyle(Theme.muted)
+            case .failed(let message):
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(verbatim: message).foregroundStyle(Theme.muted)
+                Button("Yeniden dene", action: onRetry)
+                    .buttonStyle(.pill)
+                    .controlSize(.small)
+            }
+        }
+        .font(.callout)
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Hazırlanırken ne olacağı: abonelikte kayıt beklemez, geliştirici sürümünde model hazır olunca başlar.
+    private var preparingHint: String {
+        #if HOSTED_EDITION
+        String(localized: "Kayıt hemen başlayabilir; canlı metin model hazır olunca gelir.")
+        #else
+        String(localized: "Bitince kayıt başlatılabilir.")
+        #endif
+    }
+}
+
 /// Kayıt çubuğu (ElevenLabs'in "oluştur" çubuğu gibi): küre, açıklama, seçenek çipleri ve siyah "Başlat"; kayıtta
 /// "Paneli göster" ve "Bitir".
 private struct RecordBar: View {
@@ -681,6 +721,9 @@ private struct RecordBar: View {
             }
             .buttonStyle(.bannerPrimary)
             .disabled(!model.isReadyToRecord || model.isStarting)
+            if let notice = model.localModelNotice {
+                LocalModelNoticeView(notice: notice) { Task { await model.retryLocalModel() } }
+            }
             options
         }
         .padding(.vertical, 28)
@@ -732,9 +775,13 @@ private struct RecordBar: View {
             orb(size: 34)
             switch model.phase {
             case .idle:
-                Text("Toplantını dinlemeye başla")
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
+                if let notice = model.localModelNotice {
+                    LocalModelNoticeView(notice: notice) { Task { await model.retryLocalModel() } }
+                } else {
+                    Text("Toplantını dinlemeye başla")
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 6)
                 Button("Başlat", systemImage: "record.circle", action: onStartRecording)
                     .buttonStyle(.pillPrimary)
