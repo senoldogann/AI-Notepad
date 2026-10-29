@@ -89,6 +89,14 @@ export interface DemoCopy {
   readonly decision: string;
 }
 
+/** Ana sayfadaki uygulama ekran görüntülerinden biri: kartın altındaki etiket ve başlık, görselin metin karşılığı. */
+export interface ShowcaseShot {
+  /** Toplantının hangi anı (ör. "During the meeting"). */
+  readonly label: string;
+  readonly title: string;
+  readonly alt: string;
+}
+
 /** Ana sayfa. */
 export interface HomeCopy {
   readonly meta: PageMeta;
@@ -100,6 +108,16 @@ export interface HomeCopy {
   readonly library: {
     readonly label: string;
     readonly meetings: readonly { readonly title: string; readonly meta: string }[];
+  };
+  /** Uygulamanın gerçek ekranları (örnek toplantılarla; bkz. scripts/make-screenshots.sh). */
+  readonly showcase: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly note: ShowcaseShot;
+    readonly live: ShowcaseShot;
+    readonly ask: ShowcaseShot;
+    readonly home: ShowcaseShot;
   };
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
@@ -377,6 +395,31 @@ export const copy: Copy = {
         { title: "One-on-one: Elif", meta: "Last week · 2 tasks" },
         { title: "Investor update", meta: "October · 4 tasks" },
       ],
+    },
+    showcase: {
+      eyebrow: "Inside the app",
+      title: "Quiet while you talk. Organised when you're done.",
+      lead: "One window for all your meetings, and a small panel that stays out of the way while you record.",
+      note: {
+        label: "After the meeting",
+        title: "Your note, tasks first",
+        alt: `The Product weekly note in the ${productName} app: a list of recent meetings on the left and, under the meeting cover and a who-spoke-when timeline, your three tasks with due dates: write the beta release notes by Friday, send Ayşe the pricing table today, set up a weekly call with support on Wednesday.`,
+      },
+      live: {
+        label: "During the meeting",
+        title: "Live transcript and translation",
+        alt: `The ${productName} live panel while recording a Finnish meeting: each speaker's Finnish sentences with the English translation underneath, your own lines in English, and a “What did I miss?” button at the bottom.`,
+      },
+      ask: {
+        label: "Any time later",
+        title: "Answers with sources",
+        alt: `The Ask page in ${productName}: the question “What did we decide about the budget?” answered in two bullet points with numbered citations, and a row showing 3 sources from 2 meetings.`,
+      },
+      home: {
+        label: "Before the meeting",
+        title: "One click to start",
+        alt: `The ${productName} home screen: “Good morning, Alex”, a large Start listening button with options for language, your voice and live translation, shortcuts, and your open tasks from recent meetings.`,
+      },
     },
     featuresEyebrow: "Features",
     featuresTitle: "Stay in the conversation. It keeps the record.",

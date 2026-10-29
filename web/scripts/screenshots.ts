@@ -189,6 +189,12 @@ async function checkOverflow(page: Page, shot: string, findings: Finding[]): Pro
 async function capture(page: Page, outDir: string, shot: string, findings: Finding[]): Promise<void> {
   await page.evaluate(async (): Promise<void> => {
     await document.fonts.ready;
+    // Tam sayfa görüntüde ekranın altındaki tembel yüklenen görseller de görünsün: hepsi yüklenip çözülür.
+    const images: HTMLImageElement[] = Array.from(document.images);
+    for (const image of images) {
+      image.loading = "eager";
+    }
+    await Promise.all(images.map((image: HTMLImageElement): Promise<void> => image.decode()));
   });
   await checkOverflow(page, shot, findings);
   await page.screenshot({ path: join(outDir, `${shot}.png`), fullPage: true });
