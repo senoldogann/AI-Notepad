@@ -145,12 +145,13 @@ struct AINotepadApp: App {
         // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
         let player: MeetingAudioPlayer = MeetingAudioPlayer()
         _player = State(initialValue: player)
-        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün.
-        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main)))
-        let crashReports: CrashReportCenter = CrashReportCenter()
-        _crashReports = State(initialValue: crashReports)
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode, player: player)
         _model = State(initialValue: model)
+        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün. Kayıt ya da
+        // işleme sürerken güncelleme uygulamayı yeniden başlatmaz (çıkış korumasıyla aynı koşul).
+        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main), isBusy: { model.isBusy }))
+        let crashReports: CrashReportCenter = CrashReportCenter()
+        _crashReports = State(initialValue: crashReports)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
         let router: MainWindowRouter = MainWindowRouter()
         _router = State(initialValue: router)
@@ -378,6 +379,13 @@ struct AINotepadApp: App {
             MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router, updater: updater)
         } label: {
             MenuBarLabel(symbol: menuSymbol)
+                // Menü çubuğu simgesi hep açık: kayıt ve işleme bitince ertelenen güncelleme (varsa) burada sürdürülür,
+                // ana pencere kapalı olsa da.
+                .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
+                    if !isBusy {
+                        updater.resumePostponedRelaunch()
+                    }
+                }
         }
     }
 
@@ -499,6 +507,13 @@ private struct MenuContent: View {
             openMainWindow(router: router, section: .settings)
         }
         if updater.isEnabled {
+            // Bulunan ya da indirilen güncelleme: kayıt ya da işleme sürerken yeniden başlatılmaz.
+            if let update = updater.availableUpdate {
+                Button(updateMenuTitle(update: update, isBusy: model.isBusy), systemImage: "arrow.down.circle.fill") {
+                    updater.installUpdate()
+                }
+                .disabled(model.isBusy)
+            }
             Button("Güncellemeleri denetle…", systemImage: "arrow.down.circle") {
                 updater.checkForUpdates()
             }

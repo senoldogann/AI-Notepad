@@ -83,6 +83,28 @@
         }
       }
     },
+    "%@ %@ hazır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is ready"
+          }
+        }
+      }
+    },
+    "%@ %@ çıktı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is available"
+          }
+        }
+      }
+    },
     "%@ / %@": {
       "extractionState": "manual",
       "localizations": {
@@ -610,6 +632,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ — %@"
+          }
+        }
+      }
+    },
+    "%@ — Güncelle…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Update…"
+          }
+        }
+      }
+    },
+    "%@ — Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Restart and update"
+          }
+        }
+      }
+    },
+    "%@ — kayıt bitince güncellenebilir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — can update after recording"
           }
         }
       }
@@ -4868,6 +4923,17 @@
         }
       }
     },
+    "Güncelle…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update…"
+          }
+        }
+      }
+    },
     "HATA": {
       "extractionState": "manual",
       "localizations": {
@@ -5911,12 +5977,34 @@
         }
       }
     },
+    "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app will restart and update when recording and processing finish."
+          }
+        }
+      }
+    },
     "Kayıt ve işleme bitince yeniden başlatılabilir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You can restart once recording and processing finish"
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app won't restart while recording or processing; you can update when it's done. It also installs on its own when you quit."
           }
         }
       }
@@ -7438,6 +7526,17 @@
         }
       }
     },
+    "Neler yeni?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's new?"
+          }
+        }
+      }
+    },
     "Norveççe": {
       "localizations": {
         "en": {
@@ -7726,6 +7825,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Written to the \"%@\" folder in Notes."
+          }
+        }
+      }
+    },
+    "Notları gizle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide notes"
           }
         }
       }
@@ -9117,6 +9227,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "What was decided in recent meetings?"
+          }
+        }
+      }
+    },
+    "Sonra": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
           }
         }
       }
@@ -11007,12 +11128,24 @@
         }
       }
     },
-    "Yeni sürüm günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+    "Yeni sürüm açılışta ve 6 saatte bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New versions are checked once a day. When on, they download in the background and install when you quit the app; when off, you are only notified."
+            "value": "New versions are checked at launch and every 6 hours. When on, they download in the background and install when you quit the app; when off, you are only notified."
+          }
+        }
+      }
+    },
+    "Yeni sürüm çıktı; \"Güncelle…\" indirip kurar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new version is out; \"Update…\" downloads and installs it."
           }
         }
       }
@@ -11053,6 +11186,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect again"
+          }
+        }
+      }
+    },
+    "Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart and update"
           }
         }
       }
@@ -12199,6 +12343,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next"
+          }
+        }
+      }
+    },
+    "İndirildi. Şimdi yeniden başlatabilir ya da uygulamadan çıkınca kurulmasını bekleyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded. Restart now, or let it install when you quit the app."
           }
         }
       }

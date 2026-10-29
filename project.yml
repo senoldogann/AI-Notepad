@@ -55,6 +55,10 @@ targets:
         SUFeedURL: "https://github.com/$(RELEASES_REPO_AINOTEPAD)/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
         SUEnableAutomaticChecks: true
+        # 6 saatte bir denetlenir (açılıştaki ek denetim App/AppUpdater.swift'te); güncellemeler varsayılan olarak arka
+        # planda indirilir (Ayarlar › Genel'den kapatılabilir) ve uygulamadaki şeritte haber verilir.
+        SUScheduledCheckInterval: 21600
+        SUAutomaticallyUpdate: true
         # Geri bildirim ve çökme raporlarının gittiği sunucu (`POST /v1/reports`, hesapsız); Debug ve Release aynı.
         ReportsAPIBase: "https://api.gistsmith.com"
     configFiles:
@@ -125,6 +129,10 @@ targets:
         SUFeedURL: "https://github.com/$(RELEASES_REPO_GISTSMITH)/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY_GISTSMITH)"
         SUEnableAutomaticChecks: true
+        # 6 saatte bir denetlenir (açılıştaki ek denetim App/AppUpdater.swift'te); güncellemeler varsayılan olarak arka
+        # planda indirilir (Ayarlar › Genel'den kapatılabilir) ve uygulamadaki şeritte haber verilir.
+        SUScheduledCheckInterval: 21600
+        SUAutomaticallyUpdate: true
         # Adres şeması kaydı yok: giriş ASWebAuthenticationSession ile yapılır, dönüş
         # (com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…) Launch Services'e uğramadan doğrudan o
         # oturuma gelir (bkz. App/Hosted/HostedAccount.swift). Başka bir uygulama ya da eski bir kopya dönüşü alamaz.
