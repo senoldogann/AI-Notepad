@@ -29,6 +29,8 @@ interface FakeDeviceCheck {
   readonly calls: Array<{ endpoint: string; token: string }>;
   /** Sıradaki çağrılara dönecek hata durumları (boşalınca normal yanıt). */
   readonly failures: number[];
+  /** Bu kadar bit yazımı uygulanır ama yanıtı 500 olur (Apple yazdı, yanıt kayboldu). */
+  lostUpdateResponses: number;
 }
 
 interface DeviceCheckBody {
@@ -58,6 +60,7 @@ async function fakeDeviceCheck(harness: Harness): Promise<FakeDeviceCheck> {
     bits: new Map(),
     calls: [],
     failures: [],
+    lostUpdateResponses: 0,
   };
   harness.stub(deviceCheckUrl("development", "query_two_bits").replace("query_two_bits", ""), async (request: Request): Promise<Response> => {
     const jwt: string = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
@@ -79,6 +82,10 @@ async function fakeDeviceCheck(harness: Harness): Promise<FakeDeviceCheck> {
     }
     expect(endpoint).toBe("update_two_bits");
     fake.bits.set(body.device_token, { bit0: body.bit0 ?? false, bit1: body.bit1 ?? false });
+    if (fake.lostUpdateResponses > 0) {
+      fake.lostUpdateResponses -= 1;
+      return new Response("Internal Server Error", { status: 500 });
+    }
     return new Response("");
   });
   return fake;
@@ -297,6 +304,34 @@ describe("Apple DeviceCheck ile Mac başına deneme", () => {
     await expectError(await start(harness, other, fake.env, macToken("d")), 502, "upstream_unavailable");
     expect(fake.calls).toHaveLength(3);
     expect(fake.bits.has(macToken("d"))).toBe(false);
+  });
+
+  it("Mac işaretlendikten sonra yarıda kalan ilk deneme aynı hesabı kilitlemez; aynı Mac'teki başka hesap yine reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const mac: string = macToken("yarim");
+    const owner: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+
+    // Apple biti yazdı ama yanıtlar kayboldu: istek 502 ile biter, hesap henüz doğrulanmadı.
+    fake.lostUpdateResponses = 3;
+    await expectError(await start(harness, owner, fake.env, mac), 502, "upstream_unavailable");
+    expect(fake.bits.get(mac)?.bit0).toBe(true);
+    const pending = await env.DB.prepare("SELECT trial_device_verified_at AS verified, trial_device_claim_started_at AS claim FROM users WHERE id = ?")
+      .bind(owner.userId)
+      .first<{ verified: number | null; claim: number | null }>();
+    expect(pending).toEqual({ verified: null, claim: harness.clock.nowMs });
+
+    // Aynı hesap yeniden dener: bekleyen talebi olduğu için doğrulama tamamlanır, Mac yeniden yazılmaz.
+    fake.calls.length = 0;
+    expect((await start(harness, owner, fake.env, mac)).status).toBe(201);
+    expect(fake.calls).toEqual([{ endpoint: "query_two_bits", token: mac }]);
+    const verified = await env.DB.prepare("SELECT trial_device_verified_at AS verified, trial_device_claim_started_at AS claim FROM users WHERE id = ?")
+      .bind(owner.userId)
+      .first<{ verified: number | null; claim: number | null }>();
+    expect(verified).toEqual({ verified: harness.clock.nowMs, claim: null });
+
+    const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await expectError(await start(harness, other, fake.env, mac), 403, "trial_device_used");
   });
 
   it("base64 olmayan jeton Apple'a gitmeden reddedilir", async () => {

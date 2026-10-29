@@ -284,7 +284,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
     const clientIpHash: string = await hmacSha256Hex(config.secrets.trialHash, `trial-ip:${ipKey}`);
     const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null, clientRef: body.clientRef ?? null, deferred: body.deferred ?? false };
-    return jsonResponse(201, await startMeeting(db, context.platform, config, user.userId, startRequest, now));
+    return jsonResponse(201, await startMeeting(db, context, config, user.userId, startRequest, now));
   }
   const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
   if (endMatch !== null && endMatch[1] !== undefined && method === "POST") {

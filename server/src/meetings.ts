@@ -1,6 +1,7 @@
+import { continueAfterDisconnect } from "./background";
 import type { Config } from "./config";
 import { randomId } from "./crypto";
-import { type DeviceBits, queryDeviceBits, updateDeviceBits } from "./deviceCheck";
+import { type ActiveDeviceCheck, type DeviceBits, queryDeviceBits, updateDeviceBits } from "./deviceCheck";
 import {
   type SubscriptionState,
   type TrialState,
@@ -15,7 +16,7 @@ import {
 import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
-import type { Platform } from "./platform";
+import type { Platform, RequestContext } from "./platform";
 import { type TrialRefusalReason, recordTrialRefusal } from "./trialRefusals";
 import { type MonthlyUsage, chunkOverlapAllowance, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
@@ -206,7 +207,7 @@ async function requireDailyStartLeft(db: D1Database, config: Config, userId: str
  */
 export async function startMeeting(
   db: D1Database,
-  platform: Platform,
+  context: RequestContext,
   config: Config,
   userId: string,
   request: MeetingStartRequest,
@@ -221,7 +222,7 @@ export async function startMeeting(
   await requireSpendHeadroom(db, config, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
     await requireTrialSpendHeadroom(db, config, now);
-    await requireTrialDevice(db, platform, config, userId, request.deviceCheckToken, now);
+    await requireTrialDevice(db, context, config, userId, request.deviceCheckToken, now);
     return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, request.deferred, now);
   }
   const deviceId: string | null = request.deviceId;
@@ -269,14 +270,17 @@ export async function startMeeting(
  * Deneme için Mac denetimi (Apple DeviceCheck, `bit0` = "bu Mac bir hesaba deneme verdi"). Politika `off` ise, hesabın
  * denemesi zaten bir Mac'e bağlandıysa (`users.trial_device_verified_at`) ya da hesabın denemesi bittiyse (toplantılar
  * harcandı ya da süre doldu; kapı `trial_exhausted` verir, Mac boşuna işaretlenmez) bir şey yapmaz. Yoksa jeton
- * gerekir (`device_check_required`); `bit0` doluysa `trial_device_used`. Boşsa önce Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi), sonra hesap
- * doğrulanmış sayılır: hesabın sonraki deneme toplantıları jeton istemez. Mac kapıdan (IP sınırı) önce işaretlenir;
- * kapı reddederse Mac yine bu hesabındır ve hesap yeniden deneyebilir. Apple karşılaştır-yaz sunmaz: aynı Mac'te iki
- * hesabın aynı anda ilk denemesi ikisine de geçebilir (kabul edilen yarış).
+ * gerekir (`device_check_required`). `bit0` boşsa Mac bu hesaba bağlanır (`claimTrialDevice`): önce hesabın bekleyen
+ * talebi yazılır (`users.trial_device_claim_started_at`), sonra Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi),
+ * sonra hesap doğrulanmış sayılır: hesabın sonraki deneme toplantıları jeton istemez. `bit0` doluysa: hesabın bekleyen
+ * talebi varsa Mac'i işaretleyen büyük olasılıkla bu hesabın yarıda kalmış isteğidir (Apple yazdı, yanıt ya da
+ * doğrulama yazımı kayboldu): doğrulama tamamlanır; yoksa `trial_device_used`. Mac kapıdan (IP sınırı) önce
+ * işaretlenir; kapı reddederse Mac yine bu hesabındır ve hesap yeniden deneyebilir. Apple karşılaştır-yaz sunmaz: aynı
+ * Mac'te iki hesabın aynı anda ilk denemesi ikisine de geçebilir (kabul edilen yarış).
  */
 async function requireTrialDevice(
   db: D1Database,
-  platform: Platform,
+  context: RequestContext,
   config: Config,
   userId: string,
   deviceCheckToken: string | null,
@@ -286,28 +290,69 @@ async function requireTrialDevice(
   if (deviceCheck.policy === "off") {
     return;
   }
-  const row: { verified_at: number | null } | null = await db
-    .prepare("SELECT trial_device_verified_at AS verified_at FROM users WHERE id = ?")
+  const row: { verified_at: number | null; claim_started_at: number | null } | null = await db
+    .prepare("SELECT trial_device_verified_at AS verified_at, trial_device_claim_started_at AS claim_started_at FROM users WHERE id = ?")
     .bind(userId)
-    .first<{ verified_at: number | null }>();
+    .first<{ verified_at: number | null; claim_started_at: number | null }>();
   if (row === null || row.verified_at !== null || trialMeetingsLeft(await userTrialState(db, userId), config, now) === 0) {
     return;
   }
   if (deviceCheckToken === null) {
     throw new ApiError("device_check_required", "Ücretsiz deneme için bu Mac'in Apple DeviceCheck jetonu gerekiyor; uygulamayı güncelle.");
   }
-  const bits: DeviceBits = await queryDeviceBits(platform, deviceCheck, deviceCheckToken, now);
+  const bits: DeviceBits = await queryDeviceBits(context.platform, deviceCheck, deviceCheckToken, now);
+  if (bits.bit0 && row.claim_started_at !== null) {
+    await markTrialDeviceVerified(db, userId, now);
+    log("warn", "trial_device_claim_resumed", { userId, claimStartedAt: row.claim_started_at });
+    return;
+  }
   if (bits.bit0) {
     log("info", "trial_refused", { userId, attested: false, reason: "device_used" });
     await recordTrialRefusal(db, "device_used", now);
     throw new ApiError("trial_device_used", "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için abone ol.");
   }
-  await updateDeviceBits(platform, deviceCheck, deviceCheckToken, { bit0: true, bit1: bits.bit1 }, now);
   await db
-    .prepare("UPDATE users SET trial_device_verified_at = ? WHERE id = ? AND trial_device_verified_at IS NULL")
+    .prepare("UPDATE users SET trial_device_claim_started_at = ? WHERE id = ? AND trial_device_verified_at IS NULL")
     .bind(now.getTime(), userId)
     .run();
+  // İstemci koparsa da Mac işaretlemesi ve doğrulama biter (Workers isteği iptal etse de): yarım kalan talep olmasın.
+  await continueAfterDisconnect(context, claimTrialDevice(db, context.platform, deviceCheck, userId, deviceCheckToken, bits, now), "trial_device_claim_failed", {
+    userId,
+  });
   log("info", "trial_device_claimed", { userId });
+}
+
+/**
+ * Mac'i işaretler (`bit0` = true, `bit1` korunur) ve hesabı doğrulanmış yazar. Apple jetonu reddettiyse
+ * (`device_check_invalid`, yazmadığı kesin) bekleyen talep silinir ve hata fırlatılır; diğer hatalarda (zaman aşımı,
+ * 5xx) Apple yazmış olabilir: talep kalır, hata fırlatılır (aynı hesap yeniden denediğinde doğrulama tamamlanır).
+ */
+async function claimTrialDevice(
+  db: D1Database,
+  platform: Platform,
+  deviceCheck: ActiveDeviceCheck,
+  userId: string,
+  deviceCheckToken: string,
+  bits: DeviceBits,
+  now: Date,
+): Promise<void> {
+  try {
+    await updateDeviceBits(platform, deviceCheck, deviceCheckToken, { bit0: true, bit1: bits.bit1 }, now);
+  } catch (error: unknown) {
+    if (error instanceof ApiError && error.code === "device_check_invalid") {
+      await db.prepare("UPDATE users SET trial_device_claim_started_at = NULL WHERE id = ?").bind(userId).run();
+    }
+    throw error;
+  }
+  await markTrialDeviceVerified(db, userId, now);
+}
+
+/** Hesabın denemesini Mac'e bağlanmış yazar ve bekleyen talebi siler. */
+async function markTrialDeviceVerified(db: D1Database, userId: string, now: Date): Promise<void> {
+  await db
+    .prepare("UPDATE users SET trial_device_verified_at = ?, trial_device_claim_started_at = NULL WHERE id = ? AND trial_device_verified_at IS NULL")
+    .bind(now.getTime(), userId)
+    .run();
 }
 
 /**
