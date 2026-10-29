@@ -20,6 +20,7 @@ A faster live transcript, clearer limits and recordings that survive a lost conn
 - Clearer messages for every account and limit state.
 - Fewer unexpected sign-outs: a session refresh interrupted by a lost connection no longer signs you out.
 - After you subscribe, old free-trial warnings disappear from the banner and the live panel.
+- Playing a recording no longer stutters: the time and the highlighted word move smoothly, and playback uses far less CPU.
 - English text no longer shows "1 meetings" and similar plural mistakes.
 
 Requires macOS 26 or later on Apple silicon.
