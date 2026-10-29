@@ -101,13 +101,9 @@ struct HostedAccountSettings: View {
         let status: HostedPlanStatus = hostedPlanStatus(entitlements: entitlements)
         SettingsRow(title: Text("Plan")) {
             switch status {
-            case .trial(let left, let total):
-                Text(verbatim: hostedTrialText(left: left, total: total))
-                if left == 0 {
-                    Text("Deneme bitti; yeni toplantı için abone ol.").foregroundStyle(Theme.ink)
-                } else if let trialEndsAt = entitlements.trialEndsAt {
-                    Text("Deneme \(trialEndsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde biter.")
-                }
+            case .trial:
+                // Kalan toplantılar, bitiş ve "Abone ol" aşağıdaki kullanım kartında.
+                Text("Ücretsiz deneme")
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(renewsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde yenilenir.")
             case .ending(let endsAt):
@@ -122,20 +118,9 @@ struct HostedAccountSettings: View {
                     Button("Hesabı yönet") { Task { await account.manageSubscription() } }
                         .disabled(account.isWorking)
                 }
-                if case .trial = status {
-                    Button("Abone ol") { Task { await account.subscribe() } }
-                        .buttonStyle(.pillPrimary)
-                        .disabled(account.isWorking)
-                }
             }
         }
-        SettingsRow(title: Text("Kullanım")) {
-            Text(verbatim: hostedMonthlyUsageText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
-            Text("Adil kullanım sınırı; ay başında sıfırlanır. Canlı metin bu Mac'te yazılır ve sınırdan düşmez.")
-        } control: {
-            ProgressView(value: min(entitlements.monthlyHoursUsed, entitlements.monthlyHoursCap), total: max(entitlements.monthlyHoursCap, 0.1))
-                .frame(width: 140)
-        }
+        HostedUsageCard(account: account, entitlements: entitlements)
         HostedSignOutRow(account: account)
         SettingsRow(title: Text("Hesabı sil")) {
             Text("Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.")

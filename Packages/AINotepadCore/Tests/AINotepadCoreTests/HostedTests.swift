@@ -310,6 +310,39 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             .replacingOccurrences(of: #""access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""access":"active","graceEndsAt":null"#)
             .replacingOccurrences(of: #""status":"past_due","#, with: #""status":"active","cancelAt":"2026-10-01T00:00:00.000Z","#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(ending.utf8))) == .ending(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Toplantı dışı yapay zekâ payı yeni alan: yoksa nil, varsa okunur.
+        #expect(entitlements.accountTokensCap == nil)
+        let withTokens: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"accountTokensUsed":250,"accountTokensCap":1000,"#)
+        let tokens: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(withTokens.utf8))
+        #expect(tokens.accountTokensUsed == 250 && tokens.accountTokensCap == 1000)
+    }
+
+    // Ölçer düzeyleri, ay sıfırlanması (UTC) ve bildirimler: abonede %80 ve %100, denemede son toplantı ve bitiş.
+    @Test func usageLevelsAndNotices() throws {
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 3.4, cap: 10)) == .normal)
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 8, cap: 10)) == .warning)
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 12, cap: 10)) == .full)
+        #expect(hostedUsageFraction(used: 1, cap: 0) == 1)
+        let now: Date = try Date.ISO8601FormatStyle().parse("2026-10-31T23:30:00Z")
+        #expect(hostedMonthResetDate(now: now) == (try Date.ISO8601FormatStyle().parse("2026-11-01T00:00:00Z")))
+        #expect(hostedPeriodKey(now: now) == "2026-10")
+        func decoded(_ text: String) throws -> HostedEntitlements {
+            try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(text.utf8))
+        }
+        let subscriber: String = #"""
+        {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":8.5,"monthlyHoursCap":10,
+         "subscription":{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}}
+        """#
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber)) == .monthlyWarning)
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "10"))) == .monthlyFull)
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "2"))) == nil)
+        let trial: String = subscriber.replacingOccurrences(of: #""access":"active""#, with: #""access":"none""#)
+        #expect(hostedUsageNotice(entitlements: try decoded(trial)) == .trialEnded)
+        #expect(hostedUsageNotice(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":1"#))) == .trialOneLeft)
+        #expect(hostedNoticeStorageKey(notice: .monthlyWarning, userId: "u", now: now) == "hosted.notice.monthlyWarning.u.2026-10")
+        #expect(hostedNoticeStorageKey(notice: .trialEnded, userId: "u", now: now) == "hosted.notice.trialEnded.u")
+        #expect(hostedMinutesLeft(deadline: now.addingTimeInterval(61), now: now) == 2)
     }
 }
 

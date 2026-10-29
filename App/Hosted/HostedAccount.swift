@@ -125,6 +125,9 @@ final class HostedAccount {
     private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
+    /// Ana penceredeki kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti). Her biri dönem başına bir
+    /// kez gösterilir (UserDefaults'ta `hostedNoticeStorageKey` ile işaretlenir); kapatılınca ya da durum değişince kalkar.
+    private(set) var visibleNotice: HostedUsageNotice?
     @ObservationIgnored private var isRefreshing: Bool = false
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
     /// Ağ geri gelince hak durumu yeniden okunur (bkz. `retryUnknownStatus`).
@@ -203,7 +206,9 @@ final class HostedAccount {
         }
         do {
             await HostedDeviceAttestation.prepare(client: client)
-            state = .signedIn(try await client.entitlements())
+            let entitlements: HostedEntitlements = try await client.entitlements()
+            state = .signedIn(entitlements)
+            updateNotice(entitlements: entitlements, now: Date())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
             state = .signedOut
         } catch {
@@ -215,6 +220,31 @@ final class HostedAccount {
                 state = .signedInStatusUnknown(message: message)
             }
         }
+    }
+
+    /// Bildirimi hak durumuna göre günceller: yeni eşik aşıldıysa ve bu dönemde gösterilmediyse gösterilir ve
+    /// "gösterildi" diye işaretlenir; eşik artık geçerli değilse kalkar.
+    private func updateNotice(entitlements: HostedEntitlements, now: Date) {
+        guard let notice = hostedUsageNotice(entitlements: entitlements) else {
+            visibleNotice = nil
+            return
+        }
+        if visibleNotice == notice {
+            return
+        }
+        let key: String = hostedNoticeStorageKey(notice: notice, userId: entitlements.userId, now: now)
+        guard !UserDefaults.standard.bool(forKey: key) else {
+            visibleNotice = nil
+            return
+        }
+        UserDefaults.standard.set(true, forKey: key)
+        visibleNotice = notice
+        accountLogger.info("Kullanım bildirimi gösteriliyor, tür: \(notice.rawValue, privacy: .public)")
+    }
+
+    /// Bildirimi kapatır (bu dönemde yeniden gösterilmez).
+    func dismissNotice() {
+        visibleNotice = nil
     }
 
     /// Hak durumu bilinmiyorsa (çevrimdışı açılış) yeniden okur; ağ geri gelince ve uygulama öne gelince çağrılır.
@@ -397,15 +427,16 @@ final class HostedAccount {
     }
 
     /// Kayıt bitince toplantı oturumunu kapatır; not ve son geçiş sunucunun ek süresinde aynı toplantıyla sürer.
+    /// Kapatma başarısız olsa da hak durumu yenilenir (göstergeler güncel kalsın).
     func endMeeting() async throws {
         guard let meeting = currentMeeting else {
             return
         }
+        defer { Task { await refresh() } }
         let client: HostedClient = try HostedServices.requireClient()
         let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meeting.meetingId)
         currentMeeting = nil
         accountLogger.info("Toplantı oturumu kapandı, dakika: \(ended.minutes ?? 0, privacy: .public)")
-        Task { await refresh() }
     }
 
     /// İşlemi çalıştırır, sonra durumu yeniler; hata kullanıcıya gösterilir.

@@ -44,6 +44,16 @@ final class MainWindowRouter {
     var hasShownSplash: Bool = false
     /// Toplantılar listesini süzen klasör; nil hepsi.
     var folderFilter: String?
+    /// Ayarlar açılınca Hesap sekmesi seçilsin (kenar çubuğundaki kullanım göstergesi ve kullanım bildirimi; abonelik
+    /// sürümü). Ayarlar sekmeyi seçince sıfırlar.
+    var opensAccountSettings: Bool = false
+}
+
+/// Ayarlar › Hesap'ı açar (abonelik sürümü: kullanım göstergesi ve bildirimleri).
+@MainActor
+func openAccountSettings(router: MainWindowRouter) {
+    router.opensAccountSettings = true
+    openMainWindow(router: router, section: .settings)
 }
 
 /// Çıkış koruması: kayıt ya da işleme sürerken uygulama hemen kapanmaz (toplantı "yarıda kaldı" olurdu); ana pencere
@@ -176,6 +186,12 @@ struct MainWindowView: View {
                         if updater.showsBanner, let update = updater.availableUpdate {
                             UpdateBanner(updater: updater, update: update, isBusy: model.isBusy)
                         }
+                        #if HOSTED_EDITION
+                        // Kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti); dönem başına bir kez.
+                        if let notice = HostedAccount.shared.visibleNotice {
+                            HostedUsageBanner(account: .shared, notice: notice) { openAccountSettings(router: router) }
+                        }
+                        #endif
                         detail
                             .id(router.section)
                             .transition(.opacity)
@@ -255,7 +271,7 @@ struct MainWindowView: View {
         case .settings:
             // Geniş pencerede form satırları ekran boyu uzamasın.
             // Genişlik sınırı sayfanın içinde: kaydırma çubuğu pencerenin sağ kenarında kalır.
-            SettingsPage(model: model, shortcuts: shortcuts, updater: updater, crashReports: crashReports) { router.section = .setup }
+            SettingsPage(model: model, router: router, shortcuts: shortcuts, updater: updater, crashReports: crashReports) { router.section = .setup }
                 .scrollContentBackground(.hidden)
         case .setup:
             // Kurulum kenar çubuğu olmadan gösterilir (bkz. `body`); buraya gelinmez.
@@ -312,6 +328,11 @@ private struct Sidebar: View {
             .scrollIndicators(.never)
             // Ayarlar en altta, sol köşede (uygulamaların alışılmış yeri).
             Spacer(minLength: 12)
+            #if HOSTED_EDITION
+            // Abonelikte bu ayın saatleri, denemede kalan toplantılar; tıklanınca Ayarlar › Hesap.
+            HostedSidebarUsage(account: .shared) { openAccountSettings(router: router) }
+                .padding(.bottom, 4)
+            #endif
             item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
         }
         .padding(.horizontal, 10)

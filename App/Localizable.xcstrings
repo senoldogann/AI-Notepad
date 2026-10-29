@@ -116,6 +116,17 @@
         }
       }
     },
+    "%@ / %@ sa": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@ h"
+          }
+        }
+      }
+    },
     "%@ adresine ulaşılamadı; internet bağlantını kontrol et.": {
       "localizations": {
         "en": {
@@ -750,6 +761,17 @@
         }
       }
     },
+    "%@; sınır %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@; the limit resets on %@."
+          }
+        }
+      }
+    },
     "%lld": {
       "localizations": {
         "en": {
@@ -946,6 +968,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld meetings downloading from iCloud…"
+          }
+        }
+      }
+    },
+    "%lld toplantı kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld meetings left"
           }
         }
       }
@@ -1290,13 +1323,13 @@
         }
       }
     },
-    "Adil kullanım sınırı; ay başında sıfırlanır. Canlı metin bu Mac'te yazılır ve sınırdan düşmez.": {
+    "Adil kullanım sınırı; ay başında sıfırlanır (%@). Canlı metin bu Mac'te yazılır ve sınırdan düşmez.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fair-use limit; resets at the start of the month. Live text is transcribed on this Mac and doesn't count toward it."
+            "value": "Fair-use limit; resets at the start of the month (%@). Live transcripts are written on this Mac and don't count toward it."
           }
         }
       }
@@ -2005,6 +2038,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings…"
+          }
+        }
+      }
+    },
+    "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your monthly limit leaves %lld minutes for this meeting; recording ends at %@."
           }
         }
       }
@@ -2806,6 +2850,17 @@
         }
       }
     },
+    "Bu ayki kullanım sınırına ulaştın": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've reached this month's usage limit"
+          }
+        }
+      }
+    },
     "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.": {
       "extractionState": "manual",
       "localizations": {
@@ -2813,6 +2868,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "You've reached this month's usage limit; it resets at the start of the month."
+          }
+        }
+      }
+    },
+    "Bu ayki kullanımının yüzde 80'i doldu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've used 80 percent of this month's hours"
+          }
+        }
+      }
+    },
+    "Bu ayki sınır doldu: yeni kayıt başlatılamaz. Notların ve toplantıların erişilebilir kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's limit is used up: new recordings can't start. Your notes and meetings stay available."
           }
         }
       }
@@ -3794,13 +3871,24 @@
         }
       }
     },
-    "Deneme %@ tarihinde biter.": {
+    "Deneme %@ tarihinde biter (3 toplantı ya da 7 gün, hangisi önce dolarsa).": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your trial ends on %@."
+            "value": "Your trial ends on %@ (3 meetings or 7 days, whichever comes first)."
+          }
+        }
+      }
+    },
+    "Deneme 3 toplantı ya da 7 gün sürer. Kesintisiz devam etmek için şimdi abone olabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The trial lasts 3 meetings or 7 days. Subscribe now to keep going without a break."
           }
         }
       }
@@ -3816,13 +3904,35 @@
         }
       }
     },
-    "Deneme bitti; yeni toplantı için abone ol.": {
+    "Deneme bitti": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your trial is over; subscribe to record new meetings."
+            "value": "Trial ended"
+          }
+        }
+      }
+    },
+    "Deneme bitti; yeni toplantılar için abone ol. Toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial has ended; subscribe for new meetings. Your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
+    "Deneme ilk toplantıyla başlar: 3 toplantı ya da 7 gün, hangisi önce dolarsa.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The trial starts with your first meeting: 3 meetings or 7 days, whichever comes first."
           }
         }
       }
@@ -7101,6 +7211,28 @@
         }
       }
     },
+    "Kullanım ve hesap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage and account"
+          }
+        }
+      }
+    },
+    "Kullanımı gör": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View usage"
+          }
+        }
+      }
+    },
     "Kum": {
       "localizations": {
         "en": {
@@ -9648,6 +9780,17 @@
         }
       }
     },
+    "Sor, notu yeniden yazma, paylaşım çevirisi ve görev araçları bu paydan düşer; toplantı sırasındakiler düşmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask, rewriting notes, share translations and task tools use this allowance; AI during meetings doesn't."
+          }
+        }
+      }
+    },
     "Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.": {
       "extractionState": "manual",
       "localizations": {
@@ -9895,6 +10038,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch the filter to \"All\" or search with another word."
+          }
+        }
+      }
+    },
+    "Sınır %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The limit resets on %@."
           }
         }
       }
@@ -10462,6 +10616,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change meeting language"
+          }
+        }
+      }
+    },
+    "Toplantı dışı yapay zekâ": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI outside meetings"
           }
         }
       }
@@ -11593,6 +11758,17 @@
         }
       }
     },
+    "Yeni kayıt başlatılamaz. Bu, aylık adil kullanım sınırıdır ve %@ tarihinde sıfırlanır; notların ve toplantıların erişilebilir kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New recordings can't start. This is the monthly fair-use limit and it resets on %@; your notes and meetings stay available."
+          }
+        }
+      }
+    },
     "Yeni klasör": {
       "localizations": {
         "en": {
@@ -11653,6 +11829,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "A new version is out; \"Update…\" downloads and installs it."
+          }
+        }
+      }
+    },
+    "Yeni toplantılar için abone ol; toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe for new meetings; your meetings and notes stay on this Mac."
           }
         }
       }
@@ -12743,6 +12930,17 @@
         }
       }
     },
+    "Ücretsiz deneme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free trial"
+          }
+        }
+      }
+    },
     "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.": {
       "extractionState": "manual",
       "localizations": {
@@ -12776,6 +12974,17 @@
         }
       }
     },
+    "Ücretsiz denemen bitti": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended"
+          }
+        }
+      }
+    },
     "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -12783,6 +12992,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your free trial has ended (3 meetings or 7 days). Subscribe to continue."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemende 1 toplantı kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 meeting left in your free trial"
           }
         }
       }
