@@ -61,6 +61,9 @@ describe("süresi dolmuş satırların temizliği", () => {
       env.DB.prepare("INSERT INTO deleted_trial_starts (ip_hash, day, accounts) VALUES ('ip', ?, 1), ('ip', ?, 2)").bind(day(-1), day(0)),
       env.DB.prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, 1), (?, 1), (?, 1)").bind(day(-91), day(-89), day(0)),
       env.DB.prepare("INSERT INTO daily_usage (user_id, day) VALUES (?1, ?2), (?1, ?3), (?1, ?4)").bind(first, day(-3), day(-1), day(0)),
+      env.DB.prepare(
+        "INSERT INTO trial_identity_ledger (identity_hash, trial_meetings_used, device_verified, updated_at) VALUES ('l_old', 3, 1, ?), ('l_recent', 1, 0, ?)",
+      ).bind(nowMs - 731 * dayMs, nowMs - 729 * dayMs),
     ]);
 
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
@@ -75,6 +78,7 @@ describe("süresi dolmuş satırların temizliği", () => {
       daily_spend: 1,
       daily_usage: 1,
       reports: 2,
+      trial_identity_ledger: 1,
     });
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces")).toEqual(["n_new"]);
     // Raporlar durumundan bağımsız 180 gün tutulur.
@@ -88,6 +92,8 @@ describe("süresi dolmuş satırların temizliği", () => {
     expect(await ids("SELECT day AS id FROM deleted_trial_starts")).toEqual([day(0)]);
     expect(await ids("SELECT day AS id FROM daily_spend")).toEqual([day(-89), day(0)]);
     expect(await ids("SELECT day AS id FROM daily_usage")).toEqual([day(-1), day(0)]);
+    // Kimlik deneme defteri son güncellemeden 730 gün tutulur.
+    expect(await ids("SELECT identity_hash AS id FROM trial_identity_ledger")).toEqual(["l_recent"]);
   });
 
   it("tablo başına tur sayısı sınırlıdır; kalan satırlar sonraki çalışmada silinir", async () => {

@@ -48,6 +48,15 @@
     "APP_ATTEST_ENVIRONMENT": "development",
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
     "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
+    // Apple DeviceCheck ile Mac başına ücretsiz deneme (src/deviceCheck.ts). Tek anahtar DEVICECHECK_POLICY:
+    // "required" ise denemesi henüz bir Mac'e bağlanmamış hesabın deneme toplantısı DeviceCheck jetonu ister ve Mac'in
+    // bit0'ı doluysa (Mac başka hesaba deneme verdi) `403 trial_device_used`; "off" ise DeviceCheck hiç çağrılmaz
+    // (yerelde ve testlerde). "required" iken DEVICECHECK_TEAM_ID ve DEVICECHECK_KEY_ID Apple biçiminde (10 karakter) ve
+    // gizli DEVICECHECK_PRIVATE_KEY (.p8 içeriği) girilmiş olmalı; değilse her istek 500 (config_invalid).
+    "DEVICECHECK_POLICY": "off",
+    "DEVICECHECK_ENVIRONMENT": "development",
+    "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
+    "DEVICECHECK_KEY_ID": "DEVICECHECK_KEY_ID_PENDING",
     "TRIAL_MEETINGS": "3",
     // Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev
     // aracı) için günlük token sınırı. Türetme: 90 dakikalık toplantının notunu yeniden yazmak ~100 K token (aşağıdaki
@@ -92,15 +101,21 @@
     "SCRIBE_USD_PER_HOUR": "0.22",
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
     "DAILY_SPEND_CEILING_USD": "25",
+    // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
+    // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
+    // (kötüye kullanılan deneme genel tavanı tüketip aboneleri durduramaz). Açık deneme toplantıları sürer.
+    "DAILY_TRIAL_SPEND_CEILING_USD": "10",
     "REFRESH_TOKEN_DAYS": "60",
     "STRIPE_PRICE_ID": "price_placeholder"
   },
   "env": {
     "production": {
       "name": "ainotepad-server-production",
-      // Özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. Geçiş süresince eski
-      // workers.dev adresi de açık kalır (üstteki `workers_dev: true` kalıtılır).
+      // Yalnızca özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. workers.dev adresi ve
+      // sürüm önizleme adresleri kapalıdır: onlar bölgenin WAF hız sınırı kuralını atlardı.
       "routes": [{ "pattern": "api.gistsmith.com", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false,
       "d1_databases": [
         {
           "binding": "DB",
@@ -118,7 +133,7 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        // Site; API özel alan adı `https://api.gistsmith.com` (Cloudflare panelinde Worker'a bağlanır), workers.dev de açık.
+        // Site; API özel alan adı `https://api.gistsmith.com` (Worker'ın tek adresi; workers.dev kapalı).
         "SITE_ORIGIN": "https://gistsmith.com",
         "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
         // Sitenin Google web istemcisi (bkz. üstteki geliştirme `vars` açıklaması). `placeholder` içeren değerle üretim
@@ -133,6 +148,12 @@
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
+        // Bkz. üstteki geliştirme `vars` açıklaması. DEVICECHECK_KEY_ID yer tutucusu gerçek anahtar kimliğiyle
+        // değiştirilmeden ve DEVICECHECK_PRIVATE_KEY gizli değeri girilmeden üretim her istekte 500 verir.
+        "DEVICECHECK_POLICY": "required",
+        "DEVICECHECK_ENVIRONMENT": "production",
+        "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
+        "DEVICECHECK_KEY_ID": "DEVICECHECK_KEY_ID_PENDING",
         "TRIAL_MEETINGS": "3",
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
@@ -158,6 +179,8 @@
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
         "DAILY_SPEND_CEILING_USD": "25",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "DAILY_TRIAL_SPEND_CEILING_USD": "10",
         "REFRESH_TOKEN_DAYS": "60",
         "STRIPE_PRICE_ID": "price_1UVgVdLYGoRn8lDP8H0WX1VF"
       }

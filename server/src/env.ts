@@ -19,6 +19,10 @@ export interface Env {
   readonly APP_ATTEST_ENVIRONMENT: string;
   readonly APP_ATTEST_APP_IDS: string;
   readonly APP_ATTEST_ALLOWED_CATEGORIES: string;
+  readonly DEVICECHECK_POLICY: string;
+  readonly DEVICECHECK_ENVIRONMENT: string;
+  readonly DEVICECHECK_TEAM_ID: string;
+  readonly DEVICECHECK_KEY_ID: string;
   readonly TRIAL_MEETINGS: string;
   readonly TRIAL_ACCOUNT_DAILY_TOKENS: string;
   readonly TRIAL_ACCOUNTS_PER_IP_PER_DAY: string;
@@ -41,6 +45,7 @@ export interface Env {
   readonly SCRIBE_USD_PER_HOUR: string;
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
   readonly DAILY_SPEND_CEILING_USD: string;
+  readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
   readonly STRIPE_PRICE_ID: string;
 
@@ -50,4 +55,6 @@ export interface Env {
   readonly STRIPE_SECRET_KEY: string;
   readonly STRIPE_WEBHOOK_SECRET: string;
   readonly TURNSTILE_SECRET_KEY: string;
+  /** Yalnızca `DEVICECHECK_POLICY=required` iken gerekir (Apple DeviceCheck .p8 anahtarı, PEM). */
+  readonly DEVICECHECK_PRIVATE_KEY?: string;
 }

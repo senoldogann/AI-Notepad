@@ -46,7 +46,14 @@ export interface AdminStats {
     readonly mrrUsd: number;
   };
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
-  readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DayUsd[] };
+  readonly spend: {
+    readonly todayUsd: number;
+    readonly ceilingUsd: number;
+    /** Bugünkü harcamanın deneme kısmı (deneme toplantıları ve denemedeki hesap çağrıları) ve ayrı tavanı. */
+    readonly trialTodayUsd: number;
+    readonly trialCeilingUsd: number;
+    readonly last30Days: readonly DayUsd[];
+  };
   readonly tokens: { readonly thisMonth: number };
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
 }
@@ -134,13 +141,15 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  * Yönetici istatistikleri; tümü mevcut tablolardan, toplama sorgularıyla (aralıklar dizinli). Tanımlar:
  * - `trials.activeTrialUsers`: abonelik erişimi olmayan, en az bir deneme toplantısı başlatmış ve denemesi bitmemiş
  *   kullanıcılar; `exhaustedTrialUsers`: abonelik erişimi olmayan, tüm deneme toplantılarını kullanmış kullanıcılar.
+ *   Harcanan deneme, aynı kimliğin silinmiş hesaplarından devralınanı da içerir (`users.carried_trial_meetings`).
  * - `subscriptions.active`: erişimi `active` (ödenmiş dönem); `grace`: `past_due` ek sürede; `ending`: `active` olup
  *   iptal edilmiş (`cancel_at` dolu, dönem sonunda biter); `canceledTotal`: durumu `canceled` olan satırlar (hesabı
  *   silinenler sayılmaz).
  * - `mrrUsd` = (`active` − `ending`) × `PRICE_USD_MONTHLY`: yenilenecek ödenmiş abonelikler. Ödemesi başarısız
  *   (`grace`) ve iptal edilmiş olanlar sayılmaz; vergi ve Stripe ücreti düşülmez.
  * - `meetings.hoursThisMonth`: bu ay (UTC) başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye dek).
- * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
+ * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `trialTodayUsd` bugünkü harcamanın deneme kısmı (ayrı
+ *   tavanı `trialCeilingUsd`); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
  * - `users.byProvider`: kimlik sayısı (hesaplar arası bağlama yoktur: kullanıcı başına bir kimlik).
  */
 export async function adminStats(db: D1Database, config: Config, now: Date): Promise<AdminStats> {
@@ -159,6 +168,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     meetingRows,
     meetingMsRow,
     spendRows,
+    trialSpendRow,
     tokenRow,
     reportRows,
   ] = await Promise.all([
@@ -177,8 +187,12 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .prepare(
         `SELECT COALESCE(SUM(CASE WHEN t.used < ?3 THEN 1 ELSE 0 END), 0) AS active,
            COALESCE(SUM(CASE WHEN t.used >= ?3 THEN 1 ELSE 0 END), 0) AS exhausted
-         FROM (SELECT user_id, COUNT(*) AS used FROM meeting_sessions WHERE kind = 'trial' GROUP BY user_id) t
-         WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = t.user_id AND ((${activeAccessSql}) OR (${graceAccessSql})))`,
+         FROM (
+           SELECT u.id AS user_id,
+             u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS used
+           FROM users u
+         ) t
+         WHERE t.used > 0 AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = t.user_id AND ((${activeAccessSql}) OR (${graceAccessSql})))`,
       )
       .bind(nowMs, config.pastDueGraceMs, config.trialMeetings)
       .first<{ active: number; exhausted: number }>(),
@@ -207,6 +221,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .bind(nowMs, monthStartMs(now))
       .first<{ value: number }>(),
     db.prepare("SELECT day, micro_usd AS value FROM daily_spend WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
+    db.prepare("SELECT trial_micro_usd AS value FROM daily_spend WHERE day = ?").bind(dayKey(now)).first<{ value: number }>(),
     db
       .prepare("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS value FROM monthly_usage WHERE month = ?")
       .bind(monthKey(now))
@@ -251,6 +266,8 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     spend: {
       todayUsd: (spendByDay[spendByDay.length - 1] ?? 0) / 1_000_000,
       ceilingUsd: config.dailySpendCeilingMicroUsd / 1_000_000,
+      trialTodayUsd: (trialSpendRow?.value ?? 0) / 1_000_000,
+      trialCeilingUsd: config.dailyTrialSpendCeilingMicroUsd / 1_000_000,
       last30Days: days.map((day: string, index: number): DayUsd => ({ day, usd: (spendByDay[index] ?? 0) / 1_000_000 })),
     },
     tokens: { thisMonth: tokenRow?.value ?? 0 },

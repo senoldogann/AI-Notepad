@@ -105,6 +105,14 @@ final class HostedAccount {
         return false
     }
 
+    /// Son okunan hak durumu abonelik mi (erişimi olan abonelik ya da ek süre).
+    private var isSubscribed: Bool {
+        if case .signedIn(let entitlements) = state {
+            return entitlements.plan == .subscription
+        }
+        return false
+    }
+
     // MARK: Durum
 
     /// Oturumu ve hak durumunu sunucudan yeniden okur; App Attest destekleniyorsa cihaz önce doğrulanır (sessizce
@@ -240,11 +248,13 @@ final class HostedAccount {
     // MARK: Toplantı
 
     /// Kayıt başında toplantı oturumu açar (deneme hakkı ya da abonelik buradan düşer); reddedilirse hata fırlatılır
-    /// ve kayıt başlamaz. App Attest destekleniyorsa onay eklenir.
+    /// ve kayıt başlamaz. App Attest destekleniyorsa onay eklenir. Abone olmayan (ya da hak durumu henüz okunmamış)
+    /// hesapta Apple DeviceCheck jetonu da gönderilir: deneme bu Mac'e bağlanır; jeton üretilemezse kayıt başlamaz.
     func startMeeting() async throws -> HostedStartedMeeting {
         let client: HostedClient = try HostedServices.requireClient()
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
-        let started: HostedStartedMeeting = try await client.startMeeting(device: device)
+        let deviceCheckToken: String? = isSubscribed ? nil : try await HostedDeviceCheck.token()
+        let started: HostedStartedMeeting = try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken)
         currentMeeting = started
         accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
         Task { await refresh() }

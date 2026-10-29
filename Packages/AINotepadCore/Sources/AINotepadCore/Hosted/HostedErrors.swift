@@ -22,6 +22,9 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case subscriptionExists = "subscription_exists"
     case trialExhausted = "trial_exhausted"
     case trialIPLimit = "trial_ip_limit"
+    case trialDeviceUsed = "trial_device_used"
+    case deviceCheckRequired = "device_check_required"
+    case deviceCheckInvalid = "device_check_invalid"
     case monthlyCapReached = "monthly_cap_reached"
     case dailyCapReached = "daily_cap_reached"
     case transcriptionClosed = "transcription_closed"
@@ -31,6 +34,7 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case upstreamRejected = "upstream_rejected"
     case upstreamUnavailable = "upstream_unavailable"
     case spendCeilingReached = "spend_ceiling_reached"
+    case trialCapacityReached = "trial_capacity_reached"
     case webhookInvalid = "webhook_invalid"
     case internalError = "internal_error"
 }
@@ -72,6 +76,14 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case network(path: String, reason: String)
     /// Yanıt beklenen biçimde değil; gövde hata ayıklama içindir (jeton içermez).
     case malformedResponse(path: String, status: Int, body: String)
+}
+
+/// Apple DeviceCheck jetonu üretilemedi (ücretsiz deneme toplantısı için gerekir).
+public enum HostedDeviceCheckError: Error, Sendable, Equatable {
+    /// Bu Mac'te DeviceCheck desteklenmiyor.
+    case unsupported
+    /// Jeton üretilemedi; neden hata ayıklama içindir.
+    case tokenFailed(reason: String)
 }
 
 /// Sunucu hata gövdesinin biçimi.
@@ -120,6 +132,12 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.")
     case .trialIPLimit:
         return String(localized: "Bu ağdan bugün çok fazla yeni deneme başlatıldı. Yarın yeniden dene ya da abone ol.")
+    case .trialDeviceUsed:
+        return String(localized: "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için Ayarlar › Hesap'tan abone ol.")
+    case .deviceCheckRequired:
+        return String(localized: "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.")
+    case .deviceCheckInvalid:
+        return String(localized: "Bu Mac Apple tarafından doğrulanamadı; uygulamayı yeniden açıp tekrar dene.")
     case .monthlyCapReached:
         return String(localized: "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")
     case .dailyCapReached:
@@ -128,6 +146,8 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.")
     case .subscriptionExists:
         return String(localized: "Zaten bir aboneliğin var; \"Hesabı yönet\" ile düzenleyebilirsin.")
+    case .trialCapacityReached:
+        return String(localized: "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.")
     case .spendCeilingReached:
         return String(localized: "Servis bugün çok yoğun; yeni toplantılar ve yapay zekâ istekleri geçici olarak durduruldu. Biraz sonra yeniden dene.")
     case .meetingNotActive:
@@ -183,6 +203,16 @@ public func hostedClientMessage(error: HostedClientError) -> String {
     }
 }
 
+/// DeviceCheck hatasının kullanıcıya gösterilen metni. Saf fonksiyondur.
+public func hostedDeviceCheckMessage(error: HostedDeviceCheckError) -> String {
+    switch error {
+    case .unsupported:
+        String(localized: "Bu Mac Apple'ın cihaz doğrulamasını (DeviceCheck) desteklemiyor; ücretsiz deneme başlatılamıyor. Abone olarak devam edebilirsin.")
+    case .tokenFailed:
+        String(localized: "Bu Mac Apple ile doğrulanamadı (DeviceCheck). İnternet bağlantını kontrol edip yeniden dene.")
+    }
+}
+
 /// Canlı çeviri bu kayıtta durmalı mı: anahtar reddedildi (401/403) ya da abonelik sunucusu toplantının yapay zekâ
 /// hakkını kapattı (oturum yok, toplantı kapalı, bütçe ya da sınır doldu, harcama tavanı). Her cümle aynı hatayı
 /// almasın diye çeviri durur; cümleler "Tekrar dene"de kalır. Saf fonksiyondur.
@@ -208,7 +238,7 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
 private func isClosedHostedAccess(error: HostedAPIError) -> Bool {
     switch error.code {
     case .unauthorized, .invalidToken, .forbidden, .subscriptionRequired, .trialExhausted, .monthlyCapReached, .dailyCapReached,
-         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached:
+         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached, .trialCapacityReached:
         return true
     default:
         return false

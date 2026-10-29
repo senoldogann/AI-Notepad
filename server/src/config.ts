@@ -7,6 +7,27 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
+/** Apple DeviceCheck API ortamı: geliştirme ya da yayın adresi. */
+export type DeviceCheckEnvironment = "development" | "production";
+
+/**
+ * Apple DeviceCheck ile Mac başına deneme (bkz. `deviceCheck.ts`). Tek anahtar `DEVICECHECK_POLICY`'dir:
+ * - `required`: hesabın denemesi henüz bir Mac'e bağlanmamışsa deneme toplantısı DeviceCheck jetonu ister;
+ * - `off`: DeviceCheck hiç çağrılmaz, deneme yalnızca hesap ve IP sınırlarıyla çalışır (yerel geliştirme, testler).
+ */
+export type DeviceCheckConfig =
+  | { readonly policy: "off" }
+  | {
+      readonly policy: "required";
+      readonly environment: DeviceCheckEnvironment;
+      /** Apple geliştirici ekip kimliği (JWT `iss`). */
+      readonly teamId: string;
+      /** DeviceCheck anahtarının kimliği (JWT `kid`). */
+      readonly keyId: string;
+      /** DeviceCheck anahtarı (.p8, PKCS#8 PEM). */
+      readonly privateKeyPem: string;
+    };
+
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
@@ -28,6 +49,7 @@ export interface Config {
     readonly appIds: readonly string[];
     readonly allowedCategories: readonly number[];
   };
+  readonly deviceCheck: DeviceCheckConfig;
   readonly trialMeetings: number;
   /** Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrılarının günlük token sınırı. */
   readonly trialAccountDailyTokens: number;
@@ -61,6 +83,8 @@ export interface Config {
     readonly keytermsUsdPerHour: number;
   };
   readonly dailySpendCeilingMicroUsd: number;
+  /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
+  readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
   readonly stripePriceId: string;
   readonly secrets: {
@@ -160,6 +184,11 @@ const envSchema = z.object({
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
   APP_ATTEST_APP_IDS: csv,
   APP_ATTEST_ALLOWED_CATEGORIES: csv,
+  DEVICECHECK_POLICY: z.enum(["required", "off"]),
+  DEVICECHECK_ENVIRONMENT: z.enum(["development", "production"]),
+  DEVICECHECK_TEAM_ID: z.string(),
+  DEVICECHECK_KEY_ID: z.string(),
+  DEVICECHECK_PRIVATE_KEY: z.string().optional(),
   TRIAL_MEETINGS: positiveInt,
   TRIAL_ACCOUNT_DAILY_TOKENS: positiveInt,
   TRIAL_ACCOUNTS_PER_IP_PER_DAY: positiveInt,
@@ -182,6 +211,7 @@ const envSchema = z.object({
   SCRIBE_USD_PER_HOUR: positiveNumber,
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
   DAILY_SPEND_CEILING_USD: positiveNumber,
+  DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
@@ -213,6 +243,10 @@ export function parseConfig(env: Env): Config {
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
   }
+  const deviceCheck: DeviceCheckConfig = deviceCheckConfig(value);
+  if (value.ENVIRONMENT === "production" && deviceCheck.policy === "required" && deviceCheck.environment !== "production") {
+    throw new ConfigError(["DEVICECHECK_ENVIRONMENT"]);
+  }
   if (value.ENVIRONMENT === "production") {
     const placeholders: string[] = placeholderSettings(value);
     if (placeholders.length > 0) {
@@ -234,6 +268,7 @@ export function parseConfig(env: Env): Config {
       appIds: value.APP_ATTEST_APP_IDS,
       allowedCategories: categories,
     },
+    deviceCheck,
     trialMeetings: value.TRIAL_MEETINGS,
     trialAccountDailyTokens: value.TRIAL_ACCOUNT_DAILY_TOKENS,
     trialAccountsPerIpPerDay: value.TRIAL_ACCOUNTS_PER_IP_PER_DAY,
@@ -260,6 +295,7 @@ export function parseConfig(env: Env): Config {
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
+    dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
     secrets: {
@@ -270,5 +306,45 @@ export function parseConfig(env: Env): Config {
       stripeWebhook: value.STRIPE_WEBHOOK_SECRET,
       turnstile: value.TURNSTILE_SECRET_KEY,
     },
+  };
+}
+
+/** Apple ekip ve anahtar kimlikleri 10 karakterlik büyük harf ve rakamdır. */
+const appleIdentifierPattern: RegExp = /^[A-Z0-9]{10}$/;
+
+/** DeviceCheck ayarları. */
+interface DeviceCheckSettings {
+  readonly DEVICECHECK_POLICY: "required" | "off";
+  readonly DEVICECHECK_ENVIRONMENT: DeviceCheckEnvironment;
+  readonly DEVICECHECK_TEAM_ID: string;
+  readonly DEVICECHECK_KEY_ID: string;
+  readonly DEVICECHECK_PRIVATE_KEY?: string | undefined;
+}
+
+/**
+ * DeviceCheck yapılandırması. `off` ise diğer ayarlara bakılmaz. `required` ise ekip ve anahtar kimliği Apple
+ * biçiminde (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez) ve gizli `DEVICECHECK_PRIVATE_KEY` PKCS#8 PEM olmalı;
+ * değilse geçersiz alanların adlarıyla `ConfigError`. Saf fonksiyondur.
+ */
+function deviceCheckConfig(settings: DeviceCheckSettings): DeviceCheckConfig {
+  if (settings.DEVICECHECK_POLICY === "off") {
+    return { policy: "off" };
+  }
+  const privateKeyPem: string = settings.DEVICECHECK_PRIVATE_KEY ?? "";
+  const checks: ReadonlyArray<readonly [string, boolean]> = [
+    ["DEVICECHECK_TEAM_ID", appleIdentifierPattern.test(settings.DEVICECHECK_TEAM_ID)],
+    ["DEVICECHECK_KEY_ID", appleIdentifierPattern.test(settings.DEVICECHECK_KEY_ID)],
+    ["DEVICECHECK_PRIVATE_KEY", privateKeyPem.includes("-----BEGIN PRIVATE KEY-----")],
+  ];
+  const invalid: string[] = checks.filter(([, valid]: readonly [string, boolean]): boolean => !valid).map(([name]: readonly [string, boolean]): string => name);
+  if (invalid.length > 0) {
+    throw new ConfigError(invalid);
+  }
+  return {
+    policy: "required",
+    environment: settings.DEVICECHECK_ENVIRONMENT,
+    teamId: settings.DEVICECHECK_TEAM_ID,
+    keyId: settings.DEVICECHECK_KEY_ID,
+    privateKeyPem,
   };
 }

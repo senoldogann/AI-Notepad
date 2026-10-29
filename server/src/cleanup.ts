@@ -29,9 +29,11 @@ const dailySpendRetentionMs: number = 90 * dayMs;
 const dailyUsageRetentionMs: number = 2 * dayMs;
 /** Raporlar (geri bildirim, çökme, iletişim; durumundan bağımsız) 180 gün tutulur. */
 const reportRetentionMs: number = 180 * dayMs;
+/** Kimlik deneme defteri son güncellemeden 730 gün (24 ay) tutulur (bkz. `trialLedger.ts`). */
+const trialLedgerRetentionMs: number = 730 * dayMs;
 
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 4 × 1000 satır. 10 tablo × 4 tur = en çok 40 sorgu;
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 4 × 1000 satır. 11 tablo × 4 tur = en çok 44 sorgu;
  * Workers ücretsiz planının çağrı başına 50 D1 sorgusu sınırının altındadır. Kalan satırlar ertesi gün silinir.
  */
 export const scheduledCleanupLimits: CleanupLimits = { batchSize: 1000, maxBatchesPerTable: 4 };
@@ -64,6 +66,7 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { table: "daily_spend", where: "day < ?", binds: [dayKey(new Date(nowMs - dailySpendRetentionMs))] },
     { table: "daily_usage", where: "day < ?", binds: [dayKey(new Date(nowMs - dailyUsageRetentionMs))] },
     { table: "reports", where: "created_at < ?", binds: [nowMs - reportRetentionMs] },
+    { table: "trial_identity_ledger", where: "updated_at < ?", binds: [nowMs - trialLedgerRetentionMs] },
   ];
 }
 

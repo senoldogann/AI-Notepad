@@ -1,13 +1,19 @@
 import { randomId } from "../crypto";
+import { insertUserFromLedgerStatement } from "../trialLedger";
 
 /** Giriş sağlayıcısı. */
 export type IdentityProvider = "apple" | "google";
 
-/** Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır. */
+/**
+ * Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır.
+ * Yeni kullanıcı, kimliğin deneme defterindeki (`identityHash`, bkz. `trialIdentityHash`) harcanan deneme sayısını ve
+ * cihaz doğrulamasını devralır: hesabı silip aynı kimlikle yeniden açmak denemeyi sıfırlamaz.
+ */
 export async function findOrCreateUser(
   db: D1Database,
   provider: IdentityProvider,
   subject: string,
+  identityHash: string,
   email: string | null,
   now: Date,
 ): Promise<string> {
@@ -18,7 +24,7 @@ export async function findOrCreateUser(
   const userId: string = randomId();
   try {
     await db.batch([
-      db.prepare("INSERT INTO users (id, created_at) VALUES (?, ?)").bind(userId, now.getTime()),
+      insertUserFromLedgerStatement(db, userId, identityHash, now),
       db
         .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, ?, ?)")
         .bind(provider, subject, userId, email, now.getTime()),

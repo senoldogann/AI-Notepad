@@ -21,7 +21,7 @@ import {
   trialAccountTokenStep,
   userTokenSteps,
 } from "../reservations";
-import { addSpendStatement, llmCostMicroUsd } from "../usage";
+import { addSpendStatement, addTrialSpendStatement, llmCostMicroUsd } from "../usage";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
 
 /**
@@ -36,6 +36,11 @@ export type LLMScope =
 /** Deneme kullanıcısının toplantısız çağrısı mı (ayrıca küçük günlük sınır). Saf fonksiyondur. */
 function isTrialAccountCall(scope: LLMScope): boolean {
   return scope.kind === "account" && scope.access === "trial";
+}
+
+/** Çağrının harcaması deneme tavanına da sayılır mı: deneme toplantısı ya da denemedeki hesap çağrısı. Saf fonksiyondur. */
+function isTrialSpend(scope: LLMScope): boolean {
+  return scope.kind === "meeting" ? scope.meeting.kind === "trial" : scope.access === "trial";
 }
 
 /** Log alanı: toplantı kimliği ya da hesap çağrısında null. Saf fonksiyondur. */
@@ -83,7 +88,10 @@ function totalInputTokens(usage: { input_tokens: number | null; cache_creation_i
   return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 
-/** Ayrılan tokenı (toplantı varsa toplantı, aylık, günlük) gerçek kullanımla değiştirir ve günlük harcamaya ekler. */
+/**
+ * Ayrılan tokenı (toplantı varsa toplantı, aylık, günlük) gerçek kullanımla değiştirir ve günlük harcamaya ekler
+ * (denemedeyse deneme harcamasına da).
+ */
 async function chargeUsage(db: D1Database, scope: LLMScope, reserved: number, usage: TokenUsage, now: Date): Promise<void> {
   const actual: number = usage.inputTokens + usage.outputTokens;
   const meetingStatements: D1PreparedStatement[] = scope.kind === "meeting" ? [settleMeetingTokenStatement(db, scope.meeting.id, reserved, actual)] : [];
@@ -92,7 +100,7 @@ async function chargeUsage(db: D1Database, scope: LLMScope, reserved: number, us
     ...meetingStatements,
     ...trialStatements,
     ...settleUserTokenStatements(db, scope.userId, reserved, usage.inputTokens, usage.outputTokens, now),
-    addSpendStatement(db, now, llmCostMicroUsd(usage.inputTokens, usage.outputTokens)),
+    (isTrialSpend(scope) ? addTrialSpendStatement : addSpendStatement)(db, now, llmCostMicroUsd(usage.inputTokens, usage.outputTokens)),
   ]);
   log("info", "llm_usage", { userId: scope.userId, meetingId: scopeMeetingId(scope), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }

@@ -20,8 +20,10 @@ private struct RefreshBody: Encodable {
     let refreshToken: String
 }
 
+/// Toplantı başlatma: App Attest onayı ve Apple DeviceCheck jetonu (base64); nil alanlar gövdeye yazılmaz.
 private struct MeetingStartBody: Encodable {
     let device: HostedDeviceAssertion?
+    let deviceCheckToken: String?
 }
 
 private struct DeviceChallengeBody: Encodable {
@@ -131,13 +133,14 @@ public actor HostedClient: HostedLLMCredentialSource {
         try decode(HostedEntitlements.self, data: try await authorized(path: "/v1/me", method: "GET", body: nil, isRetryable: isRetryableRepeatableRequest), path: "/v1/me")
     }
 
-    /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `monthly_cap_reached`…) `HostedAPIError`. Açılan
-    /// toplantı yapay zekâ çağrılarının toplantısı olur.
-    public func startMeeting(device: HostedDeviceAssertion?) async throws -> HostedStartedMeeting {
+    /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `trial_device_used`, `monthly_cap_reached`…)
+    /// `HostedAPIError`. `deviceCheckToken` (Apple DeviceCheck, base64) denemesi henüz bir Mac'e bağlanmamış hesabın
+    /// deneme toplantısında gerekir. Açılan toplantı yapay zekâ çağrılarının toplantısı olur.
+    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?) async throws -> HostedStartedMeeting {
         let path: String = "/v1/meetings/start"
         let started: HostedStartedMeeting = try decode(
             HostedStartedMeeting.self,
-            data: try await authorized(path: path, method: "POST", body: try encoded(body: MeetingStartBody(device: device)), isRetryable: isRetryableOneShotRequest),
+            data: try await authorized(path: path, method: "POST", body: try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken)), isRetryable: isRetryableOneShotRequest),
             path: path
         )
         meetingID = started.meetingId

@@ -7,7 +7,7 @@ import { errorName, log } from "./log";
 import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
 import { audioReservationSteps, reserveAll, settleAudioStatements } from "./reservations";
-import { addSpendStatement, transcriptionCostMicroUsd } from "./usage";
+import { addSpendStatement, addTrialSpendStatement, transcriptionCostMicroUsd } from "./usage";
 
 export const elevenLabsSpeechToTextUrl: string = "https://api.elevenlabs.io/v1/speech-to-text";
 export const scribeModel: string = "scribe_v2";
@@ -310,7 +310,8 @@ export async function proxyTranscription(
   const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
   await db.batch([
     ...settleAudioStatements(db, meeting.id, meeting.user_id, reserved, seconds, overrun ? 1 : 0, now),
-    addSpendStatement(db, now, transcriptionCostMicroUsd(seconds, usdPerHour)),
+    // Deneme toplantısının sesi deneme harcamasına da sayılır.
+    (meeting.kind === "trial" ? addTrialSpendStatement : addSpendStatement)(db, now, transcriptionCostMicroUsd(seconds, usdPerHour)),
   ]);
   if (overrun) {
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });

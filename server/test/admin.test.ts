@@ -43,7 +43,7 @@ interface StatsBody {
   readonly trials: { activeTrialUsers: number; exhaustedTrialUsers: number };
   readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; mrrUsd: number };
   readonly meetings: { last30Days: Array<{ day: string; trial: number; subscription: number }>; hoursThisMonth: number };
-  readonly spend: { todayUsd: number; ceilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
+  readonly spend: { todayUsd: number; ceilingUsd: number; trialTodayUsd: number; trialCeilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
   readonly tokens: { thisMonth: number };
   readonly reports: { openFeedback: number; openCrash: number; openContact: number };
 }
@@ -99,7 +99,7 @@ describe("yönetici API'si", () => {
     const month: string = dayOf(nowMs, 0).slice(0, 7);
     await env.DB.batch([
       env.DB.prepare("INSERT INTO downloads (day, count) VALUES (?, 3), (?, 1), (?, 10)").bind(dayOf(nowMs, 0), dayOf(nowMs, -2), dayOf(nowMs, -40)),
-      env.DB.prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, 1250000), (?, 500000)").bind(dayOf(nowMs, 0), dayOf(nowMs, -5)),
+      env.DB.prepare("INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES (?, 1250000, 400000), (?, 500000, 0)").bind(dayOf(nowMs, 0), dayOf(nowMs, -5)),
       env.DB.prepare("INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens) VALUES (?, ?, 1000, 500), (?, '2026-09', 999, 0)").bind(
         admin.userId,
         month,
@@ -140,6 +140,8 @@ describe("yönetici API'si", () => {
     expect(stats.meetings.hoursThisMonth).toBe(1.5);
     expect(stats.spend.todayUsd).toBe(1.25);
     expect(stats.spend.ceilingUsd).toBe(25);
+    expect(stats.spend.trialTodayUsd).toBe(0.4);
+    expect(stats.spend.trialCeilingUsd).toBe(10);
     expect(stats.spend.last30Days[24]).toEqual({ day: days[24], usd: 0.5 });
     expect(stats.tokens).toEqual({ thisMonth: 1500 });
     expect(stats.reports).toEqual({ openFeedback: 2, openCrash: 1, openContact: 0 });
