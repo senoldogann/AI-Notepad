@@ -16,3 +16,7 @@ CREATE INDEX trial_identity_ledger_updated ON trial_identity_ledger(updated_at);
 ALTER TABLE users ADD COLUMN carried_trial_meetings INTEGER NOT NULL DEFAULT 0;
 -- Hesabın denemesi bir Mac'e (Apple DeviceCheck bit0) bağlandığı an (ms); NULL ise deneme için DeviceCheck gerekir.
 ALTER TABLE users ADD COLUMN trial_device_verified_at INTEGER;
+
+-- Deneme harcaması (deneme toplantıları ve denemedeki toplantı dışı çağrılar; `micro_usd` toplamının parçası): ayrı
+-- günlük tavan `DAILY_TRIAL_SPEND_CEILING_USD` (bkz. src/usage.ts `requireTrialSpendHeadroom`).
+ALTER TABLE daily_spend ADD COLUMN trial_micro_usd INTEGER NOT NULL DEFAULT 0;

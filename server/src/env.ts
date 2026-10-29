@@ -45,6 +45,7 @@ export interface Env {
   readonly SCRIBE_USD_PER_HOUR: string;
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
   readonly DAILY_SPEND_CEILING_USD: string;
+  readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
   readonly STRIPE_PRICE_ID: string;
 

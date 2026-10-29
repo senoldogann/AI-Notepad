@@ -5,7 +5,7 @@ import { deviceTrialMeetingsUsed, hasSubscriptionAccess, subscriptionState, user
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
-import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom } from "./usage";
+import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
 export interface StartedMeeting {
@@ -137,11 +137,12 @@ async function requireDailyStartLeft(db: D1Database, config: Config, userId: str
 }
 
 /**
- * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503. Abonelik erişimi varsa (`past_due` ek süresi dahil)
- * aylık sınırın altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı
- * düşer (önce `requireTrialDevice`, sonra `startTrialMeeting`); abonelik toplantısı DeviceCheck istemez. Kullanıcı bugün `maxMeetingStartsPerDay` toplantı başlattıysa 429. Denetimler eklemeden
- * önce ya da eklemeyle aynı işlemde yapılır: reddedilen başlatma açık toplantıyı kapatmaz ve günlük başlatma hakkı
- * harcamaz.
+ * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503; deneme toplantısında günlük deneme harcaması tavanı
+ * aşıldıysa da 503 (`trial_capacity_reached`). Abonelik erişimi varsa (`past_due` ek süresi dahil) aylık sınırın
+ * altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı düşer (önce
+ * `requireTrialDevice`, sonra `startTrialMeeting`); abonelik toplantısı DeviceCheck istemez. Kullanıcı bugün
+ * `maxMeetingStartsPerDay` toplantı başlattıysa 429. Denetimler eklemeden önce ya da eklemeyle aynı işlemde yapılır:
+ * reddedilen başlatma açık toplantıyı kapatmaz ve günlük başlatma hakkı harcamaz.
  */
 export async function startMeeting(
   db: D1Database,
@@ -153,6 +154,7 @@ export async function startMeeting(
 ): Promise<StartedMeeting> {
   await requireSpendHeadroom(db, config, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
+    await requireTrialSpendHeadroom(db, config, now);
     await requireTrialDevice(db, platform, config, userId, request.deviceCheckToken, now);
     return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, now);
   }

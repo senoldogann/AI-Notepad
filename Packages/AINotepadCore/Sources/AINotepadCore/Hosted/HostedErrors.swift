@@ -34,6 +34,7 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case upstreamRejected = "upstream_rejected"
     case upstreamUnavailable = "upstream_unavailable"
     case spendCeilingReached = "spend_ceiling_reached"
+    case trialCapacityReached = "trial_capacity_reached"
     case webhookInvalid = "webhook_invalid"
     case internalError = "internal_error"
 }
@@ -145,6 +146,8 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.")
     case .subscriptionExists:
         return String(localized: "Zaten bir aboneliğin var; \"Hesabı yönet\" ile düzenleyebilirsin.")
+    case .trialCapacityReached:
+        return String(localized: "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.")
     case .spendCeilingReached:
         return String(localized: "Servis bugün çok yoğun; yeni toplantılar ve yapay zekâ istekleri geçici olarak durduruldu. Biraz sonra yeniden dene.")
     case .meetingNotActive:
@@ -235,7 +238,7 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
 private func isClosedHostedAccess(error: HostedAPIError) -> Bool {
     switch error.code {
     case .unauthorized, .invalidToken, .forbidden, .subscriptionRequired, .trialExhausted, .monthlyCapReached, .dailyCapReached,
-         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached:
+         .meetingNotActive, .meetingBudgetExhausted, .spendCeilingReached, .trialCapacityReached:
         return true
     default:
         return false

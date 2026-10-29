@@ -32,6 +32,7 @@ export type ErrorCode =
   | "upstream_rejected"
   | "upstream_unavailable"
   | "spend_ceiling_reached"
+  | "trial_capacity_reached"
   | "webhook_invalid"
   | "internal_error";
 
@@ -68,6 +69,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   upstream_rejected: 502,
   upstream_unavailable: 502,
   spend_ceiling_reached: 503,
+  trial_capacity_reached: 503,
   webhook_invalid: 400,
   internal_error: 500,
 };

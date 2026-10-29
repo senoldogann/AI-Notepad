@@ -79,10 +79,29 @@ export async function todaySpendMicroUsd(db: D1Database, now: Date): Promise<num
   return row?.micro_usd ?? 0;
 }
 
-/** Günlük harcamaya ekleme ifadesi. */
+/** Bugünkü tahmini deneme harcaması (mikro dolar; toplamın parçası). */
+export async function todayTrialSpendMicroUsd(db: D1Database, now: Date): Promise<number> {
+  const row: { trial_micro_usd: number } | null = await db
+    .prepare("SELECT trial_micro_usd FROM daily_spend WHERE day = ?")
+    .bind(dayKey(now))
+    .first<{ trial_micro_usd: number }>();
+  return row?.trial_micro_usd ?? 0;
+}
+
+/** Abonelik harcamasını günlük toplama ekleyen ifade. */
 export function addSpendStatement(db: D1Database, now: Date, microUsd: number): D1PreparedStatement {
   return db
     .prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd")
+    .bind(dayKey(now), microUsd);
+}
+
+/** Deneme harcamasını (deneme toplantısı ya da denemedeki hesap çağrısı) hem günlük toplama hem deneme toplamına ekleyen ifade. */
+export function addTrialSpendStatement(db: D1Database, now: Date, microUsd: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES (?1, ?2, ?2)
+       ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd`,
+    )
     .bind(dayKey(now), microUsd);
 }
 
@@ -97,4 +116,20 @@ export async function requireSpendHeadroom(db: D1Database, config: Config, now: 
   }
   log("alert", "daily_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailySpendCeilingMicroUsd });
   throw new ApiError("spend_ceiling_reached", "Servis bugün yoğun; şu an yeni istek alınamıyor. Lütfen daha sonra yeniden dene.");
+}
+
+/**
+ * Günlük deneme harcaması tavanı: bugünkü deneme harcaması `dailyTrialSpendCeilingMicroUsd`'e ulaştıysa alarm logu yazar
+ * ve 503 `trial_capacity_reached` fırlatır. Yeni deneme toplantısı başlatmada ve denemedeki hesap çağrısında (toplantı
+ * dışı yapay zekâ) denetlenir; açık deneme toplantıları kendi bütçesiyle (ve genel tavanla) sürer. Kötüye kullanılan
+ * deneme genel tavanı (`requireSpendHeadroom`) tüketip aboneleri durduramasın diye ayrıdır; aboneler yalnızca genel
+ * tavana tabidir.
+ */
+export async function requireTrialSpendHeadroom(db: D1Database, config: Config, now: Date): Promise<void> {
+  const spent: number = await todayTrialSpendMicroUsd(db, now);
+  if (spent < config.dailyTrialSpendCeilingMicroUsd) {
+    return;
+  }
+  log("alert", "daily_trial_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailyTrialSpendCeilingMicroUsd });
+  throw new ApiError("trial_capacity_reached", "Ücretsiz denemeler bugün kapasitede; yarın yeniden dene ya da abone ol.");
 }

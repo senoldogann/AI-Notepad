@@ -101,6 +101,10 @@
     "SCRIBE_USD_PER_HOUR": "0.22",
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
     "DAILY_SPEND_CEILING_USD": "25",
+    // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
+    // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
+    // (kötüye kullanılan deneme genel tavanı tüketip aboneleri durduramaz). Açık deneme toplantıları sürer.
+    "DAILY_TRIAL_SPEND_CEILING_USD": "10",
     "REFRESH_TOKEN_DAYS": "60",
     "STRIPE_PRICE_ID": "price_placeholder"
   },
@@ -173,6 +177,8 @@
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
         "DAILY_SPEND_CEILING_USD": "25",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "DAILY_TRIAL_SPEND_CEILING_USD": "10",
         "REFRESH_TOKEN_DAYS": "60",
         "STRIPE_PRICE_ID": "price_1UVgVdLYGoRn8lDP8H0WX1VF"
       }

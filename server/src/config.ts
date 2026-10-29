@@ -83,6 +83,8 @@ export interface Config {
     readonly keytermsUsdPerHour: number;
   };
   readonly dailySpendCeilingMicroUsd: number;
+  /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
+  readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
   readonly stripePriceId: string;
   readonly secrets: {
@@ -209,6 +211,7 @@ const envSchema = z.object({
   SCRIBE_USD_PER_HOUR: positiveNumber,
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
   DAILY_SPEND_CEILING_USD: positiveNumber,
+  DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
@@ -292,6 +295,7 @@ export function parseConfig(env: Env): Config {
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
+    dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
     secrets: {

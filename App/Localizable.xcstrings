@@ -11982,6 +11982,17 @@
         }
       }
     },
+    "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free trials are at capacity today. Try again tomorrow or subscribe in Settings › Account."
+          }
+        }
+      }
+    },
     "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır.": {
       "localizations": {
         "en": {

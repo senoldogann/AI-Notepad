@@ -45,6 +45,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `DMG_URL` | `GET /v1/download/mac` yönlendirmesinin hedefi (https). |
 | `PRICE_USD_MONTHLY` | Aylık fiyat; yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur). |
 | `REPORTS_PER_DAY` | Tüm kullanıcılar için günlük rapor sınırı (geri bildirim, çökme, iletişim). |
+| `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir; açık deneme toplantıları sürer. |
 | `DEVICECHECK_POLICY` | Mac başına ücretsiz deneme (Apple DeviceCheck) için tek anahtar: `required` (üretim) ya da `off` (yerel, testler: DeviceCheck hiç çağrılmaz). Ayrıntı: aşağıda "Deneme kötüye kullanımı". |
 | `DEVICECHECK_ENVIRONMENT` | `production` (`api.devicecheck.apple.com`) ya da `development` (`api.development.devicecheck.apple.com`); üretimde `required` iken `production` olmalı. |
 | `DEVICECHECK_TEAM_ID`, `DEVICECHECK_KEY_ID` | Yetki JWT'sinin `iss`'i (Apple ekip kimliği) ve `kid`'i (DeviceCheck anahtar kimliği); `required` iken 10 karakterlik Apple biçiminde olmalı (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez). |
@@ -150,6 +151,7 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği
 `403 {"error": {"code": "forbidden", "message", "identity"}}` döner (`identity`: çağıranın kendi kimlikleri, virgülle).
-Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner. Site kaynağı
+Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner; günlük deneme
+harcaması tavanı aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` döner. Site kaynağı
 (`SITE_ORIGIN`) CORS'u yalnızca site uçlarında (giriş, `/v1/me`, ödeme, raporlar) ve yönetici uçlarında alır; her yanıt
 `Cache-Control: no-store` taşır.

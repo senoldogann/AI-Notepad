@@ -130,6 +130,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(message(.monthlyCapReached, 429).contains("ay başında"))
         #expect(message(.subscriptionExists, 409).contains("Hesabı yönet"))
         #expect(message(.spendCeilingReached, 503).contains("yoğun"))
+        #expect(message(.trialCapacityReached, 503).contains("abone ol"))
         #expect(message(.meetingNotActive, 409).contains("Yeni bir toplantı"))
         #expect(message(.transcriptionClosed, 409).contains("Canlı metin"))
     }

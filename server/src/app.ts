@@ -40,7 +40,7 @@ import {
   reportStatusUpdateSchema,
   setReportStatus,
 } from "./reports";
-import { requireSpendHeadroom } from "./usage";
+import { requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { parseTranscribeParams, proxyTranscription } from "./transcribe";
 
@@ -299,6 +299,9 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     let scope: LLMScope;
     if (meetingId === null) {
       scope = { kind: "account", userId: user.userId, access: await requireAccountLLMAccess(db, config, user.userId, now) };
+      if (scope.access === "trial") {
+        await requireTrialSpendHeadroom(db, config, now);
+      }
     } else {
       scope = { kind: "meeting", userId: user.userId, meeting: await requireUsableMeeting(db, config, user.userId, meetingId, now) };
     }

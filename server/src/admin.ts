@@ -46,7 +46,14 @@ export interface AdminStats {
     readonly mrrUsd: number;
   };
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
-  readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DayUsd[] };
+  readonly spend: {
+    readonly todayUsd: number;
+    readonly ceilingUsd: number;
+    /** Bugünkü harcamanın deneme kısmı (deneme toplantıları ve denemedeki hesap çağrıları) ve ayrı tavanı. */
+    readonly trialTodayUsd: number;
+    readonly trialCeilingUsd: number;
+    readonly last30Days: readonly DayUsd[];
+  };
   readonly tokens: { readonly thisMonth: number };
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
 }
@@ -141,7 +148,8 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  * - `mrrUsd` = (`active` − `ending`) × `PRICE_USD_MONTHLY`: yenilenecek ödenmiş abonelikler. Ödemesi başarısız
  *   (`grace`) ve iptal edilmiş olanlar sayılmaz; vergi ve Stripe ücreti düşülmez.
  * - `meetings.hoursThisMonth`: bu ay (UTC) başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye dek).
- * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
+ * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `trialTodayUsd` bugünkü harcamanın deneme kısmı (ayrı
+ *   tavanı `trialCeilingUsd`); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
  * - `users.byProvider`: kimlik sayısı (hesaplar arası bağlama yoktur: kullanıcı başına bir kimlik).
  */
 export async function adminStats(db: D1Database, config: Config, now: Date): Promise<AdminStats> {
@@ -160,6 +168,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     meetingRows,
     meetingMsRow,
     spendRows,
+    trialSpendRow,
     tokenRow,
     reportRows,
   ] = await Promise.all([
@@ -212,6 +221,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .bind(nowMs, monthStartMs(now))
       .first<{ value: number }>(),
     db.prepare("SELECT day, micro_usd AS value FROM daily_spend WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
+    db.prepare("SELECT trial_micro_usd AS value FROM daily_spend WHERE day = ?").bind(dayKey(now)).first<{ value: number }>(),
     db
       .prepare("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS value FROM monthly_usage WHERE month = ?")
       .bind(monthKey(now))
@@ -256,6 +266,8 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     spend: {
       todayUsd: (spendByDay[spendByDay.length - 1] ?? 0) / 1_000_000,
       ceilingUsd: config.dailySpendCeilingMicroUsd / 1_000_000,
+      trialTodayUsd: (trialSpendRow?.value ?? 0) / 1_000_000,
+      trialCeilingUsd: config.dailyTrialSpendCeilingMicroUsd / 1_000_000,
       last30Days: days.map((day: string, index: number): DayUsd => ({ day, usd: (spendByDay[index] ?? 0) / 1_000_000 })),
     },
     tokens: { thisMonth: tokenRow?.value ?? 0 },
