@@ -1526,11 +1526,16 @@ final class AppModel {
     /// ulaşılamıyorsa bekler; sunucu şimdilik işlemiyorsa (deneme bitti, sınır) kayıt bekleyen kalır ve nedeni toplantıda
     /// görünür. Ağ gelince, hak durumu okununca, uygulama öne gelince ve her işleme bitince tetiklenir; birer birer işler.
     @ObservationIgnored private var isRunningQueue: Bool = false
+    /// Sunucunun reddettiği bekleyen kayıtlar ve reddin anı (bkz. `hostedQueueCandidates`).
+    @ObservationIgnored private var queueRejections: [String: Date] = [:]
 
     func runOfflineQueue() async {
         guard !isBusy, !isStarting, !isRunningQueue else {
             return
         }
+        // İlk beklemeden önce açılır: eşzamanlı tetiklemeler kuyruğu ikinci kez çalıştırmasın.
+        isRunningQueue = true
+        defer { isRunningQueue = false }
         let userID: String
         do {
             guard let signedIn = try await HostedAccount.shared.signedInUserID() else {
@@ -1541,21 +1546,25 @@ final class AppModel {
             Self.logger.error("Kuyruk: oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
             return
         }
-        isRunningQueue = true
-        defer { isRunningQueue = false }
         let queued: HostedQueuedRecords = hostedQueuedRecords(records: meetings, owners: loadHostedRecordOwners(), userId: userID)
         for record in queued.foreign {
             noteQueued(recordID: record.id, notice: String(localized: "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir."))
         }
-        // Reddedilen kayıt (ör. oturumu açılamadı) sonrakileri bekletmez; ilk hazır olan işlenir, kalanlar işleme
+        // Tetikleme başına en çok bir sunucu reddi: reddedilen kayıt nedeniyle işaretlenir, bir süre denenmez ve kuyruk
+        // durur (başlatma hız sınırı dolup canlı kayıt 429 almasın); sonraki tetiklemede sıradaki kayıt denenir. Hak
+        // durumundan (istek atmadan) engellenen kayıtlar sonrakileri bekletmez. İlk hazır olan işlenir, kalanlar işleme
         // bitince yeniden tetiklenir.
-        for record in queued.own {
+        for record in hostedQueueCandidates(records: queued.own, rejections: queueRejections, now: Date(), cooldownSec: hostedQueueRejectionCooldownSec) {
             let recordID: String = record.id
             switch await HostedAccount.shared.prepareQueuedMeeting(recordID: recordID) {
             case .waitingForNetwork:
                 return
             case .blocked(let reason):
                 noteQueued(recordID: recordID, notice: reason)
+            case .rejected(let reason):
+                queueRejections[recordID] = Date()
+                noteQueued(recordID: recordID, notice: reason)
+                return
             case .ready:
                 // Hazırlık sürerken kayıt başlamış ya da toplantı silinmiş olabilir.
                 guard !isBusy, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {

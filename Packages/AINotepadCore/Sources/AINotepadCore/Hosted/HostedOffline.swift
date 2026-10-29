@@ -82,9 +82,26 @@ public enum HostedQueuedMeetingPreparation: Sendable, Equatable {
     case ready(serverMeetingID: String)
     /// Sunucuya hâlâ ulaşılamıyor: sonra yeniden denenir.
     case waitingForNetwork
-    /// Sunucu kaydı şimdilik işlemiyor (deneme bitti, aylık sınır…); kayıt bu Mac'te kalır, durum değişince yeniden
-    /// denenir. Neden kullanıcıya gösterilir.
+    /// Son hak durumu kaydı şimdilik işlemiyor (deneme bitti, aylık sınır…; sunucuya istek atılmadı); kayıt bu Mac'te
+    /// kalır, durum değişince yeniden denenir. Neden kullanıcıya gösterilir.
     case blocked(reason: String)
+    /// Sunucu kaydın oturumunu reddetti (istek atıldı); neden gösterilir, kayıt bir süre denenmez
+    /// (`hostedQueueRejectionCooldownSec`) ve kuyruk bu tetiklemede durur (başlatma hız sınırı canlı kayda kalsın).
+    case rejected(reason: String)
+}
+
+/// Sunucunun reddettiği bekleyen kaydın yeniden denenmeden beklediği süre (saniye).
+public let hostedQueueRejectionCooldownSec: Double = 10 * 60
+
+/// Bu tetiklemede denenecek bekleyen kayıtlar: sunucunun son `cooldownSec` içinde reddettikleri atlanır (reddedilen
+/// kayıt sonrakileri bekletmez, sürekli de denenmez). Sıra korunur. Saf fonksiyondur.
+public func hostedQueueCandidates(records: [MeetingRecord], rejections: [String: Date], now: Date, cooldownSec: Double) -> [MeetingRecord] {
+    records.filter { (record: MeetingRecord) -> Bool in
+        guard let rejectedAt = rejections[record.id] else {
+            return true
+        }
+        return now.timeIntervalSince(rejectedAt) >= cooldownSec
+    }
 }
 
 /// Bekleyen kayıtların oturumdaki kullanıcıya göre ayrımı.

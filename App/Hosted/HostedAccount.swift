@@ -653,7 +653,7 @@ final class HostedAccount {
             return .waitingForNetwork
         } catch {
             accountLogger.warning("Çevrimdışı kayıt sunucuda işlenemiyor, hata: \(String(describing: error), privacy: .private)")
-            return .blocked(reason: userFacingMessage(error: error))
+            return .rejected(reason: userFacingMessage(error: error))
         }
     }
 

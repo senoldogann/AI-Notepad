@@ -90,6 +90,15 @@ private func record(id: String, startedAt: Double, status: MeetingStatus) -> Mee
         #expect(message(.dailyCapReached, "/v1/meetings/start").contains("toplantı sayısına"))
     }
 
+    // Sunucunun reddettiği kayıt bekleme süresince atlanır (sonrakiler denenir), süre dolunca yeniden denenir.
+    @Test func rejectedQueuedRecordsCoolDown() {
+        let records: [MeetingRecord] = [record(id: "a", startedAt: 1, status: .queued), record(id: "b", startedAt: 2, status: .queued)]
+        let now: Date = Date(timeIntervalSince1970: 10_000)
+        let rejections: [String: Date] = ["a": now.addingTimeInterval(-60)]
+        #expect(hostedQueueCandidates(records: records, rejections: rejections, now: now, cooldownSec: 600).map(\.id) == ["b"])
+        #expect(hostedQueueCandidates(records: records, rejections: rejections, now: now.addingTimeInterval(600), cooldownSec: 600).map(\.id) == ["a", "b"])
+    }
+
     // Yarıda kalan çevrimdışı (bağsız) kayıt kuyruğa döner; bağlı kayıt ve diğer durumlar değişmez.
     @Test func unlinkedInterruptedRecordReturnsToQueue() {
         let records: [MeetingRecord] = [
