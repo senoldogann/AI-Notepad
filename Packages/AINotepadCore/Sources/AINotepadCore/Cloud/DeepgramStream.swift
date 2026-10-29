@@ -298,10 +298,11 @@ private actor DeepgramConnection {
                 return
             } catch CloudSTTError.http(let service, let status, let body) where isPermanentHTTPRejection(status: status) {
                 throw CloudSTTError.http(service: service, status: status, body: body)
-            } catch let error as DeepgramTokenError {
-                // Jeton kaynağı (abonelik sunucusu) kendi yeniden denemesini yaptı: çağıran Mac'e hemen geçebilsin.
+            } catch let error as DeepgramTokenError where !isTransientDeepgramTokenFailure(error: error) {
+                // Sunucu jetonu bilerek reddetti (bütçe, yetki, toplantı kapalı): çağıran Mac'e hemen geçebilsin.
                 throw error
             } catch {
+                // Bağlantı ya da jeton için kısa ağ kesintisi (ya da sunucu 5xx): bütçe içinde yeniden denenir.
                 lastError = error
                 deepgramLogger.warning("Deepgram'a bağlanılamadı, deneme \(attempt + 1, privacy: .public): \(String(describing: error), privacy: .private)")
             }
@@ -585,6 +586,13 @@ private actor DeepgramConnection {
 /// vermediyse. Saf fonksiyondur.
 func canOpenConnection(sessionInvalidated: Bool, closeDeadlinePassed: Bool, hasFailed: Bool) -> Bool {
     !sessionInvalidated && !closeDeadlinePassed && !hasFailed
+}
+
+/// Jeton alınamaması geçici mi: ağ kesintisi ya da sunucu 5xx/408 (bkz. `isOfflineStartError`). Geçiciyse bağlanma
+/// bütçesi (`reconnectBudgetSec`) içinde yeniden denenir; sunucunun bilerek verdiği ret (bütçe, yetki, sınır) hemen
+/// bildirilir ve canlı metin Mac'e geçer. Saf fonksiyondur.
+func isTransientDeepgramTokenFailure(error: DeepgramTokenError) -> Bool {
+    error.underlying is URLError || isOfflineStartError(error: error.underlying)
 }
 
 /// Kullanıcıya gösterilecek Türkçe hata metni (anahtar içermez).
