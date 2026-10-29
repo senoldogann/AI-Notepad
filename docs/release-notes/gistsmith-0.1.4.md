@@ -6,7 +6,7 @@ The first release of Gistsmith: a meeting notepad for Mac that listens to your m
 - **"What did I miss?"** One click summarizes the last few minutes.
 - **Ask your meetings.** Ask questions across all your notes, with links to the meetings the answers came from.
 - **Integrations.** Send notes and tasks to Notion, Slack, Microsoft Teams, Discord, Zoom, Linear, Jira or Reminders.
-- **Sign in with Apple or Google.** Your first 3 meetings are free, then $5.99 a month. No API keys to set up.
+- **Sign in with Apple or Google.** Your first 3 meetings or 7 days are free, then $5.99 a month, taxes included. No API keys to set up.
 - **Feedback from the app.** Send a problem or an idea from Settings; crash reports are sent only if you allow it.
 - **Automatic updates.** Gistsmith keeps itself up to date.
 

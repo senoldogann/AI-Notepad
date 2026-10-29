@@ -215,14 +215,14 @@ public final class SystemAudioCapture {
                     try self.startDevice(continuation: continuation)
                 },
                 onFailure: { (attempt: Int, error: any Error) -> Void in
-                    Self.logger.warning("Sistem sesi yeniden kurulamadı, deneme \(attempt, privacy: .public): \(String(describing: error), privacy: .public)")
+                    Self.logger.warning("Sistem sesi yeniden kurulamadı, deneme \(attempt, privacy: .public): \(String(describing: error), privacy: .private)")
                 }
             )
         } catch {
             guard generation == restartGeneration else {
                 return
             }
-            Self.logger.error("Sistem sesi yeniden kurulamadı, akış bitiriliyor: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sistem sesi yeniden kurulamadı, akış bitiriliyor: \(String(describing: error), privacy: .private)")
             stop()
         }
     }
@@ -262,7 +262,7 @@ public final class SystemAudioCapture {
                 }
             } catch {
                 if throttle.allow() {
-                    logger.error("Sistem sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .public)")
+                    logger.error("Sistem sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .private)")
                 }
                 continuation.finish()
             }

@@ -429,7 +429,7 @@ private func windowLabelVoices(task: Task<[VoiceCluster], any Error>?, words: [D
             clusters: clusters
         )
     } catch {
-        cloudLogger.error("Ses izi çıkarılamadı, pencere yalnızca zamanla eşlendi, hata: \(String(describing: error), privacy: .public)")
+        cloudLogger.error("Ses izi çıkarılamadı, pencere yalnızca zamanla eşlendi, hata: \(String(describing: error), privacy: .private)")
         return [:]
     }
 }

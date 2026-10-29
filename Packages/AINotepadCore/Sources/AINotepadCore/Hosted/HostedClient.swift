@@ -36,21 +36,26 @@ private struct DeviceAttestBody: Encodable {
     let challenge: String
 }
 
-/// Sorgu değerinin kodlaması: `+`, `&` ve `=` da kodlanır (sunucu `+`'yı boşluk okur). Saf fonksiyondur.
-private func queryValue(text: String) -> String {
-    var allowed: CharacterSet = .urlQueryAllowed
-    allowed.remove(charactersIn: "+&=")
-    // `.urlQueryAllowed` dışındaki her karakter yüzde kodlanabilir; nil dönmez.
-    return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? text
+/// `POST /v1/transcribe` adresi: dil (sabitse) ve konuşmacı ayırma açık. Anahtar terimler adrese değil
+/// `x-keyterms` başlığına yazılır (bkz. `hostedKeytermsHeader`): adresler vekil ve sunucu loglarında kalabilir. Saf
+/// fonksiyondur.
+public func hostedTranscribeURL(baseURL: URL, languageCode: String?) -> URL {
+    let items: [URLQueryItem] = (languageCode.map { [URLQueryItem(name: "language_code", value: $0)] } ?? [])
+        + [URLQueryItem(name: "diarize", value: "true")]
+    return baseURL.appending(path: "v1/transcribe").appending(queryItems: items)
 }
 
-/// `POST /v1/transcribe` adresi: dil (sabitse), konuşmacı ayırma açık ve anahtar terimler. Saf fonksiyondur.
-public func hostedTranscribeURL(baseURL: URL, languageCode: String?, keyterms: [String]) -> URL {
-    let pairs: [(String, String)] = (languageCode.map { [("language_code", $0)] } ?? []) + [("diarize", "true")]
-        + keyterms.map { ("keyterms", $0) }
-    let query: String = pairs.map { "\($0.0)=\(queryValue(text: $0.1))" }.joined(separator: "&")
-    // Sorgu yalnızca kodlanmış karakterlerden oluşur: adres her zaman geçerlidir.
-    return URL(string: baseURL.appending(path: "v1/transcribe").absoluteString + "?" + query)!
+/// Anahtar terimler başlığı (`x-keyterms`): terimlerin UTF-8 JSON dizisinin dolgusuz base64url'i; terim yoksa nil
+/// (başlık gönderilmez). Saf fonksiyondur.
+public func hostedKeytermsHeader(keyterms: [String]) throws -> String? {
+    guard !keyterms.isEmpty else {
+        return nil
+    }
+    let json: Data = try JSONEncoder().encode(keyterms)
+    return json.base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
 }
 
 /// Abonelik sunucusunun bağlantısı: oturum (Anahtar Zinciri'nde), jeton yenileme, hak durumu, toplantı oturumu, ödeme,
@@ -199,7 +204,8 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// WAV dosyasını `/v1/transcribe`'a ham gövde olarak gönderir; ElevenLabs yanıtının JSON'unu döndürür.
     public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], timeoutSec: Double) async throws -> Data {
         let path: String = "/v1/transcribe"
-        let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode, keyterms: keyterms)
+        let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode)
+        let keytermsHeader: String? = try hostedKeytermsHeader(keyterms: keyterms)
         let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { (accessToken: String) async throws -> (Data, URLResponse) in
             var request: URLRequest = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -207,6 +213,9 @@ public actor HostedClient: HostedLLMCredentialSource {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
             request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
             request.setValue("audio/wav", forHTTPHeaderField: "content-type")
+            if let keytermsHeader {
+                request.setValue(keytermsHeader, forHTTPHeaderField: "x-keyterms")
+            }
             return try await URLSession.shared.upload(for: request, fromFile: wavFile)
         }
         return try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt)

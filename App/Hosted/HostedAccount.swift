@@ -1,6 +1,8 @@
 import AINotepadCore
 import AppKit
+import AuthenticationServices
 import Foundation
+import Network
 import Observation
 import os
 
@@ -21,12 +23,13 @@ private func hostedURL(bundle: Bundle, key: String) throws -> URL {
     return url
 }
 
-/// Uygulama boyunca tek sunucu bağlantısı; oturum Anahtar Zinciri'nde abonelik uygulamasının servis adıyla saklanır.
+/// Uygulama boyunca tek sunucu bağlantısı; oturum Anahtar Zinciri'nde Info.plist'teki servis adıyla saklanır (Debug ve
+/// Release ayrı: Debug derlemesi yayındaki oturumu okumaz, silmez).
 private func makeHostedClient(bundle: Bundle) -> Result<HostedClient, HostedClientError> {
     do {
         let client: HostedClient = HostedClient(
             baseURL: try hostedURL(bundle: bundle, key: "HostedAPIBase"),
-            storage: HostedKeychainTokenStorage(service: hostedKeychainService)
+            storage: HostedKeychainTokenStorage(service: try hostedKeychainService(bundle: bundle))
         ) { () async -> Void in
             await MainActor.run {
                 NotificationCenter.default.post(name: .hostedSessionEnded, object: nil)
@@ -34,10 +37,10 @@ private func makeHostedClient(bundle: Bundle) -> Result<HostedClient, HostedClie
         }
         return .success(client)
     } catch let error as HostedClientError {
-        accountLogger.error("Sunucu adresi geçersiz, hata: \(String(describing: error), privacy: .public)")
+        accountLogger.error("Sunucu bağlantısı kurulamadı, hata: \(String(describing: error), privacy: .private)")
         return .failure(error)
     } catch {
-        // `hostedURL` yalnızca `HostedClientError` fırlatır.
+        // `hostedURL` ve `hostedKeychainService` yalnızca `HostedClientError` fırlatır.
         return .failure(.invalidBaseURL(value: String(describing: error)))
     }
 }
@@ -63,8 +66,46 @@ enum HostedAccountState: Equatable {
     case loading
     case signedOut
     case signedIn(HostedEntitlements)
-    /// Sunucu adresi ayarlanmamış ya da güvensiz: hesap kullanılamaz.
+    /// Oturum var ama hak durumu okunamadı (ağ yok ya da sunucu yanıt vermiyor). Bağlantı gelince ve uygulama öne
+    /// gelince yeniden okunur; kullanıcı çıkış yapmış sayılmaz.
+    case signedInStatusUnknown(message: String)
+    /// Sunucu adresi ayarlanmamış ya da güvensiz, ya da Anahtar Zinciri okunamıyor: hesap kullanılamaz.
     case unavailable(message: String)
+}
+
+/// Uygulama içi giriş penceresinin (ASWebAuthenticationSession) sonucu.
+private enum HostedWebSignInOutcome {
+    /// Site dönüş adresine yönlendirdi (henüz doğrulanmadı).
+    case callback(URL)
+    /// Kullanıcı pencereyi kapattı ya da "Vazgeç"e bastı.
+    case canceled
+}
+
+/// Giriş penceresinin bağlandığı pencere (AuthenticationServices sunum sağlayıcısı; dış sistem bağlantısı, NSObject
+/// gerekir). Giriş düğmesi ana penceredeyken anahtar pencere odur.
+@MainActor
+private final class HostedWebSignInPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // Anahtar ya da ana pencere yoksa (ör. uygulama arka planda) sistem giriş penceresini kendi başına açar.
+        NSApp.keyWindow ?? NSApp.mainWindow ?? ASPresentationAnchor()
+    }
+}
+
+/// Yeni girişten önce bu Mac'teki eski oturum sunucuda kapatılır. Sunucuya ulaşılamazsa yerel oturum yine silinir
+/// (bkz. `HostedClient.signOut`) ve uyarı loglanır; sunucudaki yenileme jetonu kullanılmadığı için en geç
+/// `REFRESH_TOKEN_DAYS` (60) gün içinde kendiliğinden geçersizleşir.
+private func endPreviousSession(client: HostedClient) async throws {
+    guard try await client.isSignedIn() else {
+        return
+    }
+    do {
+        try await client.signOut()
+        accountLogger.info("Yeni giriş öncesi eski oturum kapatıldı")
+    } catch HostedClientError.network(let path, _) {
+        accountLogger.warning("Eski oturum sunucuda kapatılamadı (ağ), yerelde silindi, yol: \(path, privacy: .public)")
+    } catch let error as HostedAPIError {
+        accountLogger.warning("Eski oturum sunucuda kapatılamadı, yerelde silindi, kod: \(error.rawCode, privacy: .public), durum: \(error.status, privacy: .public)")
+    }
 }
 
 /// Abonelik hesabının arayüz bağlantısı: giriş (Apple, Google), hak durumu, ödeme sayfaları, hesap silme,
@@ -80,34 +121,60 @@ final class HostedAccount {
     var errorMessage: String?
     /// Bir işlem sürüyor (düğmeler kilitli).
     private(set) var isWorking: Bool = false
-    /// Dönüşü beklenen tarayıcıda giriş denemesi (ham nonce yalnızca burada, bellekte; tek kullanımlık).
+    /// Giriş penceresi açık, dönüşü beklenen deneme (ham nonce yalnızca burada, bellekte; tek kullanımlık).
     private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
-    @ObservationIgnored private var sessionObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var isRefreshing: Bool = false
+    @ObservationIgnored private var observers: [any NSObjectProtocol] = []
+    /// Ağ geri gelince hak durumu yeniden okunur (bkz. `retryUnknownStatus`).
+    @ObservationIgnored private let pathMonitor: NWPathMonitor = NWPathMonitor()
+    /// Açık giriş penceresi: oturum bitene dek tutulmalı (yoksa sistem pencereyi kapatır).
+    @ObservationIgnored private var webSession: ASWebAuthenticationSession?
+    @ObservationIgnored private let presenter: HostedWebSignInPresenter = HostedWebSignInPresenter()
 
     private init() {
-        sessionObserver = NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
+        observers.append(NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
             MainActor.assumeIsolated {
                 self?.currentMeeting = nil
                 self?.state = .signedOut
                 self?.errorMessage = userFacingMessage(error: HostedClientError.sessionEnded)
             }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                guard let self else {
+                    return
+                }
+                Task { await self.retryUnknownStatus() }
+            }
+        })
+        pathMonitor.pathUpdateHandler = { [weak self] (path: NWPath) -> Void in
+            guard path.status == .satisfied else {
+                return
+            }
+            Task { @MainActor in
+                await self?.retryUnknownStatus()
+            }
         }
+        pathMonitor.start(queue: DispatchQueue(label: "com.senoldogan.AINotepad.hosted.path"))
     }
 
-    /// Giriş yapılmış mı (hak durumu okunmuş olsun ya da olmasın).
+    /// Bu Mac'te oturum var mı (hak durumu okunmuş olsun ya da olmasın).
     var isSignedIn: Bool {
-        if case .signedIn = state {
-            return true
+        switch state {
+        case .signedIn, .signedInStatusUnknown:
+            true
+        case .loading, .signedOut, .unavailable:
+            false
         }
-        return false
     }
 
-    /// Son okunan hak durumu abonelik mi (erişimi olan abonelik ya da ek süre).
-    private var isSubscribed: Bool {
+    /// Son okunan hak durumu deneme mi. Bilinmiyorsa (okunamadı) false: DeviceCheck jetonu yalnızca deneme olduğu
+    /// bilinen hesapta ya da sunucu isteyince gönderilir (abonelerin hiç gerekmez).
+    private var isKnownTrial: Bool {
         if case .signedIn(let entitlements) = state {
-            return entitlements.plan == .subscription
+            return entitlements.plan == .trial
         }
         return false
     }
@@ -115,72 +182,104 @@ final class HostedAccount {
     // MARK: Durum
 
     /// Oturumu ve hak durumunu sunucudan yeniden okur; App Attest destekleniyorsa cihaz önce doğrulanır (sessizce
-    /// atlanır, bkz. `HostedDeviceAttestation`).
+    /// atlanır, bkz. `HostedDeviceAttestation`). Oturum varken hak durumu okunamazsa (ağ, sunucu) çıkış yapılmış
+    /// sayılmaz: önceden okunmuş hak durumu kalır ve hata gösterilir; hiç okunmamışsa durum "bilinmiyor" olur.
     func refresh() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
         let client: HostedClient
+        let hasSession: Bool
         do {
             client = try HostedServices.requireClient()
+            hasSession = try await client.isSignedIn()
         } catch {
+            accountLogger.error("Hesap okunamadı, hata: \(String(describing: error), privacy: .private)")
             state = .unavailable(message: userFacingMessage(error: error))
             return
         }
+        guard hasSession else {
+            state = .signedOut
+            return
+        }
         do {
-            guard try await client.isSignedIn() else {
-                state = .signedOut
-                return
-            }
             await HostedDeviceAttestation.prepare(client: client)
             state = .signedIn(try await client.entitlements())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
             state = .signedOut
         } catch {
-            accountLogger.error("Hak durumu okunamadı, hata: \(String(describing: error), privacy: .public)")
-            errorMessage = userFacingMessage(error: error)
-            if state == .loading {
-                state = .signedOut
+            accountLogger.error("Hak durumu okunamadı, hata: \(String(describing: error), privacy: .private)")
+            let message: String = userFacingMessage(error: error)
+            if case .signedIn = state {
+                errorMessage = message
+            } else {
+                state = .signedInStatusUnknown(message: message)
             }
         }
+    }
+
+    /// Hak durumu bilinmiyorsa (çevrimdışı açılış) yeniden okur; ağ geri gelince ve uygulama öne gelince çağrılır.
+    private func retryUnknownStatus() async {
+        guard case .signedInStatusUnknown = state, !isRefreshing else {
+            return
+        }
+        accountLogger.info("Hak durumu yeniden okunuyor (bağlantı ya da uygulama etkinleşti)")
+        await refresh()
     }
 
     // MARK: Giriş ve çıkış
 
-    /// Tarayıcıda girişi başlatır: yeni ham nonce üretilir (önceki deneme geçersizleşir) ve sitedeki giriş sayfası
-    /// nonce'un SHA-256'sıyla tarayıcıda açılır. Kullanıcı orada Apple ya da Google hesabını seçer; site uygulamayı
-    /// `auth/<apple|google>#idToken=…` ile açar. (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi yapamaz.)
-    func startBrowserSignIn() {
-        errorMessage = nil
-        do {
-            let attempt: HostedBrowserSignInAttempt = try makeHostedBrowserSignInAttempt(now: Date())
-            let page: URL = hostedBrowserSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
-            pendingBrowserSignIn = attempt
-            guard NSWorkspace.shared.open(page) else {
-                pendingBrowserSignIn = nil
-                accountLogger.error("Giriş sayfası açılamadı, adres: \(page.host() ?? "-", privacy: .public)")
-                errorMessage = String(localized: "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.")
-                return
-            }
-            accountLogger.info("Tarayıcıda giriş başlatıldı")
-        } catch {
-            accountLogger.error("Tarayıcıda giriş başlatılamadı, hata: \(String(describing: error), privacy: .public)")
-            errorMessage = userFacingMessage(error: error)
+    /// Girişi uygulama içi giriş penceresinde (ASWebAuthenticationSession) yapar: yeni ham nonce üretilir, sitedeki
+    /// giriş sayfası nonce'un SHA-256'sıyla açılır; kullanıcı Apple ya da Google hesabını seçer, site
+    /// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` adresine yönlendirir ve dönüş Launch Services'e
+    /// uğramadan doğrudan bu pencereye gelir (başka bir uygulama ya da eski bir kopya dönüşü alamaz). Dönüş bu denemenin
+    /// nonce'uyla eşleşirse varsa eski oturum kapatılır ve kimlik jetonu ham nonce'la sağlayıcının giriş ucuna gider.
+    /// Kullanıcı pencereyi kapatırsa hata gösterilmez. (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi
+    /// yapamaz; giriş sitede yapılır.)
+    func signIn() async {
+        guard pendingBrowserSignIn == nil else {
+            return
         }
-    }
-
-    /// Uygulamayı açan bağlantı (tarayıcıda girişin dönüşü): bekleyen denemeyle eşleşirse kimlik jetonu ve ham nonce
-    /// sağlayıcının giriş ucuna gider. Deneme sonuç ne olursa olsun düşer (ikinci dönüş reddedilir); her ret hesap
-    /// hatasında görünür.
-    func handle(url: URL) async {
-        let pending: HostedBrowserSignInAttempt? = pendingBrowserSignIn
-        pendingBrowserSignIn = nil
+        errorMessage = nil
+        let attempt: HostedBrowserSignInAttempt
+        let page: URL
+        do {
+            attempt = try makeHostedBrowserSignInAttempt(now: Date())
+            page = hostedBrowserSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
+        } catch {
+            accountLogger.error("Giriş başlatılamadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessage = userFacingMessage(error: error)
+            return
+        }
+        pendingBrowserSignIn = attempt
+        defer {
+            pendingBrowserSignIn = nil
+            webSession = nil
+        }
+        accountLogger.info("Giriş penceresi açılıyor")
+        let callbackURL: URL
+        do {
+            switch try await runWebSignIn(page: page) {
+            case .canceled:
+                accountLogger.info("Giriş penceresi kapatıldı")
+                return
+            case .callback(let url):
+                callbackURL = url
+            }
+        } catch {
+            accountLogger.error("Giriş penceresi açılamadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessage = userFacingMessage(error: error)
+            return
+        }
         let callback: HostedBrowserSignInCallback
         do {
-            callback = try resolveHostedBrowserCallback(url: url, pending: pending, now: Date(), lifetimeSec: hostedBrowserSignInLifetimeSec)
+            callback = try resolveHostedBrowserCallback(url: callbackURL, pending: attempt, now: Date(), lifetimeSec: hostedBrowserSignInLifetimeSec)
         } catch {
-            accountLogger.error("Giriş dönüşü reddedildi, hata: \(String(describing: error), privacy: .public)")
+            accountLogger.error("Giriş dönüşü reddedildi, hata: \(String(describing: error), privacy: .private)")
             errorMessage = userFacingMessage(error: error)
             return
         }
         await perform { (client: HostedClient) async throws -> Void in
+            try await endPreviousSession(client: client)
             switch callback.provider {
             case .apple:
                 try await client.signInWithApple(identityToken: callback.identityToken, nonce: callback.rawNonce)
@@ -190,12 +289,58 @@ final class HostedAccount {
         }
     }
 
-    /// Çıkış: sunucuda oturum kapatılır, yerel oturum silinir.
+    /// Giriş penceresini açar ve dönüşü bekler. Pencere açılamazsa `HostedBrowserSignInError.sessionNotStarted`.
+    private func runWebSignIn(page: URL) async throws -> HostedWebSignInOutcome {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HostedWebSignInOutcome, any Error>) -> Void in
+            // Tamamlanma bir kez sürdürülür: başlatılamayan oturum da tamamlanma bildirebilir.
+            let pending: OSAllocatedUnfairLock<CheckedContinuation<HostedWebSignInOutcome, any Error>?> = OSAllocatedUnfairLock(initialState: continuation)
+            let finish: @Sendable (Result<HostedWebSignInOutcome, any Error>) -> Void = { (result: Result<HostedWebSignInOutcome, any Error>) -> Void in
+                pending.withLock { (waiting: inout CheckedContinuation<HostedWebSignInOutcome, any Error>?) -> Void in
+                    waiting?.resume(with: result)
+                    waiting = nil
+                }
+            }
+            let session: ASWebAuthenticationSession = ASWebAuthenticationSession(url: page, callback: .customScheme(hostedURLScheme)) { (url: URL?, error: (any Error)?) -> Void in
+                if let url {
+                    finish(.success(.callback(url)))
+                } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
+                    finish(.success(.canceled))
+                } else {
+                    finish(.failure(HostedBrowserSignInError.sessionNotStarted(reason: error.map { String(describing: $0) } ?? "dönüş adresi yok")))
+                }
+            }
+            session.presentationContextProvider = presenter
+            // Tarayıcıdaki Apple ve Google oturumları kullanılabilsin (her girişte parola sorulmasın).
+            session.prefersEphemeralWebBrowserSession = false
+            webSession = session
+            guard session.start() else {
+                finish(.failure(HostedBrowserSignInError.sessionNotStarted(reason: "start() false döndü")))
+                return
+            }
+        }
+    }
+
+    /// Çıkış: sunucuda oturum kapatılır, yerel oturum her durumda silinir. Sunucuya ulaşılamazsa (çevrimdışı) bu Mac'te
+    /// çıkış yine yapılır ve bu söylenir: sunucudaki yenileme jetonu kullanılmadığı için en geç `REFRESH_TOKEN_DAYS`
+    /// (60) gün içinde kendiliğinden geçersizleşir.
     func signOut() async {
-        await perform { (client: HostedClient) async throws -> Void in
-            try await client.signOut()
+        errorMessage = nil
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await HostedServices.requireClient().signOut()
+        } catch HostedClientError.network(let path, _) {
+            accountLogger.warning("Çıkış sunucuya iletilemedi (ağ), yerelde yapıldı, yol: \(path, privacy: .public)")
+            errorMessage = String(localized: "Bu Mac'te çıkış yapıldı. Sunucuya ulaşılamadı; sunucudaki oturum en geç 60 gün içinde kendiliğinden kapanır.")
+        } catch let error as HostedAPIError {
+            accountLogger.warning("Çıkış sunucuda reddedildi, yerelde yapıldı, kod: \(error.rawCode, privacy: .public), durum: \(error.status, privacy: .public)")
+            errorMessage = String(localized: "Bu Mac'te çıkış yapıldı. Sunucuya ulaşılamadı; sunucudaki oturum en geç 60 gün içinde kendiliğinden kapanır.")
+        } catch {
+            accountLogger.error("Çıkış yapılamadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessage = userFacingMessage(error: error)
         }
         currentMeeting = nil
+        await refresh()
     }
 
     /// Hesabı ve sunucudaki tüm verilerini siler (bitmemiş abonelik Stripe'ta iptal edilir).
@@ -229,13 +374,22 @@ final class HostedAccount {
     // MARK: Toplantı
 
     /// Kayıt başında toplantı oturumu açar (deneme hakkı ya da abonelik buradan düşer); reddedilirse hata fırlatılır
-    /// ve kayıt başlamaz. App Attest destekleniyorsa onay eklenir. Abone olmayan (ya da hak durumu henüz okunmamış)
-    /// hesapta Apple DeviceCheck jetonu da gönderilir: deneme bu Mac'e bağlanır; jeton üretilemezse kayıt başlamaz.
+    /// ve kayıt başlamaz. App Attest destekleniyorsa onay eklenir. Apple DeviceCheck jetonu yalnızca hesabın deneme
+    /// olduğu biliniyorsa gönderilir; hak durumu bilinmiyorsa jetonsuz denenir ve sunucu `device_check_required`
+    /// derse bir kez jetonla yinelenir (aboneler DeviceCheck'e hiç takılmaz). Jeton üretilemezse kayıt başlamaz.
     func startMeeting() async throws -> HostedStartedMeeting {
         let client: HostedClient = try HostedServices.requireClient()
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
-        let deviceCheckToken: String? = isSubscribed ? nil : try await HostedDeviceCheck.token()
-        let started: HostedStartedMeeting = try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken)
+        let deviceCheckToken: String? = isKnownTrial ? try await HostedDeviceCheck.token() : nil
+        let started: HostedStartedMeeting
+        do {
+            started = try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken)
+        } catch let error as HostedAPIError where error.code == .deviceCheckRequired && deviceCheckToken == nil {
+            accountLogger.info("Sunucu DeviceCheck istedi, jetonla bir kez yeniden deneniyor")
+            // App Attest meydan okuması tek kullanımlık: yeniden denemede yeni onay.
+            let retryDevice: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
+            started = try await client.startMeeting(device: retryDevice, deviceCheckToken: try await HostedDeviceCheck.token())
+        }
         currentMeeting = started
         accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
         Task { await refresh() }
@@ -262,7 +416,7 @@ final class HostedAccount {
         do {
             try await operation(try HostedServices.requireClient())
         } catch {
-            accountLogger.error("Hesap işlemi başarısız, hata: \(String(describing: error), privacy: .public)")
+            accountLogger.error("Hesap işlemi başarısız, hata: \(String(describing: error), privacy: .private)")
             errorMessage = userFacingMessage(error: error)
         }
         await refresh()

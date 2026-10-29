@@ -134,11 +134,11 @@ final class PhoneAsk {
             let result: AskHistoryLoadResult = try loadAskConversations(directory: try AppPaths.askHistoryDirectory())
             conversations = result.conversations
             for failure in result.failures {
-                Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .public)")
+                Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .private)")
             }
             historyError = result.failures.isEmpty ? nil : String(localized: "Sohbet geçmişinden \(result.failures.count) sohbet okunamadı.")
         } catch {
-            Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .private)")
             historyError = String(localized: "Sohbet geçmişi okunamadı: \(userFacingMessage(error: error))")
         }
     }
@@ -163,7 +163,7 @@ final class PhoneAsk {
                 clear()
             }
         } catch {
-            Self.logger.error("Sohbet silinemedi, sohbet: \(conversationID.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet silinemedi, sohbet: \(conversationID.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             historyError = String(localized: "Sohbet silinemedi: \(userFacingMessage(error: error))")
         }
     }
@@ -187,7 +187,7 @@ final class PhoneAsk {
                 conversations.removeAll { $0.id == old.id }
             }
         } catch {
-            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             historyError = String(localized: "Sohbet saklanamadı: \(userFacingMessage(error: error))")
         }
     }

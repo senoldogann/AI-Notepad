@@ -53,7 +53,7 @@ public func loadCrashReports(directory: URL) throws -> CrashReportLoadResult {
             }
             reports.append(CrashReport(id: file.deletingPathExtension().lastPathComponent, receivedAt: receivedAt, diagnostics: diagnostics))
         } catch {
-            crashLogger.error("Çökme raporu okunamadı, dosya: \(file.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            crashLogger.error("Çökme raporu okunamadı, dosya: \(file.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             unreadable.append(file.lastPathComponent)
         }
     }
@@ -139,7 +139,7 @@ public final class CrashReportCenter {
             storeSeen()
             crashLogger.info("Çökme raporu silindi, kimlik: \(id, privacy: .public)")
         } catch {
-            crashLogger.error("Çökme raporu silinemedi, kimlik: \(id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            crashLogger.error("Çökme raporu silinemedi, kimlik: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             problem = userFacingMessage(error: error)
         }
         reload()
@@ -166,7 +166,7 @@ public final class CrashReportCenter {
             markSeen(id: report.id)
             crashLogger.info("Çökme raporu gönderildi, kimlik: \(report.id, privacy: .public)")
         } catch {
-            crashLogger.error("Çökme raporu gönderilemedi, kimlik: \(report.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            crashLogger.error("Çökme raporu gönderilemedi, kimlik: \(report.id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             sendStates[report.id] = .failed(message: userFacingMessage(error: error))
         }
     }
@@ -186,7 +186,7 @@ public final class CrashReportCenter {
                 }
             }
         } catch {
-            crashLogger.error("Teşhis paketi saklanamadı, hata: \(String(describing: error), privacy: .public)")
+            crashLogger.error("Teşhis paketi saklanamadı, hata: \(String(describing: error), privacy: .private)")
             problem = userFacingMessage(error: error)
         }
         reload()
@@ -200,7 +200,7 @@ public final class CrashReportCenter {
                 problem = String(localized: "Okunamayan çökme raporu: \(result.unreadableFiles.joined(separator: ", "))")
             }
         } catch {
-            crashLogger.error("Çökme raporları okunamadı, hata: \(String(describing: error), privacy: .public)")
+            crashLogger.error("Çökme raporları okunamadı, hata: \(String(describing: error), privacy: .private)")
             problem = userFacingMessage(error: error)
         }
     }

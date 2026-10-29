@@ -47,9 +47,9 @@ func hostedSetupProblems() async -> [String] {
     }
 }
 
-/// Geri bildirim ve çökme raporunun hedefi: abonelik sunucusu; giriş yapılmışsa rapor hesaba bağlanır (bearer).
+/// Geri bildirim ve çökme raporunun hedefi: abonelik sunucusu; rapor hesaba bağlanır (bearer). Sunucu jetonsuz
+/// raporu kabul etmez: giriş yapılmamışsa `HostedClientError.notSignedIn` (kullanıcıya "giriş yap" denir).
 func hostedReportDestination() async throws -> ReportDestination {
     let client: HostedClient = try HostedServices.requireClient()
-    let accessToken: String? = try await client.isSignedIn() ? try await client.validAccessToken() : nil
-    return ReportDestination(baseURL: client.baseURL, accessToken: accessToken)
+    return ReportDestination(baseURL: client.baseURL, accessToken: try await client.validAccessToken())
 }

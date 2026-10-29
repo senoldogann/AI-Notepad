@@ -40,7 +40,8 @@ out=".build/release"
 app="$out/export/AINotepad.app"
 dmg="$out/AI-Notepad-$version.dmg"
 
-# Uzun derlemeden önce: aynı derleme numarası appcast'te varsa güncelleme görünmez.
+# Uzun derlemeden önce: yayın yalnızca işlenmiş koddan; aynı derleme numarası appcast'te varsa güncelleme görünmez.
+require_clean_worktree
 require_new_build "$archive_dir/appcast.xml" "$build"
 
 xcodegen generate
@@ -56,6 +57,7 @@ verify_distribution_app "$app" "$sparkle_public_key"
 require_info_value "$app" CFBundleDisplayName "AI-Notepad"
 require_info_value "$app" SUFeedURL "https://github.com/$repo/releases/latest/download/appcast.xml"
 
+notarize_app "$app"
 make_notarized_dmg "$app" "$dmg" "AI-Notepad $version" Config/DMG/AI-Notepad
 sparkle_sign_dmg "$sparkle_bin" "$sparkle_account" "$dmg"
 update_appcast "$sparkle_bin" "$sparkle_account" "$archive_dir" "$dmg" "$notes" "$repo" "$version" "$build"

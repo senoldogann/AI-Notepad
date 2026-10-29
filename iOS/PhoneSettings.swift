@@ -96,7 +96,7 @@ func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
             }
         } catch {
             // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
-            phoneSettingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            phoneSettingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return false
         }
     }
@@ -104,7 +104,7 @@ func choosePhoneOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     do {
         config = try onDeviceConfig()
     } catch {
-        phoneSettingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        phoneSettingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .private)")
         return false
     }
     // Kayıtlı ana toplantı dili korunur (karşılamada bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa

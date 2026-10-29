@@ -2,12 +2,25 @@ import CryptoKit
 import Foundation
 import Security
 
-/// Abonelik uygulamasının özel adres şeması: sitedeki giriş uygulamayı
-/// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` ile açar (bkz. `hostedBrowserIdentity`).
+/// Abonelik uygulamasının giriş dönüş şeması: sitedeki giriş `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…`
+/// adresine gider, ASWebAuthenticationSession bu şemayı yakalar (bkz. `hostedBrowserIdentity`). Şema Launch
+/// Services'e kayıtlı değildir: dönüş yalnızca girişi başlatan oturuma gelir.
 public let hostedURLScheme: String = "com.senoldogan.ainotepad.hosted"
 
-/// Abonelik uygulamasının Anahtar Zinciri servis adı (geliştirici sürümünün `keychainService`'inden ayrı).
-public let hostedKeychainService: String = "AINotepadHosted"
+/// Abonelik uygulamasının Anahtar Zinciri servis adını taşıyan Info.plist anahtarı: Release `AINotepadHosted`, Debug
+/// `AINotepadHosted.debug` (bkz. project.yml `HOSTED_KEYCHAIN_SERVICE`). Geliştirici sürümünün `keychainService`'inden
+/// ayrıdır; Debug derlemesi yayındaki oturuma dokunmaz.
+public let hostedKeychainServiceInfoKey: String = "HostedKeychainService"
+
+/// Paketin Info.plist'indeki Anahtar Zinciri servis adı; yoksa, boşsa ya da derleme ayarı çözülmemişse
+/// `keychainServiceNotConfigured`.
+public func hostedKeychainService(bundle: Bundle) throws -> String {
+    guard let service = bundle.object(forInfoDictionaryKey: hostedKeychainServiceInfoKey) as? String,
+          !service.trimmingCharacters(in: .whitespaces).isEmpty, !service.contains("$(") else {
+        throw HostedClientError.keychainServiceNotConfigured(key: hostedKeychainServiceInfoKey)
+    }
+    return service
+}
 
 /// Info.plist'teki sunucu adresini (`HOSTED_API_BASE`) çözer: http ya da https, ana bilgisayarlı, sorgusuz ve
 /// parçasız olmalı; `.invalid` alan adı (yayındaki yer tutucu) ayarlanmamış sayılır. Saf fonksiyondur.

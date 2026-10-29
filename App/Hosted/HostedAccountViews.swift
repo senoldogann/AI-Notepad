@@ -13,8 +13,9 @@ func hostedMonthlyUsageText(used: Double, cap: Double) -> String {
     return String(localized: "Bu ay \(used.formatted(style)) / \(cap.formatted(style)) saat")
 }
 
-/// Giriş: tarayıcıda Apple ya da Google hesabı seçilir, ardından uygulama açılıp girişi tamamlar (Developer ID ile
-/// dağıtılan uygulama Apple ile girişi kendisi yapamaz). Kurulumda ve Ayarlar › Hesap'ta aynı.
+/// Giriş: uygulama içi giriş penceresinde Apple ya da Google hesabı seçilir, pencere kapanınca giriş tamamlanır
+/// (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi yapamaz; giriş sitede). Kurulumda ve Ayarlar › Hesap'ta
+/// aynı.
 struct HostedSignInPanel: View {
     let account: HostedAccount
 
@@ -25,16 +26,16 @@ struct HostedSignInPanel: View {
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
-                account.startBrowserSignIn()
+                Task { await account.signIn() }
             } label: {
                 Text("Giriş yap")
                     .frame(width: 228)
             }
             .buttonStyle(.pill)
-            .disabled(account.isWorking)
+            .disabled(account.isWorking || account.pendingBrowserSignIn != nil)
             Text(account.pendingBrowserSignIn == nil
-                ? "Tarayıcıda Apple ya da Google hesabını seçersin; ardından Gistsmith açılır ve girişi tamamlar."
-                : "Tarayıcıda Apple ya da Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.")
+                ? "Açılan giriş penceresinde Apple ya da Google hesabını seçersin; pencere kapanınca giriş tamamlanır."
+                : "Giriş penceresinde Apple ya da Google hesabını seç. Vazgeçersen pencereyi kapatman yeter.")
                 .appFont(size: 12, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -79,6 +80,17 @@ struct HostedAccountSettings: View {
                     .padding(.vertical, 16)
             case .signedIn(let entitlements):
                 signedIn(entitlements: entitlements)
+            case .signedInStatusUnknown(let message):
+                SettingsRow(title: Text("Plan")) {
+                    Text("Giriş yapıldı; hesap durumu şu an okunamıyor. Bağlantı gelince kendiliğinden yenilenir.")
+                    Text(verbatim: message).foregroundStyle(.orange)
+                } control: {
+                    Button("Yeniden dene") { Task { await account.refresh() } }
+                        .disabled(account.isWorking)
+                }
+                HostedSignOutRow(account: account)
+                HostedAccountError(account: account)
+                    .padding(.top, 12)
             }
         }
         .task { await account.refresh() }
@@ -124,12 +136,7 @@ struct HostedAccountSettings: View {
             ProgressView(value: min(entitlements.monthlyHoursUsed, entitlements.monthlyHoursCap), total: max(entitlements.monthlyHoursCap, 0.1))
                 .frame(width: 140)
         }
-        SettingsRow(title: Text("Oturum")) {
-            Text("Bu Mac'teki oturumu kapatır; toplantıların ve notların bu Mac'te kalır.")
-        } control: {
-            Button("Çıkış yap") { Task { await account.signOut() } }
-                .disabled(account.isWorking)
-        }
+        HostedSignOutRow(account: account)
         SettingsRow(title: Text("Hesabı sil")) {
             Text("Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.")
             if confirmingDelete {
@@ -152,6 +159,20 @@ struct HostedAccountSettings: View {
         }
         HostedAccountError(account: account)
             .padding(.top, 12)
+    }
+}
+
+/// Ayarlar › Hesap'taki çıkış satırı (hak durumu okunamasa da çıkış yapılabilir).
+private struct HostedSignOutRow: View {
+    let account: HostedAccount
+
+    var body: some View {
+        SettingsRow(title: Text("Oturum")) {
+            Text("Bu Mac'teki oturumu kapatır; toplantıların ve notların bu Mac'te kalır.")
+        } control: {
+            Button("Çıkış yap") { Task { await account.signOut() } }
+                .disabled(account.isWorking)
+        }
     }
 }
 
@@ -185,6 +206,13 @@ struct HostedSignInStep: View {
                         .foregroundStyle(Theme.muted)
                 }
                 HostedAccountError(account: account)
+            case .signedInStatusUnknown:
+                Label("Giriş yapıldı", systemImage: "checkmark.circle.fill")
+                    .appFont(size: 15, weight: .medium)
+                    .foregroundStyle(Theme.ink)
+                Text("Hesap durumu şu an okunamıyor; bağlantı gelince kendiliğinden yenilenir.")
+                    .appFont(size: 13, weight: .regular)
+                    .foregroundStyle(Theme.muted)
             }
         }
         .task { await account.refresh() }

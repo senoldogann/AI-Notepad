@@ -600,7 +600,7 @@ final class AppModel {
             speechModelProgress = nil
             modelStatus = .ready
         } catch {
-            Self.logger.error("Cihaz içi konuşma modeli hazırlanamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Cihaz içi konuşma modeli hazırlanamadı, hata: \(String(describing: error), privacy: .private)")
             speechModelProgress = nil
             modelStatus = .failed(userFacingMessage(error: error))
         }
@@ -614,7 +614,7 @@ final class AppModel {
             engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory)
             modelStatus = .ready
         } catch {
-            Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .private)")
             modelStatus = .failed(userFacingMessage(error: error))
             return
         }
@@ -624,7 +624,7 @@ final class AppModel {
             try await prepareLocalDiarization(modelsDirectory: try AppPaths.modelsDirectory())
             localDiarizationWarning = nil
         } catch {
-            Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .private)")
             localDiarizationWarning = String(localized: "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas.")
         }
     }
@@ -757,7 +757,7 @@ final class AppModel {
             let started: HostedStartedMeeting = try await HostedAccount.shared.startMeeting()
             meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
         } catch {
-            Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             microphone.stop()
             systemAudio.stop()
@@ -1039,7 +1039,7 @@ final class AppModel {
         do {
             try await HostedAccount.shared.endMeeting()
         } catch {
-            Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı oturumu kapatılamadı: \(userFacingMessage(error: error))"))
         }
         #endif
@@ -1419,7 +1419,7 @@ final class AppModel {
             }
             refreshFolderCopy(meetingID: meetingID)
         } catch {
-            Self.logger.error("Not sürümü geri yüklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Not sürümü geri yüklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not sürümü geri yüklenemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -1618,7 +1618,7 @@ final class AppModel {
                 do {
                     try await notifier.scheduleReminders(meetings: [])
                 } catch {
-                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .public)")
+                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .private)")
                 }
             }
             return
@@ -1690,7 +1690,7 @@ final class AppModel {
             try await notifier.scheduleReminders(meetings: remind)
             calendarError = nil
         } catch {
-            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .private)")
             calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
         }
     }
@@ -1718,7 +1718,7 @@ final class AppModel {
                         try await notifier.announceAutoRecordingFailed(title: meeting.title)
                     }
                 } catch {
-                    Self.logger.error("Kendiliğinden kayıt bildirilemedi, hata: \(String(describing: error), privacy: .public)")
+                    Self.logger.error("Kendiliğinden kayıt bildirilemedi, hata: \(String(describing: error), privacy: .private)")
                 }
             }
             return
@@ -1731,7 +1731,7 @@ final class AppModel {
             do {
                 try await notifier.suggestRecording()
             } catch {
-                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .private)")
             }
         }
     }
@@ -1899,7 +1899,7 @@ final class AppModel {
                 clearArchiveConversation()
             }
         } catch {
-            Self.logger.error("Sohbet silinemedi, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet silinemedi, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet silinemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -1913,13 +1913,13 @@ final class AppModel {
                 }.value
                 askConversations = result.conversations
                 for failure in result.failures {
-                    Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .public)")
+                    Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .private)")
                 }
                 if !result.failures.isEmpty {
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişinden \(result.failures.count) sohbet okunamadı."))
                 }
             } catch {
-                Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişi okunamadı: \(userFacingMessage(error: error))"))
             }
         }
@@ -1944,7 +1944,7 @@ final class AppModel {
                 askConversations.removeAll { $0.id == old.id }
             }
         } catch {
-            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet saklanamadı: \(userFacingMessage(error: error))"))
         }
     }
@@ -1992,7 +1992,7 @@ final class AppModel {
         do {
             try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, language: note.writtenLanguage, calendar: Calendar.current))
         } catch {
-            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return eventKitMessage(error: error)
         }
         // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir. Toplantı bu arada işlenmeye başladıysa işaret
@@ -2027,12 +2027,12 @@ final class AppModel {
     @ObservationIgnored private var sendStateFades: [String: Task<Void, Never>] = [:]
 
     /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
-    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations) {
+    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations, clientName: appName) {
         (connection: ChannelConnection) async throws -> ChannelConnection in
         try await refreshConnectionTokens(connection: connection)
     }
     /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
-    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService)
+    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService, clientName: appName)
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
     /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
@@ -2109,7 +2109,7 @@ final class AppModel {
             let removed: NoteDestination = try await destinationVault.remove(id: id)
             destinations = try await destinationVault.all()
             do {
-                try await revokeDestination(destination: removed)
+                try await revokeDestination(destination: removed, clientName: appName)
             } catch {
                 Self.logger.warning("Hedef servis tarafında kapatılamadı, hedef: \(destinationName(destination: removed), privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: destinationName(destination: removed), appName: appName, error: error))
@@ -2263,7 +2263,7 @@ final class AppModel {
             do {
                 saveRecord(record: change(try loadMeeting(directory: directory)), directory: directory)
             } catch {
-                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
             }
         }
@@ -2373,7 +2373,7 @@ final class AppModel {
     private func revokeReplacedGrant(connection: MCPConnection, service: String) {
         Task {
             do {
-                try await revokeMCPConnection(connection: connection)
+                try await revokeMCPConnection(connection: connection, clientName: appName)
             } catch {
                 Self.logger.warning("Eski bağlantının izni geri alınamadı, servis: \(service, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: replacedGrantRevocationFailureMessage(service: service, error: error))
@@ -2426,7 +2426,7 @@ final class AppModel {
         do {
             try await trackerVault.withTracker(id: tracker.id) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
-                try await validateTracker(service: current.service, connection: current.connection, persist: persist)
+                try await validateTracker(service: current.service, connection: current.connection, clientName: appName, persist: persist)
             }
         } catch TaskTrackerError.noCreateTool(let name) {
             await revokeTracker(tracker: try await trackerVault.remove(id: tracker.id))
@@ -2467,7 +2467,7 @@ final class AppModel {
     /// (kullanıcı kaldırmak istedi); neden ve erişimin servisin ayarlarından nasıl kaldırılacağı gösterilir.
     private func revokeTracker(tracker: TaskTracker) async {
         do {
-            try await revokeMCPConnection(connection: tracker.connection)
+            try await revokeMCPConnection(connection: tracker.connection, clientName: appName)
         } catch {
             Self.logger.warning("Görev aracının izni geri alınamadı, servis: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: tracker.service.displayName, appName: appName, error: error))
@@ -2522,7 +2522,7 @@ final class AppModel {
             try requireOnDeviceLanguages(provider: llm, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language)
             let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
-                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
+                try await sendTasksToTracker(tracker: current, clientName: appName, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
             markTasksSent(meetingID: meetingID, tracker: tracker, tasks: result.createdTaskIndices.map { tasks[$0] })
             // Sonuç uygulamanın kendi cümlesiyle gösterilir: ajanın serbest özeti (kabul testinde) başarılı gönderimi
@@ -2579,7 +2579,7 @@ final class AppModel {
         // NSAppleScript yalnızca ana iş parçacığında güvenli.
         let failure: String? = runAppleScript(source: source)
         if let failure {
-            Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .public)")
+            Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .private)")
             return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da \(appName) için Notlar'a izin ver.")
         }
         Self.logger.info("Not Apple Notlar'a yazıldı, toplantı: \(meetingID, privacy: .public)")
@@ -2671,7 +2671,7 @@ final class AppModel {
         do {
             latest = try loadMeeting(directory: directory)
         } catch {
-            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: \(userFacingMessage(error: error))"))
             latest = start
         }
@@ -2697,7 +2697,7 @@ final class AppModel {
         do {
             return SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory())
         } catch {
-            Self.logger.error("Ses izi için model klasörü alınamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Ses izi için model klasörü alınamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
             return nil
         }
@@ -2708,7 +2708,7 @@ final class AppModel {
             registeredVoices = try loadRegisteredVoices(url: try voicesFileURL())
             voiceRegistryError = nil
         } catch {
-            Self.logger.error("Kayıtlı sesler okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kayıtlı sesler okunamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
         }
     }
@@ -2719,7 +2719,7 @@ final class AppModel {
             registeredVoices = voices
             voiceRegistryError = nil
         } catch {
-            Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
         }
     }
@@ -2739,7 +2739,7 @@ final class AppModel {
             peopleBookLoaded = true
             peopleBookError = nil
         } catch {
-            Self.logger.error("Kişiler defteri okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kişiler defteri okunamadı, hata: \(String(describing: error), privacy: .private)")
             peopleBookError = userFacingMessage(error: error)
         }
     }
@@ -2754,7 +2754,7 @@ final class AppModel {
             peopleBook = book
             peopleBookError = nil
         } catch {
-            Self.logger.error("Kişiler defteri yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kişiler defteri yazılamadı, hata: \(String(describing: error), privacy: .private)")
             peopleBookError = userFacingMessage(error: error)
         }
     }
@@ -2937,7 +2937,7 @@ final class AppModel {
                 saveRecord(record: record.withAudioDeleted().with(voiceprints: nil), directory: directory)
             } catch {
                 // Silinemediyse "silindi" işaretlenmez; saklama süresi bir sonraki denemede yeniden dener.
-                Self.logger.error("Ses silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Ses silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             }
         }
@@ -3037,7 +3037,7 @@ final class AppModel {
             // Süren bir arka plan okuması bu yazmayı görmemiş olabilir: sonucu bu kaydı geri almasın.
             meetingReloader.invalidate()
         } catch {
-            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -3096,7 +3096,7 @@ final class AppModel {
             }
             keySync = .idle
         } catch {
-            Self.logger.error("Anahtarlar iCloud'a kopyalanamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Anahtarlar iCloud'a kopyalanamadı, hata: \(String(describing: error), privacy: .private)")
             keySync = .failed(userFacingMessage(error: error))
         }
         await refreshSharedKeys()

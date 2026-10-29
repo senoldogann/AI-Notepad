@@ -12,7 +12,7 @@ let appName: String = {
     do {
         return try appDisplayName(bundle: .main)
     } catch {
-        appNameLogger.fault("Uygulamanın görünen adı tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+        appNameLogger.fault("Uygulamanın görünen adı tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
         fatalError("Uygulamanın görünen adı tanımlı değil (Info.plist CFBundleDisplayName): \(error)")
     }
 }()

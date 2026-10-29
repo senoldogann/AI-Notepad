@@ -57,7 +57,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .permissions: "İki ses, tek kayıt"
         case .profile: "Sana göre ayarlanır"
         #if HOSTED_EDITION
-        case .keys: "3 toplantı ücretsiz"
+        case .keys: "3 toplantı ya da 7 gün ücretsiz"
         #else
         case .keys: "Anahtarlar yalnız sende"
         #endif

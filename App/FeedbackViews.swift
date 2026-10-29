@@ -5,8 +5,8 @@ import os
 
 private let feedbackLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Feedback")
 
-/// Geri bildirim ve çökme raporlarının gideceği sunucu: abonelik sürümünde hesabın sunucusu (giriş yapılmışsa
-/// jetonla), geliştirici sürümünde Info.plist'teki `ReportsAPIBase` (jetonsuz).
+/// Geri bildirim ve çökme raporlarının gideceği sunucu: abonelik sürümünde hesabın sunucusu (jetonla; giriş yoksa
+/// `notSignedIn`), geliştirici sürümünde Info.plist'teki `ReportsAPIBase` (jetonsuz).
 @MainActor
 func reportDestination() async throws -> ReportDestination {
     #if HOSTED_EDITION
@@ -156,7 +156,7 @@ private struct FeedbackSheet: View {
     /// Neyin nereye gittiği.
     private var privacyNote: LocalizedStringKey {
         #if HOSTED_EDITION
-        "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider; giriş yaptıysan hesabınla ilişkilendirilir. Toplantı içeriği gönderilmez."
+        "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider ve hesabınla ilişkilendirilir; göndermek için giriş yapmış olmalısın. Toplantı içeriği gönderilmez."
         #else
         "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider. Toplantı içeriği ve anahtarlar gönderilmez."
         #endif
@@ -176,7 +176,7 @@ private struct FeedbackSheet: View {
                 try await submitReport(report: report, destination: try await reportDestination())
                 state = .sent
             } catch {
-                feedbackLogger.error("Geri bildirim gönderilemedi, hata: \(String(describing: error), privacy: .public)")
+                feedbackLogger.error("Geri bildirim gönderilemedi, hata: \(String(describing: error), privacy: .private)")
                 state = .failed(message: userFacingMessage(error: error))
             }
         }

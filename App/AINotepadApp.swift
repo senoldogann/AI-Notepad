@@ -16,7 +16,7 @@ private func writeAcceptanceResult(line: String) {
     do {
         try text.write(to: url, atomically: true, encoding: .utf8)
     } catch {
-        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .public)")
+        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .private)")
     }
 }
 #endif
@@ -33,10 +33,22 @@ enum AppEntry {
             _ = try AppPaths.dataFolderName(bundle: .main)
         } catch {
             let message: String = userFacingMessage(error: error)
-            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
             FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
             fatalError(message)
         }
+        #if HOSTED_EDITION
+        // Anahtar Zinciri servis adı da Info.plist'ten (Debug ve Release ayrı); yoksa oturum yanlış yere yazılmasın diye
+        // uygulama açılmaz.
+        do {
+            _ = try hostedKeychainService(bundle: .main)
+        } catch {
+            let message: String = userFacingMessage(error: error)
+            appLogger.fault("Anahtar Zinciri servisi tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
+            FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
+            fatalError(message)
+        }
+        #endif
         #if DEBUG
         if CommandLine.arguments.contains("--icloud-yokla") {
             probeICloud()
@@ -284,9 +296,12 @@ struct AINotepadApp: App {
             }
             #endif
             #if HOSTED_EDITION
-            // Abonelik: hesap ve hak durumu açılışta okunur; kurulum eksikleri (giriş) güncellenir.
-            await HostedAccount.shared.refresh()
-            await model.refreshSetupProblems()
+            // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Konuşma modeli
+            // bunu beklemeden, paralel yüklenir (sunucu yavaşsa ya da ağ yoksa model gecikmesin).
+            Task {
+                await HostedAccount.shared.refresh()
+                await model.refreshSetupProblems()
+            }
             #else
             if await chooseOnDeviceOnFirstRun(defaults: .standard) {
                 appLogger.info("İlk açılış: anahtar yok, cihaz içi mod seçildi")
@@ -315,13 +330,9 @@ struct AINotepadApp: App {
                 }
             )
             #if HOSTED_EDITION
-            // Tarayıcıda girişin dönüşü (com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…) uygulamayı açar.
-            .onOpenURL { (url: URL) in
-                Task {
-                    await HostedAccount.shared.handle(url: url)
-                    await model.refreshSetupProblems()
-                }
-            }
+            // Giriş ya da çıkışta (kurulumda, Ayarlar'da ya da oturum sunucuda kapanınca) kurulum eksikleri (menüdeki
+            // "giriş yapılmamış") yenilenir.
+            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
             #endif
         }
         .defaultSize(width: 1180, height: 780)

@@ -54,6 +54,6 @@ private func removeChunkDirectory(directory: URL) {
     do {
         try FileManager.default.removeItem(at: directory)
     } catch {
-        finalLogger.warning("Geçici WAV parçaları silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+        finalLogger.warning("Geçici WAV parçaları silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
     }
 }

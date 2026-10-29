@@ -74,13 +74,23 @@ struct SettingsPage: View {
     let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
+    /// Başlığın altındaki özet: yalnızca bu sürümde görünen sekmeleri anar (abonelik sürümünde motor, model ve anahtar
+    /// ayarı yok).
+    private var settingsSubtitle: LocalizedStringKey {
+        #if HOSTED_EDITION
+        "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet."
+        #else
+        "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet."
+        #endif
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Ayarlar")
                     .appFont(size: 30, weight: .regular)
                     .tracking(-0.5)
-                Text("Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.")
+                Text(settingsSubtitle)
                     .appFont(size: 14, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .padding(.top, 4)
@@ -89,10 +99,9 @@ struct SettingsPage: View {
                 Group {
                     switch section {
                     #if HOSTED_EDITION
+                    // Giriş ya da çıkışta kurulum eksikleri uygulama düzeyinde yenilenir (bkz. AINotepadApp).
                     case .account:
                         HostedAccountSettings(account: .shared)
-                            // Giriş ya da çıkışta kurulum eksikleri (menüdeki "giriş yapılmamış") yenilenir.
-                            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
                     #endif
                     case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()

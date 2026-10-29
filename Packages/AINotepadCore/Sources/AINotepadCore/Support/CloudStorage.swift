@@ -108,7 +108,7 @@ public func moveFinishedMeetingsToCloud(localSessions: URL, cloudSessions: URL, 
                 moved.append(record.id)
             }
         } catch {
-            cloudLogger.error("Toplantı iCloud'a taşınamadı, toplantı: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            cloudLogger.error("Toplantı iCloud'a taşınamadı, toplantı: \(record.id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             failures.append(MeetingLoadFailure(folder: record.id, reason: userFacingMessage(error: error)))
         }
     }
@@ -213,7 +213,7 @@ private func copyCompletely(from source: URL, to destination: URL) throws {
         do {
             try FileManager.default.removeItem(at: staging)
         } catch {
-            cloudLogger.error("Geçici kopya klasörü silinemedi, hata: \(String(describing: error), privacy: .public)")
+            cloudLogger.error("Geçici kopya klasörü silinemedi, hata: \(String(describing: error), privacy: .private)")
         }
     }
     let staged: URL = staging.appending(path: destination.lastPathComponent, directoryHint: .isDirectory)
@@ -403,7 +403,7 @@ public final class CloudSyncController {
         do {
             try await prepareCloudStorage()
         } catch {
-            cloudLogger.error("iCloud hazırlanamadı, hata: \(String(describing: error), privacy: .public)")
+            cloudLogger.error("iCloud hazırlanamadı, hata: \(String(describing: error), privacy: .private)")
             state = .failed(userFacingMessage(error: error))
             return
         }
@@ -427,7 +427,7 @@ public final class CloudSyncController {
             cloudLogger.info("iCloud eşitlemesi açıldı, taşınan: \(result.moved.count, privacy: .public), birleştirilen: \(result.merged.count, privacy: .public)")
             state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
         } catch {
-            cloudLogger.error("iCloud eşitlemesi açılamadı, hata: \(String(describing: error), privacy: .public)")
+            cloudLogger.error("iCloud eşitlemesi açılamadı, hata: \(String(describing: error), privacy: .private)")
             state = .failed(userFacingMessage(error: error))
         }
         onChange()
@@ -457,7 +457,7 @@ public final class CloudSyncController {
             cloudLogger.info("iCloud eşitlemesi kapatıldı, kopyalanan: \(result.moved.count, privacy: .public)")
             state = .idle
         } catch {
-            cloudLogger.error("iCloud eşitlemesi kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+            cloudLogger.error("iCloud eşitlemesi kapatılamadı, hata: \(String(describing: error), privacy: .private)")
             state = .failed(userFacingMessage(error: error))
         }
         onChange()
@@ -486,7 +486,7 @@ public final class CloudSyncController {
                     self.state = .failed(failureSummary(failures: result.failures))
                 }
             } catch {
-                cloudLogger.error("Toplantı iCloud'a taşınamadı, hata: \(String(describing: error), privacy: .public)")
+                cloudLogger.error("Toplantı iCloud'a taşınamadı, hata: \(String(describing: error), privacy: .private)")
                 self.state = .failed(userFacingMessage(error: error))
             }
         }

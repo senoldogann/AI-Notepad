@@ -25,6 +25,25 @@ struct UpdateSettingsRow: View {
     }
 }
 
+/// Çökme şeridindeki gizlilik notu: neyin nereye gittiği. Abonelik sürümünde rapor hesaba bağlı gider ve sunucu
+/// jetonsuz raporu kabul etmez (giriş gerekir).
+private var crashBannerPrivacyNote: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği yok. \"Gönder\"e basınca hesabına bağlı olarak geliştiricinin sunucusuna gider; bunun için giriş yapmış olmalısın."
+    #else
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider."
+    #endif
+}
+
+/// Ayarlar'daki çökme raporları satırının gizlilik notu (bkz. `crashBannerPrivacyNote`).
+private var crashSettingsPrivacyNote: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği yok) hesabına bağlı olarak geliştiricinin sunucusuna yollar; bunun için giriş yapmış olmalısın."
+    #else
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği ve anahtarlar yok) geliştiricinin sunucusuna yollar."
+    #endif
+}
+
 /// Ana penceredeki çökme şeridi: önceki açılışta uygulama çöktüyse bir kez sorar. "Gönder" (kullanıcının açık onayı)
 /// saklanan raporu geliştiricinin sunucusuna yollar; hiçbir şey kendiliğinden gönderilmez.
 struct CrashReportBanner: View {
@@ -40,7 +59,7 @@ struct CrashReportBanner: View {
                 Text("\(appName) beklenmedik şekilde kapandı — raporu gönder?")
                     .appFont(size: 12, weight: .medium)
                     .foregroundStyle(Theme.ink)
-                Text("Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider.")
+                Text(crashBannerPrivacyNote)
                     .appFont(size: 11, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +98,7 @@ struct CrashReportsSettings: View {
 
     var body: some View {
         SettingsRow(title: Text("Çökme raporları")) {
-            Text("macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği ve anahtarlar yok) geliştiricinin sunucusuna yollar.")
+            Text(crashSettingsPrivacyNote)
             if let problem = center.problem {
                 Text(problem).foregroundStyle(.red)
             }

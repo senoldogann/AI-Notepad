@@ -33,6 +33,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar.</string>
 	<key>NSAudioCaptureUsageDescription</key>

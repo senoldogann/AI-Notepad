@@ -1016,6 +1016,17 @@
         }
       }
     },
+    "3 toplantı ya da 7 gün ücretsiz": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 meetings or 7 days free"
+          }
+        }
+      }
+    },
     "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
       "extractionState": "manual",
       "localizations": {
@@ -1023,17 +1034,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly subscription."
-          }
-        }
-      }
-    },
-    "3 toplantı ücretsiz": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "3 meetings free"
           }
         }
       }
@@ -1947,6 +1947,17 @@
         }
       }
     },
+    "Açılan giriş penceresinde Apple ya da Google hesabını seçersin; pencere kapanınca giriş tamamlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You choose your Apple or Google account in the sign-in window; signing in finishes when the window closes."
+          }
+        }
+      }
+    },
     "Açılan pencerede %@ hesabınla giriş yap ve izin ver.": {
       "localizations": {
         "en": {
@@ -2532,6 +2543,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not installed on this Mac"
+          }
+        }
+      }
+    },
+    "Bu Mac'te çıkış yapıldı. Sunucuya ulaşılamadı; sunucudaki oturum en geç 60 gün içinde kendiliğinden kapanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out on this Mac. The server couldn't be reached; your session on the server closes on its own within 60 days."
           }
         }
       }
@@ -4478,6 +4500,28 @@
         }
       }
     },
+    "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in window couldn't open. Bring the app to the front and click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş penceresinde Apple ya da Google hesabını seç. Vazgeçersen pencereyi kapatman yeter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your Apple or Google account in the sign-in window. To cancel, just close the window."
+          }
+        }
+      }
+    },
     "Giriş yap": {
       "extractionState": "manual",
       "localizations": {
@@ -4496,6 +4540,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Giriş yapıldı; hesap durumu şu an okunamıyor. Bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're signed in, but your account status can't be read right now. It refreshes on its own when you're back online."
           }
         }
       }
@@ -5150,6 +5205,17 @@
         }
       }
     },
+    "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage your account, interface language, appearance, connections and shortcuts."
+          }
+        }
+      }
+    },
     "Hesap": {
       "extractionState": "manual",
       "localizations": {
@@ -5157,6 +5223,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account"
+          }
+        }
+      }
+    },
+    "Hesap durumu şu an okunamıyor; bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account status can't be read right now; it refreshes on its own when you're back online."
           }
         }
       }
@@ -7073,23 +7150,23 @@
         }
       }
     },
+    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider ve hesabınla ilişkilendirilir; göndermek için giriş yapmış olmalısın. Toplantı içeriği gönderilmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer and are linked to your account; you need to be signed in to send. No meeting content is sent."
+          }
+        }
+      }
+    },
     "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider. Toplantı içeriği ve anahtarlar gönderilmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer. No meeting content and no keys are sent."
-          }
-        }
-      }
-    },
-    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider; giriş yaptıysan hesabınla ilişkilendirilir. Toplantı içeriği gönderilmez.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer; if you're signed in, they're linked to your account. No meeting content is sent."
           }
         }
       }
@@ -8235,6 +8312,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The report contains the version, the system and where the error happened; no meeting content and no keys. Pressing \"Send\" sends it to the developer's server."
+          }
+        }
+      }
+    },
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği yok. \"Gönder\"e basınca hesabına bağlı olarak geliştiricinin sunucusuna gider; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report contains the version, the system and where the error happened; no meeting content. Pressing \"Send\" sends it to the developer's server, linked to your account; you need to be signed in for this."
           }
         }
       }
@@ -9502,39 +9590,6 @@
         }
       }
     },
-    "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't open the browser; check your default browser and try again."
-          }
-        }
-      }
-    },
-    "Tarayıcıda Apple ya da Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose your Apple or Google account in the browser; Gistsmith then opens by itself. If it isn't finished within 10 minutes, click again."
-          }
-        }
-      }
-    },
-    "Tarayıcıda Apple ya da Google hesabını seçersin; ardından Gistsmith açılır ve girişi tamamlar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You choose your Apple or Google account in the browser; then Gistsmith opens and completes sign-in."
-          }
-        }
-      }
-    },
     "Tarif": {
       "localizations": {
         "en": {
@@ -10514,6 +10569,17 @@
         }
       }
     },
+    "Uygulamanın Anahtar Zinciri ayarı eksik (%@); uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's Keychain setting is missing (%@); reinstall the app."
+          }
+        }
+      }
+    },
     "Uygulamanın tamamında; Mac'te yüklü her yazı tipi seçilebilir.": {
       "localizations": {
         "en": {
@@ -11353,6 +11419,17 @@
         }
       }
     },
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği yok) hesabına bağlı olarak geliştiricinin sunucusuna yollar; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by macOS are stored only on this Mac; none are sent automatically. \"Send\" sends a report (version, system and where the error happened; no meeting content) to the developer's server, linked to your account; you need to be signed in for this."
+          }
+        }
+      }
+    },
     "not": {
       "localizations": {
         "en": {
@@ -11949,6 +12026,17 @@
         }
       }
     },
+    "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial starts with your first meeting; start a meeting first."
+          }
+        }
+      }
+    },
     "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -11960,17 +12048,6 @@
         }
       }
     },
-    "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your free trial meetings are used up. To continue, subscribe in Settings › Account."
-          }
-        }
-      }
-    },
     "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -11978,6 +12055,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Free trials are at capacity today. Try again tomorrow or subscribe in Settings › Account."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended (3 meetings or 7 days). Subscribe to continue."
           }
         }
       }

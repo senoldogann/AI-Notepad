@@ -105,9 +105,17 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedKeyterms(terms: ["a", "b", "c"], limit: 2) == ["a", "b"])
     }
 
-    @Test func transcribeURLEncodesQuery() throws {
-        let url: URL = hostedTranscribeURL(baseURL: try #require(URL(string: "http://localhost:8787")), languageCode: "fin", keyterms: ["C++ & Go", "Aino"])
-        #expect(url.absoluteString == "http://localhost:8787/v1/transcribe?language_code=fin&diarize=true&keyterms=C%2B%2B%20%26%20Go&keyterms=Aino")
+    // Anahtar terimler adreste değil, başlıkta: UTF-8 JSON dizisinin dolgusuz base64url'i.
+    @Test func transcribeKeytermsGoInHeader() throws {
+        let url: URL = hostedTranscribeURL(baseURL: try #require(URL(string: "http://localhost:8787")), languageCode: "fin")
+        #expect(url.absoluteString == "http://localhost:8787/v1/transcribe?language_code=fin&diarize=true")
+        #expect(try hostedKeytermsHeader(keyterms: []) == nil)
+        let header: String = try #require(try hostedKeytermsHeader(keyterms: ["C++ & Go", "Äino?"]))
+        #expect(!header.contains("=") && !header.contains("+") && !header.contains("/"))
+        let standard: String = header.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let padded: String = standard + String(repeating: "=", count: (4 - standard.count % 4) % 4)
+        let decoded: [String] = try JSONDecoder().decode([String].self, from: try #require(Data(base64Encoded: padded)))
+        #expect(decoded == ["C++ & Go", "Äino?"])
     }
 }
 
@@ -124,6 +132,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: status, serverMessage: "", path: "/v1/meetings/start"))
         }
         #expect(message(.trialExhausted, 402).contains("abone ol"))
+        #expect(message(.trialExhausted, 402).contains("7 gün"))
+        #expect(message(.trialNotStarted, 403).contains("önce bir toplantı"))
         #expect(message(.trialIPLimit, 429).contains("Yarın"))
         #expect(message(.trialDeviceUsed, 403).contains("abone ol"))
         #expect(hostedDeviceCheckMessage(error: .unsupported).contains("Abone"))

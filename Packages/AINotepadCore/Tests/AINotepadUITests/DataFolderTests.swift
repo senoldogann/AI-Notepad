@@ -23,9 +23,19 @@ private func dataFolderName(plist path: String) throws -> String? {
         let developer: String = try #require(try dataFolderName(plist: "App/Info.plist"), "App/Info.plist'te \(dataFolderInfoKey) yok")
         let hosted: String = try #require(try dataFolderName(plist: "App/Hosted/Info.plist"), "App/Hosted/Info.plist'te \(dataFolderInfoKey) yok")
         #expect(developer == "AINotepad")
-        #expect(hosted == "AINotepad Hosted")
-        #expect(developer != hosted)
+        // Abonelik sürümünün adı yapılandırmaya göre derleme ayarından gelir (project.yml `HOSTED_DATA_FOLDER_NAME`).
+        #expect(hosted == "$(HOSTED_DATA_FOLDER_NAME)")
         #expect(try dataFolderName(plist: "iOS/Info.plist") == "AINotepad")
+    }
+
+    // Abonelik sürümünün Debug derlemesi yayındakinden ayrı veri klasörü ve Anahtar Zinciri servisi kullanır: yerel
+    // sunucuyla denenen derleme yayındaki oturumu ve toplantıları okuyamaz, silemez. Yayın adları değişmez.
+    @Test func hostedDebugBuildIsSeparatedFromRelease() throws {
+        let project: String = try String(contentsOf: repositoryRoot().appending(path: "project.yml"), encoding: .utf8)
+        #expect(project.contains("HOSTED_DATA_FOLDER_NAME: \"AINotepad Hosted\""))
+        #expect(project.contains("HOSTED_DATA_FOLDER_NAME: \"AINotepad Hosted Debug\""))
+        #expect(project.contains("HOSTED_KEYCHAIN_SERVICE: \"AINotepadHosted\""))
+        #expect(project.contains("HOSTED_KEYCHAIN_SERVICE: \"AINotepadHosted.debug\""))
     }
 
     // Anahtar yoksa klasör tahmin edilmez: açık hata.

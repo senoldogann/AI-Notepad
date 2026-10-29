@@ -290,7 +290,7 @@ private func loadedProgress(file: URL, fingerprint: String, partCount: Int) -> C
         }
         return progress
     } catch {
-        noteLogger.error("Not ilerlemesi okunamadı, baştan yazılıyor, hata: \(String(describing: error), privacy: .public)")
+        noteLogger.error("Not ilerlemesi okunamadı, baştan yazılıyor, hata: \(String(describing: error), privacy: .private)")
         return nil
     }
 }
@@ -300,7 +300,7 @@ private func saveProgress(progress: ChunkedNoteProgress, file: URL) {
     do {
         try JSONEncoder().encode(progress).write(to: file, options: .atomic)
     } catch {
-        noteLogger.error("Not ilerlemesi yazılamadı, hata: \(String(describing: error), privacy: .public)")
+        noteLogger.error("Not ilerlemesi yazılamadı, hata: \(String(describing: error), privacy: .private)")
     }
 }
 
@@ -366,7 +366,7 @@ public func writeMeetingNote(
     do {
         try FileManager.default.removeItem(at: progressFile)
     } catch {
-        noteLogger.error("Not ilerleme dosyası silinemedi, hata: \(String(describing: error), privacy: .public)")
+        noteLogger.error("Not ilerleme dosyası silinemedi, hata: \(String(describing: error), privacy: .private)")
     }
     return withNormalizedTasks(note: note, userName: userName).with(language: language)
 }

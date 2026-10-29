@@ -240,7 +240,7 @@ public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirector
                     // Atan `write(contentsOf:)`: istemci boruyu kapatınca süreç ObjC istisnasıyla çökmez, temiz çıkar.
                     try output.write(contentsOf: Data((response + "\n").utf8))
                 } catch {
-                    mcpLogger.info("MCP istemcisi bağlantıyı kapattı, çıkılıyor: \(String(describing: error), privacy: .public)")
+                    mcpLogger.info("MCP istemcisi bağlantıyı kapattı, çıkılıyor: \(String(describing: error), privacy: .private)")
                     return
                 }
             }
