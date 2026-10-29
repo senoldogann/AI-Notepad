@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { type CryptoKey as JoseKey, decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { deviceCheckUrl } from "../src/deviceCheck";
+import { trialDeviceClaimResumeMs } from "../src/meetings";
 import type { Env } from "../src/env";
 import { trialIdentityHash } from "../src/trialLedger";
 import {
@@ -332,6 +333,24 @@ describe("Apple DeviceCheck ile Mac başına deneme", () => {
 
     const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
     await expectError(await start(harness, other, fake.env, mac), 403, "trial_device_used");
+  });
+
+  it("süresi geçmiş bekleyen talep, kullanılmış başka bir Mac'in jetonuyla denemeyi açmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const first: string = macToken("ilk");
+    const used: string = macToken("kullanilmis");
+    const owner: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    // İlk Mac'te talep yarıda kaldı (bekleyen talep kaldı).
+    fake.lostUpdateResponses = 3;
+    await expectError(await start(harness, owner, fake.env, first), 502, "upstream_unavailable");
+    // Başka bir hesap ikinci Mac'te denemesini kullandı.
+    const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    expect((await start(harness, other, fake.env, used)).status).toBe(201);
+    // Süre geçtikten sonra eski bekleyen talep o Mac'in jetonuyla denemeyi açmaz.
+    harness.clock.nowMs += trialDeviceClaimResumeMs + 1_000;
+    const renewed: Session = await refreshed(harness, owner);
+    await expectError(await start(harness, renewed, fake.env, used), 403, "trial_device_used");
   });
 
   it("base64 olmayan jeton Apple'a gitmeden reddedilir", async () => {

@@ -584,11 +584,17 @@ async function handleDispute(db: D1Database, stripe: Stripe, platform: Platform,
   });
 }
 
+/** Ödemenin faturası ve faturanın aboneliği. */
+interface ChargeInvoice {
+  readonly invoiceId: string;
+  readonly subscriptionId: string;
+}
+
 /**
- * Ödemenin ait olduğu abonelik: ödeme niyeti → fatura ödemesi → fatura → abonelik. Zincir kurulamazsa (fatura dışı
- * ödeme, eski ödeme kaydı) null.
+ * Ödemenin ait olduğu fatura ve abonelik: ödeme niyeti → fatura ödemesi → fatura → abonelik. Zincir kurulamazsa
+ * (fatura dışı ödeme, eski ödeme kaydı, aboneliksiz fatura) null.
  */
-async function chargeSubscriptionId(stripe: Stripe, platform: Platform, charge: Stripe.Charge, userId: string | null): Promise<string | null> {
+async function chargeInvoice(stripe: Stripe, platform: Platform, charge: Stripe.Charge, userId: string | null): Promise<ChargeInvoice | null> {
   const intent: string | null = charge.payment_intent === null ? null : typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent.id;
   if (intent === null) {
     return null;
@@ -605,30 +611,46 @@ async function chargeSubscriptionId(stripe: Stripe, platform: Platform, charge: 
     return null;
   }
   const invoice: Stripe.Invoice = await callStripe(platform, "invoices.retrieve", userId, () => stripe.invoices.retrieve(invoiceId));
-  return invoiceSubscriptionId(invoice);
+  const subscriptionId: string | null = invoiceSubscriptionId(invoice);
+  return subscriptionId === null ? null : { invoiceId, subscriptionId };
+}
+
+/** Aboneliğin son faturasının kimliği; yoksa null. Saf fonksiyondur. */
+function latestInvoiceId(subscription: Stripe.Subscription): string | null {
+  const latest: string | Stripe.Invoice | null = subscription.latest_invoice;
+  if (latest === null) {
+    return null;
+  }
+  return typeof latest === "string" ? latest : (latest.id ?? null);
 }
 
 /**
  * `charge.refunded`: her iade alarm yazar. Tam iade (`refunded === true`) yalnızca o ödemenin ait olduğu aboneliği
- * bitirir (`chargeSubscriptionId`): abonelik Stripe'ta yaşıyorsa hemen iptal edilir ve satırı yalnızca abonelik kimliği
- * eşleşiyorsa aynı toplu işlemde `canceled` yazılır (erişim hemen biter; ardından gelen `customer.subscription.deleted`
- * aynı durumu yazar). Eski bir aboneliğin ödemesinin iadesi yeni aboneliğe dokunmaz. Kopya aboneliğin iadesi, aboneliği
- * bulunamayan ödeme ve kısmi iade yalnızca alarmdır.
+ * (`chargeInvoice`) ve yalnızca iade edilen ödeme aboneliğin son faturasıysa bitirir: abonelik Stripe'ta yaşıyorsa
+ * hemen iptal edilir ve satırı yalnızca abonelik kimliği eşleşiyorsa aynı toplu işlemde `canceled` yazılır (erişim
+ * hemen biter; ardından gelen `customer.subscription.deleted` aynı durumu yazar). Alarmdan öteye geçmeyenler: eski bir
+ * aboneliğin ya da aynı aboneliğin eski bir ayının iadesi (ödenmiş güncel ay kesilmez), aynı Stripe hesabındaki başka
+ * ürünün aboneliği (`isOurSubscription`), kopya aboneliğin iadesi, aboneliği bulunamayan ödeme ve kısmi iade.
  */
-async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform: Platform, event: Stripe.Event, charge: Stripe.Charge): Promise<EventStatements> {
+async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform: Platform, event: Stripe.Event, charge: Stripe.Charge, priceId: string): Promise<EventStatements> {
   const customer: string | null = charge.customer === null ? null : customerIdOf(charge.customer);
   const userId: string | null = await customerOwner(db, customer);
-  const subscriptionId: string | null = charge.refunded ? await chargeSubscriptionId(stripe, platform, charge, userId) : null;
+  const paid: ChargeInvoice | null = charge.refunded ? await chargeInvoice(stripe, platform, charge, userId) : null;
+  const subscriptionId: string | null = paid?.subscriptionId ?? null;
   const duplicate: boolean = subscriptionId !== null && (await duplicateRecord(db, subscriptionId)) !== null;
-  const ends: boolean = subscriptionId !== null && !duplicate;
+  let ours: boolean = false;
+  let latest: boolean = false;
   let canceled: boolean = false;
-  if (ends && subscriptionId !== null) {
-    const subscription: Stripe.Subscription = await callStripe(platform, "subscriptions.retrieve", userId, () => stripe.subscriptions.retrieve(subscriptionId));
-    if (isLiveInStripe(subscription)) {
+  if (paid !== null && !duplicate) {
+    const subscription: Stripe.Subscription = await callStripe(platform, "subscriptions.retrieve", userId, () => stripe.subscriptions.retrieve(paid.subscriptionId));
+    ours = isOurSubscription(subscription, priceId);
+    latest = latestInvoiceId(subscription) === paid.invoiceId;
+    if (ours && latest && isLiveInStripe(subscription)) {
       await cancelSubscription(stripe, platform, subscription.id, userId);
       canceled = true;
     }
   }
+  const ends: boolean = ours && latest;
   log("alert", "stripe_charge_refunded", {
     eventId: event.id,
     chargeId: charge.id,
@@ -638,6 +660,8 @@ async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform
     currency: charge.currency,
     fullyRefunded: charge.refunded,
     duplicateRefund: duplicate,
+    ourSubscription: ours,
+    latestInvoice: latest,
     canceled,
   });
   if (!ends || userId === null || subscriptionId === null) {
@@ -687,7 +711,7 @@ async function eventStatements(db: D1Database, platform: Platform, config: Strip
     case "customer.deleted":
       return customerDeletedStatements(db, event, event.data.object.id);
     case "charge.refunded":
-      return chargeRefundedStatements(db, stripeClient(platform, config), platform, event, event.data.object);
+      return chargeRefundedStatements(db, stripeClient(platform, config), platform, event, event.data.object, config.stripePriceId);
     case "invoice.paid":
       await invoicePaidDuplicateRefund(db, stripeClient(platform, config), platform, event, event.data.object);
       return [];

@@ -293,7 +293,7 @@ export interface AccountCopy {
   /** Abone ol düğmesinin yanında: fiyat (vergiler dahil), otomatik yenileme, iptal, satıcı. */
   readonly subscribeNote: string;
   readonly manage: string;
-  /** Aboneliği yönet düğmesinin yanında (Link'te kart, makbuz, iptal). */
+  /** Aboneliği yönet düğmesinin yanında (kart, iptal; makbuzlar Link'ten e-postayla, sipariş geçmişi link.com'da). */
   readonly manageNote: string;
   readonly signOut: string;
   /** "Uygulamayı indir" kartı. */
@@ -864,7 +864,7 @@ export const copy: Copy = {
     subscribe: "Subscribe",
     subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
-    manageNote: "Update your card, see receipts or cancel anytime. Renews automatically every month until you cancel.",
+    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Renews automatically every month until you cancel.",
     signOut: "Sign out",
     appTitle: "Get the app",
     appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,

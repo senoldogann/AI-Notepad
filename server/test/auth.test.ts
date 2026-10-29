@@ -304,14 +304,29 @@ describe("yenileme jetonu ve çıkış", () => {
     const second: Session = await retried.json<Session>();
     expect(second.refreshToken).not.toBe(lost.refreshToken);
     expect((await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).status).toBe(200);
-    // Kaybolan jeton artık yok (aile düşürülmez); yeni jeton dönmeye devam eder.
-    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: lost.refreshToken } })), 401, "invalid_token");
+    // Kaybolan jeton istemciye hiç ulaşmadı; yeni jeton dönmeye devam eder.
     const third: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } }))).json<Session>();
     expect((await harness.call(req("GET", "/v1/me", { token: third.accessToken }))).status).toBe(200);
     // Süre geçtikten sonra hemen önceki jeton yeniden kullanımdır: aile düşer.
     harness.clock.nowMs += refreshRetryWindowMs + 1_000;
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } })), 401, "invalid_token");
     await expectError(await harness.call(req("GET", "/v1/me", { token: third.accessToken })), 401, "invalid_token");
+  });
+
+  it("eski jeton süre içinde başka elden yeniden denenirse gerçek istemcinin tuttuğu halef gelince tüm aile düşer", async () => {
+    const harness: Harness = await defaultHarness();
+    const first: Session = await signIn(harness);
+    // Gerçek istemci dönüşü aldı ve halefi tutuyor.
+    const legit: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 5 * 60_000;
+    // Çalınan eski jeton süre içinde sunuluyor: yeniden deneme sanılır, yeni çift verilir.
+    const stolen: Response = await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }));
+    expect(stolen.status).toBe(200);
+    const attacker: Session = await stolen.json<Session>();
+    harness.clock.nowMs += 10 * 60_000;
+    // Gerçek istemci halefini sunar: sessizce reddedilmez, tüm aile düşer (saldırganın oturumu dahil).
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: legit.refreshToken } })), 401, "invalid_token");
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: attacker.refreshToken } })), 401, "invalid_token");
   });
 
   it("yeniden denemede verilen halef kullanıldıktan sonra ilk jeton süre içinde yeniden gelirse aile düşer", async () => {

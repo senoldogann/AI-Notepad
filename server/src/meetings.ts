@@ -267,14 +267,21 @@ export async function startMeeting(
 }
 
 /**
+ * Yarıda kalan Mac talebinin aynı hesapça tamamlanabildiği süre (talebin başladığı andan): kullanıcı kayıt başlatmayı
+ * dakikalar içinde yeniden dener; daha eski talep, kullanılmış başka bir Mac'in jetonuyla denemeyi açmaya yetmez.
+ */
+export const trialDeviceClaimResumeMs: number = 60 * 60_000;
+
+/**
  * Deneme için Mac denetimi (Apple DeviceCheck, `bit0` = "bu Mac bir hesaba deneme verdi"). Politika `off` ise, hesabın
  * denemesi zaten bir Mac'e bağlandıysa (`users.trial_device_verified_at`) ya da hesabın denemesi bittiyse (toplantılar
  * harcandı ya da süre doldu; kapı `trial_exhausted` verir, Mac boşuna işaretlenmez) bir şey yapmaz. Yoksa jeton
  * gerekir (`device_check_required`). `bit0` boşsa Mac bu hesaba bağlanır (`claimTrialDevice`): önce hesabın bekleyen
  * talebi yazılır (`users.trial_device_claim_started_at`), sonra Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi),
  * sonra hesap doğrulanmış sayılır: hesabın sonraki deneme toplantıları jeton istemez. `bit0` doluysa: hesabın bekleyen
- * talebi varsa Mac'i işaretleyen büyük olasılıkla bu hesabın yarıda kalmış isteğidir (Apple yazdı, yanıt ya da
- * doğrulama yazımı kayboldu): doğrulama tamamlanır; yoksa `trial_device_used`. Mac kapıdan (IP sınırı) önce
+ * talebi `trialDeviceClaimResumeMs` içinde başladıysa Mac'i işaretleyen büyük olasılıkla bu hesabın yarıda kalmış
+ * isteğidir (Apple yazdı, yanıt ya da doğrulama yazımı kayboldu): doğrulama tamamlanır; yoksa `trial_device_used`
+ * (eski bekleyen talep başka bir Mac'in jetonuyla denemeyi açamaz). Mac kapıdan (IP sınırı) önce
  * işaretlenir; kapı reddederse Mac yine bu hesabındır ve hesap yeniden deneyebilir. Apple karşılaştır-yaz sunmaz: aynı
  * Mac'te iki hesabın aynı anda ilk denemesi ikisine de geçebilir (kabul edilen yarış).
  */
@@ -301,7 +308,7 @@ async function requireTrialDevice(
     throw new ApiError("device_check_required", "Ücretsiz deneme için bu Mac'in Apple DeviceCheck jetonu gerekiyor; uygulamayı güncelle.");
   }
   const bits: DeviceBits = await queryDeviceBits(context.platform, deviceCheck, deviceCheckToken, now);
-  if (bits.bit0 && row.claim_started_at !== null) {
+  if (bits.bit0 && row.claim_started_at !== null && now.getTime() - row.claim_started_at <= trialDeviceClaimResumeMs) {
     await markTrialDeviceVerified(db, userId, now);
     log("warn", "trial_device_claim_resumed", { userId, claimStartedAt: row.claim_started_at });
     return;

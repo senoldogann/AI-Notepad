@@ -405,7 +405,7 @@ describe("Stripe webhook", () => {
     expect(mapping?.count).toBe(0);
   });
 
-  it("tam iade yalnızca ödemenin aboneliğini bitirir (eski aboneliğin iadesi yenisini kesmez); kısmi ve eşleşmeyen iade yalnızca alarm", async () => {
+  it("tam iade yalnızca ödemenin aboneliğini ve yalnızca son faturası iade edilince bitirir; eski ay, başka ürün, kısmi ve eşleşmeyen iade yalnızca alarm", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
     const send: Sender = sender(harness, stripe);
@@ -414,11 +414,18 @@ describe("Stripe webhook", () => {
     const now: number = Math.floor(harness.clock.nowMs / 1000);
     // Ocakta eski abonelik (iptal edilmiş), martta yeni abonelik.
     stripe.subscriptions.set(id("sub_old"), fakeSubscription(id("sub_old"), customer, "canceled", now - 90 * 86_400, now - 60 * 86_400));
-    await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub_new"), customer, "active", now, now + 30 * 86_400));
+    await send.change(id("evt_1"), "customer.subscription.created", now, { ...fakeSubscription(id("sub_new"), customer, "active", now, now + 30 * 86_400), latest_invoice: id("in_new") });
     stripe.invoices.set(id("in_old"), { subscription: id("sub_old"), paid: true, created: now - 90 * 86_400 });
     stripe.invoicePayments.set(id("in_old"), [id("pi_old")]);
+    // Aynı aboneliğin geçen ayı (son fatura değil): iadesi ödenmiş güncel ayı kesmez.
+    stripe.invoices.set(id("in_prev"), { subscription: id("sub_new"), paid: true, created: now - 30 * 86_400 });
+    stripe.invoicePayments.set(id("in_prev"), [id("pi_prev")]);
     stripe.invoices.set(id("in_new"), { subscription: id("sub_new"), paid: true, created: now });
     stripe.invoicePayments.set(id("in_new"), [id("pi_new")]);
+    // Aynı Stripe hesabındaki başka ürünün aboneliği: son faturasının iadesi de ona dokunmaz.
+    stripe.subscriptions.set(id("sub_side"), { ...fakeSubscriptionWithPrice(id("sub_side"), customer, "active", now - 500, now + 30 * 86_400, "price_baska_urun"), latest_invoice: id("in_side") });
+    stripe.invoices.set(id("in_side"), { subscription: id("sub_side"), paid: true, created: now - 500 });
+    stripe.invoicePayments.set(id("in_side"), [id("pi_side")]);
     const refundEvent = (eventId: string, chargeId: string, intent: string | null, refunded: boolean, created: number): string =>
       eventOf(eventId, "charge.refunded", created, {
         id: chargeId,
@@ -434,6 +441,8 @@ describe("Stripe webhook", () => {
     for (const [eventId, chargeId, intent, refunded] of [
       [id("evt_part"), id("ch_part"), id("pi_new"), false],
       [id("evt_old"), id("ch_old"), id("pi_old"), true],
+      [id("evt_prev"), id("ch_prev"), id("pi_prev"), true],
+      [id("evt_side"), id("ch_side"), id("pi_side"), true],
       [id("evt_free"), id("ch_free"), null, true],
     ] as const) {
       expect((await postWebhook(harness, refundEvent(eventId, chargeId, intent, refunded, now + 1), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);

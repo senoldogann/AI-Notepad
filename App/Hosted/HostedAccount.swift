@@ -717,7 +717,7 @@ final class HostedAccount {
         }
     }
 
-    /// Stripe Müşteri Portalı (kart, fatura, iptal).
+    /// Stripe Müşteri Portalı (kart, iptal; makbuzlar Link'ten e-postayla gelir).
     func manageSubscription() async {
         awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
