@@ -38,6 +38,10 @@ export type ErrorCode =
   | "trial_capacity_reached"
   | "deepgram_unavailable"
   | "deepgram_grant_limit"
+  | "referral_invalid"
+  | "referral_self"
+  | "referral_not_eligible"
+  | "referral_unavailable"
   | "webhook_invalid"
   | "internal_error";
 
@@ -80,6 +84,10 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   trial_capacity_reached: 503,
   deepgram_unavailable: 503,
   deepgram_grant_limit: 429,
+  referral_invalid: 404,
+  referral_self: 403,
+  referral_not_eligible: 409,
+  referral_unavailable: 503,
   webhook_invalid: 400,
   internal_error: 500,
 };

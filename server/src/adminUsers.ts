@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isoOrNull } from "./admin";
-import type { Config } from "./config";
+import type { Config, SubscriptionPlan } from "./config";
 import {
   type SubscriptionAccess,
   type SubscriptionState,
@@ -71,6 +71,8 @@ export interface AdminSubscription {
   readonly cancelAt: string | null;
   readonly pastDueSince: string | null;
   readonly graceEndsAt: string | null;
+  /** Plan (aylık ya da yıllık); fiyatı tanınmayan abonelikte null. */
+  readonly plan: SubscriptionPlan | null;
   /** Webhook'un satırı son yazdığı an. */
   readonly updatedAt: string;
 }
@@ -281,6 +283,7 @@ interface UserRow {
   readonly cancel_at: number | null;
   readonly past_due_since: number | null;
   readonly updated_at: number | null;
+  readonly plan: SubscriptionPlan | null;
   readonly meetings: number;
   readonly trial_meetings: number;
   readonly month_ms: number;
@@ -296,7 +299,7 @@ interface UserRow {
  */
 const userColumnsSql: string = `u.id, u.created_at, u.trial_started_at, u.trial_device_verified_at, u.carried_trial_meetings,
   (SELECT provider FROM auth_identities a WHERE a.user_id = u.id ORDER BY provider LIMIT 1) AS provider,
-  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at,
+  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at, s.plan,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id) AS meetings,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS trial_meetings,
   (SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(m.ended_at, ?1), m.max_ends_at, ?1) - m.started_at)), 0)
@@ -336,6 +339,7 @@ function userSummary(row: UserRow, config: Config, now: Date): AdminUserSummary 
             cancelAt: isoOrNull(subscription.cancelAt),
             pastDueSince: isoOrNull(subscription.pastDueSince),
             graceEndsAt: isoOrNull(graceEndsAtMs(subscription, config.pastDueGraceMs)),
+            plan: row.plan,
             updatedAt: new Date(row.updated_at ?? 0).toISOString(),
           },
     trial: {

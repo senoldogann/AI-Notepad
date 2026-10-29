@@ -19,6 +19,7 @@ const productionFilledIn: Env = envWith({
   APP_ATTEST_APP_IDS: "A1B2C3D4E5.com.senoldogan.AINotepad.hosted",
   GOOGLE_CLIENT_IDS: "123456789012-abc.apps.googleusercontent.com,123456789012-web.apps.googleusercontent.com",
   STRIPE_PRICE_ID: "price_1QabcDEFghiJKL",
+  STRIPE_YEARLY_PRICE_ID: "price_1QyearDEFghiJKL",
 });
 
 function placeholderError(env: Env): ConfigPlaceholderError {
@@ -48,8 +49,8 @@ function configErrorFields(env: Env): readonly string[] {
 describe("üretim yapılandırmasında yer tutucular", () => {
   it("yer tutuculu üretim yapılandırması ayar adlarıyla (değerleri olmadan) reddedilir", () => {
     const error: ConfigPlaceholderError = placeholderError(productionWithPlaceholders);
-    expect(error.fields).toEqual(["APP_ATTEST_APP_IDS", "GOOGLE_CLIENT_IDS", "STRIPE_PRICE_ID"]);
-    for (const value of ["TEAMID0000", "000000000000-placeholder", "price_placeholder"]) {
+    expect(error.fields).toEqual(["APP_ATTEST_APP_IDS", "GOOGLE_CLIENT_IDS", "STRIPE_PRICE_ID", "STRIPE_YEARLY_PRICE_ID"]);
+    for (const value of ["TEAMID0000", "000000000000-placeholder", "price_placeholder", "price_yearly_placeholder"]) {
       expect(error.message).not.toContain(value);
     }
   });
@@ -66,12 +67,15 @@ describe("üretim yapılandırmasında yer tutucular", () => {
   it("doldurulmuş üretim yapılandırması ve yer tutuculu geliştirme yapılandırması kabul edilir", () => {
     const production: Config = parseConfig(productionFilledIn);
     expect(production.environment).toBe("production");
-    expect(production.stripePriceId).toBe("price_1QabcDEFghiJKL");
+    expect(production.stripePrices).toEqual({ monthly: "price_1QabcDEFghiJKL", yearly: "price_1QyearDEFghiJKL" });
+    expect(production.priceUsdYearly).toBe(49);
     expect(production.googleClientIds).toHaveLength(2);
     expect(production.adminIdentities).toEqual([]);
     const development: Config = parseConfig(envWith({}));
     expect(development.environment).toBe("development");
-    expect(development.stripePriceId).toBe("price_placeholder");
+    expect(development.stripePrices).toEqual({ monthly: "price_placeholder", yearly: "price_yearly_placeholder" });
+    // Aynı fiyat iki plana verilemez (plan ve MRR ayırt edilemez).
+    expect(configErrorFields(envWith({ STRIPE_YEARLY_PRICE_ID: "price_placeholder" }))).toEqual(["STRIPE_YEARLY_PRICE_ID"]);
   });
 
   it("yönetici kimlikleri `apple:` ya da `google:` önekli olmalı; DMG adresi https olmalı", () => {
@@ -122,7 +126,7 @@ describe("üretim yapılandırmasında yer tutucular", () => {
       level: "error",
       event: "config_invalid",
       error: "ConfigPlaceholderError",
-      fields: "APP_ATTEST_APP_IDS,GOOGLE_CLIENT_IDS,STRIPE_PRICE_ID",
+      fields: "APP_ATTEST_APP_IDS,GOOGLE_CLIENT_IDS,STRIPE_PRICE_ID,STRIPE_YEARLY_PRICE_ID",
     });
     expect((await harness.call(req("GET", "/v1/health", { env: productionFilledIn }))).status).toBe(200);
   });

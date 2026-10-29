@@ -21,7 +21,7 @@ import { verifyTurnstile } from "./auth/turnstile";
 import { findOrCreateUser } from "./auth/users";
 import { trialIdentityHash } from "./trialLedger";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
-import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
+import { type CheckoutRequest, createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
@@ -30,6 +30,7 @@ import { type AccountLLMAccess, entitlements, requireAccountLLMAccess } from "./
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
 import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBodyBytes, readJsonBody } from "./http";
+import { type AcceptedReferral, referralSummary, requireReferral } from "./referrals";
 import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
 import { proxyLLM } from "./llm/proxy";
@@ -70,6 +71,8 @@ const webRoutes: ReadonlySet<string> = new Set([
   "/v1/me",
   "/v1/billing/checkout",
   "/v1/billing/portal",
+  "/v1/referral",
+  "/v1/referral/validate",
   "/v1/reports",
 ]);
 
@@ -223,6 +226,33 @@ const meetingStartSchema = z.strictObject({
   /** Sonradan işlenen kayıt: açık toplantıyı kapatma (bkz. `MeetingStartRequest.deferred`). */
   deferred: z.boolean().optional(),
 });
+/** Checkout gövdesi: plan ve isteğe bağlı davet kodu. Kod plansız gönderilemez. */
+const checkoutSchema = z
+  .strictObject({
+    plan: z.enum(["monthly", "yearly"]).optional(),
+    referralCode: z.string().min(1).max(32).optional(),
+  })
+  .refine((body: { plan?: "monthly" | "yearly" | undefined; referralCode?: string | undefined }): boolean => body.referralCode === undefined || body.plan !== undefined, {
+    path: ["plan"],
+  });
+const referralValidateSchema = z.strictObject({ code: z.string().min(1).max(32) });
+
+/**
+ * Checkout isteği. Plansız istek aylıktır: yalnızca aylık planı bilen eski istemciler için — uygulama 0.1.5 ve öncesi
+ * gövdesiz (content-type'sız) POST, site bu sürümden önce `{}` gönderir. Yeni istemciler planı her zaman gönderir.
+ * Content-type'sız istekte gövde boş olmalı (değilse `unsupported_media_type`).
+ */
+async function checkoutRequest(request: Request): Promise<CheckoutRequest> {
+  if (request.headers.get("content-type") === null) {
+    if ((await readBodyBytes(request, smallBodyBytes)).byteLength > 0) {
+      throw new ApiError("unsupported_media_type", "İstek gövdesi application/json olmalı.");
+    }
+    return { plan: "monthly", referralCode: null };
+  }
+  const body = await readJsonBody(request, checkoutSchema, smallBodyBytes);
+  return { plan: body.plan ?? "monthly", referralCode: body.referralCode ?? null };
+}
+
 const meetingEndPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/end$/;
 const meetingReprocessPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/reprocess$/;
 
@@ -394,7 +424,19 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/billing/checkout" && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
-    return jsonResponse(200, { url: await createCheckout(db, context.platform, config, user.userId) });
+    return jsonResponse(200, { url: await createCheckout(db, context.platform, config, user.userId, await checkoutRequest(request)) });
+  }
+  if (path === "/v1/referral" && method === "GET") {
+    const user: AuthedUser = await authed();
+    return jsonResponse(200, await referralSummary(db, config, user.userId, now));
+  }
+  if (path === "/v1/referral/validate" && method === "POST") {
+    // Kod tahminine karşı kullanıcı başına dakikada 10 deneme (START_USER_LIMITER) ve IP sınırı.
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    const body = await readJsonBody(request, referralValidateSchema, smallBodyBytes);
+    const accepted: AcceptedReferral = await requireReferral(db, config, user.userId, body.code, now);
+    return jsonResponse(200, { code: accepted.code });
   }
   if (path === "/v1/billing/portal" && method === "POST") {
     const user: AuthedUser = await authed();

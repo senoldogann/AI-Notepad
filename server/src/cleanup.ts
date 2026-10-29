@@ -66,8 +66,8 @@ const aggregateCounterRetentionMs: number = 400 * dayMs;
 const cancellationRetentionMs: number = 180 * dayMs;
 
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 19 tablo koşulu × 3 tur
- * = 57 silme sorgusu + 3 toplu işlemin 6 ifadesi = 63 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 20 tablo koşulu × 3 tur
+ * = 60 silme sorgusu + 3 toplu işlemin 6 ifadesi = 66 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
  * ekler). Workers Paid planının çağrı başına 1000 sorgu sınırının çok altındadır; ücretsiz plana (50) dönülürse
  * `maxBatchesPerTable` 2'ye indirilmelidir. Kalan satırlar ertesi gün silinir. Koşul eklerken bu sayıyı güncelle.
  */
@@ -122,6 +122,13 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { name: "download_sources", table: "download_sources", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "ops_events", table: "ops_events", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "subscription_cancellations", table: "subscription_cancellations", where: "created_at < ?", binds: [nowMs - cancellationRetentionMs] },
+    // Hesabı silinmiş davet edilenin satırı (kimlik özeti ve zamanlar) deneme defteri gibi 730 gün tutulur.
+    {
+      name: "referral_redemptions",
+      table: "referral_redemptions",
+      where: "referred_user_id IS NULL AND updated_at < ?",
+      binds: [nowMs - trialLedgerRetentionMs],
+    },
   ];
 }
 

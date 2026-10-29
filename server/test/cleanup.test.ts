@@ -99,6 +99,12 @@ describe("süresi dolmuş satırların temizliği", () => {
         `INSERT INTO subscription_cancellations (stripe_subscription_id, user_id, created_at, event_created, reason) VALUES
            ('sub_c_old', ?1, ?2, 0, 'cancellation_requested'), ('sub_c_new', ?1, ?3, 0, 'cancellation_requested')`,
       ).bind(first, nowMs - 181 * dayMs, nowMs - 179 * dayMs),
+      // Hesabı silinmiş davet edilenin satırı 730 gün; hesabı yaşayanınki kalır.
+      env.DB.prepare(
+        `INSERT INTO referral_redemptions (id, referred_user_id, referred_identity_hash, referrer_user_id, code, status, created_at, updated_at, joined_at) VALUES
+           ('ref_old', NULL, 'h_old', ?1, 'AAAAAAAA', 'granted', 0, ?2, 0), ('ref_recent', NULL, 'h_recent', ?1, 'AAAAAAAA', 'granted', 0, ?3, 0),
+           ('ref_live', ?1, 'h_live', NULL, 'AAAAAAAA', 'granted', 0, ?2, 0)`,
+      ).bind(first, nowMs - 731 * dayMs, nowMs - 729 * dayMs),
     ]);
 
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
@@ -125,7 +131,9 @@ describe("süresi dolmuş satırların temizliği", () => {
       download_sources: 1,
       ops_events: 1,
       subscription_cancellations: 1,
+      referral_redemptions: 1,
     });
+    expect(await ids("SELECT id FROM referral_redemptions")).toEqual(["ref_live", "ref_recent"]);
     // Silinen eski deneme toplantısı kullanıcının devraldığı denemeye eklendi; başlangıç korunur.
     const user = await env.DB.prepare("SELECT carried_trial_meetings, trial_started_at FROM users WHERE id = ?").bind(first).first<{
       carried_trial_meetings: number;
