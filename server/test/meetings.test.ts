@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
+import { mayReprocess, reprocessAudioCap, reprocessTokenBudget } from "../src/meetings";
 import {
   type Harness,
   type Session,
@@ -229,6 +230,43 @@ describe("haklar ve toplantı oturumları", () => {
     // Başkasının toplantısı yeniden açılamaz.
     const other: Session = await signIn(harness);
     await expectError(await harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/reprocess`, { token: other.accessToken })), 404, "not_found");
+  });
+
+  it("yeniden işleme sesi kaydın gerçek süresiyle, yapay zekâyı sınırlı bütçeyle açar; erişimsiz hesap yalnızca 7 gün içinde", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const dayMs: number = 86_400_000;
+    // Deneme ilk toplantıyla başlar (7 gün).
+    const first: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    await harness.call(req("POST", `/v1/meetings/${first.meetingId}/end`, { token: session.accessToken }));
+    harness.clock.nowMs += 6 * dayMs;
+    let current: Session = await refreshed(harness, session);
+    const late: StartedMeetingBody = await (await startMeeting(harness, current)).json<StartedMeetingBody>();
+    harness.clock.nowMs += 2 * 60_000;
+    await harness.call(req("POST", `/v1/meetings/${late.meetingId}/end`, { token: current.accessToken }));
+    // İlk geçiş 2 dakikalık sesi yazdı.
+    await env.DB.prepare("UPDATE meeting_sessions SET audio_seconds = 120, tokens_used = 5000 WHERE id = ?").bind(late.meetingId).run();
+
+    // Deneme süresi doldu (erişim yok): bir haftadan eski toplantı reddedilir, yenisi açılır.
+    harness.clock.nowMs += 2 * dayMs;
+    current = await refreshed(harness, current);
+    const reprocess = (meetingId: string): Promise<Response> =>
+      harness.call(req("POST", `/v1/meetings/${meetingId}/reprocess`, { token: current.accessToken }));
+    await expectError(await reprocess(first.meetingId), 402, "subscription_required");
+    expect((await reprocess(late.meetingId)).status).toBe(200);
+    const row = await env.DB.prepare("SELECT reprocess_audio_cap, token_budget FROM meeting_sessions WHERE id = ?")
+      .bind(late.meetingId)
+      .first<{ reprocess_audio_cap: number; token_budget: number }>();
+    // Yazılmış 120 sn + kaydın 120 sn'si; bütçe kullanılan + yeniden işleme payı.
+    expect(row).toEqual({ reprocess_audio_cap: 240, token_budget: 5000 + reprocessTokenBudget });
+
+    // Erişimsiz hesap için pencere bitişten sonraki 7 gün.
+    harness.clock.nowMs += 8 * dayMs;
+    current = await refreshed(harness, current);
+    await expectError(await reprocess(late.meetingId), 402, "subscription_required");
+    expect(mayReprocess(true, 0, 365 * dayMs, 7 * dayMs)).toBe(true);
+    expect(reprocessAudioCap(0, 600)).toBeNull();
+    expect(reprocessAudioCap(6000, 6000)).toBe(6000 + 6000 + 120);
   });
 
   it("sonradan işlenen kayıt (deferred) açık toplantıyı kapatmaz", async () => {

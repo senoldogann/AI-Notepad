@@ -2,6 +2,7 @@ import type { Config } from "./config";
 import { randomId } from "./crypto";
 import { type DeviceBits, queryDeviceBits, updateDeviceBits } from "./deviceCheck";
 import {
+  type SubscriptionState,
   type TrialState,
   deviceTrialMeetingsUsed,
   hasSubscriptionAccess,
@@ -15,6 +16,7 @@ import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
+import { chunkOverlapAllowance } from "./reservations";
 import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
@@ -46,6 +48,7 @@ export interface MeetingRow {
   /** Yeniden işleme sayısı ve açıklığın sonu (bkz. `reprocessMeeting`). */
   readonly reprocess_count: number;
   readonly reprocess_until: number | null;
+  readonly reprocess_audio_cap: number | null;
 }
 
 /** Bir toplantının en çok yeniden işlenme sayısı. */
@@ -452,6 +455,33 @@ export function meetingUsableUntil(row: MeetingRow, graceMs: number): number {
   return Math.max(usual, row.reprocess_until ?? 0);
 }
 
+/** Aboneliği ya da denemesi olmayan hesap kendi toplantısını bitişinden sonra bu süre içinde yeniden işleyebilir. */
+export const reprocessWithoutAccessMs: number = 7 * 86_400_000;
+
+/** Yeniden açılan toplantının yapay zekâ bütçesi (token; notu bir kez yeniden yazmaya yeter). */
+export const reprocessTokenBudget: number = 300_000;
+
+/**
+ * Yeniden işlemeye izin var mı: abonelik erişimi ya da kalan deneme varsa her zaman; yoksa toplantının bitişinden sonra
+ * `windowMs` içinde (kayıtlı toplantısını son kez işleyebilsin, ama süresiz değil). Saf fonksiyondur.
+ */
+export function mayReprocess(hasAccess: boolean, meetingEndMs: number, nowMs: number, windowMs: number): boolean {
+  return hasAccess || nowMs <= meetingEndMs + windowMs;
+}
+
+/**
+ * Yeniden işlemenin ses sınırı (toplantının toplam yazılmış sesi): şimdiye dek yazılan + kaydın gerçek süresi (toplantı
+ * süresi ile ilk geçişin sesinin büyüğü) + parça örtüşme payı. Sesi hiç yazılmamış toplantıda null (ilk geçiş sınırı:
+ * toplantının en uzun süresi). Saf fonksiyondur.
+ */
+export function reprocessAudioCap(audioSeconds: number, meetingSeconds: number): number | null {
+  if (audioSeconds <= 0) {
+    return null;
+  }
+  const recording: number = Math.max(meetingSeconds, audioSeconds);
+  return audioSeconds + recording + chunkOverlapAllowance(recording);
+}
+
 /** Yeniden işleme yanıtı. */
 export interface ReprocessedMeeting {
   readonly meetingId: string;
@@ -462,11 +492,12 @@ export interface ReprocessedMeeting {
 }
 
 /**
- * Bitmiş toplantıyı yeniden işleme için açar: son geçiş toplantının kullanılmamış ses hakkıyla, toplantı kapsamlı yapay
- * zekâ kendi bütçesiyle `meetingGraceMs` boyunca kullanılabilir. Yeni deneme, başlatma ya da toplantı süresi düşmez.
- * Toplantı zaten açıksa (ek süre içinde) hak harcanmaz. En çok `maxMeetingReprocesses` kez; aşılırsa
- * `reprocess_limit_reached`. Başkasının ya da olmayan toplantı `not_found`. Sayaç tek koşullu ifadeyle artar
- * (eşzamanlı istekler sınırı aşamaz).
+ * Bitmiş toplantıyı yeniden işleme için açar: `meetingGraceMs` boyunca son geçiş en çok kaydın gerçek süresi kadar yeni
+ * ses (`reprocessAudioCap`), toplantı kapsamlı yapay zekâ en çok `reprocessTokenBudget` token kullanabilir. Yeni deneme,
+ * başlatma ya da toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının
+ * bitişinden sonraki 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Toplantı zaten
+ * açıksa (ek süre içinde) hak harcanmaz. En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`.
+ * Başkasının ya da olmayan toplantı `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
  */
 export async function reprocessMeeting(db: D1Database, config: Config, userId: string, meetingId: string, now: Date): Promise<ReprocessedMeeting> {
   const row: MeetingRow | null = await findMeeting(db, userId, meetingId);
@@ -481,15 +512,26 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
       reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count),
     };
   }
+  const [subscription, trial]: [SubscriptionState | null, TrialState] = await Promise.all([subscriptionState(db, userId), userTrialState(db, userId)]);
+  const hasAccess: boolean = hasSubscriptionAccess(subscription, now, config.pastDueGraceMs) || trialMeetingsLeft(trial, config, now) > 0;
+  const endMs: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
+  if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
+    throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
+  }
   const until: number = nowMs + config.meetingGraceMs;
+  const audioCap: number | null = reprocessAudioCap(row.audio_seconds, Math.max(0, endMs - row.started_at) / 1000);
   const updated: D1Result = await db
-    .prepare("UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ? WHERE id = ? AND user_id = ? AND reprocess_count < ?")
-    .bind(until, meetingId, userId, maxMeetingReprocesses)
+    .prepare(
+      `UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ?, reprocess_audio_cap = ?,
+         token_budget = MIN(token_budget, tokens_used + ?)
+       WHERE id = ? AND user_id = ? AND reprocess_count < ?`,
+    )
+    .bind(until, audioCap, reprocessTokenBudget, meetingId, userId, maxMeetingReprocesses)
     .run();
   if (updated.meta.changes !== 1) {
     throw new ApiError("reprocess_limit_reached", `Bu toplantı en çok ${maxMeetingReprocesses} kez yeniden işlenebilir.`);
   }
-  log("info", "meeting_reprocess_opened", { userId, meetingId, count: row.reprocess_count + 1 });
+  log("info", "meeting_reprocess_opened", { userId, meetingId, count: row.reprocess_count + 1, hasAccess, audioCap });
   return { meetingId, usableUntil: new Date(until).toISOString(), reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count - 1) };
 }
 

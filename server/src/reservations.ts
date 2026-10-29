@@ -182,13 +182,25 @@ export function subscriberAccountTokenLimit(config: Config, userId: string, now:
 export const chunkOverlapSeconds: number = 60;
 export const chunkStepSeconds: number = 2900;
 
+/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye; SQL ifadesi). */
+export function chunkOverlapAllowanceSql(seconds: string): string {
+  return `CAST((${seconds}) / ${chunkStepSeconds} AS INTEGER) * ${chunkOverlapSeconds}`;
+}
+
+/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye). Saf fonksiyondur. */
+export function chunkOverlapAllowance(seconds: number): number {
+  return Math.trunc(seconds / chunkStepSeconds) * chunkOverlapSeconds;
+}
+
 /**
- * Toplantının ses süresinden kalan (en uzun süresi + parça örtüşme payı − yazılmış ses; ses hakkı kapandıysa 0). Toplantıda
- * aynı anda tek ses isteği olabildiği için (`meetingAudioIdleLimit`) süren ayırma düşülmez.
+ * Toplantının ses süresinden kalan (en uzun süresi + parça örtüşme payı − yazılmış ses; yeniden işlemede en çok
+ * `reprocess_audio_cap`; ses hakkı kapandıysa 0). Toplantıda aynı anda tek ses isteği olabildiği için
+ * (`meetingAudioIdleLimit`) süren ayırma düşülmez.
  */
 export function meetingAudioLimit(meetingId: string): ReservationLimit {
+  const total: string = `(max_ends_at - started_at) / 1000.0 + ${chunkOverlapAllowanceSql("(max_ends_at - started_at) / 1000.0")}`;
   return {
-    remainingSql: `(SELECT CASE WHEN transcription_closed = 0 THEN (max_ends_at - started_at) / 1000.0 + CAST((max_ends_at - started_at) / 1000.0 / ${chunkStepSeconds} AS INTEGER) * ${chunkOverlapSeconds} - audio_seconds ELSE 0 END FROM meeting_sessions WHERE id = ?)`,
+    remainingSql: `(SELECT CASE WHEN transcription_closed = 0 THEN MIN(${total}, COALESCE(reprocess_audio_cap, ${total})) - audio_seconds ELSE 0 END FROM meeting_sessions WHERE id = ?)`,
     binds: [meetingId],
     error: new ApiError("audio_too_long", "Ses bu toplantının kalan ses süresini aşıyor."),
   };
