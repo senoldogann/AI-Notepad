@@ -102,6 +102,9 @@ describe("Stripe Checkout ve Portal", () => {
     expect(await first.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/cs_test_1" });
     await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken }));
     expect(stripe.customers).toBe(1);
+    // İkinci Checkout ilk (hâlâ açık) ödeme sayfasını kapatır: iki sekmede iki abonelik ödenemez.
+    expect(stripe.expiredSessions).toEqual(["cs_test_1"]);
+    expect([...stripe.openSessions.keys()]).toEqual(["cs_test_2"]);
 
     const form: URLSearchParams | undefined = stripe.checkoutForms[0];
     expect(form?.get("mode")).toBe("subscription");
@@ -334,6 +337,47 @@ describe("Stripe webhook", () => {
     expect(mapping?.count).toBe(0);
   });
 
+  it("tam iade aboneliği hemen bitirir (Stripe'ta iptal, erişim hemen kalkar); kısmi iade yalnızca alarmdır", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+    const { session, customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub"), customer, "active", now, now + 30 * 86_400));
+    const refundEvent = (eventId: string, chargeId: string, refunded: boolean, created: number): string =>
+      eventOf(eventId, "charge.refunded", created, { id: chargeId, object: "charge", customer, amount_refunded: refunded ? 599 : 100, currency: "usd", refunded });
+
+    stripe.chargeRefunds.set(id("ch_part"), [null]);
+    expect((await postWebhook(harness, refundEvent(id("evt_part"), id("ch_part"), false, now + 1), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.canceled).toEqual([]);
+    expect((await plan(harness, session)).plan).toBe("subscription");
+
+    stripe.chargeRefunds.set(id("ch_full"), [null]);
+    expect((await postWebhook(harness, refundEvent(id("evt_full"), id("ch_full"), true, now + 2), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.canceled).toEqual([id("sub")]);
+    // Erişim, iptal olayını beklemeden biter.
+    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub"), status: "canceled" });
+    expect((await plan(harness, session)).plan).toBe("trial");
+    // Geç gelen eski etkin olay iptali ezmez.
+    await send.replay(id("evt_old"), "customer.subscription.updated", now + 1, fakeSubscription(id("sub"), customer, "active", now, now + 30 * 86_400));
+    expect((await plan(harness, session)).plan).toBe("trial");
+  });
+
+  it("customer.deleted sonrası Checkout yeni Stripe müşterisi açar (eski idempotency anahtarı silinmiş müşteriyi döndürmez)", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const { session, customer } = await customerSession(harness);
+    const deleted: string = eventOf(id("evt_del"), "customer.deleted", Math.floor(harness.clock.nowMs / 1000), { id: customer, object: "customer", deleted: true });
+    expect((await postWebhook(harness, deleted, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect((await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken }))).status).toBe(200);
+    const fresh: string = await customerOf(session.userId);
+    expect(fresh).not.toBe(customer);
+    expect(stripe.customers).toBe(2);
+    expect(stripe.checkoutForms.at(-1)?.get("customer")).toBe(fresh);
+  });
+
   it("charge.refunded alarm yazar; charge.dispute.created müşterinin aboneliğini hemen iptal eder ve alarm yazar", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
@@ -347,9 +391,9 @@ describe("Stripe webhook", () => {
       id: id("ch"),
       object: "charge",
       customer,
-      amount_refunded: 599,
+      amount_refunded: 100,
       currency: "usd",
-      refunded: true,
+      refunded: false,
     });
     expect((await postWebhook(harness, refunded, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
     expect(stripe.canceled).toEqual([]);
@@ -440,9 +484,33 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     const now: number = Math.floor(harness.clock.nowMs / 1000);
     const periodEnd: number = now + 30 * 86_400;
     await send.change(id("evt_1"), "customer.subscription.created", now - 400, fakeSubscription(id("sub_A"), customer, "active", now - 400, periodEnd));
-    await send.change(id("evt_2"), "customer.subscription.created", now - 300, fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd));
+    stripe.invoicePayments.set(id("in_B"), [id("pi_B")]);
+    await send.change(id("evt_2"), "customer.subscription.created", now - 300, {
+      ...fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd),
+      latest_invoice: id("in_B"),
+    });
     expect(stripe.canceled).toEqual([id("sub_B")]);
     expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub_A"), status: "active" });
+    // Kopya aboneliğin ödemesi tam iade edilir ve işaretlenir; aynı olayın tekrarı ikinci iade açmaz (anahtar aynı).
+    expect(stripe.refundForms).toHaveLength(1);
+    expect(stripe.refundForms[0]?.get("payment_intent")).toBe(id("pi_B"));
+    expect(stripe.refundForms[0]?.get("reason")).toBe("duplicate");
+    expect(stripe.refundForms[0]?.get("metadata[purpose]")).toBe("duplicate_subscription");
+    expect(stripe.refundKeys).toEqual([`refund-duplicate-${id("sub_B")}-${id("pi_B")}`]);
+
+    // Kopya iadesinin `charge.refunded` olayı geçerli aboneliği bitirmez.
+    stripe.chargeRefunds.set(id("ch_B"), ["duplicate_subscription"]);
+    const duplicateRefund: string = eventOf(id("evt_ref"), "charge.refunded", now - 200, {
+      id: id("ch_B"),
+      object: "charge",
+      customer,
+      amount_refunded: 599,
+      currency: "usd",
+      refunded: true,
+    });
+    expect((await postWebhook(harness, duplicateRefund, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.canceled).toEqual([id("sub_B")]);
+    expect((await plan(harness, session)).plan).toBe("subscription");
   });
 });
 

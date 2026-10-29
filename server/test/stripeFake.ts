@@ -10,6 +10,7 @@ export interface FakeSubscription {
   readonly created: number;
   readonly cancel_at: number | null;
   readonly cancel_at_period_end: boolean;
+  readonly latest_invoice: string | null;
   readonly items: { readonly object: "list"; readonly data: ReadonlyArray<{ readonly id: string; readonly object: "subscription_item"; readonly current_period_end: number }> };
 }
 
@@ -27,6 +28,15 @@ export interface FakeStripe {
   readonly subscriptionLists: URL[];
   /** Ödeme kimliği → müşteri. */
   readonly charges: Map<string, string>;
+  /** Müşteri oluşturmanın idempotency anahtarı → müşteri (Stripe aynı anahtara aynı yanıtı döndürür). */
+  readonly customerKeys: Map<string, string>;
+  /** Fatura kimliği → ödenmiş ödeme niyetleri. */
+  readonly invoicePayments: Map<string, string[]>;
+  /** Oluşturulan iadeler (form) ve idempotency anahtarları. */
+  readonly refundForms: URLSearchParams[];
+  readonly refundKeys: string[];
+  /** Ödeme kimliği → iadelerinin üst verisindeki amaç (`purpose`). */
+  readonly chargeRefunds: Map<string, Array<string | null>>;
 }
 
 /** Form gövdesi. */
@@ -55,14 +65,52 @@ export function stubStripeApi(harness: Harness): FakeStripe {
     canceled: [],
     subscriptionLists: [],
     charges: new Map(),
+    customerKeys: new Map(),
+    invoicePayments: new Map(),
+    refundForms: [],
+    refundKeys: [],
+    chargeRefunds: new Map(),
   };
   harness.stub("https://api.stripe.com/v1/", async (request: Request): Promise<Response> => {
     const url: URL = new URL(request.url);
     const path: string = url.pathname;
     const method: string = request.method;
     if (method === "POST" && path === "/v1/customers") {
+      const key: string = request.headers.get("idempotency-key") ?? randomToken(6);
+      const cached: string | undefined = fake.customerKeys.get(key);
+      if (cached !== undefined) {
+        return Response.json({ id: cached, object: "customer" });
+      }
       fake.customers += 1;
-      return Response.json({ id: `cus_${randomToken(6)}`, object: "customer" });
+      const id: string = `cus_${randomToken(6)}`;
+      fake.customerKeys.set(key, id);
+      return Response.json({ id, object: "customer" });
+    }
+    if (method === "GET" && path === "/v1/invoice_payments") {
+      const invoice: string = url.searchParams.get("invoice") ?? "";
+      const paid: object[] = (fake.invoicePayments.get(invoice) ?? []).map((intent: string): object => ({
+        id: `inpay_${intent}`,
+        object: "invoice_payment",
+        invoice,
+        status: "paid",
+        payment: { type: "payment_intent", payment_intent: intent },
+      }));
+      return list("/v1/invoice_payments", paid);
+    }
+    if (method === "POST" && path === "/v1/refunds") {
+      fake.refundForms.push(await formOf(request));
+      fake.refundKeys.push(request.headers.get("idempotency-key") ?? "");
+      return Response.json({ id: `re_${randomToken(6)}`, object: "refund", status: "succeeded" });
+    }
+    if (method === "GET" && path === "/v1/refunds") {
+      const charge: string = url.searchParams.get("charge") ?? "";
+      const refunds: object[] = (fake.chargeRefunds.get(charge) ?? []).map((purpose: string | null, index: number): object => ({
+        id: `re_${charge}_${index}`,
+        object: "refund",
+        charge,
+        metadata: purpose === null ? {} : { purpose },
+      }));
+      return list("/v1/refunds", refunds);
     }
     if (method === "POST" && path === "/v1/checkout/sessions") {
       const form: URLSearchParams = await formOf(request);
@@ -132,6 +180,7 @@ export function fakeSubscription(id: string, customer: string, status: string, c
     created,
     cancel_at: null,
     cancel_at_period_end: false,
+    latest_invoice: null,
     items: { object: "list", data: [{ id: `si_${id}`, object: "subscription_item", current_period_end: periodEnd }] },
   };
 }

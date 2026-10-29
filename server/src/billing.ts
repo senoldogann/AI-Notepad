@@ -47,14 +47,36 @@ async function storedCustomerId(db: D1Database, userId: string): Promise<string 
   return row === null ? null : row.stripe_customer_id;
 }
 
+/** Kullanıcının Stripe müşteri kuşağı: her `customer.deleted` ile artar (bkz. `customerCreationKey`). */
+async function customerGeneration(db: D1Database, userId: string): Promise<number> {
+  const row: { stripe_customer_generation: number } | null = await db
+    .prepare("SELECT stripe_customer_generation FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ stripe_customer_generation: number }>();
+  if (row === null) {
+    throw new ApiError("unauthorized", "Hesap bulunamadı.");
+  }
+  return row.stripe_customer_generation;
+}
+
+/**
+ * Müşteri oluşturmanın idempotency anahtarı: eşzamanlı ve yinelenen istekler aynı müşteriyi alır; Stripe müşterisi
+ * silinince kuşak artar ve yeni anahtar yeni müşteri açar (Stripe aynı anahtara 24 saat eski yanıtı döndürür). Saf
+ * fonksiyondur.
+ */
+export function customerCreationKey(userId: string, generation: number): string {
+  return `customer-${userId}-g${generation}`;
+}
+
 /** Kullanıcının Stripe müşterisi; yoksa oluşturulur ve saklanır (sonraki ödemelerde yeniden kullanılır). */
 async function customerId(db: D1Database, stripe: Stripe, platform: Platform, userId: string): Promise<string> {
   const existing: string | null = await storedCustomerId(db, userId);
   if (existing !== null) {
     return existing;
   }
+  const idempotencyKey: string = customerCreationKey(userId, await customerGeneration(db, userId));
   const customer: Stripe.Customer = await callStripe(platform, "customers.create", userId, () =>
-    stripe.customers.create({ metadata: { user_id: userId } }, { idempotencyKey: `customer-${userId}` }),
+    stripe.customers.create({ metadata: { user_id: userId } }, { idempotencyKey }),
   );
   await db
     .prepare("INSERT OR IGNORE INTO stripe_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, ?)")
@@ -94,6 +116,62 @@ async function customerSubscriptions(stripe: Stripe, platform: Platform, custome
   return page.data;
 }
 
+/**
+ * Müşterinin açık Checkout oturumlarını sona erdirir (ikinci sekmedeki eski ödeme sayfası ikinci aboneliği açamasın);
+ * sona erdirilen sayısını döndürür.
+ */
+async function expireOpenCheckouts(stripe: Stripe, platform: Platform, customer: string, userId: string): Promise<number> {
+  const sessions: Stripe.ApiList<Stripe.Checkout.Session> = await callStripe(platform, "checkout.sessions.list", userId, () =>
+    stripe.checkout.sessions.list({ customer, status: "open", limit: 100 }),
+  );
+  for (const session of sessions.data) {
+    await callStripe(platform, "checkout.sessions.expire", userId, () => stripe.checkout.sessions.expire(session.id));
+  }
+  return sessions.data.length;
+}
+
+/** Kopya abonelik iadesinin işareti: bu iadenin `charge.refunded` olayı geçerli aboneliği iptal etmez. */
+export const duplicateRefundPurpose: string = "duplicate_subscription";
+
+/**
+ * Fazla (kopya) aboneliğin ödenmiş son faturasını tam iade eder: aynı kişi iki kez ücretlenmesin. İade
+ * `duplicateRefundPurpose` ile işaretlenir; tekrarı güvenlidir (ödeme başına idempotency anahtarı). İade edilen ödeme
+ * sayısını döndürür.
+ */
+async function refundDuplicate(stripe: Stripe, platform: Platform, subscription: Stripe.Subscription, userId: string): Promise<number> {
+  const invoice: string | null = subscription.latest_invoice === null
+    ? null
+    : typeof subscription.latest_invoice === "string" ? subscription.latest_invoice : (subscription.latest_invoice.id ?? null);
+  if (invoice === null) {
+    return 0;
+  }
+  const payments: Stripe.ApiList<Stripe.InvoicePayment> = await callStripe(platform, "invoicePayments.list", userId, () =>
+    stripe.invoicePayments.list({ invoice, status: "paid", limit: 100 }),
+  );
+  let refunded: number = 0;
+  for (const payment of payments.data) {
+    const intent: string | null = payment.payment.payment_intent === undefined
+      ? null
+      : typeof payment.payment.payment_intent === "string" ? payment.payment.payment_intent : payment.payment.payment_intent.id;
+    const charge: string | null = payment.payment.charge === undefined
+      ? null
+      : typeof payment.payment.charge === "string" ? payment.payment.charge : payment.payment.charge.id;
+    const target: { payment_intent: string } | { charge: string } | null = intent !== null ? { payment_intent: intent } : charge !== null ? { charge } : null;
+    if (target === null) {
+      log("alert", "stripe_duplicate_refund_unsupported", { userId, subscriptionId: subscription.id, invoiceId: invoice, paymentType: payment.payment.type });
+      continue;
+    }
+    await callStripe(platform, "refunds.create", userId, () =>
+      stripe.refunds.create(
+        { ...target, reason: "duplicate", metadata: { purpose: duplicateRefundPurpose, subscription_id: subscription.id, user_id: userId } },
+        { idempotencyKey: `refund-duplicate-${subscription.id}-${intent ?? charge}` },
+      ),
+    );
+    refunded += 1;
+  }
+  return refunded;
+}
+
 /** Aboneliği Stripe'ta hemen iptal eder (tekrarı güvenli: aynı idempotency anahtarı). */
 async function cancelSubscription(stripe: Stripe, platform: Platform, subscriptionId: string, userId: string | null): Promise<void> {
   await callStripe(platform, "subscriptions.cancel", userId, () =>
@@ -107,7 +185,8 @@ async function cancelSubscription(stripe: Stripe, platform: Platform, subscripti
  * ister. Bu yüzden `automatic_tax`, `customer_update` ve `tax_id_collection` gönderilmez (Managed Payments reddeder).
  * Bitmemiş bir abonelik varsa (ek süresi geçmiş `past_due` dahil) `subscription_exists`: aynı kullanıcıda iki abonelik
  * aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar. Denetim önce yerel satıra, sonra Stripe'taki listeye
- * bakar (webhook'u henüz gelmemiş abonelik de yakalanır).
+ * bakar (webhook'u henüz gelmemiş abonelik de yakalanır). Yeni oturumdan önce müşterinin açık Checkout oturumları sona
+ * erdirilir (iki sekmede iki ödeme olmasın; yine de olursa fazlası webhook'ta iptal ve iade edilir).
  */
 export async function createCheckout(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
   const subscriptionExists: ApiError = new ApiError(
@@ -126,6 +205,11 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
   if (unfinished.length > 0) {
     log("warn", "checkout_refused_stripe_subscription", { userId, count: unfinished.length });
     throw subscriptionExists;
+  }
+  // Önceki açık ödeme sayfaları kapanır: iki sekmede ödenen iki oturum iki abonelik açmasın.
+  const expired: number = await expireOpenCheckouts(stripe, platform, customer, userId);
+  if (expired > 0) {
+    log("info", "checkout_previous_sessions_expired", { userId, count: expired });
   }
   const session: Stripe.Checkout.Session = await callStripe(platform, "checkout.sessions.create", userId, () =>
     stripe.checkout.sessions.create({
@@ -171,17 +255,12 @@ export async function closeStripeForDeletion(db: D1Database, platform: Platform,
     return 0;
   }
   const stripe: Stripe = stripeClient(platform, config);
-  const sessions: Stripe.ApiList<Stripe.Checkout.Session> = await callStripe(platform, "checkout.sessions.list", userId, () =>
-    stripe.checkout.sessions.list({ customer, status: "open", limit: 100 }),
-  );
-  for (const session of sessions.data) {
-    await callStripe(platform, "checkout.sessions.expire", userId, () => stripe.checkout.sessions.expire(session.id));
-  }
+  const expiredCheckouts: number = await expireOpenCheckouts(stripe, platform, customer, userId);
   const live: Stripe.Subscription[] = (await customerSubscriptions(stripe, platform, customer, userId)).filter(isLiveInStripe);
   for (const subscription of live) {
     await cancelSubscription(stripe, platform, subscription.id, userId);
   }
-  log("info", "stripe_closed_for_deletion", { userId, expiredCheckouts: sessions.data.length, canceledSubscriptions: live.length });
+  log("info", "stripe_closed_for_deletion", { userId, expiredCheckouts, canceledSubscriptions: live.length });
   return live.length;
 }
 
@@ -262,7 +341,8 @@ type EventStatements = D1PreparedStatement[];
  * sırayla gelebilir): müşterinin tüm abonelikleri listelenir ve `chooseSubscription` ile geçerli olan yazılır.
  * - Tanınmayan müşteri (ör. silinmiş hesap): abonelik Stripe'ta yaşıyorsa hemen iptal edilir ve alarm yazılır (ödeme
  *   alınıp hak verilmeyen abonelik kalmasın); olay işlenmiş sayılır.
- * - Yaşayan ikinci abonelik: alarm yazılır ve fazlası (daha yeni ya da erişimi daha düşük olan) iptal edilir.
+ * - Yaşayan ikinci abonelik: alarm yazılır, fazlası (daha yeni ya da erişimi daha düşük olan) iptal edilir ve ödenmiş
+ *   faturası tam iade edilir (`refundDuplicate`).
  * - `past_due_since`: durum `past_due` olduğunda yazılır, `past_due` sürdükçe korunur, başka duruma geçince silinir;
  *   ek süre bundan hesaplanır (`entitlements.subscriptionAccess`).
  * Yazım `last_event_created` ile sıralanır: eşzamanlı iki webhook'tan daha eski olayınki daha yeniyi ezmez.
@@ -292,11 +372,13 @@ async function subscriptionEventStatements(
   const choice: SubscriptionChoice = chooseSubscription(await customerSubscriptions(stripe, platform, customer, owner.user_id));
   for (const duplicate of choice.duplicates) {
     await cancelSubscription(stripe, platform, duplicate.id, owner.user_id);
+    const refundedPayments: number = await refundDuplicate(stripe, platform, duplicate, owner.user_id);
     log("alert", "stripe_duplicate_subscription_canceled", {
       userId: owner.user_id,
       subscriptionId: duplicate.id,
       status: duplicate.status,
       keptSubscriptionId: choice.current?.id ?? null,
+      refundedPayments,
     });
   }
   const current: Stripe.Subscription | null = choice.current;
@@ -327,17 +409,23 @@ async function subscriptionEventStatements(
   ];
 }
 
-/** `customer.deleted`: müşteri eşlemesi ve abonelik satırı silinir (Stripe müşteriyle birlikte abonelikleri de bitirir). */
+/**
+ * `customer.deleted`: müşteri eşlemesi ve abonelik satırı silinir (Stripe müşteriyle birlikte abonelikleri de bitirir);
+ * kullanıcının müşteri kuşağı artar ki sonraki Checkout yeni müşteri açabilsin (bkz. `customerCreationKey`).
+ */
 async function customerDeletedStatements(db: D1Database, event: Stripe.Event, customer: string): Promise<EventStatements> {
   const owner: { user_id: string } | null = await db
     .prepare("SELECT user_id FROM stripe_customers WHERE stripe_customer_id = ?")
     .bind(customer)
     .first<{ user_id: string }>();
   log("warn", "stripe_customer_deleted", { eventId: event.id, userId: owner?.user_id ?? null });
-  return [
+  const statements: EventStatements = [
     db.prepare("DELETE FROM subscriptions WHERE stripe_customer_id = ?").bind(customer),
     db.prepare("DELETE FROM stripe_customers WHERE stripe_customer_id = ?").bind(customer),
   ];
+  return owner === null
+    ? statements
+    : [...statements, db.prepare("UPDATE users SET stripe_customer_generation = stripe_customer_generation + 1 WHERE id = ?").bind(owner.user_id)];
 }
 
 /** Müşterinin kullanıcısı; tanınmıyorsa null. */
@@ -378,6 +466,52 @@ async function handleDispute(db: D1Database, stripe: Stripe, platform: Platform,
   });
 }
 
+/** Ödemenin tüm iadeleri kopya abonelik iadesi mi (`refundDuplicate`). */
+async function isDuplicateRefund(stripe: Stripe, platform: Platform, chargeId: string, userId: string | null): Promise<boolean> {
+  const refunds: Stripe.ApiList<Stripe.Refund> = await callStripe(platform, "refunds.list", userId, () => stripe.refunds.list({ charge: chargeId, limit: 100 }));
+  return refunds.data.length > 0 && refunds.data.every((refund: Stripe.Refund): boolean => refund.metadata?.["purpose"] === duplicateRefundPurpose);
+}
+
+/**
+ * `charge.refunded`: her iade alarm yazar. Tam iade (`refunded === true`) aboneliği bitirir: müşterinin Stripe'ta yaşayan
+ * abonelikleri hemen iptal edilir ve abonelik satırı aynı toplu işlemde `canceled` yazılır (erişim hemen biter;
+ * ardından gelen `customer.subscription.deleted` aynı durumu yazar). Kopya abonelik iadesi (`refundDuplicate`) geçerli
+ * aboneliğe dokunmaz. Kısmi iade yalnızca alarmdır.
+ */
+async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform: Platform, event: Stripe.Event, charge: Stripe.Charge): Promise<EventStatements> {
+  const customer: string | null = charge.customer === null ? null : customerIdOf(charge.customer);
+  const userId: string | null = await customerOwner(db, customer);
+  const duplicate: boolean = charge.refunded && (await isDuplicateRefund(stripe, platform, charge.id, userId));
+  const ends: boolean = charge.refunded && !duplicate && customer !== null;
+  const live: Stripe.Subscription[] = ends && customer !== null ? (await customerSubscriptions(stripe, platform, customer, userId)).filter(isLiveInStripe) : [];
+  for (const subscription of live) {
+    await cancelSubscription(stripe, platform, subscription.id, userId);
+  }
+  log("alert", "stripe_charge_refunded", {
+    eventId: event.id,
+    chargeId: charge.id,
+    userId,
+    amountRefunded: charge.amount_refunded,
+    currency: charge.currency,
+    fullyRefunded: charge.refunded,
+    duplicateRefund: duplicate,
+    canceledSubscriptions: live.length,
+  });
+  if (!ends || userId === null) {
+    return [];
+  }
+  const nowMs: number = platform.now().getTime();
+  return [
+    db
+      .prepare(
+        `UPDATE subscriptions SET status = 'canceled', cancel_at = ?1, past_due_since = NULL,
+           last_event_created = MAX(last_event_created, ?2), updated_at = ?1
+         WHERE user_id = ?3`,
+      )
+      .bind(nowMs, event.created, userId),
+  ];
+}
+
 /** Olay türüne göre Stripe yan etkileri ve veritabanı ifadeleri; tanınmayan olay yalnızca kaydedilir. */
 async function eventStatements(db: D1Database, platform: Platform, config: Config, event: Stripe.Event): Promise<EventStatements> {
   const subscription: Stripe.Subscription | null = subscriptionFromEvent(event);
@@ -387,19 +521,8 @@ async function eventStatements(db: D1Database, platform: Platform, config: Confi
   switch (event.type) {
     case "customer.deleted":
       return customerDeletedStatements(db, event, event.data.object.id);
-    case "charge.refunded": {
-      const charge: Stripe.Charge = event.data.object;
-      const customer: string | null = charge.customer === null ? null : customerIdOf(charge.customer);
-      log("alert", "stripe_charge_refunded", {
-        eventId: event.id,
-        chargeId: charge.id,
-        userId: await customerOwner(db, customer),
-        amountRefunded: charge.amount_refunded,
-        currency: charge.currency,
-        fullyRefunded: charge.refunded,
-      });
-      return [];
-    }
+    case "charge.refunded":
+      return chargeRefundedStatements(db, stripeClient(platform, config), platform, event, event.data.object);
     case "charge.dispute.created":
       await handleDispute(db, stripeClient(platform, config), platform, event, event.data.object);
       return [];
@@ -414,7 +537,7 @@ async function eventStatements(db: D1Database, platform: Platform, config: Confi
  * Stripe yeniden dener, düzeltilince olay işlenir). İşlenmiş olay Stripe çağrılmadan `duplicate` döner. Olay kimliği
  * `stripe_events` tablosuna, durum değişiklikleri aynı toplu işlemde yazılır: aynı olay eşzamanlı ikinci kez gelirse
  * birincil anahtar çakışır, hiçbir şey değişmez. İşlenen olaylar: abonelik olayları (`subscriptionEventStatements`),
- * `customer.deleted`, `charge.refunded` (alarm), `charge.dispute.created` (alarm ve abonelik iptali); diğerleri
+ * `customer.deleted`, `charge.refunded` (alarm; tam iadede abonelik biter), `charge.dispute.created` (alarm ve abonelik iptali); diğerleri
  * yalnızca kaydedilir.
  */
 export async function handleStripeWebhook(db: D1Database, platform: Platform, config: Config, payload: string, signature: string): Promise<{ duplicate: boolean }> {
