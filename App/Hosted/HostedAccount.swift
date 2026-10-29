@@ -91,6 +91,11 @@ private final class HostedWebSignInPresenter: NSObject, ASWebAuthenticationPrese
     }
 }
 
+/// Ödeme ya da portaldan uygulamaya dönünce aboneliğin beklendiği deneme sayısı (5 sn arayla, 2 dk).
+private let hostedBillingReturnPollAttempts: Int = 24
+/// Ödeme sayfası açıkken aboneliğin beklendiği deneme sayısı (5 sn arayla, 15 dk: kart bilgisi girmeye yeter).
+private let hostedCheckoutWatchAttempts: Int = 180
+
 /// Sunucunun bu hesabın denemesini bu Mac'te reddettiği anın kaydı (hesap başına; abone olunca etkisizdir, bir gün
 /// sonra sunucuya yeniden sorulur: bkz. `hostedTrialRefusalMaxAgeSec`). Saf fonksiyondur.
 private func hostedTrialRefusedKey(userId: String) -> String {
@@ -151,6 +156,8 @@ final class HostedAccount {
     private(set) var queueTrigger: Int = 0
     /// Ödeme ya da müşteri portalı tarayıcıda açıldı: uygulama öne gelince hak durumu beklemeden yeniden okunur.
     @ObservationIgnored private var awaitingBillingReturn: Bool = false
+    /// Ödeme sayfası açıkken aboneliği bekleyen izleme (bkz. `watchCheckout`); yoksa nil.
+    @ObservationIgnored private var checkoutWatch: Task<Void, Never>?
     /// Süren hak durumu okumaları (eşzamanlı okumalar birbirinin bayrağını indirmesin).
     @ObservationIgnored private var refreshesInFlight: Int = 0
     private var isRefreshing: Bool { refreshesInFlight > 0 }
@@ -486,36 +493,56 @@ final class HostedAccount {
         let returnedFromBilling: Bool = awaitingBillingReturn
         awaitingBillingReturn = false
         await refresh()
-        if returnedFromBilling {
-            await pollForSubscriptionAfterCheckout()
+        // Ödeme sayfası izleniyorsa (bkz. `watchCheckout`) ikinci bir bekleme açılmaz.
+        if returnedFromBilling, checkoutWatch == nil {
+            _ = await pollForSubscription(attempts: hostedBillingReturnPollAttempts)
         }
     }
 
-    /// Ödeme sayfasından dönünce Stripe bildirimi (webhook) birkaç saniye gecikebilir: abonelik görünene dek 5 sn arayla
-    /// en çok 2 dk hak durumu yenilenir (Başlat düğmesi uygulamaya yeniden geçmeyi beklemeden açılsın). Abonelik zaten
-    /// görünüyorsa (ör. portaldan dönüş) hemen biter.
-    private func pollForSubscriptionAfterCheckout() async {
-        for _ in 0..<24 {
+    /// Abonelik görünene dek 5 sn arayla en çok `attempts` kez hak durumunu yeniler (Stripe bildirimi birkaç saniye
+    /// gecikebilir; Başlat düğmesi uygulamaya yeniden geçmeyi beklemeden açılsın). Abonelik zaten görünüyorsa (ör.
+    /// portaldan dönüş) hemen biter. Döner: abonelik göründü mü.
+    private func pollForSubscription(attempts: Int) async -> Bool {
+        for _ in 0..<attempts {
             guard case .signedIn(let entitlements) = state else {
-                return
+                return false
             }
             switch hostedPlanStatus(entitlements: entitlements) {
             case .subscribed, .ending, .grace:
-                return
+                return true
             case .trial, .expired:
                 break
             }
             do {
                 try await Task.sleep(for: .seconds(5))
             } catch is CancellationError {
-                return
+                return false
             } catch {
-                accountLogger.error("Ödeme dönüşü beklemesi bozuldu, hata: \(String(describing: error), privacy: .private)")
-                return
+                accountLogger.error("Abonelik beklemesi bozuldu, hata: \(String(describing: error), privacy: .private)")
+                return false
             }
             await refresh()
         }
-        accountLogger.warning("Ödeme sayfasından dönüldü ama 2 dakikada abonelik görünmedi")
+        accountLogger.warning("Abonelik beklendi ama görünmedi, deneme: \(attempts, privacy: .public)")
+        return false
+    }
+
+    /// Ödeme sayfası tarayıcıda açıldı: kullanıcı uygulamaya dönmeden abonelik beklenir (en çok
+    /// `hostedCheckoutWatchAttempts` × 5 sn); görününce uygulama öne gelir, kullanıcı tarayıcıdan geri dönmek zorunda
+    /// kalmaz. Önceki izleme varsa durdurulur.
+    private func watchCheckout() {
+        checkoutWatch?.cancel()
+        checkoutWatch = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            let subscribed: Bool = await self.pollForSubscription(attempts: hostedCheckoutWatchAttempts)
+            self.checkoutWatch = nil
+            if subscribed, !NSApp.isActive {
+                accountLogger.info("Abonelik göründü, uygulama öne getiriliyor")
+                NSApp.activate()
+            }
+        }
     }
 
     /// Ağ geri geldi: hak durumu bilinmiyorsa yeniden okunur, kapatılamamış sunucu oturumu kapatılır ve bekleyen
@@ -575,6 +602,9 @@ final class HostedAccount {
                 return
             case .callback(let url):
                 callbackURL = url
+                // Giriş varsayılan tarayıcıda (ör. Chrome penceresinde) bittiyse odak orada kalmasın: kullanıcı
+                // doğrudan uygulamaya döner.
+                NSApp.activate()
             }
         } catch {
             accountLogger.error("Giriş penceresi açılamadı, hata: \(String(describing: error), privacy: .private)")
@@ -673,12 +703,14 @@ final class HostedAccount {
 
     // MARK: Ödeme
 
-    /// Stripe Checkout'u tarayıcıda açar; bitmemiş abonelik varsa Müşteri Portalı açılır.
+    /// Stripe Checkout'u tarayıcıda açar ve abonelik görününce uygulamayı öne getirir (bkz. `watchCheckout`); bitmemiş
+    /// abonelik varsa Müşteri Portalı açılır.
     func subscribe() async {
         awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
             do {
                 NSWorkspace.shared.open(try await client.checkoutURL())
+                await self.watchCheckout()
             } catch let error as HostedAPIError where error.code == .subscriptionExists {
                 NSWorkspace.shared.open(try await client.portalURL())
             }
