@@ -43,7 +43,7 @@ struct HostedSignInGate: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .padding(16)
-                .frame(maxWidth: 520)
+                .frame(minWidth: 300, maxWidth: 520)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -100,7 +100,9 @@ struct HostedSignInGate: View {
             .foregroundStyle(Theme.muted)
             .padding(.top, 12)
         }
-        .frame(maxWidth: 420, alignment: .leading)
+        // En küçük genişlik: macOS 15 pencerenin en küçük boyutunu sıfır genişlik önererek hesaplar; dikeyde sabit
+        // metinler o genişlikte harf harf kırılıp pencereyi binlerce punto uzatıyordu (içerik ekranın altında kalırdı).
+        .frame(minWidth: 340, maxWidth: 420, alignment: .leading)
         .padding(40)
     }
 }
