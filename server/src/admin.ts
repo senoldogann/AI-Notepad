@@ -1,4 +1,5 @@
 import type { Config, StripeMode } from "./config";
+import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
 import { ForbiddenIdentityError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
@@ -58,6 +59,8 @@ export interface AdminStats {
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
   /** Stripe anahtarının modu: canlıya geçişte `live` olmalı. */
   readonly stripe: { readonly mode: StripeMode };
+  /** ElevenLabs bu faturalama dönemindeki ses saati / plan saati (kredi bitince konuşma tanıma durur). */
+  readonly elevenLabs: ElevenLabsUsage;
 }
 
 /**
@@ -174,6 +177,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     trialSpendRow,
     tokenRow,
     reportRows,
+    elevenLabs,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -231,6 +235,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .bind(monthKey(now))
       .first<{ value: number }>(),
     db.prepare("SELECT kind AS key, COUNT(*) AS count FROM reports WHERE status = 'open' GROUP BY kind").all<KeyCountRow>(),
+    elevenLabsUsage(db, config, now),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -281,5 +286,6 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       openContact: openReports.get("contact") ?? 0,
     },
     stripe: { mode: config.stripeMode },
+    elevenLabs,
   };
 }

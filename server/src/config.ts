@@ -94,6 +94,11 @@ export interface Config {
     readonly usdPerHour: number;
     readonly keytermsUsdPerHour: number;
   };
+  /** ElevenLabs aylık kredi planı: dönemde işlenebilen ses saati ve dönemin yenilendiği gün (1–28, UTC). */
+  readonly elevenLabs: {
+    readonly monthlyAudioHours: number;
+    readonly billingDay: number;
+  };
   readonly dailySpendCeilingMicroUsd: number;
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
@@ -228,6 +233,8 @@ const envSchema = z.object({
   TRANSCRIBE_MAX_KEYTERMS: positiveInt.max(1000),
   SCRIBE_USD_PER_HOUR: positiveNumber,
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
+  ELEVENLABS_MONTHLY_AUDIO_HOURS: positiveNumber,
+  ELEVENLABS_BILLING_DAY: positiveInt.max(28),
   DAILY_SPEND_CEILING_USD: positiveNumber,
   DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
@@ -319,6 +326,7 @@ export function parseConfig(env: Env): Config {
       usdPerHour: value.SCRIBE_USD_PER_HOUR,
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
+    elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,

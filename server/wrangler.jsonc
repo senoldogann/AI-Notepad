@@ -109,6 +109,12 @@
     "TRANSCRIBE_MAX_KEYTERMS": "100",
     "SCRIBE_USD_PER_HOUR": "0.22",
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+    // ElevenLabs Creator planı: ayda 121 000 kredi, ölçülen ~1080 kredi/ses saati → ~110 saat; dönem ayın 11'inde
+    // yenilenir. Kredi bitince her konuşma tanıma isteği başarısız olur (sağlayıcı uyarmaz): kullanım %80 ve %95'i aşınca
+    // `elevenlabs_capacity_threshold` alarmı, eşiğin üstündeyken günlük `elevenlabs_capacity_high` alarmı; durum
+    // `GET /v1/admin/stats` → `elevenLabs`. Gün 1–28 olmalı.
+    "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+    "ELEVENLABS_BILLING_DAY": "11",
     "DAILY_SPEND_CEILING_USD": "25",
     // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
     // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
@@ -192,6 +198,9 @@
         "TRANSCRIBE_MAX_KEYTERMS": "100",
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+        "ELEVENLABS_BILLING_DAY": "11",
         "DAILY_SPEND_CEILING_USD": "25",
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "DAILY_TRIAL_SPEND_CEILING_USD": "10",

@@ -1,6 +1,8 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
 import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
+import { parseConfig } from "./config";
+import { dailyElevenLabsCapacityCheck } from "./elevenLabsCapacity";
 import type { Env } from "./env";
 import type { Platform } from "./platform";
 
@@ -22,8 +24,10 @@ export default {
       clientIp: request.headers.get("cf-connecting-ip") ?? "local",
     });
   },
-  /** Günlük Cron Trigger: süresi dolmuş satırların temizliği. */
+  /** Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm) ve süresi dolmuş satırların temizliği. */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
-    await cleanupExpiredRows(env.DB, new Date(controller.scheduledTime), scheduledCleanupLimits);
+    const now: Date = new Date(controller.scheduledTime);
+    await dailyElevenLabsCapacityCheck(env.DB, parseConfig(env), now);
+    await cleanupExpiredRows(env.DB, now, scheduledCleanupLimits);
   },
 } satisfies ExportedHandler<Env>;

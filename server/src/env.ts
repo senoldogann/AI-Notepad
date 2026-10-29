@@ -46,6 +46,8 @@ export interface Env {
   readonly TRANSCRIBE_MAX_KEYTERMS: string;
   readonly SCRIBE_USD_PER_HOUR: string;
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
+  readonly ELEVENLABS_MONTHLY_AUDIO_HOURS: string;
+  readonly ELEVENLABS_BILLING_DAY: string;
   readonly DAILY_SPEND_CEILING_USD: string;
   readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;

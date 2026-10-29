@@ -4,6 +4,7 @@ import type { Config } from "./config";
 import { Base64Error, base64Decode, decodeUtf8Strict, randomToken, utf8 } from "./crypto";
 import { ApiError, UpstreamError, isRetryableStatus } from "./errors";
 import { jsonResponse } from "./http";
+import { alertOnElevenLabsCrossing } from "./elevenLabsCapacity";
 import { errorName, log } from "./log";
 import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
@@ -373,15 +374,20 @@ async function transcribeAndSettle(
 ): Promise<CallOutcome<Transcription>> {
   const result: ElevenLabsResult = await sendToElevenLabs(context, config, meeting, params, contentType, declaredBytes, reader, audio.head);
   if (!result.ok) {
-    // Ses ElevenLabs'e tamamen gittiyse işlenmiş (ücretlenmiş) olabilir: tahmini maliyet harcamaya sayılır.
-    await db.batch(settleAudioStatements(db, reservation, 0, false, result.uploaded ? reservation.estimatedMicroUsd : 0, now));
+    // Ses ElevenLabs'e tamamen gittiyse işlenmiş (ücretlenmiş) olabilir: tahmini maliyet ve süre ElevenLabs'e sayılır.
+    const providerSeconds: number = result.uploaded ? reservation.audioSeconds : 0;
+    await db.batch(settleAudioStatements(db, reservation, 0, false, result.uploaded ? reservation.estimatedMicroUsd : 0, providerSeconds, now));
+    if (providerSeconds > 0) {
+      await alertOnElevenLabsCrossing(db, config, providerSeconds, now);
+    }
     return { ok: false, error: result.error };
   }
   const reserved: number = audio.seconds;
   const seconds: number = billableSeconds(result.transcription, reserved);
   // Ayırma WAV başlığından kesindir; 1 saniyelik pay yuvarlama içindir.
   const overrun: boolean = seconds > reserved + 1;
-  await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), now));
+  await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now));
+  await alertOnElevenLabsCrossing(db, config, seconds, now);
   if (overrun) {
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
   }

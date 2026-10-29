@@ -314,8 +314,9 @@ export function settleLLMStatements(db: D1Database, reservation: UsageReservatio
 
 /**
  * Ses ayırmasını kesinleştiren ifadeler: ayırma satırı silinir (toplantının ses isteği serbest kalır); gerçek süre
- * toplantıya ve kullanıcının ayına, `spendMicroUsd` günlük harcamaya yazılır. Gerçek süre ayrılanı aştıysa toplantının
- * ses hakkı kapanır (`closeTranscription`).
+ * toplantıya ve kullanıcının ayına, `spendMicroUsd` günlük harcamaya, `providerSeconds` (ElevenLabs'in kredisinden
+ * düştüğü kabul edilen saniye) günlük ElevenLabs sayacına (`daily_spend.audio_seconds`) yazılır. Gerçek süre ayrılanı
+ * aştıysa toplantının ses hakkı kapanır (`closeTranscription`).
  */
 export function settleAudioStatements(
   db: D1Database,
@@ -323,6 +324,7 @@ export function settleAudioStatements(
   actualSeconds: number,
   closeTranscription: boolean,
   spendMicroUsd: number,
+  providerSeconds: number,
   now: Date,
 ): D1PreparedStatement[] {
   return [
@@ -337,22 +339,31 @@ export function settleAudioStatements(
       )
       .bind(reservation.userId, reservation.month, actualSeconds),
     spendStatement(db, reservation, spendMicroUsd, now),
+    db
+      .prepare(
+        `INSERT INTO daily_spend (day, audio_seconds) VALUES (?, ?)
+         ON CONFLICT(day) DO UPDATE SET audio_seconds = audio_seconds + excluded.audio_seconds`,
+      )
+      .bind(dayKey(now), providerSeconds),
   ];
 }
 
 /**
  * Süresi dolmuş (kesinleşmemiş) ayırmaları kapatan ifadeler; aynı toplu işlemde, aynı anla çalışmalıdır. Çağrının gerçek
- * kullanımı bilinmez: en kötü durum tahmini maliyeti ayırmanın gününün harcamasına eklenir (deneme payı ayrıca), satırlar
+ * kullanımı bilinmez: en kötü durum tahmini maliyeti (seste ayrıca saniyesi ElevenLabs sayacına) ayırmanın gününün
+ * harcamasına eklenir (deneme payı ayrıca), satırlar
  * silinir. Kullanıcının token ve süre sayaçlarına yazılmaz (istemci yanıt almadı).
  */
 export function expiredReservationStatements(db: D1Database, now: Date): D1PreparedStatement[] {
   return [
     db
       .prepare(
-        `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd)
-         SELECT day, SUM(estimated_micro_usd), SUM(CASE WHEN trial_spend = 1 THEN estimated_micro_usd ELSE 0 END)
+        `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, audio_seconds)
+         SELECT day, SUM(estimated_micro_usd), SUM(CASE WHEN trial_spend = 1 THEN estimated_micro_usd ELSE 0 END),
+           SUM(CASE WHEN kind = 'audio' THEN audio_seconds ELSE 0 END)
          FROM usage_reservations WHERE expires_at <= ? GROUP BY day
-         ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd`,
+         ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd,
+           audio_seconds = audio_seconds + excluded.audio_seconds`,
       )
       .bind(now.getTime()),
     db.prepare("DELETE FROM usage_reservations WHERE expires_at <= ?").bind(now.getTime()),
