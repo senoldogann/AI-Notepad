@@ -226,7 +226,7 @@
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "DAILY_TRIAL_SPEND_CEILING_USD": "10",
         "REFRESH_TOKEN_DAYS": "60",
-        "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDPrMhONIt1"
+        "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt"
       }
     }
   }
