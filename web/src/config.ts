@@ -1,5 +1,20 @@
 // Sitenin tek yapılandırma kaynağı. Burada gizli değer yoktur: hepsi tarayıcıya açık değerlerdir.
 
+/**
+ * Ürünün adı: sayfa başlıkları, paylaşım kartı etiketleri, metinler ve logonun erişilebilir adı bundan üretilir. Ad
+ * değişince yalnızca burası değişir (sitede elle yazılmış başka kopyası yoktur; görsel dosyalar README'de listelidir).
+ */
+export const productName: string = "Gistsmith";
+
+/**
+ * Kart ekstresinde görünen ad (Stripe Managed Payments: satıcı Link). Stripe hesabındaki alan adı ayarından gelir; ad ya
+ * da alan adı değişince Stripe panelindeki ayarla birlikte değişir.
+ */
+export const cardStatementDescriptor: string = "LINK.COM* GISTSMITH.COM";
+
+/** Tarihlerin ve sayıların yazıldığı yerel ayar (gün ay yıl); sayfalar `<html lang="en">`. */
+export const siteLocale: string = "en-GB";
+
 /** Derleme hedefi: yerel sunucuya karşı geliştirme ya da yayın. */
 export type WebTarget = "local" | "production";
 
@@ -13,8 +28,8 @@ export interface SiteConfig {
   readonly turnstileSiteKey: string;
   /** Apple ile giriş web Services ID'si; sunucunun `APPLE_CLIENT_IDS` listesinde de olmalı. */
   readonly appleServiceId: string;
-  /** DMG indirme adresi. */
-  readonly dmgUrl: string;
+  /** Google ile girişin web OAuth istemci kimliği; sunucunun kabul ettiği Google istemci kimliklerinde de olmalı. */
+  readonly googleClientId: string;
 }
 
 /** Apple ile girişin JS kütüphanesi (Apple'ın CDN'i; CSP'de bu kaynağa izin verilir). */
@@ -25,32 +40,32 @@ export const appleIdOrigin: string = "https://appleid.apple.com";
 export const turnstileScriptUrl: string = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 /** Turnstile kaynağı (betik ve iframe). */
 export const turnstileOrigin: string = "https://challenges.cloudflare.com";
-/** Kaynak kodun deposu. */
-export const repositoryUrl: string = "https://github.com/senoldogann/AI-Notepad";
-
-/** GitHub Releases'teki en son sürümün sayfası (sürüm notları, geliştirici sürümü); her yayında kendiliğinden güncel. */
-export const latestReleaseUrl: string = `${repositoryUrl}/releases/latest`;
-
-/** Yayınlanmış en son sürüm (yalnızca sayfada gösterilir; indirme adresi buna bağlı değil). */
-export const latestVersion: string = "0.1.3";
+/** Google Identity Services betiği; CSP Google'ın belgelediği kaynakları açar (src/lib/headers.ts). */
+export const googleScriptUrl: string = "https://accounts.google.com/gsi/client";
+/** Google Identity Services iframe, istek ve stil kaynaklarının ortak öneki. */
+export const googleGsiBase: string = "https://accounts.google.com/gsi/";
 
 /**
- * DMG indirme adresi: her sürüme yüklenen sabit adlı kopya (`AI-Notepad.dmg`, bkz. scripts/release.sh).
- * `releases/latest/download/` her zaman son sürümü indirir; yeni sürümde bağlantı değişmez.
+ * Google ile girişin web OAuth istemcisi (Google Cloud Console; onay ekranındaki ad "Gistsmith"). İzinli JavaScript
+ * kaynakları: https://gistsmith.com, http://localhost:8788, http://localhost. Açık değerdir.
  */
-const dmgUrl: string = `${repositoryUrl}/releases/latest/download/AI-Notepad.dmg`;
+const googleWebClientId: string = "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com";
+
+/** Yayınlanmış en son sürüm (yalnızca sayfada gösterilir). */
+export const latestVersion: string = "0.1.3";
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {
-  // Alan adı alınınca değişir; sunucudaki SITE_ORIGIN, Apple Services ID alan adı ve Turnstile parçacığıyla birlikte.
-  siteOrigin: "https://ainotepad.pages.dev",
-  // Üretim Worker'ı (`server/`, `npm run deploy`); alan adı alınınca api.<alan adı> olur.
-  apiBase: "https://ainotepad-server-production.senoldogan0233.workers.dev",
-  // Cloudflare Turnstile parçacığı "ainotepad" (alan adı ainotepad.pages.dev); alan adı değişince parçacığa eklenir.
+  // Sunucudaki SITE_ORIGIN, Apple Services ID alan adı, Google istemcisinin izinli kaynağı ve Turnstile parçacığının
+  // alan adlarıyla birlikte değişir.
+  siteOrigin: "https://gistsmith.com",
+  // Üretim Worker'ı (`server/`, `npm run deploy`), özel alan adında.
+  apiBase: "https://api.gistsmith.com",
+  // Cloudflare Turnstile parçacığı "ainotepad"; gistsmith.com parçacığın alan adlarında olmalı.
   turnstileSiteKey: "0x4AAAAAAFqQUwHe_RGFyX1t",
-  // Apple Developer'daki web Services ID'si (dönüş adresleri: <siteOrigin>/tr/giris, <siteOrigin>/en/sign-in).
+  // Apple Developer'daki web Services ID'si (dönüş adresi: <siteOrigin>/sign-in).
   appleServiceId: "com.senoldogan.AINotepad.web",
-  dmgUrl,
+  googleClientId: googleWebClientId,
 };
 
 /**
@@ -58,15 +73,21 @@ const productionConfig: SiteConfig = {
  * (sunucunun geliştirme SITE_ORIGIN'i). API adresi IPv4'e sabittir: `localhost` IPv6'ya çözülüp aynı kapıdaki başka bir
  * sürece gidebilir.
  * Turnstile Cloudflare'in her zaman geçen deneme anahtarıyla çalışır; Apple ile giriş yerelde çalışmaz (Apple yalnızca
- * kayıtlı HTTPS alan adlarına izin verir).
+ * kayıtlı HTTPS alan adlarına izin verir). Google ile giriş, istemcinin izinli kaynaklarında `http://localhost:8788` ve
+ * `http://localhost` varsa yerelde de çalışır.
  */
 const localConfig: SiteConfig = {
   siteOrigin: "http://localhost:8788",
   apiBase: "http://127.0.0.1:8787",
   turnstileSiteKey: "1x00000000000000000000AA",
   appleServiceId: "com.senoldogan.AINotepad.web",
-  dmgUrl,
+  googleClientId: googleWebClientId,
 };
+
+/** Mac indirme adresi: sunucu indirmeyi sayar ve DMG'ye yönlendirir (302). Sitedeki tüm indirme düğmeleri bunu kullanır. Saf fonksiyondur. */
+export function macDownloadUrl(config: SiteConfig): string {
+  return `${config.apiBase}/v1/download/mac`;
+}
 
 /** Hedefe göre yapılandırmalar. */
 export const siteConfigs: Readonly<Record<WebTarget, SiteConfig>> = {

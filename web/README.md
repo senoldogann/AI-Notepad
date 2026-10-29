@@ -1,11 +1,28 @@
-# AI-Notepad web sitesi
+# Gistsmith web sitesi
 
-Cloudflare Pages'te durağan site: tanıtım, fiyat, indirme, giriş (Apple ve e-posta bağlantısı), hesap ve yasal
-taslaklar, Türkçe (`/tr/…`) ve İngilizce (`/en/…`). Abonelik sunucusuyla (`../server`) tarayıcıdan konuşur.
+Cloudflare Pages'te durağan, yalnızca İngilizce site (https://gistsmith.com): tanıtım, fiyat, indirme, giriş (Apple ve
+Google), hesap, iletişim formu, yönetim paneli ve yasal metinler. Abonelik sunucusuyla (`../server`,
+https://api.gistsmith.com) tarayıcıdan konuşur.
 
-**Yığın:** Astro (durağan çıktı) ve katı TypeScript. Sayfalar derlemede HTML olur; tarayıcıya yalnızca giriş, e-posta
-bağlantısı, hesap ve dil yönlendirmesi için küçük betikler gider. Satır içi betik ve stil yoktur (CSP `'unsafe-inline'`
-istemez). İzleyici, analiz ve CDN yazı tipi yoktur; Inter uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur.
+**Yığın:** Astro (durağan çıktı) ve katı TypeScript. Sayfalar derlemede HTML olur; tarayıcıya yalnızca küçük betikler
+gider. Satır içi betik ve stil yoktur (CSP `'unsafe-inline'` istemez). İzleyici, analiz ve CDN yazı tipi yoktur; Inter
+uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur.
+
+## Adresler
+
+| Yol | Sayfa |
+|---|---|
+| `/` | Ana sayfa |
+| `/pricing` | Fiyat (Stripe Checkout iptali buraya döner) |
+| `/download` | İndirme ve kurulum |
+| `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
+| `/account` | Hesap (`?payment=done`: Stripe Checkout dönüşü; Müşteri Portalı dönüşü `/account`) |
+| `/contact` | İletişim formu |
+| `/admin` | Yönetim paneli (menüde ve site haritasında yok, `noindex`) |
+| `/privacy`, `/terms` | Yasal metinler |
+
+Yollar `src/routes.ts`'tedir; `/account` ve `/admin` `Cache-Control: no-store` alır. Tüm indirme düğmeleri
+`<apiBase>/v1/download/mac` adresine gider: sunucu indirmeyi günlük sayaca ekler ve DMG'ye yönlendirir (302).
 
 ## Geliştirme
 
@@ -15,53 +32,58 @@ npm ci
 npm run dev           # http://localhost:8788, yerel yapılandırma (API: http://127.0.0.1:8787)
 npm run typecheck
 npm run build         # yayın yapılandırmasıyla dist/
+npm run build:local && npm run serve   # yerel yapılandırmayla derle, _headers başlıklarıyla (CSP dahil) sun
+npm run screenshots -- http://localhost:8788 /tmp/gistsmith-web "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 ```
 
-Yerel uçtan uca deneme (gerçek sunucu, gerçek Turnstile deneme anahtarı):
-
-```bash
-# 1. sunucu: server/README.md'deki gibi .dev.vars (TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA)
-cd server && npm run migrate:local && npm run dev -- --ip 127.0.0.1 --port 8787
-# 2. site: yerel yapılandırmayla derle ve _headers başlıklarıyla (CSP dahil) sun
-cd web && npm run build:local && npm run serve
-# 3. yerel D1'e tek kullanımlık giriş jetonu yaz (geliştirme e-posta göndericisi bağlantıyı göndermez), sonra:
-npm run screenshots -- http://localhost:8788 /tmp/ainotepad-web "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" <jeton>
-```
-
-`screenshots` ana sayfa, fiyat, indirme, giriş ve hesap sayfalarını 1440/390 px, açık/koyu çeker; yatay taşma, konsol
-hatası ve CSP ihlali varsa çıkış kodu 1'dir. Giriş formu gerçekten gönderilir; hesap sayfası `/giris/eposta#token=…`
-ile giriş yapılıp gerçek `/v1/me` verisiyle çekilir.
+`screenshots` tüm sayfaları 1440/390 px, açık/koyu çeker; ana sayfa gösteriminin karelerini alır, tema düğmesinin
+seçimi hatırladığını ve gösterimin 5 saniyelik ana iş parçacığı maliyetini denetler. Yatay taşma, konsol hatası ya da CSP
+ihlali varsa çıkış kodu 1'dir. Hesap ve yönetim sayfaları için sekmeye örnek bir oturum yazılır ve API yanıtları
+betikteki örnek verilerle karşılanır (yalnızca görünüm denetimi; sunucu akışı sunucunun testlerindedir). Google Identity
+Services'in sayfaya eklediği `<style>` öğeleri ve yer tutucu simgesi CSP'ye takılır (Google'ın belgelediği CSP bunlara
+izin vermez; asıl düğme iframe'de çizilir ve etkilenmez); betik bunları beklenen hata sayar.
 
 Yalnızca kaynak değişince elle çalıştırılanlar (çıktıları repodadır): `scripts/subset-font.sh` (yazı tipi),
 `node scripts/make-grain.ts <chrome>` (film greni, `scripts/grain.svg`'den), `node scripts/make-og.ts <site> <chrome>`
-(paylaşım kartı `public/og.png`, site sunulurken).
+(paylaşım kartı `public/og.png`, site sunulurken; ürün adını `productName`'den alır).
 
 ## Yapılandırma
 
-Tek kaynak `src/config.ts`; gizli değer yoktur. Yayından önce `productionConfig` içinde "DOLDUR" ile işaretlenenler:
+Tek kaynak `src/config.ts`; gizli değer yoktur.
 
 | Değer | Not |
 |---|---|
+| `productName` | Ürün adı; başlıklar, meta, paylaşım kartı etiketleri, metinler ve yasal metinler bundan üretilir |
 | `siteOrigin` | Sitenin alan adı; sunucunun `SITE_ORIGIN`'i ile birebir aynı (CORS) |
-| `apiBase` | Worker adresi; CSP `connect-src` bundan üretilir |
-| `turnstileSiteKey` | Turnstile site anahtarı (şu an Cloudflare'in her zaman geçen deneme anahtarı); alan adı Turnstile panelinde izinli olmalı |
-| `appleServiceId` | Apple Developer'daki web Services ID: tam olarak `com.senoldogan.AINotepad.web` oluşturulur (sunucunun `APPLE_CLIENT_IDS` listesinde bu adla hazırdır; başka ad seçilirse ikisi birlikte değişir) |
+| `apiBase` | Worker adresi; CSP `connect-src` ve indirme adresi bundan üretilir |
+| `turnstileSiteKey` | İletişim formunun Turnstile site anahtarı; site alan adı Turnstile parçacığında izinli olmalı |
+| `appleServiceId` | Apple Developer'daki web Services ID'si (`com.senoldogan.AINotepad.web`); sunucunun `APPLE_CLIENT_IDS` listesinde de olmalı |
+| `googleClientId` | Google Cloud Console'daki web OAuth istemcisi; izinli JavaScript kaynakları: `https://gistsmith.com`, `http://localhost:8788`, `http://localhost`; sunucunun Google istemci kimliklerinde de olmalı |
 
-DMG adresi `latestVersion`'dan üretilir: yayın betiği DMG'ye sürümlü ad verdiği için (`AI-Notepad-<sürüm>.dmg`)
-`releases/latest/download/…` kalıbı bir sonraki sürümde 404 olur. Her yayında `latestVersion` güncellenir. Yayın
-sabit adlı bir kopya da yüklerse (ör. `AI-Notepad.dmg`) adres `releases/latest/download/AI-Notepad.dmg` yapılabilir.
+İşletmeci bilgileri (ad, Y-tunnus, adres, iletişim e-postası) ve yasal metinlerin tarihi `src/legal/operator.ts`'tedir.
 
-Yasal metinlerdeki işletmeci bilgileri `src/legal/operator.ts`'tedir ("[DOLDUR: …]" sayfada görünür); "[Doğrula: …]"
-notları hukuki gözden geçirmede kapatılır.
+Ad değişince elle güncellenecekler: `public/og.png` (`make-og.ts` ile yeniden üretilir); uygulama simgesi
+(`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. İç kimlikler bilerek eski adı taşır:
+tarayıcı depolama anahtarları (`ainotepad.theme`, `ainotepad.session`), uygulama adres şeması
+(`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
 
-**Mac uygulamasından e-posta girişi.** Abonelik uygulaması giriş sayfasını `<siteOrigin>/giris?app=1` ile açar
-(Turnstile yalnızca sitede çözülebildiği için form burada). Sayfa bunu bu tarayıcıda 15 dakika hatırlar
-(`localStorage`, `src/client/app-handoff.ts`); e-postadaki bağlantı (`/giris/eposta#token=…`) aynı tarayıcıda açılınca
-siteye giriş yapılmaz, jeton `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletilir ("Uygulamaya
-dönülüyor…" ve yedek "AI-Notepad'i aç" düğmesi). Bağlantı başka bir tarayıcıda açılırsa site normal girişi yapar.
+**Tema.** `public/theme.js` `<head>`'de engelleyici harici betik olarak yüklenir (CSP satır içi betiğe izin vermez) ve
+ilk boyamadan önce `<html data-theme>` yazar: kullanıcının seçimi (`localStorage`) yoksa sistem tercihi. Renkler
+`global.css`'te `light-dark()` ile tek yerde tanımlıdır; betik yoksa `color-scheme` sistemi izler.
 
-Apple Services ID ayarı: alan adı `siteOrigin`'in alan adı, dönüş adresleri `<siteOrigin>/tr/giris` ve
-`<siteOrigin>/en/sign-in` (giriş açılır pencereyle yapılır, Apple yine de adresi denetler).
+**Giriş.** Apple ve Google'da tarayıcı ham bir nonce üretir, sağlayıcıya SHA-256 özetini verir, kimlik jetonunu ham
+nonce'la sunucuya yollar (`/v1/auth/apple`, `/v1/auth/google`); oturum sekmeye özgü `sessionStorage`'da tutulur. Mac
+uygulaması `/sign-in?app=1&nonce=<özet>` ile açtığında yalnızca Google düğmesi görünür, uygulamanın özeti Google'a
+olduğu gibi verilir ve jeton sunucuya değil `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile uygulamaya
+iletilir (`src/client/app-handoff.ts`). Geçerli `nonce` yoksa sayfa açık bir hata gösterir.
+
+Apple Services ID ayarı: alan adı `gistsmith.com`, dönüş adresi `https://gistsmith.com/sign-in` (giriş açılır
+pencereyle yapılır, Apple yine de adresi denetler).
+
+**CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Google Identity Services için Google'ın belgelediği kaynaklar:
+`script-src https://accounts.google.com/gsi/client`, `frame-src https://accounts.google.com/gsi/`,
+`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Apple ile giriş ve
+Turnstile kaynakları da açıktır; başka dış kaynak yoktur.
 
 ## Cloudflare Pages
 
@@ -74,5 +96,3 @@ Apple Services ID ayarı: alan adı `siteOrigin`'in alan adı, dönüş adresler
 
 Derleme `../App` altındaki yazı tipi lisansını ve uygulama simgesini kopyalar; Pages tüm depoyu çektiği için ek ayar
 gerekmez. `_headers` (CSP, HSTS, Referrer-Policy, Permissions-Policy, önbellek) derlemede yapılandırmadan yazılır.
-Sunucunun sabit dönüş adresleri (`/hesap`, `/fiyat`, `/giris/eposta`) okuyanın dilindeki sayfaya yönlenir; sorgu ve
-`#` parçası korunur.

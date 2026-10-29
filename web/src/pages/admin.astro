@@ -1,0 +1,588 @@
+---
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): özet kutuları, son 30
+// günün grafikleri ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur (src/client/admin.ts).
+import Base from "../layouts/Base.astro";
+import Icon from "../components/Icon.astro";
+import { type AdminCopy, copy } from "../copy";
+import type { IconName } from "../lib/icons";
+import { routes } from "../routes";
+
+const text: AdminCopy = copy.admin;
+
+/** Özet kutuları: kimlik (betik `kpi-<id>` doldurur), etiket ve simge. */
+const kpis: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
+  { id: "downloads", label: text.kpis.downloads, icon: "download" },
+  { id: "users", label: text.kpis.users, icon: "users" },
+  { id: "trials", label: text.kpis.trials, icon: "gift" },
+  { id: "subscribers", label: text.kpis.subscribers, icon: "card" },
+  { id: "mrr", label: text.kpis.mrr, icon: "chart" },
+  { id: "spend", label: text.kpis.spend, icon: "wallet" },
+  { id: "hours", label: text.kpis.hours, icon: "clock" },
+  { id: "tokens", label: text.kpis.tokens, icon: "tokens" },
+];
+
+/** Grafikler: kimlik (betik `chart-<id>` çizer) ve başlık. */
+const charts: readonly { readonly id: string; readonly title: string; readonly legend: boolean }[] = [
+  { id: "downloads", title: text.charts.downloads, legend: false },
+  { id: "users", title: text.charts.users, legend: false },
+  { id: "meetings", title: text.charts.meetings, legend: true },
+  { id: "spend", title: text.charts.spend, legend: false },
+];
+
+/** Bildirim kutusu sekmeleri. */
+const tabs: readonly { readonly kind: string; readonly label: string; readonly icon: IconName }[] = [
+  { kind: "feedback", label: text.tabs.feedback, icon: "message" },
+  { kind: "crash", label: text.tabs.crash, icon: "sparkle" },
+  { kind: "contact", label: text.tabs.contact, icon: "mail" },
+];
+---
+
+<Base page="admin" meta={text.meta} indexed={false}>
+  <section class="page admin" id="admin">
+    <div class="admin__head">
+      <div>
+        <h1 class="title-l">{text.title}</h1>
+        <p id="admin-updated" class="small muted" aria-live="polite"></p>
+      </div>
+      <button id="admin-refresh" class="button button--secondary button--small" type="button">
+        <Icon name="refresh" size={16} class="" />
+        {text.refresh}
+      </button>
+    </div>
+
+    <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
+    <p id="admin-error" class="notice notice--error hidden" role="alert"></p>
+    <p id="admin-loading" class="muted" role="status">{text.loading}</p>
+
+    <div id="admin-signed-out" class="card state hidden" role="status">
+      <h2 class="title-m">{text.signedOutTitle}</h2>
+      <p class="muted">{text.signedOutText}</p>
+      <a class="button button--primary" href={routes.signIn}>{copy.common.nav.signIn}</a>
+    </div>
+
+    <div id="admin-forbidden" class="card state hidden" role="alert">
+      <h2 class="title-m">{text.forbiddenTitle}</h2>
+      <p class="muted">{text.forbiddenText}</p>
+      <code id="admin-identity" class="identity"></code>
+    </div>
+
+    <div id="admin-content" class="admin__content hidden">
+      <div class="kpis">
+        {
+          kpis.map((kpi) => (
+            <div class="card kpi">
+              <p class="kpi__label">
+                <span class="icon-chip icon-chip--small">
+                  <Icon name={kpi.icon} size={17} class="" />
+                </span>
+                {kpi.label}
+              </p>
+              <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
+              {kpi.id === "spend" ? <progress id="kpi-spend-meter" class="meter" aria-label={kpi.label} max="1" value="0" /> : null}
+              <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small muted" />
+            </div>
+          ))
+        }
+      </div>
+
+      <section aria-labelledby="charts-title">
+        <h2 class="title-m section-title" id="charts-title">{text.chartsTitle}</h2>
+        <div class="charts">
+          {
+            charts.map((chart) => (
+              <figure class="card chart">
+                <div class="chart__head">
+                  <h3 class="chart__title">{chart.title}</h3>
+                  {chart.legend ? (
+                    <p class="chart__legend small muted" aria-hidden="true">
+                      <span class="legend legend--main">{text.legendSubscription}</span>
+                      <span class="legend legend--accent">{text.legendTrial}</span>
+                    </p>
+                  ) : null}
+                </div>
+                <div id={`chart-${chart.id}`} class="chart__plot" />
+                <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
+              </figure>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="inbox" aria-labelledby="inbox-title">
+        <div class="inbox__toolbar">
+          <h2 class="title-m" id="inbox-title">{text.inboxTitle}</h2>
+          <div class="segmented" role="group" aria-label={text.inboxTitle}>
+            {
+              tabs.map((tab, index: number) => (
+                <button id={`tab-${tab.kind}`} class="segmented__button" type="button" aria-pressed={index === 0 ? "true" : "false"}>
+                  <Icon name={tab.icon} size={16} class="" />
+                  {tab.label}
+                  <span id={`count-${tab.kind}`} class="segmented__count tabular" />
+                </button>
+              ))
+            }
+          </div>
+          <div class="segmented segmented--quiet" role="group" aria-label={`${text.statusOpen} / ${text.statusDone}`}>
+            <button id="status-open" class="segmented__button" type="button" aria-pressed="true">{text.statusOpen}</button>
+            <button id="status-done" class="segmented__button" type="button" aria-pressed="false">{text.statusDone}</button>
+          </div>
+        </div>
+
+        <div class="inbox__body">
+          <div class="card inbox__list-card">
+            <ul id="inbox-list" class="inbox__list"></ul>
+            <p id="inbox-empty" class="muted inbox__empty hidden">{text.empty}</p>
+            <button id="inbox-more" class="button button--secondary button--small hidden" type="button">{text.loadMore}</button>
+          </div>
+
+          <div id="inbox-detail" class="card inbox__detail">
+            <p id="detail-empty" class="muted inbox__empty">{text.detailEmpty}</p>
+            <div id="detail-body" class="detail hidden">
+              <div class="detail__head">
+                <span id="detail-status" class="pill"></span>
+                <button
+                  id="detail-toggle"
+                  class="button button--secondary button--small"
+                  type="button"
+                  data-label-done={text.markDone}
+                  data-label-reopen={text.reopen}>{text.markDone}</button
+                >
+              </div>
+              <dl class="detail__fields">
+                <div><dt>{text.fields.received}</dt><dd id="detail-received"></dd></div>
+                <div><dt>{text.fields.email}</dt><dd id="detail-email"></dd></div>
+                <div><dt>{text.fields.user}</dt><dd id="detail-user" class="mono"></dd></div>
+                <div><dt>{text.fields.app}</dt><dd id="detail-app"></dd></div>
+                <div><dt>{text.fields.os}</dt><dd id="detail-os"></dd></div>
+              </dl>
+              <h3 class="detail__label">{text.messageTitle}</h3>
+              <p id="detail-message" class="detail__message"></p>
+              <div id="detail-payload-block" class="hidden">
+                <h3 class="detail__label">{text.payloadTitle}</h3>
+                <pre id="detail-payload" class="detail__payload" tabindex="0"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import "../client/admin";
+</script>
+
+<style>
+  .admin {
+    display: grid;
+    gap: 20px;
+    padding-top: clamp(28px, 5vw, 56px);
+  }
+
+  .admin__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .admin__content {
+    display: grid;
+    gap: clamp(32px, 4vw, 48px);
+  }
+
+  .state {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+    max-width: 40rem;
+  }
+
+  .identity {
+    display: block;
+    max-width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius-s);
+    background: var(--soft);
+    border: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  .section-title {
+    margin-bottom: 16px;
+  }
+
+  /* ---------- Özet kutuları ---------- */
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .kpi {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 20px 22px;
+  }
+
+  .kpi__label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .kpi__value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  /* ---------- Grafikler ---------- */
+
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .chart {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 20px 22px;
+  }
+
+  .chart__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+
+  .chart__title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .chart__legend {
+    display: flex;
+    gap: 14px;
+  }
+
+  .legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  .legend--main::before {
+    background: color-mix(in srgb, var(--ink) 72%, var(--card));
+  }
+
+  .legend--accent::before {
+    background: var(--accent);
+  }
+
+  .chart__plot {
+    display: grid;
+    gap: 6px;
+  }
+
+  .chart__plot :global(.chart__svg) {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .chart__plot :global(.chart__base) {
+    fill: var(--line);
+  }
+
+  .chart__plot :global(.chart__bar--main) {
+    fill: color-mix(in srgb, var(--ink) 72%, var(--card));
+  }
+
+  .chart__plot :global(.chart__bar--accent) {
+    fill: var(--accent);
+  }
+
+  .chart__plot :global(g:hover .chart__bar--main) {
+    fill: var(--ink);
+  }
+
+  .chart__plot :global(.chart__axis) {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  /* ---------- Bildirim kutusu ---------- */
+
+  .inbox {
+    display: grid;
+    gap: 16px;
+  }
+
+  .inbox__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+  }
+
+  .inbox__toolbar h2 {
+    margin-right: auto;
+  }
+
+  .segmented {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+  }
+
+  .segmented__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .segmented__button :global(.icon) {
+    flex: none;
+  }
+
+  .segmented__button:hover {
+    color: var(--ink);
+  }
+
+  .segmented__button[aria-pressed="true"] {
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+
+  .segmented__count {
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--ink);
+    font-size: 0.75rem;
+    line-height: 20px;
+    text-align: center;
+  }
+
+  .segmented__count:empty {
+    display: none;
+  }
+
+  .segmented__button[aria-pressed="true"] .segmented__count {
+    background: color-mix(in srgb, var(--on-primary) 18%, transparent);
+    color: var(--on-primary);
+  }
+
+  .inbox__body {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .inbox__list-card,
+  .inbox__detail {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .inbox__detail {
+    padding: 20px 22px;
+  }
+
+  .inbox__list {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .inbox__list :global(.inbox__item) {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .inbox__list :global(.inbox__item:hover) {
+    background: var(--soft);
+  }
+
+  .inbox__list :global(.inbox__item[aria-current="true"]) {
+    background: var(--selected);
+  }
+
+  .inbox__list :global(.inbox__summary) {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inbox__list :global(.inbox__meta) {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  .inbox__empty {
+    padding: 12px;
+  }
+
+  #inbox-more {
+    justify-self: center;
+  }
+
+  .detail {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .detail__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .detail__fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+    margin: 0;
+  }
+
+  .detail__fields dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .detail__fields dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mono {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+  }
+
+  .detail__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
+  .detail__message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .detail__payload {
+    max-height: 420px;
+    margin: 8px 0 0;
+    padding: 14px 16px;
+    overflow: auto;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--line);
+    background: var(--soft);
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
+  @media (max-width: 1040px) {
+    .kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 860px) {
+    .charts,
+    .inbox__body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* Dar ekranda süzgeçler tek satırda, tam genişlikte. */
+  @media (max-width: 560px) {
+    .segmented {
+      flex-wrap: nowrap;
+      width: 100%;
+    }
+
+    .segmented__button {
+      flex: 1 1 auto;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    .segmented__button :global(.icon) {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .kpis,
+    .detail__fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

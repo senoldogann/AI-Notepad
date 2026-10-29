@@ -3,19 +3,16 @@
 // Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
-import { type AccountCopy, copy } from "../i18n/copy";
-import { type Lang, pagePath } from "../i18n/routes";
+import { type AccountCopy, copy } from "../copy";
+import { routes } from "../routes";
 
-interface Props {
-  readonly lang: Lang;
-}
-const { lang } = Astro.props;
-const text: AccountCopy = copy[lang].account;
+const text: AccountCopy = copy.account;
 ---
 
-<Base lang={lang} page="account" meta={text.meta} indexed={false}>
-  <section class="page account" id="account" data-sign-in-path={pagePath("signIn", lang)} data-home-path={pagePath("home", lang)}>
+<Base page="account" meta={text.meta} indexed={false}>
+  <section class="page account" id="account" data-sign-in-path={routes.signIn} data-home-path={routes.home}>
     <Film palette="coral" layout="streaks" class="account__cover">
       <Waveform seed={text.title} width={240} height={52} class="account__wave" />
     </Film>
@@ -32,21 +29,21 @@ const text: AccountCopy = copy[lang].account;
     <div id="account-content" class="account__content hidden">
       <div class="stats">
         <div class="card stat">
-          <p class="stat__label">{text.planLabel}</p>
+          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="user" size={17} class="" /></span>{text.planLabel}</p>
           <p class="stat__value"><span id="plan-value"></span> <span id="plan-pill" class="pill"></span></p>
         </div>
         <div class="card stat">
-          <p class="stat__label">{text.trialLabel}</p>
+          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="gift" size={17} class="" /></span>{text.trialLabel}</p>
           <p id="trial-value" class="stat__value tabular"></p>
         </div>
         <div class="card stat">
-          <p class="stat__label" id="hours-label">{text.hoursLabel}</p>
+          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="clock" size={17} class="" /></span><span id="hours-label">{text.hoursLabel}</span></p>
           <p id="hours-value" class="stat__value tabular"></p>
           <progress id="hours-meter" class="meter" aria-labelledby="hours-label" max="10" value="0"></progress>
           <p class="small muted">{text.hoursNote}</p>
         </div>
         <div class="card stat">
-          <p class="stat__label">{text.renewalLabel}</p>
+          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="card" size={17} class="" /></span>{text.renewalLabel}</p>
           <p class="stat__value stat__value--text"><span id="subscription-pill" class="pill hidden"></span> <span id="subscription-value"></span></p>
         </div>
       </div>
@@ -67,7 +64,8 @@ const text: AccountCopy = copy[lang].account;
     <div id="account-deleted" class="card deleted hidden" tabindex="-1" role="status">
       <h2 class="title-l">{text.deletedTitle}</h2>
       <p class="muted">{text.deletedText}</p>
-      <a class="button button--primary" href={pagePath("home", lang)}>{text.backHome}</a>
+      <p class="small muted">{text.deletedRedirect}</p>
+      <a class="button button--primary" href={routes.home}>{text.backHome}</a>
     </div>
   </section>
 
@@ -133,6 +131,10 @@ const text: AccountCopy = copy[lang].account;
   }
 
   .stat__label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
     font-size: 0.8125rem;
     font-weight: 600;
     color: var(--muted);
@@ -154,31 +156,6 @@ const text: AccountCopy = copy[lang].account;
   .stat__value .pill {
     vertical-align: middle;
     letter-spacing: 0;
-  }
-
-  .meter {
-    width: 100%;
-    height: 8px;
-    appearance: none;
-    border: 0;
-    border-radius: 999px;
-    background: var(--soft);
-    overflow: hidden;
-  }
-
-  .meter::-webkit-progress-bar {
-    background: var(--soft);
-    border-radius: 999px;
-  }
-
-  .meter::-webkit-progress-value {
-    background: linear-gradient(90deg, #e9896a, #c9a3e0);
-    border-radius: 999px;
-  }
-
-  .meter::-moz-progress-bar {
-    background: linear-gradient(90deg, #e9896a, #c9a3e0);
-    border-radius: 999px;
   }
 
   .actions {
@@ -211,11 +188,11 @@ const text: AccountCopy = copy[lang].account;
     border-radius: var(--radius-m);
     background: var(--card);
     color: var(--ink);
-    box-shadow: var(--shadow);
+    box-shadow: var(--elevation);
   }
 
   .dialog::backdrop {
-    background: rgb(10 10 10 / 0.4);
+    background: light-dark(rgb(10 10 10 / 0.4), rgb(0 0 0 / 0.6));
   }
 
   .dialog__form {

@@ -1,0 +1,351 @@
+---
+// Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
+// transcribe.ts, llm/, auth/, billing.ts, migrations/, wrangler.jsonc), abonelik uygulaması (App/Hosted: canlı metin
+// Mac'te, iCloud eşitlemesi yok) ve bu sitenin tarayıcı depolaması (public/theme.js, src/client/session.ts).
+import LegalSection from "../components/LegalSection.astro";
+import Legal from "../layouts/Legal.astro";
+import { productName } from "../config";
+import { copy } from "../copy";
+import type { LegalSectionInfo } from "../lib/legal";
+import { operator } from "../legal/operator";
+import { routes } from "../routes";
+
+const sections: readonly LegalSectionInfo[] = [
+  { id: "controller", title: "Who is responsible" },
+  { id: "summary", title: "The short version" },
+  { id: "meetings", title: "Your meeting content" },
+  { id: "data", title: "Data we process, why, and on what legal basis" },
+  { id: "messages", title: "Contact form, feedback and crash reports" },
+  { id: "website", title: "This website, cookies and browser storage" },
+  { id: "providers", title: "Service providers and international transfers" },
+  { id: "retention", title: "How long we keep data" },
+  { id: "deletion", title: "Deleting your account" },
+  { id: "rights", title: "Your rights" },
+  { id: "security", title: "Security" },
+  { id: "decisions", title: "Automated decisions" },
+  { id: "children", title: "Children" },
+  { id: "changes", title: "Changes to this policy" },
+  { id: "contact", title: "Contact" },
+];
+const mail: string = `mailto:${operator.email}`;
+---
+
+<Legal page="privacy" meta={copy.privacyMeta} title={copy.common.nav.privacy} sections={sections}>
+  <p class="legal-lead">
+    This policy explains what personal data is processed when you use {productName} — the Mac app, the service behind
+    it and this website — why it is processed, who it is shared with, how long it is kept and how you can use your
+    rights under the EU General Data Protection Regulation (GDPR).
+  </p>
+
+  <LegalSection sections={sections} id="controller">
+    <p>
+      {productName} is operated by <strong>{operator.name}</strong>, {operator.legalForm}, business ID (Y-tunnus) {operator.businessId},{" "}
+      {operator.address} (“we”, “us”). We are the controller for the personal data described in
+      this policy. For any privacy question or request, write to <a href={mail}>{operator.email}</a>.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="summary">
+    <ul>
+      <li>Your notes, transcripts and recordings are stored on your Mac. Our servers do not keep a copy.</li>
+      <li>
+        Meeting audio and text pass through our server only to be transcribed and summarised by our AI providers; our
+        server does not store them. We keep only usage numbers (how long, how many tokens) to apply the plan limits.
+      </li>
+      <li>We don't use cookies, analytics or advertising trackers on this website, and we don't sell your data.</li>
+      <li>You can delete your account yourself at any time; the data on our server is deleted immediately.</li>
+    </ul>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="meetings">
+    <ul>
+      <li>
+        <strong>Live transcript.</strong> While you record, the live transcript is produced on your Mac by an on-device
+        speech model. The audio does not leave your Mac for this.
+      </li>
+      <li>
+        <strong>Final transcript and speaker separation.</strong> When a meeting ends, the app sends the recording
+        through our server to ElevenLabs, which returns the transcript. Our server streams the audio through without
+        writing it to storage and records only its duration.
+      </li>
+      <li>
+        <strong>Notes, live translation, “What did I miss?” and Ask.</strong> The relevant parts of the transcript (and
+        of earlier notes, when you use Ask) are sent through our server to Anthropic's Claude model, and the answer
+        returns to your Mac. Our server does not store or log this text; it records only the number of tokens used.
+      </li>
+      <li>
+        <strong>Storage.</strong> Notes, transcripts, recordings and the people and terms you add are stored in the app's
+        folder on your Mac. The subscription app does not sync them to any cloud service. You can export or delete them in
+        the app at any time.
+      </li>
+      <li>
+        <strong>Integrations.</strong> When you send a note or tasks to Notion, Slack, Microsoft Teams, Discord, Zoom,
+        Linear, Jira or Reminders, the app sends that content from your Mac directly to the service you chose, using the
+        account you connected. It does not pass through our server, and the receiving service processes it under its own
+        terms.
+      </li>
+    </ul>
+    <p>
+      Meetings involve other people. You decide whether to record a meeting and what to do with the result, so you are
+      responsible for telling participants that you are recording and, where the law requires it, getting their consent.
+      We process meeting content only to provide the service to you and never for any other purpose.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="data">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Data</th><th scope="col">Purpose</th><th scope="col">Legal basis (GDPR Art. 6(1))</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <strong>Account.</strong> With Sign in with Apple: the user identifier Apple gives us and, if you share it, your
+              email address (which may be an Apple private relay address). With Sign in with Google: your Google account
+              identifier and email address.
+            </td>
+            <td>Creating your account and signing you in</td>
+            <td>(b) contract</td>
+          </tr>
+          <tr>
+            <td><strong>Sessions.</strong> One-way hashes of sign-in tokens, with creation and expiry times</td>
+            <td>Keeping you signed in; detecting stolen tokens</td>
+            <td>(b) contract; (f) legitimate interest in security</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Device attestation.</strong> Apple App Attest key identifier, public key and attestation receipt, app
+              version
+            </td>
+            <td>Checking that requests come from our genuine app; preventing misuse of the free trial</td>
+            <td>(f) legitimate interest in preventing abuse</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Usage.</strong> Start and end time and length of each meeting session, audio duration and AI tokens
+              used; daily and monthly totals
+            </td>
+            <td>Applying the trial and plan limits; controlling costs</td>
+            <td>(b) contract</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Network data.</strong> Your IP address, briefly, for rate limiting; and a keyed one-way hash of your IP
+              address with the date when a new account starts its first trial meeting
+            </td>
+            <td>Preventing abuse and bulk account creation</td>
+            <td>(f) legitimate interest in preventing abuse</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Subscription.</strong> Stripe customer and subscription identifiers, subscription status, period
+              end and billing country. Card and payment details are entered at Stripe and never reach us.
+            </td>
+            <td>Managing your subscription and access</td>
+            <td>(b) contract; (c) legal obligation for accounting records</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Technical logs.</strong> Endpoint, result or error code, account ID and time. Logs never contain
+              meeting audio or text.
+            </td>
+            <td>Operating the service, finding errors, security</td>
+            <td>(f) legitimate interest in a reliable and secure service</td>
+          </tr>
+          <tr>
+            <td><strong>Messages and reports.</strong> See section 5.</td>
+            <td>Answering you; fixing problems</td>
+            <td>(f) legitimate interest; (b) contract for support requests</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Downloads.</strong> A count of app downloads per day. No IP address or other identifier is stored with
+              it.
+            </td>
+            <td>Understanding how many people download the app</td>
+            <td>Not personal data</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Where we rely on legitimate interest, we have weighed it against your interests and kept the data to the minimum
+      needed. You can object at any time (see section 10).
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="messages">
+    <ul>
+      <li>
+        <strong>Contact form.</strong> When you write to us through the <a href={routes.contact}>contact form</a>, we
+        store your email address and message so that we can answer you. The form is protected by Cloudflare Turnstile
+        (see section 6). We delete the message and email address 180 days after we receive them. If you email us
+        directly, the message stays in our mailbox for as long as needed to handle your request.
+      </li>
+      <li>
+        <strong>Feedback and crash reports from the app.</strong> These are sent only when you choose to send them. They
+        contain your message or the crash report, the app version and the macOS version, and — if you are signed in —
+        your account ID; an email address is included only if you add one. We use them to answer you and to fix problems,
+        and delete them 180 days after we receive them.
+      </li>
+    </ul>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="website">
+    <p>
+      This website sets no cookies of its own and uses no analytics, advertising or tracking tools. Fonts are served from
+      our own domain. The site stores the following in your browser:
+    </p>
+    <ul>
+      <li>
+        <strong>Theme preference</strong> (<code>localStorage</code>, key <code>ainotepad.theme</code>): saved only if you
+        use the light/dark switch, so the site remembers your choice.
+      </li>
+      <li>
+        <strong>Sign-in session</strong> (<code>sessionStorage</code>, key <code>ainotepad.session</code>): your session
+        tokens after you sign in, kept only in that browser tab and removed when you close the tab or sign out.
+      </li>
+    </ul>
+    <p>
+      These are strictly necessary for features you ask for, so they don't require consent. On the sign-in page, Apple's
+      and Google's sign-in scripts are loaded from Apple and Google; they may use their own cookies and process your IP
+      address and browser information when you sign in, under Apple's and Google's privacy policies. On the contact page,
+      Cloudflare Turnstile checks that the form is used by a person; it processes technical data such as your IP address
+      and browser characteristics. Cloudflare, which hosts the site, processes IP addresses to deliver and protect it.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="providers">
+    <p>We use the following providers (processors) to run the service. Each processes data only on our instructions:</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Provider</th><th scope="col">What for</th><th scope="col">Data</th><th scope="col">Location and safeguards</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cloudflare, Inc.</td>
+            <td>Hosting the website and our server, database, rate limiting, Turnstile, logs</td>
+            <td>Account, usage, message and technical data; meeting content in transit</td>
+            <td>
+              Database stored in the EU. Cloudflare's network is global and the company is based in the USA: EU–US Data
+              Privacy Framework and Standard Contractual Clauses.
+            </td>
+          </tr>
+          <tr>
+            <td>Anthropic</td>
+            <td>Writing notes, translations and answers with the Claude model</td>
+            <td>The relevant parts of meeting transcripts and notes</td>
+            <td>
+              USA; Standard Contractual Clauses. Under Anthropic's commercial terms, API data is not used to train models and
+              is kept only for a limited period for safety and abuse monitoring.
+            </td>
+          </tr>
+          <tr>
+            <td>ElevenLabs</td>
+            <td>Transcribing recordings and separating speakers</td>
+            <td>Meeting audio</td>
+            <td>
+              USA and EU; Standard Contractual Clauses. ElevenLabs may keep request data for a limited period as described in
+              its data processing terms.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <strong>Payments.</strong> Subscriptions are sold through Link, Stripe's payment service, which is the merchant of
+      record for your purchase. Stripe and Link process your payment, billing and tax details (such as your email address,
+      billing address and payment method) as independent controllers for the transaction, under the{" "}
+      <a href="https://stripe.com/privacy">Stripe privacy policy</a> and Link's privacy policy. From them we receive only
+      your Stripe customer ID, your subscription status and period, and your billing country — never your card details.
+    </p>
+    <p>
+      Apple (Sign in with Apple, App Attest) and Google (Sign in with Google) are also independent controllers for their
+      sign-in services, under their own privacy policies. We do not sell personal data or share it for advertising.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="retention">
+    <ul>
+      <li>Account, device registrations, meeting session records and monthly usage: while your account exists; deleted immediately when you delete it.</li>
+      <li>Sign-in tokens: up to 60 days; deleted within a day after they expire or you sign out.</li>
+      <li>Daily usage totals: 2 days. The hashed IP record for new trials: until the end of that day.</li>
+      <li>Contact messages, feedback and crash reports: 180 days.</li>
+      <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
+      <li>Technical logs: kept for a short period by Cloudflare, normally no more than a few days.</li>
+      <li>Database backups (Cloudflare D1 point-in-time recovery): up to 30 days, after which deleted data is gone from backups too.</li>
+      <li>Our accounting records of subscription income: for as long as Finnish accounting law requires (currently up to 10 years). Receipts and payment records are kept by Stripe and Link under their own policies.</li>
+    </ul>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="deletion">
+    <p>
+      You can delete your account at any time with “Delete account” on your <a href={routes.account}>account page</a>.
+      Any unfinished subscription is first cancelled immediately at Stripe; then your account, sign-in identities,
+      sessions, device registrations, meeting session records, usage, subscription record and Stripe customer link are
+      deleted together in a single step.
+    </p>
+    <p>
+      What remains: today's trial counter for your network (a hashed IP address, not linked to any account, deleted at
+      the end of the day), payment records kept by Stripe and Link as the seller, messages and reports until their
+      180 days run out (ask us if you want them deleted sooner), and technical logs and backups until they expire. Notes
+      and recordings on your Mac stay where they are; you delete them in the app.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="rights">
+    <p>Under the GDPR you have the right to:</p>
+    <ul>
+      <li>access the personal data we hold about you and get a copy of it;</li>
+      <li>have inaccurate data corrected;</li>
+      <li>have your data erased;</li>
+      <li>restrict processing;</li>
+      <li>receive the data you gave us in a portable format;</li>
+      <li>object to processing based on legitimate interest.</li>
+    </ul>
+    <p>
+      Write to <a href={mail}>{operator.email}</a>. We may ask you to confirm that the account is yours, and we reply
+      within one month. You also have the right to lodge a complaint with a supervisory authority — in Finland, the Office
+      of the Data Protection Ombudsman (Tietosuojavaltuutetun toimisto, <a href="https://tietosuoja.fi/en">tietosuoja.fi</a>),
+      or the authority in the EU country where you live or work.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="security">
+    <p>
+      All connections are encrypted with TLS. Sign-in tokens are stored on our server only as one-way hashes and IP
+      addresses only as keyed hashes. Requests from the app are verified with Apple App Attest. Our provider keys exist only
+      as encrypted secrets on our server, and access to the service's systems is limited to the operator.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="decisions">
+    <p>
+      We don't make decisions about you based solely on automated processing that have legal or similarly significant
+      effects. Usage limits are applied automatically according to your plan, as described in the{" "}
+      <a href={routes.terms}>Terms of service</a>.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="children">
+    <p>{productName} is not intended for anyone under 18, and we don't knowingly process children's data.</p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="changes">
+    <p>
+      When we change this policy we update the date at the top. We announce material changes in the app or by email
+      before they take effect.
+    </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="contact">
+    <p>
+      {operator.name}<br />
+      {operator.address}<br />
+      Business ID {operator.businessId}<br />
+      <a href={mail}>{operator.email}</a>
+    </p>
+  </LegalSection>
+</Legal>
