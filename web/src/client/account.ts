@@ -4,7 +4,7 @@
 import { ApiRequestError, type Entitlements, type RawResponse, type SubscriptionInfo, parseEntitlements, parseRedirectUrl } from "./api";
 import { type ClientCopy, clientCopy, fill } from "./copy";
 import { dataValue, element, errorText, hideNotice, showNotice } from "./dom";
-import { SignedOutError, authorizedSend, clearSession, hasSession, signOut } from "./session";
+import { SignedOutError, authorizedSend, claimTabSession, clearSession, hasSession, signOut } from "./session";
 import { siteLocale } from "../config";
 
 /** Ödeme dönüşünde aboneliğin görünmesi için en çok kaç kez, kaç ms arayla yeniden bakılır (webhook gecikmesi). */
@@ -296,6 +296,7 @@ async function main(): Promise<void> {
   const params: URLSearchParams = new URLSearchParams(window.location.search);
   // Stripe Checkout dönüşü: `/account?payment=done`. Sorgu hemen silinir; yenilemede bildirim yeniden görünmez.
   const paymentDone: boolean = params.get("payment") === "done";
+  await claimTabSession();
   if (!hasSession()) {
     if (paymentDone) {
       // Ödeme uygulamadan açıldı (bu sekmede oturum yok): giriş sayfası yerine "ödeme alındı, uygulamaya dön".

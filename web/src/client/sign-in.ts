@@ -72,7 +72,8 @@ function finishSignIn(response: RawResponse, path: string, accountPath: string):
 function prepareApple(apple: AppleIdGlobal, redirectUri: string, hashedNonce: string, state: string): void {
   apple.auth.init({
     clientId: siteConfig.appleServiceId,
-    scope: "email",
+    // Kimlik bilgisi istenmez (ad, e-posta): sunucu yalnızca Apple'ın kullanıcı kimliğini kullanır ve e-posta saklamaz.
+    scope: "",
     redirectURI: redirectUri,
     state,
     nonce: hashedNonce,
