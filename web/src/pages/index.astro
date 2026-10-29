@@ -241,7 +241,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         <div class="glass price-tag">
           <p class="price-tag__amount"><span class="tabular">{common.price}</span><span class="price-tag__per">{common.perMonth}</span></p>
           <p class="price-tag__offer">{common.offer}</p>
-          <p class="price-tag__tax">{common.taxNote}</p>
+          <p class="price-tag__tax">{common.renewalNote}</p>
         </div>
       </Film>
     </div>
@@ -505,10 +505,13 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 18px;
-    border-radius: 999px;
+    padding: 11px 18px;
+    /* Dar kartlarda iki satıra iner; köşe yarıçapı iki durumda da yumuşak kalır. */
+    border-radius: 22px;
     font-weight: 600;
     font-size: 0.9375rem;
+    line-height: 1.35;
+    text-wrap: balance;
   }
 
   .section--tinted {

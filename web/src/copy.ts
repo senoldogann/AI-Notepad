@@ -56,7 +56,12 @@ export interface CommonCopy {
   readonly perMonth: string;
   readonly offer: string;
   readonly requirementsShort: string;
+  /** Fiyatın vergiler dahil olduğu (fiyatın hemen altında). */
   readonly taxNote: string;
+  /** Otomatik yenileme ve iptal (Abone ol düğmesinin yanında). */
+  readonly renewalNote: string;
+  /** Paylaşım kartı görselinin (public/og.png) metin karşılığı. */
+  readonly ogImageAlt: string;
   readonly footer: {
     readonly tagline: string;
     readonly product: string;
@@ -67,6 +72,8 @@ export interface CommonCopy {
     /** Sayfa sonundaki çekmede görünen kısa teşekkür (PullReveal.astro). */
     readonly pullThanks: string;
     readonly copyright: string;
+    /** İşletmenin hukuki bilgisi: unvan, işletme kimliği ve adres (alt bilginin en altında). */
+    readonly business: string;
   };
   readonly lastUpdated: string;
   readonly contents: string;
@@ -90,6 +97,10 @@ export interface DemoCopy {
   readonly tasks: readonly string[];
   readonly decisionsTitle: string;
   readonly decision: string;
+  /** Duraklat/oynat düğmesinin erişilebilir adları (oynarken, duraklatılmışken, gösterim bitmişken). */
+  readonly pause: string;
+  readonly play: string;
+  readonly replay: string;
 }
 
 /** Ana sayfadaki uygulama ekran görüntülerinden biri: kartın altındaki etiket ve başlık, görselin metin karşılığı. */
@@ -216,6 +227,9 @@ export interface ContactCopy {
   readonly sendAnother: string;
   readonly directTitle: string;
   readonly directText: string;
+  /** İşletme bilgisi kutusu: başlık ve işletme kimliğinin etiketi. */
+  readonly companyTitle: string;
+  readonly businessIdLabel: string;
   readonly noScript: string;
 }
 
@@ -231,9 +245,18 @@ export interface AccountCopy {
   readonly hoursNote: string;
   readonly renewalLabel: string;
   readonly subscribe: string;
+  /** Abone ol düğmesinin yanında: fiyat (vergiler dahil), otomatik yenileme, iptal, satıcı. */
   readonly subscribeNote: string;
   readonly manage: string;
+  /** Aboneliği yönet düğmesinin yanında (Link'te kart, makbuz, iptal). */
+  readonly manageNote: string;
   readonly signOut: string;
+  /** "Uygulamayı indir" kartı. */
+  readonly appTitle: string;
+  readonly appText: string;
+  /** Yardım satırı. */
+  readonly helpTitle: string;
+  readonly helpContact: string;
   readonly dangerTitle: string;
   readonly dangerText: string;
   readonly deleteButton: string;
@@ -346,9 +369,11 @@ export const copy: Copy = {
     darkMode: "Dark mode",
     price: "$5.99",
     perMonth: "/ month",
-    offer: "3 meetings or 7 days free, then $5.99 a month",
+    offer: "3 meetings or 7 days free, then $5.99 a month, taxes included",
     requirementsShort: "macOS 26 · Apple silicon",
-    taxNote: "Plus applicable taxes, shown at checkout.",
+    taxNote: "Taxes included.",
+    renewalNote: "Renews automatically every month until you cancel. Cancel anytime.",
+    ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
     footer: {
       tagline,
       product: "Product",
@@ -358,6 +383,7 @@ export const copy: Copy = {
       cookies: "Cookies",
       pullThanks: "Thanks for listening.",
       copyright: `© 2026 ${operator.name}`,
+      business: `${operator.name} · Business ID ${operator.businessId} · ${operator.address}`,
     },
     lastUpdated: "Last updated",
     contents: "On this page",
@@ -391,6 +417,9 @@ export const copy: Copy = {
       tasks: ["Write the beta release notes by Friday", "Send Ayşe the pricing table", "Set up Wednesday's call with support"],
       decisionsTitle: "Decisions",
       decision: "The beta opens on 14 November.",
+      pause: "Pause the demo",
+      play: "Play the demo",
+      replay: "Replay the demo",
     },
     library: {
       label: "Recent meetings",
@@ -460,7 +489,7 @@ export const copy: Copy = {
       privacy: {
         title: "Privacy",
         text: "Audio is processed only to be transcribed and is not stored on our servers. Your notes and recordings stay on your Mac. No bot joins the call.",
-        badge: "Audio not stored",
+        badge: "Not stored on our servers",
       },
     },
     stepsTitle: "In three steps",
@@ -470,13 +499,13 @@ export const copy: Copy = {
       { title: "Get your note", text: "The meeting ends, the note is ready: tasks first, then decisions and a summary. Share it or send it on." },
     ],
     pricingTitle: "One plan. Simple pricing.",
-    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month; cancel anytime.",
+    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
     faqTitle: "Questions",
     faq: [
       {
         question: "How does the free trial work?",
-        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that you continue with the $5.99 monthly subscription.",
+        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month, taxes included.",
       },
       {
         question: "Does a bot join my meetings?",
@@ -485,7 +514,7 @@ export const copy: Copy = {
       {
         question: "Where does my audio go?",
         answer:
-          "The live transcript is produced on your Mac. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our server does not store audio or text; it only counts the duration.",
+          "The live transcript is produced on your Mac. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or text; they only count the duration. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
       },
       {
         question: "Where are my notes stored?",
@@ -506,10 +535,10 @@ export const copy: Copy = {
   pricing: {
     meta: {
       title: `Pricing — ${productName}`,
-      description: "One plan: $5.99 a month. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
+      description: "One plan: $5.99 a month, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
     title: "One plan. Simple pricing.",
-    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month.",
+    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, taxes included.",
     planName: productName,
     planTagline: "Everything from live transcript to tasks.",
     included: [
@@ -536,7 +565,7 @@ export const copy: Copy = {
     ],
     taxTitle: "Payments and taxes",
     taxText:
-      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. Link calculates, collects and remits sales tax, VAT or GST for your location and shows it at checkout before you pay; you may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
+      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
     faqTitle: "Questions",
     faq: [
       {
@@ -550,7 +579,7 @@ export const copy: Copy = {
       {
         question: "Can I get a refund?",
         answer:
-          "Refunds are handled by Link, which sells the subscription on our behalf. It applies statutory cooling-off rights where they apply — such as the 14-day withdrawal right for consumers in the EU — and may refund within 60 days in other cases. Contact Link support at support.link.com, or write to us and we'll help.",
+          "Refunds are handled by Link, the merchant of record for the subscription. Under Link's terms, consumers in the EU can cancel within 14 days of getting access by contacting Link support and giving “cooling off period” as the reason; Link may also refund within 60 days in certain other cases, such as a duplicate charge. Contact Link support at support.link.com, or write to us and we'll help. The details are in the terms of service.",
       },
       {
         question: "Who will I see on my receipt and card statement?",
@@ -618,6 +647,8 @@ export const copy: Copy = {
     sendAnother: "Send another message",
     directTitle: "Prefer email?",
     directText: "You can also write to us directly:",
+    companyTitle: "Company details",
+    businessIdLabel: "Business ID (Y-tunnus)",
     noScript: "The contact form needs JavaScript. You can also email us directly.",
   },
   account: {
@@ -631,9 +662,14 @@ export const copy: Copy = {
     hoursNote: "Resets on the first day of each month (UTC).",
     renewalLabel: "Subscription",
     subscribe: "Subscribe",
-    subscribeNote: "$5.99 a month plus applicable taxes, shown at checkout. Sold through Link, Stripe's payment service.",
+    subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
+    manageNote: "Update your card, see receipts or cancel anytime at Link. Renews automatically every month until you cancel.",
     signOut: "Sign out",
+    appTitle: "Get the app",
+    appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,
+    helpTitle: "Need help?",
+    helpContact: "Contact support",
     dangerTitle: "Delete account",
     dangerText:
       "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law. To prevent free-trial abuse, a pseudonymous record of how many free-trial meetings your sign-in has used is kept for up to 24 months, so signing in again with the same account continues the trial instead of restarting it.",

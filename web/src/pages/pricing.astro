@@ -1,5 +1,5 @@
 ---
-// Fiyat sayfası: tek plan (aylık 5,99 $), neler dahil, sınırlar, vergiler (Stripe Tax) ve SSS.
+// Fiyat sayfası: tek plan (aylık 5,99 $, vergiler dahil), neler dahil, sınırlar, ödeme ve vergiler (satıcı Link) ve SSS.
 import Base from "../layouts/Base.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
@@ -34,6 +34,7 @@ const common: CommonCopy = copy.common;
             <a class="button button--primary button--block" href={routes.download}>{text.startFree}</a>
             <a class="button button--secondary button--block" href={routes.account}>{text.subscribe}</a>
           </div>
+          <p class="plan__renewal small muted">{common.renewalNote}</p>
         </div>
         <ul class="included">
           {
@@ -134,6 +135,10 @@ const common: CommonCopy = copy.common;
     display: grid;
     gap: 10px;
     margin-top: 18px;
+    max-width: 340px;
+  }
+
+  .plan__renewal {
     max-width: 340px;
   }
 

@@ -1,5 +1,6 @@
 ---
-// Alt bilgi: kısa tanım, ürün, hesap ve şirket (iletişim, yasal) bağlantıları; işletme adı tek kaynaktan.
+// Alt bilgi: kısa tanım, ürün, hesap ve şirket (iletişim, yasal) bağlantıları; en altta işletmenin unvanı, işletme
+// kimliği ve adresi (tek kaynak: legal/operator.ts).
 import Logo from "./Logo.astro";
 import { productName } from "../config";
 import { copy, type CommonCopy } from "../copy";
@@ -61,6 +62,7 @@ const columns: readonly { readonly title: string; readonly links: readonly { rea
   </div>
   <div class="page site-footer__bottom">
     <p>{text.footer.copyright}</p>
+    <p>{text.footer.business}</p>
   </div>
 </footer>
 
@@ -119,6 +121,10 @@ const columns: readonly { readonly title: string; readonly links: readonly { rea
   }
 
   .site-footer__bottom {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px 24px;
     margin-top: 48px;
     padding-block: 24px 32px;
     border-top: 1px solid var(--line);
