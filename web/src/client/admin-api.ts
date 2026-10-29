@@ -15,6 +15,7 @@ import {
   stringField,
 } from "./api";
 import { authorizedSend } from "./session";
+import { type BillingPlan, billingPlans } from "../lib/plans";
 
 /** Bir günün değeri (`YYYY-MM-DD`, UTC). */
 export interface DayCount {
@@ -46,7 +47,21 @@ export interface AdminStats {
     readonly byProvider: { readonly apple: number; readonly google: number };
   };
   readonly trials: { readonly activeTrialUsers: number; readonly exhaustedTrialUsers: number };
-  readonly subscriptions: { readonly active: number; readonly grace: number; readonly ending: number; readonly canceledTotal: number; readonly mrrUsd: number };
+  /**
+   * Abonelikler: `monthly` ve `yearly` yenilenecek ödenmiş aboneliklerin plana göre sayısı; `mrrUsd` aylık × aylık fiyat
+   * + yıllık × yıllık fiyat / 12.
+   */
+  readonly subscriptions: {
+    readonly active: number;
+    readonly grace: number;
+    readonly ending: number;
+    readonly canceledTotal: number;
+    readonly monthly: number;
+    readonly yearly: number;
+    readonly mrrUsd: number;
+  };
+  /** Davet programı: katılan, 30 günlük bekleme süresindeki, ödülü verilen ve iptal edilen davetler. */
+  readonly referrals: { readonly joined: number; readonly pending: number; readonly granted: number; readonly voided: number };
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
   readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DaySpend[] };
   readonly tokens: { readonly thisMonth: number };
@@ -104,6 +119,8 @@ export type UserAccess = "active" | "grace" | "none";
 /** Kullanıcının aboneliği. Zamanlar Unix ms. */
 export interface UserSubscription {
   readonly status: string;
+  /** Aylık ya da yıllık; fiyat tanınmıyorsa null. */
+  readonly plan: BillingPlan | null;
   readonly access: UserAccess;
   readonly currentPeriodEnd: number;
   readonly cancelAt: number | null;
@@ -417,6 +434,7 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
   const billing: JsonObject = objectField(body, "billing", response, path);
   const usage: JsonObject = objectField(body, "usage", response, path);
   const refusals: JsonObject = objectField(body, "trialRefusals", response, path);
+  const referrals: JsonObject = objectField(body, "referrals", response, path);
   const dayCounts =(owner: JsonObject, key: string): DayCount[] =>
     objectArrayField(owner, key, response, path).map((item: JsonObject): DayCount => ({ day: dayField(item, response, path), count: numberField(item, "count", response, path) }));
   return {
@@ -436,7 +454,15 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       grace: numberField(subscriptions, "grace", response, path),
       ending: numberField(subscriptions, "ending", response, path),
       canceledTotal: numberField(subscriptions, "canceledTotal", response, path),
+      monthly: numberField(subscriptions, "monthly", response, path),
+      yearly: numberField(subscriptions, "yearly", response, path),
       mrrUsd: numberField(subscriptions, "mrrUsd", response, path),
+    },
+    referrals: {
+      joined: numberField(referrals, "joined", response, path),
+      pending: numberField(referrals, "pending", response, path),
+      granted: numberField(referrals, "granted", response, path),
+      voided: numberField(referrals, "voided", response, path),
     },
     meetings: {
       last30Days: objectArrayField(meetings, "last30Days", response, path).map(
@@ -595,6 +621,7 @@ function parseUserSummary(item: JsonObject, response: RawResponse, path: string)
         ? null
         : {
             status: stringField(subscription, "status", response, path),
+            plan: nullableLiteralField(subscription, "plan", billingPlans, response, path),
             access: literalField(subscription, "access", accesses, response, path),
             currentPeriodEnd: timestampField(subscription, "currentPeriodEnd", response, path),
             cancelAt: nullableTimestampField(subscription, "cancelAt", response, path),

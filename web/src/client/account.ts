@@ -1,11 +1,26 @@
-// Hesap sayfası: `/v1/me` (plan durumu etiketi, kalan deneme ve bitiş tarihi, abonede aylık saat, abonelik ve ek süre),
-// Abone ol (Checkout), Aboneliği yönet (Portal), çıkış ve onaylı hesap silme (`DELETE /v1/me`). Oturum yoksa giriş
-// sayfasına geçilir.
-import { ApiRequestError, type Entitlements, type RawResponse, type SubscriptionInfo, parseEntitlements, parseRedirectUrl } from "./api";
+// Hesap sayfası: `/v1/me` (plan durumu etiketi, aylık ya da yıllık plan, kalan deneme ve bitiş tarihi, abonede aylık
+// saat, abonelik ve ek süre), plan seçimi (yıllık seçili) ve davet kodu (`POST /v1/referral/validate`) ile Abone ol
+// (Checkout), Aboneliği yönet (Portal), abonenin davet kartı (`GET /v1/referral`), çıkış ve onaylı hesap silme
+// (`DELETE /v1/me`). Adresteki `?plan=` ve `?code=` (fiyat ve davet sayfalarından) girişten önce saklanır; oturum yoksa
+// giriş sayfasına geçilir.
+import {
+  ApiRequestError,
+  type Entitlements,
+  type JsonObject,
+  type RawResponse,
+  type ReferralInfo,
+  type SubscriptionInfo,
+  parseEntitlements,
+  parseRedirectUrl,
+  parseReferral,
+  parseValidatedReferralCode,
+} from "./api";
+import { forgetInviteCode, storeInviteCode, storePlan, storedInviteCode, storedPlan } from "./checkout-choice";
 import { type ClientCopy, clientCopy, fill } from "./copy";
 import { dataValue, element, errorText, hideNotice, showNotice } from "./dom";
 import { SignedOutError, authorizedSend, claimTabSession, clearSession, hasSession, signOut } from "./session";
 import { siteLocale } from "../config";
+import { type BillingPlan, billingPlanOf, normalizedInviteCode, recommendedPlan } from "../lib/plans";
 
 /** Ödeme dönüşünde aboneliğin görünmesi için en çok kaç kez, kaç ms arayla yeniden bakılır (webhook gecikmesi). */
 const paymentPollAttempts: number = 6;
@@ -59,6 +74,15 @@ function formatDate(iso: string, locale: string): string {
 /** Saati sitenin yerel ayarında (en çok bir ondalık) yazar. Saf fonksiyondur. */
 function formatHours(hours: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
+}
+
+/** Planın adı: denemede deneme; abonelikte aylık, yıllık ya da (fiyat tanınmıyorsa) yalnızca ürün adı. Saf fonksiyondur. */
+function planName(me: Entitlements, text: ClientCopy): string {
+  if (me.plan !== "subscription") {
+    return text.plan.trial;
+  }
+  const plan: BillingPlan | null = me.subscription === null ? null : me.subscription.plan;
+  return plan === null ? text.plan.subscription : text.plan[plan];
 }
 
 /** Deneme durumu: başlamadı, sürüyor ya da bitti (toplantılar harcandı veya süre doldu). Saf fonksiyondur. */
@@ -117,7 +141,7 @@ function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
 export function accountView(me: Entitlements, text: ClientCopy, locale: string, now: Date): AccountView {
   const subscribed: boolean = me.plan === "subscription";
   return {
-    plan: subscribed ? text.plan.subscription : text.plan.trial,
+    plan: planName(me, text),
     planPill: planPill(me, text, now),
     trial: subscribed ? null : trialText(me, text, locale, now),
     trialMeter: !subscribed && trialPhase(me, now) === "running" ? { left: me.trialMeetingsLeft, total: me.trialMeetingsTotal } : null,
@@ -162,6 +186,8 @@ function render(view: AccountView): void {
   meter.value = view.hoursUsed;
   meter.textContent = view.hours;
   element("subscribe-button", HTMLButtonElement).classList.toggle("hidden", !view.canSubscribe);
+  element("plan-choice", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
+  element("invite", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
   element("manage-button", HTMLButtonElement).classList.toggle("hidden", !view.canManage);
   element("subscribe-note", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
   element("manage-note", HTMLElement).classList.toggle("hidden", view.canSubscribe || !view.canManage);
@@ -192,22 +218,247 @@ async function fetchMeAfterPayment(): Promise<Entitlements> {
 }
 
 /** Checkout ya da Portal adresini alıp oraya geçer. */
-async function openBilling(path: "/v1/billing/checkout" | "/v1/billing/portal"): Promise<void> {
-  const response: RawResponse = await authorizedSend({ method: "POST", path, body: {}, attempts: 1 });
+async function openBilling(path: "/v1/billing/checkout" | "/v1/billing/portal", body: JsonObject): Promise<void> {
+  const response: RawResponse = await authorizedSend({ method: "POST", path, body, attempts: 1 });
   window.location.assign(parseRedirectUrl(response, path));
 }
 
-/** Abone ol: bitmemiş abonelik varsa sunucu 409 döner, Portal açılır. */
-async function subscribe(): Promise<void> {
+/** Checkout gövdesi: seçilen plan ve (doğrulanmışsa) davet kodu. Saf fonksiyondur. */
+export function checkoutBody(plan: BillingPlan, referralCode: string | null): JsonObject {
+  return referralCode === null ? { plan } : { plan, referralCode };
+}
+
+/** Davet hatasının kodu (sunucunun `referral_*` kodları); başka hata null. Saf fonksiyondur. */
+function inviteErrorCode(error: unknown): keyof ClientCopy["inviteErrors"] | null {
+  if (!(error instanceof ApiRequestError)) {
+    return null;
+  }
+  const codes: readonly (keyof ClientCopy["inviteErrors"])[] = ["referral_invalid", "referral_self", "referral_not_eligible", "referral_unavailable"];
+  return codes.find((code: keyof ClientCopy["inviteErrors"]): boolean => code === error.code) ?? null;
+}
+
+/** Plan seçimi ve davet kodu alanının durumu (sayfa ömrünce). */
+interface CheckoutForm {
+  /** Sunucunun doğruladığı kod; yoksa null. */
+  validatedCode: string | null;
+}
+
+/** Seçili plan (radyo düğmeleri; biri her zaman seçilidir). */
+function selectedPlan(): BillingPlan {
+  const checked: HTMLInputElement | null = document.querySelector<HTMLInputElement>('#plan-choice input[name="plan"]:checked');
+  const plan: BillingPlan | null = billingPlanOf(checked === null ? null : checked.value);
+  if (plan === null) {
+    throw new Error("Plan seçimi okunamadı: seçili radyo düğmesi yok.");
+  }
+  return plan;
+}
+
+/** Planı seçer. */
+function selectPlan(plan: BillingPlan): void {
+  const input: HTMLInputElement | null = document.querySelector<HTMLInputElement>(`#plan-choice input[name="plan"][value="${plan}"]`);
+  if (input === null) {
+    throw new Error(`Plan seçiminde "${plan}" düğmesi yok.`);
+  }
+  input.checked = true;
+}
+
+/** Davet durum satırını gösterir (`ok`: uygulandı, `error`: hata, `plain`: denetleniyor); metin null ise gizler. */
+function showInviteStatus(message: string | null, tone: "ok" | "error" | "plain"): void {
+  const status: HTMLElement = element("invite-status", HTMLElement);
+  status.classList.toggle("hidden", message === null);
+  status.classList.toggle("invite__ok", tone === "ok");
+  status.classList.toggle("invite__error", tone === "error");
+  status.textContent = message ?? "";
+}
+
+/** Uygulanan kodun satırını seçili plana göre yazar; kaldır düğmesi yalnızca kod uygulanınca görünür. */
+function renderAppliedInvite(form: CheckoutForm, text: ClientCopy): void {
+  element("invite-remove", HTMLButtonElement).classList.toggle("hidden", form.validatedCode === null);
+  if (form.validatedCode !== null) {
+    showInviteStatus(text.inviteApplied[selectedPlan()], "ok");
+  }
+}
+
+/**
+ * Alandaki kodu sunucuda doğrular. Geçerliyse kaydedilir ve true; biçimsiz ya da sunucu reddederse satırda neden yazar
+ * ve false. Ağ ve beklenmeyen hatalar fırlatılır (düğmenin bildirimi gösterir).
+ */
+async function applyInvite(form: CheckoutForm, text: ClientCopy): Promise<boolean> {
+  const input: HTMLInputElement = element("invite-input", HTMLInputElement);
+  form.validatedCode = null;
+  renderAppliedInvite(form, text);
+  const code: string | null = normalizedInviteCode(input.value);
+  if (code === null) {
+    showInviteStatus(text.inviteErrors.format, "error");
+    return false;
+  }
+  showInviteStatus(text.inviteChecking, "plain");
+  const path: string = "/v1/referral/validate";
   try {
-    await openBilling("/v1/billing/checkout");
+    const response: RawResponse = await authorizedSend({ method: "POST", path, body: { code }, attempts: 1 });
+    form.validatedCode = parseValidatedReferralCode(response, path);
+  } catch (error: unknown) {
+    const reason: keyof ClientCopy["inviteErrors"] | null = inviteErrorCode(error);
+    if (reason === null) {
+      showInviteStatus(null, "plain");
+      throw error;
+    }
+    if (reason !== "referral_unavailable") {
+      // Bu hesapta kullanılamayan kod saklanmaz: sonraki ziyarette yeniden denenmez.
+      forgetInviteCode();
+    }
+    showInviteStatus(text.inviteErrors[reason], "error");
+    return false;
+  }
+  input.value = form.validatedCode;
+  storeInviteCode(form.validatedCode);
+  renderAppliedInvite(form, text);
+  return true;
+}
+
+/** Davet kodunu kaldırır: alan boşalır, kayıt silinir. */
+function removeInvite(form: CheckoutForm, text: ClientCopy): void {
+  form.validatedCode = null;
+  element("invite-input", HTMLInputElement).value = "";
+  forgetInviteCode();
+  renderAppliedInvite(form, text);
+  showInviteStatus(null, "plain");
+}
+
+/**
+ * Abone ol: alanda doğrulanmamış bir kod varsa önce doğrulanır (geçersizse Checkout açılmaz, satırda neden yazar).
+ * Bitmemiş abonelik varsa sunucu 409 döner, Portal açılır; Checkout davet kodunu reddederse neden satırda yazar.
+ */
+async function subscribe(form: CheckoutForm, text: ClientCopy): Promise<void> {
+  const typed: string = element("invite-input", HTMLInputElement).value.trim();
+  if (typed !== "" && form.validatedCode !== normalizedInviteCode(typed) && !(await applyInvite(form, text))) {
+    return;
+  }
+  try {
+    await openBilling("/v1/billing/checkout", checkoutBody(selectedPlan(), form.validatedCode));
   } catch (error: unknown) {
     if (error instanceof ApiRequestError && error.code === "subscription_exists") {
-      await openBilling("/v1/billing/portal");
+      await openBilling("/v1/billing/portal", {});
+      return;
+    }
+    const reason: keyof ClientCopy["inviteErrors"] | null = inviteErrorCode(error);
+    if (reason !== null) {
+      form.validatedCode = null;
+      renderAppliedInvite(form, text);
+      showInviteStatus(text.inviteErrors[reason], "error");
       return;
     }
     throw error;
   }
+}
+
+/** Plan seçimini ve davet alanını bağlar; kayıtlı plan ve kod alanlara yazılır (kod sayfa açılınca doğrulanır). */
+function bindCheckoutForm(form: CheckoutForm, text: ClientCopy, notice: HTMLElement, signInPath: string): void {
+  selectPlan(storedPlan() ?? recommendedPlan);
+  for (const input of Array.from(document.querySelectorAll<HTMLInputElement>('#plan-choice input[name="plan"]'))) {
+    input.addEventListener("change", (): void => {
+      storePlan(selectedPlan());
+      renderAppliedInvite(form, text);
+    });
+  }
+  bindAction(element("invite-apply", HTMLButtonElement), notice, text, signInPath, async (): Promise<void> => {
+    await applyInvite(form, text);
+  });
+  element("invite-remove", HTMLButtonElement).addEventListener("click", (): void => {
+    removeInvite(form, text);
+  });
+  element("invite-input", HTMLInputElement).addEventListener("keydown", (event: KeyboardEvent): void => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      element("invite-apply", HTMLButtonElement).click();
+    }
+  });
+}
+
+/** Kayıtlı davet kodu varsa alanı açar, kodu yazar ve doğrular (abone olabilen hesapta). */
+async function prefillInvite(form: CheckoutForm, text: ClientCopy): Promise<void> {
+  const code: string | null = storedInviteCode();
+  if (code === null) {
+    return;
+  }
+  element("invite", HTMLDetailsElement).open = true;
+  element("invite-input", HTMLInputElement).value = code;
+  await applyInvite(form, text);
+}
+
+/** `GET /v1/referral`. */
+async function fetchReferral(): Promise<ReferralInfo> {
+  const path: string = "/v1/referral";
+  const response: RawResponse = await authorizedSend({ method: "GET", path, body: null, attempts: 3 });
+  return parseReferral(response, path);
+}
+
+/** Davet kartının sayı satırı. Saf fonksiyondur. */
+export function referralStatsText(referral: ReferralInfo, text: ClientCopy): string {
+  return fill(text.referralStats, {
+    joined: String(referral.joined),
+    rewarded: String(referral.rewarded),
+    pending: String(referral.pending),
+    left: String(referral.rewardsLeftThisYear),
+    cap: String(referral.rewardsPerYear),
+  });
+}
+
+/** Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. */
+function renderReferral(referral: ReferralInfo, text: ClientCopy, notice: HTMLElement): void {
+  const card: HTMLElement = element("referral-card", HTMLElement);
+  const inviteUrl: string | null = referral.inviteUrl;
+  if (!referral.enabled || referral.code === null || inviteUrl === null) {
+    card.classList.add("hidden");
+    return;
+  }
+  element("referral-code", HTMLElement).textContent = referral.code;
+  element("referral-stats", HTMLElement).textContent = referralStatsText(referral, text);
+  const copied: HTMLElement = element("referral-copied", HTMLElement);
+  const button: HTMLButtonElement = element("referral-copy", HTMLButtonElement);
+  button.onclick = (): void => {
+    hideNotice(notice);
+    navigator.clipboard
+      .writeText(inviteUrl)
+      .then((): void => {
+        copied.classList.remove("hidden");
+      })
+      .catch((error: unknown): void => {
+        console.error("invite_link_copy_failed", { error: error instanceof Error ? error.message : String(error) });
+        showNotice(notice, fill(text.errors.generic, { code: "clipboard" }));
+      });
+  };
+  card.classList.remove("hidden");
+}
+
+/** Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır). */
+async function loadReferral(text: ClientCopy, notice: HTMLElement): Promise<void> {
+  try {
+    renderReferral(await fetchReferral(), text, notice);
+  } catch (error: unknown) {
+    if (error instanceof SignedOutError) {
+      throw error;
+    }
+    console.error("referral_load_failed", { error: error instanceof Error ? error.message : String(error) });
+    element("referral-card", HTMLElement).classList.add("hidden");
+  }
+}
+
+/**
+ * Adresteki `?plan=` ve `?code=` seçimlerini saklar (girişe yönlendirmeden önce; sorgu adresten silinir). Biçimsiz kod
+ * saklanmaz.
+ */
+function rememberQueryChoices(params: URLSearchParams): boolean {
+  const plan: BillingPlan | null = billingPlanOf(params.get("plan"));
+  const rawCode: string | null = params.get("code");
+  const code: string | null = rawCode === null ? null : normalizedInviteCode(rawCode);
+  if (plan !== null) {
+    storePlan(plan);
+  }
+  if (code !== null) {
+    storeInviteCode(code);
+  }
+  return params.has("plan") || params.has("code");
 }
 
 /** Düğmeye uzun süren bir işlem bağlar: süre boyunca düğme kapalı, hata bildirimde. */
@@ -296,6 +547,13 @@ async function main(): Promise<void> {
   const params: URLSearchParams = new URLSearchParams(window.location.search);
   // Stripe Checkout dönüşü: `/account?payment=done`. Sorgu hemen silinir; yenilemede bildirim yeniden görünmez.
   const paymentDone: boolean = params.get("payment") === "done";
+  if (rememberQueryChoices(params) && !paymentDone) {
+    history.replaceState(null, "", window.location.pathname);
+  }
+  if (paymentDone) {
+    // Ödeme tamamlandı: davet kodu kullanıldı (ya da artık gerekmiyor).
+    forgetInviteCode();
+  }
   await claimTabSession();
   if (!hasSession()) {
     if (paymentDone) {
@@ -312,8 +570,10 @@ async function main(): Promise<void> {
     history.replaceState(null, "", window.location.pathname);
   }
 
-  bindAction(element("subscribe-button", HTMLButtonElement), notice, text, signInPath, subscribe);
-  bindAction(element("manage-button", HTMLButtonElement), notice, text, signInPath, (): Promise<void> => openBilling("/v1/billing/portal"));
+  const form: CheckoutForm = { validatedCode: null };
+  bindCheckoutForm(form, text, notice, signInPath);
+  bindAction(element("subscribe-button", HTMLButtonElement), notice, text, signInPath, (): Promise<void> => subscribe(form, text));
+  bindAction(element("manage-button", HTMLButtonElement), notice, text, signInPath, (): Promise<void> => openBilling("/v1/billing/portal", {}));
   bindAction(element("signout-button", HTMLButtonElement), notice, text, signInPath, async (): Promise<void> => {
     try {
       await signOut();
@@ -325,9 +585,16 @@ async function main(): Promise<void> {
 
   try {
     const me: Entitlements = paymentDone ? await fetchMeAfterPayment() : await fetchMe();
-    render(accountView(me, text, siteLocale, new Date()));
+    const view: AccountView = accountView(me, text, siteLocale, new Date());
+    render(view);
     element("account-loading", HTMLElement).classList.add("hidden");
     element("account-content", HTMLElement).classList.remove("hidden");
+    if (view.canSubscribe) {
+      await prefillInvite(form, text);
+    }
+    if (me.plan === "subscription") {
+      await loadReferral(text, notice);
+    }
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {
       window.location.replace(signInPath);

@@ -3,7 +3,8 @@
 // birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
 // Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
 // karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir. Hesap sayfası her
-// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor) çekilir. Sayfa sonundaki
+// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor) çekilir; abonede davet
+// kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
 // Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu>
@@ -65,13 +66,17 @@ const targets: readonly Target[] = [
   { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false, account: null },
   { name: "privacy", path: "/privacy", ready: "main", signedIn: false, account: null },
   { name: "terms", path: "/terms", ready: "main", signedIn: false, account: null },
+  { name: "invite", path: "/invite", ready: "main", signedIn: false, account: null },
   { name: "notfound", path: "/no-such-page", ready: "main", signedIn: false, account: null },
-  { name: "account", path: "/account?payment=done", ready: "#account-content:not(.hidden)", signedIn: true, account: "active" },
+  { name: "account", path: "/account?payment=done", ready: "#referral-card:not(.hidden) #referral-stats:not(:empty)", signedIn: true, account: "active" },
   { name: "account-trial-new", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-new" },
   { name: "account-trial-running", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-running" },
   { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
   { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
   { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
+  // Davet koduyla gelinir: kod saklanır (sonraki hesap sayfalarında da dolar), bu yüzden hesap sayfalarından sonra.
+  { name: "account-invite", path: "/account?code=k7m2-qx9d&plan=monthly", ready: "#invite-status.invite__ok", signedIn: true, account: "trial-ended" },
+  { name: "invite-code", path: "/invite?code=K7M2QX9D", ready: "#invite-code-box:not(.hidden)", signedIn: false, account: null },
   { name: "admin", path: "/admin", ready: "#kpi-mrr:not(:empty)", signedIn: true, account: null },
   { name: "admin-insights", path: "/admin#insights", ready: "#insights-funnel-rows tr", signedIn: true, account: null },
   { name: "admin-users", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
@@ -102,6 +107,7 @@ function meFixture(state: AccountState, now: Date): object {
   const base = { userId: "usr_example", trialMeetingsTotal: 3, trialDays: 7, monthlyHoursCap: 10 };
   const subscription = (access: "active" | "grace", cancelAt: string | null): object => ({
     status: access === "grace" ? "past_due" : "active",
+    plan: access === "grace" ? "monthly" : cancelAt === null ? "yearly" : "monthly",
     currentPeriodEnd: at(20),
     cancelAt,
     access,
@@ -125,13 +131,27 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
   const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
   return {
     "/v1/me": meFixture("active", now),
+    "/v1/referral": {
+      enabled: true,
+      code: "K7M2QX9D",
+      inviteUrl: "http://localhost:8788/invite?code=K7M2QX9D",
+      joined: 3,
+      rewarded: 1,
+      pending: 1,
+      rewardsLeftThisYear: 11,
+      rewardsPerYear: 12,
+      rewardUsd: 5.99,
+      holdDays: 30,
+    },
+    "/v1/referral/validate": { code: "K7M2QX9D" },
     "/v1/download/mac/version": { version: "0.1.5" },
     "/v1/admin/stats": {
       generatedAt: now.toISOString(),
       downloads: { total: 1284, last30Days: days.map((day: string, index: number) => ({ day, count: wave(index, 9) })) },
       users: { total: 412, newLast30Days: days.map((day: string, index: number) => ({ day, count: wave(index + 5, 3) })), byProvider: { apple: 251, google: 161 } },
       trials: { activeTrialUsers: 96, exhaustedTrialUsers: 188 },
-      subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, mrrUsd: 425.29 },
+      subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, monthly: 48, yearly: 18, mrrUsd: 361.02 },
+      referrals: { joined: 9, pending: 3, granted: 5, voided: 1 },
       meetings: { last30Days: days.map((day: string, index: number) => ({ day, trial: wave(index, 4), subscription: wave(index + 2, 7) })), hoursThisMonth: 213.5 },
       spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },
       tokens: { thisMonth: 48_210_000 },
@@ -167,9 +187,9 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         plan: index === 0 ? "subscription" : index === 1 ? "trial" : index === 2 ? "subscription" : "free",
         subscription:
           index === 0
-            ? { status: "active", access: "active", currentPeriodEnd: at(20), cancelAt: null, pastDueSince: null, graceEndsAt: null, updatedAt: at(-10) }
+            ? { status: "active", plan: "yearly", access: "active", currentPeriodEnd: at(20), cancelAt: null, pastDueSince: null, graceEndsAt: null, updatedAt: at(-10) }
             : index === 2
-              ? { status: "past_due", access: "grace", currentPeriodEnd: at(28), cancelAt: null, pastDueSince: at(-2), graceEndsAt: at(5), updatedAt: at(-2) }
+              ? { status: "past_due", plan: "monthly", access: "grace", currentPeriodEnd: at(28), cancelAt: null, pastDueSince: at(-2), graceEndsAt: at(5), updatedAt: at(-2) }
               : null,
         trial: index === 3 ? { used: 0, left: 3, startedAt: null, endsAt: null } : { used: index === 1 ? 1 : 3, left: index === 1 ? 2 : 0, startedAt: at(-12), endsAt: at(-5) },
         meetingsTotal: [42, 1, 17, 0][index] ?? 0,
@@ -186,7 +206,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         provider: "apple",
         createdAt: now.getTime() - 5 * 86_400_000,
         plan: "subscription",
-        subscription: { status: "active", access: "active", currentPeriodEnd: at(20), cancelAt: at(20), pastDueSince: null, graceEndsAt: null, updatedAt: at(-1) },
+        subscription: { status: "active", plan: "yearly", access: "active", currentPeriodEnd: at(20), cancelAt: at(20), pastDueSince: null, graceEndsAt: null, updatedAt: at(-1) },
         trial: { used: 3, left: 0, startedAt: at(-12), endsAt: at(-5) },
         meetingsTotal: 42,
         hoursThisMonth: 8.25,

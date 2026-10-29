@@ -1,13 +1,16 @@
 ---
 // Hesap sayfası: başlıkta plan durumu (etiket), plan kartı (plan, deneme ya da abonelik satırı, abonede aylık kullanım,
-// Abone ol / Aboneliği yönet ve fiyat, yenileme notu), uygulamayı indirme kartı, yardım bağlantıları, çıkış ve ayrı
-// duran, varsayılan kapalı hesap silme alanı (<details>; onay penceresiyle). Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
+// abone olmayanda plan seçimi (yıllık seçili) ve davet kodu alanı, Abone ol / Aboneliği yönet, yenileme notu), abonede
+// davet kartı (kod, davet bağlantısını kopyalama, sayılar), uygulamayı indirme kartı, yardım bağlantıları, çıkış ve ayrı
+// duran, varsayılan kapalı hesap silme alanı (<details>; onay penceresiyle). Değerler tarayıcıda `/v1/me` ve
+// `/v1/referral`'dan doldurulur (src/client/account.ts).
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
 import { macDownloadUrl } from "../config";
-import { type AccountCopy, type CommonCopy, copy } from "../copy";
+import { type AccountCopy, type CommonCopy, type PlanOptionCopy, copy } from "../copy";
+import { recommendedPlan } from "../lib/plans";
 import { routes } from "../routes";
 import { siteConfig } from "../site";
 
@@ -75,6 +78,54 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
               </div>
             </dl>
 
+            <fieldset id="plan-choice" class="plan-choice hidden">
+              <legend class="plan-choice__legend">{text.planChoiceLegend}</legend>
+              <div class="plan-choice__options">
+                {
+                  copy.pricing.plans.map((option: PlanOptionCopy) => (
+                    <label class="plan-choice__option">
+                      <input type="radio" name="plan" value={option.plan} checked={option.plan === recommendedPlan} />
+                      <span class="plan-choice__text">
+                        <span class="plan-choice__name">
+                          {option.name}
+                          {option.badge === null ? null : <span class="pill pill--ok">{option.badge}</span>}
+                        </span>
+                        <span class="plan-choice__price tabular">
+                          {option.price} <span class="muted">{option.per}</span>
+                        </span>
+                        <span class="small muted">{option.detail}</span>
+                      </span>
+                    </label>
+                  ))
+                }
+              </div>
+            </fieldset>
+
+            <details id="invite" class="invite hidden">
+              <summary class="invite__summary">
+                {text.invite.summary}
+                <Icon name="chevron-down" size={16} class="invite__chevron" />
+              </summary>
+              <div class="invite__body">
+                <label class="invite__label" for="invite-input">{text.invite.label}</label>
+                <div class="invite__row">
+                  <input
+                    id="invite-input"
+                    class="input invite__input"
+                    type="text"
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                    maxlength="24"
+                    placeholder={text.invite.placeholder}
+                  />
+                  <button id="invite-apply" class="button button--secondary button--small" type="button">{text.invite.apply}</button>
+                  <button id="invite-remove" class="button button--secondary button--small hidden" type="button">{text.invite.remove}</button>
+                </div>
+                <p id="invite-status" class="small hidden" role="status"></p>
+              </div>
+            </details>
+
             <div class="plan-card__actions">
               <button id="subscribe-button" class="button button--primary hidden" type="button">{text.subscribe}</button>
               <button id="manage-button" class="button button--secondary hidden" type="button">{text.manage}</button>
@@ -85,6 +136,20 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
         </article>
 
         <div class="account__side">
+          <article id="referral-card" class="card side-card referral hidden" aria-labelledby="referral-title">
+            <span class="icon-chip"><Icon name="gift" size={20} class="" /></span>
+            <h2 class="title-m" id="referral-title">{text.referral.title}</h2>
+            <p class="muted">{text.referral.text}</p>
+            <div class="referral__code-box">
+              <span class="small muted">{text.referral.codeLabel}</span>
+              <span id="referral-code" class="referral__code tabular"></span>
+            </div>
+            <button id="referral-copy" class="button button--primary button--small" type="button">{text.referral.copyLink}</button>
+            <p id="referral-copied" class="small referral__copied hidden" role="status">{text.referral.copied}</p>
+            <p id="referral-stats" class="small muted"></p>
+            <a class="text-link" href={routes.invite}>{text.referral.howItWorks} <Icon name="arrow-right" size={16} class="" /></a>
+          </article>
+
           <article class="card side-card" aria-labelledby="app-title">
             <span class="icon-chip"><Icon name="laptop" size={20} class="" /></span>
             <h2 class="title-m" id="app-title">{text.appTitle}</h2>
@@ -277,6 +342,149 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
     margin-top: 6px;
   }
 
+  /* ---------- Plan seçimi ve davet kodu ---------- */
+
+  .plan-choice {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    margin: 22px 0 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .plan-choice__legend {
+    margin-bottom: 12px;
+    padding: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .plan-choice__options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .plan-choice__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    cursor: pointer;
+    transition: border-color 160ms ease, background-color 160ms ease;
+  }
+
+  .plan-choice__option:has(input:checked) {
+    border-color: color-mix(in srgb, var(--ink) 60%, var(--line));
+    background: color-mix(in srgb, var(--ink) 4%, var(--card));
+  }
+
+  .plan-choice__option:has(input:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .plan-choice__option input {
+    flex: none;
+    margin: 3px 0 0;
+    accent-color: var(--ink);
+  }
+
+  .plan-choice__text {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .plan-choice__name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    font-weight: 600;
+  }
+
+  .plan-choice__price {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .plan-choice__price .muted {
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .invite {
+    margin-top: 14px;
+  }
+
+  .invite__summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .invite__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .invite :global(.invite__chevron) {
+    color: var(--muted);
+    transition: transform 200ms ease;
+  }
+
+  .invite[open] :global(.invite__chevron) {
+    transform: rotate(180deg);
+  }
+
+  .invite__body {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .invite__label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .invite__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .invite__input {
+    flex: 1 1 12rem;
+    max-width: 18rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .invite__input::placeholder {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .invite__ok {
+    color: var(--ok);
+  }
+
+  .invite__error {
+    color: var(--danger);
+  }
+
   /* ---------- Yan kartlar ---------- */
 
   .account__side {
@@ -296,6 +504,25 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
 
   .side-card .button {
     margin-top: 6px;
+  }
+
+  .referral__code-box {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-m);
+  }
+
+  .referral__code {
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+  }
+
+  .referral__copied {
+    color: var(--ok);
   }
 
   .help-links {
@@ -455,7 +682,8 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
   }
 
   @media (max-width: 560px) {
-    .plan-row {
+    .plan-row,
+    .plan-choice__options {
       grid-template-columns: minmax(0, 1fr);
     }
 

@@ -17,23 +17,24 @@ interface OrganizationNode {
   readonly email: string;
 }
 
-/** Aylık fiyat tanımı. */
-interface MonthlyPriceNode {
+/** Abonelik döneminin fiyat tanımı: aylık (`MON`, `P1M`) ya da yıllık (`ANN`, `P1Y`). */
+interface PeriodPriceNode {
   readonly "@type": "UnitPriceSpecification";
   readonly price: string;
   readonly priceCurrency: string;
-  readonly unitCode: "MON";
-  readonly billingDuration: "P1M";
+  readonly unitCode: "MON" | "ANN";
+  readonly billingDuration: "P1M" | "P1Y";
   readonly valueAddedTaxIncluded: true;
 }
 
-/** Abonelik teklifi. */
+/** Abonelik teklifi (planın adı `name`'dedir). */
 interface OfferNode {
   readonly "@type": "Offer";
+  readonly name: string;
   readonly price: string;
   readonly priceCurrency: string;
   readonly url: string;
-  readonly priceSpecification: MonthlyPriceNode;
+  readonly priceSpecification: PeriodPriceNode;
 }
 
 /** Uygulama düğümü; yayıncı işletme düğümüne `@id` ile bağlanır. */
@@ -47,7 +48,8 @@ interface SoftwareApplicationNode {
   readonly applicationCategory: "BusinessApplication";
   readonly operatingSystem: string;
   readonly processorRequirements: string;
-  readonly offers: OfferNode;
+  /** Aylık ve yıllık plan. */
+  readonly offers: readonly [OfferNode, OfferNode];
   readonly publisher: { readonly "@id": string };
 }
 
@@ -113,14 +115,36 @@ interface UsdPrice {
   readonly currency: "USD";
 }
 
-/** `$5.99` biçimindeki fiyat metnini tutara çevirir; başka biçimde `StructuredDataSourceError`. Saf fonksiyondur. */
+/**
+ * `$5.99` ya da `$49` biçimindeki fiyat metnini iki ondalıklı tutara çevirir (`49.00`); başka biçimde
+ * `StructuredDataSourceError`. Saf fonksiyondur.
+ */
 function usdPrice(price: string): UsdPrice {
-  const match: RegExpExecArray | null = /^\$([0-9]+\.[0-9]{2})$/.exec(price);
-  const amount: string | undefined = match?.[1];
-  if (amount === undefined) {
-    throw new StructuredDataSourceError(`Fiyat "$<tutar>" biçiminde olmalı; gelen: ${JSON.stringify(price)} (copy.common.price).`);
+  const match: RegExpExecArray | null = /^\$([0-9]+)(?:\.([0-9]{2}))?$/.exec(price);
+  const whole: string | undefined = match?.[1];
+  if (match === null || whole === undefined) {
+    throw new StructuredDataSourceError(`Fiyat "$<tutar>" biçiminde olmalı; gelen: ${JSON.stringify(price)} (copy.common.price, copy.common.yearlyPrice).`);
   }
-  return { amount, currency: "USD" };
+  return { amount: `${whole}.${match[2] ?? "00"}`, currency: "USD" };
+}
+
+/** Planın teklifi: fiyat ve dönemi (vergiler dahil). Saf fonksiyondur. */
+function planOffer(name: string, price: UsdPrice, period: "month" | "year", url: string): OfferNode {
+  return {
+    "@type": "Offer",
+    name,
+    price: price.amount,
+    priceCurrency: price.currency,
+    url,
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price: price.amount,
+      priceCurrency: price.currency,
+      unitCode: period === "month" ? "MON" : "ANN",
+      billingDuration: period === "month" ? "P1M" : "P1Y",
+      valueAddedTaxIncluded: true,
+    },
+  };
 }
 
 /** İşletim sistemi ve işlemci gereksinimi. */
@@ -150,7 +174,7 @@ export function homeStructuredData(
 ): StructuredDataDocument {
   const origin: string = config.siteOrigin;
   const organizationId: string = `${origin}/#organization`;
-  const price: UsdPrice = usdPrice(common.price);
+  const pricingUrl: string = pageUrl("pricing", origin);
   const needs: Requirements = requirements(common.requirementsShort);
   return {
     "@context": "https://schema.org",
@@ -165,20 +189,10 @@ export function homeStructuredData(
         applicationCategory: "BusinessApplication",
         operatingSystem: needs.operatingSystem,
         processorRequirements: needs.processor,
-        offers: {
-          "@type": "Offer",
-          price: price.amount,
-          priceCurrency: price.currency,
-          url: pageUrl("pricing", origin),
-          priceSpecification: {
-            "@type": "UnitPriceSpecification",
-            price: price.amount,
-            priceCurrency: price.currency,
-            unitCode: "MON",
-            billingDuration: "P1M",
-            valueAddedTaxIncluded: true,
-          },
-        },
+        offers: [
+          planOffer(`${productName} monthly`, usdPrice(common.price), "month", pricingUrl),
+          planOffer(`${productName} yearly`, usdPrice(common.yearlyPrice), "year", pricingUrl),
+        ],
         publisher: { "@id": organizationId },
       },
       { "@type": "Organization", "@id": organizationId, name: operator.name, url: origin, email: operator.email },

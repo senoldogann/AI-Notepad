@@ -2,6 +2,7 @@
 // işletme bilgisi tek yerden gelir (config.ts `productName`, legal/operator.ts).
 import { cardStatementDescriptor, productName } from "./config";
 import type { IconName } from "./lib/icons";
+import type { BillingPlan } from "./lib/plans";
 import { operator } from "./legal/operator";
 
 /** Başlık ve açıklama (arama motorları ve paylaşım kartı). */
@@ -63,6 +64,9 @@ export interface CommonCopy {
   readonly darkMode: string;
   readonly price: string;
   readonly perMonth: string;
+  /** Yıllık planın fiyatı (`$49`) ve dönemi. */
+  readonly yearlyPrice: string;
+  readonly perYear: string;
   readonly offer: string;
   readonly requirementsShort: string;
   /** Fiyatın vergiler dahil olduğu (fiyatın hemen altında). */
@@ -219,16 +223,35 @@ export interface HomeCopy {
   readonly finalLead: string;
 }
 
+/** Fiyat sayfasında ve hesap sayfasının plan seçiminde bir plan. */
+export interface PlanOptionCopy {
+  readonly plan: BillingPlan;
+  readonly name: string;
+  readonly price: string;
+  readonly per: string;
+  /** Fiyatın altındaki kısa satır (ör. aylık karşılığı ve faturalama sıklığı). */
+  readonly detail: string;
+  /** Öne çıkan planın rozeti (ör. "Save 32%"); yoksa null. */
+  readonly badge: string | null;
+  /** Fiyat sayfasındaki düğme. */
+  readonly cta: string;
+}
+
 /** Fiyat sayfası. */
 export interface PricingCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  readonly planName: string;
+  /** Plan kartlarının başlığı (ekran okuyucular için). */
+  readonly plansTitle: string;
+  readonly plans: readonly PlanOptionCopy[];
+  /** Plan kartlarının altındaki not: deneme ve davet kodu ("{invite}" bağlantının yeri). */
+  readonly plansNote: string;
+  readonly plansInviteLink: string;
+  readonly includedTitle: string;
   readonly planTagline: string;
   readonly included: readonly IconItem[];
   readonly startFree: string;
-  readonly subscribe: string;
   readonly limitsTitle: string;
   readonly limits: readonly IconText[];
   readonly taxTitle: string;
@@ -308,12 +331,31 @@ export interface AccountCopy {
   readonly hoursNote: string;
   readonly renewalLabel: string;
   readonly subscribe: string;
-  /** Abone ol düğmesinin yanında: fiyat (vergiler dahil), otomatik yenileme, iptal, satıcı. */
+  /** Abone olmadan önce plan seçimi (seçenekler `copy.pricing.plans`'tan). */
+  readonly planChoiceLegend: string;
+  /** Davet kodu alanı (abone ol düğmesinin üstünde, varsayılan kapalı). */
+  readonly invite: {
+    readonly summary: string;
+    readonly label: string;
+    readonly placeholder: string;
+    readonly apply: string;
+    readonly remove: string;
+  };
+  /** Abone ol düğmesinin yanında: vergiler dahil, otomatik yenileme, iptal, satıcı. */
   readonly subscribeNote: string;
   readonly manage: string;
   /** Aboneliği yönet düğmesinin yanında (kart, iptal; makbuzlar Link'ten e-postayla, sipariş geçmişi link.com'da). */
   readonly manageNote: string;
   readonly signOut: string;
+  /** Abonenin davet kartı ("bir ay ver, bir ay kazan"). */
+  readonly referral: {
+    readonly title: string;
+    readonly text: string;
+    readonly codeLabel: string;
+    readonly copyLink: string;
+    readonly copied: string;
+    readonly howItWorks: string;
+  };
   /** "Uygulamayı indir" kartı. */
   readonly appTitle: string;
   readonly appText: string;
@@ -334,6 +376,28 @@ export interface AccountCopy {
   readonly deletedRedirect: string;
   readonly backHome: string;
   readonly noScript: string;
+}
+
+/** Davet sayfası ("bir ay ver, bir ay kazan"). */
+export interface InviteCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly stepsTitle: string;
+  readonly steps: readonly IconText[];
+  readonly rulesTitle: string;
+  readonly rules: readonly string[];
+  /** Adresteki `?code=` ile gelen kodun kutusu. */
+  readonly codeLabel: string;
+  readonly codeNote: string;
+  readonly subscribeWithCode: string;
+  /** Davet edenin kendi kodu: hesap sayfası ve uygulama. */
+  readonly ownCodeTitle: string;
+  readonly ownCodeText: string;
+  readonly ownCodeLink: string;
+  readonly termsNote: string;
+  readonly termsLink: string;
 }
 
 /** Yönetim panelinin kullanıcılar görünümü. */
@@ -666,6 +730,7 @@ export interface Copy {
   readonly signIn: SignInCopy;
   readonly contact: ContactCopy;
   readonly account: AccountCopy;
+  readonly invite: InviteCopy;
   readonly admin: AdminCopy;
   readonly notFound: NotFoundCopy;
   readonly privacyMeta: PageMeta;
@@ -698,10 +763,12 @@ export const copy: Copy = {
     darkMode: "Dark mode",
     price: "$5.99",
     perMonth: "/ month",
-    offer: "3 meetings or 7 days free, then $5.99 a month, taxes included",
+    yearlyPrice: "$49",
+    perYear: "/ year",
+    offer: "3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included",
     requirementsShort: "macOS 26 or later · Apple silicon",
     taxNote: "Taxes included.",
-    renewalNote: "Renews automatically every month until you cancel. Cancel anytime.",
+    renewalNote: "Renews automatically every month or year, depending on your plan, until you cancel. Cancel anytime.",
     ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
     footer: {
       tagline,
@@ -907,15 +974,15 @@ export const copy: Copy = {
         source: "Client call · Nordia",
       },
     },
-    pricingTitle: "One plan. Simple pricing.",
-    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
+    pricingTitle: "Simple pricing, monthly or yearly.",
+    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month or $49 a year, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
     pricingCompare: "Compare with Granola and Otter",
     faqTitle: "Questions",
     faq: [
       {
         question: "How does the free trial work?",
-        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month, taxes included.",
+        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month or $49 a year, taxes included.",
       },
       {
         question: "Does a bot join my meetings?",
@@ -945,11 +1012,34 @@ export const copy: Copy = {
   pricing: {
     meta: {
       title: `Pricing — ${productName}`,
-      description: "One plan: $5.99 a month, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
+      description: "$5.99 a month or $49 a year, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
-    title: "One plan. Simple pricing.",
-    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, taxes included.",
-    planName: productName,
+    title: "Simple pricing, monthly or yearly.",
+    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, or $49 a year and save 32%. Taxes included.",
+    plansTitle: "Plans",
+    plans: [
+      {
+        plan: "monthly",
+        name: "Monthly",
+        price: "$5.99",
+        per: "/ month",
+        detail: "Billed every month. Taxes included.",
+        badge: null,
+        cta: "Choose monthly",
+      },
+      {
+        plan: "yearly",
+        name: "Yearly",
+        price: "$49",
+        per: "/ year",
+        detail: "About $4.08 a month, billed once a year. Taxes included.",
+        badge: "Save 32%",
+        cta: "Choose yearly",
+      },
+    ],
+    plansNote: "Both plans include everything below and start with 3 meetings or 7 days free. Got an invite from a friend? {invite}",
+    plansInviteLink: "How invites work",
+    includedTitle: "Everything included",
     planTagline: "Everything from live transcript to tasks.",
     included: [
       { icon: "gift", text: "3 meetings or 7 days free, no card needed" },
@@ -961,7 +1051,6 @@ export const copy: Copy = {
       { icon: "check-circle", text: "Cancel anytime" },
     ],
     startFree: "Start free",
-    subscribe: "Subscribe",
     limitsTitle: "The limits, plainly",
     limits: [
       { icon: "gift", title: "Trial", text: "3 meetings or 7 days from your first meeting, whichever comes first; each meeting up to 90 minutes. Opening a new account does not reset the trial." },
@@ -975,7 +1064,7 @@ export const copy: Copy = {
     ],
     taxTitle: "Payments and taxes",
     taxText:
-      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
+      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month or $49 a year includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
     faqTitle: "Questions",
     faq: [
       {
@@ -985,6 +1074,16 @@ export const copy: Copy = {
       {
         question: "What if a payment fails?",
         answer: "The payment is retried over a few days. You keep access meanwhile and can update your card under “Manage subscription” or at link.com.",
+      },
+      {
+        question: "Can I switch between monthly and yearly?",
+        answer:
+          "Not with a single click yet. Cancel your current plan with “Manage subscription” on your account page; you keep access until the end of the period you paid for. When it has ended, subscribe again from your account page and choose the other plan.",
+      },
+      {
+        question: "How do invites work?",
+        answer:
+          "Subscribers get a personal invite code in the app and on their account page. A friend who subscribes with it gets their first month free on the monthly plan, or $5.99 off their first year on the yearly plan. Once your friend's first payment has gone through and hasn't been refunded for 30 days, you get $5.99 off your next payment. You can earn up to 12 rewards a year.",
       },
       {
         question: "Can I get a refund?",
@@ -1041,7 +1140,7 @@ export const copy: Copy = {
       plans: "Plans for teams",
     },
     us: {
-      price: "$5.99 a month, taxes included",
+      price: "$5.99 a month or $49 a year, taxes included",
       free: "Free trial: 3 meetings or 7 days, whichever comes first; no card needed",
       capture: "No bot. Listens to your Mac's system audio and microphone",
       platforms: "Mac with Apple silicon, macOS 26 or later",
@@ -1051,7 +1150,7 @@ export const copy: Copy = {
       ask: "Ask across all your meetings; answers link to the meetings they came from",
       integrations: "Slack, Microsoft Teams, Discord, Notion, Apple Notes, an Obsidian folder, webhooks and MCP",
       storage: "Notes, transcripts and recordings are saved on your Mac",
-      plans: "One personal plan",
+      plans: "One personal plan, billed monthly or yearly",
     },
     topicColumn: "Topic",
     tableTitle: "Side by side",
@@ -1063,7 +1162,7 @@ export const copy: Copy = {
     readComparison: "Read the comparison",
     trademarks: `Granola and Otter.ai are trademarks of their owners. ${productName} isn't affiliated with either company. Plans and prices change; check the vendor's site before you buy.`,
     ctaTitle: `Try ${productName} on your next meeting`,
-    ctaText: "3 meetings or 7 days free, no card needed. Then $5.99 a month, taxes included.",
+    ctaText: "3 meetings or 7 days free, no card needed. Then $5.99 a month or $49 a year, taxes included.",
     competitors: {
       granola: {
         meta: {
@@ -1072,7 +1171,7 @@ export const copy: Copy = {
         },
         name: "Granola",
         title: `${productName} vs Granola`,
-        lead: "Both take notes without a bot joining the call. Granola runs on more devices and has team plans; Gistsmith is a Mac app with one price, notes that start with your tasks and live translation.",
+        lead: "Both take notes without a bot joining the call. Granola runs on more devices and has team plans; Gistsmith is a Mac app with simple pricing, notes that start with your tasks and live translation.",
         summary: "Both work without a bot. Granola has a free plan, mobile apps and team plans; Gistsmith is Mac-only, with one personal plan.",
         pricingUrl: "https://www.granola.ai/pricing",
         values: {
@@ -1107,7 +1206,7 @@ export const copy: Copy = {
         pickUs: {
           title: `Pick ${productName} if`,
           points: [
-            "you work on a Mac and want one price: $5.99 a month, taxes included",
+            "you work on a Mac and want simple pricing: $5.99 a month or $49 a year, taxes included",
             "you want every note to open with your own tasks",
             "your meetings are in another language and you want a live translation as people talk",
             "you want notes, transcripts and recordings saved on your own Mac",
@@ -1159,7 +1258,7 @@ export const copy: Copy = {
             "you'd rather no bot joins your calls",
             "you meet in a language beyond the six on Otter's pricing page, or you want a live translation",
             "you want every note to open with your own tasks",
-            "you work on a Mac and want one price: $5.99 a month, taxes included",
+            "you work on a Mac and want simple pricing: $5.99 a month or $49 a year, taxes included",
           ],
         },
       },
@@ -1180,7 +1279,7 @@ export const copy: Copy = {
     readPost: "Read the post",
     backToBlog: "All posts",
     ctaTitle: `Try ${productName}`,
-    ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month, taxes included.",
+    ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included.",
   },
   mcp: {
     meta: {
@@ -1322,10 +1421,26 @@ export const copy: Copy = {
     hoursNote: "Resets on the first day of each month (UTC).",
     renewalLabel: "Subscription",
     subscribe: "Subscribe",
-    subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
+    planChoiceLegend: "Choose a plan",
+    invite: {
+      summary: "Have an invite code?",
+      label: "Invite code",
+      placeholder: "For example K7M2QX9D",
+      apply: "Apply",
+      remove: "Remove",
+    },
+    subscribeNote: "Taxes included. Your plan renews automatically every month or year until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
-    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Renews automatically every month until you cancel.",
+    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Your plan renews automatically until you cancel.",
     signOut: "Sign out",
+    referral: {
+      title: "Give a month, get a month",
+      text: "Friends who subscribe with your code get their first month free. For each one who stays, you get $5.99 off your next payment, up to 12 times a year.",
+      codeLabel: "Your invite code",
+      copyLink: "Copy invite link",
+      copied: "Link copied",
+      howItWorks: "How invites work",
+    },
     appTitle: "Get the app",
     appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,
     helpTitle: "Need help?",
@@ -1345,6 +1460,49 @@ export const copy: Copy = {
     deletedRedirect: "Taking you to the home page…",
     backHome: "Back to the home page",
     noScript: "The account page needs JavaScript.",
+  },
+  invite: {
+    meta: {
+      title: `Invite a friend — ${productName}`,
+      description: `Give a month, get a month: a friend who subscribes to ${productName} with your invite code gets their first month free, and you get $5.99 off your next payment.`,
+    },
+    eyebrow: "Invite a friend",
+    title: "Give a month, get a month.",
+    lead: `Share ${productName} with a friend. They get their first month free, and when they stay, you get a month too.`,
+    stepsTitle: "How it works",
+    steps: [
+      {
+        icon: "gift",
+        title: "Share your code",
+        text: "Every subscriber gets a personal invite code, shown in the app under Settings › Account and on your account page. Send the code or your invite link to a friend.",
+      },
+      {
+        icon: "card",
+        title: "Your friend subscribes with it",
+        text: "On the monthly plan their first month is free; on the yearly plan they get $5.99 off their first year. Invites are for people who haven't subscribed before.",
+      },
+      {
+        icon: "check-circle",
+        title: "You get a month",
+        text: "Once your friend's first payment has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month.",
+      },
+    ],
+    rulesTitle: "The rules, plainly",
+    rules: [
+      "Up to 12 rewards per person in any 12 months.",
+      "One reward for each new paying account. Your own account, or another account of yours, doesn't count.",
+      "A reward is cancelled if your friend's first payment is refunded or disputed.",
+      "Rewards are credit on your next payments, not cash, and can't be exchanged or transferred.",
+      "We may change or end the invite programme; rewards already earned stay yours.",
+    ],
+    codeLabel: "Your invite code",
+    codeNote: "We've saved it in this browser. Subscribe here, or sign in to the Mac app and enter it when you subscribe.",
+    subscribeWithCode: "Subscribe with this code",
+    ownCodeTitle: "Looking for your own code?",
+    ownCodeText: "Subscribers find it in the app under Settings › Account and on their account page.",
+    ownCodeLink: "Go to your account",
+    termsNote: "The full rules are in the",
+    termsLink: "terms of service",
   },
   admin: {
     meta: { title: productName, description: tagline },

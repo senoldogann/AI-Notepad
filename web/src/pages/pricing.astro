@@ -1,12 +1,15 @@
 ---
-// Fiyat sayfası: tek plan (aylık 5,99 $, vergiler dahil), neler dahil, sınırlar, ödeme ve vergiler (satıcı Link) ve SSS.
+// Fiyat sayfası: iki plan (aylık 5,99 $, yıllık 49 $; vergiler dahil; yıllık önerilen), neler dahil, sınırlar, ödeme
+// ve vergiler (satıcı Link) ve SSS. Plan düğmeleri hesap sayfasına seçilen planla gider (`/account?plan=…`); hesap
+// sayfası oturum yoksa önce girişe yönlendirir.
 import Base from "../layouts/Base.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
-import { copy, type CommonCopy, type IconItem, type IconText, type PricingCopy } from "../copy";
+import { copy, type CommonCopy, type IconItem, type IconText, type PlanOptionCopy, type PricingCopy } from "../copy";
 import { faqStructuredData, structuredDataJson } from "../lib/structured-data";
+import { recommendedPlan } from "../lib/plans";
 import { pageUrl, routes } from "../routes";
 import { siteConfig } from "../site";
 
@@ -14,6 +17,11 @@ const text: PricingCopy = copy.pricing;
 const common: CommonCopy = copy.common;
 /** Arama motorları için sayfanın sık sorulan soruları (JSON-LD; aşağıdaki `Faq` ile aynı girdiler). */
 const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pageUrl("pricing", siteConfig.siteOrigin)));
+/** Plan notunun davet bağlantısından önceki ve sonraki parçası (`{invite}`). */
+const [noteBefore, noteAfter]: readonly [string, string] = ((): readonly [string, string] => {
+  const parts: readonly string[] = text.plansNote.split("{invite}");
+  return [parts[0] ?? "", parts[1] ?? ""];
+})();
 ---
 
 <Base page="pricing" meta={text.meta} indexed={true}>
@@ -25,22 +33,54 @@ const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pa
     <p class="lead">{text.lead}</p>
   </section>
 
-  <section class="page" aria-labelledby="plan-title">
+  <section class="page" aria-labelledby="plans-title">
+    <h2 class="visually-hidden" id="plans-title">{text.plansTitle}</h2>
+    <div class="plans">
+      {
+        text.plans.map((option: PlanOptionCopy) => {
+          const featured: boolean = option.plan === recommendedPlan;
+          return (
+            <article class:list={["plan-option", { "plan-option--featured": featured }]} aria-labelledby={`plan-${option.plan}`}>
+              <Film palette={featured ? "rose" : "ocean"} layout={featured ? "clouds-left" : "streaks"} class="plan-option__cover">
+                <Waveform seed={option.name} width={160} height={40} class="plan-option__wave" />
+              </Film>
+              <div class="plan-option__body">
+                <div class="plan-option__head">
+                  <h3 class="title-m" id={`plan-${option.plan}`}>{option.name}</h3>
+                  {option.badge === null ? null : <span class="pill pill--ok">{option.badge}</span>}
+                </div>
+                <p class="plan-option__price">
+                  <span class="tabular">{option.price}</span>
+                  <span class="plan-option__per">{option.per}</span>
+                </p>
+                <p class="small muted">{option.detail}</p>
+                <a
+                  class:list={["button", "button--block", featured ? "button--primary" : "button--secondary"]}
+                  href={`${routes.account}?plan=${option.plan}`}
+                >
+                  {option.cta}
+                </a>
+              </div>
+            </article>
+          );
+        })
+      }
+    </div>
+    <div class="plans__foot">
+      <p class="muted">
+        {noteBefore}<a class="text-link" href={routes.invite}>{text.plansInviteLink}</a>{noteAfter}
+      </p>
+      <p class="small muted">{common.renewalNote}</p>
+      <a class="button button--secondary" href={routes.download}>{text.startFree}</a>
+    </div>
+  </section>
+
+  <section class="page included-section" aria-labelledby="included-title">
     <article class="plan">
-      <Film palette="rose" layout="clouds-left" class="plan__cover">
-        <Waveform seed={text.planName} width={220} height={56} class="plan__wave" />
-      </Film>
       <div class="plan__body">
         <div class="plan__summary">
-          <h2 class="title-m" id="plan-title">{text.planName}</h2>
+          <h2 class="title-l" id="included-title">{text.includedTitle}</h2>
           <p class="muted">{text.planTagline}</p>
-          <p class="plan__price"><span class="tabular">{common.price}</span><span class="plan__per">{common.perMonth}</span></p>
-          <p class="plan__tax small muted">{common.taxNote}</p>
-          <div class="plan__actions">
-            <a class="button button--primary button--block" href={routes.download}>{text.startFree}</a>
-            <a class="button button--secondary button--block" href={routes.account}>{text.subscribe}</a>
-          </div>
-          <p class="plan__renewal small muted">{common.renewalNote}</p>
         </div>
         <ul class="included">
           {
@@ -92,18 +132,93 @@ const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pa
     padding-block: clamp(48px, 8vw, 96px) clamp(32px, 5vw, 56px);
   }
 
-  .plan {
+  /* ---------- Plan kartları ---------- */
+
+  .plans {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    max-width: 880px;
+  }
+
+  .plan-option {
+    display: grid;
+    grid-template-rows: auto 1fr;
     border: 1px solid var(--line);
     border-radius: var(--radius-l);
     background: var(--card);
     overflow: hidden;
   }
 
-  .plan :global(.plan__cover) {
+  /* Önerilen plan (yıllık): vurgulu kenar. */
+  .plan-option--featured {
+    border-color: color-mix(in srgb, var(--ink) 55%, var(--line));
+    box-shadow: var(--elevation);
+  }
+
+  .plan-option :global(.plan-option__cover) {
     display: grid;
     place-items: center;
-    height: clamp(140px, 18vw, 200px);
+    height: clamp(88px, 10vw, 112px);
     border-radius: 0;
+  }
+
+  .plan-option__body {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: clamp(22px, 3vw, 32px);
+  }
+
+  .plan-option__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+  }
+
+  .plan-option__price {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: clamp(2.5rem, 5vw, 3.25rem);
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  .plan-option__per {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+
+  .plan-option .button {
+    margin-top: 14px;
+  }
+
+  .plans__foot {
+    display: grid;
+    justify-items: start;
+    gap: 10px;
+    max-width: 46rem;
+    margin-top: 24px;
+  }
+
+  /* ---------- Neler dahil ---------- */
+
+  .included-section {
+    margin-top: clamp(48px, 7vw, 88px);
+  }
+
+  .plan {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    background: var(--card);
+    overflow: hidden;
   }
 
   .plan__body {
@@ -116,36 +231,7 @@ const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pa
   .plan__summary {
     display: grid;
     align-content: start;
-    gap: 8px;
-  }
-
-  .plan__price {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-top: 14px;
-    font-size: clamp(3rem, 6vw, 4rem);
-    font-weight: 600;
-    letter-spacing: -0.045em;
-    line-height: 1;
-  }
-
-  .plan__per {
-    font-size: 1.0625rem;
-    font-weight: 500;
-    letter-spacing: 0;
-    color: var(--muted);
-  }
-
-  .plan__actions {
-    display: grid;
-    gap: 10px;
-    margin-top: 18px;
-    max-width: 340px;
-  }
-
-  .plan__renewal {
-    max-width: 340px;
+    gap: 12px;
   }
 
   .included {
@@ -208,13 +294,15 @@ const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pa
   }
 
   @media (max-width: 720px) {
+    .plans,
     .plan__body,
     .limits {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .plan__actions {
-      max-width: none;
+    /* Tek sütunda önerilen plan önce gelir. */
+    .plan-option--featured {
+      order: -1;
     }
   }
 </style>
