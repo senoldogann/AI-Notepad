@@ -22,11 +22,13 @@ interface SubscriptionBase {
   readonly plan: BillingPlan | null;
   readonly currentPeriodEnd: string;
   readonly cancelAt: string | null;
+  readonly complimentary: boolean;
 }
 
 /**
  * `GET /v1/me` yanıtındaki abonelik: ek sürenin bitişi yalnızca `grace` durumunda vardır. `cancelAt` iptal edilmiş
- * aboneliğin biteceği andır; yenilenecekse null.
+ * aboneliğin biteceği andır; yenilenecekse null. `complimentary`: yöneticinin verdiği ücretsiz erişim (ödeme yok,
+ * Stripe'ta yönetilecek bir şey yok).
  */
 export type SubscriptionInfo =
   | (SubscriptionBase & { readonly access: "grace"; readonly graceEndsAt: string })
@@ -155,6 +157,15 @@ export function numberField(object: JsonObject, key: string, response: RawRespon
   const value: JsonValue | undefined = object[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new ApiResponseError(path, response.status, `"${key}" sayı değil`, response.text);
+  }
+  return value;
+}
+
+/** Nesnedeki mantıksal alan; değilse (eksikse de) `ApiResponseError`. */
+export function booleanField(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
+  const value: JsonValue | undefined = object[key];
+  if (typeof value !== "boolean") {
+    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değil`, response.text);
   }
   return value;
 }
@@ -331,13 +342,14 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   }
   const currentPeriodEnd: string = stringField(value, "currentPeriodEnd", response, path);
   const cancelAt: string | null = value["cancelAt"] === null ? null : stringField(value, "cancelAt", response, path);
+  const complimentary: boolean = booleanField(value, "complimentary", response, path);
   if (access === "grace") {
-    return { status, plan, currentPeriodEnd, cancelAt, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
+    return { status, plan, currentPeriodEnd, cancelAt, complimentary, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
   }
   if (value["graceEndsAt"] !== null) {
     throw new ApiResponseError(path, response.status, '"graceEndsAt" ek süre dışında null değil', response.text);
   }
-  return { status, plan, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
+  return { status, plan, currentPeriodEnd, cancelAt, complimentary, access, graceEndsAt: null };
 }
 
 /** Nesnedeki mantıksal alan; değilse `ApiResponseError`. */

@@ -3,7 +3,7 @@
 // birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
 // Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
 // karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir. Hesap sayfası her
-// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor) çekilir; abonede davet
+// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor; ücretsiz erişim) çekilir; abonede davet
 // kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
@@ -27,7 +27,7 @@ interface Finding {
 }
 
 /** Hesap sayfasının örnek plan durumları (`/v1/me` yanıtı bunlardan seçilir). */
-type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace";
+type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace" | "complimentary";
 
 /**
  * Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). `account` hesap
@@ -74,6 +74,7 @@ const targets: readonly Target[] = [
   { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
   { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
   { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
+  { name: "account-complimentary", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "complimentary" },
   // Davet koduyla gelinir: kod saklanır (sonraki hesap sayfalarında da dolar), bu yüzden hesap sayfalarından sonra.
   { name: "account-invite", path: "/account?code=k7m2-qx9d&plan=monthly", ready: "#invite-status.invite__ok", signedIn: true, account: "trial-ended" },
   { name: "invite-code", path: "/invite?code=K7M2QX9D", ready: "#invite-code-box:not(.hidden)", signedIn: false, account: null },
@@ -121,6 +122,7 @@ function meFixture(state: AccountState, now: Date): object {
     plan: access === "grace" ? "monthly" : cancelAt === null ? "yearly" : "monthly",
     currentPeriodEnd: at(20),
     cancelAt,
+    complimentary: false,
     access,
     graceEndsAt: access === "grace" ? at(5) : null,
   });
@@ -131,6 +133,14 @@ function meFixture(state: AccountState, now: Date): object {
     active: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 3.4, subscription: subscription("active", null) },
     canceling: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 7.6, subscription: subscription("active", at(20)) },
     grace: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 1.2, subscription: subscription("grace", null) },
+    complimentary: {
+      ...base,
+      plan: "subscription",
+      trialMeetingsLeft: 0,
+      trialEndsAt: null,
+      monthlyHoursUsed: 2.3,
+      subscription: { status: "active", plan: "monthly", currentPeriodEnd: at(36_500), cancelAt: null, complimentary: true, access: "active", graceEndsAt: null },
+    },
   };
   return states[state];
 }
@@ -206,7 +216,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       downloads: { total: 1284, last30Days: days.map((day: string, index: number) => ({ day, count: wave(index, 9) })) },
       users: { total: 412, newLast30Days: days.map((day: string, index: number) => ({ day, count: wave(index + 5, 3) })), byProvider: { apple: 251, google: 161 } },
       trials: { activeTrialUsers: 96, exhaustedTrialUsers: 188 },
-      subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, monthly: 48, yearly: 18, mrrUsd: 361.02, complimentary: 3 },
+      subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, monthly: 46, yearly: 18, mrrUsd: 349.04, complimentary: 3, freeInviteMonth: 2 },
       referrals: { joined: 9, pending: 3, granted: 5, voided: 1 },
       meetings: { last30Days: days.map((day: string, index: number) => ({ day, trial: wave(index, 4), subscription: wave(index + 2, 7) })), hoursThisMonth: 213.5 },
       spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },

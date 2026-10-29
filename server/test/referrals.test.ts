@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { monthlyRecurringRevenueUsd } from "../src/admin";
 import { type Config, parseConfig } from "../src/config";
+import type { Env } from "../src/env";
 import { randomId, randomToken } from "../src/crypto";
 import { ReferralRewardFailedError, type ReferralRewardReport, grantDueReferralRewards } from "../src/referralRewards";
 import { normalizeReferralCode, referralCodeAlphabet, referralCodeFromBytes } from "../src/referrals";
@@ -527,7 +528,50 @@ describe("davet ödülü", () => {
   });
 });
 
+/** Yönetici istatistiğindeki abonelik sayıları (denetlenen alanlar). */
+interface StatsSubscriptions {
+  readonly monthly: number;
+  readonly mrrUsd: number;
+  readonly freeInviteMonth: number;
+}
+
+const adminSubject: string = "davet-yonetici";
+const adminEnv: Env = envWith({ ADMIN_IDENTITIES: `google:${adminSubject}` });
+
+async function subscriptionStats(harness: Harness, admin: Session): Promise<StatsSubscriptions> {
+  const response: Response = await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken, env: adminEnv }));
+  expect(response.status).toBe(200);
+  return (await response.json<{ subscriptions: StatsSubscriptions }>()).subscriptions;
+}
+
 describe("yönetici MRR ve davet sayaçları", () => {
+  it("davetle gelen aylık abonenin ücretsiz ilk ayı MRR'a girmez, ayrı sayılır; ilk ücretli faturadan sonra MRR'a girer", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const before: StatsSubscriptions = await subscriptionStats(harness, admin);
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const friendSession: Session = await signIn(harness);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false);
+    await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
+
+    // Paylaşılan veritabanında başka testlerin satırları da var: fark denetlenir.
+    const inFreeMonth: StatsSubscriptions = await subscriptionStats(harness, admin);
+    expect(inFreeMonth.monthly - before.monthly).toBe(1);
+    expect(inFreeMonth.freeInviteMonth - before.freeInviteMonth).toBe(1);
+    expect(Math.round((inFreeMonth.mrrUsd - before.mrrUsd) * 100)).toBe(599);
+
+    harness.clock.nowMs += 30 * dayMs;
+    await payInvoice(harness, stripe, friend, id("in_second"), 599, code);
+    // Erişim jetonu 15 dakikada dolar: oturum bir kez yenilenir (eski yenileme jetonu yeniden kullanılmaz).
+    const paid: StatsSubscriptions = await subscriptionStats(harness, await refreshed(harness, admin));
+    expect(paid.monthly - before.monthly).toBe(2);
+    expect(paid.freeInviteMonth - before.freeInviteMonth).toBe(0);
+    expect(Math.round((paid.mrrUsd - before.mrrUsd) * 100)).toBe(1198);
+  });
+
   it("MRR yıllığı ayda 1/12 sayar; davet sayaçları istatistikte görünür", async () => {
     // 3 aylık × 5,99 + 2 yıllık × 49 / 12 = 17,97 + 8,1667 = 26,14.
     expect(monthlyRecurringRevenueUsd(3, 2, 5.99, 49)).toBe(26.14);

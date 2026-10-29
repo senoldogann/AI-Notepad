@@ -4,6 +4,7 @@
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
 import {
   ApiResponseError,
+  booleanField,
   type JsonObject,
   type JsonValue,
   type RawResponse,
@@ -50,6 +51,7 @@ export interface AdminStats {
   /**
    * Abonelikler: `monthly` ve `yearly` yenilenecek ödenmiş aboneliklerin plana göre sayısı; `mrrUsd` aylık × aylık fiyat
    * + yıllık × yıllık fiyat / 12. `complimentary`: süren ücretsiz erişim (diğer sayılara ve gelire girmez).
+   * `freeInviteMonth`: davetle gelip ücretsiz ilk ayındaki aylık aboneler (`active`'e girer, `monthly`'ye ve MRR'a girmez).
    */
   readonly subscriptions: {
     readonly active: number;
@@ -60,6 +62,7 @@ export interface AdminStats {
     readonly yearly: number;
     readonly mrrUsd: number;
     readonly complimentary: number;
+    readonly freeInviteMonth: number;
   };
   /** Davet programı: katılan, 30 günlük bekleme süresindeki, ödülü verilen ve iptal edilen davetler. */
   readonly referrals: { readonly joined: number; readonly pending: number; readonly granted: number; readonly voided: number };
@@ -461,6 +464,7 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       yearly: numberField(subscriptions, "yearly", response, path),
       mrrUsd: numberField(subscriptions, "mrrUsd", response, path),
       complimentary: numberField(subscriptions, "complimentary", response, path),
+      freeInviteMonth: numberField(subscriptions, "freeInviteMonth", response, path),
     },
     referrals: {
       joined: numberField(referrals, "joined", response, path),
@@ -562,15 +566,6 @@ function literalField<Literal extends string>(object: JsonObject, key: string, a
 /** Değeri izinli metinlerden biri ya da null olan alan. */
 function nullableLiteralField<Literal extends string>(object: JsonObject, key: string, allowed: readonly Literal[], response: RawResponse, path: string): Literal | null {
   return object[key] === null ? null : literalField(object, key, allowed, response, path);
-}
-
-/** Mantıksal alan; değilse `ApiResponseError`. */
-function booleanField(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
-  const value: JsonValue | undefined = object[key];
-  if (typeof value !== "boolean") {
-    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değil`, response.text);
-  }
-  return value;
 }
 
 /** Zaman ya da null alanı (ms döner). */

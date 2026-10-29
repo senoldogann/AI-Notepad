@@ -89,6 +89,11 @@ export interface Entitlements {
     readonly graceEndsAt: string | null;
     /** Plan (aylık ya da yıllık); fiyatı tanınmayan eski abonelikte null. Haklar plana bakmaz. */
     readonly plan: SubscriptionPlan | null;
+    /**
+     * Yöneticinin verdiği ücretsiz erişim mi (Stripe'ta faturası yok). Plan yine `monthly` görünür: yayındaki uygulama
+     * planı yalnızca aylık/yıllık olarak çözer; bu alanı bilmeyen istemci yok sayar. Site hesap sayfası "Free access" yazar.
+     */
+    readonly complimentary: boolean;
   } | null;
 }
 
@@ -364,6 +369,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
             access,
             graceEndsAt: access === "grace" ? new Date(graceEndsAtMs(subscription, config.pastDueGraceMs) ?? 0).toISOString() : null,
             plan,
+            complimentary: subscription.complimentary,
           },
   };
 }

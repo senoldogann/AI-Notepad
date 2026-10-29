@@ -76,10 +76,24 @@ function formatHours(hours: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
-/** Planın adı: denemede deneme; abonelikte aylık, yıllık ya da (fiyat tanınmıyorsa) yalnızca ürün adı. Saf fonksiyondur. */
+/**
+ * Süren ücretsiz erişim mi (yöneticinin verdiği; `complimentary.ts`). Plan yine `monthly` görünür, bu yüzden plan adı,
+ * etiketi ve yönetim düğmesi buna bakar. Saf fonksiyondur.
+ */
+function hasComplimentaryAccess(me: Entitlements): boolean {
+  return me.plan === "subscription" && me.subscription !== null && me.subscription.complimentary;
+}
+
+/**
+ * Planın adı: denemede deneme; ücretsiz erişimde "Free access"; abonelikte aylık, yıllık ya da (fiyat tanınmıyorsa)
+ * yalnızca ürün adı. Saf fonksiyondur.
+ */
 function planName(me: Entitlements, text: ClientCopy): string {
   if (me.plan !== "subscription") {
     return text.plan.trial;
+  }
+  if (hasComplimentaryAccess(me)) {
+    return text.plan.complimentary;
   }
   const plan: BillingPlan | null = me.subscription === null ? null : me.subscription.plan;
   return plan === null ? text.plan.subscription : text.plan[plan];
@@ -105,10 +119,13 @@ function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date
   return fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal), date: formatDate(me.trialEndsAt, locale) });
 }
 
-/** Abonelik satırının metni; hiç abonelik yoksa null. Saf fonksiyondur. */
+/** Abonelik satırının metni; hiç abonelik yoksa null. Ücretsiz erişimde yenileme tarihi yoktur. Saf fonksiyondur. */
 function subscriptionText(subscription: SubscriptionInfo | null, text: ClientCopy, locale: string): string | null {
   if (subscription === null) {
     return null;
+  }
+  if (subscription.complimentary && subscription.access === "active") {
+    return text.subscriptionComplimentary;
   }
   if (subscription.access === "active" && subscription.cancelAt !== null) {
     return fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
@@ -131,6 +148,9 @@ function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
   if (me.plan === "subscription" && subscription !== null && subscription.cancelAt !== null) {
     return { text: text.pillCanceling, tone: "warn" };
   }
+  if (hasComplimentaryAccess(me)) {
+    return { text: text.pillComplimentary, tone: "ok" };
+  }
   if (me.plan === "subscription") {
     return { text: text.pillActive, tone: "ok" };
   }
@@ -151,7 +171,7 @@ export function accountView(me: Entitlements, text: ClientCopy, locale: string, 
     hoursUsed: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
     hoursCap: me.monthlyHoursCap,
     canSubscribe: !subscribed,
-    canManage: me.subscription !== null,
+    canManage: me.subscription !== null && !hasComplimentaryAccess(me),
   };
 }
 
@@ -394,7 +414,7 @@ async function fetchReferral(): Promise<ReferralInfo> {
 }
 
 /** Davet kartının sayı satırı. Saf fonksiyondur. */
-export function referralStatsText(referral: ReferralInfo, text: ClientCopy): string {
+function referralStatsText(referral: ReferralInfo, text: ClientCopy): string {
   return fill(text.referralStats, {
     joined: String(referral.joined),
     rewarded: String(referral.rewarded),
@@ -404,8 +424,16 @@ export function referralStatsText(referral: ReferralInfo, text: ClientCopy): str
   });
 }
 
-/** Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. */
-function renderReferral(referral: ReferralInfo, text: ClientCopy, notice: HTMLElement): void {
+/**
+ * Ücretsiz erişimli hesabın davet kartı satırı: arkadaşlar yine ilk ayı ücretsiz alır, ama ödenecek fatura olmadığından
+ * 5,99 $ ödülü uygulanmaz (sunucu `referrer_complimentary` ile düşürür). Saf fonksiyondur.
+ */
+function complimentaryReferralStatsText(referral: ReferralInfo, text: ClientCopy): string {
+  return fill(text.referralStatsComplimentary, { joined: String(referral.joined) });
+}
+
+/** Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. `stats` kartın sayı satırıdır. */
+function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy, notice: HTMLElement): void {
   const card: HTMLElement = element("referral-card", HTMLElement);
   const inviteUrl: string | null = referral.inviteUrl;
   if (!referral.enabled || referral.code === null || inviteUrl === null) {
@@ -413,7 +441,7 @@ function renderReferral(referral: ReferralInfo, text: ClientCopy, notice: HTMLEl
     return;
   }
   element("referral-code", HTMLElement).textContent = referral.code;
-  element("referral-stats", HTMLElement).textContent = referralStatsText(referral, text);
+  element("referral-stats", HTMLElement).textContent = stats;
   const copied: HTMLElement = element("referral-copied", HTMLElement);
   const button: HTMLButtonElement = element("referral-copy", HTMLButtonElement);
   button.onclick = (): void => {
@@ -431,10 +459,15 @@ function renderReferral(referral: ReferralInfo, text: ClientCopy, notice: HTMLEl
   card.classList.remove("hidden");
 }
 
-/** Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır). */
-async function loadReferral(text: ClientCopy, notice: HTMLElement): Promise<void> {
+/**
+ * Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır).
+ * Ücretsiz erişimli hesapta sayı satırı ödülün uygulanmadığını söyler.
+ */
+async function loadReferral(me: Entitlements, text: ClientCopy, notice: HTMLElement): Promise<void> {
   try {
-    renderReferral(await fetchReferral(), text, notice);
+    const referral: ReferralInfo = await fetchReferral();
+    const stats: string = hasComplimentaryAccess(me) ? complimentaryReferralStatsText(referral, text) : referralStatsText(referral, text);
+    renderReferral(referral, stats, text, notice);
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {
       throw error;
@@ -593,7 +626,7 @@ async function main(): Promise<void> {
       await prefillInvite(form, text);
     }
     if (me.plan === "subscription") {
-      await loadReferral(text, notice);
+      await loadReferral(me, text, notice);
     }
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {

@@ -175,6 +175,7 @@ function renderGrowthAndRevenue(stats: AdminStats): void {
       ending: formatCount(stats.subscriptions.ending),
       canceled: formatCount(stats.subscriptions.canceledTotal),
       free: formatCount(stats.subscriptions.complimentary),
+      invite: formatCount(stats.subscriptions.freeInviteMonth),
     })}. ${fillCounts(adminText.referralsSub, {
       joined: stats.referrals.joined,
       pending: stats.referrals.pending,
