@@ -2678,9 +2678,11 @@ private struct NowPlayingBar: View {
             HStack(spacing: DesignTokens.Spacing.s) {
                 Button(action: onOpen) {
                     HStack(spacing: 6) {
+                        // Durağan simge (çalarken vurgu renginde, duraklatılınca soluk): sürekli sembol animasyonu her karede
+                        // pencereyi yeniden çizdiriyor ve ana iş parçacığı çizim sunucusunu beklerken saniyeler boyunca
+                        // bloke oluyordu (ölçüm: zamanın %45'i); süre ve kelime vurgusu takılıyordu.
                         Image(systemName: "waveform")
-                            .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
-                            .foregroundStyle(appearance.accent.color)
+                            .foregroundStyle(player.isPlaying ? appearance.accent.color : Theme.muted)
                         Text(title)
                             .appFont(size: 12, weight: .semibold)
                             .lineLimit(1)

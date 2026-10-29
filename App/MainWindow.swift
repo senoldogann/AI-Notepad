@@ -671,10 +671,10 @@ private struct HomePage: View {
         switch model.phase {
         case .recording:
             HStack(spacing: 12) {
+                // Durağan: kayıt boyunca süren nabız animasyonu her karede pencereyi yeniden çizdirip işlemciyi
+                // yoruyordu (kayıt sırasında uygulama hafif kalmalı); duraklatılınca soluklaşır.
                 Image(systemName: "record.circle.fill")
-                    .foregroundStyle(.red)
-                    // Kayıt ekranı açıkken bulanıklığın altında boşuna titreşmesin.
-                    .symbolEffect(.pulse, isActive: !model.isPaused && router.isRecordingFocusDismissed)
+                    .foregroundStyle(.red.opacity(model.isPaused ? 0.45 : 1))
                 if let startedAt = model.recordingStartedAt {
                     Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
                         .monospacedDigit()
