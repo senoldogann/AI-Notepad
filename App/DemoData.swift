@@ -31,6 +31,8 @@ enum DemoScene: String {
     case live = "canli"
     /// Ana sayfa ve abone olma teklifi (deneme notu hazır; yalnız abonelik sürümünde).
     case upsell = "abone"
+    /// Ana sayfa ve sağ altta güncelleme kartı (sahte sürüm ve notlar).
+    case update = "guncelleme"
 }
 
 /// Tanıtım modu hataları.
@@ -105,7 +107,7 @@ func seedDemoData(now: Date) throws {
 
 /// Açılıştan sonra sahneyi kurar: bölümü seçer, Sor sohbetini açar ya da sahte bir kaydı canlı panelde gösterir.
 @MainActor
-func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, panel: LivePanelController, now: Date) {
+func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, panel: LivePanelController, updater: AppUpdater, now: Date) {
     // Konuşma modeli yüklenmez (indirme yok); kayıt düğmeleri hazır görünür.
     model.modelStatus = .ready
     switch scene {
@@ -127,6 +129,23 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
             }
             model.openConversation(id: demoAskConversationID)
         }
+    case .update:
+        router.section = .home
+        updater.showUpdateForDemo(update: AvailableAppUpdate(
+            version: "0.1.6",
+            releaseNotes: """
+            Smoother playback and a lighter app.
+
+            ## What's new
+            - **Smooth playback.** The time and the highlighted word now move without stutter.
+            - **Lighter while recording.** Gistsmith uses far less CPU during meetings.
+            - **Subscribe in one step.** A short window takes you straight to checkout.
+            - **Your avatar.** Your photo or your own colour orb next to Settings.
+            - **Faster updates.** New versions reach you within minutes.
+            """,
+            releaseNotesURL: URL(string: "https://gistsmith.com"),
+            isReadyToInstall: true
+        ))
     case .upsell:
         router.section = .home
         #if HOSTED_EDITION

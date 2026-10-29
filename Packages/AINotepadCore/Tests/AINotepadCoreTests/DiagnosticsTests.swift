@@ -43,4 +43,12 @@ import Testing
         let full: ReportRequest = try feedbackReport(message: String(repeating: "x", count: reportMessageLimit), email: "", diagnostics: nil)
         #expect(throws: ReportError.self) { try appendingDiagnostics(report: full, diagnosticsText: long, limit: reportMessageLimit) }
     }
+
+    // Güncelleme kartı: sürüm notlarının maddeleri sırayla, işaretsiz ve sınırlı; başlık ve paragraflar atlanır.
+    @Test func releaseNoteBulletsFromMarkdown() {
+        let notes: String = "Intro line.\n\n## What's new\n- **Faster.** Words appear sooner.\n- Import a file.\n\n## Fixes\n* Fewer sign-outs.\n-   \n"
+        #expect(releaseNoteBullets(markdown: notes, limit: 10) == ["**Faster.** Words appear sooner.", "Import a file.", "Fewer sign-outs."])
+        #expect(releaseNoteBullets(markdown: notes, limit: 2).count == 2)
+        #expect(releaseNoteBullets(markdown: "No bullets here.", limit: 4).isEmpty)
+    }
 }

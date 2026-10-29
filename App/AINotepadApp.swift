@@ -186,7 +186,8 @@ struct AINotepadApp: App {
         _model = State(initialValue: model)
         // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün. Kayıt ya da
         // işleme sürerken güncelleme uygulamayı yeniden başlatmaz (çıkış korumasıyla aynı koşul).
-        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main), isBusy: { model.isBusy }))
+        let updater: AppUpdater = AppUpdater(publicKey: sparklePublicKey(bundle: .main), isBusy: { model.isBusy })
+        _updater = State(initialValue: updater)
         let crashReports: CrashReportCenter = CrashReportCenter()
         _crashReports = State(initialValue: crashReports)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
@@ -323,7 +324,7 @@ struct AINotepadApp: App {
                 // Tanıtım modunun sahnesi (sahne açılışta doğrulandı; burada hata beklenmez).
                 if isDemoMode {
                     do {
-                        showDemoScene(scene: try demoScene(arguments: CommandLine.arguments), model: model, router: router, panel: panel, now: Date())
+                        showDemoScene(scene: try demoScene(arguments: CommandLine.arguments), model: model, router: router, panel: panel, updater: updater, now: Date())
                     } catch {
                         fatalError(String(describing: error))
                     }

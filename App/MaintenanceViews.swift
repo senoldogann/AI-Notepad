@@ -47,86 +47,119 @@ func updateMenuTitle(update: AvailableAppUpdate, isBusy: Bool) -> String {
         : String(localized: "\(headline) — Güncelle…")
 }
 
-/// Ana penceredeki güncelleme şeridi (çökme şeridiyle aynı sakin görünüm; açılır pencere yok): sürüm, "Neler yeni?"
-/// (sürüm notları şeridin içinde açılır) ve "Yeniden başlat ve güncelle". Kayıt ya da işleme sürerken düğme kapalıdır
-/// ve nedeni yazar; uygulama yalnızca kullanıcı isteyince ya da çıkışta güncellenir.
-struct UpdateBanner: View {
+/// Güncelleme kartında gösterilen en çok yenilik sayısı.
+private let updateToastBulletLimit: Int = 4
+
+/// Ana pencerenin sağ alt köşesindeki güncelleme kartı (açılır pencere değil, içeriğin üstünde küçük kart): uygulama
+/// simgesi, "Yeni sürüm hazır" ve sürüm, sürüm notlarından madde madde en çok dört yenilik, "Şimdi güncelle" ve
+/// "Sonra". Kayıt ya da işleme sürerken düğme kapalıdır ve nedeni yazar; uygulama yalnızca kullanıcı isteyince ya da
+/// çıkışta güncellenir. "Sonra" kartı bu sürüm için kapatır (menüde görünmeye devam eder).
+struct UpdateToast: View {
     let updater: AppUpdater
     let update: AvailableAppUpdate
     /// Kayıt ya da işleme sürüyor.
     let isBusy: Bool
-    @State private var showsNotes: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NoticeBar(severity: .info, title: Text(verbatim: updateHeadline(update: update)), detail: Text(subtitle), onDismiss: { updater.dismissBanner() }) {
-                HStack(spacing: 8) {
-                    notesLink
-                    Button(update.isReadyToInstall ? "Yeniden başlat ve güncelle" : "Güncelle…") { updater.installUpdate() }
-                        .buttonStyle(.pill)
-                        .disabled(isBusy)
+        let bullets: [String] = update.releaseNotes.map { releaseNoteBullets(markdown: $0, limit: updateToastBulletLimit) } ?? []
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .frame(width: 38, height: 38)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Yeni sürüm hazır")
+                        .appFont(size: 14, weight: .semibold)
+                        .foregroundStyle(Theme.ink)
+                    Text("Sürüm \(update.version)")
+                        .appFont(size: 12, weight: .regular)
+                        .foregroundStyle(Theme.muted)
                 }
-            }
-            if showsNotes, let notes = update.releaseNotes {
-                ReleaseNotesText(markdown: notes)
-                    .padding(.horizontal, 14)
-                    .padding(.leading, 23)
-                    .padding(.vertical, 10)
-                    .background(Theme.soft)
-                    .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-            }
-        }
-        .transition(.move(edge: .top).combined(with: .opacity))
-    }
-
-    /// Altyazı: kayıt sürerken neden beklendiği, ertelenmiş kurulum ya da ne olacağı.
-    private var subtitle: LocalizedStringKey {
-        if updater.isRelaunchPostponed {
-            "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek."
-        } else if isBusy {
-            "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
-        } else if update.isReadyToInstall {
-            "İndirildi. Şimdi yeniden başlatabilir ya da uygulamadan çıkınca kurulmasını bekleyebilirsin."
-        } else {
-            "Yeni sürüm çıktı; \"Güncelle…\" indirip kurar."
-        }
-    }
-
-    /// "Neler yeni?": gömülü notlar şeridin içinde açılır; yoksa notların sayfası tarayıcıda açılır.
-    @ViewBuilder
-    private var notesLink: some View {
-        if update.releaseNotes != nil {
-            Button(showsNotes ? "Notları gizle" : "Neler yeni?") { showsNotes.toggle() }
+                Spacer(minLength: 8)
+                Button {
+                    updater.dismissBanner()
+                } label: {
+                    Image(systemName: "xmark")
+                        .appFont(size: 10, weight: .semibold)
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 22, height: 22)
+                }
                 .buttonStyle(.hoverPlain)
-        } else if let url = update.releaseNotesURL {
-            Link("Neler yeni?", destination: url)
-                .appFont(size: 12, weight: .regular)
+                .accessibilityLabel(Text("Kapat"))
+            }
+            if !bullets.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(bullets.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Circle()
+                                .fill(Theme.ink.opacity(0.35))
+                                .frame(width: 4.5, height: 4.5)
+                                .alignmentGuide(.firstTextBaseline) { (dimensions: ViewDimensions) -> CGFloat in dimensions[.bottom] + 3 }
+                            Text(releaseNoteLine(markdown: item.element))
+                                .appFont(size: 12.5, weight: .regular)
+                                .foregroundStyle(Theme.ink)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            if let note = busyNote {
+                Text(note)
+                    .appFont(size: 11.5, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                if let url = update.releaseNotesURL {
+                    Link("Tüm notlar", destination: url)
+                        .appFont(size: 12, weight: .regular)
+                        .buttonStyle(.hoverPlain)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                Spacer(minLength: 8)
+                Button("Sonra") { updater.dismissBanner() }
+                    .buttonStyle(.pill)
+                Button("Şimdi güncelle") { updater.installUpdate() }
+                    .buttonStyle(.pillPrimary)
+                    .disabled(isBusy)
+            }
+            .controlSize(.regular)
         }
+        .padding(18)
+        .frame(width: 344)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+        .shadow(color: Color.black.opacity(0.14), radius: 22, y: 10)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    /// Kayıt sürerken ya da kurulum ertelenmişken neden beklendiği; başka durumda nil.
+    private var busyNote: LocalizedStringKey? {
+        if updater.isRelaunchPostponed {
+            return "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek."
+        }
+        if isBusy {
+            return "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+        }
+        return nil
     }
 }
 
-/// Sürüm notları (Markdown; appcast'e gömülü). Markdown çözülemezse metin olduğu gibi gösterilir ve uyarı loglanır.
-private struct ReleaseNotesText: View {
-    let markdown: String
-
-    var body: some View {
-        ScrollView {
-            Text(attributed)
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(Theme.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-        }
-        .frame(maxHeight: 220)
-    }
-
-    private var attributed: AttributedString {
-        do {
-            return try AttributedString(markdown: markdown, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-        } catch {
-            maintenanceLogger.warning("Sürüm notları Markdown olarak çözülemedi, düz metin gösteriliyor, hata: \(String(describing: error), privacy: .private)")
-            return AttributedString(markdown)
-        }
+/// Sürüm notu maddesi: satır içi Markdown (kalın başlık) çözülür; çözülemezse metin olduğu gibi gösterilir ve uyarı
+/// loglanır.
+private func releaseNoteLine(markdown: String) -> AttributedString {
+    do {
+        return try AttributedString(markdown: markdown, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+    } catch {
+        maintenanceLogger.warning("Sürüm notu maddesi Markdown olarak çözülemedi, düz metin gösteriliyor, hata: \(String(describing: error), privacy: .private)")
+        return AttributedString(markdown)
     }
 }
 

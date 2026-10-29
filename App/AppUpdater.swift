@@ -7,8 +7,13 @@ import Sparkle
 private let updateLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Update")
 
 /// Açılıştaki ek denetimin en kısa aralığı: son denetim bundan yeniyse açılışta yeniden denetlenmez (art arda açılışlar
-/// sunucuyu yormasın). Zamanlanmış denetim aralığı Info.plist'te (`SUScheduledCheckInterval`, 6 saat).
+/// sunucuyu yormasın). Sparkle'ın kendi zamanlanmış denetimi Info.plist'te (`SUScheduledCheckInterval`, 6 saat; Sparkle
+/// 1 saatten sıkına izin vermez).
 private let launchCheckMinimumIntervalSec: TimeInterval = 3600
+
+/// Uygulama açıkken yeni sürümün denetlendiği aralık (saniye): yeni sürüm birkaç dakikada kullanıcıya ulaşsın. Denetim
+/// GitHub'daki küçük appcast.xml'in indirilmesidir (birkaç KB; işlemci ve pil etkisi yok sayılacak kadar az).
+private let frequentCheckIntervalSec: TimeInterval = 300
 
 /// Info.plist'teki Sparkle açık anahtarı (`SUPublicEDKey`, Config/Signing.xcconfig'teki `SPARKLE_PUBLIC_KEY`); boşsa
 /// ya da yoksa nil.
@@ -35,7 +40,7 @@ struct AvailableAppUpdate: Equatable {
     let version: String
     /// Appcast'e gömülü sürüm notları (Markdown); yoksa nil.
     let releaseNotes: String?
-    /// Sürüm notlarının sayfası (gömülü not yoksa "Neler yeni?" bunu açar); yoksa nil.
+    /// Sürüm notlarının sayfası (güncelleme kartındaki "Tüm notlar" bunu açar); yoksa nil.
     let releaseNotesURL: URL?
     /// İndirildi; uygulama yeniden başlatılınca (ya da çıkışta) kurulur.
     let isReadyToInstall: Bool
@@ -117,7 +122,7 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
     }
 }
 
-/// Sparkle güncelleyicisine bağlantı: GitHub'daki appcast.xml'den yeni sürümü açılışta ve 6 saatte bir denetler, arka
+/// Sparkle güncelleyicisine bağlantı: GitHub'daki appcast.xml'den yeni sürümü açılışta ve uygulama açıkken 5 dakikada bir denetler, arka
 /// planda indirir (ayardan kapatılabilir) ve çıkışta kurar (uygulama sandbox'sız; Sparkle'ın XPC servisleri gerekmez).
 /// Bulunan ya da indirilen güncelleme ana penceredeki şeritte ve menüde gösterilir; kayıt ya da işleme sürerken
 /// yeniden başlatılmaz. İmza anahtarı yoksa Sparkle hiç başlatılmaz (başlatılsa açılışta hata penceresi gösterirdi),
@@ -146,6 +151,8 @@ final class AppUpdater {
     @ObservationIgnored private var observation: NSKeyValueObservation?
     @ObservationIgnored private var installNow: (() -> Void)?
     @ObservationIgnored private var postponedRelaunch: (() -> Void)?
+    /// Sık denetim döngüsü (bkz. `frequentCheckIntervalSec`).
+    @ObservationIgnored private var frequentChecks: Task<Void, Never>?
 
     init(publicKey: String?, isBusy: @escaping @MainActor () -> Bool) {
         self.isBusy = isBusy
@@ -169,6 +176,16 @@ final class AppUpdater {
             updateLogger.info("Açılışta güncelleme denetimi başlatıldı")
         }
         automaticallyUpdates = updater.automaticallyDownloadsUpdates
+        frequentChecks = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(frequentCheckIntervalSec))
+                } catch {
+                    return
+                }
+                self?.checkInBackground()
+            }
+        }
         observation = updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] (updater: SPUUpdater, _: NSKeyValueObservedChange<Bool>) -> Void in
             // Sparkle bu özelliği ana iş parçacığında değiştirir.
             MainActor.assumeIsolated {
@@ -177,6 +194,22 @@ final class AppUpdater {
         }
         updateLogger.info("Sparkle başlatıldı, akış: \(updater.feedURL?.absoluteString ?? "-", privacy: .public), aralık: \(updater.updateCheckInterval, privacy: .public)")
     }
+
+    /// Sık denetim: otomatik denetim açıksa, bir denetim sürmüyorsa ve bulunmuş bir güncelleme beklemiyorsa arka planda
+    /// denetlenir (sonuç şeritte değil sağ alttaki kartta gösterilir; Sparkle penceresi açılmaz).
+    private func checkInBackground() {
+        guard let updater = controller?.updater, updater.automaticallyChecksForUpdates, updater.canCheckForUpdates, availableUpdate == nil else {
+            return
+        }
+        updater.checkForUpdatesInBackground()
+    }
+
+    #if DEBUG
+    /// Tanıtım modu (bkz. `DemoScene.update`): güncelleme kartı Sparkle'a sorulmadan gösterilir.
+    func showUpdateForDemo(update: AvailableAppUpdate) {
+        foundUpdate = update
+    }
+    #endif
 
     /// Son güncelleme denetiminin zamanı (Sparkle'ın kaydı); hiç denetlenmediyse ya da güncelleme kapalıysa nil.
     var lastCheckDate: Date? {

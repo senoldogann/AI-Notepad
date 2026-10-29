@@ -6084,17 +6084,6 @@
         }
       }
     },
-    "Güncelle…": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update…"
-          }
-        }
-      }
-    },
     "Güvenli bir giriş penceresi açılır; parolan Apple'da ya da Google'da kalır.": {
       "extractionState": "manual",
       "localizations": {
@@ -8918,17 +8907,6 @@
         }
       }
     },
-    "Neler yeni?": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What's new?"
-          }
-        }
-      }
-    },
     "Norveççe": {
       "localizations": {
         "en": {
@@ -9239,17 +9217,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Written to the \"%@\" folder in Notes."
-          }
-        }
-      }
-    },
-    "Notları gizle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide notes"
           }
         }
       }
@@ -11095,6 +11062,17 @@
         }
       }
     },
+    "Sürüm %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %@"
+          }
+        }
+      }
+    },
     "Sürüm ve sistem bilgisini ekle": {
       "extractionState": "manual",
       "localizations": {
@@ -12241,6 +12219,17 @@
         }
       }
     },
+    "Tüm notlar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes"
+          }
+        }
+      }
+    },
     "Tüm sonuçları listede göster": {
       "localizations": {
         "en": {
@@ -12993,13 +12982,13 @@
         }
       }
     },
-    "Yeni sürüm çıktı; \"Güncelle…\" indirip kurar.": {
+    "Yeni sürüm hazır": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A new version is out; \"Update…\" downloads and installs it."
+            "value": "New version ready"
           }
         }
       }
@@ -14476,17 +14465,6 @@
         }
       }
     },
-    "İndirildi. Şimdi yeniden başlatabilir ya da uygulamadan çıkınca kurulmasını bekleyebilirsin.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Downloaded. Restart now, or let it install when you quit the app."
-          }
-        }
-      }
-    },
     "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.": {
       "localizations": {
         "en": {
@@ -14861,6 +14839,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not now"
+          }
+        }
+      }
+    },
+    "Şimdi güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update now"
           }
         }
       }

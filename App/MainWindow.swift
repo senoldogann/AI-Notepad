@@ -190,10 +190,6 @@ struct MainWindowView: View {
                         if let report = crashReports.reportToAnnounce {
                             CrashReportBanner(center: crashReports, report: report)
                         }
-                        // Bulunan ya da indirilen güncelleme (zamanlanmış denetimde Sparkle penceresi açılmaz).
-                        if updater.showsBanner, let update = updater.availableUpdate {
-                            UpdateBanner(updater: updater, update: update, isBusy: model.isBusy)
-                        }
                         #if HOSTED_EDITION
                         // Kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti); dönem başına bir kez.
                         if let notice = HostedAccount.shared.visibleNotice {
@@ -215,6 +211,14 @@ struct MainWindowView: View {
                     }
                     .animation(.smooth(duration: 0.25), value: router.section)
                 }
+                // Bulunan ya da indirilen güncelleme: sağ altta küçük kart (zamanlanmış denetimde Sparkle penceresi açılmaz).
+                .overlay(alignment: .bottomTrailing) {
+                    if updater.showsBanner, let update = updater.availableUpdate {
+                        UpdateToast(updater: updater, update: update, isBusy: model.isBusy)
+                            .padding(20)
+                    }
+                }
+                .animation(.smooth(duration: 0.35), value: updater.showsBanner)
                 .transition(.opacity)
             }
         }
