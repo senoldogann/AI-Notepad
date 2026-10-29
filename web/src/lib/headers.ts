@@ -4,13 +4,13 @@
 // CSP iki katmanlıdır. Pages, birden çok kurala uyan adreste aynı başlığın değerlerini virgülle birleştirir; tarayıcı
 // virgülle ayrılmış her politikayı ayrı ayrı uygular (hepsine uyan yüklenir). `/*` kuralı tüm dış hizmetlere izin veren
 // geniş politikayı taşır (sayfası olmayan adresler, ör. bilinmeyen adresin 404'ü, için); her sayfanın kendi kuralı
-// yalnızca o sayfanın kullandığı hizmetlere izin veren dar politikayı ekler. Böylece Apple ve Google betikleri yalnızca
-// giriş sayfasında, Turnstile yalnızca iletişim sayfasında çalışabilir.
-import { appleAuthScriptUrl, appleIdOrigin, googleGsiBase, googleScriptUrl, type SiteConfig, turnstileOrigin } from "../config";
+// yalnızca o sayfanın kullandığı hizmetlere izin veren dar politikayı ekler. Böylece Apple betiği yalnızca giriş
+// sayfasında, Turnstile yalnızca iletişim sayfasında çalışabilir. Google ile giriş Google'a yönlendirir; betik yüklenmez.
+import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
 import { type PageKey, privatePages, routes } from "../routes";
 
 /** Sayfaların yüklediği dış hizmetler. */
-export type ExternalService = "appleSignIn" | "googleSignIn" | "turnstile";
+export type ExternalService = "appleSignIn" | "turnstile";
 
 /** Bir dış hizmetin CSP yönergelerine eklediği kaynaklar. */
 interface ServiceSources {
@@ -27,24 +27,22 @@ function originOf(url: string): string {
 }
 
 /**
- * Hizmetlerin kaynakları. Google Identity Services için Google'ın belgelediği kaynaklar: betik `gsi/client`, stil
- * `gsi/style`, iframe ve istekler `gsi/`. Apple ile giriş açılır pencere kullanır; betik Apple'ın CDN'inden gelir.
+ * Hizmetlerin kaynakları. Apple ile giriş açılır pencere kullanır; betik Apple'ın CDN'inden gelir.
  */
 const serviceSources: Readonly<Record<ExternalService, ServiceSources>> = {
   appleSignIn: { script: [originOf(appleAuthScriptUrl)], style: [], connect: [], frame: [appleIdOrigin], formAction: [appleIdOrigin] },
-  googleSignIn: { script: [googleScriptUrl], style: [`${googleGsiBase}style`], connect: [googleGsiBase], frame: [googleGsiBase], formAction: [] },
   turnstile: { script: [turnstileOrigin], style: [], connect: [], frame: [turnstileOrigin], formAction: [] },
 };
 
 /** Tüm dış hizmetler (geniş politika). */
-const allServices: readonly ExternalService[] = ["appleSignIn", "googleSignIn", "turnstile"];
+const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile"];
 
-/** Sayfaların kullandığı dış hizmetler: giriş sayfası Apple ve Google, iletişim sayfası Turnstile; diğerleri hiçbiri. */
+/** Sayfaların kullandığı dış hizmetler: giriş sayfası Apple, iletişim sayfası Turnstile; diğerleri hiçbiri. */
 export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>> = {
   home: [],
   pricing: [],
   download: [],
-  signIn: ["appleSignIn", "googleSignIn"],
+  signIn: ["appleSignIn"],
   account: [],
   contact: ["turnstile"],
   admin: [],
@@ -111,7 +109,7 @@ export function pagesHeaders(config: SiteConfig): string {
     `  Permissions-Policy: ${permissionsPolicy}`,
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
-    // Apple ve Google ile giriş açılır pencere kullanır: açtığımız pencereyle bağ korunur, başka sayfalar bizi açamaz.
+    // Apple ile giriş açılır pencere kullanır: açtığımız pencereyle bağ korunur, başka sayfalar bizi açamaz.
     "  Cross-Origin-Opener-Policy: same-origin-allow-popups",
     "  Cross-Origin-Resource-Policy: same-origin",
     "",

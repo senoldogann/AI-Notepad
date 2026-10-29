@@ -1,6 +1,6 @@
-// Giriş sayfası. Sitenin kendi girişi: Apple ile giriş (açılır pencere) ve Google ile giriş (Google Identity Services
-// düğmesi); tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik jetonunu ham nonce'la sunucuya
-// yollar; başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına giriş (app-handoff.ts):
+// Giriş sayfası. Sitenin kendi girişi: Apple ile giriş (açılır pencere) ve Google ile giriş (Google'a yönlendirme; açılır
+// pencere iOS Safari'de güvenilir çalışmaz); tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik
+// jetonunu ham nonce'la sunucuya yollar; başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına giriş (app-handoff.ts):
 // açılır pencere yok, sayfa sağlayıcıya yönlendirir ve `#` parçasıyla geri döner; nonce özeti uygulamanındır ve jeton
 // sunucuya değil uygulamaya iletilir.
 import { type RawResponse, parseSession, send } from "./api";
@@ -21,9 +21,9 @@ import {
   signInMode,
 } from "./app-handoff";
 import { type ClientCopy, clientCopy } from "./copy";
-import { type Theme, currentTheme, dataValue, element, errorText, hideNotice, loadScript, onThemeChange, showNotice } from "./dom";
+import { dataValue, element, errorText, hideNotice, loadScript, showNotice } from "./dom";
 import { saveSession } from "./session";
-import { appleAuthScriptUrl, appleAuthorizeUrl, googleAuthorizeUrl, googleScriptUrl } from "../config";
+import { appleAuthScriptUrl, appleAuthorizeUrl, googleAuthorizeUrl } from "../config";
 import { siteConfig } from "../site";
 
 /** Apple yanıtındaki `state` gönderdiğimizle aynı değil. */
@@ -37,9 +37,14 @@ interface Nonce {
   readonly hashed: string;
 }
 
-/** Google düğmesinin en dar ve en geniş hâli (Google'ın kabul ettiği aralık, piksel). */
-const googleButtonMinWidth: number = 200;
-const googleButtonMaxWidth: number = 400;
+/** Sitenin Google girişinde yönlendirme süresince saklanan deneme (`sessionStorage`, sekmeye özgü, tek kullanımlık). */
+const pendingSiteGoogleKey: string = "gistsmith.siteSignIn";
+
+/** Google'a yönlendirilen site girişi: dönüşte `state` karşılaştırılır, ham nonce sunucuya gider. */
+interface PendingSiteGoogle {
+  readonly state: string;
+  readonly rawNonce: string;
+}
 
 /** Bayt dizisinin onaltılık yazımı. Saf fonksiyondur. */
 function hex(bytes: Uint8Array): string {
@@ -136,73 +141,6 @@ async function setUpApple(text: ClientCopy, notice: HTMLElement, redirectUri: st
   });
 }
 
-/** Google düğmesini kabın genişliğine ve sayfa temasına göre çizer (tema değişince yeniden çizilir). */
-function renderGoogleButton(google: GoogleGlobal, container: HTMLElement, theme: Theme): void {
-  const width: number = Math.round(Math.min(googleButtonMaxWidth, Math.max(googleButtonMinWidth, container.clientWidth)));
-  google.accounts.id.renderButton(container, {
-    type: "standard",
-    theme: theme === "dark" ? "filled_black" : "outline",
-    size: "large",
-    text: "continue_with",
-    shape: "pill",
-    // Logo metnin yanında (Apple düğmesi gibi), düğmenin sol kenarına yaslı değil.
-    logo_alignment: "center",
-    width,
-    locale: "en",
-  });
-}
-
-/** Google'a hangi nonce özetinin verileceği ve kimlik jetonunun ne yapılacağı. */
-interface GoogleFlow {
-  /** Google'a verilecek nonce özeti (her denemede yeni). */
-  readonly nextHashedNonce: () => Promise<string>;
-  /** Kimlik jetonu geldiğinde. Hata fırlatırsa bildirim gösterilir ve yeni nonce'la yeniden hazırlanır. */
-  readonly onCredential: (credential: string) => Promise<void>;
-}
-
-/** Google Identity Services'i yükler, düğmeyi çizer ve verilen akışa bağlar. Betik yüklenemezse Apple önerilir. */
-async function setUpGoogle(text: ClientCopy, notice: HTMLElement, flow: GoogleFlow): Promise<void> {
-  const container: HTMLElement = element("google-button", HTMLElement);
-  try {
-    await loadScript(googleScriptUrl);
-  } catch (error: unknown) {
-    container.classList.add("hidden");
-    showNotice(notice, text.errors.googleUnavailable);
-    console.error("google_script_failed", { error: error instanceof Error ? error.message : String(error) });
-    return;
-  }
-  const google: GoogleGlobal | undefined = window.google;
-  if (google === undefined) {
-    container.classList.add("hidden");
-    showNotice(notice, text.errors.googleUnavailable);
-    console.error("google_script_failed", { error: "window.google tanımsız" });
-    return;
-  }
-  const initialize = async (): Promise<void> => {
-    google.accounts.id.initialize({
-      client_id: siteConfig.googleClientId,
-      nonce: await flow.nextHashedNonce(),
-      ux_mode: "popup",
-      auto_select: false,
-      context: "signin",
-      itp_support: true,
-      callback: (response: GoogleCredentialResponse): void => {
-        hideNotice(notice);
-        flow.onCredential(response.credential).catch(async (error: unknown): Promise<void> => {
-          showNotice(notice, errorText(error, text));
-          await initialize();
-          renderGoogleButton(google, container, currentTheme());
-        });
-      },
-    });
-  };
-  await initialize();
-  renderGoogleButton(google, container, currentTheme());
-  onThemeChange((theme: Theme): void => {
-    renderGoogleButton(google, container, theme);
-  });
-}
-
 /** "Uygulamaya dönülüyor…" durumunu ve yedek düğmeyi gösterip uygulamayı açar. */
 function handOffToApp(url: string): void {
   element("signin-panel", HTMLElement).classList.add("hidden");
@@ -243,18 +181,90 @@ async function signInOnSite(path: "/v1/auth/apple" | "/v1/auth/google", identity
   finishSignIn(response, path, accountPath);
 }
 
-/** Sitenin kendi girişi: Apple ve Google, jeton sunucuya. */
+/** Saklanan site Google denemesini okur ve siler (tek kullanımlık); yoksa ya da bozuksa null. */
+function takePendingSiteGoogle(): PendingSiteGoogle | null {
+  try {
+    const raw: string | null = window.sessionStorage.getItem(pendingSiteGoogleKey);
+    window.sessionStorage.removeItem(pendingSiteGoogleKey);
+    if (raw === null) {
+      return null;
+    }
+    const parsed: { state?: unknown; rawNonce?: unknown } = JSON.parse(raw) as { state?: unknown; rawNonce?: unknown };
+    if (typeof parsed.state === "string" && typeof parsed.rawNonce === "string") {
+      return { state: parsed.state, rawNonce: parsed.rawNonce };
+    }
+    console.error("site_google_pending_corrupt", { keys: Object.keys(parsed) });
+    return null;
+  } catch (error: unknown) {
+    console.error("site_google_pending_unreadable", { error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
+/** Google düğmesi: yeni nonce ve `state` saklanır, sayfa Google'a yönlendirilir; dönüş `finishSiteGoogleReturn`'de. */
+function setUpGoogleRedirect(text: ClientCopy, notice: HTMLElement, redirectUri: string): void {
+  const button: HTMLButtonElement = element("google-redirect-button", HTMLButtonElement);
+  button.addEventListener("click", (): void => {
+    hideNotice(notice);
+    button.disabled = true;
+    void (async (): Promise<void> => {
+      const nonce: Nonce = await newNonce();
+      const pending: PendingSiteGoogle = { state: randomHex(16), rawNonce: nonce.raw };
+      try {
+        window.sessionStorage.setItem(pendingSiteGoogleKey, JSON.stringify(pending));
+      } catch (error: unknown) {
+        console.error("site_google_storage_failed", { error: error instanceof Error ? error.message : String(error) });
+        showNotice(notice, text.errors.storageUnavailable);
+        button.disabled = false;
+        return;
+      }
+      window.location.assign(googleAuthorizeRedirect(googleAuthorizeUrl, siteConfig.googleClientId, redirectUri, pending.state, nonce.hashed));
+    })();
+  });
+  button.disabled = false;
+}
+
+/**
+ * Google'dan site girişi dönüşü: `#` parçası hemen silinir; `state` eşleşirse kimlik jetonu ham nonce'la sunucuya gider
+ * ve hesap sayfasına geçilir. Vazgeçildiyse bildirim yok; başka hatada bildirim gösterilir ve giriş yeniden sunulur.
+ */
+async function finishSiteGoogleReturn(
+  text: ClientCopy,
+  notice: HTMLElement,
+  result: Exclude<ProviderReturn, { readonly kind: "none" }>,
+  pending: PendingSiteGoogle,
+  accountPath: string,
+  redirectUri: string,
+): Promise<void> {
+  window.history.replaceState(null, "", window.location.pathname);
+  startSiteSignIn(text, notice, accountPath, redirectUri);
+  if (result.kind === "error") {
+    if (!isCancellation(result.error)) {
+      console.warn("site_google_error", { error: result.error });
+      showNotice(notice, text.errors.googleFailed);
+    }
+    return;
+  }
+  if (result.state !== pending.state) {
+    console.error("site_google_state_mismatch", {});
+    showNotice(notice, text.errors.googleFailed);
+    return;
+  }
+  try {
+    await signInOnSite("/v1/auth/google", result.idToken, pending.rawNonce, accountPath);
+  } catch (error: unknown) {
+    showNotice(notice, errorText(error, text));
+  }
+}
+
+/** Sitenin kendi girişi: Apple (açılır pencere) ve Google (yönlendirme), jeton sunucuya. */
 function startSiteSignIn(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): void {
   const appleNonces: SiteNonces = siteNonces();
   void setUpApple(text, notice, redirectUri, {
     nextHashedNonce: appleNonces.next,
     onIdentityToken: (identityToken: string): Promise<void> => signInOnSite("/v1/auth/apple", identityToken, appleNonces.raw(), accountPath),
   });
-  const googleNonces: SiteNonces = siteNonces();
-  void setUpGoogle(text, notice, {
-    nextHashedNonce: googleNonces.next,
-    onCredential: (credential: string): Promise<void> => signInOnSite("/v1/auth/google", credential, googleNonces.raw(), accountPath),
-  });
+  setUpGoogleRedirect(text, notice, redirectUri);
 }
 
 /** Sağlayıcının yetkilendirme adresi: uygulamanın nonce özeti ve bu denemenin `state`'iyle. */
@@ -272,10 +282,8 @@ function providerAuthorizeUrl(pending: PendingAppSignIn, redirectUri: string): s
 function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: string, hashedNonce: string): void {
   element("signin-intro", HTMLElement).classList.add("hidden");
   element("signin-app-intro", HTMLElement).classList.remove("hidden");
-  element("google-button", HTMLElement).classList.add("hidden");
   const apple: HTMLButtonElement = element("apple-button", HTMLButtonElement);
   const google: HTMLButtonElement = element("google-redirect-button", HTMLButtonElement);
-  google.classList.remove("hidden");
   const go = (provider: AppSignInProvider): void => {
     hideNotice(notice);
     const pending: PendingAppSignIn = { provider, state: randomHex(16), hashedNonce };
@@ -345,6 +353,12 @@ function main(): void {
   const text: ClientCopy = clientCopy;
   const returned: ProviderReturn = providerReturn(window.location.hash);
   if (returned.kind !== "none") {
+    // Sitenin Google girişinden mi dönüldü (bu sekmede bekleyen site denemesi), yoksa uygulama adına girişten mi.
+    const siteGoogle: PendingSiteGoogle | null = takePendingSiteGoogle();
+    if (siteGoogle !== null) {
+      void finishSiteGoogleReturn(text, notice, returned, siteGoogle, dataValue(root, "accountPath"), dataValue(root, "redirectUri"));
+      return;
+    }
     finishAppReturn(text, notice, returned, window.location.pathname, dataValue(root, "redirectUri"));
     return;
   }

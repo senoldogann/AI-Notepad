@@ -10,7 +10,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type Browser, type BrowserContext, type CDPSession, type ConsoleMessage, type Page, type Route, chromium } from "playwright-core";
-import { googleScriptUrl, siteConfigs } from "../src/config.ts";
+import { siteConfigs } from "../src/config.ts";
 
 /** Ekran boyutu ve renk teması. */
 interface Variant {
@@ -52,7 +52,7 @@ const targets: readonly Target[] = [
   { name: "home", path: "/", ready: "main", signedIn: false, account: null },
   { name: "pricing", path: "/pricing", ready: "main", signedIn: false, account: null },
   { name: "download", path: "/download", ready: "main", signedIn: false, account: null },
-  { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false, account: null },
+  { name: "signin", path: "/sign-in", ready: "#google-redirect-button:not(.hidden):enabled", signedIn: false, account: null },
   { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "main", signedIn: false, account: null },
   { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false, account: null },
   { name: "privacy", path: "/privacy", ready: "main", signedIn: false, account: null },
@@ -148,18 +148,11 @@ function argument(index: number, name: string): string {
   return value;
 }
 
-/**
- * Beklenen konsol hataları: Google Identity Services sayfaya kendi `<style>` öğelerini ve iframe yüklenene dek görünen
- * yer tutucu düğmede `data:` adresli bir Google simgesi ekler; Google'ın belgelediği CSP bunlara izin vermez (asıl düğme
- * iframe içinde çizildiği için etkilenmez; giriş sayfasında Google dışında `data:` görsel ekleyen yok). 404 sayfasının
- * kendisi 404 durumuyla gelir; yönetici olmayanın yönetim isteği 403 alır.
- */
+/** Beklenen konsol hataları: 404 sayfasının kendisi 404 durumuyla gelir; yönetici olmayanın yönetim isteği 403 alır. */
 function isExpectedConsoleError(message: ConsoleMessage, shot: string): boolean {
-  const fromGoogle: boolean = message.location().url.startsWith(googleScriptUrl);
-  const googlePlaceholderIcon: boolean = shot.startsWith("signin") && message.text().startsWith("Loading the image 'data:image/png");
   const notFoundDocument: boolean = shot.startsWith("notfound") && message.text().includes("status of 404");
   const adminForbidden: boolean = shot.startsWith("admin-forbidden") && message.text().includes("status of 403");
-  return fromGoogle || googlePlaceholderIcon || notFoundDocument || adminForbidden;
+  return notFoundDocument || adminForbidden;
 }
 
 /** Sayfanın konsol hatalarını ve yakalanmamış hatalarını toplar. */
@@ -281,10 +274,6 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
       }
       await page.goto(`${base}${target.path}`, { waitUntil: "load" });
       await page.waitForSelector(target.ready, { timeout: 20_000 });
-      if (target.ready.includes("iframe")) {
-        // Google düğmesinin iframe içeriği (yazı ve yazı tipi) ayrıca yüklenir.
-        await page.waitForTimeout(2000);
-      }
       if (target.name === "admin") {
         await page.click("#inbox-list .inbox__item");
         await page.waitForSelector("#detail-body:not(.hidden)");
