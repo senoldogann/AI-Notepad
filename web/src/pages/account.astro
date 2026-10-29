@@ -90,7 +90,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
             <h2 class="title-m" id="app-title">{text.appTitle}</h2>
             <p class="muted">{text.appText}</p>
             <p class="small muted">{common.requirementsShort}</p>
-            <a class="button button--primary button--small" href={macDownloadUrl(siteConfig)}>
+            <a class="button button--primary button--small" href={macDownloadUrl(siteConfig, "account")}>
               <Icon name="apple" size={15} class="button__apple" />
               {common.downloadCta}
             </a>

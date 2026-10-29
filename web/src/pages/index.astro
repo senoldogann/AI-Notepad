@@ -16,6 +16,8 @@ import { type Brand, brands, marqueeBrands } from "../lib/brands";
 import type { FilmLayout, FilmPalette } from "../lib/film";
 import type { IconName } from "../lib/icons";
 import { cyclic } from "../lib/list";
+import { homeStructuredData, structuredDataJson } from "../lib/structured-data";
+import { operator } from "../legal/operator";
 import { routes } from "../routes";
 import { siteConfig } from "../site";
 import askShot from "../assets/screenshots/ask.webp";
@@ -25,7 +27,8 @@ import noteShot from "../assets/screenshots/note.webp";
 
 const text: HomeCopy = copy.home;
 const common: CommonCopy = copy.common;
-const downloadUrl: string = macDownloadUrl(siteConfig);
+const heroDownloadUrl: string = macDownloadUrl(siteConfig, "home-hero");
+const ctaDownloadUrl: string = macDownloadUrl(siteConfig, "home-cta");
 const covers: readonly { readonly palette: FilmPalette; readonly layout: FilmLayout }[] = [
   { palette: "coral", layout: "clouds-right" },
   { palette: "ocean", layout: "clouds-left" },
@@ -54,16 +57,20 @@ const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; r
   { key: "tasks", icon: "check-circle", palette: "violet" },
   { key: "files", icon: "disk", palette: "mint" },
 ];
+/** Arama motorları için uygulama ve işletme bilgisi (JSON-LD). */
+const structuredData: string = structuredDataJson(homeStructuredData(siteConfig, common, text.meta, operator));
 ---
 
 <Base page="home" meta={text.meta} indexed={true}>
+  {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
+  <script is:inline type="application/ld+json" set:html={structuredData} />
   <section class="hero page">
     <div class="hero__text">
       <p class="eyebrow">{text.eyebrow}</p>
       <h1 class="display">{text.title}</h1>
       <p class="lead">{text.lead}</p>
       <div class="hero__actions">
-        <a class="button button--primary" href={downloadUrl}>
+        <a class="button button--primary" href={heroDownloadUrl}>
           <Icon name="apple" size={16} class="button__apple" />
           {common.downloadCta}
         </a>
@@ -398,7 +405,7 @@ const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; r
         <h2 class="title-xl" id="final-title">{text.finalTitle}</h2>
         <p class="final__lead">{text.finalLead}</p>
         <div class="hero__actions final__actions">
-          <a class="button button--primary button--on-film" href={downloadUrl}>
+          <a class="button button--primary button--on-film" href={ctaDownloadUrl}>
             <Icon name="apple" size={16} class="button__apple" />
             {common.downloadCta}
           </a>

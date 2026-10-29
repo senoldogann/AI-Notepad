@@ -116,6 +116,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
   const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
   return {
     "/v1/me": meFixture("active", now),
+    "/v1/download/mac/version": { version: "0.1.5" },
     "/v1/admin/stats": {
       generatedAt: now.toISOString(),
       downloads: { total: 1284, last30Days: days.map((day: string, index: number) => ({ day, count: wave(index, 9) })) },

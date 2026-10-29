@@ -535,7 +535,7 @@ export const copy: Copy = {
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
-    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
+    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and no one else in the meeting needs to install anything.`,
     secondaryCta: "See pricing",
     assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
     facts: {
