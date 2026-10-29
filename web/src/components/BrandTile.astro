@@ -1,0 +1,43 @@
+---
+// Marka karosu: uygulamadaki BrandTile gibi, markanın pastel film gradyanı üstünde koyu mürekkep renginde tek renk logo.
+// Karo `size`×`size`; logo karonun yaklaşık yarısı.
+import BrandLogo from "./BrandLogo.astro";
+import Film from "./Film.astro";
+import { type Brand, type BrandMark, brands } from "../lib/brands";
+
+interface Props {
+  readonly brand: Brand;
+  readonly size: "small" | "medium";
+}
+const { brand, size } = Astro.props;
+const mark: BrandMark = brands[brand];
+const logoSize: Readonly<Record<Props["size"], number>> = { small: 13, medium: 24 };
+---
+
+<Film palette={mark.palette} layout={mark.layout} class={`brand-tile brand-tile--${size}`}>
+  <BrandLogo brand={brand} size={logoSize[size]} />
+</Film>
+
+<style>
+  /* Gradyan durgun; doygunluk filtresi kaldırılır ki kayan şeritte karolar her karede filtrelenmesin. */
+  :global(.brand-tile) {
+    display: grid;
+    place-items: center;
+    flex: none;
+    filter: none;
+    color: rgb(10 10 10 / 0.8);
+    border: 1px solid rgb(255 255 255 / 0.25);
+  }
+
+  :global(.brand-tile--small) {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+  }
+
+  :global(.brand-tile--medium) {
+    width: 50px;
+    height: 50px;
+    border-radius: 14px;
+  }
+</style>

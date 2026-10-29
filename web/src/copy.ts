@@ -22,6 +22,12 @@ export interface TitledText {
   readonly text: string;
 }
 
+/** Ürün gerçekleri kartı: büyük değer ve kısa açıklama. */
+export interface FactCopy {
+  readonly value: string;
+  readonly label: string;
+}
+
 /** Simgeli, başlıklı kısa metin (kartlar). */
 export interface IconText extends TitledText {
   readonly icon: IconName;
@@ -116,6 +122,8 @@ export interface HomeCopy {
   readonly title: string;
   readonly lead: string;
   readonly secondaryCta: string;
+  /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
+  readonly assurances: readonly string[];
   readonly demo: DemoCopy;
   readonly library: {
     readonly label: string;
@@ -131,6 +139,14 @@ export interface HomeCopy {
     readonly ask: ShowcaseShot;
     readonly home: ShowcaseShot;
   };
+  /** Doğrulanabilir ürün gerçekleri kartları (uydurma kullanıcı sayısı yok); her kartın küçük bir örnek görseli var. */
+  readonly facts: {
+    readonly label: string;
+    readonly noBot: FactCopy & { readonly people: readonly string[]; readonly note: string };
+    readonly live: FactCopy & { readonly status: string; readonly line: string };
+    readonly languages: FactCopy & { readonly sample: readonly string[] };
+    readonly tasks: FactCopy & { readonly sample: readonly string[] };
+  };
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
   readonly featuresLead: string;
@@ -139,11 +155,43 @@ export interface HomeCopy {
     readonly tasks: TitledText & { readonly sample: readonly string[] };
     readonly missed: TitledText & { readonly button: string; readonly answer: string };
     readonly ask: TitledText & { readonly question: string; readonly source: string };
-    readonly integrations: TitledText;
-    readonly privacy: TitledText & { readonly badge: string };
+    readonly followUp: TitledText & { readonly recipe: string; readonly subject: string; readonly lines: readonly string[] };
+    readonly templates: TitledText & { readonly sample: readonly string[] };
   };
-  readonly stepsTitle: string;
-  readonly steps: readonly TitledText[];
+  /** Kayan entegrasyon şeridinin etiketi. */
+  readonly marqueeLabel: string;
+  /** Not ekranındaki açıklama balonları (ekran görüntüsüne göre konumlar Home'da). */
+  readonly noteCallouts: {
+    readonly dueDate: string;
+    readonly transcript: string;
+  };
+  /** Entegrasyonlar: notların ve görevlerin gittiği yerler, MCP ile yapay zekâ uygulamaları, dosyalar ve takvim. */
+  readonly integrations: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly notes: TitledText;
+    readonly tasks: TitledText;
+    readonly ai: TitledText;
+    readonly files: TitledText;
+    /** Claude'da toplantılar üstüne bir soru örneği (MCP). */
+    readonly mcpDemo: {
+      readonly label: string;
+      readonly question: string;
+      readonly tool: string;
+      readonly answerLead: string;
+      readonly answer: readonly string[];
+      readonly source: string;
+    };
+  };
+  /** Gizlilik ve güven ızgarası. */
+  readonly trust: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly items: readonly TitledText[];
+    readonly link: string;
+  };
   readonly pricingTitle: string;
   readonly pricingLead: string;
   readonly pricingCta: string;
@@ -176,17 +224,12 @@ export interface DownloadCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  /** Sürüm etiketi ("Version" + numara). */
+  /** Sürüm etiketi ("Version" + sunucudan okunan numara). */
   readonly versionLabel: string;
-  readonly buttonNote: string;
-  readonly requirementsTitle: string;
-  readonly requirements: readonly IconText[];
   readonly installTitle: string;
   readonly installSteps: readonly TitledText[];
-  readonly updatesTitle: string;
-  readonly updatesText: string;
-  readonly helpTitle: string;
-  readonly helpText: string;
+  /** Sayfanın sonundaki tek satır: güncellemeler ve yardım bağlantısı. */
+  readonly footnote: string;
   readonly helpCta: string;
 }
 
@@ -400,6 +443,32 @@ export const copy: Copy = {
     title: tagline,
     lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
     secondaryCta: "See pricing",
+    assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
+    facts: {
+      label: "At a glance",
+      noBot: {
+        value: "No bot",
+        label: `Nothing joins your call. ${productName} listens on your Mac.`,
+        people: ["E", "M", "A", "Y"],
+        note: "4 people · no bots",
+      },
+      live: {
+        value: "Live",
+        label: "Transcript and translation appear while people talk.",
+        status: "Listening · 23:20",
+        line: "So the beta opens on the fourteenth?",
+      },
+      languages: {
+        value: "30+",
+        label: "Languages for your meetings, notes and translations.",
+        sample: ["English", "Suomi", "Türkçe", "Deutsch", "Español", "日本語"],
+      },
+      tasks: {
+        value: "Tasks first",
+        label: "Every note opens with who does what, by when.",
+        sample: ["Release notes · Fri", "Pricing table · Today"],
+      },
+    },
     demo: {
       label: `${productName} recording a meeting and writing the note`,
       listening: "Listening",
@@ -484,22 +553,67 @@ export const copy: Copy = {
         question: "What did we decide about the budget?",
         source: "Sources: Investor update, Product weekly",
       },
-      integrations: {
-        title: "Integrations",
-        text: "Send notes and tasks where they belong: Notion, Slack, Microsoft Teams, Discord and Zoom; tasks to Linear, Jira or Reminders. Connected with their official sign-ins.",
+      followUp: {
+        title: "Follow-up in one click",
+        text: "Recipes turn a meeting into the next step: a follow-up email, a project plan, risks and open questions. Save your own for the questions you ask every week.",
+        recipe: "Follow-up email",
+        subject: "Subject: Product weekly, next steps",
+        lines: ["Beta opens on 14 November.", "Alex: release notes by Friday."],
       },
-      privacy: {
-        title: "Privacy",
-        text: "Audio is processed only to be transcribed and is not stored on our servers. Your notes and recordings stay on your Mac. No bot joins the call.",
-        badge: "Not stored on our servers",
+      templates: {
+        title: "Meeting templates",
+        text: "Client calls, one-on-ones, interviews and lectures each get a note that puts the right things first. Or write your own.",
+        sample: ["Client call", "One-on-one", "Interview", "Lecture", "Your own"],
       },
     },
-    stepsTitle: "In three steps",
-    steps: [
-      { title: "Download and sign in", text: `Download the app, drag ${productName} to Applications and sign in with Apple or Google.` },
-      { title: "Start listening", text: "One click as the meeting starts. Zoom, Meet, Teams or in person; your voice and the other side's." },
-      { title: "Get your note", text: "The meeting ends, the note is ready: tasks first, then decisions and a summary. Share it or send it on." },
-    ],
+    trust: {
+      eyebrow: "Privacy",
+      title: "Your meetings stay yours.",
+      lead: "Built for conversations you'd rather keep private, by a small company in Finland.",
+      items: [
+        { title: "No bot in your call", text: "Gistsmith listens on your Mac. Nobody sees an extra participant, and you don't have to ask anyone to let it in." },
+        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers never keep a copy." },
+        { title: "Audio isn't kept by us", text: "Audio is sent only to be transcribed. Our servers don't store it, and your recordings stay on your Mac." },
+        { title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
+        { title: "EU company, GDPR", text: "Gistsmith is run from Finland under EU data protection law. Our account database is hosted in the EU." },
+        { title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
+      ],
+      link: "Read the privacy policy",
+    },
+    marqueeLabel: "Works with the tools you already use",
+    noteCallouts: {
+      dueDate: "Owner and due date",
+      transcript: "Full transcript, by speaker",
+    },
+    integrations: {
+      eyebrow: "Integrations",
+      title: "Your meetings, where your work happens.",
+      lead: "Send the note where your team works, put tasks in your tracker, and let your AI apps read your meetings.",
+      notes: {
+        title: "Notes to your team",
+        text: "Send the finished note to Notion, Apple Notes or a channel in Slack, Microsoft Teams, Discord or Zoom Team Chat; anything else through a webhook (Zapier, Make, n8n).",
+      },
+      tasks: {
+        title: "Tasks to your tracker",
+        text: "Turn your tasks into Linear or Jira issues, or into Apple Reminders.",
+      },
+      ai: {
+        title: "Your AI apps, through MCP",
+        text: "Claude, Cursor and VS Code can search and read your meetings. Connect them with one click in Settings; they can only read, never change anything.",
+      },
+      files: {
+        title: "Your files and calendar",
+        text: "Save every note as Markdown to a folder, such as your Obsidian vault or iCloud Drive. Your calendar shows what's next and can start recording when a meeting begins.",
+      },
+      mcpDemo: {
+        label: "In Claude",
+        question: "What did I promise Nordia last week?",
+        tool: "Searched your meetings",
+        answerLead: "In the client call on 27 October you said you'd:",
+        answer: ["Send the revised quote by Friday", "Share the onboarding checklist"],
+        source: "Client call · Nordia",
+      },
+    },
     pricingTitle: "One plan. Simple pricing.",
     pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
@@ -597,27 +711,14 @@ export const copy: Copy = {
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
     versionLabel: "Version",
-    buttonNote: "Signed with an Apple Developer ID and notarized by Apple.",
-    requirementsTitle: "System requirements",
-    requirements: [
-      { icon: "laptop", title: "macOS 26", text: "or later" },
-      { icon: "chip", title: "Apple silicon", text: "M1 or later" },
-      { icon: "globe", title: "Internet", text: "for the live transcript, notes, translation and speaker separation" },
-      { icon: "disk", title: "~1 GB free space", text: "for the on-device speech model, used when the live transcript runs offline" },
-    ],
-    installTitle: "Installing on your Mac",
+    installTitle: "Three steps to your first meeting",
     installSteps: [
-      { title: "Open the disk image", text: `Double-click the ${productName} disk image (.dmg) you downloaded.` },
-      { title: "Drag to Applications", text: `Drag the ${productName} icon into the Applications folder, then eject the disk image.` },
-      { title: "Open it", text: `Open ${productName} from Applications. If macOS asks whether to open an app downloaded from the internet, choose “Open”.` },
-      { title: "Grant permissions", text: "The setup page asks for microphone and system-audio permissions. You can change them later in System Settings › Privacy & Security." },
-      { title: "Sign in", text: "Sign in with Apple or Google and start your first meeting. The trial is 3 meetings or 7 days, whichever comes first." },
+      { title: "Install", text: `Open the disk image and drag ${productName} into Applications.` },
+      { title: "Allow audio", text: "Open the app and allow the microphone and system audio, so it hears both sides of the call." },
+      { title: "Sign in", text: "Sign in with Apple or Google and start listening. Your first 3 meetings or 7 days are free." },
     ],
-    updatesTitle: "Updates",
-    updatesText: "New versions arrive inside the app and are installed with your approval.",
-    helpTitle: "Need a hand?",
-    helpText: "Questions about installing, your account or your subscription? Send us a message and we'll get back to you by email.",
-    helpCta: "Contact us",
+    footnote: "Updates arrive automatically inside the app.",
+    helpCta: "Questions? Contact us",
   },
   signIn: {
     meta: { title: `Sign in — ${productName}`, description: `Sign in to your ${productName} account with Apple or Google.` },

@@ -21,7 +21,7 @@ import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
-import { countDownload } from "./downloads";
+import { countDownload, latestMacVersion } from "./downloads";
 import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
@@ -57,6 +57,7 @@ const webhookBodyBytes: number = 512 * 1024;
  */
 const webRoutes: ReadonlySet<string> = new Set([
   "/v1/health",
+  "/v1/download/mac/version",
   "/v1/auth/apple",
   "/v1/auth/google",
   "/v1/auth/refresh",
@@ -358,6 +359,14 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     }
     await createReport(db, config, body, user === null ? null : user.userId, now);
     return jsonResponse(202, {});
+  }
+  if (path === "/v1/download/mac/version" && method === "GET") {
+    // İndirme sayfasındaki sürüm numarası; tarayıcı ve kenar önbelleği 5 dk tutar (GitHub her görüntülemede çağrılmaz).
+    const version: string = await latestMacVersion(context.platform, config.appcastUrl);
+    return new Response(JSON.stringify({ version }), {
+      status: 200,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" },
+    });
   }
   if (path === "/v1/download/mac" && method === "GET") {
     await countDownload(db, now);

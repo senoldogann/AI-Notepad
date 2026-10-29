@@ -1,9 +1,9 @@
 ---
-// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, uygulamanın gerçek ekranları,
-// özellikler, üç adım, fiyat, SSS.
+// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, ürün gerçekleri, kayan
+// entegrasyon şeridi, uygulamanın gerçek ekranları, özellikler, entegrasyonlar (MCP dahil), gizlilik, fiyat, SSS.
 import Base from "../layouts/Base.astro";
-import AppShot from "../components/AppShot.astro";
-import BrandLogo from "../components/BrandLogo.astro";
+import AppShot, { type ShotCallout } from "../components/AppShot.astro";
+import BrandTile from "../components/BrandTile.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
 import HeroDemo from "../components/HeroDemo.astro";
@@ -12,7 +12,7 @@ import MeetingCard from "../components/MeetingCard.astro";
 import Waveform from "../components/Waveform.astro";
 import { macDownloadUrl } from "../config";
 import { copy, type CommonCopy, type HomeCopy } from "../copy";
-import { type Brand, integrationBrands } from "../lib/brands";
+import { type Brand, brands, marqueeBrands } from "../lib/brands";
 import type { FilmLayout, FilmPalette } from "../lib/film";
 import type { IconName } from "../lib/icons";
 import { cyclic } from "../lib/list";
@@ -32,15 +32,28 @@ const covers: readonly { readonly palette: FilmPalette; readonly layout: FilmLay
   { palette: "mint", layout: "streaks" },
   { palette: "violet", layout: "clouds-right" },
 ];
+/** Gizlilik ızgarasının simgeleri (metinlerle aynı sırada). */
+const trustIcons: readonly IconName[] = ["users", "laptop", "waveform", "sparkle", "globe", "check-circle"];
 /** Özellik kartlarının başlık simgeleri. */
 const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   live: "translate",
   tasks: "check-circle",
   missed: "rewind",
   ask: "search",
-  integrations: "plug",
-  privacy: "lock",
+  followUp: "mail",
+  templates: "note",
 };
+/** Not ekranındaki açıklama balonları (konumları stilde, note.webp'deki öğelere göre). */
+const noteCallouts: readonly ShotCallout[] = [
+  { text: text.noteCallouts.transcript, class: "note-callout--transcript", side: "right" },
+  { text: text.noteCallouts.dueDate, class: "note-callout--due", side: "right" },
+];
+/** Entegrasyon gruplarının simgeleri (yapay zekâ grubu ayrı, geniş kartta; logolar kayan şeritte). */
+const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; readonly icon: IconName; readonly palette: FilmPalette }[] = [
+  { key: "notes", icon: "message", palette: "rose" },
+  { key: "tasks", icon: "check-circle", palette: "violet" },
+  { key: "files", icon: "disk", palette: "mint" },
+];
 ---
 
 <Base page="home" meta={text.meta} indexed={true}>
@@ -56,7 +69,17 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         </a>
         <a class="button button--secondary" href={routes.pricing}>{text.secondaryCta}</a>
       </div>
-      <p class="hero__offer small"><strong>{common.offer}</strong><span class="muted">{common.requirementsShort}</span></p>
+      <ul class="hero__assurances small">
+        {
+          text.assurances.map((item: string) => (
+            <li>
+              <Icon name="check" size={15} class="hero__check" />
+              {item}
+            </li>
+          ))
+        }
+        <li class="muted">{common.requirementsShort}</li>
+      </ul>
     </div>
 
     <Film palette="sunset" layout="clouds-left" class="hero__cover">
@@ -73,6 +96,71 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         }
       </div>
     </section>
+  </section>
+
+  <section class="page facts" aria-label={text.facts.label}>
+    <ul class="facts__grid">
+      <li class="fact reveal">
+        <Film palette="mint" layout="clouds-right" class="fact__cover">
+          <div class="glass fact__roster">
+            <span class="fact__avatars">{text.facts.noBot.people.map((initial: string) => <span class="fact__avatar">{initial}</span>)}</span>
+            <span class="fact__roster-note">{text.facts.noBot.note}</span>
+          </div>
+        </Film>
+        <p class="fact__value">{text.facts.noBot.value}</p>
+        <p class="fact__label muted">{text.facts.noBot.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="ocean" layout="clouds-left" class="fact__cover">
+          <div class="glass fact__live">
+            <span class="fact__status"><span class="fact__rec" aria-hidden="true" />{text.facts.live.status}</span>
+            <Waveform seed={text.facts.live.line} width={112} height={22} class="fact__wave" />
+            <span class="fact__line">{text.facts.live.line}</span>
+          </div>
+        </Film>
+        <p class="fact__value">{text.facts.live.value}</p>
+        <p class="fact__label muted">{text.facts.live.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="violet" layout="streaks" class="fact__cover">
+          <ul class="fact__languages">{text.facts.languages.sample.map((language: string) => <li class="glass fact__language">{language}</li>)}</ul>
+        </Film>
+        <p class="fact__value tabular">{text.facts.languages.value}</p>
+        <p class="fact__label muted">{text.facts.languages.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="coral" layout="clouds-left" class="fact__cover">
+          <ul class="glass fact__tasks">
+            {
+              text.facts.tasks.sample.map((task: string) => (
+                <li class="fact__task">
+                  <span class="sample-tasks__box" aria-hidden="true" />
+                  {task}
+                </li>
+              ))
+            }
+          </ul>
+        </Film>
+        <p class="fact__value">{text.facts.tasks.value}</p>
+        <p class="fact__label muted">{text.facts.tasks.label}</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="marquee" aria-labelledby="marquee-label">
+    <p class="marquee__label" id="marquee-label">{text.marqueeLabel}</p>
+    <div class="marquee__viewport">
+      <ul class="marquee__track">
+        {
+          [...marqueeBrands, ...marqueeBrands].map((brand: Brand, index: number) => (
+            <li class="marquee__item" aria-hidden={index >= marqueeBrands.length ? "true" : undefined}>
+              <BrandTile brand={brand} size="medium" />
+              <span class="marquee__name">{brands[brand].name}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
   </section>
 
   <section class="section page showcase" aria-labelledby="showcase-title">
@@ -92,6 +180,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[720, 1200, 1680, 2160]}
         sizes="(max-width: 640px) 160vw, min(1040px, 86vw)"
         class="showcase__note reveal"
+        callouts={noteCallouts}
       />
       <AppShot
         image={askShot}
@@ -102,6 +191,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[640, 960, 1360]}
         sizes="(max-width: 640px) 130vw, (max-width: 960px) 86vw, 680px"
         class="showcase__ask reveal"
+        callouts={[]}
       />
       <AppShot
         image={liveShot}
@@ -112,6 +202,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[360, 560, 840]}
         sizes="(max-width: 640px) 76vw, (max-width: 960px) 72vw, 320px"
         class="showcase__live reveal"
+        callouts={[]}
       />
       <AppShot
         image={homeShot}
@@ -122,6 +213,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[720, 1200, 1680, 2160]}
         sizes="(max-width: 640px) 120vw, min(1040px, 86vw)"
         class="showcase__home reveal"
+        callouts={[]}
       />
     </div>
   </section>
@@ -186,48 +278,93 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
 
       <article class="feature reveal">
         <Film palette="mint" layout="clouds-right" class="feature__cover">
-          <ul class="logos">
-            {
-              integrationBrands.map((brand: Brand) => (
-                <li class="glass logos__tile">
-                  <BrandLogo brand={brand} size={22} />
-                </li>
-              ))
-            }
-          </ul>
+          <div class="follow-up">
+            <span class="glass follow-up__recipe"><Icon name="sparkle" size={14} class="" />{text.features.followUp.recipe}</span>
+            <div class="glass follow-up__mail">
+              <p class="follow-up__subject">{text.features.followUp.subject}</p>
+              {text.features.followUp.lines.map((line: string) => <p class="follow-up__line">{line}</p>)}
+            </div>
+          </div>
         </Film>
-        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.integrations} size={18} class="" /></span>{text.features.integrations.title}</h3>
-        <p class="muted">{text.features.integrations.text}</p>
+        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.followUp} size={18} class="" /></span>{text.features.followUp.title}</h3>
+        <p class="muted">{text.features.followUp.text}</p>
       </article>
 
       <article class="feature reveal">
         <Film palette="sunset" layout="streaks" class="feature__cover">
-          <p class="glass privacy-badge">
-            <Icon name="lock" size={18} class="" />
-            {text.features.privacy.badge}
-          </p>
+          <ul class="templates">
+            {
+              text.features.templates.sample.map((template: string) => (
+                <li class="glass templates__item">{template}</li>
+              ))
+            }
+          </ul>
         </Film>
-        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.privacy} size={18} class="" /></span>{text.features.privacy.title}</h3>
-        <p class="muted">{text.features.privacy.text}</p>
+        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.templates} size={18} class="" /></span>{text.features.templates.title}</h3>
+        <p class="muted">{text.features.templates.text}</p>
       </article>
     </div>
   </section>
 
-  <section class="section section--tinted" aria-labelledby="steps-title">
-    <div class="page">
-      <h2 class="title-l reveal" id="steps-title">{text.stepsTitle}</h2>
-      <ol class="steps">
-        {
-          text.steps.map((step, index: number) => (
-            <li class="step reveal">
-              <span class="step__number tabular" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-              <h3 class="title-m">{step.title}</h3>
-              <p class="muted">{step.text}</p>
-            </li>
-          ))
-        }
-      </ol>
+  <section class="section page" id="integrations" aria-labelledby="integrations-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.integrations.eyebrow}</p>
+      <h2 class="title-xl" id="integrations-title">{text.integrations.title}</h2>
+      <p class="lead">{text.integrations.lead}</p>
     </div>
+
+    <div class="integrations">
+      <article class="card integration integration--ai reveal">
+        <div class="integration__text">
+          <h3 class="integration__title"><Film palette="sunset" layout="clouds-left" class="integration__badge"><Icon name="sparkle" size={20} class="" /></Film>{text.integrations.ai.title}</h3>
+          <p class="muted">{text.integrations.ai.text}</p>
+        </div>
+        <Film palette="sunset" layout="clouds-right" class="integration__cover">
+          <div class="glass mcp-chat">
+            <div class="mcp-chat__label"><BrandTile brand="claude" size="small" />{text.integrations.mcpDemo.label}</div>
+            <p class="mcp-chat__question">{text.integrations.mcpDemo.question}</p>
+            <p class="mcp-chat__tool"><Icon name="search" size={13} class="" />{text.integrations.mcpDemo.tool}</p>
+            <p class="mcp-chat__answer">{text.integrations.mcpDemo.answerLead}</p>
+            <ul class="mcp-chat__list">{text.integrations.mcpDemo.answer.map((item: string) => <li>{item}</li>)}</ul>
+            <p class="mcp-chat__source">{text.integrations.mcpDemo.source}</p>
+          </div>
+        </Film>
+      </article>
+
+      {
+        integrationGroups.map((group) => (
+          <article class:list={["card integration reveal", `integration--${group.palette}`]}>
+            <h3 class="integration__title">
+              <Film palette={group.palette} layout="clouds-right" class="integration__badge">
+                <Icon name={group.icon} size={20} class="" />
+              </Film>
+              {text.integrations[group.key].title}
+            </h3>
+            <p class="muted">{text.integrations[group.key].text}</p>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="section page" aria-labelledby="trust-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.trust.eyebrow}</p>
+      <h2 class="title-xl" id="trust-title">{text.trust.title}</h2>
+      <p class="lead">{text.trust.lead}</p>
+    </div>
+    <ul class="trust">
+      {
+        text.trust.items.map((item, index: number) => (
+          <li class="trust__item reveal">
+            <span class="icon-chip icon-chip--small"><Icon name={trustIcons[index] ?? "lock"} size={18} class="" /></span>
+            <h3 class="trust__title">{item.title}</h3>
+            <p class="muted">{item.text}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <a class="text-link trust__link reveal" href={routes.privacy}>{text.trust.link} <Icon name="arrow-right" size={16} class="" /></a>
   </section>
 
   <section class="section page" aria-labelledby="pricing-title">
@@ -290,14 +427,457 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     margin-top: 6px;
   }
 
-  .hero__offer {
+  /* Düğmelerin altındaki güvenceler: küçük onay işaretli, tek satırda akan liste. */
+  .hero__assurances {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 14px;
+    gap: 6px 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .hero__offer strong {
+  .hero__assurances li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+
+  .hero__assurances :global(.hero__check) {
+    color: var(--accent);
+  }
+
+  /* Ürün gerçekleri: dört sütun, büyük değer ve kısa açıklama; ince ayraçlarla sakin bir şerit. */
+  /* Ürün gerçekleri: dört kart, her birinde durgun film kapak üstünde küçük bir örnek ve altında büyük değer. */
+  .facts {
+    margin-top: clamp(40px, 6vw, 72px);
+  }
+
+  .facts__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(12px, 1.6vw, 20px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fact {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    padding: 8px 8px 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--card);
+    box-shadow: var(--elevation);
+  }
+
+  .fact :global(.fact__cover) {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 5 / 3.4;
+    padding: 14px;
+    margin-bottom: 12px;
+    border-radius: calc(var(--radius-m) - 6px);
+  }
+
+  .fact__value {
+    margin: 0;
+    padding: 0 14px;
+    font-size: clamp(1.375rem, 2.2vw, 1.75rem);
     font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .fact__label {
+    margin: 0;
+    padding: 0 14px;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  .fact__roster,
+  .fact__live,
+  .fact__tasks {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+  }
+
+  .fact__roster {
+    justify-items: center;
+  }
+
+  .fact__avatars {
+    display: flex;
+  }
+
+  .fact__avatar {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-left: -6px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    background: #e7efe9;
+    color: #1d2a23;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .fact__avatar:first-child {
+    margin-left: 0;
+  }
+
+  .fact__avatar:nth-child(2) {
+    background: #e6ecf6;
+  }
+
+  .fact__avatar:nth-child(3) {
+    background: #f6e9e1;
+  }
+
+  .fact__avatar:nth-child(4) {
+    background: #eee7f5;
+  }
+
+  .fact__roster-note {
+    font-weight: 600;
+  }
+
+  .fact__live {
+    max-width: 220px;
+  }
+
+  .fact__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+
+  .fact__rec {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e5484d;
+  }
+
+  .fact__live :global(.fact__wave) {
+    color: #4f7cb8;
+  }
+
+  .fact__line {
+    line-height: 1.35;
+  }
+
+  .fact__languages {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    max-width: 230px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fact__language {
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .fact__tasks {
+    margin: 0;
+    list-style: none;
+  }
+
+  .fact__task {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .fact__task .sample-tasks__box {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+  }
+
+  /* Kayan entegrasyon şeridi: liste iki kez yazılır, iz yarısı kadar kayar ve dikiş görünmez. Yalnızca `transform`
+     hareket eder (karolar bir kez çizilir); üstüne gelince durur, hareket azaltılmışsa kaymaz ve tek liste ortalanır. */
+  .marquee {
+    display: grid;
+    gap: 18px;
+    margin-top: clamp(48px, 7vw, 88px);
+  }
+
+  .marquee__label {
+    margin: 0;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .marquee__viewport {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .marquee__track {
+    display: flex;
+    width: max-content;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    animation: marquee 90s linear infinite;
+  }
+
+  .marquee__viewport:hover .marquee__track {
+    animation-play-state: paused;
+  }
+
+  .marquee__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-right: clamp(28px, 4vw, 48px);
+  }
+
+  .marquee__name {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee__track {
+      width: auto;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px 0;
+      animation: none;
+    }
+
+    .marquee__item[aria-hidden="true"] {
+      display: none;
+    }
+
+    .marquee__viewport {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+  }
+
+  /* Entegrasyonlar: geniş yapay zekâ kartı (MCP örneğiyle), altında üç grup. Logolar markanın renginde, beyaz karoda. */
+  .integrations {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(14px, 1.8vw, 22px);
+    margin-top: clamp(32px, 4vw, 48px);
+  }
+
+  .integration {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .integration p {
+    margin: 0;
+  }
+
+  .integration--ai {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: clamp(20px, 3vw, 40px);
+    padding: clamp(10px, 1.2vw, 14px) clamp(10px, 1.2vw, 14px) clamp(10px, 1.2vw, 14px) clamp(20px, 3vw, 36px);
+  }
+
+  .integration__text {
+    display: grid;
+    gap: 12px;
+    align-content: center;
+  }
+
+  /* Grup kartları: köşeden süzülen durgun, hafif ton; simge uygulamadaki gibi pastel film karoda. */
+  .integration--rose {
+    background: linear-gradient(150deg, light-dark(#fbeef1, #2a1d21) 0%, var(--card) 60%);
+  }
+
+  .integration--violet {
+    background: linear-gradient(150deg, light-dark(#f3eefb, #221d2c) 0%, var(--card) 60%);
+  }
+
+  .integration--mint {
+    background: linear-gradient(150deg, light-dark(#ecf5ef, #1b2620) 0%, var(--card) 60%);
+  }
+
+  .integration :global(.integration__badge) {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    filter: none;
+    color: rgb(10 10 10 / 0.8);
+  }
+
+  .integration__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .integration--ai .integration__title {
+    font-size: clamp(1.25rem, 2vw, 1.5rem);
+  }
+
+  .integration :global(.integration__cover) {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+    padding: clamp(20px, 3vw, 36px);
+    border-radius: calc(var(--radius-m) - 6px);
+  }
+
+
+  .mcp-chat {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 400px);
+    padding: 18px 20px;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .mcp-chat p,
+  .mcp-chat ul {
+    margin: 0;
+  }
+
+  .mcp-chat__label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__question {
+    justify-self: end;
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 14px 14px 4px 14px;
+    background: #f1ece6;
+    font-weight: 500;
+  }
+
+  .mcp-chat__tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: start;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgb(10 10 10 / 0.1);
+    font-size: 0.75rem;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__list {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .mcp-chat__source {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #5a4a40;
+  }
+
+
+  /* Gizlilik ızgarası: üç sütun, kartsız sakin hücreler. */
+  .trust {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 36px 40px;
+    margin: clamp(32px, 4vw, 48px) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .trust__item {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .trust__title {
+    margin: 4px 0 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .trust__item p {
+    margin: 0;
+  }
+
+  .trust__link {
+    display: inline-flex;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 860px) {
+    .facts__grid,
+
+
+    .integrations {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .integration--ai,
+
+
+    .integration--ai {
+      padding: clamp(20px, 3vw, 32px) 10px 10px;
+    }
+
+    .integration--ai .integration__text {
+      padding: 0 10px;
+    }
+
+    .trust {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
   }
 
   /* Gösterim kapağı: gradyan durgun; doygunluk filtresi kaldırılır ki animasyonlu içerik her karede filtrelenmesin. */
@@ -362,6 +942,17 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   /* Geniş pencereler alt kenarda kesilir. */
   .showcase__grid > :global(.showcase__note) {
     --shot-ratio: 16 / 9;
+  }
+
+  /* Not ekranının balonları: görseldeki öğelerin yeri (görselin yüzdesi). */
+  .showcase__grid :global(.note-callout--transcript) {
+    left: 66.8%;
+    top: 59%;
+  }
+
+  .showcase__grid :global(.note-callout--due) {
+    left: 60.2%;
+    top: 73.4%;
   }
 
   .showcase__grid > :global(.showcase__home) {
@@ -482,64 +1073,66 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     color: #2a2238;
   }
 
-  /* Entegrasyon logoları: tek renk, cam karolar, 4 × 2. */
-  .logos {
-    display: grid;
-    grid-template-columns: repeat(4, 48px);
-    gap: 10px;
+  /* Şablonlar: cam etiketler. */
+  .templates {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 260px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  .logos__tile {
-    display: grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    color: #1d2a23;
+  .templates__item {
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
-  .privacy-badge {
+  /* Takip e-postası: tarif düğmesi ve taslak. */
+  .follow-up {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+    width: min(100%, 260px);
+  }
+
+  .follow-up__recipe {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 11px 18px;
-    /* Dar kartlarda iki satıra iner; köşe yarıçapı iki durumda da yumuşak kalır. */
-    border-radius: 22px;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
     font-weight: 600;
-    font-size: 0.9375rem;
-    line-height: 1.35;
-    text-wrap: balance;
   }
+
+  .follow-up__mail {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 14px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .follow-up__mail p {
+    margin: 0;
+  }
+
+  .follow-up__subject {
+    font-weight: 600;
+  }
+
 
   .section--tinted {
     background: var(--soft);
   }
 
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(20px, 3vw, 40px);
-    margin: clamp(32px, 4vw, 52px) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .step {
-    display: grid;
-    align-content: start;
-    gap: 10px;
-    padding-top: 20px;
-    border-top: 1px solid var(--line);
-  }
-
-  .step__number {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
 
   .pricing-band {
     display: grid;
@@ -661,6 +1254,18 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     }
   }
 
+  @media (max-width: 560px) {
+    .facts__grid,
+
+
+    .fact :global(.fact__cover) {
+      aspect-ratio: auto;
+      min-height: 150px;
+      padding: 18px;
+    }
+
+  }
+
   @media (max-width: 640px) {
     /* Dar ekranda pencere büyütülür ve kaydırılır: tüm pencere yerine okunur bir parçası (not, cevap, karşılama)
        görünür. */
@@ -695,9 +1300,6 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
       grid-column: 1 / -1;
     }
 
-    .steps {
-      grid-template-columns: minmax(0, 1fr);
-    }
 
     .hero__actions .button {
       flex: 1 1 auto;

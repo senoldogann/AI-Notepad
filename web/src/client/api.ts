@@ -308,6 +308,15 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
 }
 
+/** `GET /v1/download/mac/version` yanıtını okur: yayınlanmış en son Mac sürümü (ör. "0.1.4"). */
+export function parseLatestVersion(response: RawResponse, path: string): string {
+  const version: string = stringField(parseObject(response, path), "version", response, path);
+  if (!/^[0-9]+(\.[0-9]+){1,3}$/.test(version)) {
+    throw new ApiResponseError(path, response.status, `sürüm biçimsiz "${version}"`, response.text);
+  }
+  return version;
+}
+
 /** `GET /v1/me` yanıtını okur. */
 export function parseEntitlements(response: RawResponse, path: string): Entitlements {
   const body: JsonObject = parseObject(response, path);
