@@ -14003,17 +14003,6 @@
         }
       }
     },
-    "Önceki toplantılar hesabına taşınamadı: %@ hesap klasöründe zaten var. Hiçbir şey silinmedi; veriler eski yerinde.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't move your earlier meetings to your account: %@ already exists in the account folder. Nothing was deleted; your data is still in its old location."
-          }
-        }
-      }
-    },
     "Önemli gördüğünü kısaca yaz; toplantı bitince not bunları öncelik sayar, gerisini transkriptten tamamlar.": {
       "localizations": {
         "en": {

@@ -62,6 +62,20 @@ func resolveStartBlock(action: StartBlockAction, router: MainWindowRouter) {
     }
 }
 
+/// Başlat düğmesinin yanındaki "abone ol" nedeninin zaten anlattığı hatalar (ör. Başlat'ın reddinden kalan "deneme
+/// bitti"): hata şeridinde farklı sözlerle ikinci kez gösterilmez. Neden yoksa ya da abonelikle çözülmüyorsa boş.
+@MainActor
+func errorsCoveredByStartBlock(notice: StartBlockNotice?) -> [String] {
+    #if HOSTED_EDITION
+    guard notice?.action == .subscribe else {
+        return []
+    }
+    return hostedMessagesResolvedBySubscription()
+    #else
+    return []
+    #endif
+}
+
 /// Çözülmüş durumların hata mesajları: hata şeridinde artık gösterilmez (ör. giriş yapıldıktan sonra "giriş
 /// yapılmamış", oturum yeniden açıldıktan sonra "oturumun kapandı", abone olduktan sonra "deneme bitti" ya da "bu
 /// Mac'te deneme kullanıldı").

@@ -247,8 +247,6 @@ private func storageMessage(error: StorageError) -> String {
         String(localized: "Hesap klasörü tanınmadı. Uygulamayı yeniden başlat; sürerse geri bildirim gönder.")
     case .accountSwitchRequiresRelaunch:
         String(localized: "Başka bir hesapla giriş yapıldı; o hesabın toplantıları için uygulama yeniden başlamalı.")
-    case .legacyDataConflict(let source, _):
-        String(localized: "Önceki toplantılar hesabına taşınamadı: \((source as NSString).lastPathComponent) hesap klasöründe zaten var. Hiçbir şey silinmedi; veriler eski yerinde.")
     case .legacyDataMoveFailed(let source, _, let reason, _):
         String(localized: "Önceki toplantılar hesabına taşınamadı (\((source as NSString).lastPathComponent): \(reason)). Hiçbir şey silinmedi; taşınamayanlar eski yerinde kaldı, yeniden dene.")
     }

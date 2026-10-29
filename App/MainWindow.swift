@@ -177,9 +177,10 @@ struct MainWindowView: View {
                         // yalnızca canlı panelde çıkıyordu.
                         // Aynı ekranda başka yerde görünen (başlat düğmesinin yanındaki neden, kurulum eksikleri) ya da
                         // çözülmüş (ör. giriş yapıldı) hatalar şeritte tekrarlanmaz.
+                        let startBlock: StartBlockNotice? = startBlockNotice(model: model)
                         let visibleErrors: [String] = visibleErrorMessages(
                             errors: model.errorMessages,
-                            shownElsewhere: model.setupProblems + [startBlockNotice(model: model)?.reason].compactMap { $0 },
+                            shownElsewhere: model.setupProblems + [startBlock?.reason].compactMap { $0 } + errorsCoveredByStartBlock(notice: startBlock),
                             resolved: resolvedErrorMessages()
                         )
                         if !visibleErrors.isEmpty {

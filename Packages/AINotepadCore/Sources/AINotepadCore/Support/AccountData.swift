@@ -295,15 +295,18 @@ private func writeLegacyClaim(dataRoot: URL, accountKey: String) throws {
 public struct LegacyMigrationResult: Equatable, Sendable {
     public let claim: LegacyDataClaim
     public let moves: [DataMove]
+    /// Hedefte aynı adlı öğe olduğu için taşınmayan, eski yerinde bırakılan öğeler.
+    public let skipped: [DataMove]
 }
 
 /// Güncellemeden önceki (hesapsız) veriyi hesaba taşır. Kimse sahiplenmediyse bu hesap sahiplenir (kayıt taşımadan önce
 /// yazılır: taşıma yarıda kalsa da veri bu hesabındır, ikinci hesap boş başlar); zaten bu hesabınsa yerinde kalanlar
 /// taşınır; başka hesabınsa hiçbir şeye dokunulmaz. Bekleyen kayıtlar `recordOwnerKeys`'teki sahiplerine gider (bkz.
 /// `legacyDataMoves`). Taşıma aynı disk içinde atomik yeniden adlandırmadır (`renamex_np`, `RENAME_EXCL`): kopyalanmaz,
-/// hedefteki hiçbir şeyin üzerine yazılmaz, hiçbir şey silinmez. Hedeflerden biri zaten varsa hiçbir şey taşınmadan
-/// `legacyDataConflict`; bir taşıma başarısız olursa `legacyDataMoveFailed` (taşınmamış olanlar yerinde kalır, sonraki
-/// denemede kaldığı yerden sürer).
+/// hedefteki hiçbir şeyin üzerine yazılmaz, hiçbir şey silinmez. Hedefinde aynı adlı öğe olanlar taşınmaz, eski yerinde
+/// kalır ve uyarı loglanır (`skipped`; ör. taşımadan sonra eski bir sürüm eski yere yeni dosya yazdı): tek bir öğe hesabı
+/// kilitlemez. Bir taşıma başarısız olursa `legacyDataMoveFailed` (taşınmamış olanlar yerinde kalır, sonraki denemede
+/// kaldığı yerden sürer).
 public func migrateLegacyUserData(dataRoot: URL, accountKey: String, recordOwnerKeys: [String: String]) throws -> LegacyMigrationResult {
     guard isValidAccountDataKey(key: accountKey) else {
         throw StorageError.invalidAccountKey(key: accountKey)
@@ -314,18 +317,20 @@ public func migrateLegacyUserData(dataRoot: URL, accountKey: String, recordOwner
     let claim: LegacyDataClaim = legacyDataClaim(claimOwner: try readLegacyClaimOwner(dataRoot: dataRoot), accountKey: accountKey)
     switch claim {
     case .ownedByAnotherAccount:
-        return LegacyMigrationResult(claim: claim, moves: [])
+        return LegacyMigrationResult(claim: claim, moves: [], skipped: [])
     case .claim:
         try writeLegacyClaim(dataRoot: dataRoot, accountKey: accountKey)
         accountDataLogger.info("Eski veri hesaba yazıldı")
     case .resume:
         break
     }
-    let moves: [DataMove] = legacyDataMoves(
+    let planned: [DataMove] = legacyDataMoves(
         dataRoot: dataRoot, legacy: try readLegacyUserData(dataRoot: dataRoot), claimantKey: accountKey, recordOwnerKeys: recordOwnerKeys
     )
-    if let conflict = moves.first(where: { FileManager.default.fileExists(atPath: $0.destination.path) }) {
-        throw StorageError.legacyDataConflict(source: conflict.source.path, destination: conflict.destination.path)
+    let skipped: [DataMove] = planned.filter { FileManager.default.fileExists(atPath: $0.destination.path) }
+    let moves: [DataMove] = planned.filter { !FileManager.default.fileExists(atPath: $0.destination.path) }
+    for conflict in skipped {
+        accountDataLogger.warning("Eski veri öğesi taşınmadı, hedefte aynı adlı öğe var, öğe: \(conflict.source.lastPathComponent, privacy: .private)")
     }
     for (index, move) in moves.enumerated() {
         try renameExclusively(move: move, movedSoFar: index)
@@ -333,7 +338,7 @@ public func migrateLegacyUserData(dataRoot: URL, accountKey: String, recordOwner
     if !moves.isEmpty {
         accountDataLogger.info("Eski veri hesaba taşındı, öğe: \(moves.count, privacy: .public)")
     }
-    return LegacyMigrationResult(claim: claim, moves: moves)
+    return LegacyMigrationResult(claim: claim, moves: moves, skipped: skipped)
 }
 
 /// Öğeyi aynı disk içinde atomik olarak yeniden adlandırır; hedef varsa ya da başka diske düşüyorsa hata (kopyalanmaz).

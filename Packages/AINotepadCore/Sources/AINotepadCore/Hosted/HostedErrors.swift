@@ -142,12 +142,15 @@ public let hostedCodesResolvedBySubscription: [HostedErrorCode] = [
     .deviceCheckRequired, .deviceCheckInvalid, .trialCapacityReached,
 ]
 
-/// Abone olunca geçersizleşen hataların kullanıcıya gösterilen metinleri (bkz. `hostedCodesResolvedBySubscription`;
-/// bu kodların metni isteğin yoluna bağlı değildir). Saf fonksiyondur.
+/// Abone olunca geçersizleşen hataların kullanıcıya gösterilen metinleri: deneme ve abonelik kodları (bkz.
+/// `hostedCodesResolvedBySubscription`; bu kodların metni isteğin yoluna bağlı değildir) ve yalnızca deneme toplantısında
+/// istenen Apple DeviceCheck hataları. Saf fonksiyondur.
 public func hostedMessagesResolvedBySubscription() -> [String] {
-    hostedCodesResolvedBySubscription.map { (code: HostedErrorCode) -> String in
+    let server: [String] = hostedCodesResolvedBySubscription.map { (code: HostedErrorCode) -> String in
         hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: 403, serverMessage: "", path: "/v1/meetings/start"))
     }
+    let deviceCheck: [String] = [HostedDeviceCheckError.unsupported, HostedDeviceCheckError.tokenFailed(reason: "")].map(hostedDeviceCheckMessage)
+    return server + deviceCheck
 }
 
 /// Sunucu hatasının kullanıcıya gösterilen, ne yapılacağını söyleyen metni. Saf fonksiyondur.

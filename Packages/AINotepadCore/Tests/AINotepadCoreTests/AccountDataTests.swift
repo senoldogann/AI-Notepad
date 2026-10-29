@@ -154,7 +154,7 @@ private func fileNumber(url: URL) throws -> Int {
 
         // İkinci hesap: eski veri A'nın, B'nin klasöründe yalnızca kendi kaydı.
         let second: LegacyMigrationResult = try migrateLegacyUserData(dataRoot: root, accountKey: keyB, recordOwnerKeys: owners)
-        #expect(second == LegacyMigrationResult(claim: .ownedByAnotherAccount, moves: []))
+        #expect(second == LegacyMigrationResult(claim: .ownedByAnotherAccount, moves: [], skipped: []))
         #expect(meetingIDs(sessions: sessionsB) == ["20260103-090000"])
         #expect(!FileManager.default.fileExists(atPath: AppPaths.accountDataDirectory(dataRoot: root, accountKey: keyB).appending(path: "People.json").path))
     }
@@ -204,26 +204,25 @@ private func fileNumber(url: URL) throws -> Int {
         #expect(meetingIDs(sessions: AppPaths.accountSessionsDirectory(dataRoot: root, accountKey: keyA)).contains("20260104-090000"))
     }
 
-    // Hedefte aynı adlı öğe varsa hiçbir şey taşınmaz, üzerine yazılmaz, silinmez; hata açıkça döner.
-    @Test func conflictMovesNothing() throws {
+    // Hedefte aynı adlı öğe varsa yalnızca o taşınmaz (üzerine yazılmaz, silinmez, eski yerinde kalır); gerisi taşınır ve
+    // hesap kilitlenmez.
+    @Test func conflictSkipsOnlyTheConflictingItem() throws {
         let root: URL = try makeLegacyDataRoot()
         let existing: URL = AppPaths.accountSessionsDirectory(dataRoot: root, accountKey: keyA).appending(path: "20260102-090000", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
-        let before: LegacyUserData = try readLegacyUserData(dataRoot: root)
+        let legacySessions: URL = root.appending(path: "Sessions", directoryHint: .isDirectory)
 
-        #expect(throws: StorageError.legacyDataConflict(
-            source: root.appending(path: "Sessions/20260102-090000", directoryHint: .isDirectory).path, destination: existing.path
-        )) {
-            try migrateLegacyUserData(dataRoot: root, accountKey: keyA, recordOwnerKeys: [:])
-        }
-        #expect(try readLegacyUserData(dataRoot: root) == before)
-        #expect(meetingIDs(sessions: root.appending(path: "Sessions", directoryHint: .isDirectory)).count == 3)
+        let result: LegacyMigrationResult = try migrateLegacyUserData(dataRoot: root, accountKey: keyA, recordOwnerKeys: [:])
+        #expect(result.skipped.map(\.source.lastPathComponent) == ["20260102-090000"])
+        #expect(!result.moves.isEmpty)
+        #expect(meetingIDs(sessions: legacySessions) == ["20260102-090000"])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: existing.path).isEmpty)
     }
 
     // Hiç eski veri yoksa (yeni kurulum) ilk hesap yine sahiplenir: sonra eski yerde veri belirse de ikinci hesaba gitmez.
     @Test func freshInstallRecordsTheClaim() throws {
         let root: URL = try temporaryDirectory()
-        #expect(try migrateLegacyUserData(dataRoot: root, accountKey: keyA, recordOwnerKeys: [:]) == LegacyMigrationResult(claim: .claim, moves: []))
+        #expect(try migrateLegacyUserData(dataRoot: root, accountKey: keyA, recordOwnerKeys: [:]) == LegacyMigrationResult(claim: .claim, moves: [], skipped: []))
         #expect(try readLegacyClaimOwner(dataRoot: root) == keyA)
     }
 

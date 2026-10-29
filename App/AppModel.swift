@@ -1999,9 +1999,21 @@ final class AppModel {
             }
         }
         calendarChangesTask = Task { [weak self] in
+            // Takvim eşitlemesi değişiklik bildirimlerini art arda gönderir; her biri takvimi ana iş parçacığında okur
+            // (çalma ve kayıt ekranı takılır). Bildirimler birleştirilir: son bildirimden 2 sn sonra bir kez okunur.
+            var pending: Task<Void, Never>?
             for await _ in changes {
-                await self?.refreshCalendar()
+                pending?.cancel()
+                pending = Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        return
+                    }
+                    await self?.refreshCalendar()
+                }
             }
+            pending?.cancel()
         }
         if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) || UserDefaults.standard.bool(forKey: SettingsKey.autoRecord) {
             micMonitor.start { [weak self] in self?.microphoneStartedElsewhere() }
