@@ -14,6 +14,10 @@ export interface ClientCopy {
     readonly googleUnavailable: string;
     /** Uygulamadan gelen giriş adresi eksik ya da bozuk (`app=1` ile geçerli `nonce` yok). */
     readonly appRequestInvalid: string;
+    /** Sağlayıcıdan dönüş bu denemeye ait değil (`state` eşleşmiyor). */
+    readonly appReturnInvalid: string;
+    /** Tarayıcı depolaması kullanılamıyor (uygulama adına giriş yönlendirme boyunca ona yazar). */
+    readonly storageUnavailable: string;
     readonly upstream: string;
     readonly messageTooLong: string;
     /** Bilinmeyen hata; `{code}` sunucunun hata koduyla değişir. */
@@ -89,6 +93,8 @@ export const clientCopy: ClientCopy = {
     googleFailed: "Sign in with Google didn't complete. Try again or continue with Apple.",
     googleUnavailable: "Sign in with Google isn't available right now. You can continue with Apple.",
     appRequestInvalid: `This sign-in link from the app is incomplete. Start signing in again from ${productName}.`,
+    appReturnInvalid: "This sign-in didn't come back as expected. Choose Apple or Google again.",
+    storageUnavailable: "Your browser blocked the storage this sign-in needs. Allow site data for this page and try again.",
     upstream: "A connected service isn't responding right now. Try again shortly.",
     messageTooLong: "Your message is too long. Please shorten it to 5,000 characters.",
     generic: "Something went wrong (code: {code}). Try again.",

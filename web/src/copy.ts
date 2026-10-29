@@ -187,6 +187,8 @@ export interface SignInCopy {
   readonly title: string;
   readonly lead: string;
   readonly apple: string;
+  /** Uygulama adına girişte Google düğmesi (yönlendirmeli; sitede Google'ın kendi düğmesi çizilir). */
+  readonly google: string;
   /** "… the {Terms} and the {Privacy policy}." cümlesinin bağlantılar dışındaki parçaları. */
   readonly legalBefore: string;
   readonly legalBetween: string;
@@ -593,6 +595,7 @@ export const copy: Copy = {
     title: "Sign in",
     lead: "To manage your account and subscription. You use the same account in the Mac app.",
     apple: "Continue with Apple",
+    google: "Continue with Google",
     legalBefore: "By continuing, you agree to the",
     legalBetween: "and confirm you have read the",
     noScript: "Signing in needs JavaScript.",
