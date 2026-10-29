@@ -172,6 +172,8 @@ final class HostedAccount {
     @ObservationIgnored private var awaitingBillingReturn: Bool = false
     /// Ödeme sayfası açıkken aboneliği bekleyen izleme (bkz. `watchCheckout`); yoksa nil.
     @ObservationIgnored private var checkoutWatch: Task<Void, Never>?
+    /// "Abonelik gerekli" teklifinin son açılışı (bkz. `subscriptionRequiredByServer`).
+    @ObservationIgnored private var lastSubscriptionPromptAt: Date?
     /// Süren hak durumu okumaları (eşzamanlı okumalar birbirinin bayrağını indirmesin).
     @ObservationIgnored private var refreshesInFlight: Int = 0
     private var isRefreshing: Bool { refreshesInFlight > 0 }
@@ -213,6 +215,11 @@ final class HostedAccount {
         }
         // Açılışta oturum varsa o hesabın verisi, toplantılar okunmadan önce yüklenir (bkz. `syncAccountData`).
         syncAccountData(userID: signedInUserIDCache)
+        observers.append(NotificationCenter.default.addObserver(forName: .hostedSubscriptionRequired, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                self?.subscriptionRequiredByServer()
+            }
+        })
         observers.append(NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
             MainActor.assumeIsolated {
                 self?.currentMeeting = nil
@@ -490,6 +497,23 @@ final class HostedAccount {
         upsell = moment
     }
     #endif
+
+    /// Kullanıcı abonelik gerektiren bir şey denedi (Başlat'a bastı) ama hakkı yok: abone olma teklifi hemen açılır.
+    func requestSubscription() {
+        lastSubscriptionPromptAt = Date()
+        upsell = .subscriptionRequired
+    }
+
+    /// Sunucu bir isteği abonelik gerektiği için reddetti (bkz. `hostedSubscriptionRequired`): teklif en çok
+    /// `hostedSubscriptionPromptIntervalSec`'te bir açılır (arka plandaki işler art arda açmasın); hak durumu yenilenir.
+    private func subscriptionRequiredByServer() {
+        if let last = lastSubscriptionPromptAt, Date().timeIntervalSince(last) < hostedSubscriptionPromptIntervalSec {
+            return
+        }
+        lastSubscriptionPromptAt = Date()
+        upsell = .subscriptionRequired
+        Task { await refresh() }
+    }
 
     /// Teklifi kapatır. Deneme bitti teklifi görüldüyse aynı şeyi söyleyen şerit de kalkar (iki kez söylenmesin).
     func dismissUpsell() {

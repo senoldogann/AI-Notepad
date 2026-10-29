@@ -462,6 +462,7 @@ func sendHostedRequest(
                 return (data: data, status: http.statusCode)
             }
             let error: HostedAPIError = parseHostedAPIError(status: http.statusCode, data: data, path: path)
+            announceIfSubscriptionRequired(error: error)
             lastError = error
             failure = .server(error)
             retryAfter = http.value(forHTTPHeaderField: "retry-after")

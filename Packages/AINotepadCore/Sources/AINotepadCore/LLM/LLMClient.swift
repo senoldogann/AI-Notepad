@@ -181,6 +181,10 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
             llmLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
             try await config.credentials.refreshAccessToken()
             return try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
+        } catch LLMError.hosted(let error) {
+            // Abonelik gerektiren ret (deneme bitti vb.): uygulama teklifi gösterir.
+            announceIfSubscriptionRequired(error: error)
+            throw LLMError.hosted(error)
         }
     }
 }

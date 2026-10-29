@@ -518,8 +518,14 @@ func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: Is
         return
     }
     // Kayıt başlatılamıyorsa (deneme bitti, aylık sınır, eksik ayar) hata üretilmez: ana pencere açılır, neden başlat
-    // düğmesinin yanında yazar.
-    guard startBlockNotice(model: model) == nil else {
+    // düğmesinin yanında yazar. Çözümü abone olmaksa (deneme bitti, abonelik sona erdi) abone olma teklifi de açılır
+    // (panelden basıldıysa ana pencere panelin arkasında kalıp hiçbir şey olmamış gibi görünmesin).
+    if let notice = startBlockNotice(model: model) {
+        #if HOSTED_EDITION
+        if notice.action == .subscribe {
+            HostedAccount.shared.requestSubscription()
+        }
+        #endif
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return
     }

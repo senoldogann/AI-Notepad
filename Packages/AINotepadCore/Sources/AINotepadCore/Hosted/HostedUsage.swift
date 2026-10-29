@@ -192,7 +192,14 @@ public enum HostedUpsellMoment: String, Sendable, Equatable {
     case trialNoteReady
     /// Son deneme toplantısının notu hazır: deneme bitti.
     case trialEnded
+    /// Kullanıcı abonelik gerektiren bir şey denedi (kayıt başlatma, Sor, not) ama hakkı yok: deneme bitti, bu Mac'te
+    /// deneme kullanıldı ya da abonelik sona erdi.
+    case subscriptionRequired
 }
+
+/// Sunucunun abonelik reddinden açılan teklif en çok bu aralıkla bir gösterilir (saniye): arka plandaki işler (bekleyen
+/// kayıtlar, uygulama öne gelince yenileme) teklifi art arda açmasın. Kullanıcının kendi denemesi (Başlat) her zaman açar.
+public let hostedSubscriptionPromptIntervalSec: Double = 10 * 60
 
 /// Deneme notu hazır olunca teklif en çok bu aralıkla bir gösterilir (saniye): günde bir.
 public let hostedUpsellIntervalSec: Double = 24 * 60 * 60

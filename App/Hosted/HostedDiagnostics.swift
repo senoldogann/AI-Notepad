@@ -25,7 +25,7 @@ func hostedAccountDiagnostics(account: HostedAccount) -> DiagnosticsSection {
     case .signedIn(let entitlements):
         return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: stateLabel, value: String(localized: "Giriş yapıldı"))]
             + hostedPlanDiagnostics(entitlements: entitlements)
-            + [DiagnosticsItem(label: String(localized: "DeviceCheck"), value: HostedDeviceCheck.lastFailure.map { String(localized: "son hata: \($0)") } ?? String(localized: "hata yok"))])
+            + [DiagnosticsItem(label: String(localized: "Cihaz doğrulaması"), value: HostedDeviceCheck.lastFailure.map { String(localized: "son hata: \($0)") } ?? String(localized: "hata yok"))])
     }
 }
 
@@ -63,9 +63,9 @@ func hostedLiveEngineDiagnostics(model: AppModel, account: HostedAccount) -> [Di
     let engine: String
     switch status.engine {
     case .deepgram:
-        engine = String(localized: "Deepgram (bulut)")
+        engine = String(localized: "Bulut")
     case .whisperKit:
-        engine = String(localized: "WhisperKit (bu Mac'te)")
+        engine = String(localized: "Bu Mac'te")
     }
     return [
         DiagnosticsItem(label: String(localized: "Motor"), value: engine),

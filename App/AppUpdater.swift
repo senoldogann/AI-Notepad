@@ -105,7 +105,14 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
         return true
     }
 
+    /// Sparkle "güncelleme yok" ve kullanıcının vazgeçmesini de bu yoldan bildirir: bunlar hata değildir (Tanılama'nın
+    /// son hatalarında görünmesin), yalnızca gerçek kesintiler uyarı olarak loglanır.
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
+        let nsError: NSError = error as NSError
+        if nsError.domain == SUSparkleErrorDomain, [Int(SUError.noUpdateError.rawValue), Int(SUError.installationCanceledError.rawValue)].contains(nsError.code) {
+            updateLogger.info("Güncelleme denetimi bitti, yeni sürüm yok ya da kullanıcı vazgeçti, kod: \(nsError.code, privacy: .public)")
+            return
+        }
         updateLogger.warning("Güncelleme denetimi yarıda kaldı, hata: \(String(describing: error), privacy: .private)")
     }
 }

@@ -135,6 +135,24 @@ public func isRetryableHostedError(error: HostedAPIError) -> Bool {
     }
 }
 
+extension Notification.Name {
+    /// Sunucu bir isteği abonelik gerektiği için reddetti (deneme bitti, bu Mac'te deneme kullanıldı, abonelik gerekli):
+    /// uygulama abone olma teklifini gösterir. `userInfo["path"]`: isteğin yolu.
+    public static let hostedSubscriptionRequired: Notification.Name = Notification.Name("com.senoldogan.AINotepad.hosted.subscriptionRequired")
+}
+
+/// Yalnızca abone olunca geçen ret kodları (geçici sınırlar ve cihaz doğrulaması değil): teklif bunlarda açılır.
+public let hostedSubscriptionRequiredCodes: [HostedErrorCode] = [.subscriptionRequired, .trialExhausted, .trialDeviceUsed]
+
+/// Ret abonelik gerektiriyorsa `hostedSubscriptionRequired` bildirimini yayınlar (sunucu isteği ve yapay zekâ çağrısı
+/// bunu hatayı fırlatmadan önce çağırır).
+func announceIfSubscriptionRequired(error: HostedAPIError) {
+    guard let code = error.code, hostedSubscriptionRequiredCodes.contains(code) else {
+        return
+    }
+    NotificationCenter.default.post(name: .hostedSubscriptionRequired, object: nil, userInfo: ["path": error.path])
+}
+
 /// Abone olunca geçersizleşen deneme ve abonelik hatalarının kodları (Başlat bunlardan biriyle reddedildiyse abonelik
 /// açıldıktan sonra hata şeridinde kalmamalı).
 public let hostedCodesResolvedBySubscription: [HostedErrorCode] = [

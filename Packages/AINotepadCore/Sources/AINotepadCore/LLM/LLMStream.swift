@@ -48,6 +48,10 @@ public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTex
             streamLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
             try await config.credentials.refreshAccessToken()
             return try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
+        } catch LLMError.hosted(let error) {
+            // Abonelik gerektiren ret (deneme bitti vb.): uygulama teklifi gösterir.
+            announceIfSubscriptionRequired(error: error)
+            throw LLMError.hosted(error)
         }
     }
 }

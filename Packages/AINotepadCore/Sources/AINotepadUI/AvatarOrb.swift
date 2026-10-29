@@ -12,8 +12,9 @@ func avatarPalette(seed: String) -> FilmPalette {
     return palettes[Int(avatarSeedNumber(seed: seed) % UInt64(palettes.count))]
 }
 
-/// Resmi olmayan hesabın avatarı: ElevenLabs kürelerine benzer, hesaba özel renkli pastel küre. Durağandır (hareket ve
-/// bulanıklık yok: kenar çubuğunda sürekli çizilir); ışık sol üstte, kenar hafif koyu, ince beyaz çizgi.
+/// Resmi olmayan hesabın avatarı: ElevenLabs kürelerine benzer, hesaba özel renkli pastel küre ve üzerinde beyaz kişi
+/// silueti. Durağandır (hareket ve bulanıklık yok: kenar çubuğunda sürekli çizilir); ışık sol üstte, kenar hafif koyu,
+/// ince beyaz çizgi.
 public struct AvatarOrb: View {
     let seed: String
     let size: CGFloat
@@ -56,6 +57,16 @@ public struct AvatarOrb: View {
                 startRadius: size * 0.3,
                 endRadius: size * 0.52
             )))
+            // Kişi silueti: küre bir hesabı temsil ettiği belli olsun (beyaz, yarı saydam; omuzlar alttan taşar).
+            .overlay(alignment: .bottom) {
+                Image(systemName: "person.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .frame(width: size * 0.56, height: size * 0.56)
+                    .offset(y: size * 0.1)
+                    .shadow(color: colors.clouds[3].opacity(0.35), radius: size * 0.04, y: size * 0.02)
+            }
             .clipShape(Circle())
             .overlay(Circle().strokeBorder(Color.white.opacity(0.6), lineWidth: 0.75))
             .frame(width: size, height: size)

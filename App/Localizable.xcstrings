@@ -1552,6 +1552,17 @@
         }
       }
     },
+    "Aboneliğin sona erdi. Toplantıların ve notların bu Mac'te kalır; yeniden abone olunca kaldığın yerden devam edersin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription has ended. Your meetings and notes stay on this Mac; subscribe again to pick up where you left off."
+          }
+        }
+      }
+    },
     "Aboneliğin sona erdi; yeni kayıt için yeniden abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -2394,13 +2405,13 @@
         }
       }
     },
-    "Aylık abonelik; istediğin zaman iptal edebilirsin. Ödeme Stripe'ta yapılır.": {
+    "Aylık abonelik, istediğin zaman iptal edebilirsin. Ödeme Stripe ile güvenle yapılır.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Monthly subscription; cancel anytime. Payment is handled by Stripe."
+            "value": "Monthly subscription, cancel anytime. Payment is handled securely by Stripe."
           }
         }
       }
@@ -3206,6 +3217,17 @@
         }
       }
     },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kaydetmeye ve not almaya devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has already used a free trial with another account. Subscribe to keep recording and getting notes."
+          }
+        }
+      }
+    },
     "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı; devam etmek için abone ol. Toplantıların ve notların bu Mac'te kalır.": {
       "extractionState": "manual",
       "localizations": {
@@ -3974,6 +3996,17 @@
         }
       }
     },
+    "Bulut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud"
+          }
+        }
+      }
+    },
     "Bulut (en hızlı)": {
       "localizations": {
         "en": {
@@ -3990,6 +4023,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cloud (with your own keys)"
+          }
+        }
+      }
+    },
+    "Bulut canlı metin servisine %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach the cloud live transcript service for %lld seconds; check your internet connection. Recording continues; the transcript is written from the recording when the meeting ends."
           }
         }
       }
@@ -4270,6 +4314,17 @@
         }
       }
     },
+    "Cihaz doğrulaması": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device verification"
+          }
+        }
+      }
+    },
     "Cihaz içi (ücretsiz, anahtarsız)": {
       "localizations": {
         "en": {
@@ -4520,16 +4575,6 @@
         }
       }
     },
-    "Deepgram (bulut)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deepgram (cloud)"
-          }
-        }
-      }
-    },
     "Deepgram (bulut, ~1 sn)": {
       "localizations": {
         "en": {
@@ -4556,17 +4601,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deepgram and ElevenLabs; speakers separated live. Needs two keys."
-          }
-        }
-      }
-    },
-    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
           }
         }
       }
@@ -4729,6 +4763,17 @@
         }
       }
     },
+    "Devam etmek için abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe to continue"
+          }
+        }
+      }
+    },
     "Devam ettir": {
       "localizations": {
         "en": {
@@ -4745,17 +4790,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask a follow-up…"
-          }
-        }
-      }
-    },
-    "DeviceCheck": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DeviceCheck"
           }
         }
       }
@@ -5379,6 +5413,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask the tagged meetings…"
+          }
+        }
+      }
+    },
+    "Etkin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
           }
         }
       }
@@ -8984,6 +9029,17 @@
         }
       }
     },
+    "Not hazırlama": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note writing"
+          }
+        }
+      }
+    },
     "Not hazırlanıyor": {
       "localizations": {
         "en": {
@@ -10134,6 +10190,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The service is very busy today; new meetings and AI requests are paused for now. Try again a bit later."
+          }
+        }
+      }
+    },
+    "Ses": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
           }
         }
       }
@@ -12575,16 +12642,6 @@
         }
       }
     },
-    "WhisperKit (bu Mac'te)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "WhisperKit (on this Mac)"
-          }
-        }
-      }
-    },
     "WhisperKit, internetsiz. İlk açılışta ~630 MB model indirilir.": {
       "localizations": {
         "en": {
@@ -14226,6 +14283,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your free trial has ended. Subscribe to keep recording."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti. Toplantıların ve notların bu Mac'te kalır; yeni toplantılar için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended. Your meetings and notes stay on this Mac; subscribe to record new meetings."
           }
         }
       }

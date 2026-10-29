@@ -150,7 +150,7 @@ private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
         status = String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))")
     }
     #if HOSTED_EDITION
-    // Abonelik: motor her kayıtta sunucuya göre seçilir (Deepgram ya da Mac); "Model" Mac'teki WhisperKit modelidir.
+    // Abonelik: motor her kayıtta sunucuya göre seçilir (bulut ya da Mac); "Mac modeli" Mac'teki konuşma modelidir.
     return DiagnosticsSection(title: String(localized: "Canlı metin"), items: hostedLiveEngineDiagnostics(model: model, account: .shared) + [
         DiagnosticsItem(label: String(localized: "Mac modeli"), value: status),
     ])
@@ -172,13 +172,29 @@ private func updateDiagnostics(updater: AppUpdater) -> DiagnosticsSection {
     let pending: String = updater.availableUpdate.map { updateHeadline(update: $0) } ?? String(localized: "Yok")
     return DiagnosticsSection(title: title, items: [
         DiagnosticsItem(label: String(localized: "Son denetim"), value: updater.lastCheckDate.map { $0.formatted(.iso8601) } ?? String(localized: "Henüz denetlenmedi")),
-        DiagnosticsItem(label: String(localized: "Otomatik indirme"), value: updater.automaticallyUpdates ? String(localized: "Açık") : String(localized: "Kapalı")),
+        DiagnosticsItem(label: String(localized: "Otomatik indirme"), value: updater.automaticallyUpdates ? String(localized: "Etkin") : String(localized: "Kapalı")),
         DiagnosticsItem(label: String(localized: "Bekleyen güncelleme"), value: pending),
     ])
 }
 
-/// Son hatalar bölümü (en çok 50; zaman, kod, kısa mesaj).
+/// Son hatalar bölümü, ekranda (en çok 50): zaman ve alan. Günlük metni geliştirici içindir (Türkçe, teknik); ekranda
+/// gösterilmez, yalnızca kopyalanan tanılamaya girer (bkz. `errorDiagnosticsForSupport`).
 private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
+    let title: String = String(localized: "Son hatalar")
+    switch errors {
+    case .failure:
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunamadı"))])
+    case .success(let entries) where entries.isEmpty:
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"))])
+    case .success(let entries):
+        return DiagnosticsSection(title: title, items: entries.map { (entry: DiagnosticErrorEntry) -> DiagnosticsItem in
+            DiagnosticsItem(label: entry.date.formatted(date: .abbreviated, time: .standard), value: diagnosticErrorArea(code: entry.code))
+        })
+    }
+}
+
+/// Son hatalar bölümü, kopyalanan tanılamada (destek için): zaman, kod ve günlük metni (kişisel bilgiler ayıklanmış).
+private func errorDiagnosticsForSupport(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
     let title: String = String(localized: "Son hatalar")
     switch errors {
     case .failure(let error):
@@ -191,6 +207,29 @@ private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>)
         return DiagnosticsSection(title: title, items: entries.map { (entry: DiagnosticErrorEntry) -> DiagnosticsItem in
             DiagnosticsItem(label: "\(entry.date.formatted(.iso8601)) \(entry.code)", value: entry.message)
         })
+    }
+}
+
+/// Hatanın günlük kategorisinden (`kategori.düzey`) kullanıcının anlayacağı alan adı. Saf fonksiyondur.
+private func diagnosticErrorArea(code: String) -> String {
+    let category: String = String(code.split(separator: ".").first ?? "")
+    switch category {
+    case "Update":
+        return String(localized: "Güncelleme")
+    case "Hosted", "HostedAccount", "HostedSeams", "HostedGate", "HostedAttest", "HostedAccountData", "AccountData":
+        return String(localized: "Hesap")
+    case "Deepgram", "CloudLiveSession", "HybridLiveSession", "LiveSession", "WhisperKitEngine", "AppleSpeech":
+        return String(localized: "Canlı metin")
+    case "SystemAudioCapture", "MicrophoneCapture", "AudioPlayer":
+        return String(localized: "Ses")
+    case "ProcessMeeting", "ChunkedNote", "LLM", "OnDeviceLLM", "ElevenLabs", "HostedFinal", "LocalFinalPass":
+        return String(localized: "Not hazırlama")
+    case "Meetings", "CloudStorage":
+        return String(localized: "Toplantılar")
+    case "Webhook", "Destinations", "MCPRemote", "MCPIntegrations", "LoopbackRedirect", "Channel", "MCP":
+        return String(localized: "Bağlantılar")
+    default:
+        return String(localized: "Uygulama")
     }
 }
 
@@ -217,7 +256,7 @@ private func probeAPI(base: Result<URL, any Error>) async -> APIHealth? {
 
 /// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir.
 @MainActor
-func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: Result<[DiagnosticErrorEntry], any Error>) -> [DiagnosticsSection] {
+func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: DiagnosticsSection) -> [DiagnosticsSection] {
     let base: Result<URL, any Error> = Result { try diagnosticsAPIBase() }
     var sections: [DiagnosticsSection] = [appDiagnostics(bundle: .main)]
     #if HOSTED_EDITION
@@ -228,7 +267,7 @@ func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?
         permissionDiagnostics(model: model),
         transcriptionDiagnostics(model: model),
         updateDiagnostics(updater: updater),
-        errorDiagnostics(errors: errors),
+        errors,
     ]
     return sections
 }
@@ -238,7 +277,7 @@ func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?
 func diagnosticsReportText(model: AppModel, updater: AppUpdater) async -> String {
     let health: APIHealth? = await probeAPI(base: Result { try diagnosticsAPIBase() })
     let errors: Result<[DiagnosticErrorEntry], any Error> = await loadAppErrors()
-    return diagnosticsText(sections: collectDiagnostics(model: model, updater: updater, health: health, errors: errors), generatedAt: Date())
+    return diagnosticsText(sections: collectDiagnostics(model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors)), generatedAt: Date())
 }
 
 /// Metni panoya koyar.
@@ -260,7 +299,7 @@ struct DiagnosticsSettings: View {
     @State private var copied: Bool = false
 
     var body: some View {
-        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errors)
+        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorDiagnostics(errors: errors))
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Tanılama")) {
                 Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
@@ -272,7 +311,10 @@ struct DiagnosticsSettings: View {
                     Button("Yenile") { Task { await refresh() } }
                         .disabled(isRefreshing)
                     Button(copied ? "Kopyalandı" : "Tanılama bilgisini kopyala") {
-                        copyToPasteboard(text: diagnosticsText(sections: sections, generatedAt: Date()))
+                        let support: [DiagnosticsSection] = collectDiagnostics(
+                            model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors)
+                        )
+                        copyToPasteboard(text: diagnosticsText(sections: support, generatedAt: Date()))
                         copied = true
                     }
                     .buttonStyle(.pillPrimary)

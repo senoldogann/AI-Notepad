@@ -599,7 +599,7 @@ func isTransientDeepgramTokenFailure(error: DeepgramTokenError) -> Bool {
 private func deepgramFailureMessage(error: any Error) -> String {
     switch error {
     case CloudSTTError.connectionFailed:
-        return String(localized: "Deepgram'a \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.")
+        return String(localized: "Bulut canlı metin servisine \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.")
     case let error as DeepgramTokenError:
         return userFacingMessage(error: error.underlying)
     default:
