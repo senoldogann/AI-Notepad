@@ -385,6 +385,27 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedEntitlementsOnThisMac(entitlements: subscriber, trialRefusedOnThisMac: true) == subscriber)
     }
 
+    // Abone olma teklifi: denemede günde en çok bir, deneme bitince hesap başına bir kez; abonede hiç.
+    @Test func upsellMoments() throws {
+        let trialJSON: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":2,"accountTrialMeetingsLeft":2,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"subscription":null}
+        """#
+        let now: Date = Date(timeIntervalSince1970: 2_000_000)
+        let trial: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.utf8))
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-3600), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-hostedUpsellIntervalSec), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        let ended: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.replacingOccurrences(of: #""trialMeetingsLeft":2"#, with: #""trialMeetingsLeft":0"#).utf8))
+        // Deneme bitince günlük aralık beklenmez, ama yalnızca bir kez.
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: now.addingTimeInterval(-60), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialEnded)
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: nil, trialEndedShown: true, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON
+            .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#).utf8))
+        #expect(hostedUpsellMoment(entitlements: subscriber, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+    }
+
     // İçe aktarma toplantının ses hakkını aşarsa kuyruğa alınmadan reddedilir; eski sunucu (alan yok) denetlenmez.
     @Test func importLongerThanMeetingAllowanceIsRejected() throws {
         let json: String = #"""

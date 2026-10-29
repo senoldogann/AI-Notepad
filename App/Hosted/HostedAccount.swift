@@ -131,6 +131,8 @@ final class HostedAccount {
     private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
     /// Açık giriş penceresinin sağlayıcısı (düğmede bekleme göstergesi için).
     private(set) var pendingSignInProvider: HostedSignInProvider?
+    /// Ana pencerede açılacak abone olma teklifi (bkz. `meetingNoteReady`); kayıt ya da işleme sürerken açılmaz.
+    private(set) var upsell: HostedUpsellMoment?
     /// Sunucu bu hesabın ücretsiz denemesini bu Mac'te reddetti (Mac denemesini başka bir hesapla kullandı); hak durumu
     /// kalan deneme 0 olarak gösterilir (bkz. `hostedEntitlementsOnThisMac`).
     private(set) var isTrialRefusedOnThisMac: Bool = false
@@ -345,6 +347,47 @@ final class HostedAccount {
         UserDefaults.standard.set(true, forKey: key)
         visibleNotice = notice
         accountLogger.info("Kullanım bildirimi gösteriliyor, tür: \(notice.rawValue, privacy: .public)")
+    }
+
+    /// Bir toplantının notu hazır: hak durumu yenilenir; hesap denemedeyse ve zamanı geldiyse (günde en çok bir, deneme
+    /// bitince bir kez; bkz. `hostedUpsellMoment`) abone olma teklifi açılır ve gösterim hesap başına kaydedilir.
+    func meetingNoteReady() async {
+        await refresh()
+        guard case .signedIn(let entitlements) = state else {
+            return
+        }
+        let lastShownKey: String = "hosted.upsell.lastShownAt.\(entitlements.userId)"
+        let trialEndedKey: String = "hosted.upsell.trialEndedShown.\(entitlements.userId)"
+        guard let moment = hostedUpsellMoment(
+            entitlements: entitlements,
+            lastShownAt: UserDefaults.standard.object(forKey: lastShownKey) as? Date,
+            trialEndedShown: UserDefaults.standard.bool(forKey: trialEndedKey),
+            now: Date(),
+            intervalSec: hostedUpsellIntervalSec
+        ) else {
+            return
+        }
+        UserDefaults.standard.set(Date(), forKey: lastShownKey)
+        if moment == .trialEnded {
+            UserDefaults.standard.set(true, forKey: trialEndedKey)
+        }
+        upsell = moment
+        accountLogger.info("Abone olma teklifi gösteriliyor, an: \(moment.rawValue, privacy: .public)")
+    }
+
+    #if DEBUG
+    /// Tanıtım modu (bkz. `DemoScene.upsell`): teklif sunucuya sorulmadan açılır.
+    func showUpsellForDemo(moment: HostedUpsellMoment) {
+        upsell = moment
+    }
+    #endif
+
+    /// Teklifi kapatır. Deneme bitti teklifi görüldüyse aynı şeyi söyleyen şerit de kalkar (iki kez söylenmesin).
+    func dismissUpsell() {
+        if upsell == .trialEnded && visibleNotice == .trialEnded {
+            visibleNotice = nil
+        }
+        upsell = nil
     }
 
     /// Bildirimi kapatır (bu dönemde yeniden gösterilmez).

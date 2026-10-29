@@ -1366,8 +1366,13 @@ final class AppModel {
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
             #if HOSTED_EDITION
-            // Son geçişin ses süresi aylık kullanıma sayılır: işleme bitince göstergeler yenilenir.
-            Task { await HostedAccount.shared.refresh() }
+            // Son geçişin ses süresi aylık kullanıma sayılır: işleme bitince göstergeler yenilenir. Not hazırsa denemedeki
+            // kullanıcıya zamanı geldiyse abone olma teklifi açılır.
+            if saved.status == .done && saved.note != nil {
+                Task { await HostedAccount.shared.meetingNoteReady() }
+            } else {
+                Task { await HostedAccount.shared.refresh() }
+            }
             #endif
             autoSendToDestinations(record: saved)
             if saved.status == .done {

@@ -254,6 +254,22 @@ struct MainWindowView: View {
         .foregroundStyle(Theme.ink)
         // Toplantı hazırlanırken ana pencerede de aynı ilerleme kartı (panelle eş zamanlı).
         .modifier(ProcessingOverlayHost(model: model))
+        #if HOSTED_EDITION
+        // Abone olma teklifi: deneme notu hazır olunca (günde en çok bir) ve deneme bitince bir kez. Kayıt ya da işleme
+        // sürerken ve kurulumda açılmaz; o sırada hazır olduysa bitince açılır.
+        .sheet(isPresented: Binding<Bool>(
+            get: { HostedAccount.shared.upsell != nil && !model.isBusy && router.section != .setup },
+            set: { (shown: Bool) -> Void in
+                if !shown {
+                    HostedAccount.shared.dismissUpsell()
+                }
+            }
+        )) {
+            if let moment = HostedAccount.shared.upsell {
+                HostedUpsellSheet(account: .shared, moment: moment)
+            }
+        }
+        #endif
         .frame(minWidth: 860, minHeight: 580)
         // Cam tek katman: pencere zemini (ikinci bir arka plan opaklığı iki kat gösteriyordu).
         .containerBackground(for: .window) { WindowBackdrop() }

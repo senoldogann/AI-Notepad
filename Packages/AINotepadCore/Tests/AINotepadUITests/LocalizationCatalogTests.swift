@@ -23,9 +23,19 @@ private func placeholders(text: String) -> [String] {
     return text.matches(of: pattern).map { String($0.output) }
 }
 
-/// Girdinin verilen dildeki çevirisi; yoksa nil.
-private func translation(entry: [String: Any], language: String) -> String? {
-    (((entry["localizations"] as? [String: Any])?[language] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
+/// Girdinin verilen dildeki çevirileri: düz çeviri tek metindir, tekil/çoğul biçimli çeviride her biçim ayrı metindir
+/// (ör. "1 meeting left", "3 meetings left"); çeviri yoksa boş.
+private func translations(entry: [String: Any], language: String) -> [String] {
+    guard let localization = (entry["localizations"] as? [String: Any])?[language] as? [String: Any] else {
+        return []
+    }
+    if let value = (localization["stringUnit"] as? [String: Any])?["value"] as? String {
+        return [value]
+    }
+    let plural: [String: Any] = ((localization["variations"] as? [String: Any])?["plural"] as? [String: Any]) ?? [:]
+    return plural.keys.sorted().compactMap { (form: String) -> String? in
+        ((plural[form] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
+    }
 }
 
 @Suite struct LocalizationCatalogTests {
@@ -44,10 +54,13 @@ private func translation(entry: [String: Any], language: String) -> String? {
             if entry["shouldTranslate"] as? Bool == false {
                 continue
             }
-            let english: String = try #require(translation(entry: entry, language: "en"), "İngilizcesi yok: \(path) › \(key)")
-            let source: String = translation(entry: entry, language: "tr") ?? key
-            #expect(!english.isEmpty, "boş çeviri: \(path) › \(key)")
-            #expect(placeholders(text: english) == placeholders(text: source), "yer tutucular farklı: \(path) › \(key)")
+            let english: [String] = translations(entry: entry, language: "en")
+            let source: String = translations(entry: entry, language: "tr").first ?? key
+            #expect(!english.isEmpty, "İngilizcesi yok: \(path) › \(key)")
+            for text in english {
+                #expect(!text.isEmpty, "boş çeviri: \(path) › \(key)")
+                #expect(placeholders(text: text) == placeholders(text: source), "yer tutucular farklı: \(path) › \(key) › \(text)")
+            }
         }
     }
 

@@ -358,3 +358,94 @@ struct HostedMeetingLimitStrip: View {
         }
     }
 }
+
+/// Abone olma teklifi (ana pencerede açılan kart): üstte durağan film gradyanı ve uygulama simgesi, başlık, kısa açıklama,
+/// üç fayda, "Şimdi değil" ve "Abone ol". Deneme notu hazır olunca (günde en çok bir) ve deneme bitince bir kez açılır
+/// (bkz. `HostedAccount.meetingNoteReady`); kayıt ve işleme sürerken açılmaz.
+struct HostedUpsellSheet: View {
+    let account: HostedAccount
+    let moment: HostedUpsellMoment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            FilmGradient(seed: "gistsmith-abone", palette: .sunset)
+                .frame(height: 140)
+                .overlay {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 8)
+                        .accessibilityHidden(true)
+                }
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
+                        .appFont(size: 24, weight: .medium)
+                        .tracking(-0.4)
+                        .foregroundStyle(Theme.ink)
+                    Text(verbatim: subtitle)
+                        .appFont(size: 14, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    benefit(symbol: "waveform", text: "Canlı metin, konuşulurken")
+                    benefit(symbol: "checklist", text: "Toplantı bitince not hazır, görevler en üstte")
+                    benefit(symbol: "text.magnifyingglass", text: "Tüm toplantılarına soru sor")
+                }
+                HStack(spacing: 10) {
+                    Button("Şimdi değil") { account.dismissUpsell() }
+                        .buttonStyle(.pill)
+                        .keyboardShortcut(.cancelAction)
+                    Spacer(minLength: 0)
+                    Button("Abone ol") {
+                        account.dismissUpsell()
+                        Task { await account.subscribe() }
+                    }
+                    .buttonStyle(.pillPrimary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(account.isWorking)
+                }
+                .controlSize(.large)
+                .padding(.top, 4)
+                Text("Aylık abonelik; istediğin zaman iptal edebilirsin. Ödeme Stripe'ta yapılır.")
+                    .appFont(size: 11, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(28)
+        }
+        .frame(width: 440)
+    }
+
+    private var title: LocalizedStringKey {
+        switch moment {
+        case .trialNoteReady: "Notun hazır"
+        case .trialEnded: "Ücretsiz denemen bitti"
+        }
+    }
+
+    private var subtitle: String {
+        switch moment {
+        case .trialNoteReady:
+            guard case .signedIn(let entitlements) = account.state, case .trial(let left, _) = hostedPlanStatus(entitlements: entitlements) else {
+                return String(localized: "Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
+            }
+            return String(localized: "Ücretsiz denemende \(left) toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
+        case .trialEnded:
+            return String(localized: "Toplantıların ve notların bu Mac'te kalır. Yeni toplantıları kaydetmek için abone ol.")
+        }
+    }
+
+    private func benefit(symbol: String, text: LocalizedStringKey) -> some View {
+        Label {
+            Text(text)
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.ink)
+        } icon: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 20)
+        }
+    }
+}

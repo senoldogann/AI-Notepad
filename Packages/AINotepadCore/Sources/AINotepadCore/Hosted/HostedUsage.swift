@@ -185,3 +185,30 @@ public func isHostedRefreshDue(lastRefresh: Date?, now: Date, intervalSec: Doubl
     }
     return now.timeIntervalSince(lastRefresh) >= intervalSec
 }
+
+/// Abone olma teklifinin (ana pencerede açılan kart) gösterildiği an.
+public enum HostedUpsellMoment: String, Sendable, Equatable {
+    /// Deneme toplantısının notu hazır; denemede hâlâ toplantı var.
+    case trialNoteReady
+    /// Son deneme toplantısının notu hazır: deneme bitti.
+    case trialEnded
+}
+
+/// Deneme notu hazır olunca teklif en çok bu aralıkla bir gösterilir (saniye): günde bir.
+public let hostedUpsellIntervalSec: Double = 24 * 60 * 60
+
+/// Bir toplantının notu hazır olunca teklif gösterilsin mi; gösterilecekse hangi an. Yalnızca denemede: deneme bittiyse
+/// (kalan 0) hesap başına bir kez `trialEnded`; bitmediyse son gösterimden en az `intervalSec` geçtiyse
+/// `trialNoteReady`. Abonede, süresi bitmiş abonelikte ve aralık dolmadıysa nil. Saf fonksiyondur.
+public func hostedUpsellMoment(entitlements: HostedEntitlements, lastShownAt: Date?, trialEndedShown: Bool, now: Date, intervalSec: Double) -> HostedUpsellMoment? {
+    guard case .trial(let left, _) = hostedPlanStatus(entitlements: entitlements) else {
+        return nil
+    }
+    if left == 0 {
+        return trialEndedShown ? nil : .trialEnded
+    }
+    if let lastShownAt, now.timeIntervalSince(lastShownAt) < intervalSec {
+        return nil
+    }
+    return .trialNoteReady
+}

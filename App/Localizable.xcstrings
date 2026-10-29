@@ -34,9 +34,21 @@
     "\"Ne kaçırdım?\" son %lld dakikayı özetler": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "\"What did I miss?\" summarizes the last %lld minutes"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"What did I miss?\" summarizes the last %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"What did I miss?\" summarizes the last %lld minutes"
+                }
+              }
+            }
           }
         }
       }
@@ -715,9 +727,21 @@
     "%@: %lld görev açıldı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@: %lld tasks created"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld task created"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld tasks created"
+                }
+              }
+            }
           }
         }
       }
@@ -766,9 +790,21 @@
     "%lld an işaretlendi": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld moments marked"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment marked"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moments marked"
+                }
+              }
+            }
           }
         }
       }
@@ -796,9 +832,21 @@
     "%lld beceri Sor'a tarif olarak eklendi.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld skills added to Ask as recipes."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld skill added to Ask as a recipe."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld skills added to Ask as recipes."
+                }
+              }
+            }
           }
         }
       }
@@ -826,9 +874,21 @@
     "%lld görev": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld tasks"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld task"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tasks"
+                }
+              }
+            }
           }
         }
       }
@@ -836,9 +896,21 @@
     "%lld gün": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld days"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days"
+                }
+              }
+            }
           }
         }
       }
@@ -846,9 +918,21 @@
     "%lld karar": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld decisions"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld decision"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld decisions"
+                }
+              }
+            }
           }
         }
       }
@@ -856,9 +940,21 @@
     "%lld konuşmacı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld speakers"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld speaker"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld speakers"
+                }
+              }
+            }
           }
         }
       }
@@ -866,9 +962,21 @@
     "%lld model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Found %lld models. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld model. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld models. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+                }
+              }
+            }
           }
         }
       }
@@ -896,9 +1004,21 @@
     "%lld sonuç": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld results"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld result"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld results"
+                }
+              }
+            }
           }
         }
       }
@@ -906,9 +1026,21 @@
     "%lld terim": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld terms"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld term"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld terms"
+                }
+              }
+            }
           }
         }
       }
@@ -916,9 +1048,21 @@
     "%lld toplantı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings"
+                }
+              }
+            }
           }
         }
       }
@@ -926,9 +1070,21 @@
     "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move %lld meetings (text, note and audio) to the Trash?"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld meeting (text, note and audio) to the Trash?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld meetings (text, note and audio) to the Trash?"
+                }
+              }
+            }
           }
         }
       }
@@ -936,9 +1092,21 @@
     "%lld toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: %@": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings could not be copied to this device; iCloud sync stays on, try again: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting could not be copied to this device; iCloud sync stays on, try again: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings could not be copied to this device; iCloud sync stays on, try again: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -946,9 +1114,21 @@
     "%lld toplantı iCloud'dan iniyor…": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings downloading from iCloud…"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting downloading from iCloud…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings downloading from iCloud…"
+                }
+              }
+            }
           }
         }
       }
@@ -957,9 +1137,21 @@
       "extractionState": "manual",
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings left"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings left"
+                }
+              }
+            }
           }
         }
       }
@@ -967,9 +1159,21 @@
     "%lld toplantı okunamadı: %@": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings could not be read: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting could not be read: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings could not be read: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -977,9 +1181,21 @@
     "%lld toplantı okunuyor…": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reading %lld meetings…"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reading %lld meeting…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reading %lld meetings…"
+                }
+              }
+            }
           }
         }
       }
@@ -987,9 +1203,21 @@
     "%lld toplantı taşınamadı: %@": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings couldn't be moved: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting couldn't be moved: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings couldn't be moved: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -1155,6 +1383,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscribe"
+          }
+        }
+      }
+    },
+    "Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe and every meeting gets a note like this, automatically."
           }
         }
       }
@@ -2122,13 +2361,36 @@
         }
       }
     },
-    "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter.": {
+    "Aylık abonelik; istediğin zaman iptal edebilirsin. Ödeme Stripe'ta yapılır.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your monthly limit leaves %lld minutes for this meeting; recording ends at %@."
+            "value": "Monthly subscription; cancel anytime. Payment is handled by Stripe."
+          }
+        }
+      }
+    },
+    "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your monthly limit leaves %lld minute for this meeting; recording ends at %@."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your monthly limit leaves %lld minutes for this meeting; recording ends at %@."
+                }
+              }
+            }
           }
         }
       }
@@ -3825,6 +4087,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live text and its translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+          }
+        }
+      }
+    },
+    "Canlı metin, konuşulurken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript as people speak"
           }
         }
       }
@@ -6561,9 +6834,21 @@
       "extractionState": "manual",
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The first %lld minute of the recording was transcribed; the rest could not be processed: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -8973,6 +9258,17 @@
         }
       }
     },
+    "Notun hazır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your note is ready"
+          }
+        }
+      }
+    },
     "Odadaki herkes konuşmacılara ayrılır, %@ çevirisi canlı akar; bitince notu yazar.": {
       "localizations": {
         "en": {
@@ -10093,9 +10389,21 @@
     "Sohbet geçmişinden %lld sohbet okunamadı.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't read %lld chats from the chat history."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Couldn't read %lld chat from the chat history."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Couldn't read %lld chats from the chat history."
+                }
+              }
+            }
           }
         }
       }
@@ -10153,9 +10461,21 @@
     "Son %lld dakikada konuşma yok.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No speech in the last %lld minutes."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "No speech in the last %lld minute."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "No speech in the last %lld minutes."
+                }
+              }
+            }
           }
         }
       }
@@ -11125,6 +11445,17 @@
         }
       }
     },
+    "Toplantı bitince not hazır, görevler en üstte": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your note is ready when the meeting ends, tasks on top"
+          }
+        }
+      }
+    },
     "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır, tamamlayınca işaretlersin.": {
       "localizations": {
         "en": {
@@ -11480,6 +11811,17 @@
         }
       }
     },
+    "Toplantıların ve notların bu Mac'te kalır. Yeni toplantıları kaydetmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your meetings and notes stay on this Mac. Subscribe to record new meetings."
+          }
+        }
+      }
+    },
     "Toplantılarına bir şey sor… (@ toplantı, / tarif)": {
       "localizations": {
         "en": {
@@ -11696,6 +12038,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "All meetings"
+          }
+        }
+      }
+    },
+    "Tüm toplantılarına soru sor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask questions across all your meetings"
           }
         }
       }
@@ -13715,6 +14068,29 @@
         }
       }
     },
+    "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting left in your free trial. Subscribe and every meeting gets a note like this, automatically."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings left in your free trial. Subscribe and every meeting gets a note like this, automatically."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Ücretsiz denemende 1 toplantı kaldı": {
       "extractionState": "manual",
       "localizations": {
@@ -14222,6 +14598,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try now"
+          }
+        }
+      }
+    },
+    "Şimdi değil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
           }
         }
       }

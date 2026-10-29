@@ -29,6 +29,8 @@ enum DemoScene: String {
     case ask = "sor"
     /// Kayıt sürerken canlı panel (canlı metin ve çeviri).
     case live = "canli"
+    /// Ana sayfa ve abone olma teklifi (deneme notu hazır; yalnız abonelik sürümünde).
+    case upsell = "abone"
 }
 
 /// Tanıtım modu hataları.
@@ -47,7 +49,7 @@ enum DemoModeError: Error, CustomStringConvertible {
         case .dataFolderOutsideHome(let dataFolder, let home):
             "Tanıtım modu: veri klasörü (\(dataFolder)) geçici evin (\(home)) dışında; kullanıcının verisine yazılmaz."
         case .unknownScene(let value):
-            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor ya da canli olmalı."
+            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor, canli ya da abone olmalı."
         }
     }
 }
@@ -125,6 +127,11 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
             }
             model.openConversation(id: demoAskConversationID)
         }
+    case .upsell:
+        router.section = .home
+        #if HOSTED_EDITION
+        HostedAccount.shared.showUpsellForDemo(moment: .trialNoteReady)
+        #endif
     case .live:
         router.section = .home
         router.isRecordingFocusDismissed = true
