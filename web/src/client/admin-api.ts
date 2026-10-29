@@ -1,5 +1,5 @@
-// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, bildirim kutusu listesi, tek
-// bildirim ve durum değişikliği. Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
+// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, kullanıcı listesi ve ayrıntısı,
+// işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği. Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
 // Zaman alanları (`generatedAt`, `createdAt`) Unix ms sayısı ya da ISO 8601 metni olabilir; ikisi de ms'ye çevrilir.
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
 import {
@@ -55,8 +55,190 @@ export interface AdminStats {
   readonly stripe: { readonly mode: StripeMode };
   /** ElevenLabs plan döngüsündeki yazıya çevirme saatleri ve planın sınırı. */
   readonly elevenLabs: { readonly usedHours: number; readonly capHours: number; readonly percent: number };
-  /** Deepgram canlı metin bütçesi (ömür boyu, tahmini): harcanan, tavan ve yüzde. */
-  readonly deepgram: { readonly estimatedUsd: number; readonly budgetUsd: number; readonly percent: number };
+  /** Deepgram canlı metin bütçesi (ömür boyu, tahmini): harcanan, tavan, yüzde ve bütçeye sayılan akış dakikası. */
+  readonly deepgram: { readonly estimatedUsd: number; readonly budgetUsd: number; readonly percent: number; readonly streamMinutes: number };
+  /** Denemeden aboneliğe dönüşüm (tüm zamanlar ve son 30 günde denemeye başlayanlar). */
+  readonly conversion: {
+    readonly trialStarted: number;
+    readonly converted: number;
+    readonly startedLast30Days: number;
+    readonly convertedLast30Days: number;
+    readonly subscribedWithoutTrial: number;
+  };
+  readonly churn: { readonly canceledLast30Days: number; readonly pastDue: number; readonly unpaid: number; readonly duplicateSubscriptions: number };
+  readonly billing: { readonly refundsLast30Days: number; readonly disputesLast30Days: number; readonly paymentFailuresLast30Days: number };
+  readonly usage: {
+    readonly meetingsThisMonth: number;
+    readonly deferredThisMonth: number;
+    readonly reprocessedThisMonth: number;
+    readonly openMeetings: number;
+    readonly audioHoursThisMonth: number;
+    readonly accountTokensThisMonth: number;
+    readonly monthlyTokenCapPerUser: number;
+    readonly monthlyAccountTokenCapPerUser: number;
+    readonly usersNearTokenCap: number;
+  };
+  readonly trialRefusals: { readonly last30Days: TrialRefusalCounts; readonly today: TrialRefusalCounts };
+}
+
+/** Neden başına reddedilen deneme başlatma. */
+export interface TrialRefusalCounts {
+  readonly deviceUsed: number;
+  readonly exhausted: number;
+  readonly expired: number;
+  readonly ipDailyLimit: number;
+}
+
+/** Kullanıcı listesi kesimi. */
+export type UserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free";
+
+/** Giriş sağlayıcısı süzgeci. */
+export type UserProvider = "apple" | "google";
+
+/** Hesabın planı. */
+export type UserPlan = "subscription" | "trial" | "free";
+
+/** Aboneliğin erişim durumu. */
+export type UserAccess = "active" | "grace" | "none";
+
+/** Kullanıcının aboneliği. Zamanlar Unix ms. */
+export interface UserSubscription {
+  readonly status: string;
+  readonly access: UserAccess;
+  readonly currentPeriodEnd: number;
+  readonly cancelAt: number | null;
+  readonly pastDueSince: number | null;
+  readonly graceEndsAt: number | null;
+  readonly updatedAt: number;
+}
+
+/** Listedeki kullanıcı. Zamanlar Unix ms. */
+export interface UserSummary {
+  readonly id: string;
+  readonly provider: UserProvider | null;
+  readonly createdAt: number;
+  readonly plan: UserPlan;
+  readonly subscription: UserSubscription | null;
+  readonly trial: { readonly used: number; readonly left: number; readonly startedAt: number | null; readonly endsAt: number | null };
+  readonly meetingsTotal: number;
+  readonly hoursThisMonth: number;
+  readonly lastActiveAt: number | null;
+}
+
+/** Kullanıcı listesinin bir sayfası; `nextCursor` sonraki sayfanın imleci (yoksa null). */
+export interface UserPage {
+  readonly items: readonly UserSummary[];
+  readonly nextCursor: string | null;
+}
+
+/** Toplantının durumu. */
+export type MeetingState = "open" | "ended" | "superseded" | "expired";
+
+/** Kullanıcı ayrıntısındaki toplantı. */
+export interface UserMeeting {
+  readonly id: string;
+  readonly kind: "trial" | "subscription";
+  readonly state: MeetingState;
+  readonly startedAt: number;
+  readonly durationMinutes: number;
+  readonly deferred: boolean;
+  readonly reprocessCount: number;
+  readonly audioMinutes: number;
+  readonly tokensUsed: number;
+  readonly tokenBudget: number;
+  readonly attested: boolean;
+  readonly deepgram: boolean;
+}
+
+/** Zaman çizelgesi olayı. */
+export type TimelineKind =
+  | "account_created"
+  | "trial_started"
+  | "trial_device_verified"
+  | "trial_ends"
+  | "subscription_updated"
+  | "subscription_past_due"
+  | "subscription_cancel_at"
+  | "subscription_period_end";
+
+/** Zaman çizelgesi satırı. */
+export interface TimelineEntry {
+  readonly kind: TimelineKind;
+  readonly at: number;
+  readonly detail: string | null;
+}
+
+/** Kullanıcı ayrıntısındaki rapor. */
+export interface UserReport {
+  readonly id: string;
+  readonly kind: ReportKind;
+  readonly status: ReportStatus;
+  readonly createdAt: number;
+  readonly summary: string;
+}
+
+/** `GET /v1/admin/users/{id}` yanıtı. */
+export interface UserDetail {
+  readonly user: UserSummary;
+  readonly trialDeviceVerifiedAt: number | null;
+  readonly stripeCustomerId: string | null;
+  readonly usage: {
+    readonly usedHours: number;
+    readonly capHours: number;
+    readonly audioHours: number;
+    readonly tokens: number;
+    readonly tokenCap: number;
+    readonly accountTokens: number;
+    readonly accountTokenCap: number;
+  };
+  readonly meetings: readonly UserMeeting[];
+  readonly reports: readonly UserReport[];
+  readonly timeline: readonly TimelineEntry[];
+}
+
+/** Şu an açık toplantı. */
+export interface OpenMeeting {
+  readonly id: string;
+  readonly userId: string;
+  readonly kind: "trial" | "subscription";
+  readonly startedAt: number;
+  readonly maxEndsAt: number;
+  readonly deferred: boolean;
+  readonly deepgram: boolean;
+}
+
+/** Son çökme raporu. */
+export interface RecentCrash {
+  readonly id: string;
+  readonly status: ReportStatus;
+  readonly createdAt: number;
+  readonly appVersion: string | null;
+  readonly os: string | null;
+  readonly summary: string;
+}
+
+/** `GET /v1/admin/operations` yanıtı. */
+export interface Operations {
+  readonly generatedAt: number;
+  readonly meetings: { readonly open: number; readonly openItems: readonly OpenMeeting[]; readonly unendedLast7Days: number };
+  readonly reservations: { readonly active: number; readonly expired: number; readonly oldestExpiredAt: number | null };
+  readonly deepgram: { readonly unsettled: number; readonly stale: number };
+  readonly stripe: {
+    readonly lastEventAt: number | null;
+    readonly eventsLast24Hours: number;
+    readonly last7DaysByType: readonly { readonly type: string; readonly count: number }[];
+  };
+  readonly reports: {
+    readonly last7Days: { readonly feedback: number; readonly crash: number; readonly contact: number };
+    readonly recentCrashes: readonly RecentCrash[];
+  };
+}
+
+/** Kullanıcı listesi süzgeci; null süzmez. */
+export interface UserFilter {
+  readonly query: string | null;
+  readonly segment: UserSegment | null;
+  readonly provider: UserProvider | null;
 }
 
 /** Stripe anahtarının modu. */
@@ -170,7 +352,12 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
   const stripe: JsonObject = objectField(body, "stripe", response, path);
   const elevenLabs: JsonObject = objectField(body, "elevenLabs", response, path);
   const deepgram: JsonObject = objectField(body, "deepgram", response, path);
-  const dayCounts = (owner: JsonObject, key: string): DayCount[] =>
+  const conversion: JsonObject = objectField(body, "conversion", response, path);
+  const churn: JsonObject = objectField(body, "churn", response, path);
+  const billing: JsonObject = objectField(body, "billing", response, path);
+  const usage: JsonObject = objectField(body, "usage", response, path);
+  const refusals: JsonObject = objectField(body, "trialRefusals", response, path);
+  const dayCounts =(owner: JsonObject, key: string): DayCount[] =>
     objectArrayField(owner, key, response, path).map((item: JsonObject): DayCount => ({ day: dayField(item, response, path), count: numberField(item, "count", response, path) }));
   return {
     generatedAt: timestampField(body, "generatedAt", response, path),
@@ -224,6 +411,265 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       estimatedUsd: numberField(deepgram, "estimatedUsd", response, path),
       budgetUsd: numberField(deepgram, "budgetUsd", response, path),
       percent: numberField(deepgram, "percent", response, path),
+      streamMinutes: numberField(deepgram, "streamMinutes", response, path),
+    },
+    conversion: {
+      trialStarted: numberField(conversion, "trialStarted", response, path),
+      converted: numberField(conversion, "converted", response, path),
+      startedLast30Days: numberField(conversion, "startedLast30Days", response, path),
+      convertedLast30Days: numberField(conversion, "convertedLast30Days", response, path),
+      subscribedWithoutTrial: numberField(conversion, "subscribedWithoutTrial", response, path),
+    },
+    churn: {
+      canceledLast30Days: numberField(churn, "canceledLast30Days", response, path),
+      pastDue: numberField(churn, "pastDue", response, path),
+      unpaid: numberField(churn, "unpaid", response, path),
+      duplicateSubscriptions: numberField(churn, "duplicateSubscriptions", response, path),
+    },
+    billing: {
+      refundsLast30Days: numberField(billing, "refundsLast30Days", response, path),
+      disputesLast30Days: numberField(billing, "disputesLast30Days", response, path),
+      paymentFailuresLast30Days: numberField(billing, "paymentFailuresLast30Days", response, path),
+    },
+    usage: {
+      meetingsThisMonth: numberField(usage, "meetingsThisMonth", response, path),
+      deferredThisMonth: numberField(usage, "deferredThisMonth", response, path),
+      reprocessedThisMonth: numberField(usage, "reprocessedThisMonth", response, path),
+      openMeetings: numberField(usage, "openMeetings", response, path),
+      audioHoursThisMonth: numberField(usage, "audioHoursThisMonth", response, path),
+      accountTokensThisMonth: numberField(usage, "accountTokensThisMonth", response, path),
+      monthlyTokenCapPerUser: numberField(usage, "monthlyTokenCapPerUser", response, path),
+      monthlyAccountTokenCapPerUser: numberField(usage, "monthlyAccountTokenCapPerUser", response, path),
+      usersNearTokenCap: numberField(usage, "usersNearTokenCap", response, path),
+    },
+    trialRefusals: {
+      last30Days: refusalCounts(objectField(refusals, "last30Days", response, path), response, path),
+      today: refusalCounts(objectField(refusals, "today", response, path), response, path),
+    },
+  };
+}
+
+/** Neden başına reddedilen deneme sayaçlarını okur. */
+function refusalCounts(object: JsonObject, response: RawResponse, path: string): TrialRefusalCounts {
+  return {
+    deviceUsed: numberField(object, "device_used", response, path),
+    exhausted: numberField(object, "exhausted", response, path),
+    expired: numberField(object, "expired", response, path),
+    ipDailyLimit: numberField(object, "ip_daily_limit", response, path),
+  };
+}
+
+/** Değeri izinli metinlerden biri olan alan; değilse `ApiResponseError`. */
+function literalField<Literal extends string>(object: JsonObject, key: string, allowed: readonly Literal[], response: RawResponse, path: string): Literal {
+  const value: string = stringField(object, key, response, path);
+  const match: Literal | undefined = allowed.find((candidate: Literal): boolean => candidate === value);
+  if (match === undefined) {
+    throw new ApiResponseError(path, response.status, `"${key}" bilinmeyen değer "${value}"`, response.text);
+  }
+  return match;
+}
+
+/** Değeri izinli metinlerden biri ya da null olan alan. */
+function nullableLiteralField<Literal extends string>(object: JsonObject, key: string, allowed: readonly Literal[], response: RawResponse, path: string): Literal | null {
+  return object[key] === null ? null : literalField(object, key, allowed, response, path);
+}
+
+/** Mantıksal alan; değilse `ApiResponseError`. */
+function booleanField(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
+  const value: JsonValue | undefined = object[key];
+  if (typeof value !== "boolean") {
+    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değil`, response.text);
+  }
+  return value;
+}
+
+/** Zaman ya da null alanı (ms döner). */
+function nullableTimestampField(object: JsonObject, key: string, response: RawResponse, path: string): number | null {
+  return object[key] === null ? null : timestampField(object, key, response, path);
+}
+
+/** Nesne ya da null alanı. */
+function nullableObjectField(object: JsonObject, key: string, response: RawResponse, path: string): JsonObject | null {
+  return object[key] === null ? null : objectField(object, key, response, path);
+}
+
+const segments: readonly UserSegment[] = ["subscribed", "past_due", "canceled", "trial", "free"];
+const providers: readonly UserProvider[] = ["apple", "google"];
+const plans: readonly UserPlan[] = ["subscription", "trial", "free"];
+const accesses: readonly UserAccess[] = ["active", "grace", "none"];
+const meetingKinds: readonly ("trial" | "subscription")[] = ["trial", "subscription"];
+const meetingStates: readonly MeetingState[] = ["open", "ended", "superseded", "expired"];
+const timelineKinds: readonly TimelineKind[] = [
+  "account_created",
+  "trial_started",
+  "trial_device_verified",
+  "trial_ends",
+  "subscription_updated",
+  "subscription_past_due",
+  "subscription_cancel_at",
+  "subscription_period_end",
+];
+
+/** Kesim adının geçerli olup olmadığı (sayfadaki seçimden okunurken). Saf fonksiyondur. */
+export function userSegmentOf(value: string): UserSegment | null {
+  return segments.find((segment: UserSegment): boolean => segment === value) ?? null;
+}
+
+/** Sağlayıcı adının geçerli olup olmadığı. Saf fonksiyondur. */
+export function userProviderOf(value: string): UserProvider | null {
+  return providers.find((provider: UserProvider): boolean => provider === value) ?? null;
+}
+
+/** Kullanıcı özetini okur. */
+function parseUserSummary(item: JsonObject, response: RawResponse, path: string): UserSummary {
+  const subscription: JsonObject | null = nullableObjectField(item, "subscription", response, path);
+  const trial: JsonObject = objectField(item, "trial", response, path);
+  return {
+    id: idField(item, response, path),
+    provider: nullableLiteralField(item, "provider", providers, response, path),
+    createdAt: timestampField(item, "createdAt", response, path),
+    plan: literalField(item, "plan", plans, response, path),
+    subscription:
+      subscription === null
+        ? null
+        : {
+            status: stringField(subscription, "status", response, path),
+            access: literalField(subscription, "access", accesses, response, path),
+            currentPeriodEnd: timestampField(subscription, "currentPeriodEnd", response, path),
+            cancelAt: nullableTimestampField(subscription, "cancelAt", response, path),
+            pastDueSince: nullableTimestampField(subscription, "pastDueSince", response, path),
+            graceEndsAt: nullableTimestampField(subscription, "graceEndsAt", response, path),
+            updatedAt: timestampField(subscription, "updatedAt", response, path),
+          },
+    trial: {
+      used: numberField(trial, "used", response, path),
+      left: numberField(trial, "left", response, path),
+      startedAt: nullableTimestampField(trial, "startedAt", response, path),
+      endsAt: nullableTimestampField(trial, "endsAt", response, path),
+    },
+    meetingsTotal: numberField(item, "meetingsTotal", response, path),
+    hoursThisMonth: numberField(item, "hoursThisMonth", response, path),
+    lastActiveAt: nullableTimestampField(item, "lastActiveAt", response, path),
+  };
+}
+
+/** `GET /v1/admin/users` yanıtını okur. */
+export function parseUserPage(response: RawResponse, path: string): UserPage {
+  const body: JsonObject = parseObject(response, path);
+  return {
+    items: objectArrayField(body, "items", response, path).map((item: JsonObject): UserSummary => parseUserSummary(item, response, path)),
+    nextCursor: nullableStringField(body, "nextCursor", response, path),
+  };
+}
+
+/** `GET /v1/admin/users/{id}` yanıtını okur. */
+export function parseUserDetail(response: RawResponse, path: string): UserDetail {
+  const body: JsonObject = parseObject(response, path);
+  const usage: JsonObject = objectField(body, "usage", response, path);
+  return {
+    user: parseUserSummary(objectField(body, "user", response, path), response, path),
+    trialDeviceVerifiedAt: nullableTimestampField(body, "trialDeviceVerifiedAt", response, path),
+    stripeCustomerId: nullableStringField(body, "stripeCustomerId", response, path),
+    usage: {
+      usedHours: numberField(usage, "usedHours", response, path),
+      capHours: numberField(usage, "capHours", response, path),
+      audioHours: numberField(usage, "audioHours", response, path),
+      tokens: numberField(usage, "tokens", response, path),
+      tokenCap: numberField(usage, "tokenCap", response, path),
+      accountTokens: numberField(usage, "accountTokens", response, path),
+      accountTokenCap: numberField(usage, "accountTokenCap", response, path),
+    },
+    meetings: objectArrayField(body, "meetings", response, path).map(
+      (item: JsonObject): UserMeeting => ({
+        id: idField(item, response, path),
+        kind: literalField(item, "kind", meetingKinds, response, path),
+        state: literalField(item, "state", meetingStates, response, path),
+        startedAt: timestampField(item, "startedAt", response, path),
+        durationMinutes: numberField(item, "durationMinutes", response, path),
+        deferred: booleanField(item, "deferred", response, path),
+        reprocessCount: numberField(item, "reprocessCount", response, path),
+        audioMinutes: numberField(item, "audioMinutes", response, path),
+        tokensUsed: numberField(item, "tokensUsed", response, path),
+        tokenBudget: numberField(item, "tokenBudget", response, path),
+        attested: booleanField(item, "attested", response, path),
+        deepgram: booleanField(item, "deepgram", response, path),
+      }),
+    ),
+    reports: objectArrayField(body, "reports", response, path).map(
+      (item: JsonObject): UserReport => ({
+        id: idField(item, response, path),
+        kind: kindField(item, response, path),
+        status: statusField(item, response, path),
+        createdAt: timestampField(item, "createdAt", response, path),
+        summary: stringField(item, "summary", response, path),
+      }),
+    ),
+    timeline: objectArrayField(body, "timeline", response, path).map(
+      (item: JsonObject): TimelineEntry => ({
+        kind: literalField(item, "kind", timelineKinds, response, path),
+        at: timestampField(item, "at", response, path),
+        detail: nullableStringField(item, "detail", response, path),
+      }),
+    ),
+  };
+}
+
+/** `GET /v1/admin/operations` yanıtını okur. */
+export function parseOperations(response: RawResponse, path: string): Operations {
+  const body: JsonObject = parseObject(response, path);
+  const meetings: JsonObject = objectField(body, "meetings", response, path);
+  const reservations: JsonObject = objectField(body, "reservations", response, path);
+  const deepgram: JsonObject = objectField(body, "deepgram", response, path);
+  const stripe: JsonObject = objectField(body, "stripe", response, path);
+  const reports: JsonObject = objectField(body, "reports", response, path);
+  const reportsLast7Days: JsonObject = objectField(reports, "last7Days", response, path);
+  return {
+    generatedAt: timestampField(body, "generatedAt", response, path),
+    meetings: {
+      open: numberField(meetings, "open", response, path),
+      openItems: objectArrayField(meetings, "openItems", response, path).map(
+        (item: JsonObject): OpenMeeting => ({
+          id: idField(item, response, path),
+          userId: stringField(item, "userId", response, path),
+          kind: literalField(item, "kind", meetingKinds, response, path),
+          startedAt: timestampField(item, "startedAt", response, path),
+          maxEndsAt: timestampField(item, "maxEndsAt", response, path),
+          deferred: booleanField(item, "deferred", response, path),
+          deepgram: booleanField(item, "deepgram", response, path),
+        }),
+      ),
+      unendedLast7Days: numberField(meetings, "unendedLast7Days", response, path),
+    },
+    reservations: {
+      active: numberField(reservations, "active", response, path),
+      expired: numberField(reservations, "expired", response, path),
+      oldestExpiredAt: nullableTimestampField(reservations, "oldestExpiredAt", response, path),
+    },
+    deepgram: { unsettled: numberField(deepgram, "unsettled", response, path), stale: numberField(deepgram, "stale", response, path) },
+    stripe: {
+      lastEventAt: nullableTimestampField(stripe, "lastEventAt", response, path),
+      eventsLast24Hours: numberField(stripe, "eventsLast24Hours", response, path),
+      last7DaysByType: objectArrayField(stripe, "last7DaysByType", response, path).map((item: JsonObject): { readonly type: string; readonly count: number } => ({
+        type: stringField(item, "type", response, path),
+        count: numberField(item, "count", response, path),
+      })),
+    },
+    reports: {
+      last7Days: {
+        feedback: numberField(reportsLast7Days, "feedback", response, path),
+        crash: numberField(reportsLast7Days, "crash", response, path),
+        contact: numberField(reportsLast7Days, "contact", response, path),
+      },
+      recentCrashes: objectArrayField(reports, "recentCrashes", response, path).map(
+        (item: JsonObject): RecentCrash => ({
+          id: idField(item, response, path),
+          status: statusField(item, response, path),
+          createdAt: timestampField(item, "createdAt", response, path),
+          appVersion: nullableStringField(item, "appVersion", response, path),
+          os: nullableStringField(item, "os", response, path),
+          summary: stringField(item, "summary", response, path),
+        }),
+      ),
     },
   };
 }
@@ -298,6 +744,25 @@ export async function fetchReports(kind: ReportKind, status: ReportStatus, befor
 export async function fetchReport(id: string): Promise<ReportDetail> {
   const path: string = `/v1/admin/reports/${encodeURIComponent(id)}`;
   return parseReportDetail(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Kullanıcı listesinin bir sayfası (`cursor` yoksa en yeniler). */
+export async function fetchUsers(filter: UserFilter, cursor: string | null): Promise<UserPage> {
+  const query: URLSearchParams = new URLSearchParams({ q: filter.query ?? "", segment: filter.segment ?? "", provider: filter.provider ?? "", cursor: cursor ?? "" });
+  const path: string = `/v1/admin/users?${query.toString()}`;
+  return parseUserPage(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Tek kullanıcının ayrıntısı. */
+export async function fetchUser(id: string): Promise<UserDetail> {
+  const path: string = `/v1/admin/users/${encodeURIComponent(id)}`;
+  return parseUserDetail(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** İşletim görünümü. */
+export async function fetchOperations(): Promise<Operations> {
+  const path: string = "/v1/admin/operations";
+  return parseOperations(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
 }
 
 /** Bildirimin durumunu değiştirir (204). */

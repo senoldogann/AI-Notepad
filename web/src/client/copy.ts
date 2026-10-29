@@ -71,7 +71,6 @@ export interface AdminClientCopy {
   /** `{ceiling}`. */
   readonly spendSub: string;
   readonly hoursSub: string;
-  readonly tokensSub: string;
   /** Grafik özeti: `{total}`, `{peak}`, `{day}`. */
   readonly chartSummary: string;
   /** Hiç değer olmayan grafik. */
@@ -83,6 +82,68 @@ export interface AdminClientCopy {
   readonly anonymous: string;
   readonly noSummary: string;
   readonly noMessage: string;
+  /** Kullanıcılar kutusu alt satırına eklenir: `{today}`, `{week}`. */
+  readonly usersRecent: string;
+  /** `{rate}`, `{converted}`, `{started}`, `{recentRate}`, `{direct}`. */
+  readonly conversionSub: string;
+  /** `{pastDue}`, `{unpaid}`, `{ending}`. */
+  readonly churnSub: string;
+  /** `{refunds}`, `{disputes}`, `{failed}`, `{duplicates}`. */
+  readonly paymentsSub: string;
+  /** `{open}`, `{deferred}`, `{reprocessed}`. */
+  readonly meetingsSub: string;
+  /** `{minutes}` Deepgram akış dakikası. */
+  readonly audioSub: string;
+  /** `{account}`, `{near}`, `{cap}`. */
+  readonly tokensUsageSub: string;
+  /** `{device}`, `{ip}`, `{exhausted}`, `{expired}`, `{today}`. */
+  readonly refusalsSub: string;
+  /** Değer yok. */
+  readonly none: string;
+  readonly plans: { readonly subscription: string; readonly trial: string; readonly free: string };
+  readonly providers: { readonly apple: string; readonly google: string };
+  /** Abonelik durumu rozetleri (Stripe durumu ve erişim). */
+  readonly subscriptionPills: { readonly active: string; readonly ending: string; readonly grace: string; readonly ended: string };
+  /** Deneme hücresi: `{used}`, `{left}`. */
+  readonly trialCell: string;
+  readonly trialNotStarted: string;
+  readonly meetingKinds: { readonly trial: string; readonly subscription: string };
+  readonly meetingStates: { readonly open: string; readonly ended: string; readonly superseded: string; readonly expired: string };
+  readonly meetingNotes: { readonly deferred: string; readonly reprocessed: string; readonly deepgram: string; readonly attested: string };
+  /** `{minutes}`. */
+  readonly minutes: string;
+  /** `{hours}`. */
+  readonly hours: string;
+  readonly timeline: {
+    readonly account_created: string;
+    readonly trial_started: string;
+    readonly trial_device_verified: string;
+    readonly trial_ends: string;
+    readonly subscription_updated: string;
+    readonly subscription_past_due: string;
+    readonly subscription_cancel_at: string;
+    readonly subscription_period_end: string;
+  };
+  /** Ölçer metni: `{used}`, `{cap}`. */
+  readonly ofCap: string;
+  /** Kullanıcı başlığı: `{id}`. */
+  readonly userTitle: string;
+  /** `{count}` gösterilen satır. */
+  readonly shown: string;
+  readonly opsOpenSub: string;
+  readonly opsUnendedSub: string;
+  /** `{expired}`, `{oldest}`. */
+  readonly opsReservationsSub: string;
+  readonly opsReservationsOk: string;
+  /** `{stale}`. */
+  readonly opsDeepgramSub: string;
+  /** `{count}` son 24 saat. */
+  readonly opsWebhookSub: string;
+  readonly opsWebhookNever: string;
+  /** `{feedback}`, `{crash}`, `{contact}`. */
+  readonly opsReportsSub: string;
+  /** Göreli zaman: `{value}` önce. */
+  readonly ago: string;
 }
 
 /** Tarayıcı metinleri. */
@@ -132,7 +193,6 @@ export const clientCopy: ClientCopy = {
     deepgramSub: "{used} of {budget} Deepgram credit (estimate); then live text runs on the Mac",
     spendSub: "of {ceiling} daily ceiling",
     hoursSub: "Recorded across all users",
-    tokensSub: "Input and output, all users",
     chartSummary: "{total} in total over 30 days; highest {peak} on {day}.",
     chartEmpty: "Nothing in the last 30 days.",
     barTitle: "{day}: {value}",
@@ -140,6 +200,47 @@ export const clientCopy: ClientCopy = {
     anonymous: "Not signed in",
     noSummary: "(no summary)",
     noMessage: "(no message)",
+    usersRecent: "{today} today · {week} in 7 days",
+    conversionSub: "{converted} of {started} trials converted · last 30 days {recentRate} · {direct} paid without a trial",
+    churnSub: "{ending} set to end · {pastDue} payment due · {unpaid} unpaid",
+    paymentsSub: "{refunds} refunds · {disputes} disputes · {failed} failed payments in 30 days · {duplicates} duplicate subscriptions refunded",
+    meetingsSub: "{open} live now · {deferred} processed later · {reprocessed} reprocessed",
+    audioSub: "Cloud transcription; Deepgram live text used {minutes} stream minutes in total",
+    tokensUsageSub: "{account} outside meetings · {near} accounts above 80% of the {cap} monthly cap",
+    refusalsSub: "Mac already used {device} · same network {ip} · used up {exhausted} · expired {expired} · {today} today",
+    none: "—",
+    plans: { subscription: "Subscribed", trial: "Trial", free: "No plan" },
+    providers: { apple: "Apple", google: "Google" },
+    subscriptionPills: { active: "Active", ending: "Ending", grace: "Payment due", ended: "Ended" },
+    trialCell: "{used} used · {left} left",
+    trialNotStarted: "Not started",
+    meetingKinds: { trial: "Trial", subscription: "Subscription" },
+    meetingStates: { open: "Live", ended: "Ended", superseded: "Replaced", expired: "Never ended" },
+    meetingNotes: { deferred: "Processed later", reprocessed: "Reprocessed ×{count}", deepgram: "Deepgram", attested: "Verified Mac" },
+    minutes: "{minutes} min",
+    hours: "{hours} h",
+    timeline: {
+      account_created: "Account created",
+      trial_started: "Trial started",
+      trial_device_verified: "Trial tied to a Mac",
+      trial_ends: "Trial period ends",
+      subscription_updated: "Subscription last updated ({detail})",
+      subscription_past_due: "Payment failed",
+      subscription_cancel_at: "Cancelled; access ends",
+      subscription_period_end: "Current period ends ({detail})",
+    },
+    ofCap: "{used} of {cap}",
+    userTitle: "Account {id}",
+    shown: "{count} shown",
+    opsOpenSub: "Started and not yet ended or timed out",
+    opsUnendedSub: "The app didn't report the end (crash, network or a closed Mac)",
+    opsReservationsSub: "{expired} expired, waiting for the daily cleanup · oldest {oldest}",
+    opsReservationsOk: "No expired reservations waiting",
+    opsDeepgramSub: "{stale} older than the longest meeting (should have settled)",
+    opsWebhookSub: "{count} events in the last 24 hours",
+    opsWebhookNever: "No events stored in the last 90 days",
+    opsReportsSub: "{feedback} feedback · {crash} crashes · {contact} contact",
+    ago: "{value} ago",
   },
 };
 

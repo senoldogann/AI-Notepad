@@ -64,7 +64,19 @@ const targets: readonly Target[] = [
   { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
   { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
   { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
-  { name: "admin", path: "/admin", ready: "#admin-content:not(.hidden)", signedIn: true, account: null },
+  { name: "admin", path: "/admin", ready: "#kpi-mrr:not(:empty)", signedIn: true, account: null },
+  { name: "admin-users", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
+  { name: "admin-user", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
+  { name: "admin-operations", path: "/admin#operations", ready: "#ops-open-rows tr", signedIn: true, account: null },
+  { name: "admin-inbox", path: "/admin#inbox", ready: "#inbox-list .inbox__item", signedIn: true, account: null },
+];
+
+/** Örnek kullanıcıların kimlikleri (liste, ayrıntı ve açık toplantılar aynı kimlikleri kullanır). */
+const exampleUserIds: readonly string[] = [
+  "3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+  "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+  "b7e6d5c4-3b2a-4190-8f7e-6d5c4b3a2918",
+  "e1f2a3b4-c5d6-4e7f-8091-a2b3c4d5e6f7",
 ];
 
 /** Yerel derlemenin API adresi (istekler buraya gider ve örnek verilerle karşılanır). */
@@ -101,6 +113,7 @@ function meFixture(state: AccountState, now: Date): object {
 function fixtures(now: Date): Readonly<Record<string, object>> {
   const days: string[] = last30Days(now);
   const wave = (index: number, scale: number): number => Math.max(0, Math.round((Math.sin(index / 3) + 1.3) * scale + (index % 4)));
+  const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
   return {
     "/v1/me": meFixture("active", now),
     "/v1/admin/stats": {
@@ -116,6 +129,102 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       stripe: { mode: "test" },
       // Kapasite eşiğin üstünde: kutunun uyarı görünümü de çekilir.
       elevenLabs: { usedHours: 41.5, capHours: 50, percent: 83 },
+      deepgram: { estimatedUsd: 61.2, budgetUsd: 200, percent: 30.6, streamMinutes: 14_210 },
+      conversion: { trialStarted: 284, converted: 79, startedLast30Days: 61, convertedLast30Days: 17, subscribedWithoutTrial: 6 },
+      churn: { canceledLast30Days: 4, pastDue: 2, unpaid: 0, duplicateSubscriptions: 1 },
+      billing: { refundsLast30Days: 1, disputesLast30Days: 0, paymentFailuresLast30Days: 3 },
+      usage: {
+        meetingsThisMonth: 812,
+        deferredThisMonth: 37,
+        reprocessedThisMonth: 12,
+        openMeetings: 4,
+        audioHoursThisMonth: 198.4,
+        accountTokensThisMonth: 3_120_000,
+        monthlyTokenCapPerUser: 6_500_000,
+        monthlyAccountTokenCapPerUser: 1_500_000,
+        usersNearTokenCap: 0,
+      },
+      trialRefusals: {
+        last30Days: { device_used: 9, exhausted: 41, expired: 12, ip_daily_limit: 3 },
+        today: { device_used: 1, exhausted: 2, expired: 0, ip_daily_limit: 0 },
+      },
+    },
+    "/v1/admin/users": {
+      items: exampleUserIds.map((id: string, index: number) => ({
+        id,
+        provider: index % 2 === 0 ? "apple" : "google",
+        createdAt: now.getTime() - (index + 1) * 5 * 86_400_000,
+        plan: index === 0 ? "subscription" : index === 1 ? "trial" : index === 2 ? "subscription" : "free",
+        subscription:
+          index === 0
+            ? { status: "active", access: "active", currentPeriodEnd: at(20), cancelAt: null, pastDueSince: null, graceEndsAt: null, updatedAt: at(-10) }
+            : index === 2
+              ? { status: "past_due", access: "grace", currentPeriodEnd: at(28), cancelAt: null, pastDueSince: at(-2), graceEndsAt: at(5), updatedAt: at(-2) }
+              : null,
+        trial: index === 3 ? { used: 0, left: 3, startedAt: null, endsAt: null } : { used: index === 1 ? 1 : 3, left: index === 1 ? 2 : 0, startedAt: at(-12), endsAt: at(-5) },
+        meetingsTotal: [42, 1, 17, 0][index] ?? 0,
+        hoursThisMonth: [8.25, 0.5, 3.1, 0][index] ?? 0,
+        lastActiveAt: index === 3 ? null : now.getTime() - (index + 1) * 3_600_000,
+      })),
+      nextCursor: "1760529600000:e1f2a3b4-c5d6-4e7f-8091-a2b3c4d5e6f7",
+    },
+    [`/v1/admin/users/${exampleUserIds[0] ?? ""}`]: {
+      user: {
+        id: exampleUserIds[0],
+        provider: "apple",
+        createdAt: now.getTime() - 5 * 86_400_000,
+        plan: "subscription",
+        subscription: { status: "active", access: "active", currentPeriodEnd: at(20), cancelAt: at(20), pastDueSince: null, graceEndsAt: null, updatedAt: at(-1) },
+        trial: { used: 3, left: 0, startedAt: at(-12), endsAt: at(-5) },
+        meetingsTotal: 42,
+        hoursThisMonth: 8.25,
+        lastActiveAt: now.getTime() - 3_600_000,
+      },
+      trialDeviceVerifiedAt: at(-12),
+      stripeCustomerId: "cus_ExampleCustomer01",
+      usage: { usedHours: 8.25, capHours: 10, audioHours: 7.9, tokens: 2_310_000, tokenCap: 6_500_000, accountTokens: 410_000, accountTokenCap: 1_500_000 },
+      meetings: [
+        { id: "m1", kind: "subscription", state: "open", startedAt: now.getTime() - 1_800_000, durationMinutes: 30, deferred: false, reprocessCount: 0, audioMinutes: 28.5, tokensUsed: 41_000, tokenBudget: 900_000, attested: true, deepgram: true },
+        { id: "m2", kind: "subscription", state: "ended", startedAt: now.getTime() - 86_400_000, durationMinutes: 52, deferred: true, reprocessCount: 1, audioMinutes: 51.2, tokensUsed: 310_000, tokenBudget: 900_000, attested: true, deepgram: false },
+        { id: "m3", kind: "trial", state: "expired", startedAt: now.getTime() - 9 * 86_400_000, durationMinutes: 90, deferred: false, reprocessCount: 0, audioMinutes: 0, tokensUsed: 0, tokenBudget: 400_000, attested: false, deepgram: false },
+      ],
+      reports: [{ id: "rep_1", kind: "feedback", status: "open", createdAt: now.getTime() - 3_600_000, summary: "Would love a keyboard shortcut to start recording" }],
+      timeline: [
+        { kind: "subscription_period_end", at: at(20), detail: "active" },
+        { kind: "subscription_cancel_at", at: at(20), detail: null },
+        { kind: "subscription_updated", at: at(-1), detail: "active" },
+        { kind: "trial_ends", at: at(-5), detail: null },
+        { kind: "trial_device_verified", at: at(-12), detail: null },
+        { kind: "trial_started", at: at(-12), detail: null },
+        { kind: "account_created", at: at(-12), detail: null },
+      ],
+    },
+    "/v1/admin/operations": {
+      generatedAt: now.toISOString(),
+      meetings: {
+        open: 2,
+        openItems: [
+          { id: "m1", userId: exampleUserIds[0], kind: "subscription", startedAt: at(-0.01), maxEndsAt: at(0.15), deferred: false, deepgram: true },
+          { id: "m9", userId: exampleUserIds[1], kind: "trial", startedAt: at(-0.02), maxEndsAt: at(0.04), deferred: true, deepgram: false },
+        ],
+        unendedLast7Days: 3,
+      },
+      // Bir günden eski bekleyen ayırma: kutunun uyarı görünümü de çekilir.
+      reservations: { active: 5, expired: 2, oldestExpiredAt: at(-1.5) },
+      deepgram: { unsettled: 2, stale: 0 },
+      stripe: {
+        lastEventAt: at(-0.1),
+        eventsLast24Hours: 7,
+        last7DaysByType: [
+          { type: "invoice.paid", count: 18 },
+          { type: "customer.subscription.updated", count: 11 },
+          { type: "invoice.payment_failed", count: 2 },
+        ],
+      },
+      reports: {
+        last7Days: { feedback: 3, crash: 1, contact: 2 },
+        recentCrashes: [{ id: "rep_3", status: "open", createdAt: now.getTime() - 7_200_000, appVersion: "0.1.4", os: "macOS 26.1", summary: "EXC_BAD_ACCESS · SIGSEGV" }],
+      },
     },
     "/v1/admin/reports": {
       items: [
@@ -208,7 +317,7 @@ async function checkOverflow(page: Page, shot: string, findings: Finding[]): Pro
     for (const element of Array.from(document.querySelectorAll("body *"))) {
       const rect: DOMRect = element.getBoundingClientRect();
       if (rect.width > 0 && (rect.right > viewport + 1 || rect.left < -1) && getComputedStyle(element).position !== "fixed") {
-        const insideClip: boolean = element.closest(".film, .faq, dialog, .visually-hidden, .skip-link, .table-wrap, .detail__payload") !== null;
+        const insideClip: boolean = element.closest(".film, .faq, dialog, .visually-hidden, .skip-link, .table-wrap, .table-scroll, .detail__payload") !== null;
         if (!insideClip) {
           offenders.push(`${element.tagName.toLowerCase()}.${String(element.className).split(" ").join(".")} (${Math.round(rect.left)}–${Math.round(rect.right)})`);
         }
@@ -274,12 +383,16 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
       }
       await page.goto(`${base}${target.path}`, { waitUntil: "load" });
       await page.waitForSelector(target.ready, { timeout: 20_000 });
-      if (target.name === "admin") {
+      if (target.name === "admin-inbox") {
         await page.click("#inbox-list .inbox__item");
         await page.waitForSelector("#detail-body:not(.hidden)");
-        // Ayrıntı görünür alana kaydırılır; tam sayfa görüntüde yapışkan üst çubuk ortada kalmasın.
-        await page.evaluate((): void => window.scrollTo(0, 0));
       }
+      if (target.name === "admin-user") {
+        await page.click("#users-rows .id-button");
+        await page.waitForSelector("#user-detail-view:not(.hidden) #user-meetings tr");
+      }
+      // Ayrıntı görünür alana kaydırılır; tam sayfa görüntüde yapışkan üst çubuk ortada kalmasın.
+      await page.evaluate((): void => window.scrollTo(0, 0));
       await capture(page, outDir, shot, findings);
       await page.close();
     }

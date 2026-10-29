@@ -1,9 +1,11 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): özet kutuları, son 30
-// günün grafikleri ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur (src/client/admin.ts).
-// Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve yalnızca sunucu yönetici
-// erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca nötr bir yükleme satırı
-// görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart "sayfa bulunamadı" görünümü.
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): dört görünüm — genel
+// bakış (özet kutuları ve son 30 günün grafikleri), kullanıcılar (liste ve ayrıntı), işletim (açık toplantılar, takılı
+// işler, Stripe olayları, son çökmeler) ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
+// (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
+// yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
+// nötr bir yükleme satırı görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
+// "sayfa bulunamadı" görünümü.
 import Base from "../layouts/Base.astro";
 import Icon from "../components/Icon.astro";
 import NotFound from "../components/NotFound.astro";
@@ -20,17 +22,14 @@ interface KpiSpec {
   readonly meter: boolean;
 }
 
-/** Özet kutusu grubu: başlık ve kutular. */
+/** Özet kutusu grubu: başlık ve kutular (her grup dört kutu, tam genişlik). */
 interface KpiGroup {
-  readonly id: "growth" | "revenue" | "costs";
+  readonly id: "growth" | "revenue" | "usage" | "costs";
   readonly title: string;
   readonly kpis: readonly KpiSpec[];
 }
 
-/**
- * Özet kutuları üç grupta: büyüme, gelir, maliyet ve kapasite. Maliyet grubunun ızgarası yeni kutulara (ör. Deepgram
- * bütçesi) kendiliğinden yer açar.
- */
+/** Genel bakışın özet kutuları dört grupta: büyüme, gelir, kullanım, maliyet ve kapasite. */
 const groups: readonly KpiGroup[] = [
   {
     id: "growth",
@@ -42,18 +41,46 @@ const groups: readonly KpiGroup[] = [
       { id: "subscribers", label: text.kpis.subscribers, icon: "card", meter: false },
     ],
   },
-  { id: "revenue", title: text.groups.revenue, kpis: [{ id: "mrr", label: text.kpis.mrr, icon: "chart", meter: false }] },
+  {
+    id: "revenue",
+    title: text.groups.revenue,
+    kpis: [
+      { id: "mrr", label: text.kpis.mrr, icon: "chart", meter: false },
+      { id: "conversion", label: text.kpis.conversion, icon: "sparkle", meter: true },
+      { id: "churn", label: text.kpis.churn, icon: "rewind", meter: false },
+      { id: "payments", label: text.kpis.payments, icon: "wallet", meter: false },
+    ],
+  },
+  {
+    id: "usage",
+    title: text.groups.usage,
+    kpis: [
+      { id: "meetings", label: text.kpis.meetings, icon: "calendar", meter: false },
+      { id: "hours", label: text.kpis.hours, icon: "clock", meter: false },
+      { id: "audio", label: text.kpis.audio, icon: "waveform", meter: false },
+      { id: "tokens", label: text.kpis.tokens, icon: "tokens", meter: false },
+    ],
+  },
   {
     id: "costs",
     title: text.groups.costs,
     kpis: [
-      { id: "spend", label: text.kpis.spend, icon: "wallet", meter: true },
-      { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "waveform", meter: true },
+      { id: "spend", label: text.kpis.spend, icon: "chip", meter: true },
+      { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "timer", meter: true },
       { id: "deepgram", label: text.kpis.deepgram, icon: "translate", meter: true },
-      { id: "hours", label: text.kpis.hours, icon: "clock", meter: false },
-      { id: "tokens", label: text.kpis.tokens, icon: "tokens", meter: false },
+      { id: "refusals", label: text.kpis.refusals, icon: "lock", meter: false },
     ],
   },
+];
+
+/** İşletim görünümünün özet kutuları (betik `kpi-ops-<id>` doldurur). */
+const opsKpis: readonly KpiSpec[] = [
+  { id: "ops-open", label: text.operations.kpis.open, icon: "play", meter: false },
+  { id: "ops-unended", label: text.operations.kpis.unended, icon: "pause", meter: false },
+  { id: "ops-reservations", label: text.operations.kpis.reservations, icon: "disk", meter: false },
+  { id: "ops-deepgram", label: text.operations.kpis.deepgram, icon: "translate", meter: false },
+  { id: "ops-webhook", label: text.operations.kpis.webhook, icon: "plug", meter: false },
+  { id: "ops-reports", label: text.operations.kpis.reports, icon: "inbox", meter: false },
 ];
 
 /** Grafikler: kimlik (betik `chart-<id>` çizer) ve başlık. */
@@ -64,11 +91,83 @@ const charts: readonly { readonly id: string; readonly title: string; readonly l
   { id: "spend", title: text.charts.spend, legend: false },
 ];
 
+/** Panelin görünümleri (betik `view-<id>` düğmesiyle `panel-<id>` açar). */
+const views: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
+  { id: "overview", label: text.views.overview, icon: "chart" },
+  { id: "users", label: text.views.users, icon: "users" },
+  { id: "operations", label: text.views.operations, icon: "laptop" },
+  { id: "inbox", label: text.views.inbox, icon: "inbox" },
+];
+
 /** Bildirim kutusu sekmeleri. */
 const tabs: readonly { readonly kind: string; readonly label: string; readonly icon: IconName }[] = [
   { kind: "feedback", label: text.tabs.feedback, icon: "message" },
   { kind: "crash", label: text.tabs.crash, icon: "sparkle" },
   { kind: "contact", label: text.tabs.contact, icon: "mail" },
+];
+
+/** Kullanıcı listesi kesimleri (değer sunucunun `segment` parametresidir; boş = tümü). */
+const segments: readonly { readonly value: string; readonly label: string }[] = [
+  { value: "", label: text.users.segments.all },
+  { value: "subscribed", label: text.users.segments.subscribed },
+  { value: "past_due", label: text.users.segments.pastDue },
+  { value: "canceled", label: text.users.segments.canceled },
+  { value: "trial", label: text.users.segments.trial },
+  { value: "free", label: text.users.segments.free },
+];
+
+const providerOptions: readonly { readonly value: string; readonly label: string }[] = [
+  { value: "", label: text.users.providers.all },
+  { value: "apple", label: text.users.providers.apple },
+  { value: "google", label: text.users.providers.google },
+];
+
+const userColumns: readonly string[] = [
+  text.users.columns.user,
+  text.users.columns.provider,
+  text.users.columns.created,
+  text.users.columns.plan,
+  text.users.columns.trial,
+  text.users.columns.subscription,
+  text.users.columns.meetings,
+  text.users.columns.hours,
+  text.users.columns.lastActive,
+];
+
+const meetingColumns: readonly string[] = [
+  text.users.meetingColumns.started,
+  text.users.meetingColumns.kind,
+  text.users.meetingColumns.state,
+  text.users.meetingColumns.duration,
+  text.users.meetingColumns.audio,
+  text.users.meetingColumns.tokens,
+  text.users.meetingColumns.notes,
+];
+
+const openColumns: readonly string[] = [
+  text.operations.openColumns.user,
+  text.operations.openColumns.kind,
+  text.operations.openColumns.started,
+  text.operations.openColumns.endsBy,
+  text.operations.openColumns.notes,
+];
+
+/** Kullanıcı ayrıntısının ölçerleri (betik `user-meter-<id>` ve `user-meter-<id>-text` doldurur). */
+const userMeters: readonly { readonly id: string; readonly label: string }[] = [
+  { id: "hours", label: text.users.usage.hours },
+  { id: "tokens", label: text.users.usage.tokens },
+  { id: "account", label: text.users.usage.accountTokens },
+];
+
+/** Kullanıcı ayrıntısının alanları (betik `user-field-<id>` doldurur). */
+const userFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
+  { id: "provider", label: text.users.fields.provider, mono: false },
+  { id: "created", label: text.users.fields.created, mono: false },
+  { id: "last-active", label: text.users.fields.lastActive, mono: false },
+  { id: "subscription", label: text.users.fields.subscription, mono: false },
+  { id: "trial", label: text.users.fields.trial, mono: false },
+  { id: "trial-device", label: text.users.fields.trialDevice, mono: false },
+  { id: "stripe", label: text.users.fields.stripeCustomer, mono: true },
 ];
 ---
 
@@ -96,7 +195,20 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
       </button>
     </div>
 
-    <div id="admin-content" class="admin__content">
+    <div class="segmented admin__views" role="group" aria-label={text.views.label}>
+      {
+        views.map((view, index: number) => (
+          <button id={`view-${view.id}`} class="segmented__button" type="button" aria-pressed={index === 0 ? "true" : "false"} aria-controls={`panel-${view.id}`}>
+            <Icon name={view.icon} size={16} class="" />
+            {view.label}
+            {view.id === "inbox" ? <span id="count-inbox" class="segmented__count tabular" /> : null}
+          </button>
+        ))
+      }
+    </div>
+
+    {/* ---------- Genel bakış ---------- */}
+    <div id="panel-overview" class="admin__panel">
       <div class="kpi-groups">
         {
           groups.map((group: KpiGroup) => (
@@ -106,7 +218,7 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
               </h2>
               <div class="kpi-group__grid">
                 {group.kpis.map((kpi: KpiSpec) => (
-                  <div class:list={["card", "kpi", { "kpi--meter": kpi.meter }]} id={`kpi-${kpi.id}-card`}>
+                  <div class:list={["card", "kpi", { "kpi--meter": kpi.meter, "kpi--accent": kpi.id === "mrr" }]} id={`kpi-${kpi.id}-card`}>
                     <p class="kpi__label">
                       <Icon name={kpi.icon} size={16} class="kpi__icon" />
                       {kpi.label}
@@ -144,7 +256,187 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
           }
         </div>
       </section>
+    </div>
 
+    {/* ---------- Kullanıcılar ---------- */}
+    <div id="panel-users" class="admin__panel hidden">
+      <section id="users-list-view" class="users" aria-labelledby="users-title">
+        <h2 class="visually-hidden" id="users-title">{text.users.title}</h2>
+        <form id="users-form" class="users__toolbar" role="search">
+          <div class="field users__search">
+            <label for="users-query">{text.users.searchLabel}</label>
+            <input
+              id="users-query"
+              class="input input--small mono"
+              type="search"
+              placeholder={text.users.searchPlaceholder}
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="36"
+            />
+          </div>
+          <div class="field">
+            <label for="users-segment">{text.users.segmentLabel}</label>
+            <select id="users-segment" class="input input--small select">
+              {segments.map((segment) => <option value={segment.value}>{segment.label}</option>)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="users-provider">{text.users.providerLabel}</label>
+            <select id="users-provider" class="input input--small select">
+              {providerOptions.map((provider) => <option value={provider.value}>{provider.label}</option>)}
+            </select>
+          </div>
+          <button class="button button--primary button--small users__submit" type="submit">
+            <Icon name="search" size={16} class="" />
+            {text.users.search}
+          </button>
+        </form>
+
+        <div class="card table-card">
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="users-title">
+            <table class="data-table">
+              <thead>
+                <tr>{userColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+              </thead>
+              <tbody id="users-rows"></tbody>
+            </table>
+          </div>
+          <p id="users-empty" class="muted table-empty hidden">{text.users.empty}</p>
+          <div class="table-foot">
+            <span id="users-shown" class="small muted tabular"></span>
+            <button id="users-more" class="button button--secondary button--small hidden" type="button">{text.users.loadMore}</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="user-detail-view" class="user-detail hidden" aria-labelledby="user-title">
+        <div class="user-detail__head">
+          <button id="user-back" class="button button--secondary button--small" type="button">{text.users.back}</button>
+          <h2 id="user-title" class="title-m user-detail__title"></h2>
+          <div id="user-pills" class="pill-row"></div>
+        </div>
+
+        <div class="user-detail__grid">
+          <div class="card user-card">
+            <dl class="detail__fields">
+              {
+                userFields.map((field) => (
+                  <div>
+                    <dt>{field.label}</dt>
+                    <dd id={`user-field-${field.id}`} class:list={{ mono: field.mono }} />
+                  </div>
+                ))
+              }
+            </dl>
+          </div>
+          <div class="card user-card">
+            <h3 class="detail__label">{text.users.usageTitle}</h3>
+            <div class="usage-meters">
+              {
+                userMeters.map((meter) => (
+                  <div class="usage-meter">
+                    <p class="usage-meter__label">
+                      <span>{meter.label}</span>
+                      <span id={`user-meter-${meter.id}-text`} class="tabular muted" />
+                    </p>
+                    <progress id={`user-meter-${meter.id}`} class="meter" aria-label={meter.label} max="1" value="0" />
+                  </div>
+                ))
+              }
+              <p class="usage-meter__label">
+                <span>{text.users.usage.audio}</span>
+                <span id="user-audio" class="tabular muted"></span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <h3 class="detail__label table-card__title">{text.users.meetingsTitle}</h3>
+          <div class="table-scroll" tabindex="0" role="region" aria-label={text.users.meetingsTitle}>
+            <table class="data-table">
+              <thead>
+                <tr>{meetingColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+              </thead>
+              <tbody id="user-meetings"></tbody>
+            </table>
+          </div>
+          <p id="user-meetings-empty" class="muted table-empty hidden">{text.users.noMeetings}</p>
+        </div>
+
+        <div class="user-detail__grid">
+          <div class="card user-card">
+            <h3 class="detail__label">{text.users.timelineTitle}</h3>
+            <ol id="user-timeline" class="timeline"></ol>
+            <p class="small muted">{text.users.timelineNote}</p>
+          </div>
+          <div class="card user-card">
+            <h3 class="detail__label">{text.users.reportsTitle}</h3>
+            <ul id="user-reports" class="link-list"></ul>
+            <p id="user-reports-empty" class="muted hidden">{text.users.noReports}</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    {/* ---------- İşletim ---------- */}
+    <div id="panel-operations" class="admin__panel hidden">
+      <div class="kpi-group__grid ops-kpis">
+        {
+          opsKpis.map((kpi: KpiSpec) => (
+            <div class="card kpi" id={`kpi-${kpi.id}-card`}>
+              <p class="kpi__label">
+                <Icon name={kpi.icon} size={16} class="kpi__icon" />
+                {kpi.label}
+              </p>
+              <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
+              <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
+            </div>
+          ))
+        }
+      </div>
+
+      <div class="ops-grid">
+        <section class="card table-card ops-grid__wide" aria-labelledby="ops-open-title">
+          <h3 class="detail__label table-card__title" id="ops-open-title">{text.operations.openTitle}</h3>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-open-title">
+            <table class="data-table">
+              <thead>
+                <tr>{openColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+              </thead>
+              <tbody id="ops-open-rows"></tbody>
+            </table>
+          </div>
+          <p id="ops-open-empty" class="muted table-empty hidden">{text.operations.noOpen}</p>
+        </section>
+
+        <section class="card table-card" aria-labelledby="ops-stripe-title">
+          <h3 class="detail__label table-card__title" id="ops-stripe-title">{text.operations.stripeTitle}</h3>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-stripe-title">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">{text.operations.stripeColumns.type}</th>
+                  <th scope="col" class="numeric">{text.operations.stripeColumns.count}</th>
+                </tr>
+              </thead>
+              <tbody id="ops-stripe-rows"></tbody>
+            </table>
+          </div>
+          <p id="ops-stripe-empty" class="muted table-empty hidden">{text.operations.noStripe}</p>
+        </section>
+
+        <section class="card user-card" aria-labelledby="ops-crashes-title">
+          <h3 class="detail__label" id="ops-crashes-title">{text.operations.crashesTitle}</h3>
+          <ul id="ops-crashes" class="link-list"></ul>
+          <p id="ops-crashes-empty" class="muted hidden">{text.operations.noCrashes}</p>
+        </section>
+      </div>
+    </div>
+
+    {/* ---------- Bildirim kutusu ---------- */}
+    <div id="panel-inbox" class="admin__panel hidden">
       <section class="inbox" aria-labelledby="inbox-title">
         <div class="inbox__toolbar">
           <h2 class="title-m" id="inbox-title">{text.inboxTitle}</h2>
@@ -225,9 +517,15 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
     gap: 16px;
   }
 
-  .admin__content {
+  /* Görünüm seçici: başlığın altında, sola yaslı; görünümler kendi aralıklarıyla akar. */
+  .admin__views {
+    justify-self: start;
+  }
+
+  .admin__panel {
     display: grid;
     gap: clamp(32px, 4vw, 48px);
+    min-width: 0;
   }
 
   /* Panel eklenince yükleme satırı gizlenir; panel kendi aralıklarıyla akar. */
@@ -250,41 +548,28 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
 
   /* ---------- Özet kutuları ---------- */
 
-  /* Büyüme tam genişlikte; altında gelir (1 pay) ve maliyet ve kapasite (2 pay, ikişerli) yan yana. */
+  /* Gruplar alt alta, tam genişlikte; her grup dörtlü ızgara (dar ekranda ikişerli, telefonda tek). */
   .kpi-groups {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-    gap: 28px 16px;
+    gap: 28px;
   }
 
   .kpi-group {
     display: grid;
-    grid-template-rows: auto 1fr;
     gap: 12px;
     min-width: 0;
   }
 
-  .kpi-group--growth {
-    grid-column: 1 / -1;
-  }
-
   .kpi-group__grid {
     display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-auto-rows: 1fr;
     gap: 16px;
   }
 
-  .kpi-group--growth .kpi-group__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .kpi-group--revenue .kpi-group__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* İkişerli; yeni maliyet kutuları (ör. Deepgram bütçesi) ızgaraya kendiliğinden yeni satır olarak eklenir. */
-  .kpi-group--costs .kpi-group__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* İşletim kutuları üçlü (altı kutu, iki satır). */
+  .ops-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .kpi {
@@ -332,30 +617,19 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
     line-height: 1.45;
   }
 
-  /* Gelir kutusu: üstte ince, durgun film şeridi (bulanıklık ya da hareket yok). */
-  /* Gelir kutusu uzun: değer ve alt satır üstte, altı hafif, durgun bir pastel tonla dolar. */
-  .kpi-group--revenue .kpi {
+  /* MRR kutusu: üstte ince, durgun pastel film şeridi; altı hafif bir tonla dolar (bulanıklık ya da hareket yok). */
+  .kpi--accent {
     position: relative;
     overflow: hidden;
-    grid-template-rows: auto auto auto;
-    padding-top: 30px;
     background: linear-gradient(180deg, var(--card) 40%, color-mix(in srgb, #dac6ee 16%, var(--card)) 100%);
   }
 
-  .kpi-group--revenue .kpi__sub {
-    align-self: start;
-  }
-
-  .kpi-group--revenue .kpi::before {
+  .kpi--accent::before {
     content: "";
     position: absolute;
     inset: 0 0 auto;
     height: 6px;
     background: linear-gradient(90deg, #f7c9b2, #f4bcc6 35%, #dac6ee 70%, #bfd4f4);
-  }
-
-  .kpi-group--revenue .kpi__value {
-    font-size: clamp(2.125rem, 3.4vw, 2.75rem);
   }
 
   /* Uyarı: ölçer eşiği aştı (harcama tavana, kapasite sınıra yakın). */
@@ -666,19 +940,311 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
     white-space: pre;
   }
 
-  @media (max-width: 1040px) {
-    .kpi-groups {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  /* ---------- Tablolar (kullanıcılar, toplantılar, işletim) ---------- */
 
-    .kpi-group--growth .kpi-group__grid {
+  .table-card {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    min-width: 0;
+  }
+
+  .table-card__title {
+    padding: 12px 14px 0;
+  }
+
+  /* Geniş tablo kartın içinde yatay kayar; sayfa yana taşmaz. */
+  .table-scroll {
+    overflow-x: auto;
+    border-radius: var(--radius-s);
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .data-table th {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .data-table .numeric,
+  .data-table :global(td.numeric) {
+    text-align: right;
+  }
+
+  .data-table :global(td) {
+    padding: 10px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .data-table :global(tr:last-child td) {
+    border-bottom: 0;
+  }
+
+  .data-table :global(tr.is-clickable) {
+    cursor: pointer;
+  }
+
+  .data-table :global(tr.is-clickable:hover td) {
+    background: var(--soft);
+  }
+
+  /* Hesap kimliği düğmesi: satırın klavyeyle açılan bağlantısı. */
+  .data-table :global(.id-button) {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 0.25em;
+    cursor: pointer;
+  }
+
+  .data-table :global(.id-button:hover) {
+    text-decoration-color: currentColor;
+  }
+
+  .table-empty {
+    padding: 16px 14px;
+  }
+
+  .table-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 14px 8px;
+  }
+
+  /* Küçük rozetler (tablo hücrelerinde). */
+  .admin__panel :global(.pill--compact) {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+  }
+
+  .admin__panel :global(.pill-row),
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Betiğin oluşturduğu öğelerde de eş aralıklı yazı (Stripe olay türü). */
+  .admin__panel :global(.mono) {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+  }
+
+  /* ---------- Kullanıcılar ---------- */
+
+  .users,
+  .user-detail {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .users__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .users__toolbar .field {
+    gap: 6px;
+  }
+
+  .users__toolbar label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .users__search {
+    flex: 1 1 260px;
+  }
+
+  .input--small {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.9375rem;
+  }
+
+  .select {
+    padding-right: 32px;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 17px) 50%,
+      calc(100% - 12px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+  }
+
+  .users__submit {
+    min-height: 40px;
+  }
+
+  .user-detail__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+  }
+
+  .user-detail__title {
+    font-family: var(--mono);
+    font-size: 1.0625rem;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .user-detail__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .user-card {
+    display: grid;
+    gap: 14px;
+    padding: 20px 22px;
+    min-width: 0;
+  }
+
+  .usage-meters {
+    display: grid;
+    gap: 14px;
+  }
+
+  .usage-meter {
+    display: grid;
+    gap: 6px;
+  }
+
+  .usage-meter__label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.875rem;
+  }
+
+  /* Zaman çizelgesi: solda ince çizgi ve noktalar. */
+  .timeline {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0 0 0 18px;
+    list-style: none;
+    border-left: 1px solid var(--line);
+  }
+
+  .timeline :global(li) {
+    position: relative;
+    display: grid;
+    gap: 2px;
+    font-size: 0.875rem;
+  }
+
+  .timeline :global(li::before) {
+    content: "";
+    position: absolute;
+    left: -22px;
+    top: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .timeline :global(.timeline__time) {
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  /* Rapor ve çökme listeleri: tıklanınca bildirim kutusunda açılır. */
+  .link-list {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .link-list :global(.link-list__item) {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--radius-s);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .link-list :global(.link-list__item:hover) {
+    background: var(--soft);
+  }
+
+  .link-list :global(.link-list__title) {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .link-list :global(.link-list__meta) {
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  /* ---------- İşletim ---------- */
+
+  .ops-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .ops-grid__wide {
+    grid-column: 1 / -1;
+  }
+
+  @media (max-width: 1040px) {
+    .kpi-group__grid,
+    .ops-kpis {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
   @media (max-width: 860px) {
     .charts,
-    .inbox__body {
+    .inbox__body,
+    .user-detail__grid,
+    .ops-grid {
       grid-template-columns: minmax(0, 1fr);
     }
   }
@@ -710,12 +1276,10 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
       min-height: 0;
     }
 
-    .kpi-group__grid {
-      grid-auto-rows: auto;
-    }
-
-    .kpi-group--costs .kpi-group__grid {
+    .kpi-group__grid,
+    .ops-kpis {
       grid-template-columns: minmax(0, 1fr);
+      grid-auto-rows: auto;
     }
   }
 </style>

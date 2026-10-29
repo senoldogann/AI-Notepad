@@ -318,6 +318,85 @@ export interface AccountCopy {
   readonly noScript: string;
 }
 
+/** Yönetim panelinin kullanıcılar görünümü. */
+export interface AdminUsersCopy {
+  readonly title: string;
+  readonly searchLabel: string;
+  readonly searchPlaceholder: string;
+  readonly search: string;
+  readonly segmentLabel: string;
+  readonly segments: {
+    readonly all: string;
+    readonly subscribed: string;
+    readonly pastDue: string;
+    readonly canceled: string;
+    readonly trial: string;
+    readonly free: string;
+  };
+  readonly providerLabel: string;
+  readonly providers: { readonly all: string; readonly apple: string; readonly google: string };
+  readonly columns: {
+    readonly user: string;
+    readonly provider: string;
+    readonly created: string;
+    readonly plan: string;
+    readonly trial: string;
+    readonly subscription: string;
+    readonly meetings: string;
+    readonly hours: string;
+    readonly lastActive: string;
+  };
+  readonly empty: string;
+  readonly loadMore: string;
+  readonly back: string;
+  readonly fields: {
+    readonly provider: string;
+    readonly created: string;
+    readonly lastActive: string;
+    readonly stripeCustomer: string;
+    readonly trialDevice: string;
+    readonly subscription: string;
+    readonly trial: string;
+  };
+  readonly usageTitle: string;
+  readonly usage: { readonly hours: string; readonly tokens: string; readonly accountTokens: string; readonly audio: string };
+  readonly timelineTitle: string;
+  readonly timelineNote: string;
+  readonly meetingsTitle: string;
+  readonly meetingColumns: {
+    readonly started: string;
+    readonly kind: string;
+    readonly state: string;
+    readonly duration: string;
+    readonly audio: string;
+    readonly tokens: string;
+    readonly notes: string;
+  };
+  readonly noMeetings: string;
+  readonly reportsTitle: string;
+  readonly noReports: string;
+}
+
+/** Yönetim panelinin işletim görünümü. */
+export interface AdminOperationsCopy {
+  readonly kpis: {
+    readonly open: string;
+    readonly unended: string;
+    readonly reservations: string;
+    readonly deepgram: string;
+    readonly webhook: string;
+    readonly reports: string;
+  };
+  readonly openTitle: string;
+  readonly openColumns: { readonly user: string; readonly kind: string; readonly started: string; readonly endsBy: string; readonly notes: string };
+  readonly noOpen: string;
+  readonly stripeTitle: string;
+  readonly stripeColumns: { readonly type: string; readonly count: string };
+  readonly noStripe: string;
+  readonly crashesTitle: string;
+  readonly noCrashes: string;
+}
+
 /** Yönetim panelinin durgun metinleri (değerlere bağlı olanlar client/copy.ts'te). */
 export interface AdminCopy {
   /** Nötr başlık ve açıklama: yönetici erişimi doğrulanmadan panelin varlığı belli olmaz. */
@@ -339,9 +418,19 @@ export interface AdminCopy {
     readonly tokens: string;
     readonly elevenLabs: string;
     readonly deepgram: string;
+    readonly conversion: string;
+    readonly churn: string;
+    readonly payments: string;
+    readonly meetings: string;
+    readonly audio: string;
+    readonly refusals: string;
   };
   /** Özet kutusu gruplarının başlıkları. */
-  readonly groups: { readonly growth: string; readonly revenue: string; readonly costs: string };
+  readonly groups: { readonly growth: string; readonly revenue: string; readonly usage: string; readonly costs: string };
+  /** Panelin görünümleri (üstteki sekmeler). */
+  readonly views: { readonly label: string; readonly overview: string; readonly users: string; readonly operations: string; readonly inbox: string };
+  readonly users: AdminUsersCopy;
+  readonly operations: AdminOperationsCopy;
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -814,8 +903,75 @@ export const copy: Copy = {
       tokens: "Tokens this month",
       elevenLabs: "Transcription capacity",
       deepgram: "Live transcript budget",
+      conversion: "Trial to paid",
+      churn: "Cancellations, 30 days",
+      payments: "Payment issues",
+      meetings: "Meetings this month",
+      audio: "Transcribed audio this month",
+      refusals: "Trials refused, 30 days",
     },
-    groups: { growth: "Growth", revenue: "Revenue", costs: "Costs & capacity" },
+    groups: { growth: "Growth", revenue: "Revenue", usage: "Usage", costs: "Costs & capacity" },
+    views: { label: "Dashboard sections", overview: "Overview", users: "Users", operations: "Operations", inbox: "Inbox" },
+    users: {
+      title: "Users",
+      searchLabel: "Account ID",
+      searchPlaceholder: "Search by account ID prefix",
+      search: "Search",
+      segmentLabel: "Plan",
+      segments: { all: "All", subscribed: "Subscribed", pastDue: "Payment due", canceled: "Cancelled", trial: "Trial", free: "No plan" },
+      providerLabel: "Sign-in",
+      providers: { all: "Any", apple: "Apple", google: "Google" },
+      columns: {
+        user: "Account",
+        provider: "Sign-in",
+        created: "Joined",
+        plan: "Plan",
+        trial: "Trial",
+        subscription: "Subscription",
+        meetings: "Meetings",
+        hours: "Hours this month",
+        lastActive: "Last active",
+      },
+      empty: "No accounts match.",
+      loadMore: "Load more",
+      back: "All users",
+      fields: {
+        provider: "Sign-in",
+        created: "Joined",
+        lastActive: "Last active",
+        stripeCustomer: "Stripe customer",
+        trialDevice: "Trial tied to a Mac",
+        subscription: "Subscription",
+        trial: "Trial",
+      },
+      usageTitle: "This month",
+      usage: { hours: "Meeting hours", tokens: "AI tokens", accountTokens: "AI outside meetings", audio: "Transcribed audio" },
+      timelineTitle: "Timeline",
+      timelineNote: "Built from the account's current dates; past subscription changes aren't stored.",
+      meetingsTitle: "Meetings",
+      meetingColumns: { started: "Started", kind: "Plan", state: "Status", duration: "Length", audio: "Audio", tokens: "Tokens", notes: "Notes" },
+      noMeetings: "No meetings yet.",
+      reportsTitle: "Reports from this account",
+      noReports: "No reports.",
+    },
+    operations: {
+      kpis: {
+        open: "Meetings live now",
+        unended: "Never ended, 7 days",
+        reservations: "Usage reservations",
+        deepgram: "Unsettled live transcripts",
+        webhook: "Stripe webhook",
+        reports: "Reports, 7 days",
+      },
+      openTitle: "Live meetings",
+      openColumns: { user: "Account", kind: "Plan", started: "Started", endsBy: "Ends by", notes: "Notes" },
+      noOpen: "No meetings are live right now.",
+      stripeTitle: "Stripe events, 7 days",
+      stripeColumns: { type: "Event", count: "Count" },
+      noStripe: "No Stripe events in the last 7 days.",
+      crashesTitle: "Latest crash reports",
+      noCrashes: "No crash reports.",
+    },
     chartsTitle: "Last 30 days",
     charts: {
       downloads: "Downloads per day",
