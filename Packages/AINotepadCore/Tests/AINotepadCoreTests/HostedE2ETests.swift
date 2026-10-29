@@ -66,6 +66,43 @@ private func executeLocalD1(sql: String) throws {
     }
 }
 
+/// `wrangler d1 execute --json` çıktısındaki toplantı satırı.
+private struct MeetingEndRow: Decodable {
+    let ended_at: Int?
+}
+
+/// `wrangler d1 execute --json` çıktısındaki bir ifadenin sonucu.
+private struct MeetingEndStatement: Decodable {
+    let results: [MeetingEndRow]
+}
+
+/// Yerel D1'deki toplantı oturumu kapanmış mı (`ended_at` dolu); oturum yoksa hata.
+private func localMeetingIsEnded(meetingID: String) throws -> Bool {
+    let process: Process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["npx", "wrangler", "d1", "execute", "ainotepad", "--local", "--json", "--command", "SELECT ended_at FROM meeting_sessions WHERE id = '\(meetingID)';"]
+    process.currentDirectoryURL = serverDirectory()
+    let output: Pipe = Pipe()
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    let data: Data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0, let row = try JSONDecoder().decode([MeetingEndStatement].self, from: data).first?.results.first else {
+        throw HostedClientError.malformedResponse(path: "wrangler d1 execute --json", status: Int(process.terminationStatus), body: String(decoding: data, as: UTF8.self))
+    }
+    return row.ended_at != nil
+}
+
+/// Toplantı kaydı (yalnızca kuyruğun sahiplik ayrımı için gereken alanlarla).
+private func queuedRecord(id: String) -> MeetingRecord {
+    MeetingRecord(
+        id: id, title: id, startedAt: Date(), endedAt: Date(), language: nil, status: .queued, failureMessage: nil,
+        liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false,
+        engine: .local, notice: nil, meNeedsFinalPass: nil
+    )
+}
+
 /// Şimdiki an (ms, sunucunun sakladığı biçim).
 private func nowMs() -> Int {
     Int(Date().timeIntervalSince1970 * 1000)
@@ -596,6 +633,65 @@ private func silentWav() -> Data {
         await #expect(throws: HostedClientError.sessionEnded) {
             _ = try await awaitingAuthLimit { try await deletedClient.entitlements() }
         }
+    }
+
+    // Çevrimdışı kayıt → bağlantı gelince işlenir: sunucuya ulaşılamazken (kapalı kapı, erişim jetonunun süresi de
+    // dolmuş) toplantı başlatma gerçek URLSession hatasıyla "çevrimdışı" sayılır, oturum düşmez ve son hak durumunun
+    // izni kayda süre verir. Aynı Mac'te başka hesap açılınca kayıt o hesapla işlenmez. Bağlantı gelince (uygulama
+    // yeniden açılmış gibi yeni istemci, aynı jeton deposu) kayıt kendi kimliğiyle ertelenmiş oturum açar, yinelenen
+    // açılış aynı oturumu döndürür, süren canlı toplantı kapanmaz ve deneme yalnızca sahibinden bir kez düşer.
+    @Test func offlineRecordingIsProcessedWhenBackOnlineAgainstLocalServer() async throws {
+        let baseURL: URL = try localServerBase()
+        try resetLocalTrialStarts()
+        let owner: SignedInUser = try await signedInUser(baseURL: baseURL)
+        let lastKnown: HostedEntitlements = try await owner.client.entitlements()
+        let permit: HostedOfflinePermit = try #require(hostedOfflinePermit(entitlements: lastKnown, now: Date()))
+        let live: HostedStartedMeeting = try await owner.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "canli-\(UUID().uuidString.lowercased())", deferred: false)
+
+        // Sunucuya ulaşılamıyor; erişim jetonu da bitmiş (yenileme de ağa çıkmalı).
+        let stored: HostedTokens = try #require(try owner.storage.load())
+        try owner.storage.save(tokens: HostedTokens(accessToken: stored.accessToken, refreshToken: stored.refreshToken, accessExpiresAt: Date.distantPast, userId: stored.userId))
+        let endedSessions: SessionEndCounter = SessionEndCounter()
+        let offline: HostedClient = HostedClient(baseURL: try parseHostedBaseURL(value: "http://127.0.0.1:1"), storage: owner.storage) { () async -> Void in
+            endedSessions.count.withLock { $0 += 1 }
+        }
+        let recordID: String = "kayit-\(UUID().uuidString.lowercased())"
+        do {
+            _ = try await offline.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID, deferred: false)
+            Issue.record("Kapalı kapıya başlatma başarılı olmamalı")
+        } catch {
+            #expect(isOfflineStartError(error: error), "Ulaşılamayan sunucu çevrimdışı kayda düşmeli: \(error)")
+        }
+        #expect(try await offline.isSignedIn())
+        #expect(endedSessions.count.withLock { $0 } == 0)
+        #expect(try owner.storage.load()?.refreshToken == stored.refreshToken)
+        #expect(hostedOfflineRecordingMinutes(permit: permit, userId: try owner.storage.load()?.userId, now: Date(), maxAgeSec: hostedOfflinePermitMaxAgeSec) == permit.maxMinutes)
+
+        // Aynı Mac'te başka hesap: kayıt onun kuyruğunda değil, onun denemesi düşmez.
+        let other: SignedInUser = try await signedInUser(baseURL: baseURL)
+        let otherBefore: HostedEntitlements = try await other.client.entitlements()
+        let owners: [String: String] = [recordID: owner.userID]
+        let asOther: HostedQueuedRecords = hostedQueuedRecords(records: [queuedRecord(id: recordID)], owners: owners, userId: other.userID)
+        #expect(asOther.own.isEmpty)
+        #expect(asOther.foreign.map(\.id) == [recordID])
+
+        // Bağlantı geldi: sahibinin kuyruğunda; ertelenmiş oturum açılır, yinelenen açılış aynı oturumu döndürür.
+        let online: HostedClient = HostedClient(baseURL: baseURL, storage: owner.storage) { () async -> Void in }
+        let asOwner: HostedQueuedRecords = hostedQueuedRecords(records: [queuedRecord(id: recordID)], owners: owners, userId: try #require(try await online.signedInUserID()))
+        #expect(asOwner.own.map(\.id) == [recordID])
+        let queued: HostedStartedMeeting = try await awaitingAuthLimit {
+            try await online.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID, deferred: true)
+        }
+        #expect(queued.meetingId != live.meetingId)
+        _ = try await online.endMeeting(meetingID: queued.meetingId)
+        let repeated: HostedStartedMeeting = try await online.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID, deferred: true)
+        #expect(repeated.meetingId == queued.meetingId)
+        #expect(try localMeetingIsEnded(meetingID: live.meetingId) == false, "Ertelenmiş kayıt süren canlı toplantıyı kapatmamalı")
+        #expect(try localMeetingIsEnded(meetingID: queued.meetingId))
+        let ownerAfter: HostedEntitlements = try await online.entitlements()
+        #expect(ownerAfter.trialMeetingsLeft == lastKnown.trialMeetingsLeft - 2)
+        #expect(try await other.client.entitlements().trialMeetingsLeft == otherBefore.trialMeetingsLeft)
+        _ = try await online.endMeeting(meetingID: live.meetingId)
     }
 
     // İstemcinin hata kodları sunucununkilerle birebir aynı olmalı (`HostedErrors.swift` bunu söyler): eksik kod

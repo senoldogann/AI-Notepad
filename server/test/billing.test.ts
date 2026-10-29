@@ -468,6 +468,71 @@ describe("Stripe webhook", () => {
     await send.change(id("evt_2"), "customer.subscription.deleted", now + 3, { ...fakeSubscription(id("sub"), customer, "canceled", now, now + 30 * 86_400) });
     expect((await plan(harness, session)).plan).toBe("trial");
   });
+
+  it("abonelik yaşam döngüsü Stripe'ın olay sırasıyla: her olaydan sonra haklar ve toplantı türü doğrudur", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+    const { session, customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    const periodEnd: number = now + 30 * 86_400;
+    const startKind = async (clientRef: string): Promise<string> =>
+      (await (await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef } }))).json<{ kind: string }>()).kind;
+    const invoiceEvent = (eventId: string, type: string, created: number): string =>
+      eventOf(eventId, type, created, {
+        id: id("in_1"),
+        object: "invoice",
+        customer,
+        status: type === "invoice.paid" ? "paid" : "open",
+        parent: { type: "subscription_details", subscription_details: { subscription: id("sub"), metadata: null } },
+      });
+    const before: number = stripe.operations.length;
+
+    // Checkout bitti ama ödeme henüz alınmadı: abonelik `incomplete`, erişim yok.
+    const incomplete: FakeSubscription = fakeSubscription(id("sub"), customer, "incomplete", now, periodEnd);
+    await send.change(id("evt_l1"), "customer.subscription.created", now, incomplete);
+    expect(await plan(harness, session)).toMatchObject({ plan: "trial", subscription: { status: "incomplete", access: "none" } });
+    // checkout.session.completed ve invoice.paid yalnızca kaydedilir (kopya olmayan faturada iade yok).
+    const completed: string = eventOf(id("evt_l2"), "checkout.session.completed", now + 1, {
+      id: id("cs"),
+      object: "checkout.session",
+      customer,
+      mode: "subscription",
+      subscription: id("sub"),
+      client_reference_id: session.userId,
+    });
+    expect(await (await postWebhook(harness, completed, env.STRIPE_WEBHOOK_SECRET)).json()).toEqual({ received: true, duplicate: false });
+    expect((await postWebhook(harness, invoiceEvent(id("evt_l3"), "invoice.paid", now + 2), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.operations.length).toBe(before);
+
+    // Ödeme alındı: active → abonelik toplantısı.
+    const active: FakeSubscription = { ...incomplete, status: "active" };
+    await send.change(id("evt_l4"), "customer.subscription.updated", now + 3, active);
+    expect(await plan(harness, session)).toMatchObject({ plan: "subscription", subscription: { status: "active", access: "active", cancelAt: null } });
+    expect(await startKind("yasam-1")).toBe("subscription");
+
+    // Yenileme ödemesi başarısız: invoice.payment_failed tek başına durumu değiştirmez; past_due gelince ek süre başlar.
+    expect((await postWebhook(harness, invoiceEvent(id("evt_l5"), "invoice.payment_failed", now + 4), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect((await plan(harness, session)).subscription?.access).toBe("active");
+    await send.change(id("evt_l6"), "customer.subscription.updated", now + 5, { ...active, status: "past_due" });
+    expect(await plan(harness, session)).toMatchObject({ plan: "subscription", subscription: { status: "past_due", access: "grace" } });
+    expect(await startKind("yasam-2")).toBe("subscription");
+
+    // Ödeme sonradan alındı, sonra kullanıcı Portal'dan iptal etti: dönem sonuna dek sürer.
+    await send.change(id("evt_l7"), "customer.subscription.updated", now + 6, active);
+    expect((await plan(harness, session)).subscription).toMatchObject({ access: "active", graceEndsAt: null });
+    await send.change(id("evt_l8"), "customer.subscription.updated", now + 7, { ...active, cancel_at_period_end: true });
+    expect(await plan(harness, session)).toMatchObject({ plan: "subscription", subscription: { cancelAt: new Date(periodEnd * 1000).toISOString() } });
+
+    // Abonelik bitti: deneme planına döner, yeni Checkout açılabilir; Stripe'ta hiçbir şey iptal ya da iade edilmedi.
+    await send.change(id("evt_l9"), "customer.subscription.deleted", now + 8, { ...active, status: "canceled", cancel_at_period_end: true });
+    expect(await plan(harness, session)).toMatchObject({ plan: "trial", subscription: { status: "canceled", access: "none" } });
+    expect(await startKind("yasam-3")).toBe("trial");
+    expect((await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken }))).status).toBe(200);
+    expect(stripe.canceled).toEqual([]);
+    expect(stripe.refundForms).toEqual([]);
+  });
 });
 
 describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
