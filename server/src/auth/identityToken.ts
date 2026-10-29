@@ -21,11 +21,9 @@ export interface IdentityTokenIssuer {
   readonly audiences: readonly string[];
 }
 
-/** Doğrulanmış kimlik jetonunun kullanılan alanları. */
+/** Doğrulanmış kimlik jetonunun kullanılan alanı: kalıcı kullanıcı kimliği (`sub`). */
 export interface VerifiedIdentityToken {
   readonly subject: string;
-  readonly email: string | null;
-  readonly emailVerified: boolean;
 }
 
 const jwkSchema = z.object({
@@ -42,8 +40,6 @@ const claimsSchema = z.object({
   sub: z.string().min(1),
   exp: z.number(),
   nonce: z.string().min(1),
-  email: z.string().optional(),
-  email_verified: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
 });
 
 /** Sağlayıcının açık anahtarlarını (JWKS) alır; geçici hatalar yeniden denenir. */
@@ -140,9 +136,5 @@ export async function verifyIdentityToken(
   if (inserted.meta.changes !== 1) {
     throw new ApiError("invalid_token", `Bu ${issuer.displayName} kimlik jetonu zaten kullanıldı.`);
   }
-  return {
-    subject: claims.data.sub,
-    email: claims.data.email ?? null,
-    emailVerified: claims.data.email_verified === true || claims.data.email_verified === "true",
-  };
+  return { subject: claims.data.sub };
 }

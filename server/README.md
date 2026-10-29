@@ -77,7 +77,8 @@ silinme anından doldurulur. `0011` raporların bayt boyunu (`reports.size_bytes
 `0012` süreli ayırma satırlarını (`usage_reservations`, aşağıda "Ayırma ve kesinleştirme") ve abonenin toplantı dışı
 token sayacını (`monthly_usage.account_tokens`) ekler; eski `*_reserved` sayaç sütunları artık kullanılmaz. `0013`
 yenileme jetonunun yerine geçen jetonu (`refresh_tokens.replaced_by`) ekler. `0014` aboneliğin `past_due`'ya geçtiği anı
-(`subscriptions.past_due_since`; var olan `past_due` satırları son webhook yazımından) ekler.
+(`subscriptions.past_due_since`; var olan `past_due` satırları son webhook yazımından) ekler. `0015` giriş kimliklerindeki
+e-postaları siler (yeni girişlerde de saklanmaz) ve cihaz saklama temizliği için dizin ekler.
 
 ## Ayırma ve kesinleştirme
 
@@ -116,12 +117,15 @@ App Attest (`APP_ATTEST_POLICY`) macOS'ta desteklenmediği için bugün cihaz s�
 ## Zamanlanmış temizlik
 
 `wrangler.jsonc` → `triggers.crons` her gün 03:17 UTC'de `scheduled` işleyicisini çalıştırır (`src/cleanup.ts`). Silinenler:
-süresi dolmuş nonce'lar (Apple ve Google), süresi dolmuş ya da kullanılmış cihaz meydan okumaları, süresi dolmuş ya da
-ailesi düşürülmüş yenileme jetonları ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük harcama, bugünden
-eski deneme başlangıçları, 2 günden eski kullanıcı günlük kullanımı, 180 günden eski raporlar (durumundan bağımsız), 730
-gündür güncellenmemiş kimlik deneme defteri satırları.
-İndirme sayacı (gün başına tek satır, kişisel veri yok) silinmez. Silme tablo başına 1000 satırlık en çok 4 turdur; kalan
-ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev --test-scheduled`, sonra
+süresi dolmuş ayırmalar (tahmini maliyeti harcamaya yazılarak), süresi dolmuş nonce'lar (Apple ve Google), süresi dolmuş
+ya da kullanılmış cihaz meydan okumaları, süresi dolmuş, ailesi düşürülmüş ya da ailede daha yenisi kullanılmış yenileme
+jetonları ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük harcama, bugünden eski deneme
+başlangıçları, 2 günden eski kullanıcı günlük kullanımı, 13 aydan eski toplantılar (deneme toplantıları önce
+`users.carried_trial_meetings`'e eklenir: deneme hakkı geri gelmez) ve aylık kullanım, 13 aydır kullanılmayan cihazlar,
+180 günden eski raporlar (durumundan bağımsız), 730 gündür güncellenmemiş kimlik deneme defteri satırları.
+İndirme sayacı (gün başına tek satır, kişisel veri yok) silinmez. Silme tablo başına 1000 satırlık en çok 3 turdur; kalan
+ertesi gün silinir (`cleanup_incomplete` uyarısı). Her adım ayrı denenir: biri başarısız olursa `cleanup_failed` alarmı
+yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır. Yerelde: `npx wrangler dev --test-scheduled`, sonra
 `curl "http://localhost:8787/__scheduled?cron=17+3+*+*+*"`.
 
 ## İlk dağıtım (sahibin bir kez yapacakları)
@@ -158,7 +162,7 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 | Uç | Kimlik | Not |
 |---|---|---|
 | `GET /v1/health` | — | |
-| `POST /v1/auth/apple` | — | `{identityToken, nonce}`; Apple'a `sha256hex(nonce)` verilir |
+| `POST /v1/auth/apple` | — | `{identityToken, nonce}`; Apple'a `sha256hex(nonce)` verilir; e-posta saklanmaz |
 | `POST /v1/auth/google` | — | `{identityToken, nonce}`; Google'a `sha256hex(nonce)` verilir. `iss` `https://accounts.google.com` ya da `accounts.google.com`, `aud` ∈ `GOOGLE_CLIENT_IDS`, RS256, nonce tek kullanımlık. Kimlik `google:<sub>`; e-posta saklanmaz. Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı). Oturum yanıtı ve deneme kuralları Apple ile aynı |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür; yalnızca hemen önceki jeton 30 sn içinde yeniden sunulursa (yanıtı kaybolan yenileme) yeni çift verilir ve kaybolan jeton silinir. Ailede en son kullanılmış jeton dışındaki kullanılmış jetonlar dönüşte silinir |
 | `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü; süre dolduysa 0), `trialDays`, `trialEndsAt` (ilk deneme toplantısı + `TRIAL_DAYS`, ISO 8601; deneme başlamadıysa ya da abonelikte `null`), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |

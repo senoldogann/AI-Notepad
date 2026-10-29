@@ -65,6 +65,9 @@ describe("Apple ile giriş", () => {
     const me: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
     expect(me.status).toBe(200);
     expect((await me.json<{ userId: string }>()).userId).toBe(session.userId);
+    // Jetondaki doğrulanmış e-posta saklanmaz.
+    const identity = await env.DB.prepare("SELECT provider, email FROM auth_identities WHERE user_id = ?").bind(session.userId).first<{ provider: string; email: string | null }>();
+    expect(identity).toEqual({ provider: "apple", email: null });
   });
 
   it("yanlış aud, yanlış iss, süresi dolmuş jeton ve yanlış nonce reddedilir", async () => {

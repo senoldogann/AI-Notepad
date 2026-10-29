@@ -221,16 +221,16 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
       const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "apple", identity.subject);
-      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, identity.email, now);
+      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, now);
       log("info", "login", { provider: "apple", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
     if (path === "/v1/auth/google") {
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyGoogleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
-      // E-posta saklanmaz; Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
+      // Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
       const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "google", identity.subject);
-      const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, null, now);
+      const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, now);
       log("info", "login", { provider: "google", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }

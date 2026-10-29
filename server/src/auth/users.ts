@@ -7,16 +7,10 @@ export type IdentityProvider = "apple" | "google";
 /**
  * Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır.
  * Yeni kullanıcı, kimliğin deneme defterindeki (`identityHash`, bkz. `trialIdentityHash`) harcanan deneme sayısını ve
- * cihaz doğrulamasını devralır: hesabı silip aynı kimlikle yeniden açmak denemeyi sıfırlamaz.
+ * cihaz doğrulamasını devralır: hesabı silip aynı kimlikle yeniden açmak denemeyi sıfırlamaz. E-posta saklanmaz
+ * (`auth_identities.email` NULL; sunucu e-postayı kullanmaz).
  */
-export async function findOrCreateUser(
-  db: D1Database,
-  provider: IdentityProvider,
-  subject: string,
-  identityHash: string,
-  email: string | null,
-  now: Date,
-): Promise<string> {
+export async function findOrCreateUser(db: D1Database, provider: IdentityProvider, subject: string, identityHash: string, now: Date): Promise<string> {
   const existing: string | null = await findUserId(db, provider, subject);
   if (existing !== null) {
     return existing;
@@ -26,8 +20,8 @@ export async function findOrCreateUser(
     await db.batch([
       insertUserFromLedgerStatement(db, userId, identityHash, now),
       db
-        .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(provider, subject, userId, email, now.getTime()),
+        .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, NULL, ?)")
+        .bind(provider, subject, userId, now.getTime()),
     ]);
     return userId;
   } catch (error: unknown) {

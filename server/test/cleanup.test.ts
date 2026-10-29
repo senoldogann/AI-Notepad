@@ -1,7 +1,7 @@
 import { createScheduledController } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
-import { type CleanupReport, cleanupExpiredRows } from "../src/cleanup";
+import { CleanupFailedError, type CleanupReport, cleanupExpiredRows } from "../src/cleanup";
 import { randomId } from "../src/crypto";
 import worker from "../src/index";
 
@@ -64,23 +64,54 @@ describe("süresi dolmuş satırların temizliği", () => {
       env.DB.prepare(
         "INSERT INTO trial_identity_ledger (identity_hash, trial_meetings_used, device_verified, updated_at) VALUES ('l_old', 3, 1, ?), ('l_recent', 1, 0, ?)",
       ).bind(nowMs - 731 * dayMs, nowMs - 729 * dayMs),
+      // 13 aylık saklama: toplantılar, aylık kullanım, kullanılmayan cihazlar.
+      env.DB.prepare(
+        `INSERT INTO devices (id, public_key_spki, sign_count, environment, validation_category, bundle_version, receipt,
+           attested_by_user_id, created_at, last_used_at) VALUES
+           ('d_old', 's', 0, 'development', 3, '1', 'r', ?1, 0, ?2), ('d_recent', 's', 0, 'development', 3, '1', 'r', ?1, 0, ?3)`,
+      ).bind(first, nowMs - 396 * dayMs, nowMs - 394 * dayMs),
+      env.DB.prepare(
+        `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget) VALUES
+           ('m_old_trial', ?1, 'd_old', 'trial', ?2, ?2, 1), ('m_old_paid', ?1, NULL, 'subscription', ?2, ?2, 1),
+           ('m_recent_trial', ?1, 'd_old', 'trial', ?3, ?3, 1)`,
+      ).bind(first, nowMs - 396 * dayMs, nowMs - 394 * dayMs),
+      env.DB.prepare("INSERT INTO monthly_usage (user_id, month) VALUES (?1, ?2), (?1, ?3)").bind(
+        first,
+        new Date(nowMs - 430 * dayMs).toISOString().slice(0, 7),
+        new Date(nowMs - 360 * dayMs).toISOString().slice(0, 7),
+      ),
     ]);
 
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
     expect(report).toEqual({
       usage_reservations: 0,
+      meeting_sessions: 2,
+      devices: 1,
       used_nonces: 1,
       device_challenges: 2,
-      refresh_tokens: 3,
+      refresh_tokens: 2,
+      refresh_tokens_superseded: 1,
       refresh_families: 2,
       stripe_events: 1,
       trial_starts: 1,
       deleted_trial_starts: 1,
       daily_spend: 1,
       daily_usage: 1,
+      monthly_usage: 1,
       reports: 2,
       trial_identity_ledger: 1,
     });
+    // Silinen eski deneme toplantısı kullanıcının devraldığı denemeye eklendi; başlangıç korunur.
+    const user = await env.DB.prepare("SELECT carried_trial_meetings, trial_started_at FROM users WHERE id = ?").bind(first).first<{
+      carried_trial_meetings: number;
+      trial_started_at: number;
+    }>();
+    expect(user).toEqual({ carried_trial_meetings: 1, trial_started_at: nowMs - 396 * dayMs });
+    expect(await ids("SELECT id FROM meeting_sessions")).toEqual(["m_recent_trial"]);
+    // Kullanılmayan cihaz silindi, ona bağlı yeni toplantının cihaz bağı kalktı.
+    expect(await ids("SELECT id FROM devices")).toEqual(["d_recent"]);
+    expect(await ids("SELECT COALESCE(device_id, 'yok') AS id FROM meeting_sessions")).toEqual(["yok"]);
+    expect(await ids("SELECT month AS id FROM monthly_usage")).toEqual([new Date(nowMs - 360 * dayMs).toISOString().slice(0, 7)]);
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces")).toEqual(["n_new"]);
     // Raporlar durumundan bağımsız 180 gün tutulur.
     expect(await ids("SELECT id FROM reports")).toEqual(["r_recent"]);
@@ -107,6 +138,30 @@ describe("süresi dolmuş satırların temizliği", () => {
     warnings.mockRestore();
     const second: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 2 });
     expect(second["used_nonces"]).toBe(1);
+  });
+
+  it("bir adımın hatası diğerlerini durdurmaz; alarm yazılır ve sonunda toplu hata fırlatılır", async () => {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES ('evt_kilitli', 'x', ?)").bind(nowMs - 100 * dayMs),
+      env.DB.prepare("INSERT INTO used_nonces (nonce_hash, expires_at) VALUES ('n_hata_sonrasi', ?)").bind(nowMs - 1),
+      env.DB.prepare("CREATE TRIGGER stripe_events_kilit BEFORE DELETE ON stripe_events BEGIN SELECT RAISE(ABORT, 'kilitli'); END"),
+    ]);
+    const alerts = vi.spyOn(console, "error");
+    try {
+      const failure: unknown = await cleanupExpiredRows(env.DB, now, { batchSize: 100, maxBatchesPerTable: 2 }).then(
+        (): null => null,
+        (error: unknown): unknown => error,
+      );
+      expect(failure).toBeInstanceOf(CleanupFailedError);
+      expect((failure as CleanupFailedError).steps).toEqual(["stripe_events"]);
+      expect((failure as CleanupFailedError).report["used_nonces"]).toBe(1);
+      expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"cleanup_failed","step":"stripe_events"'))).toBe(true);
+    } finally {
+      alerts.mockRestore();
+      await env.DB.prepare("DROP TRIGGER stripe_events_kilit").run();
+    }
+    // Hatadan sonraki adımlar çalıştı.
+    expect(await ids("SELECT nonce_hash AS id FROM used_nonces WHERE nonce_hash = 'n_hata_sonrasi'")).toEqual([]);
   });
 
   it("zamanlanmış işleyici (Cron Trigger) temizliği çalıştırır", async () => {
