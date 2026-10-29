@@ -64,6 +64,8 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let userId: String
     public let plan: HostedPlan
     public let trialMeetingsTotal: Int
+    /// Denemenin süresi (gün; ilk deneme toplantısından başlar); alanı bilmeyen eski sunucuda nil.
+    public let trialDays: Int?
     /// Etkin kalan deneme (hesap ve doğrulanmış cihazın küçüğü).
     public let trialMeetingsLeft: Int
     public let accountTrialMeetingsLeft: Int
@@ -190,6 +192,8 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
     case grace(endsAt: Date)
+    /// Abonelik sona erdi (iptal edildi ya da ödenmedi) ve deneme hakkı kalmadı: yeni kayıt için yeniden abone olunmalı.
+    case expired(endedAt: Date)
 }
 
 /// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.
@@ -204,7 +208,10 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
         case .grace:
             return .grace(endsAt: subscription.graceEndsAt ?? subscription.currentPeriodEnd)
         case .none:
-            break
+            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi".
+            if entitlements.trialMeetingsLeft == 0 {
+                return .expired(endedAt: subscription.cancelAt ?? subscription.currentPeriodEnd)
+            }
         }
     }
     return .trial(left: entitlements.trialMeetingsLeft, total: entitlements.trialMeetingsTotal)

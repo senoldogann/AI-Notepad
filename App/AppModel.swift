@@ -119,6 +119,9 @@ final class AppModel {
     @ObservationIgnored private let micMonitor: MicrophoneActivityMonitor = MicrophoneActivityMonitor()
     /// Kaydı panel ve adayla birlikte başlatır (uygulama bağlar; kendiliğinden kayıtta kullanılır).
     @ObservationIgnored var onAutoRecord: (@MainActor () async -> Void)?
+    /// Kayıt şu an başlatılamıyor mu (giriş yok, deneme bitti, sınır…; uygulama bağlar): öyleyse görüşme önerisi ve
+    /// takvimle kendiliğinden kayıt mikrofon ve sistem sesine dokunmaz.
+    @ObservationIgnored var isStartBlocked: @MainActor () -> Bool = { false }
     /// Kendiliğinden kayıtta bağlanacak etkinlik (çakışan etkinliklerde doğru olan kayda geçsin).
     @ObservationIgnored private var pendingAutoMeeting: CalendarMeeting?
     @ObservationIgnored private var calendarTask: Task<Void, Never>?
@@ -729,8 +732,10 @@ final class AppModel {
             modelStatus = .failed(userFacingMessage(error: error))
             return
         }
+        #if !HOSTED_EDITION
         // Konuşmacı ayırma modeli de şimdi indirilir: ilk yerel toplantının son geçişi internetsiz çalışsın.
         // İndirilemezse canlı kayıt engellenmez; uyarı menüde görünür, son geçiş metni tek konuşmacı saklar.
+        // (Abonelik sürümünde konuşmacılar sunucunun son geçişinde ayrılır: ~40 MB model indirilmez.)
         do {
             try await prepareLocalDiarization(modelsDirectory: try AppPaths.modelsDirectory())
             localDiarizationWarning = nil
@@ -738,6 +743,7 @@ final class AppModel {
             Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .private)")
             localDiarizationWarning = String(localized: "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas.")
         }
+        #endif
     }
 
     // MARK: Kayıt
@@ -1934,6 +1940,11 @@ final class AppModel {
     /// açıksa kayıt başlar ve bildirilir; değilse (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
     private func microphoneStartedElsewhere() {
         guard !isRecording, !isStarting else {
+            return
+        }
+        // Kayıt başlatılamıyorsa öneri ve kendiliğinden kayıt yapılmaz (neden Ana sayfada başlat düğmesinin yanında).
+        guard !isStartBlocked() else {
+            Self.logger.info("Görüşme algılandı ama kayıt şu an başlatılamıyor; öneri gösterilmedi")
             return
         }
         if UserDefaults.standard.bool(forKey: SettingsKey.autoRecord),

@@ -24,7 +24,8 @@ func hostedAccountDiagnostics(account: HostedAccount) -> DiagnosticsSection {
         ])
     case .signedIn(let entitlements):
         return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: stateLabel, value: String(localized: "Giriş yapıldı"))]
-            + hostedPlanDiagnostics(entitlements: entitlements))
+            + hostedPlanDiagnostics(entitlements: entitlements)
+            + [DiagnosticsItem(label: String(localized: "DeviceCheck"), value: HostedDeviceCheck.lastFailure.map { String(localized: "son hata: \($0)") } ?? String(localized: "hata yok"))])
     }
 }
 
@@ -49,6 +50,8 @@ private func hostedPlanDiagnostics(entitlements: HostedEntitlements) -> [Diagnos
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Abonelik iptal edildi, bitiş \(endsAt.formatted(.iso8601))")), usage]
     case .grace(let endsAt):
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Ödeme bekleniyor, ek süre bitişi \(endsAt.formatted(.iso8601))")), usage]
+    case .expired(let endedAt):
+        return [DiagnosticsItem(label: planLabel, value: String(localized: "Abonelik sona erdi: \(endedAt.formatted(.iso8601))")), usage]
     }
 }
 

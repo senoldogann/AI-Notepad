@@ -151,9 +151,10 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
     case .deviceCheckInvalid:
         return String(localized: "Bu Mac Apple tarafından doğrulanamadı; uygulamayı yeniden açıp tekrar dene.")
     case .monthlyCapReached:
-        return String(localized: "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")
+        // Aynı kod farklı sınırlardan gelir: hangisi olduğu isteğin yolundan (kayıt, son geçiş ya da yapay zekâ).
+        return monthlyCapMessage(path: error.path)
     case .dailyCapReached:
-        return String(localized: "Bugünkü kullanım sınırına ulaştın; yarın yeniden dene.")
+        return dailyCapMessage(path: error.path)
     case .subscriptionRequired:
         return String(localized: "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.")
     case .subscriptionExists:
@@ -198,6 +199,36 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
     case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid:
         return String(localized: "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.")
+    }
+}
+
+/// `monthly_cap_reached` metni: kayıt başlatma ve son geçişte aylık kayıt saatleri, yapay zekâ çağrısında toplantı dışı
+/// yapay zekâ payı (kayıt etkilenmez). Saf fonksiyondur.
+private func monthlyCapMessage(path: String) -> String {
+    switch path {
+    case "/v1/meetings/start":
+        String(localized: "Bu ayki kayıt saatlerin doldu; yeni kayıt ay başında açılır. Notların ve toplantıların kullanılabilir.")
+    case "/v1/transcribe":
+        String(localized: "Bu ayki kayıt saatlerin bu kaydı işlemeye yetmiyor; canlı metin kullanılır. Sınır ay başında sıfırlanır.")
+    case "/v1/llm/messages":
+        String(localized: "Bu ayki yapay zekâ payın doldu (Sor, notu yeniden yazma…); ay başında sıfırlanır. Kayıt yapmaya devam edebilirsin.")
+    default:
+        String(localized: "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")
+    }
+}
+
+/// `daily_cap_reached` metni: günlük toplantı başlatma, günlük yapay zekâ payı ya da günlük rapor sınırı. Saf
+/// fonksiyondur.
+private func dailyCapMessage(path: String) -> String {
+    switch path {
+    case "/v1/meetings/start":
+        String(localized: "Bugün başlatılabilecek toplantı sayısına ulaştın; yarın yeniden dene.")
+    case "/v1/llm/messages":
+        String(localized: "Bugünkü yapay zekâ payın doldu (Sor, notu yeniden yazma…); yarın yeniden dene. Kayıt yapmaya devam edebilirsin.")
+    case "/v1/reports":
+        String(localized: "Bugün çok fazla rapor gönderildi; yarın yeniden dene.")
+    default:
+        String(localized: "Bugünkü kullanım sınırına ulaştın; yarın yeniden dene.")
     }
 }
 

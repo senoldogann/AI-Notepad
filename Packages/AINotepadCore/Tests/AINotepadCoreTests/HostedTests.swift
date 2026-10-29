@@ -353,7 +353,10 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber)) == .monthlyWarning)
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "10"))) == .monthlyFull)
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "2"))) == nil)
-        let trial: String = subscriber.replacingOccurrences(of: #""access":"active""#, with: #""access":"none""#)
+        // Hiç abone olmamış deneme hesabı (eski abone "abonelik sona erdi" görür; bkz. HostedOfflineTests).
+        let trial: String = subscriber.replacingOccurrences(
+            of: #"{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}"#, with: "null"
+        )
         #expect(hostedUsageNotice(entitlements: try decoded(trial)) == .trialEnded)
         #expect(hostedUsageNotice(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":1"#))) == .trialOneLeft)
         #expect(hostedNoticeStorageKey(notice: .monthlyWarning, userId: "u", now: now) == "hosted.notice.monthlyWarning.u.2026-10")

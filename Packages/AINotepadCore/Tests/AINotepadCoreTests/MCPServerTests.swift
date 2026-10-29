@@ -61,26 +61,26 @@ import Testing
         let file: URL = MCPClient.claudeDesktop.configFile(home: home)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(#"{"globalShortcut":"Ctrl+Space","mcpServers":{"other":{"command":"/bin/other","args":[]}}}"#.utf8).write(to: file)
-        try connectMCPClient(client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", home: home)
+        try connectMCPClient(client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad", home: home)
         let connected: JSONValue = try readMCPConfig(file: file)
-        #expect(isMCPServerConnected(config: connected, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        #expect(isMCPServerConnected(config: connected, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad"))
         guard case .object(let root) = connected, case .object(let servers) = root["mcpServers"] else {
             Issue.record("yapılandırma nesne değil")
             return
         }
         #expect(root["globalShortcut"] == .string("Ctrl+Space") && servers["other"] != nil)
-        try disconnectMCPClient(client: .claudeDesktop, home: home)
+        try disconnectMCPClient(client: .claudeDesktop, serverName: "ai-notepad", home: home)
         let removed: JSONValue = try readMCPConfig(file: file)
-        #expect(!isMCPServerConnected(config: removed, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        #expect(!isMCPServerConnected(config: removed, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad"))
         #expect(removed != connected)
     }
 
     // VS Code'da sunucular "servers" altında ve "type" ister; dosya yoksa oluşturulur.
     @Test func vsCodeShapeAndMissingFile() throws {
         let home: URL = try temporaryDirectory()
-        try connectMCPClient(client: .vsCode, executablePath: "/x/AINotepad", home: home)
+        try connectMCPClient(client: .vsCode, executablePath: "/x/AINotepad", serverName: mcpServerName(appName: "Gistsmith"), home: home)
         guard case .object(let root) = try readMCPConfig(file: MCPClient.vsCode.configFile(home: home)),
-              case .object(let servers) = root["servers"], case .object(let entry) = servers[mcpServerName] else {
+              case .object(let servers) = root["servers"], case .object(let entry) = servers["gistsmith"] else {
             Issue.record("VS Code yapılandırması beklenen biçimde değil")
             return
         }
@@ -93,7 +93,7 @@ import Testing
         let file: URL = MCPClient.cursor.configFile(home: home)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("{bozuk".utf8).write(to: file)
-        #expect(throws: MCPConfigError.self) { try connectMCPClient(client: .cursor, executablePath: "/x", home: home) }
+        #expect(throws: MCPConfigError.self) { try connectMCPClient(client: .cursor, executablePath: "/x", serverName: "ai-notepad", home: home) }
         #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self) == "{bozuk")
     }
 }

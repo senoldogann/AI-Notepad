@@ -389,12 +389,17 @@ private func silentWav() -> Data {
             Issue.record("Ek süredeki abonelik `.grace` görünmeli: \(hostedPlanStatus(entitlements: pastDue))")
         }
 
-        // 6. Abonelik iptal edildi: plan denemeye döner (deneme toplantıları harcanmış).
+        // 6. Abonelik iptal edildi: sunucu planı denemeye döndürür (deneme toplantıları harcanmış); uygulama bunu
+        // "deneme bitti" değil "abonelik sona erdi" olarak gösterir ve yeniden abone olmayı önerir.
         try executeLocalD1(sql: "UPDATE subscriptions SET status = 'canceled', past_due_since = NULL WHERE user_id = '\(user.userID)';")
         let canceled: HostedEntitlements = try await client.entitlements()
         #expect(canceled.plan == .trial)
         #expect(canceled.subscription?.access == HostedSubscriptionAccess.none)
-        #expect(hostedPlanStatus(entitlements: canceled) == .trial(left: 0, total: canceled.trialMeetingsTotal))
+        if case .expired = hostedPlanStatus(entitlements: canceled) {
+            #expect(hostedStartBlock(entitlements: canceled) == .subscriptionEnded)
+        } else {
+            Issue.record("İptal edilmiş abonelik `.expired` görünmeli: \(hostedPlanStatus(entitlements: canceled))")
+        }
         let canceledAsk: HostedAPIError? = await hostedError { _ = try await sendLLM(provider: account, request: smallRequest()) }
         #expect(canceledAsk?.code == .subscriptionRequired)
     }

@@ -68,18 +68,34 @@ enum HostedDeviceAttestation {
 /// Apple DeviceCheck jetonu: sunucu bununla Apple'da bu Mac'in iki bitini okur ve yazar (`bit0` = "bu Mac bir hesaba
 /// ücretsiz deneme verdi"); Apple sunucuya cihaz kimliği vermez. App Attest'in aksine macOS'ta çalışır. Jeton kısa
 /// ömürlüdür, her deneme toplantısı başlatmada yeniden üretilir ve loglanmaz.
+@MainActor
 enum HostedDeviceCheck {
+    /// Bu açılışta son jeton üretiminin hatası (Tanılama'da hata kodu görünür; jeton yazılmaz); başarıda nil.
+    private(set) static var lastFailure: String?
+
     /// Jetonu base64 olarak üretir; DeviceCheck desteklenmiyorsa ya da üretilemezse `HostedDeviceCheckError`.
     static func token() async throws -> String {
         guard DCDevice.current.isSupported else {
             attestLogger.error("DeviceCheck desteklenmiyor")
+            lastFailure = "unsupported"
             throw HostedDeviceCheckError.unsupported
         }
         do {
-            return try await DCDevice.current.generateToken().base64EncodedString()
+            let token: String = try await DCDevice.current.generateToken().base64EncodedString()
+            lastFailure = nil
+            return token
         } catch {
-            attestLogger.error("DeviceCheck jetonu üretilemedi, hata: \(String(describing: error), privacy: .private)")
-            throw HostedDeviceCheckError.tokenFailed(reason: String(describing: error))
+            // Hata kodu (alan ve sayı) gizli değildir; imzalı sürümde neyin ters gittiğini anlamak için açık loglanır.
+            let code: String = deviceCheckErrorCode(error: error)
+            attestLogger.error("DeviceCheck jetonu üretilemedi, kod: \(code, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            lastFailure = code
+            throw HostedDeviceCheckError.tokenFailed(reason: code)
         }
     }
+}
+
+/// Hatanın alanı ve kodu, ör. "com.apple.devicecheck.error 2". Saf fonksiyondur.
+func deviceCheckErrorCode(error: any Error) -> String {
+    let nsError: NSError = error as NSError
+    return "\(nsError.domain) \(nsError.code)"
 }

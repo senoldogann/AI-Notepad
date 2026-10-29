@@ -39,7 +39,12 @@ func startBlockNotice(model: AppModel) -> StartBlockNotice? {
 func resolveStartBlock(action: StartBlockAction, router: MainWindowRouter) {
     switch action {
     case .openSettings:
+        #if HOSTED_EDITION
+        // Abonelik sürümünde kayıtla ilgili tek ayar yeri hesap (anahtar yok).
+        openAccountSettings(router: router)
+        #else
         router.section = .settings
+        #endif
     case .openAccount:
         openAccountSettings(router: router)
     case .subscribe:

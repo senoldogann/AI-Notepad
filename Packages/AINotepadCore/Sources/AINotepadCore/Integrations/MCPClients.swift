@@ -48,8 +48,11 @@ public enum MCPClient: String, CaseIterable, Sendable {
     }
 }
 
-/// Yapılandırmadaki sunucu adı.
-public let mcpServerName: String = "ai-notepad"
+/// Yapılandırmadaki sunucu adı: uygulamanın görünen adından (ör. "ai-notepad", "gistsmith"). İki sürüm aynı Mac'te
+/// birbirinin girdisini ezmesin diye sürüme özgüdür. Saf fonksiyondur.
+public func mcpServerName(appName: String) -> String {
+    appName.lowercased().replacingOccurrences(of: " ", with: "-")
+}
 
 /// MCP istemci yapılandırması hataları. Bozuk dosyanın üzerine yazılmaz: kullanıcı ayarları kaybolmasın.
 public enum MCPConfigError: Error, Equatable {
@@ -73,7 +76,7 @@ func mcpServerEntry(client: MCPClient, executablePath: String) -> JSONValue {
 
 /// Yapılandırmaya AI-Notepad sunucusunu ekler (varsa günceller); diğer sunucular ve ayarlar aynen kalır. Kök nesne
 /// değilse ya da sunucu alanı nesne değilse `invalidConfig`. Saf fonksiyondur.
-public func mcpConfigAdding(config: JSONValue, client: MCPClient, executablePath: String, path: String) throws -> JSONValue {
+public func mcpConfigAdding(config: JSONValue, client: MCPClient, executablePath: String, serverName: String, path: String) throws -> JSONValue {
     guard case .object(var root) = config else {
         throw MCPConfigError.invalidConfig(path: path, reason: "kök JSON nesnesi değil")
     }
@@ -86,25 +89,25 @@ public func mcpConfigAdding(config: JSONValue, client: MCPClient, executablePath
     case .some:
         throw MCPConfigError.invalidConfig(path: path, reason: "\(client.serversKey) nesne değil")
     }
-    servers[mcpServerName] = mcpServerEntry(client: client, executablePath: executablePath)
+    servers[serverName] = mcpServerEntry(client: client, executablePath: executablePath)
     root[client.serversKey] = .object(servers)
     return .object(root)
 }
 
 /// Yapılandırmadan AI-Notepad sunucusunu çıkarır; başka hiçbir şeye dokunmaz. Saf fonksiyondur.
-public func mcpConfigRemoving(config: JSONValue, client: MCPClient) -> JSONValue {
+public func mcpConfigRemoving(config: JSONValue, client: MCPClient, serverName: String) -> JSONValue {
     guard case .object(var root) = config, case .object(var servers) = root[client.serversKey] else {
         return config
     }
-    servers[mcpServerName] = nil
+    servers[serverName] = nil
     root[client.serversKey] = .object(servers)
     return .object(root)
 }
 
 /// Yapılandırmada bu uygulamayı gösteren AI-Notepad sunucusu var mı. Saf fonksiyondur.
-public func isMCPServerConnected(config: JSONValue, client: MCPClient, executablePath: String) -> Bool {
+public func isMCPServerConnected(config: JSONValue, client: MCPClient, executablePath: String, serverName: String) -> Bool {
     guard case .object(let root) = config, case .object(let servers) = root[client.serversKey],
-          case .object(let entry) = servers[mcpServerName] else {
+          case .object(let entry) = servers[serverName] else {
         return false
     }
     return entry["command"] == .string(executablePath)
@@ -159,14 +162,14 @@ public func mcpExecutablePath(executablePath: String) throws -> String {
 }
 
 /// Uygulamaya AI-Notepad sunucusunu ekler (okur, birleştirir, yazar). Bozuk dosyanın üzerine yazmaz.
-public func connectMCPClient(client: MCPClient, executablePath: String, home: URL) throws {
+public func connectMCPClient(client: MCPClient, executablePath: String, serverName: String, home: URL) throws {
     let file: URL = client.configFile(home: home)
-    let updated: JSONValue = try mcpConfigAdding(config: try readMCPConfig(file: file), client: client, executablePath: executablePath, path: file.path)
+    let updated: JSONValue = try mcpConfigAdding(config: try readMCPConfig(file: file), client: client, executablePath: executablePath, serverName: serverName, path: file.path)
     try writeMCPConfig(config: updated, file: file)
 }
 
 /// Uygulamadan AI-Notepad sunucusunu kaldırır.
-public func disconnectMCPClient(client: MCPClient, home: URL) throws {
+public func disconnectMCPClient(client: MCPClient, serverName: String, home: URL) throws {
     let file: URL = client.configFile(home: home)
-    try writeMCPConfig(config: mcpConfigRemoving(config: try readMCPConfig(file: file), client: client), file: file)
+    try writeMCPConfig(config: mcpConfigRemoving(config: try readMCPConfig(file: file), client: client, serverName: serverName), file: file)
 }

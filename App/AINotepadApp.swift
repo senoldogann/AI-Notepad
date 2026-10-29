@@ -178,6 +178,7 @@ struct AINotepadApp: App {
         _shortcuts = State(initialValue: shortcuts)
         // Kayıt ya da işleme sürerken çıkış (⌘Q, Dock, menü) sorulur; toplantı yarıda kalmasın.
         QuitGuard.shared.isBusy = { model.isBusy }
+        model.isStartBlocked = { isSignInRequired() || startBlockNotice(model: model) != nil }
         AppDelegate.onStartFromNotification = {
             guard !model.isRecording else {
                 return

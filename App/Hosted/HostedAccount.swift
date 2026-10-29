@@ -607,6 +607,8 @@ final class HostedAccount {
             String(localized: "Ücretsiz denemen bittiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; abone olunca kendiliğinden işlenir.")
         case .monthlyCapReached:
             String(localized: "Bu ayki kullanım sınırın dolduğu için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; sınır sıfırlanınca kendiliğinden işlenir.")
+        case .subscriptionEnded:
+            String(localized: "Aboneliğin sona erdiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; yeniden abone olunca kendiliğinden işlenir.")
         case .none:
             String(localized: "Bu kayıt şimdilik işlenemedi; kendiliğinden yeniden denenecek.")
         }

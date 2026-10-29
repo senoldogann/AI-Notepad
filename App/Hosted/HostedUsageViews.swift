@@ -33,6 +33,20 @@ func hostedResetDayText(now: Date) -> String {
     return hostedMonthResetDate(now: now).formatted(style)
 }
 
+/// Arayüz dilinde gün, ör. "1 Kas 2026". Saf fonksiyondur.
+func hostedDayText(date: Date) -> String {
+    date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale()))
+}
+
+/// Denemenin koşulu sunucunun bildirdiği değerlerle, ör. "3 toplantı ya da 7 gün" (gün bilinmiyorsa yalnızca toplantı).
+/// Saf fonksiyondur.
+func hostedTrialTermsText(entitlements: HostedEntitlements) -> String {
+    guard let days = entitlements.trialDays else {
+        return String(localized: "\(entitlements.trialMeetingsTotal) toplantı")
+    }
+    return String(localized: "\(entitlements.trialMeetingsTotal) toplantı ya da \(days) gün")
+}
+
 /// Kısa saat metni, ör. "3,4 / 10 sa". Saf fonksiyondur.
 func hostedCompactHoursText(used: Double, cap: Double) -> String {
     let style: FloatingPointFormatStyle<Double> = .number.precision(.fractionLength(0...1)).locale(interfaceLocale())
@@ -117,6 +131,8 @@ struct HostedUsageCard: View {
                 trial(left: left, total: total)
             case .subscribed, .ending, .grace:
                 subscriber
+            case .expired(let endedAt):
+                expired(endedAt: endedAt)
             }
         }
         .padding(18)
@@ -189,9 +205,9 @@ struct HostedUsageCard: View {
                 if left == 0 {
                     Text("Deneme bitti; yeni toplantılar için abone ol. Toplantıların ve notların bu Mac'te kalır.")
                 } else if let endsAt = entitlements.trialEndsAt {
-                    Text("Deneme \(endsAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))) tarihinde biter (3 toplantı ya da 7 gün, hangisi önce dolarsa).")
+                    Text("Deneme \(endsAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))) tarihinde biter (\(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa).")
                 } else {
-                    Text("Deneme ilk toplantıyla başlar: 3 toplantı ya da 7 gün, hangisi önce dolarsa.")
+                    Text("Deneme ilk toplantıyla başlar: \(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa.")
                 }
             }
             .appFont(size: 12, weight: .regular)
@@ -201,6 +217,25 @@ struct HostedUsageCard: View {
                 .buttonStyle(.pillPrimary)
                 .disabled(account.isWorking)
                 .padding(.top, 2)
+        }
+    }
+}
+
+extension HostedUsageCard {
+    /// Abonelik sona erdi: toplantılar ve notlar yerinde; yeni kayıt için yeniden abone ol.
+    @ViewBuilder
+    fileprivate func expired(endedAt: Date) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Abonelik sona erdi")
+                .appFont(size: 17, weight: .medium)
+                .foregroundStyle(Theme.ink)
+            Text("Aboneliğin \(hostedDayText(date: endedAt)) tarihinde sona erdi. Toplantıların ve notların bu Mac'te; yeni kayıt için yeniden abone ol.")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Yeniden abone ol") { Task { await account.subscribe() } }
+                .buttonStyle(.pillPrimary)
+                .disabled(account.isWorking)
         }
     }
 }
@@ -221,6 +256,10 @@ struct HostedSidebarUsage: View {
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(left == 0 ? meterFull : Theme.muted)
                         HostedTrialSegments(left: left, total: total, height: 4)
+                    case .expired:
+                        Text("Abonelik sona erdi")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(meterFull)
                     case .subscribed, .ending, .grace:
                         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
                         Text(verbatim: hostedCompactHoursText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
@@ -290,7 +329,10 @@ struct HostedUsageBanner: View {
         case .monthlyFull:
             return String(localized: "Yeni kayıt başlatılamaz. Bu, aylık adil kullanım sınırıdır ve \(reset) tarihinde sıfırlanır; notların ve toplantıların erişilebilir kalır.")
         case .trialOneLeft:
-            return String(localized: "Deneme 3 toplantı ya da 7 gün sürer. Kesintisiz devam etmek için şimdi abone olabilirsin.")
+            guard case .signedIn(let entitlements) = account.state else {
+                return String(localized: "Kesintisiz devam etmek için şimdi abone olabilirsin.")
+            }
+            return String(localized: "Deneme \(hostedTrialTermsText(entitlements: entitlements)) sürer. Kesintisiz devam etmek için şimdi abone olabilirsin.")
         case .trialEnded:
             return String(localized: "Yeni toplantılar için abone ol; toplantıların ve notların bu Mac'te kalır.")
         }

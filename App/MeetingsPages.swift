@@ -849,7 +849,12 @@ struct MeetingDetailPage: View {
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
+        #if HOSTED_EDITION
+        // Abonelik sürümünde iCloud yok: PDF geçici klasörden paylaşım seçicisiyle (Mail, AirDrop, Mesajlar…).
+        Button("PDF olarak paylaş…", systemImage: "square.and.arrow.up") { sharePDF() }
+        #else
         Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
+        #endif
         // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
         Menu("Kanala gönder", systemImage: "paperplane") {
             if model.destinations.isEmpty {
@@ -1107,6 +1112,37 @@ struct MeetingDetailPage: View {
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu (seçili dilde) PDF olarak geçici klasöre yazar ve paylaşım seçicisini açar (abonelik sürümü: iCloud yok).
+    /// Geçici dosyayı sistem temizler.
+    private func sharePDF() {
+        let pdf: Data
+        do {
+            pdf = try meetingPDF(record: shownRecord)
+        } catch {
+            meetingsLogger.error("Paylaşılacak PDF oluşturulamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: error))
+            return
+        }
+        let title: String = shownRecord.note?.title ?? record.title
+        let startedAt: Date = record.startedAt
+        do {
+            let directory: URL = FileManager.default.temporaryDirectory.appending(path: "paylasim-\(UUID().uuidString)", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url: URL = try exportFileURL(directory: directory, title: title, startedAt: startedAt, fileExtension: "pdf")
+            try pdf.write(to: url, options: .atomic)
+            guard let view = NSApp.keyWindow?.contentView else {
+                export = .failed(String(localized: "Paylaşım penceresi açılamadı; uygulamayı öne getirip yeniden dene."))
+                return
+            }
+            // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
+            let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
+            NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+        } catch {
+            meetingsLogger.error("PDF paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: StorageError.writeFailed(path: "PDF", reason: error.localizedDescription)))
         }
     }
 

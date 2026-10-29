@@ -215,5 +215,7 @@ func hostedStartBlockNotice() -> StartBlockNotice? {
         return StartBlockNotice(
             reason: String(localized: "Bu ayki kullanım sınırın doldu; \(hostedResetDayText(now: Date())) tarihinde sıfırlanır."), action: .openAccount
         )
+    case .subscriptionEnded:
+        return StartBlockNotice(reason: String(localized: "Aboneliğin sona erdi. Kayda devam etmek için yeniden abone ol."), action: .subscribe)
     }
 }

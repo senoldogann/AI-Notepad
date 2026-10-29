@@ -58,6 +58,38 @@ private func record(id: String, startedAt: Double, status: MeetingStatus) -> Mee
         #expect(!isOfflineStartError(error: HostedClientError.notSignedIn))
     }
 
+    // Eski abone (abonelik bitti, deneme hakkı yok) "deneme bitti" değil "abonelik sona erdi" görür; deneme hakkı
+    // kalan eski abone denemeyi kullanabilir.
+    @Test func formerSubscriberSeesSubscriptionEnded() throws {
+        let json: String = #"""
+        {"userId":"u1","plan":"trial","trialMeetingsTotal":3,"trialDays":7,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,
+         "subscription":{"status":"canceled","currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"none","graceEndsAt":null}}
+        """#
+        let decoder: JSONDecoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { (decoder: any Decoder) throws -> Date in
+            try Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(try decoder.singleValueContainer().decode(String.self))
+        }
+        let expired: HostedEntitlements = try decoder.decode(HostedEntitlements.self, from: Data(json.utf8))
+        #expect(expired.trialDays == 7)
+        #expect(hostedPlanStatus(entitlements: expired) == .expired(endedAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        #expect(hostedStartBlock(entitlements: expired) == .subscriptionEnded)
+        #expect(hostedUsageNotice(entitlements: expired) == nil)
+        let withTrial: HostedEntitlements = try decoder.decode(HostedEntitlements.self, from: Data(json.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":2"#).utf8))
+        #expect(hostedPlanStatus(entitlements: withTrial) == .trial(left: 2, total: 3))
+    }
+
+    // Aynı sınır kodu farklı sınırlardan gelir: Sor'un payı dolunca kayıt engellenmiş gibi okunmaz.
+    @Test func capMessagesNameTheRightLimit() {
+        func message(_ code: HostedErrorCode, _ path: String) -> String {
+            hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: 429, serverMessage: "", path: path))
+        }
+        #expect(message(.monthlyCapReached, "/v1/meetings/start").contains("kayıt saatlerin"))
+        #expect(message(.monthlyCapReached, "/v1/llm/messages").contains("Kayıt yapmaya devam edebilirsin"))
+        #expect(message(.dailyCapReached, "/v1/llm/messages").contains("Kayıt yapmaya devam edebilirsin"))
+        #expect(message(.dailyCapReached, "/v1/meetings/start").contains("toplantı sayısına"))
+    }
+
     // Kuyruk en eskiden işlenir; bağ kayıt başına tektir ve en yeniler tutulur; son geçiş zaman aşımı sunucu
     // penceresinden uzundur.
     @Test func queueOrderLinksAndTimeout() {

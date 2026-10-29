@@ -104,11 +104,13 @@ struct HostedAccountSettings: View {
                 // Kalan toplantılar, bitiş ve "Abone ol" aşağıdaki kullanım kartında.
                 Text("Ücretsiz deneme")
             case .subscribed(let renewsAt):
-                Text("Abonelik etkin; dönem \(renewsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde yenilenir.")
+                Text("Abonelik etkin; dönem \(hostedDayText(date: renewsAt)) tarihinde yenilenir.")
             case .ending(let endsAt):
-                Text("Abonelik iptal edildi; \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar kullanabilirsin, yenilenmez.")
+                Text("Abonelik iptal edildi; \(hostedDayText(date: endsAt)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):
-                NoticeText("Ödeme alınamadı; erişimin \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
+                NoticeText("Ödeme alınamadı; erişimin \(hostedDayText(date: endsAt)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
+            case .expired(let endedAt):
+                Text("Aboneliğin \(hostedDayText(date: endedAt)) tarihinde sona erdi; toplantıların ve notların bu Mac'te.")
             }
         } control: {
             HStack(spacing: 8) {
@@ -184,6 +186,10 @@ struct HostedSignInStep: View {
                         .foregroundStyle(Theme.muted)
                 case .subscribed, .ending, .grace:
                     Text("Aboneliğin etkin.")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                case .expired:
+                    Text("Aboneliğin sona erdi; yeni kayıt için yeniden abone ol.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 }

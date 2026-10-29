@@ -194,6 +194,15 @@ private struct SettingsTabs: View {
 }
 
 /// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
+/// Tanıma sözlüğünün açıklaması: sözlüğün nerede uygulandığı sürüme göre (abonelikte motor seçimi yok).
+private var vocabularyHelp: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Canlı metinde ve kayıt bitince yapılan son geçişte uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir."
+    #else
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir."
+    #endif
+}
+
 private struct GeneralSettings: View {
     let model: AppModel
     let updater: AppUpdater
@@ -296,7 +305,11 @@ private struct GeneralSettings: View {
                 model.primaryLanguageChanged()
             }
             SettingsRow(title: Text("Kurulum")) {
+                #if HOSTED_EDITION
+                Text("İzinler, hesap ve kısayollar adım adım.")
+                #else
                 Text("İzinler, anahtarlar ve kısayollar adım adım.")
+                #endif
             } control: {
                 Button("Kurulumu yeniden aç") { onShowSetup() }
             }
@@ -308,7 +321,7 @@ private struct GeneralSettings: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Tanıma sözlüğü").appFont(size: 15, weight: .medium)
-                Text("Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.")
+                Text(vocabularyHelp)
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1308,7 +1321,7 @@ private struct MCPClientCard: View {
         }
         do {
             let config: JSONValue = try readMCPConfig(file: client.configFile(home: FileManager.default.homeDirectoryForCurrentUser))
-            isConnected = isMCPServerConnected(config: config, client: client, executablePath: try executablePath())
+            isConnected = isMCPServerConnected(config: config, client: client, executablePath: try executablePath(), serverName: mcpServerName(appName: appName))
             errorMessage = nil
         } catch {
             errorMessage = userFacingMessage(error: error)
@@ -1317,7 +1330,7 @@ private struct MCPClientCard: View {
 
     private func connect() {
         do {
-            try connectMCPClient(client: client, executablePath: try executablePath(), home: FileManager.default.homeDirectoryForCurrentUser)
+            try connectMCPClient(client: client, executablePath: try executablePath(), serverName: mcpServerName(appName: appName), home: FileManager.default.homeDirectoryForCurrentUser)
             justConnected = true
             refresh()
         } catch {
@@ -1327,7 +1340,7 @@ private struct MCPClientCard: View {
 
     private func disconnect() {
         do {
-            try disconnectMCPClient(client: client, home: FileManager.default.homeDirectoryForCurrentUser)
+            try disconnectMCPClient(client: client, serverName: mcpServerName(appName: appName), home: FileManager.default.homeDirectoryForCurrentUser)
             justConnected = false
             refresh()
         } catch {

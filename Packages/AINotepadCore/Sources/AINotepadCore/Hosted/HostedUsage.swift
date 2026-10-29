@@ -76,6 +76,9 @@ public func hostedUsageNotice(entitlements: HostedEntitlements) -> HostedUsageNo
             return .trialEnded
         }
         return left == 1 ? .trialOneLeft : nil
+    case .expired:
+        // Başlat düğmesinin yanındaki neden yeterli (bkz. `hostedStartBlock`).
+        return nil
     case .subscribed, .ending, .grace:
         switch hostedUsageLevel(fraction: hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)) {
         case .full:
@@ -117,6 +120,8 @@ public enum HostedStartBlock: Sendable, Equatable {
     case trialEnded
     /// Bu ayın adil kullanım saatleri doldu.
     case monthlyCapReached
+    /// Abonelik sona erdi, deneme hakkı da yok.
+    case subscriptionEnded
 }
 
 /// Hak durumuna göre kayıt başlayabilir mi; başlayamıyorsa neden. Ek süredeki ve iptal edilip dönemi süren abonelik
@@ -125,14 +130,17 @@ public func hostedStartBlock(entitlements: HostedEntitlements) -> HostedStartBlo
     switch hostedPlanStatus(entitlements: entitlements) {
     case .trial(let left, _):
         return left == 0 ? .trialEnded : nil
+    case .expired:
+        return .subscriptionEnded
     case .subscribed, .ending, .grace:
         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
         return hostedUsageLevel(fraction: fraction) == .full ? .monthlyCapReached : nil
     }
 }
 
-/// Hak durumunun eskimiş sayıldığı süre (saniye): uygulama öne gelince bundan eskiyse yeniden okunur.
-public let hostedStaleRefreshIntervalSec: Double = 600
+/// Hak durumunun eskimiş sayıldığı süre (saniye): uygulama her öne geldiğinde, son okuma bundan eskiyse yeniden okunur
+/// (ödeme sayfasından dönüşte beklemeden; bkz. `HostedAccount.refreshOnActivation`).
+public let hostedStaleRefreshIntervalSec: Double = 60
 
 /// Hak durumu yeniden okunmalı mı: hiç okunmadıysa ya da son okuma `intervalSec`'ten eskiyse. Saf fonksiyondur.
 public func isHostedRefreshDue(lastRefresh: Date?, now: Date, intervalSec: Double) -> Bool {

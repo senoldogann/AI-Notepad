@@ -24,8 +24,12 @@ import Testing
         """#
         #expect(hostedStartBlock(entitlements: try decoded(subscriber)) == .monthlyCapReached)
         #expect(hostedStartBlock(entitlements: try decoded(subscriber.replacingOccurrences(of: #""monthlyHoursUsed":10"#, with: #""monthlyHoursUsed":4"#))) == nil)
-        let trial: String = subscriber.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#)
+        // Hiç abone olmamış deneme hesabı; eski abone (abonelik bitti, deneme yok) "abonelik sona erdi".
+        let trial: String = subscriber.replacingOccurrences(
+            of: #"{"status":"past_due","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"grace","graceEndsAt":"2026-11-27T00:00:00.000Z"}"#, with: "null"
+        )
         #expect(hostedStartBlock(entitlements: try decoded(trial)) == .trialEnded)
+        #expect(hostedStartBlock(entitlements: try decoded(subscriber.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#))) == .subscriptionEnded)
         #expect(hostedStartBlock(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":2"#))) == nil)
     }
 
@@ -33,8 +37,8 @@ import Testing
     @Test func refreshIsDueOnlyWhenStale() {
         let now: Date = Date(timeIntervalSince1970: 10_000)
         #expect(isHostedRefreshDue(lastRefresh: nil, now: now, intervalSec: hostedStaleRefreshIntervalSec))
-        #expect(!isHostedRefreshDue(lastRefresh: now.addingTimeInterval(-60), now: now, intervalSec: hostedStaleRefreshIntervalSec))
-        #expect(isHostedRefreshDue(lastRefresh: now.addingTimeInterval(-601), now: now, intervalSec: hostedStaleRefreshIntervalSec))
+        #expect(!isHostedRefreshDue(lastRefresh: now.addingTimeInterval(-30), now: now, intervalSec: hostedStaleRefreshIntervalSec))
+        #expect(isHostedRefreshDue(lastRefresh: now.addingTimeInterval(-61), now: now, intervalSec: hostedStaleRefreshIntervalSec))
     }
 }
 
