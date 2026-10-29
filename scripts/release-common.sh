@@ -76,6 +76,18 @@ release_notes_path() {
     printf '%s\n' "$(cd "$(dirname "$notes")" && pwd)/$(basename "$notes")"
 }
 
+# Çalışma ağacı temiz olmalı (işlenmemiş ya da izlenmeyen dosya yok): yayın, depodaki bir işlemeden derlenir; yerel
+# değişiklik sürüme sızmaz ve sürüm hangi işlemeden çıktığı bilinir.
+require_clean_worktree() {
+    local changes
+    changes="$(git status --porcelain)"
+    [[ -z "$changes" ]] || {
+        echo "Çalışma ağacı temiz değil; önce işle ya da geri al:" >&2
+        printf '%s\n' "$changes" >&2
+        exit 1
+    }
+}
+
 # Yerel appcast'te bu derleme zaten varsa durur (her sürümde CURRENT_PROJECT_VERSION artırılır).
 require_new_build() {
     local appcast="$1"
@@ -87,7 +99,7 @@ require_new_build() {
 }
 
 # Şemayı Release olarak arşivler ve Developer ID ile dışa aktarır: Xcode'un otomatik imzalaması profili geliştirici
-# hesabından alır (iCloud ve Apple ile giriş profil ister), hardened runtime ve zaman damgasıyla imzalar. Uygulama
+# hesabından alır (iCloud profil ister; özel yetkisi olmayan uygulamaya profil gömülmez), hardened runtime ve zaman damgasıyla imzalar. Uygulama
 # `<çıktı>/export/` altına çıkar.
 archive_and_export() {
     local scheme="$1"
@@ -144,9 +156,10 @@ require_sparkle_keychain_key() {
     }
 }
 
-# Dışa aktarılan uygulamanın dağıtıma uygunluğu: Developer ID imzası, hardened runtime, mikrofon yetkisi, gömülü
-# profil, Developer ID ile yeniden imzalanmış Sparkle yardımcıları, Info.plist'teki Sparkle açık anahtarı ve hata
-# ayıklayıcı izninin yokluğu. Sürüme özgü yetkiler (iCloud, Apple ile giriş) çağıran betikte denetlenir.
+# Dışa aktarılan uygulamanın dağıtıma uygunluğu: Developer ID imzası, hardened runtime, mikrofon yetkisi,
+# Developer ID ile yeniden imzalanmış Sparkle yardımcıları, Info.plist'teki Sparkle açık anahtarı ve hata
+# ayıklayıcı izninin yokluğu. Sürüme özgü yetkiler ve gömülü profil (yalnızca iCloud'lu geliştirici sürümünde) çağıran
+# betikte denetlenir.
 verify_distribution_app() {
     local app="$1"
     local sparkle_public_key="$2"
@@ -161,7 +174,6 @@ verify_distribution_app() {
     [[ "$entitlements" == *"com.apple.security.device.audio-input"* ]] || { echo "Mikrofon yetkisi (entitlement) eksik." >&2; exit 1; }
     # Hata ayıklayıcı izni dağıtımda olmamalı (Apple noter onayı reddeder).
     [[ "$entitlements" != *"get-task-allow"* ]] || { echo "get-task-allow yetkisi var (noter onayı reddeder)." >&2; exit 1; }
-    [[ -f "$app/Contents/embedded.provisionprofile" ]] || { echo "Developer ID profili gömülü değil." >&2; exit 1; }
     # Sparkle gömülü ve açık anahtar uygulamada (yoksa yayınlanan sürüm güncelleme alamaz).
     [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || { echo "Sparkle.framework uygulamaya gömülmemiş." >&2; exit 1; }
     # Sparkle'ın yardımcıları pakette ad-hoc imzalı gelir; Developer ID dışa aktarımı onları yeniden imzalamalı (noter
@@ -200,8 +212,35 @@ require_info_value() {
     [[ "$actual" == "$expected" ]] || { echo "$app Info.plist $key: '$actual', beklenen '$expected'." >&2; exit 1; }
 }
 
+# Uygulamanın imzasında iCloud yetkisi olmamalı (abonelik sürümü eşitleme yapmaz; yetki profil ve Apple hesabı ister).
+require_no_icloud_entitlement() {
+    local app="$1"
+    local entitlements
+    entitlements="$(app_entitlements "$app")"
+    [[ "$entitlements" != *"com.apple.developer.icloud"* && "$entitlements" != *"com.apple.developer.ubiquity"* ]] || {
+        echo "$app imzasında iCloud yetkisi var; bu sürümde olmamalı." >&2
+        exit 1
+    }
+}
+
+# Uygulamanın kendisini noter onayına gönderir ve onayı uygulamaya ekler (staple): DMG'den çıkarılan ya da Sparkle'ın
+# kurduğu uygulama, ilk açılışta Apple'a sormadan (çevrimdışı da) Gatekeeper'dan geçer. DMG'den önce çağrılır; DMG
+# ayrıca onaylanır (bkz. `make_notarized_dmg`).
+notarize_app() {
+    local app="$1"
+    local zip
+    zip="$(dirname "$app")/$(basename "${app%.app}")-notarize.zip"
+    rm -f "$zip"
+    ditto -c -k --keepParent "$app" "$zip"
+    xcrun notarytool submit "$zip" --keychain-profile "$notary_profile" --wait
+    rm -f "$zip"
+    xcrun stapler staple "$app"
+    xcrun stapler validate "$app"
+    spctl --assess --type execute --verbose=2 "$app"
+}
+
 # DMG: tasarlanmış kurulum penceresi (arka plan, uygulama → Uygulamalar kısayolu), Developer ID imzası, noter onayı ve
-# onayın DMG'ye eklenmesi (staple).
+# onayın DMG'ye eklenmesi (staple). Uygulama önceden `notarize_app` ile onaylanmış olmalı.
 make_notarized_dmg() {
     local app="$1"
     local dmg="$2"

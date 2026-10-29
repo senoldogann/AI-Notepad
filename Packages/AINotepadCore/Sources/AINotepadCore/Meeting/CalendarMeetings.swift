@@ -128,6 +128,10 @@ public func customVocabulary(text: String) -> [String] {
 /// Toplantı öncesi brifing sorusu (arşive sorulur): aynı kişilerle ya da konuda önceki görüşmeler, kararlar ve açık
 /// görevler. Saf fonksiyondur.
 public func briefingQuestion(meeting: CalendarMeeting) -> String {
-    let people: String = meeting.attendees.isEmpty ? "" : " Katılımcılar: \(meeting.attendees.prefix(8).joined(separator: ", "))."
-    return "\"\(meeting.title)\" toplantısı öncesi brifing:\(people) Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak."
+    // Soru arayüz dilinde (İngilizce arayüzde İngilizce sorulur ve cevaplanır).
+    guard !meeting.attendees.isEmpty else {
+        return String(localized: "\"\(meeting.title)\" toplantısı öncesi brifing: Bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.")
+    }
+    let people: String = meeting.attendees.prefix(8).joined(separator: ", ")
+    return String(localized: "\"\(meeting.title)\" toplantısı öncesi brifing. Katılımcılar: \(people). Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.")
 }

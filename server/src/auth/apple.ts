@@ -5,15 +5,25 @@ import { type IdentityTokenIssuer, type VerifiedIdentityToken, verifyIdentityTok
 export const appleIssuer: string = "https://appleid.apple.com";
 export const appleJwksUrl: string = "https://appleid.apple.com/auth/keys";
 
-/** Doğrulanmış Apple kimliği. */
+/** Doğrulanmış Apple kimliği: yalnızca kalıcı `sub` (e-posta saklanmaz, sunucu kullanmaz). */
 export interface AppleIdentity {
   readonly subject: string;
-  readonly email: string | null;
+}
+
+/** Apple kimlik jetonlarını veren sağlayıcı: JWKS adresi, `iss` ve izinli istemci kimlikleri. Saf fonksiyondur. */
+export function appleTokenIssuer(config: Config): IdentityTokenIssuer {
+  return {
+    displayName: "Apple",
+    jwksService: "apple_jwks",
+    jwksUrl: appleJwksUrl,
+    issuers: [appleIssuer],
+    audiences: config.appleClientIds,
+  };
 }
 
 /**
  * Apple kimlik jetonunu doğrular (`verifyIdentityToken`): Apple JWKS imzası (RS256), `iss`, `aud` (izinli istemci
- * kimlikleri), süre ve tek kullanımlık nonce. E-posta yalnızca Apple doğrulanmış dediyse (küçük harfle) döner.
+ * kimlikleri), süre ve tek kullanımlık nonce.
  */
 export async function verifyAppleIdentityToken(
   db: D1Database,
@@ -22,16 +32,7 @@ export async function verifyAppleIdentityToken(
   identityToken: string,
   rawNonce: string,
 ): Promise<AppleIdentity> {
-  const issuer: IdentityTokenIssuer = {
-    displayName: "Apple",
-    jwksService: "apple_jwks",
-    jwksUrl: appleJwksUrl,
-    issuers: [appleIssuer],
-    audiences: config.appleClientIds,
-  };
+  const issuer: IdentityTokenIssuer = appleTokenIssuer(config);
   const token: VerifiedIdentityToken = await verifyIdentityToken(db, platform, issuer, identityToken, rawNonce);
-  return {
-    subject: token.subject,
-    email: token.emailVerified && token.email !== null ? token.email.toLowerCase() : null,
-  };
+  return { subject: token.subject };
 }

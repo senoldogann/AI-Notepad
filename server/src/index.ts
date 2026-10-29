@@ -1,15 +1,24 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
+import { appleTokenIssuer } from "./auth/apple";
+import { googleTokenIssuer } from "./auth/google";
+import { refreshPersistedIssuerKeys } from "./auth/identityToken";
+import { warnIfStripeTestMode } from "./billing";
 import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
+import { type Config, parseConfig } from "./config";
+import { settleDeepgramMeetings } from "./deepgram";
+import { dailyElevenLabsCapacityCheck } from "./elevenLabsCapacity";
 import type { Env } from "./env";
+import { errorName, log } from "./log";
 import type { Platform } from "./platform";
 
-/** Üretim platformu: gerçek fetch, saat ve Apple App Attestation kökü. */
+/** Üretim platformu: gerçek fetch, saat, Apple App Attestation kökü ve Worker örneği ömrünce JWKS önbelleği. */
 const platform: Platform = {
   fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => fetch(input, init),
   now: (): Date => new Date(),
   appAttestRootPem: appleAppAttestationRootPem,
   retryBaseDelayMs: 300,
+  jwksCache: new Map(),
 };
 
 export default {
@@ -21,8 +30,35 @@ export default {
       clientIp: request.headers.get("cf-connecting-ip") ?? "local",
     });
   },
-  /** Günlük Cron Trigger: süresi dolmuş satırların temizliği. */
+  /**
+   * Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm), bitirilmeden kalan toplantıların Deepgram
+   * tahmininin indirilmesi, süresi dolmuş satırların temizliği ve Apple/Google anahtarlarının tazelenmesi.
+   */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
-    await cleanupExpiredRows(env.DB, new Date(controller.scheduledTime), scheduledCleanupLimits);
+    const now: Date = new Date(controller.scheduledTime);
+    const config: Config = parseConfig(env);
+    warnIfStripeTestMode(config, "scheduled");
+    // Adımlar birbirinden bağımsız: biri başarısız olsa da diğerleri çalışır; her hata `alert` yazılır, sonunda hepsi
+    // birlikte fırlatılır (Cron çalışması başarısız görünsün).
+    const steps: ReadonlyArray<{ name: string; run: () => Promise<unknown> }> = [
+      { name: "elevenlabs_capacity", run: () => dailyElevenLabsCapacityCheck(env.DB, config, now) },
+      { name: "deepgram_settle", run: () => settleDeepgramMeetings(env.DB, now) },
+      { name: "cleanup", run: () => cleanupExpiredRows(env.DB, now, scheduledCleanupLimits) },
+      // Apple ve Google anahtarları önceden alınır: girişler sağlayıcıyı beklemesin (bkz. `persistedIssuerKeys`).
+      { name: "apple_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, appleTokenIssuer(config)) },
+      { name: "google_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, googleTokenIssuer(config)) },
+    ];
+    const failures: unknown[] = [];
+    for (const step of steps) {
+      try {
+        await step.run();
+      } catch (error: unknown) {
+        log("alert", "scheduled_step_failed", { step: step.name, error: errorName(error) });
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `Zamanlanmış görevde ${failures.length} adım başarısız.`);
+    }
   },
 } satisfies ExportedHandler<Env>;

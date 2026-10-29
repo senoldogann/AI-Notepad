@@ -70,7 +70,7 @@ public final class MeetingAudioPlayer {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            playerLogger.error("Çalma oturumu açılamadı, hata: \(String(describing: error), privacy: .public)")
+            playerLogger.error("Çalma oturumu açılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessage = userFacingMessage(error: AudioCaptureError.playbackSessionFailed(code: Int32((error as NSError).code)))
             return
         }

@@ -1,16 +1,17 @@
 import { randomId } from "../crypto";
+import { insertUserFromLedgerStatement, seedDailyUsageFromLedgerStatement, seedMonthlyUsageFromLedgerStatement } from "../trialLedger";
 
 /** Giriş sağlayıcısı. */
 export type IdentityProvider = "apple" | "google";
 
-/** Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır. */
-export async function findOrCreateUser(
-  db: D1Database,
-  provider: IdentityProvider,
-  subject: string,
-  email: string | null,
-  now: Date,
-): Promise<string> {
+/**
+ * Kimliğin kullanıcısını bulur; yoksa yeni kullanıcı ve kimlik oluşturur. Eşzamanlı ilk girişte tek kullanıcı kalır.
+ * Yeni kullanıcı, kimliğin deneme defterindeki (`identityHash`, bkz. `trialIdentityHash`) harcanan deneme sayısını,
+ * cihaz doğrulamasını ve (aynı aydaysa) bu ayın kullanımını devralır: hesabı silip aynı kimlikle yeniden açmak denemeyi
+ * de aylık sınırları da sıfırlamaz. E-posta saklanmaz
+ * (`auth_identities.email` NULL; sunucu e-postayı kullanmaz).
+ */
+export async function findOrCreateUser(db: D1Database, provider: IdentityProvider, subject: string, identityHash: string, now: Date): Promise<string> {
   const existing: string | null = await findUserId(db, provider, subject);
   if (existing !== null) {
     return existing;
@@ -18,10 +19,12 @@ export async function findOrCreateUser(
   const userId: string = randomId();
   try {
     await db.batch([
-      db.prepare("INSERT INTO users (id, created_at) VALUES (?, ?)").bind(userId, now.getTime()),
+      insertUserFromLedgerStatement(db, userId, identityHash, now),
+      seedMonthlyUsageFromLedgerStatement(db, userId, identityHash, now),
+      seedDailyUsageFromLedgerStatement(db, userId, identityHash, now),
       db
-        .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(provider, subject, userId, email, now.getTime()),
+        .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, NULL, ?)")
+        .bind(provider, subject, userId, now.getTime()),
     ]);
     return userId;
   } catch (error: unknown) {

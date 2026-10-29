@@ -7,6 +7,49 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
+/** Stripe anahtarının modu: canlı ya da test. */
+export type StripeMode = "live" | "test";
+
+/** Stripe gizli ya da kısıtlı anahtarının öneki ve modu. */
+const stripeKeyPattern: RegExp = /^(?:sk|rk)_(live|test)_/;
+
+/** Apple DeviceCheck API ortamı: geliştirme ya da yayın adresi. */
+export type DeviceCheckEnvironment = "development" | "production";
+
+/**
+ * Apple DeviceCheck ile Mac başına deneme (bkz. `deviceCheck.ts`). Tek anahtar `DEVICECHECK_POLICY`'dir:
+ * - `required`: hesabın denemesi henüz bir Mac'e bağlanmamışsa deneme toplantısı DeviceCheck jetonu ister;
+ * - `off`: DeviceCheck hiç çağrılmaz, deneme yalnızca hesap ve IP sınırlarıyla çalışır (yerel geliştirme, testler).
+ */
+export type DeviceCheckConfig =
+  | { readonly policy: "off" }
+  | {
+      readonly policy: "required";
+      readonly environment: DeviceCheckEnvironment;
+      /** Apple geliştirici ekip kimliği (JWT `iss`). */
+      readonly teamId: string;
+      /** DeviceCheck anahtarının kimliği (JWT `kid`). */
+      readonly keyId: string;
+      /** DeviceCheck anahtarı (.p8, PKCS#8 PEM). */
+      readonly privateKeyPem: string;
+    };
+
+/**
+ * Deepgram canlı metninin anahtarı (bkz. `deepgram.ts`). Tek anahtar `DEEPGRAM_POLICY`'dir:
+ * - `on`: açık toplantısı olan kullanıcıya kısa ömürlü Deepgram jetonu verilir; tahmini harcama bütçeye ulaşınca durur;
+ * - `off`: jeton verilmez, `/v1/me` canlı motoru `whisperkit` der (yerel geliştirme, testler, acil kapatma).
+ */
+export type DeepgramAccess = { readonly policy: "off" } | { readonly policy: "on"; readonly apiKey: string };
+
+/** Deepgram canlı metni: anahtar ve ücretsiz kredi bütçesi (politika kapalıyken de yönetici istatistiği için okunur). */
+export interface DeepgramConfig {
+  readonly access: DeepgramAccess;
+  /** Ücretsiz kredinin canlı metne ayrılan kısmı (mikro USD; ömür boyu, aylık değil). */
+  readonly budgetMicroUsd: number;
+  /** Akış dakikası başına fiyat (mikro USD). */
+  readonly microUsdPerMinute: number;
+}
+
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
@@ -16,19 +59,28 @@ export interface Config {
   readonly googleClientIds: readonly string[];
   /** Yönetici API'sine erişebilen kimlikler (`<sağlayıcı>:<sub>`); boşsa kimse yönetici değildir. */
   readonly adminIdentities: readonly string[];
+  /** Yönetici uçlarının Cloudflare Access denetimi (bkz. `requireCloudflareAccess`). */
+  readonly access: CloudflareAccessConfig;
   /** `GET /v1/download/mac` yönlendirmesinin hedefi (DMG). */
   readonly dmgUrl: string;
+  /** DMG ile aynı GitHub sürümündeki Sparkle appcast'i; `GET /v1/download/mac/version` sürümü buradan okur. */
+  readonly appcastUrl: string;
   /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
   readonly priceUsdMonthly: number;
-  /** Tüm kullanıcılar için günde en çok kabul edilen rapor (geri bildirim, çökme, iletişim). */
-  readonly reportsPerDay: number;
+  /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
+  readonly reportBytesPerDay: number;
   readonly attest: {
     readonly policy: AttestPolicy;
     readonly environment: AttestEnvironment;
     readonly appIds: readonly string[];
     readonly allowedCategories: readonly number[];
   };
+  readonly deviceCheck: DeviceCheckConfig;
   readonly trialMeetings: number;
+  /** Denemenin süresi (gün): hesabın ilk deneme toplantısından başlar; `trialMeetings` ya da bu süre, hangisi önce dolarsa. */
+  readonly trialDays: number;
+  /** `trialDays` milisaniye olarak. */
+  readonly trialDurationMs: number;
   /** Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrılarının günlük token sınırı. */
   readonly trialAccountDailyTokens: number;
   /** Bir IP'den bir günde denemeye başlayabilecek yeni hesap sayısı. */
@@ -37,12 +89,14 @@ export interface Config {
   readonly subscriberMaxMeetingMinutes: number;
   readonly monthlyCapSeconds: number;
   readonly meetingGraceMs: number;
-  /** `past_due` aboneliğin dönem sonundan sonra erişimi koruduğu süre. */
+  /** `past_due` aboneliğin `past_due`'ya geçişten sonra erişimi koruduğu süre. */
   readonly pastDueGraceMs: number;
   readonly trialMeetingTokenBudget: number;
   readonly subscriberMeetingTokenBudget: number;
   /** Kullanıcı başına aylık token sınırı (tüm toplantılar). */
   readonly monthlyTokenCap: number;
+  /** Abonenin toplantıya bağlı olmayan (hesap) çağrılarının aylık token sınırı; `monthlyTokenCap`'in parçasıdır. */
+  readonly monthlyAccountTokenCap: number;
   /** Kullanıcı başına günlük token sınırı. */
   readonly dailyTokenCap: number;
   /** Kullanıcı başına günde en çok toplantı başlatma. */
@@ -60,17 +114,51 @@ export interface Config {
     readonly usdPerHour: number;
     readonly keytermsUsdPerHour: number;
   };
+  /** ElevenLabs aylık kredi planı: dönemde işlenebilen ses saati ve dönemin yenilendiği gün (1–28, UTC). */
+  readonly elevenLabs: {
+    readonly monthlyAudioHours: number;
+    readonly billingDay: number;
+  };
+  readonly deepgram: DeepgramConfig;
   readonly dailySpendCeilingMicroUsd: number;
+  /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
+  readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
   readonly stripePriceId: string;
+  /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
+  readonly stripeMode: StripeMode;
   readonly secrets: {
     readonly accessToken: string;
+    /** Kimlik deneme defteri (`trialIdentityHash`) ve deneme IP özetinin HMAC sırrı. */
+    readonly trialHash: string;
     readonly anthropic: string;
     readonly elevenLabs: string;
     readonly stripe: string;
     readonly stripeWebhook: string;
     readonly turnstile: string;
   };
+}
+
+/**
+ * Stripe webhook'unun yapılandırması: yalnızca ortam ve Stripe sırları. Webhook bununla çalışır; ilgisiz bir ayarın
+ * (ör. `DEVICECHECK_PRIVATE_KEY`, `DEEPGRAM_API_KEY`) hatası ödeme olaylarını durdurmaz. `Config` bunu kapsar.
+ */
+export interface StripeWebhookConfig {
+  readonly environment: "development" | "production";
+  /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
+  readonly stripeMode: StripeMode;
+  /** Aylık abonelik fiyatı: webhook yalnızca bu fiyatlı (ya da `metadata.user_id` taşıyan) aboneliklere dokunur. */
+  readonly stripePriceId: string;
+  readonly secrets: {
+    readonly stripe: string;
+    readonly stripeWebhook: string;
+  };
+}
+
+/** Cloudflare Access: ekip alan adı ve uygulamanın AUD etiketi (boşsa denetim kapalı: null). */
+export interface CloudflareAccessConfig {
+  readonly teamDomain: string;
+  readonly audience: string | null;
 }
 
 /** Yapılandırma eksik ya da geçersiz: dağıtım hatasıdır, istemciye ayrıntı verilmez. */
@@ -98,6 +186,7 @@ export interface PlaceholderCandidates {
   readonly APP_ATTEST_APP_IDS: readonly string[];
   readonly GOOGLE_CLIENT_IDS: readonly string[];
   readonly DMG_URL: string;
+  readonly APPCAST_URL: string;
   readonly STRIPE_PRICE_ID: string;
 }
 
@@ -127,6 +216,7 @@ export function placeholderSettings(settings: PlaceholderCandidates): string[] {
     ["APP_ATTEST_APP_IDS", settings.APP_ATTEST_APP_IDS.some((appId: string): boolean => appId.startsWith("TEAMID"))],
     ["GOOGLE_CLIENT_IDS", settings.GOOGLE_CLIENT_IDS.some(containsPlaceholder)],
     ["DMG_URL", isPlaceholderUrl(settings.DMG_URL)],
+    ["APPCAST_URL", isPlaceholderUrl(settings.APPCAST_URL)],
     ["STRIPE_PRICE_ID", containsPlaceholder(settings.STRIPE_PRICE_ID)],
   ];
   return checks.filter(([, placeholder]: readonly [string, boolean]): boolean => placeholder).map(([name]: readonly [string, boolean]): string => name);
@@ -153,14 +243,24 @@ const envSchema = z.object({
   APPLE_CLIENT_IDS: csv,
   GOOGLE_CLIENT_IDS: csv,
   ADMIN_IDENTITIES: adminIdentityList,
+  CF_ACCESS_TEAM_DOMAIN: z.string().regex(/^[a-z0-9-]+\.cloudflareaccess\.com$/),
+  /** Access uygulamasının AUD etiketi; boşsa yönetici uçlarında Access denetimi kapalıdır. */
+  CF_ACCESS_AUD: z.string().regex(/^([0-9a-f]{64})?$/),
   DMG_URL: z.url({ protocol: /^https$/ }),
+  APPCAST_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
-  REPORTS_PER_DAY: positiveInt,
+  REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
   APP_ATTEST_APP_IDS: csv,
   APP_ATTEST_ALLOWED_CATEGORIES: csv,
+  DEVICECHECK_POLICY: z.enum(["required", "off"]),
+  DEVICECHECK_ENVIRONMENT: z.enum(["development", "production"]),
+  DEVICECHECK_TEAM_ID: z.string(),
+  DEVICECHECK_KEY_ID: z.string(),
+  DEVICECHECK_PRIVATE_KEY: z.string().optional(),
   TRIAL_MEETINGS: positiveInt,
+  TRIAL_DAYS: positiveInt,
   TRIAL_ACCOUNT_DAILY_TOKENS: positiveInt,
   TRIAL_ACCOUNTS_PER_IP_PER_DAY: positiveInt,
   TRIAL_MAX_MEETING_MINUTES: positiveInt,
@@ -171,6 +271,7 @@ const envSchema = z.object({
   TRIAL_MEETING_TOKEN_BUDGET: positiveInt,
   SUBSCRIBER_MEETING_TOKEN_BUDGET: positiveInt,
   MONTHLY_TOKEN_CAP: positiveInt,
+  MONTHLY_ACCOUNT_TOKEN_CAP: positiveInt,
   DAILY_TOKEN_CAP: positiveInt,
   MAX_MEETING_STARTS_PER_DAY: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
@@ -181,16 +282,51 @@ const envSchema = z.object({
   TRANSCRIBE_MAX_KEYTERMS: positiveInt.max(1000),
   SCRIBE_USD_PER_HOUR: positiveNumber,
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
+  ELEVENLABS_MONTHLY_AUDIO_HOURS: positiveNumber,
+  ELEVENLABS_BILLING_DAY: positiveInt.max(28),
+  DEEPGRAM_POLICY: z.enum(["on", "off"]),
+  DEEPGRAM_BUDGET_USD: positiveNumber,
+  DEEPGRAM_USD_PER_MINUTE: positiveNumber,
+  DEEPGRAM_API_KEY: z.string().optional(),
   DAILY_SPEND_CEILING_USD: positiveNumber,
+  DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
+  TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
   ELEVENLABS_API_KEY: secret,
-  STRIPE_SECRET_KEY: secret,
+  STRIPE_SECRET_KEY: secret.regex(stripeKeyPattern),
   STRIPE_WEBHOOK_SECRET: secret,
   TURNSTILE_SECRET_KEY: secret,
 });
+
+/** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası). */
+const stripeWebhookSchema = envSchema.pick({ ENVIRONMENT: true, STRIPE_SECRET_KEY: true, STRIPE_WEBHOOK_SECRET: true, STRIPE_PRICE_ID: true });
+
+/** Anahtarın modu. Saf fonksiyondur. */
+function stripeModeOf(key: string): StripeMode {
+  return stripeKeyPattern.exec(key)?.[1] === "live" ? "live" : "test";
+}
+
+/** Yalnızca webhook'un ayarlarını doğrular; hatada alan adlarını taşıyan `ConfigError`. */
+export function parseStripeWebhookConfig(env: Env): StripeWebhookConfig {
+  const parsed = stripeWebhookSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new ConfigError(parsed.error.issues.map((issue: z.core.$ZodIssue): string => issue.path.join(".")));
+  }
+  return {
+    environment: parsed.data.ENVIRONMENT,
+    stripeMode: stripeModeOf(parsed.data.STRIPE_SECRET_KEY),
+    stripePriceId: parsed.data.STRIPE_PRICE_ID,
+    secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET },
+  };
+}
+
+/** Üretimde test modu Stripe anahtarı mı (gerçek ödemeler alınmaz; uyarı yazılır). Saf fonksiyondur. */
+export function isStripeTestModeInProduction(config: StripeWebhookConfig): boolean {
+  return config.environment === "production" && config.stripeMode === "test";
+}
 
 /**
  * Ortamı doğrular ve tipli yapılandırmaya çevirir; hatada yalnızca alan adlarını taşıyan `ConfigError` fırlatır.
@@ -210,8 +346,16 @@ export function parseConfig(env: Env): Config {
   if (value.LLM_ACCOUNT_MAX_TOKENS > value.LLM_MAX_TOKENS) {
     throw new ConfigError(["LLM_ACCOUNT_MAX_TOKENS"]);
   }
+  if (value.MONTHLY_ACCOUNT_TOKEN_CAP > value.MONTHLY_TOKEN_CAP) {
+    throw new ConfigError(["MONTHLY_ACCOUNT_TOKEN_CAP"]);
+  }
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
+  }
+  const deviceCheck: DeviceCheckConfig = deviceCheckConfig(value);
+  const deepgram: DeepgramConfig = deepgramConfig(value);
+  if (value.ENVIRONMENT === "production" && deviceCheck.policy === "required" && deviceCheck.environment !== "production") {
+    throw new ConfigError(["DEVICECHECK_ENVIRONMENT"]);
   }
   if (value.ENVIRONMENT === "production") {
     const placeholders: string[] = placeholderSettings(value);
@@ -225,16 +369,21 @@ export function parseConfig(env: Env): Config {
     appleClientIds: value.APPLE_CLIENT_IDS,
     googleClientIds: value.GOOGLE_CLIENT_IDS,
     adminIdentities: value.ADMIN_IDENTITIES,
+    access: { teamDomain: value.CF_ACCESS_TEAM_DOMAIN, audience: value.CF_ACCESS_AUD === "" ? null : value.CF_ACCESS_AUD },
     dmgUrl: value.DMG_URL,
+    appcastUrl: value.APPCAST_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
-    reportsPerDay: value.REPORTS_PER_DAY,
+    reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,
       environment: value.APP_ATTEST_ENVIRONMENT,
       appIds: value.APP_ATTEST_APP_IDS,
       allowedCategories: categories,
     },
+    deviceCheck,
     trialMeetings: value.TRIAL_MEETINGS,
+    trialDays: value.TRIAL_DAYS,
+    trialDurationMs: value.TRIAL_DAYS * 86_400_000,
     trialAccountDailyTokens: value.TRIAL_ACCOUNT_DAILY_TOKENS,
     trialAccountsPerIpPerDay: value.TRIAL_ACCOUNTS_PER_IP_PER_DAY,
     trialMaxMeetingMinutes: value.TRIAL_MAX_MEETING_MINUTES,
@@ -245,6 +394,7 @@ export function parseConfig(env: Env): Config {
     trialMeetingTokenBudget: value.TRIAL_MEETING_TOKEN_BUDGET,
     subscriberMeetingTokenBudget: value.SUBSCRIBER_MEETING_TOKEN_BUDGET,
     monthlyTokenCap: value.MONTHLY_TOKEN_CAP,
+    monthlyAccountTokenCap: value.MONTHLY_ACCOUNT_TOKEN_CAP,
     dailyTokenCap: value.DAILY_TOKEN_CAP,
     maxMeetingStartsPerDay: value.MAX_MEETING_STARTS_PER_DAY,
     llm: {
@@ -259,11 +409,16 @@ export function parseConfig(env: Env): Config {
       usdPerHour: value.SCRIBE_USD_PER_HOUR,
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
+    elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
+    deepgram,
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
+    dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
+    stripeMode: stripeModeOf(value.STRIPE_SECRET_KEY),
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
+      trialHash: value.TRIAL_HASH_SECRET,
       anthropic: value.ANTHROPIC_API_KEY,
       elevenLabs: value.ELEVENLABS_API_KEY,
       stripe: value.STRIPE_SECRET_KEY,
@@ -271,4 +426,69 @@ export function parseConfig(env: Env): Config {
       turnstile: value.TURNSTILE_SECRET_KEY,
     },
   };
+}
+
+/** Apple ekip ve anahtar kimlikleri 10 karakterlik büyük harf ve rakamdır. */
+const appleIdentifierPattern: RegExp = /^[A-Z0-9]{10}$/;
+
+/** DeviceCheck ayarları. */
+interface DeviceCheckSettings {
+  readonly DEVICECHECK_POLICY: "required" | "off";
+  readonly DEVICECHECK_ENVIRONMENT: DeviceCheckEnvironment;
+  readonly DEVICECHECK_TEAM_ID: string;
+  readonly DEVICECHECK_KEY_ID: string;
+  readonly DEVICECHECK_PRIVATE_KEY?: string | undefined;
+}
+
+/**
+ * DeviceCheck yapılandırması. `off` ise diğer ayarlara bakılmaz. `required` ise ekip ve anahtar kimliği Apple
+ * biçiminde (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez) ve gizli `DEVICECHECK_PRIVATE_KEY` PKCS#8 PEM olmalı;
+ * değilse geçersiz alanların adlarıyla `ConfigError`. Saf fonksiyondur.
+ */
+function deviceCheckConfig(settings: DeviceCheckSettings): DeviceCheckConfig {
+  if (settings.DEVICECHECK_POLICY === "off") {
+    return { policy: "off" };
+  }
+  const privateKeyPem: string = settings.DEVICECHECK_PRIVATE_KEY ?? "";
+  const checks: ReadonlyArray<readonly [string, boolean]> = [
+    ["DEVICECHECK_TEAM_ID", appleIdentifierPattern.test(settings.DEVICECHECK_TEAM_ID)],
+    ["DEVICECHECK_KEY_ID", appleIdentifierPattern.test(settings.DEVICECHECK_KEY_ID)],
+    ["DEVICECHECK_PRIVATE_KEY", privateKeyPem.includes("-----BEGIN PRIVATE KEY-----")],
+  ];
+  const invalid: string[] = checks.filter(([, valid]: readonly [string, boolean]): boolean => !valid).map(([name]: readonly [string, boolean]): string => name);
+  if (invalid.length > 0) {
+    throw new ConfigError(invalid);
+  }
+  return {
+    policy: "required",
+    environment: settings.DEVICECHECK_ENVIRONMENT,
+    teamId: settings.DEVICECHECK_TEAM_ID,
+    keyId: settings.DEVICECHECK_KEY_ID,
+    privateKeyPem,
+  };
+}
+
+/** Deepgram ayarları. */
+interface DeepgramSettings {
+  readonly DEEPGRAM_POLICY: "on" | "off";
+  readonly DEEPGRAM_BUDGET_USD: number;
+  readonly DEEPGRAM_USD_PER_MINUTE: number;
+  readonly DEEPGRAM_API_KEY?: string | undefined;
+}
+
+/**
+ * Deepgram yapılandırması. `off` ise anahtara bakılmaz. `on` ise gizli `DEEPGRAM_API_KEY` en az 16 karakter olmalı;
+ * değilse `ConfigError`. Saf fonksiyondur.
+ */
+function deepgramConfig(settings: DeepgramSettings): DeepgramConfig {
+  const budgetMicroUsd: number = Math.round(settings.DEEPGRAM_BUDGET_USD * 1_000_000);
+  const microUsdPerMinute: number = Math.round(settings.DEEPGRAM_USD_PER_MINUTE * 1_000_000);
+  if (settings.DEEPGRAM_POLICY === "off") {
+    return { access: { policy: "off" }, budgetMicroUsd, microUsdPerMinute };
+  }
+  const apiKey: string = settings.DEEPGRAM_API_KEY ?? "";
+  if (apiKey.length < 16) {
+    throw new ConfigError(["DEEPGRAM_API_KEY"]);
+  }
+  return { access: { policy: "on", apiKey }, budgetMicroUsd, microUsdPerMinute };
 }

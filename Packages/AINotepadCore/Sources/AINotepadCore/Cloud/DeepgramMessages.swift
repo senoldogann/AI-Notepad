@@ -46,14 +46,36 @@ public func parseDeepgramMessage(data: Data) throws -> DeepgramMessage {
     }
 }
 
-/// Canlı dinleme adresi. Her zaman somut dil kullanılır: `multi` ölçümde güvenilmez çıktı.
+/// Canlı dinleme adresinin dil ve terimler dışındaki seçenekleri.
+public struct DeepgramListenOptions: Sendable, Equatable {
+    public let model: String
+    /// Deepgram'ın model geliştirme programından çıkılır (`mip_opt_out=true`): ses ve metin yalnızca istek işlenirken
+    /// tutulur, model eğitiminde kullanılmaz.
+    public let optOutOfModelImprovement: Bool
+
+    public init(model: String, optOutOfModelImprovement: Bool) {
+        self.model = model
+        self.optOutOfModelImprovement = optOutOfModelImprovement
+    }
+}
+
+/// Geliştirici sürümünün (kullanıcının kendi Deepgram anahtarı) seçenekleri: Nova-3, hesabın kendi veri ayarı.
+public let developerDeepgramListenOptions: DeepgramListenOptions = DeepgramListenOptions(model: "nova-3", optOutOfModelImprovement: false)
+
+/// Geliştirici sürümünün canlı dinleme adresi (bkz. `deepgramListenURL(language:keyterms:options:)`).
 public func deepgramListenURL(language: MeetingLanguage, keyterms: [String]) -> URL {
+    deepgramListenURL(language: language, keyterms: keyterms, options: developerDeepgramListenOptions)
+}
+
+/// Canlı dinleme adresi. Her zaman somut dil kullanılır: `multi` ölçümde güvenilmez çıktı. Saf fonksiyondur.
+public func deepgramListenURL(language: MeetingLanguage, keyterms: [String], options: DeepgramListenOptions) -> URL {
     var components: URLComponents = URLComponents()
     components.scheme = "wss"
     components.host = "api.deepgram.com"
     components.path = "/v1/listen"
+    let privacy: [URLQueryItem] = options.optOutOfModelImprovement ? [URLQueryItem(name: "mip_opt_out", value: "true")] : []
     components.queryItems = [
-        URLQueryItem(name: "model", value: "nova-3"),
+        URLQueryItem(name: "model", value: options.model),
         URLQueryItem(name: "language", value: language.rawValue),
         URLQueryItem(name: "encoding", value: "linear16"),
         URLQueryItem(name: "sample_rate", value: "16000"),
@@ -64,7 +86,7 @@ public func deepgramListenURL(language: MeetingLanguage, keyterms: [String]) -> 
         // Son geçiş metni zaten yeniden yazar.
         URLQueryItem(name: "no_delay", value: "true"),
     // Adlar ve terimler (keyterm prompting, nova-3): her terim ayrı parametre.
-    ] + keyterms.map { URLQueryItem(name: "keyterm", value: $0) }
+    ] + privacy + keyterms.map { URLQueryItem(name: "keyterm", value: $0) }
     // Sabit bileşenlerden üretildiği için her zaman geçerlidir.
     return components.url!
 }

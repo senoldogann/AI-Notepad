@@ -2,12 +2,25 @@ import CryptoKit
 import Foundation
 import Security
 
-/// Abonelik uygulamasının özel adres şeması: sitedeki Google girişi uygulamayı
-/// `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile açar (bkz. `hostedGoogleIDToken`).
+/// Abonelik uygulamasının giriş dönüş şeması: sitedeki giriş `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…`
+/// adresine gider, ASWebAuthenticationSession bu şemayı yakalar (bkz. `hostedBrowserIdentity`). Şema Launch
+/// Services'e kayıtlı değildir: dönüş yalnızca girişi başlatan oturuma gelir.
 public let hostedURLScheme: String = "com.senoldogan.ainotepad.hosted"
 
-/// Abonelik uygulamasının Anahtar Zinciri servis adı (geliştirici sürümünün `keychainService`'inden ayrı).
-public let hostedKeychainService: String = "AINotepadHosted"
+/// Abonelik uygulamasının Anahtar Zinciri servis adını taşıyan Info.plist anahtarı: Release `AINotepadHosted`, Debug
+/// `AINotepadHosted.debug` (bkz. project.yml `HOSTED_KEYCHAIN_SERVICE`). Geliştirici sürümünün `keychainService`'inden
+/// ayrıdır; Debug derlemesi yayındaki oturuma dokunmaz.
+public let hostedKeychainServiceInfoKey: String = "HostedKeychainService"
+
+/// Paketin Info.plist'indeki Anahtar Zinciri servis adı; yoksa, boşsa ya da derleme ayarı çözülmemişse
+/// `keychainServiceNotConfigured`.
+public func hostedKeychainService(bundle: Bundle) throws -> String {
+    guard let service = bundle.object(forInfoDictionaryKey: hostedKeychainServiceInfoKey) as? String,
+          !service.trimmingCharacters(in: .whitespaces).isEmpty, !service.contains("$(") else {
+        throw HostedClientError.keychainServiceNotConfigured(key: hostedKeychainServiceInfoKey)
+    }
+    return service
+}
 
 /// Info.plist'teki sunucu adresini (`HOSTED_API_BASE`) çözer: http ya da https, ana bilgisayarlı, sorgusuz ve
 /// parçasız olmalı; `.invalid` alan adı (yayındaki yer tutucu) ayarlanmamış sayılır. Saf fonksiyondur.
@@ -35,7 +48,7 @@ public func requireSecureHostedBaseURL(url: URL) throws {
 }
 
 /// Apple ve Google ile giriş için rastgele ham nonce (32 bayt, onaltılık, CSPRNG). Ham değer sunucuya, SHA-256'sı
-/// kimlik sağlayıcısına (Apple isteği ya da Google giriş sayfası) verilir.
+/// kimlik sağlayıcısına (sitedeki giriş sayfası üzerinden) verilir.
 public func makeHostedNonce() throws -> String {
     var bytes: [UInt8] = [UInt8](repeating: 0, count: 32)
     let status: OSStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)

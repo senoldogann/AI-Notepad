@@ -40,7 +40,8 @@ out=".build/release"
 app="$out/export/AINotepad.app"
 dmg="$out/AI-Notepad-$version.dmg"
 
-# Uzun derlemeden önce: aynı derleme numarası appcast'te varsa güncelleme görünmez.
+# Uzun derlemeden önce: yayın yalnızca işlenmiş koddan; aynı derleme numarası appcast'te varsa güncelleme görünmez.
+require_clean_worktree
 require_new_build "$archive_dir/appcast.xml" "$build"
 
 xcodegen generate
@@ -50,11 +51,13 @@ sparkle_bin="$(sparkle_tools_dir)"
 require_sparkle_keychain_key "$sparkle_bin" "$sparkle_account" "$sparkle_public_key"
 
 verify_distribution_app "$app" "$sparkle_public_key"
-# iCloud eşitlemesi Developer ID profilindeki iCloud yetkisini ister.
+# iCloud eşitlemesi Developer ID profilindeki iCloud yetkisini ister; profil uygulamaya gömülü olmalı.
+[[ -f "$app/Contents/embedded.provisionprofile" ]] || { echo "Developer ID profili gömülü değil." >&2; exit 1; }
 [[ "$(app_entitlements "$app")" == *"iCloud.com.senoldogan.AINotepad"* ]] || { echo "iCloud yetkisi eksik." >&2; exit 1; }
 require_info_value "$app" CFBundleDisplayName "AI-Notepad"
 require_info_value "$app" SUFeedURL "https://github.com/$repo/releases/latest/download/appcast.xml"
 
+notarize_app "$app"
 make_notarized_dmg "$app" "$dmg" "AI-Notepad $version" Config/DMG/AI-Notepad
 sparkle_sign_dmg "$sparkle_bin" "$sparkle_account" "$dmg"
 update_appcast "$sparkle_bin" "$sparkle_account" "$archive_dir" "$dmg" "$notes" "$repo" "$version" "$build"

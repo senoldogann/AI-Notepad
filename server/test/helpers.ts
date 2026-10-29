@@ -42,6 +42,8 @@ export function req(method: string, path: string, fields: Partial<TestRequest>):
 
 /** Yeni düzenek; Apple JWKS uç noktası hazır bağlanır. */
 export async function createHarness(rootPem: string): Promise<Harness> {
+  // Kalıcı anahtar önbelleği (D1) testler arasında paylaşılır; her düzenek kendi sahte Apple/Google anahtarıyla başlar.
+  await env.DB.prepare("DELETE FROM identity_jwks").run();
   const clock: { nowMs: number } = { nowMs: Date.UTC(2026, 9, 15, 12, 0, 0) };
   const outbound: Request[] = [];
   const routes: Array<{ prefix: string; handler: StubHandler }> = [];
@@ -59,6 +61,7 @@ export async function createHarness(rootPem: string): Promise<Harness> {
     now: (): Date => new Date(clock.nowMs),
     appAttestRootPem: rootPem,
     retryBaseDelayMs: 0,
+    jwksCache: new Map(),
   };
   const harness: Harness = {
     clock,
@@ -242,6 +245,8 @@ export interface StartedMeetingBody {
   readonly kind: "trial" | "subscription";
   readonly tokenBudget: number;
   readonly maxDurationMinutes: number;
+  /** Toplantının en çok süresinin bittiği an (ISO 8601). */
+  readonly expiresAt: string;
   readonly trialMeetingsLeft: number | null;
 }
 
@@ -278,14 +283,17 @@ export function wavFile(sampleRate: number, channels: number, bits: number, data
   return file;
 }
 
-/** Abonelik satırı ekler (webhook testleri dışında kısayol). */
+/**
+ * Abonelik satırı ekler (webhook testleri dışında kısayol). `past_due` durumunda `past_due_since` dönem sonu kabul
+ * edilir (ödeme dönem sonunda başarısız oldu).
+ */
 export async function grantSubscription(userId: string, status: string, periodEndMs: number): Promise<void> {
   const customer: string = `cus_${randomToken(8)}`;
   await env.DB.batch([
     env.DB.prepare("INSERT INTO stripe_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, 0)").bind(userId, customer),
     env.DB.prepare(
-      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, 0)`,
-    ).bind(userId, customer, `sub_${randomToken(8)}`, status, periodEndMs),
+      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, past_due_since, last_event_created, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 0)`,
+    ).bind(userId, customer, `sub_${randomToken(8)}`, status, periodEndMs, status === "past_due" ? periodEndMs : null),
   ]);
 }

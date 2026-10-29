@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Config } from "./config";
-import { randomId } from "./crypto";
+import { randomId, utf8 } from "./crypto";
 import { ApiError } from "./errors";
 import { parseWithSchema } from "./http";
 import { log } from "./log";
@@ -11,14 +11,18 @@ export type ReportKind = "feedback" | "crash" | "contact";
 /** Raporun yönetici durumu. */
 export type ReportStatus = "open" | "done";
 
-/** Çökme raporu JSON'unun en çok uzunluğu (karakter). */
-export const crashPayloadMaxChars: number = 512 * 1024;
+/** Çökme raporu JSON'unun en çok UTF-8 baytı (rapor başına 64 KB). */
+export const crashPayloadMaxBytes: number = 64 * 1024;
 
 /**
  * `POST /v1/reports` gövdesinin en çok baytı: çökme JSON'u bir JSON dizgesi içinde gelir ve kaçışlarla (`\"`) büyür;
- * 512 K karakterlik yük + %40 kaçış payı + diğer alanlar. Gövde bu sınırı aşarsa hiç ayrıştırılmaz (`413`).
+ * 64 KB'lık yük + kaçış payı + diğer alanlar (mesaj en çok 5000 karakter). Gövde bu sınırı aşarsa hiç ayrıştırılmaz
+ * (`413`).
  */
-export const reportBodyMaxBytes: number = 768 * 1024;
+export const reportBodyMaxBytes: number = 160 * 1024;
+
+/** Hesap başına günde (UTC) en çok kabul edilen rapor (geri bildirim ve çökme hesap ister; iletişim formu hesapsızdır). */
+export const reportsPerUserPerDay: number = 20;
 
 /** Yönetici listesinde sayfa boyu. */
 export const reportPageSize: number = 50;
@@ -37,7 +41,7 @@ const osSchema = z.string().trim().min(1).max(80);
  * `POST /v1/reports` gövdesi; alanlar türe göre:
  * - `contact` (site): `message`, `email` ve `turnstileToken` zorunlu;
  * - `feedback` (uygulama): `message` zorunlu, `email` isteğe bağlı;
- * - `crash` (uygulama): `payload` (JSON nesnesi, en çok 512 K karakter) zorunlu, `message` ve `email` isteğe bağlı.
+ * - `crash` (uygulama): `payload` (JSON nesnesi, en çok 64 KB) zorunlu, `message` ve `email` isteğe bağlı.
  * `appVersion` ve `os` her türde isteğe bağlıdır. Türe ait olmayan alan (ör. `feedback` ile `payload`) reddedilir:
  * sessizce yok sayılmaz.
  */
@@ -59,7 +63,8 @@ export const reportSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("crash"),
-    payload: z.string().min(2).max(crashPayloadMaxChars),
+    // Karakter sınırı kaba ön elemedir; asıl sınır UTF-8 baytıdır (`createReport`).
+    payload: z.string().min(2).max(crashPayloadMaxBytes),
     message: messageSchema.optional(),
     email: emailSchema.optional(),
     appVersion: appVersionSchema.optional(),
@@ -80,6 +85,8 @@ interface NewReport {
   readonly message: string | null;
   readonly payload: string | null;
   readonly summary: string;
+  /** Saklanan metin alanlarının UTF-8 baytı (türe göre günlük bayt bütçesi için). */
+  readonly sizeBytes: number;
 }
 
 /** Mach istisna türleri (`mach/exception_types.h`). */
@@ -169,17 +176,29 @@ export function reportSummary(input: ReportInput): string {
   return input.message === undefined ? "crash report" : truncateChars(input.message, summaryMaxChars);
 }
 
+/** Metin alanlarının toplam UTF-8 baytı (null 0 sayılır). Saf fonksiyondur. */
+function utf8Bytes(values: readonly (string | null)[]): number {
+  return values.reduce((sum: number, value: string | null): number => sum + (value === null ? 0 : utf8(value).byteLength), 0);
+}
+
 /** Gövdeden saklanacak satır. Saf fonksiyondur. */
 function newReport(input: ReportInput, userId: string | null): NewReport {
+  const email: string | null = input.email ?? null;
+  const appVersion: string | null = input.appVersion ?? null;
+  const os: string | null = input.os ?? null;
+  const message: string | null = input.message ?? null;
+  const payload: string | null = input.kind === "crash" ? input.payload : null;
+  const summary: string = reportSummary(input);
   return {
     kind: input.kind,
     userId,
-    email: input.email ?? null,
-    appVersion: input.appVersion ?? null,
-    os: input.os ?? null,
-    message: input.message ?? null,
-    payload: input.kind === "crash" ? input.payload : null,
-    summary: reportSummary(input),
+    email,
+    appVersion,
+    os,
+    message,
+    payload,
+    summary,
+    sizeBytes: utf8Bytes([email, appVersion, os, message, payload, summary]),
   };
 }
 
@@ -189,18 +208,26 @@ export function utcDayStartMs(now: Date): number {
 }
 
 /**
- * Raporu saklar ve kimliğini döndürür. Tüm kullanıcılar için günlük sınır (`REPORTS_PER_DAY`, UTC günü) ekleme ile
- * aynı ifadededir: eşzamanlı istekler sınırı aşamaz; aşılırsa `daily_cap_reached` (429). Log içerik, e-posta ya da yük
- * taşımaz.
+ * Raporu saklar ve kimliğini döndürür. Çökme yükü en çok `crashPayloadMaxBytes` (`413 payload_too_large`). İki günlük
+ * sınır (UTC günü) eklemeyle aynı ifadededir, eşzamanlı istekler aşamaz:
+ * - hesap başına `reportsPerUserPerDay` rapor (hesapsız iletişim formu hariç; o Turnstile ve IP sınırıyla korunur);
+ * - tür başına (geri bildirim, çökme, iletişim ayrı) `REPORT_BYTES_PER_DAY` bayt: bir tür (ör. çökme yağmuru) diğerlerini
+ *   aç bırakmaz.
+ * Aşılırsa `daily_cap_reached` (429). Log içerik, e-posta ya da yük taşımaz.
  */
 export async function createReport(db: D1Database, config: Config, input: ReportInput, userId: string | null, now: Date): Promise<string> {
+  if (input.kind === "crash" && utf8(input.payload).byteLength > crashPayloadMaxBytes) {
+    throw new ApiError("payload_too_large", `Çökme raporu en çok ${crashPayloadMaxBytes / 1024} KB olabilir.`);
+  }
   const report: NewReport = newReport(input, userId);
   const id: string = randomId();
+  const dayStart: number = utcDayStartMs(now);
   const inserted: D1Result = await db
     .prepare(
-      `INSERT INTO reports (id, kind, status, created_at, user_id, email, app_version, os, message, payload, summary)
-       SELECT ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?
-       WHERE (SELECT COUNT(*) FROM reports WHERE created_at >= ?) < ?`,
+      `INSERT INTO reports (id, kind, status, created_at, user_id, email, app_version, os, message, payload, summary, size_bytes)
+       SELECT ?1, ?2, 'open', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+       WHERE (SELECT COALESCE(SUM(size_bytes), 0) FROM reports WHERE kind = ?2 AND created_at >= ?12) + ?11 <= ?13
+         AND (?4 IS NULL OR (SELECT COUNT(*) FROM reports WHERE user_id = ?4 AND created_at >= ?12) < ?14)`,
     )
     .bind(
       id,
@@ -213,15 +240,28 @@ export async function createReport(db: D1Database, config: Config, input: Report
       report.message,
       report.payload,
       report.summary,
-      utcDayStartMs(now),
-      config.reportsPerDay,
+      report.sizeBytes,
+      dayStart,
+      config.reportBytesPerDay,
+      reportsPerUserPerDay,
     )
     .run();
   if (inserted.meta.changes !== 1) {
-    log("warn", "reports_daily_cap_reached", { kind: report.kind, cap: config.reportsPerDay });
+    const userCount: { count: number } | null =
+      report.userId === null
+        ? null
+        : await db
+            .prepare("SELECT COUNT(*) AS count FROM reports WHERE user_id = ? AND created_at >= ?")
+            .bind(report.userId, dayStart)
+            .first<{ count: number }>();
+    if (userCount !== null && userCount.count >= reportsPerUserPerDay) {
+      log("warn", "reports_user_daily_cap_reached", { kind: report.kind, userId: report.userId, cap: reportsPerUserPerDay });
+      throw new ApiError("daily_cap_reached", `Bir hesaptan günde en çok ${reportsPerUserPerDay} rapor gönderilebilir; yarın yeniden dene.`);
+    }
+    log("warn", "reports_daily_cap_reached", { kind: report.kind, bytes: report.sizeBytes, capBytes: config.reportBytesPerDay });
     throw new ApiError("daily_cap_reached", "Bugün çok fazla rapor alındı; yarın yeniden dene.");
   }
-  log("info", "report_received", { reportId: id, kind: report.kind, userId: report.userId, payloadChars: report.payload?.length ?? 0 });
+  log("info", "report_received", { reportId: id, kind: report.kind, userId: report.userId, bytes: report.sizeBytes });
   return id;
 }
 

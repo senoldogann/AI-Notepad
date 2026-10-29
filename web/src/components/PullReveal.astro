@@ -1,0 +1,125 @@
+---
+// Sayfanın sonu: en altta kaydırmaya devam edilince sayfa hafifçe yukarı kayar, arkadaki bu katman (logo, dinleyen ses
+// dalgası, kısa bir teşekkür) görünür; bırakınca sayfa yaylanarak yerine döner. Katman sayfanın arkasında sabittir ve
+// yalnızca çekilirken görünür; ekran okuyucudan gizlidir (süs). Zemin durgun pastel gökkuşağıdır (şeftali → gül →
+// lavanta → gök; film kapakları gibi koyu temada da açık kalır, yazı koyu); yalnızca dalga çubukları dönüşümle oynar.
+// Davranış: src/client/pull-reveal.ts.
+import Logo from "./Logo.astro";
+import Waveform from "./Waveform.astro";
+import { copy, type CommonCopy } from "../copy";
+
+const text: CommonCopy = copy.common;
+---
+
+<div id="pull-reveal" class="pull-reveal" aria-hidden="true">
+  <div class="pull-reveal__inner">
+    <Logo size={32} />
+    <Waveform seed={text.footer.pullThanks} width={160} height={30} class="pull-reveal__wave" />
+    <p class="pull-reveal__text">{text.footer.pullThanks}</p>
+  </div>
+</div>
+
+<script>
+  import "../client/pull-reveal";
+</script>
+
+<style>
+  /* Sayfanın (`.page-shell`) arkasında, görünümün altına sabit; sayfa zemini onu örter. Yükseklik en çok kaymayla
+     (pull-reveal.ts `maxPull`) aynıdır; içerik alta yaslanır, az çekmede de görünür. */
+  .pull-reveal {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 0;
+    height: 170px;
+    display: grid;
+    justify-items: center;
+    align-content: end;
+    padding-bottom: 22px;
+    /* Durgun gradyan: hiç hareket etmez (bulanıklık filtresi yok). Ortadaki yumuşak ışık yazıyı okunur kılar. */
+    background-color: #f6d3c4;
+    background-image:
+      radial-gradient(ellipse 46% 70% at 50% 78%, rgb(255 248 240 / 0.85) 0%, rgb(255 248 240 / 0.35) 55%, transparent 100%),
+      linear-gradient(100deg, #f7c9b2 0%, #f4bcc6 32%, #dac6ee 66%, #bfd4f4 100%);
+    color: #2e2622;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  /* Film kapaklarının ince greni (durgun döşeme). */
+  .pull-reveal::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("/grain.png");
+    background-size: 180px 180px;
+    mix-blend-mode: overlay;
+    opacity: 0.45;
+  }
+
+  :global(html.is-pulling) .pull-reveal,
+  :global(html.is-springing) .pull-reveal {
+    visibility: visible;
+  }
+
+  /* Çekme oranı `--pull` (0–1): içerik çekildikçe belirir ve büyür. */
+  .pull-reveal__inner {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    opacity: var(--pull, 0);
+    transform: translateY(calc((1 - var(--pull, 0)) * 24px)) scale(calc(0.9 + var(--pull, 0) * 0.1));
+  }
+
+  :global(html.is-springing) .pull-reveal__inner {
+    transition:
+      opacity 360ms ease,
+      transform 560ms cubic-bezier(0.22, 1.25, 0.36, 1);
+  }
+
+  .pull-reveal__inner :global(.pull-reveal__wave) {
+    color: #6b4b40;
+    opacity: 0.7;
+  }
+
+  /* Dalga çubukları yalnızca çekilirken "dinler" (yalnızca dönüşüm; bulanık katman yok). */
+  .pull-reveal__inner :global(.pull-reveal__wave rect) {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  :global(html.is-pulling) .pull-reveal__inner :global(.pull-reveal__wave rect) {
+    animation: pull-listen 900ms ease-in-out infinite alternate;
+  }
+
+  :global(html.is-pulling) .pull-reveal__inner :global(.pull-reveal__wave rect:nth-child(3n)) {
+    animation-delay: -300ms;
+  }
+
+  :global(html.is-pulling) .pull-reveal__inner :global(.pull-reveal__wave rect:nth-child(3n + 1)) {
+    animation-delay: -600ms;
+  }
+
+  @keyframes pull-listen {
+    from {
+      transform: scaleY(0.45);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .pull-reveal__text {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: #2e2622;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pull-reveal {
+      display: none;
+    }
+  }
+</style>

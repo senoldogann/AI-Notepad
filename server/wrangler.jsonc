@@ -20,13 +20,16 @@
     }
   ],
   // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
-  // çökme, iletişim) IP başına dakikada 5; ayrıca tüm kullanıcılar için günlük `REPORTS_PER_DAY`.
+  // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
+  // DEEPGRAM_USER_LIMITER: `POST /v1/live/deepgram-token` kullanıcı başına dakikada 10 (kayıt başında iki akış, kopmada
+  // yeniden bağlanma; ayrıca toplantı başına toplam ve 5 dakikalık pencere sınırı, bkz. src/deepgram.ts).
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
     { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
     { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } },
-    { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } }
+    { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } },
+    { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "1006", "simple": { "limit": 10, "period": 60 } }
   ],
   "vars": {
     "ENVIRONMENT": "development",
@@ -35,20 +38,40 @@
     // Google OAuth istemci kimlikleri (açık değerler); kimlik jetonunun `aud`'u bunlardan biri olmalı. Mac uygulaması
     // Google kimlik jetonunu site üzerinden aldığı için tek istemci sitenin web istemcisidir.
     "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
-    // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğini
-    // öğrenmek için giriş yapıp `GET /v1/admin/stats` çağır: 403 yanıtındaki `error.identity`.
+    // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğin
+    // D1'deki `auth_identities` tablosundadır (bkz. README "İlk dağıtım").
     "ADMIN_IDENTITIES": "",
+    // Yönetici uçlarının Cloudflare Access denetimi: ekip alan adı ve Access uygulamasının AUD etiketi (64 onaltılık).
+    // AUD boşsa denetim kapalıdır (yerelde Access yok); yalnızca `ADMIN_IDENTITIES` denetlenir.
+    "CF_ACCESS_TEAM_DOMAIN": "dry-heart-1ee2.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "",
     // `GET /v1/download/mac` buraya yönlendirir (302) ve günlük sayacı artırır.
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
+    // DMG ile aynı sürümdeki Sparkle akışı: `GET /v1/download/mac/version` sitedeki sürüm numarasını buradan okur.
+    "APPCAST_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml",
     // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
     "PRICE_USD_MONTHLY": "5.99",
-    // Tüm kullanıcılar için günde en çok kabul edilen rapor; aşılınca `429 daily_cap_reached`.
-    "REPORTS_PER_DAY": "500",
+    // Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günde en çok saklanan bayt; aşılınca
+    // `429 daily_cap_reached`. 2 MB ≈ 30 en büyük (64 KB) çökme raporu ya da ~400 uzun geri bildirim. Üst sınır:
+    // 3 tür × 2 MB × 180 günlük saklama ≈ 1,1 GB.
+    "REPORT_BYTES_PER_DAY": "2000000",
     "APP_ATTEST_POLICY": "optional",
     "APP_ATTEST_ENVIRONMENT": "development",
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
     "APP_ATTEST_ALLOWED_CATEGORIES": "3,6",
+    // Apple DeviceCheck ile Mac başına ücretsiz deneme (src/deviceCheck.ts). Tek anahtar DEVICECHECK_POLICY:
+    // "required" ise denemesi henüz bir Mac'e bağlanmamış hesabın deneme toplantısı DeviceCheck jetonu ister ve Mac'in
+    // bit0'ı doluysa (Mac başka hesaba deneme verdi) `403 trial_device_used`; "off" ise DeviceCheck hiç çağrılmaz
+    // (yerelde ve testlerde). "required" iken DEVICECHECK_TEAM_ID ve DEVICECHECK_KEY_ID Apple biçiminde (10 karakter) ve
+    // gizli DEVICECHECK_PRIVATE_KEY (.p8 içeriği) girilmiş olmalı; değilse her istek 500 (config_invalid).
+    "DEVICECHECK_POLICY": "off",
+    "DEVICECHECK_ENVIRONMENT": "development",
+    "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
+    "DEVICECHECK_KEY_ID": "DEVICECHECK_KEY_ID_PENDING",
     "TRIAL_MEETINGS": "3",
+    // Deneme: TRIAL_MEETINGS toplantı ya da TRIAL_DAYS gün, hangisi önce dolarsa. Süre hesabın ilk deneme toplantısıyla
+    // başlar (kayıtla değil); süre dolunca kullanılmamış toplantılar da düşer (`402 trial_exhausted`).
+    "TRIAL_DAYS": "7",
     // Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev
     // aracı) için günlük token sınırı. Türetme: 90 dakikalık toplantının notunu yeniden yazmak ~100 K token (aşağıdaki
     // bütçe açıklaması), bir Sor cevabı ~10–30 K. 300 K ≈ günde 3 not yenileme ya da ~10–20 soru: denemeyi değerlendirmeye
@@ -80,6 +103,10 @@
     // - Aylık: 10 saat × 0,52 M = 5,2 M, %25 pay → 6,5 M (en çok ~0,9 $/ay).
     // - Günlük: en uzun tek toplantının bütçesi (2,6 M) sığsın, kısa ek kullanım kalsın → 3,0 M.
     "MONTHLY_TOKEN_CAP": "6500000",
+    // Abonenin toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev aracı) için aylık ayrı sınır
+    // (MONTHLY_TOKEN_CAP'in parçası; toplantı bütçeleri değişmez). Türetme: notu yeniden yazmak ~100 K, Sor ~10–30 K →
+    // 1,5 M ≈ ayda ~15 not yenileme ya da ~50–100 soru; en çok ~0,2 $/ay. Aşılınca `403 monthly_cap_reached`.
+    "MONTHLY_ACCOUNT_TOKEN_CAP": "1500000",
     "DAILY_TOKEN_CAP": "3000000",
     "MAX_MEETING_STARTS_PER_DAY": "20",
     "LLM_MAX_TOKENS": "8192",
@@ -91,16 +118,37 @@
     "TRANSCRIBE_MAX_KEYTERMS": "100",
     "SCRIBE_USD_PER_HOUR": "0.22",
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+    // ElevenLabs Creator planı: ayda 121 000 kredi, ölçülen ~1080 kredi/ses saati → ~110 saat; dönem ayın 11'inde
+    // yenilenir. Kredi bitince her konuşma tanıma isteği başarısız olur (sağlayıcı uyarmaz): kullanım %80 ve %95'i aşınca
+    // `elevenlabs_capacity_threshold` alarmı, eşiğin üstündeyken günlük `elevenlabs_capacity_high` alarmı; durum
+    // `GET /v1/admin/stats` → `elevenLabs`. Gün 1–28 olmalı.
+    "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+    "ELEVENLABS_BILLING_DAY": "11",
+    // Deepgram canlı metni (src/deepgram.ts): "on" ise açık toplantıya kısa ömürlü Deepgram jetonu verilir (gizli
+    // DEEPGRAM_API_KEY gerekir; yoksa her istek 500), "off" ise verilmez ve uygulama canlı metni Mac'te (WhisperKit)
+    // üretir. Yerelde ve testlerde "off". Bütçe ömür boyudur (sahibin ücretsiz kredisinin canlı metne ayrılan kısmı);
+    // tahmin temkinlidir: toplantının ilk jetonunda kalan en çok süresi × 2 akış peşin sayılır, toplantı bitince gerçek
+    // süreye indirilir. Tahmin bütçeye ulaşınca yeni toplantılar Mac'e geçer (`/v1/me` → `liveEngine: "whisperkit"`);
+    // %80 ve %95'te `deepgram_budget_threshold` alarmı. Fiyat: Nova-3 çok dilli akışın dakika liste fiyatı (temkinli).
+    "DEEPGRAM_POLICY": "off",
+    "DEEPGRAM_BUDGET_USD": "185",
+    "DEEPGRAM_USD_PER_MINUTE": "0.0092",
     "DAILY_SPEND_CEILING_USD": "25",
+    // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
+    // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
+    // (kötüye kullanılan deneme genel tavanı tüketip aboneleri durduramaz). Açık deneme toplantıları sürer.
+    "DAILY_TRIAL_SPEND_CEILING_USD": "10",
     "REFRESH_TOKEN_DAYS": "60",
     "STRIPE_PRICE_ID": "price_placeholder"
   },
   "env": {
     "production": {
       "name": "ainotepad-server-production",
-      // Özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. Geçiş süresince eski
-      // workers.dev adresi de açık kalır (üstteki `workers_dev: true` kalıtılır).
+      // Yalnızca özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. workers.dev adresi ve
+      // sürüm önizleme adresleri kapalıdır: onlar bölgenin WAF hız sınırı kuralını atlardı.
       "routes": [{ "pattern": "api.gistsmith.com", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false,
       "d1_databases": [
         {
           "binding": "DB",
@@ -114,11 +162,12 @@
         { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 300, "period": 60 } },
         { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
         { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } },
-        { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } }
+        { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } },
+        { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "2006", "simple": { "limit": 10, "period": 60 } }
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        // Site; API özel alan adı `https://api.gistsmith.com` (Cloudflare panelinde Worker'a bağlanır), workers.dev de açık.
+        // Site; API özel alan adı `https://api.gistsmith.com` (Worker'ın tek adresi; workers.dev kapalı).
         "SITE_ORIGIN": "https://gistsmith.com",
         "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
         // Sitenin Google web istemcisi (bkz. üstteki geliştirme `vars` açıklaması). `placeholder` içeren değerle üretim
@@ -126,17 +175,33 @@
         "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
         // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
         "ADMIN_IDENTITIES": "google:101383806107899312129",
+        // Access uygulamasının AUD etiketi. Bilerek boş (denetim kapalı): yönetim paneli API'yi Access çerezi olmadan
+        // çağırır; açılırsa panel 403 alır (bkz. src/auth/access.ts).
+        "CF_ACCESS_TEAM_DOMAIN": "dry-heart-1ee2.cloudflareaccess.com",
+        "CF_ACCESS_AUD": "",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
+        "APPCAST_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/appcast.xml",
         "PRICE_USD_MONTHLY": "5.99",
-        "REPORTS_PER_DAY": "500",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "REPORT_BYTES_PER_DAY": "2000000",
         "APP_ATTEST_POLICY": "optional",
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Anahtar Apple Developer › Keys'te "Gistsmith DeviceCheck"; gizli
+        // DEVICECHECK_PRIVATE_KEY (.p8 içeriği) girilmeden üretim her istekte 500 verir.
+        "DEVICECHECK_POLICY": "required",
+        "DEVICECHECK_ENVIRONMENT": "production",
+        "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
+        "DEVICECHECK_KEY_ID": "HRQ8LH4N52",
         "TRIAL_MEETINGS": "3",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "TRIAL_DAYS": "7",
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
-        "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
+        // Lansman (sahibin kararı, 2026-10-29): aynı ofis ve mobil operatör (CGNAT) arkasındaki kullanıcılar takılmasın;
+        // Mac başına deneme DeviceCheck ile ayrıca sınırlı.
+        "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "10",
         "TRIAL_MAX_MEETING_MINUTES": "90",
         "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
         "MONTHLY_CAP_HOURS": "10",
@@ -146,6 +211,8 @@
         "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
         "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
         "MONTHLY_TOKEN_CAP": "6500000",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "MONTHLY_ACCOUNT_TOKEN_CAP": "1500000",
         "DAILY_TOKEN_CAP": "3000000",
         "MAX_MEETING_STARTS_PER_DAY": "20",
         "LLM_MAX_TOKENS": "8192",
@@ -157,9 +224,24 @@
         "TRANSCRIBE_MAX_KEYTERMS": "100",
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
-        "DAILY_SPEND_CEILING_USD": "25",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        // Otomatik yükleme kapalı (sahibin kararı: her ödeme önce sorulur). Bu dönem (11 Ekim–11 Kasım): Creator planı
+        // 121 K + bir kez alınan 137,5 K yükleme kredisi = 258,5 K; ölçülen ~1.080 kredi/saat ile ~239 saat. Yükleme
+        // kredisi 12 ay geçerli, ay başında sıfırlanmaz; her dönem başında hesaptaki kalan krediye göre yeniden ayarla.
+        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "235",
+        "ELEVENLABS_BILLING_DAY": "11",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
+        // Açık (sahibin kararı): kurulan akış jetonun süresi dolsa da sürebilir. DEEPGRAM_BUDGET_USD tahmini izler, kesin
+        // sınır değildir (değiştirilmiş istemci akışı toplantıdan sonra açık tutabilir); kesin üst sınır Deepgram
+        // projesinin otomatik yüklemesiz ön ödemeli bakiyesidir.
+        "DEEPGRAM_POLICY": "on",
+        "DEEPGRAM_BUDGET_USD": "185",
+        "DEEPGRAM_USD_PER_MINUTE": "0.0092",
+        "DAILY_SPEND_CEILING_USD": "50",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "DAILY_TRIAL_SPEND_CEILING_USD": "25",
         "REFRESH_TOKEN_DAYS": "60",
-        "STRIPE_PRICE_ID": "price_1UVgVdLYGoRn8lDP8H0WX1VF"
+        "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt"
       }
     }
   }

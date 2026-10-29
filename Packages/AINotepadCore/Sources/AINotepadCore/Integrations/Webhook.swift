@@ -114,7 +114,8 @@ let discordContentLimit: Int = 2000
 /// en çok görevler okunur; Discord sınırında kesilen kısım sondaki özet ve konu akışı olur, görevler değil. Saf
 /// fonksiyondur.
 public func webhookText(record: MeetingRecord, note: MeetingNote) -> String {
-    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale(identifier: "tr")))
+    // Tarih arayüz dilinde (başlıklar gibi): İngilizce arayüzde "October 29, 2026", Türkçede "29 Ekim 2026".
+    let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(Locale.current))
     var lines: [String] = ["# \(note.title)", "", "_\(date)_", ""]
     let tasks: [NoteTask] = note.tasks.filter(\.isMine) + note.tasks.filter { !$0.isMine }
     if !tasks.isEmpty {
@@ -133,8 +134,9 @@ public func webhookText(record: MeetingRecord, note: MeetingNote) -> String {
 }
 
 /// Gönderilecek gövde: servise uygun biçimde webhook metni (notun dilinde), genel webhook'ta ayrıca yapılandırılmış toplantı.
-/// Saf fonksiyondur.
-public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote) throws -> Data {
+/// Discord'da gönderen adı uygulamanın adıdır (`appName`; yoksa Discord webhook'u oluşturan uygulamanın kayıtlı adını
+/// gösterir). Saf fonksiyondur.
+public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: MeetingNote, appName: String) throws -> Data {
     let markdown: String = webhookText(record: record, note: note)
     let encoder: JSONEncoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
@@ -144,7 +146,7 @@ public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: Meeti
         return try encoder.encode(["text": slackText(markdown: markdown)])
     case .discord:
         let content: String = markdown.count > discordContentLimit ? String(markdown.prefix(discordContentLimit - 1)) + "…" : markdown
-        return try encoder.encode(DiscordMessage(content: content, allowedMentions: DiscordAllowedMentions(parse: [])))
+        return try encoder.encode(DiscordMessage(content: content, username: appName, allowedMentions: DiscordAllowedMentions(parse: [])))
     case .teams:
         return try encoder.encode(TeamsMessage(markdown: markdown))
     case .zoom:
@@ -158,10 +160,13 @@ public func webhookPayload(kind: WebhookKind, record: MeetingRecord, note: Meeti
 /// kimseyi uyarmaz.
 private struct DiscordMessage: Encodable {
     let content: String
+    /// Mesajın gönderen adı (webhook'un kayıtlı adının yerine).
+    let username: String
     let allowedMentions: DiscordAllowedMentions
 
     enum CodingKeys: String, CodingKey {
         case content
+        case username
         case allowedMentions = "allowed_mentions"
     }
 }

@@ -96,7 +96,7 @@ public struct LocalFinalTranscriber: FinalTranscriber {
             turns = try await diarize(samples: samples)
             notice = nil
         } catch {
-            localPassLogger.error("Yerel konuşmacı ayırma başarısız, hata: \(String(describing: error), privacy: .public)")
+            localPassLogger.error("Yerel konuşmacı ayırma başarısız, hata: \(String(describing: error), privacy: .private)")
             turns = []
             notice = String(localized: "Konuşmacılar ayrılamadı (\(userFacingMessage(error: error))); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene.")
         }

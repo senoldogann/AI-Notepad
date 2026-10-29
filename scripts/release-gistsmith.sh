@@ -1,7 +1,8 @@
 #!/bin/bash
-# Abonelik sürümünün (Gistsmith, şema AINotepadHosted) dağıtım sürümü: Gistsmith.app'i Release olarak Developer ID ile
-# imzalar (hardened runtime, zaman damgası), DMG'ye koyar (arka plan Config/DMG/Gistsmith), Apple'a noter onayına
-# gönderir ve onayı DMG'ye ekler (staple). Çıktı: .build/release-gistsmith/Gistsmith-<sürüm>.dmg.
+# Abonelik sürümünün (Gistsmith, şema AINotepadHosted) dağıtım sürümü: çalışma ağacı temizse Gistsmith.app'i Release
+# olarak Developer ID ile imzalar (hardened runtime, zaman damgası), uygulamayı noter onayına gönderip onayı uygulamaya
+# ekler (staple), DMG'ye koyar (arka plan Config/DMG/Gistsmith), DMG'yi de onaylatıp onayı DMG'ye ekler. Çıktı:
+# .build/release-gistsmith/Gistsmith-<sürüm>.dmg.
 #
 # Ardından Sparkle güncellemesini hazırlar: DMG'yi bu sürümün kendi Sparkle anahtarıyla imzalar (hesap "gistsmith";
 # geliştirici sürümünün "ainotepad" anahtarından ayrı), yerel release-archive-gistsmith/ klasöründe kendi
@@ -16,7 +17,6 @@
 #
 # Bir kerelik hazırlık (noter onayı profili, Sparkle araçları): bkz. scripts/release-common.sh. Sparkle anahtarı
 # `generate_keys --account gistsmith`; açık anahtar Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY_GISTSMITH'tir.
-# Developer ID profili Apple ile giriş yetkisini içermeli (Xcode'un otomatik imzalaması alır).
 #
 # release-archive-gistsmith/ (repoya girmez) appcast.xml'in yerel kopyasını tutar; silinmez, her sürüm üstüne eklenir.
 # Başka bir Mac'ten yayınlarken önce yayımlanmış appcast indirilir:
@@ -41,7 +41,8 @@ out=".build/release-gistsmith"
 app="$out/export/Gistsmith.app"
 dmg="$out/Gistsmith-$version.dmg"
 
-# Uzun derlemeden önce: aynı derleme numarası appcast'te varsa güncelleme görünmez.
+# Uzun derlemeden önce: yayın yalnızca işlenmiş koddan; aynı derleme numarası appcast'te varsa güncelleme görünmez.
+require_clean_worktree
 require_new_build "$archive_dir/appcast.xml" "$build"
 
 xcodegen generate
@@ -51,14 +52,21 @@ sparkle_bin="$(sparkle_tools_dir)"
 require_sparkle_keychain_key "$sparkle_bin" "$sparkle_account" "$sparkle_public_key"
 
 verify_distribution_app "$app" "$sparkle_public_key"
-# Abonelik hesabı Apple ile girişi kullanır; iç kimlikler değişmez (izinler, Anahtar Zinciri ve veri klasörü paket
-# kimliğine bağlı).
-[[ "$(app_entitlements "$app")" == *"com.apple.developer.applesignin"* ]] || { echo "Apple ile giriş yetkisi eksik." >&2; exit 1; }
+# Apple ile giriş yetkisi olmamalı: Apple onu Developer ID profillerine vermez (dışa aktarım reddedilir); giriş tarayıcıda
+# yapılır. İç kimlikler değişmez (izinler, Anahtar Zinciri ve veri klasörü paket kimliğine bağlı).
+[[ "$(app_entitlements "$app")" != *"com.apple.developer.applesignin"* ]] || { echo "Apple ile giriş yetkisi Developer ID'de kullanılamaz." >&2; exit 1; }
 require_info_value "$app" CFBundleIdentifier "com.senoldogan.AINotepad.hosted"
 require_info_value "$app" CFBundleDisplayName "Gistsmith"
 require_info_value "$app" HostedAPIBase "https://api.gistsmith.com"
+require_info_value "$app" HostedSiteBase "https://gistsmith.com"
 require_info_value "$app" SUFeedURL "https://github.com/$repo/releases/latest/download/appcast.xml"
+# Abonelik sürümü iCloud kullanmaz (eşitleme kapalı); Release Anahtar Zinciri servisi ve veri klasörü yayındakiler.
+require_no_icloud_entitlement "$app"
+require_info_value "$app" HostedKeychainService "AINotepadHosted"
+require_info_value "$app" AINotepadDataFolderName "AINotepad Hosted"
+require_info_value "$app" CFBundleDevelopmentRegion "en"
 
+notarize_app "$app"
 make_notarized_dmg "$app" "$dmg" "Gistsmith $version" Config/DMG/Gistsmith
 sparkle_sign_dmg "$sparkle_bin" "$sparkle_account" "$dmg"
 update_appcast "$sparkle_bin" "$sparkle_account" "$archive_dir" "$dmg" "$notes" "$repo" "$version" "$build"

@@ -20,6 +20,7 @@ private func launchSettingsSection(arguments: [String]) -> SettingsSection {
     case "anahtarlar": return .keys
     case "baglantilar": return .connections
     case "kisayollar": return .shortcuts
+    case "tanilama": return .diagnostics
     #if HOSTED_EDITION
     case "hesap": return .account
     #endif
@@ -38,6 +39,8 @@ private enum SettingsSection: CaseIterable {
     case keys
     case connections
     case shortcuts
+    /// Sürüm, sistem, hesap, sunucuya erişim, izinler, model, güncelleme ve son hatalar (bkz. App/DiagnosticsViews.swift).
+    case diagnostics
 
     /// Sekme çubuğundaki sekmeler: abonelik sürümünde LLM ve Anahtarlar yok (model ve anahtar sunucudadır).
     static var visible: [SettingsSection] {
@@ -59,6 +62,7 @@ private enum SettingsSection: CaseIterable {
         case .keys: "Anahtarlar"
         case .connections: "Bağlantılar"
         case .shortcuts: "Kısayollar"
+        case .diagnostics: "Tanılama"
         }
     }
 }
@@ -67,6 +71,7 @@ private enum SettingsSection: CaseIterable {
 /// satır (solda başlık ve açıklama, sağda denetim).
 struct SettingsPage: View {
     let model: AppModel
+    let router: MainWindowRouter
     let shortcuts: ShortcutController
     let updater: AppUpdater
     let crashReports: CrashReportCenter
@@ -74,13 +79,34 @@ struct SettingsPage: View {
     let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
+    /// Başlığın altındaki özet: yalnızca bu sürümde görünen sekmeleri anar (abonelik sürümünde motor, model ve anahtar
+    /// ayarı yok).
+    private var settingsSubtitle: LocalizedStringKey {
+        #if HOSTED_EDITION
+        "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet."
+        #else
+        "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet."
+        #endif
+    }
+
+    #if HOSTED_EDITION
+    /// İstenmişse Hesap sekmesini seçer ve isteği sıfırlar.
+    private func selectAccountIfRequested() {
+        guard router.opensAccountSettings else {
+            return
+        }
+        router.opensAccountSettings = false
+        section = .account
+    }
+    #endif
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Ayarlar")
                     .appFont(size: 30, weight: .regular)
                     .tracking(-0.5)
-                Text("Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.")
+                Text(settingsSubtitle)
                     .appFont(size: 14, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .padding(.top, 4)
@@ -89,10 +115,9 @@ struct SettingsPage: View {
                 Group {
                     switch section {
                     #if HOSTED_EDITION
+                    // Giriş ya da çıkışta kurulum eksikleri uygulama düzeyinde yenilenir (bkz. AINotepadApp).
                     case .account:
-                        HostedAccountSettings(account: .shared)
-                            // Giriş ya da çıkışta kurulum eksikleri (menüdeki "giriş yapılmamış") yenilenir.
-                            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
+                        HostedAccountSettings(account: .shared, isMeetingInFlight: model.isBusy || model.isStarting)
                     #endif
                     case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
@@ -100,11 +125,17 @@ struct SettingsPage: View {
                     case .keys: KeySettings(model: model)
                     case .connections: ConnectionSettings(model: model)
                     case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+                    case .diagnostics: DiagnosticsSettings(model: model, updater: updater)
                     }
                 }
                 .id(section)
                 .transition(.opacity)
                 .padding(.top, 8)
+                #if HOSTED_EDITION
+                // Kullanım göstergesi ya da bildirimi Ayarlar'ı Hesap sekmesinde açar.
+                .onAppear { selectAccountIfRequested() }
+                .onChange(of: router.opensAccountSettings) { (_: Bool, _: Bool) in selectAccountIfRequested() }
+                #endif
             }
             .animation(.smooth(duration: 0.2), value: section)
             // Geniş pencerede form satırları ekran boyu uzamasın; kaydırma alanı tam genişlikte.
@@ -129,9 +160,12 @@ private struct SettingsTabs: View {
                     Button {
                         selection = item
                     } label: {
+                        // Sekme adı bölünmez (dar pencerede "Appearanc/e" oluyordu).
                         Text(item.title)
                             .appFont(size: 14, weight: isSelected ? .medium : .regular)
                             .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
+                            .lineLimit(1)
+                            .fixedSize()
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background {
@@ -163,6 +197,15 @@ private struct SettingsTabs: View {
 }
 
 /// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
+/// Tanıma sözlüğünün açıklaması: sözlüğün nerede uygulandığı sürüme göre (abonelikte motor seçimi yok).
+private var vocabularyHelp: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Canlı metinde ve kayıt bitince yapılan son geçişte uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir."
+    #else
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir."
+    #endif
+}
+
 private struct GeneralSettings: View {
     let model: AppModel
     let updater: AppUpdater
@@ -197,7 +240,7 @@ private struct GeneralSettings: View {
                     Text("Yeniden başlatınca uygulanır.").foregroundStyle(Theme.ink)
                 }
                 if let relaunchError {
-                    Text(relaunchError).foregroundStyle(.red)
+                    NoticeText(relaunchError, severity: .error)
                 }
             } control: {
                 HStack(spacing: 8) {
@@ -265,7 +308,11 @@ private struct GeneralSettings: View {
                 model.primaryLanguageChanged()
             }
             SettingsRow(title: Text("Kurulum")) {
+                #if HOSTED_EDITION
+                Text("İzinler, hesap ve kısayollar adım adım.")
+                #else
                 Text("İzinler, anahtarlar ve kısayollar adım adım.")
+                #endif
             } control: {
                 Button("Kurulumu yeniden aç") { onShowSetup() }
             }
@@ -277,7 +324,7 @@ private struct GeneralSettings: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Tanıma sözlüğü").appFont(size: 15, weight: .medium)
-                Text("Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Bulut motorunda (Deepgram, ElevenLabs) uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.")
+                Text(vocabularyHelp)
                     .appFont(size: 13, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -297,7 +344,7 @@ private struct GeneralSettings: View {
             SettingsRow(title: Text("Takvimi kullan")) {
                 Text("Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.")
                 if let error = model.calendarError {
-                    Text(error).foregroundStyle(.red)
+                    NoticeText(error, severity: .error)
                 }
             } control: {
                 Toggle("Takvimi kullan", isOn: Binding<Bool>(
@@ -316,7 +363,7 @@ private struct GeneralSettings: View {
                 SettingsRow(title: Text("Toplantıdan 1 dk önce hatırlat")) {
                     Text("Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.")
                     if let problem = model.notificationProblem {
-                        Text(problem).foregroundStyle(.orange)
+                        NoticeText(problem, severity: .attention)
                     }
                 } control: {
                     Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
@@ -408,7 +455,7 @@ private struct GeneralSettings: View {
             SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
                 Text("Açıkken 8 sn'den fazla konuşan herkesin ses izi (sesi tanıyan sayılar; biyometrik veridir) o toplantıyla saklanır; ad verdiğin kişininki bu Mac'te hatırlanır ve sonraki toplantılarda adı kendiliğinden gelir. Toplantı silinince ondan öğrenilen izler, sesi silinince toplantıdaki izler de silinir. Başkalarının ses izini saklamadan önce onaylarını al.")
                 if let error = model.voiceRegistryError {
-                    Text(error).foregroundStyle(.red)
+                    NoticeText(error, severity: .error)
                 }
             } control: {
                 Toggle("Konuşmacıları sesinden tanı", isOn: $voiceRecognition).settingsToggle()
@@ -448,7 +495,7 @@ private struct GeneralSettings: View {
             #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
-            FeedbackSettingsRow()
+            FeedbackSettingsRow { await diagnosticsReportText(model: model, updater: updater) }
         }
     }
 }
@@ -479,7 +526,7 @@ private struct CloudSyncRow: View {
             case .working:
                 Text("Toplantılar taşınıyor…").foregroundStyle(Theme.ink)
             case .failed(let message):
-                Text(message).foregroundStyle(.red)
+                NoticeText(message, severity: .error)
             case .idle:
                 if model.cloudDownloadingCount > 0 {
                     Text("\(model.cloudDownloadingCount) toplantı iCloud'dan iniyor…").foregroundStyle(Theme.ink)
@@ -874,7 +921,7 @@ private struct LLMSettings: View {
                 case .succeeded(let reply):
                     Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.tint).lineLimit(1)
                 case .failed(let message):
-                    Text(message).foregroundStyle(.red)
+                    NoticeText(message, severity: .error)
                 }
             } control: {
                 Button("Bağlantıyı dene") {
@@ -996,7 +1043,7 @@ private struct KeySettings: View {
                 case .working:
                     Text("Kopyalanıyor…").foregroundStyle(Theme.ink)
                 case .failed(let message):
-                    Text(message).foregroundStyle(.red)
+                    NoticeText(message, severity: .error)
                 case .idle:
                     if !model.sharedKeyAccounts.isEmpty {
                         Text("iPhone'da kullanılıyor: \(model.sharedKeyAccounts.map(secretAccountTitle).joined(separator: ", "))").foregroundStyle(Theme.ink)
@@ -1179,7 +1226,9 @@ private struct ConnectionCard<Action: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 6)
+            // Düğmeler sıkıştırılmaz (dar kartta "Değiştir" iki satıra bölünüyordu); yer daralınca başlık kırılır.
             action
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
@@ -1250,7 +1299,7 @@ private struct MCPClientCard: View {
                     if !isInstalled {
                         Text("Bu Mac'te yüklü değil").foregroundStyle(Theme.muted)
                     } else if let errorMessage {
-                        Text(errorMessage).foregroundStyle(.red)
+                        NoticeText(errorMessage, severity: .error)
                     } else if isConnected {
                         Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(Color.green)
@@ -1277,7 +1326,7 @@ private struct MCPClientCard: View {
         }
         do {
             let config: JSONValue = try readMCPConfig(file: client.configFile(home: FileManager.default.homeDirectoryForCurrentUser))
-            isConnected = isMCPServerConnected(config: config, client: client, executablePath: try executablePath())
+            isConnected = isMCPServerConnected(config: config, client: client, executablePath: try executablePath(), serverName: mcpServerName(appName: appName))
             errorMessage = nil
         } catch {
             errorMessage = userFacingMessage(error: error)
@@ -1286,7 +1335,7 @@ private struct MCPClientCard: View {
 
     private func connect() {
         do {
-            try connectMCPClient(client: client, executablePath: try executablePath(), home: FileManager.default.homeDirectoryForCurrentUser)
+            try connectMCPClient(client: client, executablePath: try executablePath(), serverName: mcpServerName(appName: appName), home: FileManager.default.homeDirectoryForCurrentUser)
             justConnected = true
             refresh()
         } catch {
@@ -1296,7 +1345,7 @@ private struct MCPClientCard: View {
 
     private func disconnect() {
         do {
-            try disconnectMCPClient(client: client, home: FileManager.default.homeDirectoryForCurrentUser)
+            try disconnectMCPClient(client: client, serverName: mcpServerName(appName: appName), home: FileManager.default.homeDirectoryForCurrentUser)
             justConnected = false
             refresh()
         } catch {
@@ -1471,9 +1520,8 @@ private struct WebhookSettings: View {
                     .appFont(size: 14, weight: .semibold)
                     .foregroundStyle(Theme.ink)
                 if destination.needsReconnect {
-                    Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill")
+                    NoticeText("Oturumun süresi doldu; yeniden bağlan", severity: .attention)
                         .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(.orange)
                 } else {
                     Text(verbatim: destinationDetail(destination: destination))
                         .appFont(size: 12, weight: .regular)
@@ -1592,9 +1640,8 @@ private struct WebhookSettings: View {
                 .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
                 .transition(.opacity)
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 13, weight: .regular)
-                .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
                 .transition(.opacity)
@@ -1660,7 +1707,7 @@ private struct WebhookSettings: View {
     private var appleNotesCard: some View {
         ConnectionCard(
             tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
-            detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
+            detail: notesStatus.map { Text(verbatim: $0) } ?? Text("\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
         ) {
             Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
                 .settingsToggle()
@@ -1682,7 +1729,7 @@ private struct WebhookSettings: View {
     private var folderCard: some View {
         ConnectionCard(
             tile: BrandTile(mark: .symbol("folder.fill"), palette: .ocean, seed: "klasor", size: 38), title: Text("Klasör (Obsidian, iCloud)"),
-            detail: Text(folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))),
+            detail: folderStatus.map { Text(verbatim: $0) } ?? (markdownFolder.isEmpty ? Text("Markdown dosyası olarak") : Text(verbatim: (markdownFolder as NSString).abbreviatingWithTildeInPath)),
             badge: nil
         ) {
             if markdownFolder.isEmpty {
@@ -1863,13 +1910,7 @@ private struct WebhookSettings: View {
     }
 
     private func chooseFolder() {
-        let panel: NSOpenPanel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = String(localized: "Seç")
-        panel.message = String(localized: "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)")
-        guard panel.runModal() == .OK, let url = panel.url else {
+        guard let url = pickMarkdownFolder() else {
             return
         }
         markdownFolder = url.path
@@ -1877,6 +1918,22 @@ private struct WebhookSettings: View {
         folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
             ?? String(localized: "Son not klasöre yazıldı.")
     }
+}
+
+/// Notların Markdown olarak yazılacağı klasörü sorar (Ayarlar › Bağlantılar ve toplantıdaki "Klasöre Markdown kaydet");
+/// vazgeçilirse nil.
+@MainActor
+func pickMarkdownFolder() -> URL? {
+    let panel: NSOpenPanel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = true
+    panel.prompt = String(localized: "Seç")
+    panel.message = String(localized: "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)")
+    guard panel.runModal() == .OK, let url = panel.url else {
+        return nil
+    }
+    return url
 }
 
 /// Görev araçları: Linear ve Jira'ya tek tıkla bağlanma (MCP, tarayıcıda izin; API anahtarı gerekmez), görevlerin
@@ -2016,7 +2073,7 @@ private struct TrackerTargetPicker: View {
             } else if let errorMessage {
                 Button("Yeniden dene", systemImage: "arrow.clockwise") { Task { await load() } }
                     .controlSize(.small)
-                    .hoverHint(LocalizedStringKey(errorMessage), alignment: .trailing, edge: .bottom)
+                    .hoverHint(verbatim: errorMessage, alignment: .trailing, edge: .bottom)
             } else {
                 ProgressView().controlSize(.small)
             }
@@ -2093,7 +2150,7 @@ private struct ShortcutSettings: View {
             ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
                 SettingsRow(title: Text(action.title)) {
                     if let error = shortcuts.errors[action] {
-                        Text(error).foregroundStyle(.red)
+                        NoticeText(error, severity: .error)
                     }
                 } control: {
                     ShortcutRecorder(binding: shortcuts.currentBinding(action: action)) { (binding: KeyBinding) -> Void in
@@ -2274,15 +2331,20 @@ extension View {
     }
 }
 
-/// İstemcinin MCP yapılandırması; yol JSON olarak kaçışlanır (tırnak ya da ters bölü içeren yol yapılandırmayı bozmasın).
+/// JSON metin değeri: tırnak ve ters bölü kaçışlanır (tırnak ya da ters bölü içeren yol yapılandırmayı bozmasın).
 /// Saf fonksiyondur.
-func mcpClientConfig(executablePath: String) -> String {
-    let encoded: String = "\"" + executablePath.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
-    return """
+private func jsonStringLiteral(text: String) -> String {
+    "\"" + text.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+}
+
+/// İstemcinin MCP yapılandırması: sunucu adı sürüme özgüdür (bkz. `mcpServerName(appName:)`), tek tıkla bağlamanın
+/// yazdığıyla aynıdır. Saf fonksiyondur.
+func mcpClientConfig(executablePath: String, serverName: String) -> String {
+    """
     {
       "mcpServers": {
-        "ai-notepad": {
-          "command": \(encoded),
+        \(jsonStringLiteral(text: serverName)): {
+          "command": \(jsonStringLiteral(text: executablePath)),
           "args": ["--mcp"]
         }
       }
@@ -2298,7 +2360,9 @@ private struct MCPSettings: View {
 
     var body: some View {
         // Elle kopyalanan yapılandırma da uygulamanın gerçek yolunu gösterir (uygulama paketi her zaman bir çalıştırılabilir içerir).
-        let config: String = mcpClientConfig(executablePath: Bundle.main.executableURL?.path ?? Bundle.main.bundlePath)
+        let config: String = mcpClientConfig(
+            executablePath: Bundle.main.executableURL?.path ?? Bundle.main.bundlePath, serverName: mcpServerName(appName: appName)
+        )
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Diğer MCP istemcileri")
             SettingsRow(title: Text("Elle yapılandırma")) {
@@ -2346,7 +2410,7 @@ struct LocalLLMSetup: View {
             case .found(let names):
                 Text("\(names.count) model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.")
             case .missing(let message):
-                Text("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b").foregroundStyle(.orange)
+                NoticeText("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b", severity: .attention)
             case .applied(let name):
                 Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }

@@ -1,12 +1,22 @@
+import type { JSONWebKeySet } from "jose";
+
+/** Önbellekteki kimlik sağlayıcısı anahtarları ve alındıkları an (ms). */
+export interface CachedJwks {
+  readonly keys: JSONWebKeySet;
+  readonly fetchedAt: number;
+}
+
 /**
- * Dış dünyaya açılan uçlar: dışarı giden istekler, saat, App Attest kök sertifikası ve yeniden deneme beklemesi.
- * Üretimde `index.ts` gerçek değerleri verir; testler yalnızca bu sınırı değiştirir.
+ * Dış dünyaya açılan uçlar: dışarı giden istekler, saat, App Attest kök sertifikası, yeniden deneme beklemesi ve
+ * kimlik sağlayıcısı anahtarlarının (Apple, Google JWKS) önbelleği (JWKS adresi → anahtarlar; Worker örneği başına
+ * bellekte). Üretimde `index.ts` gerçek değerleri verir; testler yalnızca bu sınırı değiştirir.
  */
 export interface Platform {
   readonly fetch: typeof fetch;
   readonly now: () => Date;
   readonly appAttestRootPem: string;
   readonly retryBaseDelayMs: number;
+  readonly jwksCache: Map<string, CachedJwks>;
 }
 
 /** İstek bağlamı: istek boyunca değişmeyen her şey. */

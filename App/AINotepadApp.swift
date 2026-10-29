@@ -16,7 +16,7 @@ private func writeAcceptanceResult(line: String) {
     do {
         try text.write(to: url, atomically: true, encoding: .utf8)
     } catch {
-        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .public)")
+        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .private)")
     }
 }
 #endif
@@ -26,6 +26,13 @@ private func writeAcceptanceResult(line: String) {
 @main
 enum AppEntry {
     static func main() {
+        #if HOSTED_EDITION
+        // Gistsmith'in arayüzü varsayılan olarak İngilizce açılır (macOS'un dili Türkçe olsa da); Ayarlar'dan
+        // değiştirilebilir. Hiçbir metin okunmadan yazılmalı.
+        if let identifier = Bundle.main.bundleIdentifier {
+            applyDefaultInterfaceLanguageOnce(bundleIdentifier: identifier, language: .english)
+        }
+        #endif
         // Görünen ad (bkz. `appName`) metinlerden önce okunur: yoksa uygulama hemen, açık hatayla kapanır.
         _ = appName
         // Veri klasörü adı Info.plist'ten gelir; yoksa uygulama başka bir uygulamanın verisine yazmasın diye açılmaz.
@@ -33,27 +40,79 @@ enum AppEntry {
             _ = try AppPaths.dataFolderName(bundle: .main)
         } catch {
             let message: String = userFacingMessage(error: error)
-            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
             FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
             fatalError(message)
         }
+        #if HOSTED_EDITION
+        // Anahtar Zinciri servis adı da Info.plist'ten (Debug ve Release ayrı); yoksa oturum yanlış yere yazılmasın diye
+        // uygulama açılmaz.
+        do {
+            _ = try hostedKeychainService(bundle: .main)
+        } catch {
+            let message: String = userFacingMessage(error: error)
+            appLogger.fault("Anahtar Zinciri servisi tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
+            FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
+            fatalError(message)
+        }
+        #endif
         #if DEBUG
         if CommandLine.arguments.contains("--icloud-yokla") {
             probeICloud()
             return
+        }
+        // "--tanitim <sahne>": sahte verilerle ekran görüntüsü modu; veri geçici eve yazılır, değilse açılmaz.
+        if isDemoMode {
+            do {
+                _ = try demoScene(arguments: CommandLine.arguments)
+                #if HOSTED_EDITION
+                // Abonelikte veri hesap başına: tanıtım verisi sahte bir hesabın klasörüne yazılır.
+                try AppPaths.activateAccount(key: accountDataKey(userId: "tanitim"))
+                #endif
+                try seedDemoData(now: Date())
+            } catch {
+                FileHandle.standardError.write(Data("\(appName) tanıtım: \(error)\n".utf8))
+                fatalError(String(describing: error))
+            }
         }
         #endif
         guard CommandLine.arguments.contains("--mcp") else {
             AINotepadApp.main()
             return
         }
+        #if HOSTED_EDITION
+        // Giriş kapısı: oturum yoksa yerel MCP sunucusu da açılmaz (toplantı arşivi girişten sonra kullanılır). Yalnızca
+        // giriş yapmış hesabın arşivi okunur; her araç çağrısında oturum yeniden denetlenir (bkz.
+        // `hostedMCPAccessDenial`: çıkış ya da başka hesapla giriş yapılınca arşiv okunmaz).
+        let archive: HostedMCPArchive
+        do {
+            guard let current = try hostedMCPArchive(bundle: .main) else {
+                FileHandle.standardError.write(Data("\(appName) MCP: \(String(localized: "Önce uygulamayı açıp giriş yap."))\n".utf8))
+                exit(1)
+            }
+            archive = current
+        } catch {
+            FileHandle.standardError.write(Data("\(appName) MCP: \(userFacingMessage(error: error))\n".utf8))
+            exit(1)
+        }
+        let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        runMCPServer(
+            input: .standardInput, output: .standardOutput, sessionsDirectories: [archive.sessionsDirectory],
+            accessDenial: { hostedMCPAccessDenial(archive: archive, bundle: .main) }, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
+        )
+        #else
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version, noteLanguage: selectedNoteLanguage(), appName: appName)
+            runMCPServer(
+                input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()),
+                // Geliştirici sürümünde oturum yoktur, ret de yoktur.
+                accessDenial: { nil }, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
+            )
         } catch {
             FileHandle.standardError.write(Data("\(appName) MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)
         }
+        #endif
     }
 }
 
@@ -114,8 +173,8 @@ struct AINotepadApp: App {
             appLogger.info("Not effort'u high'a taşındı (xhigh/max notu kesiyordu)")
         }
         #if HOSTED_EDITION
-        // Abonelik sürümünde motor seçimi yok: canlı metin Mac'te (WhisperKit).
-        let engine: LiveEngine = hostedLiveEngine
+        // Abonelik sürümünde motor seçimi yok: yerel motor WhisperKit; kaydın canlı motoru sunucuya göre seçilir.
+        let engine: LiveEngine = hostedLocalEngine
         #else
         let engine: LiveEngine = LiveEngine(rawValue: UserDefaults.standard.string(forKey: SettingsKey.liveEngine) ?? "") ?? .deepgram
         #endif
@@ -123,12 +182,14 @@ struct AINotepadApp: App {
         // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
         let player: MeetingAudioPlayer = MeetingAudioPlayer()
         _player = State(initialValue: player)
-        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün.
-        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main)))
-        let crashReports: CrashReportCenter = CrashReportCenter()
-        _crashReports = State(initialValue: crashReports)
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode, player: player)
         _model = State(initialValue: model)
+        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün. Kayıt ya da
+        // işleme sürerken güncelleme uygulamayı yeniden başlatmaz (çıkış korumasıyla aynı koşul).
+        let updater: AppUpdater = AppUpdater(publicKey: sparklePublicKey(bundle: .main), isBusy: { model.isBusy })
+        _updater = State(initialValue: updater)
+        let crashReports: CrashReportCenter = CrashReportCenter()
+        _crashReports = State(initialValue: crashReports)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
         let router: MainWindowRouter = MainWindowRouter()
         _router = State(initialValue: router)
@@ -143,6 +204,7 @@ struct AINotepadApp: App {
         _shortcuts = State(initialValue: shortcuts)
         // Kayıt ya da işleme sürerken çıkış (⌘Q, Dock, menü) sorulur; toplantı yarıda kalmasın.
         QuitGuard.shared.isBusy = { model.isBusy }
+        model.isStartBlocked = { isSignInRequired() || startBlockNotice(model: model) != nil }
         AppDelegate.onStartFromNotification = {
             guard !model.isRecording else {
                 return
@@ -170,10 +232,18 @@ struct AINotepadApp: App {
                 // Tema açılışta bir kez uygulanır (hiç pencere açılmasa da ada ve menüler doğru temada olsun).
                 applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
                 island.install()
-                model.performStartupMaintenance()
+                // Abonelikte toplantılar, kişiler ve geçmiş yalnızca giriş yapan hesabın verisi yüklüyse okunur; değilse
+                // giriş yapılıp hesap yüklenince (bkz. `HostedAccount.dataActivations`).
+                if isAccountDataReady() {
+                    model.performStartupMaintenance()
+                }
                 // Önceki açılışın çökme raporları (MetricKit) okunur ve yenileri dinlenir.
                 crashReports.start()
-                shortcuts.registerAll()
+                // Giriş kapısı kapalıyken (abonelik sürümü, oturum yok) genel kısayollar kaydedilmez; giriş yapılınca
+                // menü çubuğu etiketi kaydeder.
+                if !isSignInRequired() {
+                    shortcuts.registerAll()
+                }
                 // Kurulum yalnızca ilk açılışta bir kez (tam pencere); sonra ayarlar Ayarlar'dan değişir.
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     router.section = .setup
@@ -183,7 +253,7 @@ struct AINotepadApp: App {
                     model.consentReminderVisible = true
                 }
                 // "--soru <metin>": Sor bölümünde soruyu sorar (görsel kontrol için).
-                if let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
+                if !isSignInRequired(), let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
                     model.askArchive(question: CommandLine.arguments[index + 1], meetingIDs: [], recipeTitle: nil)
                 }
                 #if DEBUG
@@ -246,8 +316,20 @@ struct AINotepadApp: App {
                 if section == .meetings, case .meeting(let id) = page {
                     router.selectedMeetingID = id
                 } else if let page {
-                    panel.show(page: page)
+                    if !isSignInRequired() {
+                        panel.show(page: page)
+                    }
                 }
+                #if DEBUG
+                // Tanıtım modunun sahnesi (sahne açılışta doğrulandı; burada hata beklenmez).
+                if isDemoMode {
+                    do {
+                        showDemoScene(scene: try demoScene(arguments: CommandLine.arguments), model: model, router: router, panel: panel, updater: updater, now: Date())
+                    } catch {
+                        fatalError(String(describing: error))
+                    }
+                }
+                #endif
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
@@ -257,10 +339,21 @@ struct AINotepadApp: App {
         }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir; ilk açılışta anahtar yoksa cihaz içi mod seçilir.
         Task {
+            #if DEBUG
+            // Tanıtım modu sunucuya bağlanmaz ve konuşma modelini yüklemez (bkz. App/DemoData.swift).
+            if isDemoMode {
+                return
+            }
+            #endif
             #if HOSTED_EDITION
-            // Abonelik: hesap ve hak durumu açılışta okunur; kurulum eksikleri (giriş) güncellenir.
+            // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Mac modeli (~630 MB)
+            // yalnızca sunucu bulut canlı metnini önermiyorsa ya da hak durumu okunamadıysa yüklenir; bulut
+            // kullanılabiliyorsa ilk Mac'e geçişte iner (bkz. `hostedPreloadsLocalModel`).
             await HostedAccount.shared.refresh()
             await model.refreshSetupProblems()
+            if hostedPreloadsLocalModel(account: .shared) {
+                await model.loadModel()
+            }
             #else
             if await chooseOnDeviceOnFirstRun(defaults: .standard) {
                 appLogger.info("İlk açılış: anahtar yok, cihaz içi mod seçildi")
@@ -268,35 +361,30 @@ struct AINotepadApp: App {
                 model.settingsChanged()
                 return
             }
-            #endif
             switch engine {
             case .deepgram: break
             case .whisperKit: await model.loadModel()
             case .appleSpeech: await model.prepareSpeechModel()
             }
+            #endif
         }
     }
 
     var body: some Scene {
         // Açılışta ana pencere; kapatılınca uygulama menü çubuğunda sürer, Dock simgesi ya da menü yeniden açar.
         Window(appName, id: mainWindowID) {
-            MainWindowView(
-                model: model, router: router, shortcuts: shortcuts, player: player, updater: updater, crashReports: crashReports,
-                onStartRecording: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
-                onShowPanel: {
-                    panel.show(page: .live)
-                    island.show()
+            Group {
+                #if HOSTED_EDITION
+                // Giriş kapısı: oturum yoksa yalnızca giriş ekranı (kenar çubuğu, toplantılar, ayarlar ve kayıt yok).
+                if HostedAccount.shared.requiresSignIn {
+                    HostedSignInGate(account: .shared)
+                } else {
+                    mainWindow
                 }
-            )
-            #if HOSTED_EDITION
-            // Google girişinin dönüşü (com.senoldogan.ainotepad.hosted://auth/google#idToken=…) uygulamayı açar.
-            .onOpenURL { (url: URL) in
-                Task {
-                    await HostedAccount.shared.handle(url: url)
-                    await model.refreshSetupProblems()
-                }
+                #else
+                mainWindow
+                #endif
             }
-            #endif
         }
         .defaultSize(width: 1180, height: 780)
         // Açılışta her zaman görünür: son oturumda pencere kapatılmışsa durum geri yükleme onu kapalı açıyordu
@@ -321,7 +409,7 @@ struct AINotepadApp: App {
                     Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
                 }
                 .keyboardShortcut("n", modifiers: .command)
-                .disabled(model.phase == .idle && !model.isReadyToRecord)
+                .disabled(model.phase == .idle && (!model.isReadyToRecord || isSignInRequired() || startBlockNotice(model: model) != nil))
             }
             // Bölümler arası geçiş (⌘1–5), Mac uygulamalarının alışılmış kısayolları.
             CommandMenu("Git") {
@@ -341,7 +429,71 @@ struct AINotepadApp: App {
             MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router, updater: updater)
         } label: {
             MenuBarLabel(symbol: menuSymbol)
+                // Menü çubuğu simgesi hep açık: kayıt ve işleme bitince ertelenen güncelleme (varsa) burada sürdürülür,
+                // ana pencere kapalı olsa da.
+                .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
+                    if !isBusy {
+                        updater.resumePostponedRelaunch()
+                    }
+                }
+                // Giriş kapısı açılınca genel kısayollar kaydedilir, kapanınca (çıkış, hesap silme) kaldırılır.
+                .onChange(of: isSignInRequired()) { (_: Bool, required: Bool) in
+                    if required {
+                        shortcuts.unregisterAll()
+                        if !model.isRecording {
+                            panel.hide()
+                            island.hide()
+                        }
+                    } else {
+                        shortcuts.registerAll()
+                    }
+                }
+                #if HOSTED_EDITION
+                // Bekleyen (çevrimdışı) kayıtlar: ağ gelince, hak durumu okununca, uygulama öne gelince ve kayıt/işleme
+                // bitince işlenir (birer birer).
+                .onChange(of: HostedAccount.shared.queueTrigger) { (_: Int, _: Int) in
+                    Task { await model.runOfflineQueue() }
+                }
+                .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
+                    if !isBusy {
+                        relaunchForAccountSwitchIfIdle(model: model)
+                        Task { await model.runOfflineQueue() }
+                    }
+                }
+                // Açılışta oturum yoktu, giriş yapılınca hesabın verisi yüklendi: toplantılar, kişiler ve geçmiş şimdi
+                // okunur. Başka bir hesapla giriş yapıldıysa uygulama (kayıt ve işleme yokken) yeniden başlar; o
+                // hesabın verisi yeni süreçte yüklenir.
+                .onChange(of: HostedAccount.shared.dataActivations) { (_: Int, _: Int) in
+                    model.performStartupMaintenance()
+                }
+                .onChange(of: HostedAccount.shared.dataState) { (_: HostedDataState, _: HostedDataState) in
+                    relaunchForAccountSwitchIfIdle(model: model)
+                }
+                // Kurulum eksikleri hesabın her durum değişiminde (giriş, çıkış, hesap silme, hak durumu yenilemesi)
+                // yeniden hesaplanır: açılışta bir kez hesaplanıp eskiyen "giriş yapılmamış" uyarısı kalmaz. Menü
+                // çubuğu simgesi hep açık olduğundan ana pencere kapalıyken de çalışır.
+                .onChange(of: HostedAccount.shared.state) { (_: HostedAccountState, _: HostedAccountState) in
+                    Task { await model.refreshSetupProblems() }
+                }
+                #endif
+                // Uygulama öne gelince kurulum eksikleri yenilenir (Anahtar Zinciri ya da Sistem Ayarları'nda yapılan
+                // değişiklikler eskimesin).
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { (_: Notification) in
+                    Task { await model.refreshSetupProblems() }
+                }
         }
+    }
+
+    /// Ana pencerenin içeriği (giriş kapısı açıkken).
+    private var mainWindow: some View {
+        MainWindowView(
+            model: model, router: router, shortcuts: shortcuts, player: player, updater: updater, crashReports: crashReports,
+            onStartRecording: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
+            onShowPanel: {
+                panel.show(page: .live)
+                island.show()
+            }
+        )
     }
 
     private var menuSymbol: String {
@@ -360,6 +512,24 @@ func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: Is
         model.stopRecording()
         return
     }
+    // Giriş kapısı: kayıt başlamaz, ana pencere (giriş ekranı) açılır. Menü, kısayol, bildirim, takvimle otomatik
+    // kayıt ve ⌘N hep bu yoldan geçer.
+    guard !isSignInRequired() else {
+        NotificationCenter.default.post(name: .openMainWindow, object: nil)
+        return
+    }
+    // Kayıt başlatılamıyorsa (deneme bitti, aylık sınır, eksik ayar) hata üretilmez: ana pencere açılır, neden başlat
+    // düğmesinin yanında yazar. Çözümü abone olmaksa (deneme bitti, abonelik sona erdi) abone olma teklifi de açılır
+    // (panelden basıldıysa ana pencere panelin arkasında kalıp hiçbir şey olmamış gibi görünmesin).
+    if let notice = startBlockNotice(model: model) {
+        #if HOSTED_EDITION
+        if notice.action == .subscribe {
+            HostedAccount.shared.requestSubscription()
+        }
+        #endif
+        NotificationCenter.default.post(name: .openMainWindow, object: nil)
+        return
+    }
     await model.startRecording()
     // Başlatma başarısız olsa da panel canlı sayfada açılır: metin ya da hata orada görünür
     // (önceki toplantının sayfası açık kalmış olabilir).
@@ -371,6 +541,11 @@ func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: Is
 /// karar panelin durumuna göre verilir.
 @MainActor
 func toggleWindows(panel: LivePanelController, island: IslandController) {
+    // Giriş kapısı kapalıyken panel açılmaz; giriş ekranı gösterilir.
+    if !panel.isVisible, isSignInRequired() {
+        NotificationCenter.default.post(name: .openMainWindow, object: nil)
+        return
+    }
     if panel.isVisible {
         panel.hide()
         island.hide()
@@ -380,7 +555,48 @@ func toggleWindows(panel: LivePanelController, island: IslandController) {
     }
 }
 
-/// Menü çubuğu menüsü.
+/// Giriş kapısı kapalı mı: abonelik sürümünde bu Mac'te oturum yoksa ana arayüz, kayıt, panel, kısayollar ve menü
+/// eylemleri açılmaz (bkz. `HostedAccount.requiresSignIn`); geliştirici sürümünde kapı yoktur.
+@MainActor
+func isSignInRequired() -> Bool {
+    #if HOSTED_EDITION
+    HostedAccount.shared.requiresSignIn
+    #else
+    false
+    #endif
+}
+
+/// Kullanıcı verisi okunabilir mi: abonelik sürümünde giriş yapan hesabın verisi bu süreçte yüklüyse (bkz.
+/// `HostedAccount.dataState`); geliştirici sürümünde her zaman.
+@MainActor
+func isAccountDataReady() -> Bool {
+    #if HOSTED_EDITION
+    HostedAccount.shared.isAccountDataLoaded
+    #else
+    true
+    #endif
+}
+
+#if HOSTED_EDITION
+/// Başka bir hesapla giriş yapıldıysa ve kayıt ya da işleme yoksa uygulamayı yeniden başlatır: yeni süreç o hesabın
+/// verisini yükler, bellekteki eski hesabın toplantıları hiç görünmez. Kayıt ya da işleme sürerken beklenir (giriş kapısı
+/// nedenini söyler); bitince yeniden denenir. Başlatıcı çalıştırılamazsa neden kapıda görünür.
+@MainActor
+private func relaunchForAccountSwitchIfIdle(model: AppModel) {
+    guard case .relaunchRequired = HostedAccount.shared.dataState, !model.isBusy else {
+        return
+    }
+    appLogger.info("Başka bir hesapla giriş yapıldı, uygulama yeniden başlatılıyor")
+    do {
+        try relaunchApplication()
+    } catch {
+        appLogger.error("Hesap değişiminde uygulama yeniden başlatılamadı, hata: \(String(describing: error), privacy: .private)")
+        HostedAccount.shared.reportRelaunchFailure(message: userFacingMessage(error: error))
+    }
+}
+#endif
+
+/// Menü çubuğu menüsü. Giriş kapısı kapalıyken yalnızca "Giriş yap…" ve "Çık" (kayıt sürüyorsa "Kaydı bitir").
 private struct MenuContent: View {
     @Bindable var model: AppModel
     let panel: LivePanelController
@@ -391,6 +607,22 @@ private struct MenuContent: View {
     @AppStorage(SettingsKey.hideFromScreenCapture) private var hideFromCapture: Bool = true
 
     var body: some View {
+        if isSignInRequired() && !model.isRecording {
+            Button("Giriş yap…", systemImage: "person.crop.circle") {
+                NotificationCenter.default.post(name: .openMainWindow, object: nil)
+            }
+            Divider()
+            Button("Çık", systemImage: "power") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
+        } else {
+            fullMenu
+        }
+    }
+
+    @ViewBuilder
+    private var fullMenu: some View {
         switch model.phase {
         case .recording:
             Button("Kaydı bitir", systemImage: "stop.circle") {
@@ -407,7 +639,7 @@ private struct MenuContent: View {
             Button("Kaydı başlat", systemImage: "record.circle") {
                 Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
             }
-            .disabled(!model.isReadyToRecord || model.isStarting)
+            .disabled(!model.isReadyToRecord || model.isStarting || startBlockNotice(model: model) != nil)
             .menuShortcut(binding: shortcuts.currentBinding(action: .record))
         }
 
@@ -418,7 +650,7 @@ private struct MenuContent: View {
 
         // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar ve kısayol hataları.
         ForEach(Array((model.setupProblems + [model.shortcutError, model.localDiarizationWarning].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-            Text(item.element).foregroundStyle(.red)
+            Label(item.element, systemImage: "exclamationmark.circle")
         }
 
         Divider()
@@ -462,6 +694,13 @@ private struct MenuContent: View {
             openMainWindow(router: router, section: .settings)
         }
         if updater.isEnabled {
+            // Bulunan ya da indirilen güncelleme: kayıt ya da işleme sürerken yeniden başlatılmaz.
+            if let update = updater.availableUpdate {
+                Button(updateMenuTitle(update: update, isBusy: model.isBusy), systemImage: "arrow.down.circle.fill") {
+                    updater.installUpdate()
+                }
+                .disabled(model.isBusy)
+            }
             Button("Güncellemeleri denetle…", systemImage: "arrow.down.circle") {
                 updater.checkForUpdates()
             }
@@ -470,13 +709,15 @@ private struct MenuContent: View {
 
         if model.liveEngine == .appleSpeech, case .failed(let message) = model.modelStatus {
             Divider()
-            Text(message).foregroundStyle(.red)
+            Label(message, systemImage: "exclamationmark.triangle")
             Button("Konuşma modelini yeniden hazırla", systemImage: "arrow.clockwise") {
                 Task { await model.prepareSpeechModel() }
             }
         }
         if model.liveEngine == .whisperKit {
             switch model.modelStatus {
+            case .notLoaded:
+                EmptyView()
             case .loading:
                 Divider()
                 Text("Model hazırlanıyor… İlk açılışta birkaç dakika sürebilir.")
@@ -488,7 +729,7 @@ private struct MenuContent: View {
                 }
             case .failed(let message):
                 Divider()
-                Text(message).foregroundStyle(.red)
+                Label(message, systemImage: "exclamationmark.triangle")
                 Button("Modeli yeniden yükle", systemImage: "arrow.clockwise") {
                     Task { await model.loadModel() }
                 }

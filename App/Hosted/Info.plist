@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AINotepadAccountScopedData</key>
+	<true/>
 	<key>AINotepadDataFolderName</key>
-	<string>AINotepad Hosted</string>
+	<string>$(HOSTED_DATA_FOLDER_NAME)</string>
 	<key>ATSApplicationFontsPath</key>
 	<string>.</string>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -20,36 +22,35 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.senoldogan.AINotepad.hosted.auth</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.senoldogan.ainotepad.hosted</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>HostedAPIBase</key>
 	<string>$(HOSTED_API_BASE)</string>
+	<key>HostedKeychainService</key>
+	<string>$(HOSTED_KEYCHAIN_SERVICE)</string>
 	<key>HostedSiteBase</key>
 	<string>$(HOSTED_SITE_BASE)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Gistsmith toplantı notunu istediğinde Apple Notlar'a yazar.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Gistsmith toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Gistsmith yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 T:mi Aslan Dogan Marketing</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Gistsmith toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
 	<string>https://github.com/$(RELEASES_REPO_GISTSMITH)/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_KEY_GISTSMITH)</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>21600</integer>
 </dict>
 </plist>

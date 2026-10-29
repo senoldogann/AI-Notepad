@@ -36,7 +36,7 @@ import Testing
         let output: Pipe = Pipe()
         input.fileHandleForWriting.write(Data((requests.joined(separator: "\n") + "\n").utf8))
         try input.fileHandleForWriting.close()
-        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectories: [sessions], version: "test", noteLanguage: .english, appName: "AI-Notepad")
+        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectories: [sessions], accessDenial: { nil }, version: "test", noteLanguage: .english, appName: "AI-Notepad")
         try output.fileHandleForWriting.close()
         let lines: [String] = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n").map(String.init)
         // Bildirime yanıt yok: 10 yanıt.
@@ -54,6 +54,27 @@ import Testing
     }
 }
 
+@Suite struct MCPAccessTests {
+    // Oturum sunucu açıldıktan sonra kapandıysa (abonelikte çıkış) araç çağrısı arşivi okumaz, nedeni hata olarak döner;
+    // tanışma ve araç listesi yine yanıtlanır.
+    @Test func toolCallsAreDeniedWhenSessionEnded() throws {
+        var reads: Int = 0
+        let call: String = #"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_meetings","arguments":{}}}"#
+        let denied: String = try #require(handleMCPMessage(
+            line: call, loadRecords: { reads += 1; return [] }, accessDenial: { "Önce giriş yap." }, version: "test", noteLanguage: .english, appName: "Gistsmith"
+        ))
+        #expect(reads == 0)
+        #expect(denied.contains("Önce giriş yap.") && denied.contains(#""isError":true"#))
+        let allowed: String = try #require(handleMCPMessage(
+            line: call, loadRecords: { reads += 1; return [] }, accessDenial: { nil }, version: "test", noteLanguage: .english, appName: "Gistsmith"
+        ))
+        #expect(reads == 1)
+        #expect(allowed.contains("No meetings."))
+        #expect(isCurrentSessionGeneration(started: 3, current: 3))
+        #expect(!isCurrentSessionGeneration(started: 3, current: 4))
+    }
+}
+
 @Suite struct MCPClientConfigTests {
     // Tek tıkla bağlama: gerçek dosyada diğer sunucular ve ayarlar korunur; kaldırınca yalnız bizim girdimiz gider.
     @Test func connectPreservesOtherSettingsAndDisconnects() throws {
@@ -61,26 +82,26 @@ import Testing
         let file: URL = MCPClient.claudeDesktop.configFile(home: home)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(#"{"globalShortcut":"Ctrl+Space","mcpServers":{"other":{"command":"/bin/other","args":[]}}}"#.utf8).write(to: file)
-        try connectMCPClient(client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", home: home)
+        try connectMCPClient(client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad", home: home)
         let connected: JSONValue = try readMCPConfig(file: file)
-        #expect(isMCPServerConnected(config: connected, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        #expect(isMCPServerConnected(config: connected, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad"))
         guard case .object(let root) = connected, case .object(let servers) = root["mcpServers"] else {
             Issue.record("yapılandırma nesne değil")
             return
         }
         #expect(root["globalShortcut"] == .string("Ctrl+Space") && servers["other"] != nil)
-        try disconnectMCPClient(client: .claudeDesktop, home: home)
+        try disconnectMCPClient(client: .claudeDesktop, serverName: "ai-notepad", home: home)
         let removed: JSONValue = try readMCPConfig(file: file)
-        #expect(!isMCPServerConnected(config: removed, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad"))
+        #expect(!isMCPServerConnected(config: removed, client: .claudeDesktop, executablePath: "/Applications/AINotepad.app/Contents/MacOS/AINotepad", serverName: "ai-notepad"))
         #expect(removed != connected)
     }
 
     // VS Code'da sunucular "servers" altında ve "type" ister; dosya yoksa oluşturulur.
     @Test func vsCodeShapeAndMissingFile() throws {
         let home: URL = try temporaryDirectory()
-        try connectMCPClient(client: .vsCode, executablePath: "/x/AINotepad", home: home)
+        try connectMCPClient(client: .vsCode, executablePath: "/x/AINotepad", serverName: mcpServerName(appName: "Gistsmith"), home: home)
         guard case .object(let root) = try readMCPConfig(file: MCPClient.vsCode.configFile(home: home)),
-              case .object(let servers) = root["servers"], case .object(let entry) = servers[mcpServerName] else {
+              case .object(let servers) = root["servers"], case .object(let entry) = servers["gistsmith"] else {
             Issue.record("VS Code yapılandırması beklenen biçimde değil")
             return
         }
@@ -93,7 +114,7 @@ import Testing
         let file: URL = MCPClient.cursor.configFile(home: home)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("{bozuk".utf8).write(to: file)
-        #expect(throws: MCPConfigError.self) { try connectMCPClient(client: .cursor, executablePath: "/x", home: home) }
+        #expect(throws: MCPConfigError.self) { try connectMCPClient(client: .cursor, executablePath: "/x", serverName: "ai-notepad", home: home) }
         #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self) == "{bozuk")
     }
 }

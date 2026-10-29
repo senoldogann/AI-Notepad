@@ -28,7 +28,12 @@ export interface Entitlements {
   readonly userId: string;
   readonly plan: "trial" | "subscription";
   readonly trialMeetingsTotal: number;
+  /** Denemenin süresi (gün; ilk deneme toplantısından başlar). */
+  readonly trialDays: number;
+  /** Kalan deneme toplantısı; deneme süresi dolduysa 0. */
   readonly trialMeetingsLeft: number;
+  /** Deneme süresinin bittiği an (ISO 8601); deneme başlamadıysa ya da abonelikte null. */
+  readonly trialEndsAt: string | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
   readonly subscription: SubscriptionInfo | null;
@@ -303,6 +308,15 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
 }
 
+/** `GET /v1/download/mac/version` yanıtını okur: yayınlanmış en son Mac sürümü (ör. "0.1.4"). */
+export function parseLatestVersion(response: RawResponse, path: string): string {
+  const version: string = stringField(parseObject(response, path), "version", response, path);
+  if (!/^[0-9]+(\.[0-9]+){1,3}$/.test(version)) {
+    throw new ApiResponseError(path, response.status, `sürüm biçimsiz "${version}"`, response.text);
+  }
+  return version;
+}
+
 /** `GET /v1/me` yanıtını okur. */
 export function parseEntitlements(response: RawResponse, path: string): Entitlements {
   const body: JsonObject = parseObject(response, path);
@@ -314,7 +328,9 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
     userId: stringField(body, "userId", response, path),
     plan,
     trialMeetingsTotal: numberField(body, "trialMeetingsTotal", response, path),
+    trialDays: numberField(body, "trialDays", response, path),
     trialMeetingsLeft: numberField(body, "trialMeetingsLeft", response, path),
+    trialEndsAt: body["trialEndsAt"] === null ? null : stringField(body, "trialEndsAt", response, path),
     monthlyHoursUsed: numberField(body, "monthlyHoursUsed", response, path),
     monthlyHoursCap: numberField(body, "monthlyHoursCap", response, path),
     subscription: parseSubscription(body["subscription"], response, path),

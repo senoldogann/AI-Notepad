@@ -37,6 +37,9 @@ public enum ProcessingStep: Int, Sendable, Equatable, CaseIterable {
 public enum FinalPassPlan: Sendable {
     case run(any FinalTranscriber)
     case skip(reason: String)
+    /// Son geçiş şimdi yapılamaz ve atlanmamalı (ör. sunucu güncel değil): işleme durur, toplantı "başarısız" olur ve
+    /// "Tekrar işle" ile yeniden denenebilir (not canlı metinden yazılmaz).
+    case stop(any Error)
 }
 
 /// Bulut son geçişi: ElevenLabs Scribe v2, konuşmacı ayırma açık.
@@ -106,7 +109,9 @@ public func processMeeting(
     await onStep(.finalPass)
     switch finalPass {
     case .skip(let reason):
-        current = current.with(notice: String(localized: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı."))
+        current = current.with(notice: skippedFinalPassNotice(reason: reason, hasFinalTranscript: hasOthersFinalTranscript(record: current)))
+    case .stop(let error):
+        return failed(record: current, step: String(localized: "Son geçiş başlatılamadı"), error: error)
     case .run(let transcriber):
         current = await transcribeOthers(record: current, directory: directory, transcriber: transcriber, languageMode: languageMode)
         if current.meNeedsFinalPass == true {
@@ -205,9 +210,28 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
             .with(voiceprints: nil)
             .with(notice: result.notice)
     } catch {
-        processLogger.error("Son geçiş başarısız, canlı metinle devam ediliyor, hata: \(String(describing: error), privacy: .private)")
-        return record.with(notice: String(localized: "Son geçiş başarısız: \(userFacingMessage(error: error)) Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin."))
+        processLogger.error("Son geçiş başarısız, eldeki metinle devam ediliyor, hata: \(String(describing: error), privacy: .private)")
+        return record.with(notice: failedFinalPassNotice(error: error, hasFinalTranscript: hasOthersFinalTranscript(record: record)))
     }
+}
+
+/// Kayıtta önceki son geçişin "Diğerleri" metni var mı (yeniden işlemede yeni geçiş olmazsa o metin kalır). Saf fonksiyondur.
+func hasOthersFinalTranscript(record: MeetingRecord) -> Bool {
+    record.finalSegments.contains { $0.speaker == .others }
+}
+
+/// Son geçiş atlandığında toplantıdaki uyarı: hangi metnin kaldığını doğru söyler. Saf fonksiyondur.
+func skippedFinalPassNotice(reason: String, hasFinalTranscript: Bool) -> String {
+    hasFinalTranscript
+        ? String(localized: "Ses yeniden yazıya dökülmedi: \(reason) Önceki son geçiş metni korundu.")
+        : String(localized: "Son geçiş yapılmadı: \(reason) Canlı metin kullanıldı.")
+}
+
+/// Son geçiş başarısız olduğunda toplantıdaki uyarı: hangi metnin kaldığını doğru söyler. Saf fonksiyondur.
+func failedFinalPassNotice(error: any Error, hasFinalTranscript: Bool) -> String {
+    hasFinalTranscript
+        ? String(localized: "Ses yeniden yazıya dökülemedi: \(userFacingMessage(error: error)) Önceki son geçiş metni korundu, not ondan yazıldı.")
+        : String(localized: "Son geçiş başarısız: \(userFacingMessage(error: error)) Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.")
 }
 
 /// "Sen"in canlı akışı koptuysa "Sen" kaydını da yazıya döker; bölümler "Sen" olarak son geçişe eklenir ve canlı

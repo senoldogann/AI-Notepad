@@ -22,6 +22,12 @@ export interface TitledText {
   readonly text: string;
 }
 
+/** Ürün gerçekleri kartı: büyük değer ve kısa açıklama. */
+export interface FactCopy {
+  readonly value: string;
+  readonly label: string;
+}
+
 /** Simgeli, başlıklı kısa metin (kartlar). */
 export interface IconText extends TitledText {
   readonly icon: IconName;
@@ -56,13 +62,21 @@ export interface CommonCopy {
   readonly perMonth: string;
   readonly offer: string;
   readonly requirementsShort: string;
+  /** Fiyatın vergiler dahil olduğu (fiyatın hemen altında). */
   readonly taxNote: string;
+  /** Otomatik yenileme ve iptal (Abone ol düğmesinin yanında). */
+  readonly renewalNote: string;
+  /** Paylaşım kartı görselinin (public/og.png) metin karşılığı. */
+  readonly ogImageAlt: string;
   readonly footer: {
     readonly tagline: string;
     readonly product: string;
     readonly account: string;
     readonly company: string;
     readonly fontLicense: string;
+    readonly cookies: string;
+    /** Sayfa sonundaki çekmede görünen kısa teşekkür (PullReveal.astro). */
+    readonly pullThanks: string;
     readonly copyright: string;
   };
   readonly lastUpdated: string;
@@ -87,6 +101,18 @@ export interface DemoCopy {
   readonly tasks: readonly string[];
   readonly decisionsTitle: string;
   readonly decision: string;
+  /** Duraklat/oynat düğmesinin erişilebilir adları (oynarken, duraklatılmışken, gösterim bitmişken). */
+  readonly pause: string;
+  readonly play: string;
+  readonly replay: string;
+}
+
+/** Ana sayfadaki uygulama ekran görüntülerinden biri: kartın altındaki etiket ve başlık, görselin metin karşılığı. */
+export interface ShowcaseShot {
+  /** Toplantının hangi anı (ör. "During the meeting"). */
+  readonly label: string;
+  readonly title: string;
+  readonly alt: string;
 }
 
 /** Ana sayfa. */
@@ -96,10 +122,30 @@ export interface HomeCopy {
   readonly title: string;
   readonly lead: string;
   readonly secondaryCta: string;
+  /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
+  readonly assurances: readonly string[];
   readonly demo: DemoCopy;
   readonly library: {
     readonly label: string;
     readonly meetings: readonly { readonly title: string; readonly meta: string }[];
+  };
+  /** Uygulamanın gerçek ekranları (örnek toplantılarla; bkz. scripts/make-screenshots.sh). */
+  readonly showcase: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly note: ShowcaseShot;
+    readonly live: ShowcaseShot;
+    readonly ask: ShowcaseShot;
+    readonly home: ShowcaseShot;
+  };
+  /** Doğrulanabilir ürün gerçekleri kartları (uydurma kullanıcı sayısı yok); her kartın küçük bir örnek görseli var. */
+  readonly facts: {
+    readonly label: string;
+    readonly noBot: FactCopy & { readonly people: readonly string[]; readonly note: string };
+    readonly live: FactCopy & { readonly status: string; readonly line: string };
+    readonly languages: FactCopy & { readonly sample: readonly string[] };
+    readonly tasks: FactCopy & { readonly sample: readonly string[] };
   };
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
@@ -109,11 +155,43 @@ export interface HomeCopy {
     readonly tasks: TitledText & { readonly sample: readonly string[] };
     readonly missed: TitledText & { readonly button: string; readonly answer: string };
     readonly ask: TitledText & { readonly question: string; readonly source: string };
-    readonly integrations: TitledText;
-    readonly privacy: TitledText & { readonly badge: string };
+    readonly followUp: TitledText & { readonly recipe: string; readonly subject: string; readonly lines: readonly string[] };
+    readonly templates: TitledText & { readonly sample: readonly string[] };
   };
-  readonly stepsTitle: string;
-  readonly steps: readonly TitledText[];
+  /** Kayan entegrasyon şeridinin etiketi. */
+  readonly marqueeLabel: string;
+  /** Not ekranındaki açıklama balonları (ekran görüntüsüne göre konumlar Home'da). */
+  readonly noteCallouts: {
+    readonly dueDate: string;
+    readonly transcript: string;
+  };
+  /** Entegrasyonlar: notların ve görevlerin gittiği yerler, MCP ile yapay zekâ uygulamaları, dosyalar ve takvim. */
+  readonly integrations: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly notes: TitledText;
+    readonly tasks: TitledText;
+    readonly ai: TitledText;
+    readonly files: TitledText;
+    /** Claude'da toplantılar üstüne bir soru örneği (MCP). */
+    readonly mcpDemo: {
+      readonly label: string;
+      readonly question: string;
+      readonly tool: string;
+      readonly answerLead: string;
+      readonly answer: readonly string[];
+      readonly source: string;
+    };
+  };
+  /** Gizlilik ve güven ızgarası. */
+  readonly trust: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly items: readonly TitledText[];
+    readonly link: string;
+  };
   readonly pricingTitle: string;
   readonly pricingLead: string;
   readonly pricingCta: string;
@@ -146,17 +224,12 @@ export interface DownloadCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  /** Sürüm etiketi ("Version" + numara). */
+  /** Sürüm etiketi ("Version" + sunucudan okunan numara). */
   readonly versionLabel: string;
-  readonly buttonNote: string;
-  readonly requirementsTitle: string;
-  readonly requirements: readonly IconText[];
   readonly installTitle: string;
   readonly installSteps: readonly TitledText[];
-  readonly updatesTitle: string;
-  readonly updatesText: string;
-  readonly helpTitle: string;
-  readonly helpText: string;
+  /** Sayfanın sonundaki tek satır: güncellemeler ve yardım bağlantısı. */
+  readonly footnote: string;
   readonly helpCta: string;
 }
 
@@ -166,6 +239,8 @@ export interface SignInCopy {
   readonly title: string;
   readonly lead: string;
   readonly apple: string;
+  /** Uygulama adına girişte Google düğmesi (yönlendirmeli; sitede Google'ın kendi düğmesi çizilir). */
+  readonly google: string;
   /** "… the {Terms} and the {Privacy policy}." cümlesinin bağlantılar dışındaki parçaları. */
   readonly legalBefore: string;
   readonly legalBetween: string;
@@ -195,6 +270,9 @@ export interface ContactCopy {
   readonly sendAnother: string;
   readonly directTitle: string;
   readonly directText: string;
+  /** İşletme bilgisi kutusu: başlık ve işletme kimliğinin etiketi. */
+  readonly companyTitle: string;
+  readonly businessIdLabel: string;
   readonly noScript: string;
 }
 
@@ -204,15 +282,26 @@ export interface AccountCopy {
   readonly title: string;
   readonly loading: string;
   readonly paymentDone: string;
+  /** Ödeme uygulamadan açıldıysa tarayıcıda oturum yoktur: giriş sayfası yerine bu not görünür. */
+  readonly paymentDoneSignedOut: { readonly title: string; readonly text: string; readonly signIn: string };
   readonly planLabel: string;
   readonly trialLabel: string;
   readonly hoursLabel: string;
   readonly hoursNote: string;
   readonly renewalLabel: string;
   readonly subscribe: string;
+  /** Abone ol düğmesinin yanında: fiyat (vergiler dahil), otomatik yenileme, iptal, satıcı. */
   readonly subscribeNote: string;
   readonly manage: string;
+  /** Aboneliği yönet düğmesinin yanında (kart, iptal; makbuzlar Link'ten e-postayla, sipariş geçmişi link.com'da). */
+  readonly manageNote: string;
   readonly signOut: string;
+  /** "Uygulamayı indir" kartı. */
+  readonly appTitle: string;
+  readonly appText: string;
+  /** Yardım satırı. */
+  readonly helpTitle: string;
+  readonly helpContact: string;
   readonly dangerTitle: string;
   readonly dangerText: string;
   readonly deleteButton: string;
@@ -229,16 +318,98 @@ export interface AccountCopy {
   readonly noScript: string;
 }
 
+/** Yönetim panelinin kullanıcılar görünümü. */
+export interface AdminUsersCopy {
+  readonly title: string;
+  readonly searchLabel: string;
+  readonly searchPlaceholder: string;
+  readonly search: string;
+  readonly segmentLabel: string;
+  readonly segments: {
+    readonly all: string;
+    readonly subscribed: string;
+    readonly pastDue: string;
+    readonly canceled: string;
+    readonly trial: string;
+    readonly free: string;
+  };
+  readonly providerLabel: string;
+  readonly providers: { readonly all: string; readonly apple: string; readonly google: string };
+  readonly columns: {
+    readonly user: string;
+    readonly provider: string;
+    readonly created: string;
+    readonly plan: string;
+    readonly trial: string;
+    readonly subscription: string;
+    readonly meetings: string;
+    readonly hours: string;
+    readonly lastActive: string;
+  };
+  readonly empty: string;
+  readonly loadMore: string;
+  readonly back: string;
+  readonly fields: {
+    readonly provider: string;
+    readonly created: string;
+    readonly lastActive: string;
+    readonly stripeCustomer: string;
+    readonly trialDevice: string;
+    readonly subscription: string;
+    readonly trial: string;
+  };
+  readonly usageTitle: string;
+  readonly usage: { readonly hours: string; readonly tokens: string; readonly accountTokens: string; readonly audio: string };
+  readonly timelineTitle: string;
+  readonly timelineNote: string;
+  readonly meetingsTitle: string;
+  readonly meetingColumns: {
+    readonly started: string;
+    readonly kind: string;
+    readonly state: string;
+    readonly duration: string;
+    readonly audio: string;
+    readonly tokens: string;
+    readonly notes: string;
+  };
+  readonly noMeetings: string;
+  readonly reportsTitle: string;
+  readonly noReports: string;
+}
+
+/** Yönetim panelinin işletim görünümü. */
+export interface AdminOperationsCopy {
+  readonly kpis: {
+    readonly open: string;
+    readonly unended: string;
+    readonly reservations: string;
+    readonly deepgram: string;
+    readonly webhook: string;
+    readonly reports: string;
+  };
+  readonly openTitle: string;
+  readonly openColumns: { readonly user: string; readonly kind: string; readonly started: string; readonly endsBy: string; readonly notes: string };
+  readonly noOpen: string;
+  readonly stripeTitle: string;
+  readonly stripeColumns: { readonly type: string; readonly count: string };
+  readonly noStripe: string;
+  readonly crashesTitle: string;
+  readonly noCrashes: string;
+}
+
 /** Yönetim panelinin durgun metinleri (değerlere bağlı olanlar client/copy.ts'te). */
 export interface AdminCopy {
+  /** Nötr başlık ve açıklama: yönetici erişimi doğrulanmadan panelin varlığı belli olmaz. */
   readonly meta: PageMeta;
+  /** Erişim doğrulanınca sekme başlığı. */
+  readonly documentTitle: string;
+  /** Sol menüde ürün adının yanındaki rozet. */
   readonly title: string;
+  /** Sol menüden siteye dönüş bağlantısı. */
+  readonly backToSite: string;
   readonly refresh: string;
+  /** Nötr yükleme satırı. */
   readonly loading: string;
-  readonly signedOutTitle: string;
-  readonly signedOutText: string;
-  readonly forbiddenTitle: string;
-  readonly forbiddenText: string;
   readonly kpis: {
     readonly downloads: string;
     readonly users: string;
@@ -248,7 +419,21 @@ export interface AdminCopy {
     readonly spend: string;
     readonly hours: string;
     readonly tokens: string;
+    readonly elevenLabs: string;
+    readonly deepgram: string;
+    readonly conversion: string;
+    readonly churn: string;
+    readonly payments: string;
+    readonly meetings: string;
+    readonly audio: string;
+    readonly refusals: string;
   };
+  /** Özet kutusu gruplarının başlıkları. */
+  readonly groups: { readonly growth: string; readonly revenue: string; readonly usage: string; readonly costs: string };
+  /** Panelin görünümleri (üstteki sekmeler). */
+  readonly views: { readonly label: string; readonly overview: string; readonly users: string; readonly operations: string; readonly inbox: string };
+  readonly users: AdminUsersCopy;
+  readonly operations: AdminOperationsCopy;
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -276,7 +461,6 @@ export interface AdminCopy {
   readonly payloadTitle: string;
   readonly markDone: string;
   readonly reopen: string;
-  readonly noScript: string;
 }
 
 /** 404 sayfası. */
@@ -325,15 +509,19 @@ export const copy: Copy = {
     darkMode: "Dark mode",
     price: "$5.99",
     perMonth: "/ month",
-    offer: "3 meetings free, then $5.99 a month",
-    requirementsShort: "macOS 26 · Apple silicon",
-    taxNote: "Plus applicable taxes, shown at checkout.",
+    offer: "3 meetings or 7 days free, then $5.99 a month, taxes included",
+    requirementsShort: "macOS 26 or later · Apple silicon",
+    taxNote: "Taxes included.",
+    renewalNote: "Renews automatically every month until you cancel. Cancel anytime.",
+    ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
     footer: {
       tagline,
       product: "Product",
       account: "Account",
       company: "Company",
       fontLicense: "Inter font licence",
+      cookies: "Cookies",
+      pullThanks: "Thanks for listening.",
       copyright: `© 2026 ${operator.name}`,
     },
     lastUpdated: "Last updated",
@@ -343,12 +531,38 @@ export const copy: Copy = {
     meta: {
       title: `${productName} — ${tagline}`,
       description:
-        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks the moment the meeting ends. 3 meetings free.",
+        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks the moment the meeting ends. 3 meetings or 7 days free.",
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
     lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
     secondaryCta: "See pricing",
+    assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
+    facts: {
+      label: "At a glance",
+      noBot: {
+        value: "No bot",
+        label: `Nothing joins your call. ${productName} listens on your Mac.`,
+        people: ["E", "M", "A", "Y"],
+        note: "4 people · no bots",
+      },
+      live: {
+        value: "Live",
+        label: "Transcript and translation appear while people talk.",
+        status: "Listening · 23:20",
+        line: "So the beta opens on the fourteenth?",
+      },
+      languages: {
+        value: "30+",
+        label: "Languages for your meetings, notes and translations.",
+        sample: ["English", "Suomi", "Türkçe", "Deutsch", "Español", "日本語"],
+      },
+      tasks: {
+        value: "Tasks first",
+        label: "Every note opens with who does what, by when.",
+        sample: ["Release notes · Fri", "Pricing table · Today"],
+      },
+    },
     demo: {
       label: `${productName} recording a meeting and writing the note`,
       listening: "Listening",
@@ -368,6 +582,9 @@ export const copy: Copy = {
       tasks: ["Write the beta release notes by Friday", "Send Ayşe the pricing table", "Set up Wednesday's call with support"],
       decisionsTitle: "Decisions",
       decision: "The beta opens on 14 November.",
+      pause: "Pause the demo",
+      play: "Play the demo",
+      replay: "Replay the demo",
     },
     library: {
       label: "Recent meetings",
@@ -378,13 +595,38 @@ export const copy: Copy = {
         { title: "Investor update", meta: "October · 4 tasks" },
       ],
     },
+    showcase: {
+      eyebrow: "Inside the app",
+      title: "Quiet while you talk. Organised when you're done.",
+      lead: "One window for all your meetings, and a small panel that stays out of the way while you record.",
+      note: {
+        label: "After the meeting",
+        title: "Your note, tasks first",
+        alt: `The Product weekly note in the ${productName} app: a list of recent meetings on the left and, under the meeting cover and a who-spoke-when timeline, your three tasks with due dates: write the beta release notes by Friday, send Ayşe the pricing table today, set up a weekly call with support on Wednesday.`,
+      },
+      live: {
+        label: "During the meeting",
+        title: "Live transcript and translation",
+        alt: `The ${productName} live panel while recording a Finnish meeting: each speaker's Finnish sentences with the English translation underneath, your own lines in English, and a “What did I miss?” button at the bottom.`,
+      },
+      ask: {
+        label: "Any time later",
+        title: "Answers with sources",
+        alt: `The Ask page in ${productName}: the question “What did we decide about the budget?” answered in two bullet points with numbered citations, and a row showing 3 sources from 2 meetings.`,
+      },
+      home: {
+        label: "Before the meeting",
+        title: "One click to start",
+        alt: `The ${productName} home screen: “Good morning, Alex”, a large Start listening button with options for language, your voice and live translation, shortcuts, and your open tasks from recent meetings.`,
+      },
+    },
     featuresEyebrow: "Features",
     featuresTitle: "Stay in the conversation. It keeps the record.",
     featuresLead: "By your side during the meeting, in your hands after it: what to do, what was decided, and a searchable record of everything.",
     features: {
       live: {
         title: "Live transcript and translation",
-        text: "Every sentence is on screen within seconds. If the meeting is in another language, a translation into yours runs alongside. The live transcript is produced on your Mac.",
+        text: "Every sentence is on screen within seconds. If the meeting is in another language, a translation into yours runs alongside.",
         original: "Betayı on dördünde açmalıyız.",
         translation: "We should open the beta on the fourteenth.",
       },
@@ -405,30 +647,75 @@ export const copy: Copy = {
         question: "What did we decide about the budget?",
         source: "Sources: Investor update, Product weekly",
       },
-      integrations: {
-        title: "Integrations",
-        text: "Send notes and tasks where they belong: Notion, Slack, Microsoft Teams, Discord and Zoom; tasks to Linear, Jira or Reminders. Connected with their official sign-ins.",
+      followUp: {
+        title: "Follow-up in one click",
+        text: "Recipes turn a meeting into the next step: a follow-up email, a project plan, risks and open questions. Save your own for the questions you ask every week.",
+        recipe: "Follow-up email",
+        subject: "Subject: Product weekly, next steps",
+        lines: ["Beta opens on 14 November.", "Alex: release notes by Friday."],
       },
-      privacy: {
-        title: "Privacy",
-        text: "Audio is processed only to be transcribed and is not stored on our servers. Your notes and recordings stay on your Mac. No bot joins the call.",
-        badge: "Audio not stored",
+      templates: {
+        title: "Meeting templates",
+        text: "Client calls, one-on-ones, interviews and lectures each get a note that puts the right things first. Or write your own.",
+        sample: ["Client call", "One-on-one", "Interview", "Lecture", "Your own"],
       },
     },
-    stepsTitle: "In three steps",
-    steps: [
-      { title: "Download and sign in", text: `Download the app, drag ${productName} to Applications and sign in with Apple or Google.` },
-      { title: "Start listening", text: "One click as the meeting starts. Zoom, Meet, Teams or in person; your voice and the other side's." },
-      { title: "Get your note", text: "The meeting ends, the note is ready: tasks first, then decisions and a summary. Share it or send it on." },
-    ],
+    trust: {
+      eyebrow: "Privacy",
+      title: "Your meetings stay yours.",
+      lead: "Built for conversations you'd rather keep private, by a small company in Finland.",
+      items: [
+        { title: "No bot in your call", text: "Gistsmith listens on your Mac. Nobody sees an extra participant, and you don't have to ask anyone to let it in." },
+        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers don't keep your notes or recordings." },
+        { title: "Audio isn't kept by us", text: "Audio is sent only to be transcribed. Our servers don't store it, and your recordings stay on your Mac." },
+        { title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
+        { title: "EU company, GDPR", text: "Gistsmith is run from Finland under EU data protection law. Our account database is hosted in the EU." },
+        { title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
+      ],
+      link: "Read the privacy policy",
+    },
+    marqueeLabel: "Works with the tools you already use",
+    noteCallouts: {
+      dueDate: "Owner and due date",
+      transcript: "Full transcript, by speaker",
+    },
+    integrations: {
+      eyebrow: "Integrations",
+      title: "Your meetings, where your work happens.",
+      lead: "Send the note where your team works, put tasks in your tracker, and let your AI apps read your meetings.",
+      notes: {
+        title: "Notes to your team",
+        text: "Send the finished note to Notion, Apple Notes or a channel in Slack, Microsoft Teams, Discord or Zoom Team Chat; anything else through a webhook (Zapier, Make, n8n).",
+      },
+      tasks: {
+        title: "Tasks to your tracker",
+        text: "Turn your tasks into Linear or Jira issues, or into Apple Reminders.",
+      },
+      ai: {
+        title: "Your AI apps, through MCP",
+        text: "Claude, Cursor and VS Code can search and read your meetings. Connect them with one click in Settings; they can only read, never change anything.",
+      },
+      files: {
+        title: "Your files and calendar",
+        text: "Save every note as Markdown to a folder, such as your Obsidian vault or iCloud Drive. Your calendar shows what's next and can start recording when a meeting begins.",
+      },
+      mcpDemo: {
+        label: "In Claude",
+        question: "What did I promise Nordia last week?",
+        tool: "Searched your meetings",
+        answerLead: "In the client call on 27 October you said you'd:",
+        answer: ["Send the revised quote by Friday", "Share the onboarding checklist"],
+        source: "Client call · Nordia",
+      },
+    },
     pricingTitle: "One plan. Simple pricing.",
-    pricingLead: "Your first 3 meetings are free, no card needed. Then $5.99 a month; cancel anytime.",
+    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
     faqTitle: "Questions",
     faq: [
       {
         question: "How does the free trial work?",
-        answer: "Your first 3 meetings are free and no card is needed. Trial meetings can be up to 90 minutes long. After that you continue with the $5.99 monthly subscription.",
+        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month, taxes included.",
       },
       {
         question: "Does a bot join my meetings?",
@@ -437,11 +724,11 @@ export const copy: Copy = {
       {
         question: "Where does my audio go?",
         answer:
-          "The live transcript is produced on your Mac. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our server does not store audio or text; it only counts the duration.",
+          "While you record, the audio streams from your Mac to Deepgram for the live transcript; Deepgram is asked not to keep it or use it for training. If that isn't available, the live transcript is produced on your Mac instead. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or notes; they count the duration and hold the final transcript encrypted for up to 2 hours, only so it can be re-sent if the connection drops. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
       },
       {
         question: "Where are my notes stored?",
-        answer: "On your Mac. Notes, transcripts and recordings live in the app's folder on your Mac; our servers never keep a copy. You can export, share or delete them in the app.",
+        answer: "On your Mac. Notes, transcripts and recordings live in the app's folder on your Mac; our servers don't keep them (the final transcript is held encrypted for up to 2 hours so it can be re-sent, then deleted). You can export, share or delete them in the app.",
       },
       {
         question: "Which languages are supported?",
@@ -453,19 +740,19 @@ export const copy: Copy = {
       },
     ],
     finalTitle: "Let it write the note for your next meeting.",
-    finalLead: "3 meetings free. Set up in a minute.",
+    finalLead: "3 meetings or 7 days free. Set up in a minute.",
   },
   pricing: {
     meta: {
       title: `Pricing — ${productName}`,
-      description: "One plan: $5.99 a month. First 3 meetings free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
+      description: "One plan: $5.99 a month, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
     title: "One plan. Simple pricing.",
-    lead: "Try 3 meetings for free. If you like it, continue for $5.99 a month.",
+    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, taxes included.",
     planName: productName,
     planTagline: "Everything from live transcript to tasks.",
     included: [
-      { icon: "gift", text: "First 3 meetings free, no card needed" },
+      { icon: "gift", text: "3 meetings or 7 days free, no card needed" },
       { icon: "calendar", text: "Up to 10 hours of meetings a month (fair use)" },
       { icon: "timer", text: "Up to 4 hours per meeting" },
       { icon: "waveform", text: "Live transcript, live translation, “What did I miss?” and Ask" },
@@ -477,7 +764,7 @@ export const copy: Copy = {
     subscribe: "Subscribe",
     limitsTitle: "The limits, plainly",
     limits: [
-      { icon: "gift", title: "Trial", text: "3 meetings, each up to 90 minutes. Opening a new account does not reset the trial." },
+      { icon: "gift", title: "Trial", text: "3 meetings or 7 days from your first meeting, whichever comes first; each meeting up to 90 minutes. Opening a new account does not reset the trial." },
       {
         icon: "calendar",
         title: "10 hours a month",
@@ -488,7 +775,7 @@ export const copy: Copy = {
     ],
     taxTitle: "Payments and taxes",
     taxText:
-      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. Link calculates, collects and remits sales tax, VAT or GST for your location and shows it at checkout before you pay; you may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
+      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
     faqTitle: "Questions",
     faq: [
       {
@@ -502,7 +789,7 @@ export const copy: Copy = {
       {
         question: "Can I get a refund?",
         answer:
-          "Refunds are handled by Link, which sells the subscription on our behalf. It applies statutory cooling-off rights where they apply — such as the 14-day withdrawal right for consumers in the EU — and may refund within 60 days in other cases. Contact Link support at support.link.com, or write to us and we'll help.",
+          "Refunds are handled by Link, the merchant of record for the subscription. Under Link's terms, consumers in the EU can cancel within 14 days of getting access by contacting Link support and giving “cooling off period” as the reason; Link may also refund within 60 days in certain other cases, such as a duplicate charge. Contact Link support at support.link.com, or write to us and we'll help. The details are in the terms of service.",
       },
       {
         question: "Who will I see on my receipt and card statement?",
@@ -513,43 +800,31 @@ export const copy: Copy = {
   download: {
     meta: {
       title: `Download — ${productName}`,
-      description: `Download ${productName} for your Mac: macOS 26 and Apple silicon. First 3 meetings free.`,
+      description: `Download ${productName} for your Mac: macOS 26 or later on Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
-    lead: "For Mac. Your first 3 meetings are free, no card needed.",
+    lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
     versionLabel: "Version",
-    buttonNote: "Signed with an Apple Developer ID and notarized by Apple.",
-    requirementsTitle: "System requirements",
-    requirements: [
-      { icon: "laptop", title: "macOS 26", text: "or later" },
-      { icon: "chip", title: "Apple silicon", text: "M1 or later" },
-      { icon: "globe", title: "Internet", text: "for notes, translation and speaker separation" },
-      { icon: "disk", title: "~1 GB free space", text: "for the on-device speech model" },
-    ],
-    installTitle: "Installing on your Mac",
+    installTitle: "Three steps to your first meeting",
     installSteps: [
-      { title: "Open the disk image", text: `Double-click the ${productName} disk image (.dmg) you downloaded.` },
-      { title: "Drag to Applications", text: `Drag the ${productName} icon into the Applications folder, then eject the disk image.` },
-      { title: "Open it", text: `Open ${productName} from Applications. If macOS asks whether to open an app downloaded from the internet, choose “Open”.` },
-      { title: "Grant permissions", text: "The setup page asks for microphone and system-audio permissions. You can change them later in System Settings › Privacy & Security." },
-      { title: "Sign in", text: "Sign in with Apple or Google and start your first meeting. The first 3 are free." },
+      { title: "Install", text: `Open the disk image and drag ${productName} into Applications.` },
+      { title: "Allow audio", text: "Open the app and allow the microphone and system audio, so it hears both sides of the call." },
+      { title: "Sign in", text: "Sign in with Apple or Google and start listening. Your first 3 meetings or 7 days are free." },
     ],
-    updatesTitle: "Updates",
-    updatesText: "New versions arrive inside the app and are installed with your approval.",
-    helpTitle: "Need a hand?",
-    helpText: "Questions about installing, your account or your subscription? Send us a message and we'll get back to you by email.",
-    helpCta: "Contact us",
+    footnote: "Updates arrive automatically inside the app.",
+    helpCta: "Questions? Contact us",
   },
   signIn: {
     meta: { title: `Sign in — ${productName}`, description: `Sign in to your ${productName} account with Apple or Google.` },
     title: "Sign in",
     lead: "To manage your account and subscription. You use the same account in the Mac app.",
     apple: "Continue with Apple",
+    google: "Continue with Google",
     legalBefore: "By continuing, you agree to the",
     legalBetween: "and confirm you have read the",
     noScript: "Signing in needs JavaScript.",
     appTitle: `Sign in to the ${productName} app`,
-    appLead: "Continue with Google. When you're done, the app opens and finishes signing you in.",
+    appLead: "Continue with Apple or Google. When you're done, the app opens and finishes signing you in.",
     appReturning: "Returning to the app…",
     appReturningHelp: `If ${productName} didn't open, use the button below.`,
     appOpen: `Open ${productName}`,
@@ -570,6 +845,8 @@ export const copy: Copy = {
     sendAnother: "Send another message",
     directTitle: "Prefer email?",
     directText: "You can also write to us directly:",
+    companyTitle: "Company details",
+    businessIdLabel: "Business ID (Y-tunnus)",
     noScript: "The contact form needs JavaScript. You can also email us directly.",
   },
   account: {
@@ -577,18 +854,28 @@ export const copy: Copy = {
     title: "Your account",
     loading: "Loading your account…",
     paymentDone: "Payment received, thank you. Your subscription will show up here within a few seconds.",
+    paymentDoneSignedOut: {
+      title: "Payment received, thank you",
+      text: `Go back to the ${productName} app: your subscription shows up there within a few seconds. You can close this tab.`,
+      signIn: "Sign in to see your account here",
+    },
     planLabel: "Plan",
     trialLabel: "Free trial",
     hoursLabel: "Usage this month",
     hoursNote: "Resets on the first day of each month (UTC).",
     renewalLabel: "Subscription",
     subscribe: "Subscribe",
-    subscribeNote: "$5.99 a month plus applicable taxes, shown at checkout. Sold through Link, Stripe's payment service.",
+    subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
+    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Renews automatically every month until you cancel.",
     signOut: "Sign out",
+    appTitle: "Get the app",
+    appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,
+    helpTitle: "Need help?",
+    helpContact: "Contact support",
     dangerTitle: "Delete account",
     dangerText:
-      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law.",
+      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law. To prevent free-trial abuse, a pseudonymous record of how many free-trial meetings your sign-in has used is kept for up to 24 months, so signing in again with the same account continues the trial instead of restarting it.",
     deleteButton: "Delete account",
     dialogTitle: "Delete your account?",
     dialogText: "This can't be undone. If you have a subscription, it is cancelled immediately and ends with your account; the remaining time is not refunded automatically.",
@@ -597,20 +884,18 @@ export const copy: Copy = {
     cancel: "Cancel",
     confirmDelete: "Permanently delete my account",
     deletedTitle: "Your account was deleted",
-    deletedText: "Your account data on our server is gone. The notes and recordings on your Mac are still there.",
+    deletedText: "Your account data on our server is gone, apart from the pseudonymous free-trial record described in the privacy policy. The notes and recordings on your Mac are still there.",
     deletedRedirect: "Taking you to the home page…",
     backHome: "Back to the home page",
     noScript: "The account page needs JavaScript.",
   },
   admin: {
-    meta: { title: `Dashboard — ${productName}`, description: "Operator dashboard." },
-    title: "Dashboard",
+    meta: { title: productName, description: tagline },
+    documentTitle: `Dashboard — ${productName}`,
+    title: "Admin",
+    backToSite: "Back to site",
     refresh: "Refresh",
-    loading: "Loading the dashboard…",
-    signedOutTitle: "Sign in first",
-    signedOutText: "The dashboard needs an admin session in this tab. Sign in, then open the dashboard again.",
-    forbiddenTitle: "Not authorized",
-    forbiddenText: "This account isn't on the server's admin list. To grant access, add this identity to the allowlist:",
+    loading: "Loading…",
     kpis: {
       downloads: "Downloads",
       users: "Users",
@@ -620,6 +905,76 @@ export const copy: Copy = {
       spend: "AI spend today",
       hours: "Meeting hours this month",
       tokens: "Tokens this month",
+      elevenLabs: "Transcription capacity",
+      deepgram: "Live transcript budget",
+      conversion: "Trial to paid",
+      churn: "Cancellations, 30 days",
+      payments: "Payment issues",
+      meetings: "Meetings this month",
+      audio: "Transcribed audio this month",
+      refusals: "Trials refused, 30 days",
+    },
+    groups: { growth: "Growth", revenue: "Revenue", usage: "Usage", costs: "Costs & capacity" },
+    views: { label: "Dashboard sections", overview: "Overview", users: "Users", operations: "Operations", inbox: "Inbox" },
+    users: {
+      title: "Users",
+      searchLabel: "Account ID",
+      searchPlaceholder: "Search by account ID prefix",
+      search: "Search",
+      segmentLabel: "Plan",
+      segments: { all: "All", subscribed: "Subscribed", pastDue: "Payment due", canceled: "Cancelled", trial: "Trial", free: "No plan" },
+      providerLabel: "Sign-in",
+      providers: { all: "Any", apple: "Apple", google: "Google" },
+      columns: {
+        user: "Account",
+        provider: "Sign-in",
+        created: "Joined",
+        plan: "Plan",
+        trial: "Trial",
+        subscription: "Subscription",
+        meetings: "Meetings",
+        hours: "Hours this month",
+        lastActive: "Last active",
+      },
+      empty: "No accounts match.",
+      loadMore: "Load more",
+      back: "All users",
+      fields: {
+        provider: "Sign-in",
+        created: "Joined",
+        lastActive: "Last active",
+        stripeCustomer: "Stripe customer",
+        trialDevice: "Trial tied to a Mac",
+        subscription: "Subscription",
+        trial: "Trial",
+      },
+      usageTitle: "This month",
+      usage: { hours: "Meeting hours", tokens: "AI tokens", accountTokens: "AI outside meetings", audio: "Transcribed audio" },
+      timelineTitle: "Timeline",
+      timelineNote: "Built from the account's current dates; past subscription changes aren't stored.",
+      meetingsTitle: "Meetings",
+      meetingColumns: { started: "Started", kind: "Plan", state: "Status", duration: "Length", audio: "Audio", tokens: "Tokens", notes: "Notes" },
+      noMeetings: "No meetings yet.",
+      reportsTitle: "Reports from this account",
+      noReports: "No reports.",
+    },
+    operations: {
+      kpis: {
+        open: "Meetings live now",
+        unended: "Never ended, 7 days",
+        reservations: "Usage reservations",
+        deepgram: "Unsettled live transcripts",
+        webhook: "Stripe webhook",
+        reports: "Reports, 7 days",
+      },
+      openTitle: "Live meetings",
+      openColumns: { user: "Account", kind: "Plan", started: "Started", endsBy: "Ends by", notes: "Notes" },
+      noOpen: "No meetings are live right now.",
+      stripeTitle: "Stripe events, 7 days",
+      stripeColumns: { type: "Event", count: "Count" },
+      noStripe: "No Stripe events in the last 7 days.",
+      crashesTitle: "Latest crash reports",
+      noCrashes: "No crash reports.",
     },
     chartsTitle: "Last 30 days",
     charts: {
@@ -642,7 +997,6 @@ export const copy: Copy = {
     payloadTitle: "Crash report",
     markDone: "Mark done",
     reopen: "Reopen",
-    noScript: "The dashboard needs JavaScript.",
   },
   notFound: {
     meta: { title: `Page not found — ${productName}`, description: "The address may be mistyped, or the page has moved." },

@@ -276,7 +276,8 @@ public func audioToDelete(records: [MeetingRecord], now: Date, retentionDays: In
             switch record.status {
             case .done: days = retentionDays
             case .failed, .interrupted: days = retentionDays * 2
-            case .recording, .processing: return false
+            // İşlenmeyi bekleyen (çevrimdışı) kaydın sesi henüz işlenmedi: hiç silinmez.
+            case .recording, .processing, .queued: return false
             }
             return !record.audioDeleted && now.timeIntervalSince(record.startedAt) > Double(days) * 86_400
         }

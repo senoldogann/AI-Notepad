@@ -1,9 +1,25 @@
+import { continueAfterDisconnect } from "./background";
 import type { Config } from "./config";
 import { randomId } from "./crypto";
-import { deviceTrialMeetingsUsed, hasSubscriptionAccess, subscriptionState, userTrialMeetingsUsed } from "./entitlements";
+import { type ActiveDeviceCheck, type DeviceBits, queryDeviceBits, updateDeviceBits } from "./deviceCheck";
+import {
+  type SubscriptionState,
+  type TrialState,
+  deviceTrialMeetingsUsed,
+  hasSubscriptionAccess,
+  isTrialExpired,
+  subscriberMeetingMaxMinutes,
+  subscriptionState,
+  trialMeetingsLeft,
+  userTrialState,
+} from "./entitlements";
+import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
-import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom } from "./usage";
+import type { Platform, RequestContext } from "./platform";
+import { type TrialRefusalReason, recordTrialRefusal } from "./trialRefusals";
+import { requireElevenLabsTrialHeadroom } from "./elevenLabsCapacity";
+import { type MonthlyUsage, chunkOverlapAllowance, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
 export interface StartedMeeting {
@@ -27,11 +43,34 @@ export interface MeetingRow {
   readonly token_budget: number;
   readonly tokens_used: number;
   readonly audio_seconds: number;
-  readonly audio_reserved: number;
   /** 1: gerçek ses süresi ayrılanı aştı, toplantının ses hakkı kapandı. */
   readonly transcription_closed: number;
   /** `ended`: kullanıcı bitirdi (not için ek süre); `superseded`: yeni toplantı başlayınca kapandı (ek süre yok). */
   readonly end_reason: "ended" | "superseded" | null;
+  /** Yeniden işleme sayısı ve açıklığın sonu (bkz. `reprocessMeeting`). */
+  readonly reprocess_count: number;
+  readonly reprocess_until: number | null;
+  readonly reprocess_audio_cap: number | null;
+}
+
+/** Bir toplantının en çok yeniden işlenme sayısı. */
+export const maxMeetingReprocesses: number = 2;
+
+/** Toplantı başlatma isteğinin kötüye kullanım bilgileri. */
+export interface MeetingStartRequest {
+  /** Doğrulanmış App Attest cihazı (bildirildiyse). */
+  readonly deviceId: string | null;
+  /** İstemci IP'sinin HMAC özeti (yeni hesap başına günlük deneme sınırı). */
+  readonly clientIpHash: string;
+  /** İstemcinin Apple DeviceCheck jetonu (base64); deneme toplantısında gerekebilir (`requireTrialDevice`). */
+  readonly deviceCheckToken: string | null;
+  /** İstemcinin kayıt kimliği; aynı kullanıcı ve kimlikle açılmış oturum varsa o döner (yeniden düşüm yok). */
+  readonly clientRef: string | null;
+  /**
+   * Sonradan işlenen kayıt (çevrimdışı kaydedilmiş ya da içe aktarılmış): açık toplantıyı kapatmaz (süren canlı kaydı
+   * bölmez). Haklar, deneme ve süre normal başlatmadaki gibi denetlenir.
+   */
+  readonly deferred: boolean;
 }
 
 /** SQL bağ değeri. */
@@ -51,6 +90,26 @@ interface NewMeeting {
   readonly kind: "trial" | "subscription";
   readonly maxEndsAt: number;
   readonly tokenBudget: number;
+  readonly clientRef: string | null;
+  /** Açık toplantıyı kapatmadan ekle (bkz. `MeetingStartRequest.deferred`). */
+  readonly deferred: boolean;
+}
+
+/** Aynı anda ek süresi içinde olan (işlenen) en çok sonradan işlenen kayıt oturumu. */
+export const maxPendingDeferredMeetings: number = 3;
+
+/** Bekleyen kayıt sınırı dolduysa `rate_limited` (istemci kuyruğu bir süre sonra yeniden dener). */
+async function requirePendingDeferredLeft(db: D1Database, config: Config, userId: string, deferred: boolean, now: Date): Promise<void> {
+  if (!deferred) {
+    return;
+  }
+  const row: { count: number } | null = await db
+    .prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ? AND deferred = 1 AND ended_at > ?")
+    .bind(userId, now.getTime() - config.meetingGraceMs)
+    .first<{ count: number }>();
+  if ((row?.count ?? 0) >= maxPendingDeferredMeetings) {
+    throw new ApiError("rate_limited", `Aynı anda en çok ${maxPendingDeferredMeetings} bekleyen kayıt işlenir; diğerleri biraz sonra işlenecek.`);
+  }
 }
 
 /** Abonelik toplantısının ek koşulu yoktur: aylık sınır eklemeden önce denetlenir. */
@@ -60,7 +119,9 @@ const noGate: StartGate = { sql: "1", binds: [] };
  * Toplantıyı tek D1 toplu işleminde (tek işlem) ekler. Satır yalnızca kullanıcının bugünkü başlatma sayısı
  * `maxMeetingStartsPerDay` altındaysa ve `gate` sağlanıyorsa eklenir. Eklenirse aynı işlemde günlük başlatma sayısı
  * artar ve kullanıcının açık toplantısı ek süresiz kapanır (`superseded`; aynı anda tek toplantı, yeniden başlatarak
- * bütçe katlanamaz). Eklenmezse hiçbir sayaç ve açık toplantı değişmez. `followUps` eklemeden sonra çalışır ve kendi
+ * bütçe katlanamaz). Sonradan işlenen kayıt (`deferred`) bitmiş olarak eklenir (canlı kullanılamaz: Deepgram jetonu
+ * almaz, yalnızca ek sürede son geçiş ve not), açık toplantıyı kapatmaz ve ek süresi içindeki bekleyenler
+ * `maxPendingDeferredMeetings`'i geçemez. Eklenmezse hiçbir sayaç ve açık toplantı değişmez. `followUps` eklemeden sonra çalışır ve kendi
  * "toplantı eklendi mi" koşulunu taşır. Eklendiyse true döner.
  */
 async function insertMeeting(
@@ -77,9 +138,11 @@ async function insertMeeting(
     db.prepare("INSERT OR IGNORE INTO daily_usage (user_id, day) VALUES (?, ?)").bind(meeting.userId, day),
     db
       .prepare(
-        `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget)
-         SELECT ?, ?, ?, ?, ?, ?, ?
-         WHERE (SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?) < ? AND (${gate.sql})`,
+        `INSERT OR IGNORE INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget, client_ref,
+           deferred, ended_at, minutes, end_reason)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN ? END, CASE WHEN ? = 1 THEN 0 END, CASE WHEN ? = 1 THEN 'ended' END
+         WHERE (SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?) < ? AND (${gate.sql})
+           AND (? = 0 OR (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND deferred = 1 AND ended_at > ?) < ?)`,
       )
       .bind(
         meeting.id,
@@ -89,10 +152,20 @@ async function insertMeeting(
         nowMs,
         meeting.maxEndsAt,
         meeting.tokenBudget,
+        meeting.clientRef,
+        meeting.deferred ? 1 : 0,
+        meeting.deferred ? 1 : 0,
+        nowMs,
+        meeting.deferred ? 1 : 0,
+        meeting.deferred ? 1 : 0,
         meeting.userId,
         day,
         config.maxMeetingStartsPerDay,
         ...gate.binds,
+        meeting.deferred ? 1 : 0,
+        meeting.userId,
+        nowMs - config.meetingGraceMs,
+        maxPendingDeferredMeetings,
       ),
     db
       .prepare(
@@ -100,14 +173,15 @@ async function insertMeeting(
          WHERE user_id = ? AND day = ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
       )
       .bind(meeting.userId, day, meeting.id),
+    // Sonradan işlenen kayıt açık toplantıyı kapatmaz (`deferred`): koşul her zaman yanlış olur.
     db
       .prepare(
         `UPDATE meeting_sessions
          SET ended_at = MIN(?, max_ends_at), minutes = CAST((MIN(?, max_ends_at) - started_at + 59999) / 60000 AS INTEGER),
            end_reason = 'superseded'
-         WHERE user_id = ? AND ended_at IS NULL AND id <> ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
+         WHERE ? = 0 AND user_id = ? AND ended_at IS NULL AND id <> ? AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)`,
       )
-      .bind(nowMs, nowMs, meeting.userId, meeting.id, meeting.id),
+      .bind(nowMs, nowMs, meeting.deferred ? 1 : 0, meeting.userId, meeting.id, meeting.id),
     ...followUps,
   ]);
   return results[1]?.meta.changes === 1;
@@ -125,31 +199,42 @@ async function requireDailyStartLeft(db: D1Database, config: Config, userId: str
 }
 
 /**
- * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503. Abonelik erişimi varsa (`past_due` ek süresi dahil)
- * aylık sınırın altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı
- * düşer (`startTrialMeeting`). Kullanıcı bugün `maxMeetingStartsPerDay` toplantı başlattıysa 429. Denetimler eklemeden
- * önce ya da eklemeyle aynı işlemde yapılır: reddedilen başlatma açık toplantıyı kapatmaz ve günlük başlatma hakkı
- * harcamaz.
+ * Toplantı oturumu açar. Günlük harcama tavanı aşıldıysa 503; deneme toplantısında günlük deneme harcaması tavanı
+ * aşıldıysa da 503 (`trial_capacity_reached`). Abonelik erişimi varsa (`past_due` ek süresi dahil) aylık sınırın
+ * altında olmak gerekir (oturum süresi kalan aylık süreyle de sınırlanır); yoksa bir deneme toplantısı düşer (önce
+ * `requireTrialDevice`, sonra `startTrialMeeting`); abonelik toplantısı DeviceCheck istemez. Kullanıcı bugün
+ * `maxMeetingStartsPerDay` toplantı başlattıysa 429. Denetimler eklemeden önce ya da eklemeyle aynı işlemde yapılır:
+ * reddedilen başlatma açık toplantıyı kapatmaz ve günlük başlatma hakkı harcamaz.
  */
 export async function startMeeting(
   db: D1Database,
+  context: RequestContext,
   config: Config,
   userId: string,
-  deviceId: string | null,
-  clientIpHash: string,
+  request: MeetingStartRequest,
   now: Date,
 ): Promise<StartedMeeting> {
+  // Aynı kayıt için yinelenen başlatma (yanıt kaybolduysa, çevrimdışı kayıt sonradan açılırken): aynı oturum döner;
+  // deneme hakkı, günlük başlatma ve süre yeniden düşmez, açık toplantı kapanmaz.
+  const existing: StartedMeeting | null = await startedByClientRef(db, config, userId, request.clientRef, now);
+  if (existing !== null) {
+    return existing;
+  }
   await requireSpendHeadroom(db, config, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
-    return startTrialMeeting(db, config, userId, deviceId, clientIpHash, now);
+    await requireTrialSpendHeadroom(db, config, now);
+    await requireElevenLabsTrialHeadroom(db, config, now);
+    await requireTrialDevice(db, context, config, userId, request.deviceCheckToken, now);
+    return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, request.deferred, now);
   }
+  const deviceId: string | null = request.deviceId;
   const usage: MonthlyUsage = await monthlyUsage(db, userId, now);
   const remainingSeconds: number = config.monthlyCapSeconds - usage.usedSeconds;
   if (remainingSeconds <= 0) {
     throw new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.");
   }
   const meetingId: string = randomId();
-  const maxMinutes: number = Math.max(1, Math.min(config.subscriberMaxMeetingMinutes, Math.floor(remainingSeconds / 60)));
+  const maxMinutes: number = subscriberMeetingMaxMinutes(config, remainingSeconds);
   const maxEndsAt: number = now.getTime() + maxMinutes * 60_000;
   const meeting: NewMeeting = {
     id: meetingId,
@@ -158,8 +243,16 @@ export async function startMeeting(
     kind: "subscription",
     maxEndsAt,
     tokenBudget: config.subscriberMeetingTokenBudget,
+    clientRef: request.clientRef,
+    deferred: request.deferred,
   };
   if (!(await insertMeeting(db, config, meeting, noGate, [], now))) {
+    // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner.
+    const raced: StartedMeeting | null = await startedByClientRef(db, config, userId, request.clientRef, now);
+    if (raced !== null) {
+      return raced;
+    }
+    await requirePendingDeferredLeft(db, config, userId, request.deferred, now);
     await requireDailyStartLeft(db, config, userId, now);
     log("error", "meeting_insert_failed", { userId, kind: "subscription" });
     throw new ApiError("internal_error", "Toplantı başlatılamadı; yeniden dene.");
@@ -176,12 +269,112 @@ export async function startMeeting(
 }
 
 /**
+ * Yarıda kalan Mac talebinin aynı hesapça tamamlanabildiği süre (talebin başladığı andan): kullanıcı kayıt başlatmayı
+ * dakikalar içinde yeniden dener; daha eski talep, kullanılmış başka bir Mac'in jetonuyla denemeyi açmaya yetmez.
+ */
+export const trialDeviceClaimResumeMs: number = 60 * 60_000;
+
+/**
+ * Deneme için Mac denetimi (Apple DeviceCheck, `bit0` = "bu Mac bir hesaba deneme verdi"). Politika `off` ise, hesabın
+ * denemesi zaten bir Mac'e bağlandıysa (`users.trial_device_verified_at`) ya da hesabın denemesi bittiyse (toplantılar
+ * harcandı ya da süre doldu; kapı `trial_exhausted` verir, Mac boşuna işaretlenmez) bir şey yapmaz. Yoksa jeton
+ * gerekir (`device_check_required`). `bit0` boşsa Mac bu hesaba bağlanır (`claimTrialDevice`): önce hesabın bekleyen
+ * talebi yazılır (`users.trial_device_claim_started_at`), sonra Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi),
+ * sonra hesap doğrulanmış sayılır: hesabın sonraki deneme toplantıları jeton istemez. `bit0` doluysa: hesabın bekleyen
+ * talebi `trialDeviceClaimResumeMs` içinde başladıysa Mac'i işaretleyen büyük olasılıkla bu hesabın yarıda kalmış
+ * isteğidir (Apple yazdı, yanıt ya da doğrulama yazımı kayboldu): doğrulama tamamlanır; yoksa `trial_device_used`
+ * (eski bekleyen talep başka bir Mac'in jetonuyla denemeyi açamaz). Mac kapıdan (IP sınırı) önce
+ * işaretlenir; kapı reddederse Mac yine bu hesabındır ve hesap yeniden deneyebilir. Apple karşılaştır-yaz sunmaz: aynı
+ * Mac'te iki hesabın aynı anda ilk denemesi ikisine de geçebilir (kabul edilen yarış).
+ */
+async function requireTrialDevice(
+  db: D1Database,
+  context: RequestContext,
+  config: Config,
+  userId: string,
+  deviceCheckToken: string | null,
+  now: Date,
+): Promise<void> {
+  const deviceCheck: Config["deviceCheck"] = config.deviceCheck;
+  if (deviceCheck.policy === "off") {
+    return;
+  }
+  const row: { verified_at: number | null; claim_started_at: number | null } | null = await db
+    .prepare("SELECT trial_device_verified_at AS verified_at, trial_device_claim_started_at AS claim_started_at FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ verified_at: number | null; claim_started_at: number | null }>();
+  if (row === null || row.verified_at !== null || trialMeetingsLeft(await userTrialState(db, userId), config, now) === 0) {
+    return;
+  }
+  if (deviceCheckToken === null) {
+    throw new ApiError("device_check_required", "Ücretsiz deneme için bu Mac'in Apple DeviceCheck jetonu gerekiyor; uygulamayı güncelle.");
+  }
+  const bits: DeviceBits = await queryDeviceBits(context.platform, deviceCheck, deviceCheckToken, now);
+  if (bits.bit0 && row.claim_started_at !== null && now.getTime() - row.claim_started_at <= trialDeviceClaimResumeMs) {
+    await markTrialDeviceVerified(db, userId, now);
+    log("warn", "trial_device_claim_resumed", { userId, claimStartedAt: row.claim_started_at });
+    return;
+  }
+  if (bits.bit0) {
+    log("info", "trial_refused", { userId, attested: false, reason: "device_used" });
+    await recordTrialRefusal(db, "device_used", now);
+    throw new ApiError("trial_device_used", "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için abone ol.");
+  }
+  await db
+    .prepare("UPDATE users SET trial_device_claim_started_at = ? WHERE id = ? AND trial_device_verified_at IS NULL")
+    .bind(now.getTime(), userId)
+    .run();
+  // İstemci koparsa da Mac işaretlemesi ve doğrulama biter (Workers isteği iptal etse de): yarım kalan talep olmasın.
+  await continueAfterDisconnect(context, claimTrialDevice(db, context.platform, deviceCheck, userId, deviceCheckToken, bits, now), "trial_device_claim_failed", {
+    userId,
+  });
+  log("info", "trial_device_claimed", { userId });
+}
+
+/**
+ * Mac'i işaretler (`bit0` = true, `bit1` korunur) ve hesabı doğrulanmış yazar. Apple jetonu reddettiyse
+ * (`device_check_invalid`, yazmadığı kesin) bekleyen talep silinir ve hata fırlatılır; diğer hatalarda (zaman aşımı,
+ * 5xx) Apple yazmış olabilir: talep kalır, hata fırlatılır (aynı hesap yeniden denediğinde doğrulama tamamlanır).
+ */
+async function claimTrialDevice(
+  db: D1Database,
+  platform: Platform,
+  deviceCheck: ActiveDeviceCheck,
+  userId: string,
+  deviceCheckToken: string,
+  bits: DeviceBits,
+  now: Date,
+): Promise<void> {
+  try {
+    await updateDeviceBits(platform, deviceCheck, deviceCheckToken, { bit0: true, bit1: bits.bit1 }, now);
+  } catch (error: unknown) {
+    if (error instanceof ApiError && error.code === "device_check_invalid") {
+      await db.prepare("UPDATE users SET trial_device_claim_started_at = NULL WHERE id = ?").bind(userId).run();
+    }
+    throw error;
+  }
+  await markTrialDeviceVerified(db, userId, now);
+}
+
+/** Hesabın denemesini Mac'e bağlanmış yazar ve bekleyen talebi siler. */
+async function markTrialDeviceVerified(db: D1Database, userId: string, now: Date): Promise<void> {
+  await db
+    .prepare("UPDATE users SET trial_device_verified_at = ?, trial_device_claim_started_at = NULL WHERE id = ? AND trial_device_verified_at IS NULL")
+    .bind(now.getTime(), userId)
+    .run();
+}
+
+/**
  * Deneme toplantısı. Her hesabın doğrulanmış bir kimliği vardır (Apple ya da Google `sub`; hesap başka yoldan
- * oluşmaz). Hak üç koşula bağlıdır:
- * - hesap başına `trialMeetings` toplantı;
+ * oluşmaz). Hak dört koşula bağlıdır:
+ * - hesap başına `trialMeetings` toplantı; aynı kimliğin silinmiş hesaplarının harcadığı denemeler de sayılır
+ *   (`users.carried_trial_meetings`, bkz. `trialLedger.ts`);
+ * - deneme süresi (`trialDurationMs`) dolmamış olmalı: süre hesabın ilk deneme toplantısıyla başlar
+ *   (`users.trial_started_at`, ilk toplantıyla aynı işlemde yazılır; silinmiş hesaptan devralınabilir) ve dolunca
+ *   kullanılmamış toplantılar da düşer;
  * - doğrulanmış cihaz bildirildiyse cihaz başına `trialMeetings` toplantı (yeni hesap aynı cihazda yeni deneme almaz);
  * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı (silinmiş hesaplar dahil)
- *   `trialAccountsPerIpPerDay` altında olmalı.
+ *   `trialAccountsPerIpPerDay` altında olmalı. Denemeyi devralan (yeniden açılmış) hesap yeni deneme hesabı sayılmaz.
  * Koşullar, günlük başlatma sınırı ve ekleme tek toplu işlemdir (D1 işlemi): eşzamanlı istekler sınırları aşamaz.
  */
 async function startTrialMeeting(
@@ -190,23 +383,34 @@ async function startTrialMeeting(
   userId: string,
   deviceId: string | null,
   clientIpHash: string,
+  clientRef: string | null,
+  deferred: boolean,
   now: Date,
 ): Promise<StartedMeeting> {
   const meetingId: string = randomId();
   const day: string = dayKey(now);
   const maxEndsAt: number = now.getTime() + config.trialMaxMeetingMinutes * 60_000;
   const gate: StartGate = {
-    sql: `(SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') < ?
+    sql: `(SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial')
+        + (SELECT carried_trial_meetings FROM users WHERE id = ?) < ?
+      AND COALESCE((SELECT trial_started_at FROM users WHERE id = ?) + ?, ? + 1) > ?
       AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)
       AND (EXISTS (SELECT 1 FROM meeting_sessions WHERE user_id = ? AND kind = 'trial')
+        OR (SELECT carried_trial_meetings FROM users WHERE id = ?) > 0
         OR (SELECT COUNT(*) FROM trial_starts WHERE ip_hash = ? AND day = ?)
           + COALESCE((SELECT accounts FROM deleted_trial_starts WHERE ip_hash = ? AND day = ?), 0) < ?)`,
     binds: [
       userId,
+      userId,
       config.trialMeetings,
+      userId,
+      config.trialDurationMs,
+      now.getTime(),
+      now.getTime(),
       deviceId,
       deviceId,
       config.trialMeetings,
+      userId,
       userId,
       clientIpHash,
       day,
@@ -215,29 +419,38 @@ async function startTrialMeeting(
       config.trialAccountsPerIpPerDay,
     ],
   };
-  // Yalnızca hesabın ilk deneme toplantısı IP sayacına girer: eski günlerin satırları temizlikte silinir
-  // (`cleanup.ts`), "denemeye başlamış mı" sorusu toplantılardan yanıtlanır.
+  // Yalnızca hesabın ilk deneme toplantısı IP sayacına girer (denemeyi devralan hesabınki girmez): eski günlerin
+  // satırları temizlikte silinir (`cleanup.ts`), "denemeye başlamış mı" sorusu toplantılardan yanıtlanır.
   const recordTrialStart: D1PreparedStatement = db
     .prepare(
       `INSERT OR IGNORE INTO trial_starts (user_id, ip_hash, day, created_at)
        SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)
-         AND (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') = 1`,
+         AND (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial') = 1
+         AND (SELECT carried_trial_meetings FROM users WHERE id = ?) = 0`,
     )
-    .bind(userId, clientIpHash, day, now.getTime(), meetingId, userId);
-  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget };
-  const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart], now);
+    .bind(userId, clientIpHash, day, now.getTime(), meetingId, userId, userId);
+  // Denemenin süresi ilk deneme toplantısıyla başlar (devralınmış başlangıç korunur).
+  const recordTrialStartedAt: D1PreparedStatement = db
+    .prepare("UPDATE users SET trial_started_at = ? WHERE id = ? AND trial_started_at IS NULL AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)")
+    .bind(now.getTime(), userId, meetingId);
+  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget, clientRef, deferred };
+  const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart, recordTrialStartedAt], now);
   if (!inserted) {
+    // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner (deneme bir kez düşer).
+    const raced: StartedMeeting | null = await startedByClientRef(db, config, userId, clientRef, now);
+    if (raced !== null) {
+      return raced;
+    }
+    await requirePendingDeferredLeft(db, config, userId, deferred, now);
     await requireDailyStartLeft(db, config, userId, now);
   }
-  const accountUsed: number = await userTrialMeetingsUsed(db, userId);
+  const trial: TrialState = await userTrialState(db, userId);
   const deviceUsed: number | null = deviceId === null ? null : await deviceTrialMeetingsUsed(db, deviceId);
   if (!inserted) {
-    const exhausted: boolean = accountUsed >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings;
-    log("info", "trial_refused", { userId, attested: deviceId !== null, reason: exhausted ? "exhausted" : "ip_daily_limit" });
-    if (exhausted) {
-      throw new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
-    }
-    throw new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
+    const reason: TrialRefusalReason = trialRefusalReason(config, trial, deviceUsed, now);
+    log("info", "trial_refused", { userId, attested: deviceId !== null, reason });
+    await recordTrialRefusal(db, reason, now);
+    throw trialRefusalError(config, reason);
   }
   log("info", "meeting_started", { userId, meetingId, kind: "trial", attested: deviceId !== null });
   return {
@@ -246,11 +459,39 @@ async function startTrialMeeting(
     tokenBudget: config.trialMeetingTokenBudget,
     maxDurationMinutes: config.trialMaxMeetingMinutes,
     expiresAt: new Date(maxEndsAt).toISOString(),
-    trialMeetingsLeft: Math.max(0, config.trialMeetings - Math.max(accountUsed, deviceUsed ?? 0)),
+    trialMeetingsLeft: Math.max(0, config.trialMeetings - Math.max(trial.used, deviceUsed ?? 0)),
   };
 }
 
-/** Toplantıyı bitirir; zaten bittiyse kayıtlı sonucu döndürür. Başkasının toplantısı `not_found`. */
+/**
+ * Reddedilen deneme başlatmanın nedeni: toplantılar harcandıysa (hesap ya da cihaz) `exhausted`, süre dolduysa
+ * `expired`, değilse IP başına günlük sınır `ip_daily_limit`. Saf fonksiyondur.
+ */
+function trialRefusalReason(config: Config, trial: TrialState, deviceUsed: number | null, now: Date): Exclude<TrialRefusalReason, "device_used"> {
+  if (trial.used >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings) {
+    return "exhausted";
+  }
+  return isTrialExpired(trial, config.trialDurationMs, now) ? "expired" : "ip_daily_limit";
+}
+
+/**
+ * Reddedilen deneme başlatmanın hatası: harcanmış ya da süresi dolmuş denemede `trial_exhausted` (0.1.4 Mac uygulaması
+ * da bu kodu tanır), IP başına günlük sınırda `trial_ip_limit`. Saf fonksiyondur.
+ */
+function trialRefusalError(config: Config, reason: Exclude<TrialRefusalReason, "device_used">): ApiError {
+  if (reason === "exhausted") {
+    return new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
+  }
+  if (reason === "expired") {
+    return new ApiError("trial_exhausted", `Ücretsiz deneme süren doldu (${config.trialDays} gün). Devam etmek için abone ol.`);
+  }
+  return new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
+}
+
+/**
+ * Toplantıyı bitirir; zaten bittiyse kayıtlı sonucu döndürür. Başkasının toplantısı `not_found`. Biten toplantıların
+ * (bu ve yeni toplantı başlayınca kapananlar) Deepgram tahmini gerçek süreye indirilir.
+ */
 export async function endMeeting(db: D1Database, userId: string, meetingId: string, now: Date): Promise<MeetingRow> {
   await db
     .prepare(
@@ -265,8 +506,35 @@ export async function endMeeting(db: D1Database, userId: string, meetingId: stri
   if (row === null) {
     throw new ApiError("not_found", "Toplantı oturumu bulunamadı.");
   }
+  await settleDeepgramMeetings(db, now);
   log("info", "meeting_ended", { userId, meetingId, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
   return row;
+}
+
+/**
+ * İstemcinin kayıt kimliğiyle daha önce açılmış oturum (yoksa ya da kimlik verilmediyse null). Yanıt ilk başlatmanınkiyle
+ * aynı biçimdedir; deneme toplantısında kalan deneme şimdiki durumdan hesaplanır.
+ */
+async function startedByClientRef(db: D1Database, config: Config, userId: string, clientRef: string | null, now: Date): Promise<StartedMeeting | null> {
+  if (clientRef === null) {
+    return null;
+  }
+  const row: MeetingRow | null = await db
+    .prepare("SELECT * FROM meeting_sessions WHERE user_id = ? AND client_ref = ?")
+    .bind(userId, clientRef)
+    .first<MeetingRow>();
+  if (row === null) {
+    return null;
+  }
+  log("info", "meeting_start_repeated", { userId, meetingId: row.id, kind: row.kind });
+  return {
+    meetingId: row.id,
+    kind: row.kind,
+    tokenBudget: row.token_budget,
+    maxDurationMinutes: Math.max(1, Math.round((row.max_ends_at - row.started_at) / 60_000)),
+    expiresAt: new Date(row.max_ends_at).toISOString(),
+    trialMeetingsLeft: row.kind === "trial" ? trialMeetingsLeft(await userTrialState(db, userId), config, now) : null,
+  };
 }
 
 async function findMeeting(db: D1Database, userId: string, meetingId: string): Promise<MeetingRow | null> {
@@ -279,7 +547,93 @@ async function findMeeting(db: D1Database, userId: string, meetingId: string): P
  */
 export function meetingUsableUntil(row: MeetingRow, graceMs: number): number {
   const end: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
-  return row.end_reason === "superseded" ? end : end + graceMs;
+  const usual: number = row.end_reason === "superseded" ? end : end + graceMs;
+  // Yeniden işleme açıklığı (bkz. `reprocessMeeting`) ek süreden bağımsızdır.
+  return Math.max(usual, row.reprocess_until ?? 0);
+}
+
+/** Aboneliği ya da denemesi olmayan hesap kendi toplantısını bitişinden sonra bu süre içinde yeniden işleyebilir. */
+export const reprocessWithoutAccessMs: number = 7 * 86_400_000;
+
+/** Yeniden açılan toplantının yapay zekâ bütçesi (token; notu bir kez yeniden yazmaya yeter). */
+export const reprocessTokenBudget: number = 300_000;
+
+/**
+ * Yeniden işlemeye izin var mı: abonelik erişimi ya da kalan deneme varsa her zaman; yoksa toplantının bitişinden sonra
+ * `windowMs` içinde (kayıtlı toplantısını son kez işleyebilsin, ama süresiz değil). Saf fonksiyondur.
+ */
+export function mayReprocess(hasAccess: boolean, meetingEndMs: number, nowMs: number, windowMs: number): boolean {
+  return hasAccess || nowMs <= meetingEndMs + windowMs;
+}
+
+/**
+ * Yeniden işlemenin ses sınırı (toplantının toplam yazılmış sesi): şimdiye dek yazılan + kaydın gerçek süresi (toplantı
+ * süresi ile ilk geçişin sesinin büyüğü) + parça örtüşme payı. Sesi hiç yazılmamış toplantıda null (ilk geçiş sınırı:
+ * toplantının en uzun süresi). Saf fonksiyondur.
+ */
+export function reprocessAudioCap(audioSeconds: number, meetingSeconds: number): number | null {
+  if (audioSeconds <= 0) {
+    return null;
+  }
+  const recording: number = Math.max(meetingSeconds, audioSeconds);
+  return audioSeconds + recording + chunkOverlapAllowance(recording);
+}
+
+/** Yeniden işleme yanıtı. */
+export interface ReprocessedMeeting {
+  readonly meetingId: string;
+  /** Toplantının vekil çağrılarına açık olduğu son an (ISO 8601). */
+  readonly usableUntil: string;
+  /** Kalan yeniden işleme hakkı. */
+  readonly reprocessesLeft: number;
+}
+
+/**
+ * Bitmiş toplantıyı yeniden işleme için açar: `meetingGraceMs` boyunca son geçiş en çok kaydın gerçek süresi kadar yeni
+ * ses (`reprocessAudioCap`), toplantı kapsamlı yapay zekâ tam `reprocessTokenBudget` token kullanabilir (bütçe =
+ * şimdiye dek kullanılan + pay; ilk geçiş bütçesini neredeyse bitirmiş toplantı da tam pay alır). Toplantının toplam
+ * yapay zekâ bütçesi böylece en çok ilk bütçe + `maxMeetingReprocesses` × pay olur. Yeni deneme, başlatma ya da
+ * toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
+ * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı doluysa
+ * (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503. Toplantı zaten açıksa (ek süre içinde) hak harcanmaz.
+ * En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`. Başkasının ya da olmayan toplantı
+ * `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
+ */
+export async function reprocessMeeting(db: D1Database, config: Config, userId: string, meetingId: string, now: Date): Promise<ReprocessedMeeting> {
+  const row: MeetingRow | null = await findMeeting(db, userId, meetingId);
+  if (row === null) {
+    throw new ApiError("not_found", "Toplantı oturumu bulunamadı.");
+  }
+  const nowMs: number = now.getTime();
+  if (nowMs < meetingUsableUntil(row, config.meetingGraceMs)) {
+    return {
+      meetingId,
+      usableUntil: new Date(meetingUsableUntil(row, config.meetingGraceMs)).toISOString(),
+      reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count),
+    };
+  }
+  const [subscription, trial]: [SubscriptionState | null, TrialState] = await Promise.all([subscriptionState(db, userId), userTrialState(db, userId)]);
+  const hasAccess: boolean = hasSubscriptionAccess(subscription, now, config.pastDueGraceMs) || trialMeetingsLeft(trial, config, now) > 0;
+  const endMs: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
+  if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
+    throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
+  }
+  await requireSpendHeadroom(db, config, now);
+  const until: number = nowMs + config.meetingGraceMs;
+  const audioCap: number | null = reprocessAudioCap(row.audio_seconds, Math.max(0, endMs - row.started_at) / 1000);
+  const updated: D1Result = await db
+    .prepare(
+      `UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ?, reprocess_audio_cap = ?,
+         token_budget = tokens_used + ?
+       WHERE id = ? AND user_id = ? AND reprocess_count < ?`,
+    )
+    .bind(until, audioCap, reprocessTokenBudget, meetingId, userId, maxMeetingReprocesses)
+    .run();
+  if (updated.meta.changes !== 1) {
+    throw new ApiError("reprocess_limit_reached", `Bu toplantı en çok ${maxMeetingReprocesses} kez yeniden işlenebilir.`);
+  }
+  log("info", "meeting_reprocess_opened", { userId, meetingId, count: row.reprocess_count + 1, hasAccess, audioCap });
+  return { meetingId, usableUntil: new Date(until).toISOString(), reprocessesLeft: Math.max(0, maxMeetingReprocesses - row.reprocess_count - 1) };
 }
 
 /** Vekil çağrısı için toplantı: çağırana ait, açık ya da ek süre içinde olmalı; değilse `meeting_not_active`. */

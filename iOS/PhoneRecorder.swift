@@ -356,6 +356,9 @@ final class PhoneRecorder {
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         case .speakersAssigned:
             break
+        case .liveEngineFellBack(let message):
+            // iPhone hibrit oturum kullanmaz; olay gelirse yine görünür.
+            errorMessages = appendUnique(messages: errorMessages, message: message)
         }
     }
 
@@ -499,7 +502,7 @@ final class PhoneRecorder {
             try BGTaskScheduler.shared.submit(request)
             Self.logger.info("Sürdürülen işleme görevi istendi, toplantı: \(id, privacy: .public), görev: \(identifier, privacy: .public)")
         } catch {
-            Self.logger.warning("Sürdürülen işleme görevi reddedildi, işleme arka plan süresiyle sürecek, toplantı: \(id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.warning("Sürdürülen işleme görevi reddedildi, işleme arka plan süresiyle sürecek, toplantı: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
         }
     }
 
@@ -576,7 +579,7 @@ final class PhoneRecorder {
             )
             lastActivityUpdate = .distantPast
         } catch {
-            Self.logger.error("Canlı etkinlik başlatılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Canlı etkinlik başlatılamadı, hata: \(String(describing: error), privacy: .private)")
         }
     }
 
@@ -730,7 +733,7 @@ final class PhoneRecorder {
             try saveMeeting(record: record, directory: directory)
             store.upsert(record: record)
         } catch {
-            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
         }
     }

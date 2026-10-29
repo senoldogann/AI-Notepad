@@ -1,7 +1,8 @@
 ---
 // Kullanım şartları. Sınırlar ve ödeme davranışı sunucuyla aynıdır (server/wrangler.jsonc `vars`, server/src/billing.ts,
-// server/src/account.ts). Ödeme Stripe Managed Payments ile alınır: satıcı (merchant of record) Link'tir; iade ve cayma
-// hakkı Link'in sürecine bağlıdır.
+// server/src/account.ts, trialLedger.ts, deviceCheck.ts). Ödeme Stripe Managed Payments ile alınır: satıcı (merchant of
+// record) Link'tir; iade ve cayma hakkı Link'in şartlarına bağlıdır (link.com/terms "Sold Through Link Terms": AB
+// tüketicisine erişimden itibaren 14 gün, Link desteğine "cooling off period" gerekçesiyle başvurulur).
 import LegalSection from "../components/LegalSection.astro";
 import Legal from "../layouts/Legal.astro";
 import { cardStatementDescriptor, productName } from "../config";
@@ -21,6 +22,7 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "limits", title: "Fair use and limits" },
   { id: "use", title: "Acceptable use and recording consent" },
   { id: "content", title: "Your content" },
+  { id: "dpa", title: "Processing personal data on your behalf" },
   { id: "ai", title: "AI-generated output" },
   { id: "third-party", title: "Integrations and third-party services" },
   { id: "availability", title: "Availability and changes to the service" },
@@ -31,6 +33,9 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "contact", title: "Contact" },
 ];
 const mail: string = `mailto:${operator.email}`;
+/** Link'in satın alma şartları (Stripe Managed Payments: satıcı Link) ve destek adresi. */
+const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
+const linkSupportUrl: string = "https://support.link.com/topics/sold-through-link";
 ---
 
 <Legal page="terms" meta={copy.termsMeta} title={copy.common.nav.terms} sections={sections}>
@@ -57,7 +62,8 @@ const mail: string = `mailto:${operator.email}`;
       {productName} is a Mac app that records your meetings, shows a live transcript and optional live translation, and
       writes a note when the meeting ends — your tasks first, then decisions and a summary. Transcription after the meeting
       and the AI features run through our servers using our providers (see the Privacy policy); the live transcript is
-      produced on your Mac. Your notes and recordings are stored on your Mac.
+      produced on your Mac or, when available, by our speech-to-text provider from audio streamed directly from your Mac.
+      Your notes and recordings are stored on your Mac.
     </p>
     <p>
       Subject to these terms, you may download and use the app on Macs you own or control, for as long as you have an
@@ -75,37 +81,51 @@ const mail: string = `mailto:${operator.email}`;
 
   <LegalSection sections={sections} id="trial">
     <p>
-      Every new account includes 3 free meetings, each up to 90 minutes long, with no payment card required. During the
-      trial, AI features used outside a meeting (for example Ask or rewriting a note) have a small daily limit. To prevent
-      abuse, trials are also limited per device and per network. When the trial is used up, you can keep reading your
-      existing notes, but you need a subscription to start new meetings.
+      New users get one free trial, with no payment card required: <strong>3 meetings or 7 days</strong> from your first
+      trial meeting, whichever comes first. Trial meetings not used within the 7 days expire, and each trial meeting can be
+      up to 90 minutes long. During the trial, AI features used outside a meeting (for example Ask or rewriting a note)
+      have a small daily limit.
     </p>
+    <ul>
+      <li>
+        There is one free trial per person and one per Mac. We keep a pseudonymous record of the sign-in identity (Apple
+        or Google account) that used a trial, and Apple DeviceCheck tells us whether a Mac has already been used for one.
+      </li>
+      <li>
+        If you delete your account and sign in again with the same Apple or Google account, your trial continues where it
+        left off; it does not start again.
+      </li>
+      <li>We may refuse to start new free trials when many accounts start from the same network on the same day.</li>
+      <li>When the trial ends, you can keep reading your existing notes, but you need a subscription to start new meetings.</li>
+    </ul>
   </LegalSection>
 
   <LegalSection sections={sections} id="subscription">
     <ul>
       <li>
-        The subscription costs <strong>USD 5.99 per month</strong>, plus any applicable sales tax, VAT or GST. The total,
-        including tax, is shown at checkout before you pay; it may be shown in your local currency.
+        The subscription costs <strong>USD 5.99 per month, taxes included</strong>: any sales tax, VAT or GST that applies
+        where you live is part of that price. The price is shown at checkout before you pay; it may be shown in your local
+        currency.
       </li>
       <li>
         Subscriptions are sold through <strong>Link</strong>, Stripe's payment service, which acts as the{" "}
         <strong>merchant of record</strong> (the seller) for your purchase. Checkout is hosted by Stripe, and Link
-        calculates, collects and remits the taxes. Link's own terms apply to the purchase and payment; these terms apply to
-        your use of {productName}. Receipts and some subscription emails are sent by Link, and your card statement shows{" "}
+        calculates, collects and remits the taxes. <a href={linkTermsUrl}>Link's terms</a> apply to the purchase and
+        payment; these terms apply to your use of {productName}. Receipts and some subscription emails are sent by Link, and your card statement shows{" "}
         <code>{cardStatementDescriptor}</code>. We never see your card details.
       </li>
       <li>
         You subscribe from your <a href={routes.account}>account page</a>. The subscription starts when the payment is
-        confirmed and <strong>renews automatically every month</strong> on the same day, until you cancel. Each renewal is
-        charged to your saved payment method.
+        confirmed. <strong>It renews automatically every month</strong> on the same day of the month, and each renewal is
+        charged to your saved payment method, <strong>until you cancel</strong>. You can cancel at any time (see section 6).
       </li>
       <li>
         If a payment fails, it is retried over the following days. You keep access for up to 7 days after the end of the
         paid period; after that, new meetings can't be started until the payment succeeds.
       </li>
       <li>
-        If we change the price, we will tell you at least 30 days in advance. The new price applies from your next billing
+        If we change the price, we will tell you in the app and on our website at least 30 days in advance (Link also
+        emails you before a renewal at a new price). The new price applies from your next billing
         period after the notice period, and you can cancel before it takes effect.
       </li>
       <li>
@@ -129,17 +149,32 @@ const mail: string = `mailto:${operator.email}`;
 
   <LegalSection sections={sections} id="withdrawal">
     <p>
-      Because Link is the seller of the subscription, payment questions, refunds and statutory cooling-off rights are
-      handled by Link under its process. This includes the right of consumers in the EU and EEA to withdraw from the
-      purchase within 14 days, where that right applies. Link may also issue refunds within 60 days of a payment in certain
-      other cases.
+      Link is the merchant of record for the subscription, so payment questions, refunds and the statutory right of
+      withdrawal are handled by Link under <a href={linkTermsUrl}>Link's terms</a>, which also provide the way to withdraw.
     </p>
+    <ul>
+      <li>
+        <strong>Right of withdrawal (EU and EEA consumers).</strong> Under Link's terms, you can cancel your order within 14
+        days from the day you get access to the subscription. To do so, contact{" "}
+        <a href={linkSupportUrl}>Link support</a>, follow its instructions for requesting a refund and give “cooling off
+        period” as the reason.
+      </li>
+      <li>
+        <strong>A service that has already started.</strong> The subscription is a digital service that starts, at your
+        request, as soon as your payment is confirmed. If you withdraw within the 14 days, EU consumer law lets the seller
+        charge an amount in proportion to the service provided until you withdrew; the right of withdrawal ends early only
+        if the service has been fully provided with your express prior consent. How this applies to your request is set
+        out in Link's terms.
+      </li>
+      <li>
+        <strong>Other refunds.</strong> Link may also refund a payment within 60 days in certain other cases, such as a
+        duplicate or unauthorised charge. Apart from these cases, or where mandatory law requires otherwise, unused parts of
+        a subscription period are not refunded.
+      </li>
+    </ul>
     <p>
-      To ask for a refund or to withdraw, contact Link support at{" "}
-      <a href="https://support.link.com">support.link.com</a>. You can also write to us at{" "}
-      <a href={mail}>{operator.email}</a> and we will help you with the request. Apart from these cases, or where mandatory
-      law requires otherwise, partial subscription periods are not refunded. Nothing in these terms limits any statutory
-      right you have as a consumer.
+      You can also write to us at <a href={mail}>{operator.email}</a> and we will help you with a request to Link. Nothing in
+      these terms limits any statutory right you have as a consumer.
     </p>
   </LegalSection>
 
@@ -163,8 +198,9 @@ const mail: string = `mailto:${operator.email}`;
       </li>
       <li>Don't use the service for anything unlawful, to infringe other people's rights, or to record conversations you are not entitled to record.</li>
       <li>
-        Don't access our servers other than through the app, try to get around limits or device checks, reverse engineer
-        the service, resell it, or overload it.
+        Don't access our servers other than through the app and our website, try to get around limits or device checks, resell the
+        service or overload it. Don't reverse engineer, decompile or disassemble the app or the service, except as
+        permitted by applicable law.
       </li>
     </ul>
   </LegalSection>
@@ -177,6 +213,55 @@ const mail: string = `mailto:${operator.email}`;
     </p>
   </LegalSection>
 
+  <LegalSection sections={sections} id="dpa">
+    <p>
+      The meetings you record include personal data of other participants: their voices, what they say and their names.
+      For that data you are the controller and we are your processor. This section is our data processing agreement under
+      Article 28 of the GDPR.
+    </p>
+    <ul>
+      <li>
+        <strong>Subject, purpose and duration.</strong> We process meeting audio, transcripts, notes and the participant
+        names and terms you add, only to transcribe your meetings and to produce notes, translations and answers for you,
+        for as long as you use the service. The categories of data depend on what is said in your meetings.
+      </li>
+      <li>
+        <strong>Your instructions.</strong> These terms and the <a href={routes.privacy}>Privacy policy</a> are your
+        documented instructions. We process the data for no other purpose, unless EU or Finnish law requires us to; in that
+        case we tell you first unless the law forbids it.
+      </li>
+      <li>
+        <strong>Confidentiality and security.</strong> Only the operator has access to the service's systems and is bound
+        by confidentiality. Meeting content is encrypted in transit; our servers keep no audio or notes, and keep the final
+        transcript encrypted for at most 2 hours so it can be re-sent; our other security
+        measures are described in the Privacy policy.
+      </li>
+      <li>
+        <strong>Sub-processors.</strong> You authorise the sub-processors listed in{" "}
+        <a href={`${routes.privacy}#providers`}>section 7 of the Privacy policy</a> (Cloudflare, Deepgram, ElevenLabs
+        and Anthropic for meeting content). We bind them by written data processing terms with data protection obligations equivalent to
+        these, and we remain responsible to you for them. We announce changes to this list in the Privacy policy before
+        they take effect; if you object, you can stop using the service and delete your account.
+      </li>
+      <li>
+        <strong>Assistance.</strong> Taking into account the nature of the processing, we help you answer requests from
+        people who use their data protection rights, and with security, data breach notifications, impact assessments and
+        consultations with supervisory authorities. We tell you without undue delay after becoming aware of a personal data
+        breach affecting this data.
+      </li>
+      <li>
+        <strong>Deletion.</strong> We don't keep meeting content after processing it: transcripts and notes are returned
+        to your Mac, and you delete them there; the encrypted copy of the final transcript is deleted from our server
+        within 2 hours, or immediately when you delete your account. Our sub-processors delete it under the retention rules described in the
+        Privacy policy.
+      </li>
+      <li>
+        <strong>Demonstrating compliance.</strong> We give you the information you need to show that these obligations are
+        met, including written answers to reasonable audit questions.
+      </li>
+    </ul>
+  </LegalSection>
+
   <LegalSection sections={sections} id="ai">
     <p>
       Transcripts, translations, summaries, tasks and answers are produced automatically by AI models. They can be
@@ -187,7 +272,8 @@ const mail: string = `mailto:${operator.email}`;
 
   <LegalSection sections={sections} id="third-party">
     <p>
-      You connect integrations such as Notion, Slack, Microsoft Teams, Discord, Zoom, Linear and Jira with your own
+      You connect integrations such as Notion, Slack, Microsoft Teams, Discord, Zoom, Linear, Jira, Apple Notes, Markdown
+      folders and webhooks (for example Zapier, Make or n8n) with your own
       accounts. Those services are provided by third parties under their own terms, and we are not responsible for how they
       work. Product names and logos belong to their owners.
     </p>
@@ -230,7 +316,7 @@ const mail: string = `mailto:${operator.email}`;
   <LegalSection sections={sections} id="changes">
     <p>
       We may update these terms, for example when the service or the law changes. We announce material changes in the app
-      or by email at least 30 days before they take effect. If you don't agree, you can cancel before then; continuing to
+      and on our website at least 30 days before they take effect. If you don't agree, you can cancel before then; continuing to
       use the service after the change means you accept it.
     </p>
   </LegalSection>
@@ -243,8 +329,11 @@ const mail: string = `mailto:${operator.email}`;
     <p>
       If something goes wrong, please contact us first — most issues are quickest to solve directly. Consumers in Finland can
       get help from the Consumer Advisory Services (kuluttajaneuvonta) and can bring a dispute to the Consumer Disputes Board
-      (Kuluttajariitalautakunta, <a href="https://www.kuluttajariita.fi/en/">kuluttajariita.fi</a>). Consumers can also take a
-      dispute to the courts of the place where they live. For business customers, disputes are settled by the Oulu District
+      (Kuluttajariitalautakunta, <a href="https://www.kuluttajariita.fi/en/">kuluttajariita.fi</a>). Consumers in other EU
+      countries, Iceland and Norway can get free help with a cross-border dispute from the European Consumer Centre in
+      their own country, which works together with the European Consumer Centre Finland (ECC Finland,{" "}
+      <a href="https://www.ecc.fi/en/">ecc.fi</a>). Consumers can also take a dispute to the courts of the place where they
+      live. For business customers, disputes are settled by the Oulu District
       Court (Oulun käräjäoikeus).
     </p>
   </LegalSection>

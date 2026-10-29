@@ -1,8 +1,11 @@
 # Yerel geliştirme gizli değerleri. Bu dosyayı `.dev.vars` olarak kopyalayıp doldur; `.dev.vars` repoya girmez.
 # Gerçek anahtarları sohbete, loga ya da repoya yazma.
 ACCESS_TOKEN_SECRET=
+TRIAL_HASH_SECRET=
 ANTHROPIC_API_KEY=
 ELEVENLABS_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 TURNSTILE_SECRET_KEY=
+# Yalnızca DEEPGRAM_POLICY=on iken gerekir.
+DEEPGRAM_API_KEY=

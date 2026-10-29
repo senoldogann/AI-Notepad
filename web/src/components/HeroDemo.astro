@@ -1,7 +1,8 @@
 ---
 // Ana sayfanın kısa, dönen ürün gösterimi (18 sn): kayıt sürerken sayaç ilerler, ses dalgası oynar, canlı metin satırları
 // birer birer gelir; kayıt bitince not kendiliğinden yazılır (başlık, bilgi, görevler, bir görev işaretlenir, karar),
-// bir süre durur ve yumuşakça baştan başlar.
+// bir süre durur ve yumuşakça baştan başlar. Üç turdan sonra bitmiş notta durur (WCAG 2.2.2); köşedeki küçük düğme
+// gösterimi duraklatır, sürdürür ya da baştan oynatır (client/hero-demo.ts; betik yoksa düğme gizli kalır).
 // Maliyet: yalnızca küçük öğelerin saydamlığı ve dönüşümü (birleştirici) ile sayaç (tek öğede tamsayı özelliği) oynar;
 // arkadaki film gradyanı hiç hareket etmez, bulanıklık filtresi yoktur. Gösterim ekranda değilken ya da sekme gizliyken
 // durur (client/hero-demo.ts). "Hareketi azalt" açıksa animasyon hiç uygulanmaz: notun bitmiş hâli durgun görünür.
@@ -21,6 +22,7 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
 }));
 ---
 
+<div class="demo-frame">
 <div class="demo" id="hero-demo" role="img" aria-label={demo.label}>
   <div class="demo__left" aria-hidden="true">
     <div class="glass recorder">
@@ -84,6 +86,22 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
     <p class="note__decision write-8">{demo.decision}</p>
   </article>
 </div>
+<button
+  id="hero-demo-toggle"
+  class="demo-toggle"
+  type="button"
+  hidden
+  aria-controls="hero-demo"
+  aria-label={demo.pause}
+  title={demo.pause}
+  data-label-pause={demo.pause}
+  data-label-play={demo.play}
+  data-label-replay={demo.replay}
+>
+  <Icon name="pause" size={16} class="demo-toggle__pause" />
+  <Icon name="play" size={15} class="demo-toggle__play" />
+</button>
+</div>
 
 <script>
   import "../client/hero-demo";
@@ -97,8 +115,14 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
     initial-value: 16;
   }
 
+  .demo-frame {
+    min-width: 0;
+  }
+
   .demo {
     --loop: 18s;
+    /* Üç tur: ikisi tam, üçüncüsü notun bittiği ana (%88) dek; sonra o karede kalır (animation-fill-mode). */
+    --loops: 2.88;
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     align-items: center;
@@ -117,8 +141,8 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
      yeniden hesaplanmasın. */
   .demo :global(.glass) {
     background: rgb(255 255 255 / 0.82);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .demo-label {
@@ -394,16 +418,32 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
   @media (prefers-reduced-motion: no-preference) {
     .demo[data-paused] *,
     .demo[data-paused] *::before,
-    .demo[data-paused] *::after {
+    .demo[data-paused] *::after,
+    .demo[data-user-paused] *,
+    .demo[data-user-paused] *::before,
+    .demo[data-user-paused] *::after {
       animation-play-state: paused !important;
     }
 
+    /* Baştan oynatmak için animasyonlar bir kare kaldırılır (hero-demo.ts). */
+    .demo[data-restart] *,
+    .demo[data-restart] *::before,
+    .demo[data-restart] *::after {
+      animation: none !important;
+    }
+
+    /* Gösterim bitti: sürekli dönen küçük hareketler de durur. */
+    .demo[data-finished] .live-wave__bar,
+    .demo[data-finished] .state-mark__dot::after {
+      animation: none;
+    }
+
     .timer-seconds {
-      animation: demo-timer var(--loop) linear infinite;
+      animation: demo-timer var(--loop) linear var(--loops) forwards;
     }
 
     .state-mark__dot {
-      animation: demo-phase-record var(--loop) ease infinite;
+      animation: demo-phase-record var(--loop) ease var(--loops) forwards;
     }
 
     .state-mark__dot::after {
@@ -411,25 +451,25 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
     }
 
     .state-label--listening {
-      animation: demo-phase-record var(--loop) ease infinite;
+      animation: demo-phase-record var(--loop) ease var(--loops) forwards;
     }
 
     .state-label--writing,
     .demo :global(.state-mark__sparkle) {
-      animation: demo-phase-write var(--loop) ease infinite;
+      animation: demo-phase-write var(--loop) ease var(--loops) forwards;
     }
 
     .state-label--done,
     .demo :global(.state-mark__check) {
-      animation: demo-phase-done var(--loop) ease infinite;
+      animation: demo-phase-done var(--loop) ease var(--loops) forwards;
     }
 
     .recorder .orb {
-      animation: demo-breathe var(--loop) ease-in-out infinite;
+      animation: demo-breathe var(--loop) ease-in-out var(--loops) forwards;
     }
 
     .live-wave {
-      animation: demo-wave-rest var(--loop) ease infinite;
+      animation: demo-wave-rest var(--loop) ease var(--loops) forwards;
     }
 
     .live-wave__bar {
@@ -442,29 +482,29 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
     .live-wave__bar--t4 { animation-duration: 1.3s; animation-delay: -1.1s; }
 
     .note__pending {
-      animation: demo-phase-record var(--loop) ease infinite;
+      animation: demo-phase-record var(--loop) ease var(--loops) forwards;
     }
 
-    .appear-1 { animation: demo-in-08 var(--loop) ease infinite; }
-    .appear-2 { animation: demo-in-20 var(--loop) ease infinite; }
-    .appear-3 { animation: demo-in-32 var(--loop) ease infinite; }
-    .appear-4 { animation: demo-in-40 var(--loop) ease infinite; }
-    .write-1 { animation: demo-in-54 var(--loop) ease infinite; }
-    .write-2 { animation: demo-in-57 var(--loop) ease infinite; }
-    .write-3 { animation: demo-in-60 var(--loop) ease infinite; }
-    .write-4 { animation: demo-in-63 var(--loop) ease infinite; }
-    .write-5 { animation: demo-in-66 var(--loop) ease infinite; }
-    .write-6 { animation: demo-in-69 var(--loop) ease infinite; }
-    .write-7 { animation: demo-in-72 var(--loop) ease infinite; }
-    .write-8 { animation: demo-in-75 var(--loop) ease infinite; }
+    .appear-1 { animation: demo-in-08 var(--loop) ease var(--loops) forwards; }
+    .appear-2 { animation: demo-in-20 var(--loop) ease var(--loops) forwards; }
+    .appear-3 { animation: demo-in-32 var(--loop) ease var(--loops) forwards; }
+    .appear-4 { animation: demo-in-40 var(--loop) ease var(--loops) forwards; }
+    .write-1 { animation: demo-in-54 var(--loop) ease var(--loops) forwards; }
+    .write-2 { animation: demo-in-57 var(--loop) ease var(--loops) forwards; }
+    .write-3 { animation: demo-in-60 var(--loop) ease var(--loops) forwards; }
+    .write-4 { animation: demo-in-63 var(--loop) ease var(--loops) forwards; }
+    .write-5 { animation: demo-in-66 var(--loop) ease var(--loops) forwards; }
+    .write-6 { animation: demo-in-69 var(--loop) ease var(--loops) forwards; }
+    .write-7 { animation: demo-in-72 var(--loop) ease var(--loops) forwards; }
+    .write-8 { animation: demo-in-75 var(--loop) ease var(--loops) forwards; }
 
     .checklist__item--ticks .checkbox::before,
     .checklist__item--ticks .checkbox :global(.checkbox__mark) {
-      animation: demo-tick var(--loop) ease infinite;
+      animation: demo-tick var(--loop) ease var(--loops) forwards;
     }
 
     .checklist__item--ticks .checklist__text {
-      animation: demo-strike var(--loop) ease infinite;
+      animation: demo-strike var(--loop) ease var(--loops) forwards;
     }
   }
 
@@ -539,6 +579,57 @@ const bars: readonly { readonly height: number; readonly tempo: number }[] = cov
   @keyframes demo-in-69 { 0%, 68% { opacity: 0; transform: translateY(6px); } 71%, 92% { opacity: 1; transform: none; } 96%, 100% { opacity: 0; } }
   @keyframes demo-in-72 { 0%, 71% { opacity: 0; transform: translateY(6px); } 74%, 92% { opacity: 1; transform: none; } 96%, 100% { opacity: 0; } }
   @keyframes demo-in-75 { 0%, 74% { opacity: 0; transform: translateY(6px); } 77%, 92% { opacity: 1; transform: none; } 96%, 100% { opacity: 0; } }
+
+  /* Duraklat/oynat: köşede küçük, yarı saydam yuvarlak düğme (cam yüzey, bulanıklık yok). */
+  .demo-toggle {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid rgb(10 10 10 / 0.1);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.72);
+    color: #0a0a0a;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 160ms ease, background-color 160ms ease;
+  }
+
+  .demo-toggle[hidden] {
+    display: none;
+  }
+
+  .demo-toggle:hover,
+  .demo-toggle:focus-visible {
+    opacity: 1;
+    background: rgb(255 255 255 / 0.92);
+  }
+
+  .demo-toggle :global(.icon) {
+    grid-area: 1 / 1;
+  }
+
+  .demo-toggle :global(.demo-toggle__play),
+  .demo-toggle[data-state="paused"] :global(.demo-toggle__pause),
+  .demo-toggle[data-state="finished"] :global(.demo-toggle__pause) {
+    display: none;
+  }
+
+  .demo-toggle[data-state="paused"] :global(.demo-toggle__play),
+  .demo-toggle[data-state="finished"] :global(.demo-toggle__play) {
+    display: block;
+  }
+
+  /* Hareket azaltılmışsa gösterim zaten durgundur; düğme gerekmez. */
+  @media (prefers-reduced-motion: reduce) {
+    .demo-toggle {
+      display: none;
+    }
+  }
 
   @media (max-width: 960px) {
     .demo {

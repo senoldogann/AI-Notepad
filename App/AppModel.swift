@@ -9,9 +9,24 @@ import os
 
 /// Konuşma tanıma modelinin (WhisperKit) yüklenme durumu.
 enum ModelStatus: Equatable {
+    /// Abonelik: model henüz gerekmedi (canlı metin bulutta); gerekince (Mac'e geçişte) indirilir.
+    case notLoaded
     case loading
     case ready
     case failed(String)
+}
+
+/// Kayıt kartındaki konuşma modeli durumu (bkz. `AppModel.localModelNotice`).
+enum LocalModelNotice: Equatable {
+    /// İndiriliyor (0…1) ya da yükleniyor (nil).
+    case preparing(progress: Double?)
+    case failed(message: String)
+}
+
+/// Model hazırlanırken gösterilen metin: indirme yüzdesi ya da "hazırlanıyor". Saf fonksiyondur.
+func localModelNoticeText(progress: Double?) -> String {
+    progress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") }
+        ?? String(localized: "Konuşma modeli hazırlanıyor…")
 }
 
 /// Toplantı sayfasındaki "Konuşmacıları gözden geçir" kartı.
@@ -60,7 +75,16 @@ private struct RecordingSession {
 final class AppModel {
     private static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel")
 
+    #if HOSTED_EDITION
+    var modelStatus: ModelStatus = .notLoaded
+    /// Abonelik: canlı metnin motoru ve nedeni (son kaydın başında seçilen, Mac'e geçişte güncellenen); bu açılışta
+    /// kayıt yapılmadıysa nil (tanılama sunucunun önerisini gösterir).
+    var hostedLiveStatus: HostedLiveStatus?
+    #else
     var modelStatus: ModelStatus = .loading
+    #endif
+    /// Süren model yüklemesi: aynı anda gelen istekler (açılış, Mac'e geçiş) tek yüklemeyi bekler.
+    @ObservationIgnored private var modelLoad: Task<Void, Never>?
     var liveEngine: LiveEngine
     var isRecording: Bool = false
     /// İzin pencereleri açıkken ikinci bir başlatmayı engeller.
@@ -95,6 +119,9 @@ final class AppModel {
     @ObservationIgnored private let micMonitor: MicrophoneActivityMonitor = MicrophoneActivityMonitor()
     /// Kaydı panel ve adayla birlikte başlatır (uygulama bağlar; kendiliğinden kayıtta kullanılır).
     @ObservationIgnored var onAutoRecord: (@MainActor () async -> Void)?
+    /// Kayıt şu an başlatılamıyor mu (giriş yok, deneme bitti, sınır…; uygulama bağlar): öyleyse görüşme önerisi ve
+    /// takvimle kendiliğinden kayıt mikrofon ve sistem sesine dokunmaz.
+    @ObservationIgnored var isStartBlocked: @MainActor () -> Bool = { false }
     /// Kendiliğinden kayıtta bağlanacak etkinlik (çakışan etkinliklerde doğru olan kayda geçsin).
     @ObservationIgnored private var pendingAutoMeeting: CalendarMeeting?
     @ObservationIgnored private var calendarTask: Task<Void, Never>?
@@ -150,6 +177,9 @@ final class AppModel {
     var processingSteps: [String: ProcessingStep] = [:]
     /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
     var activeMeetingID: String?
+    /// Biten kayıt işlemeye devrediliyor (sunucu oturumu kapatılıyor, kayıt yazılıyor): bu arada yeni kayıt, kuyruk,
+    /// çıkış ve güncellemeyle yeniden başlatma beklenir (bkz. `isBusy`, `isReadyToRecord`).
+    private(set) var handingOffMeetingID: String?
     /// "Arka planda devam et" ile kapatılan hazırlanma kartları (panel ve ana pencere ortak).
     var dismissedProgressIDs: Set<String> = []
     /// Kayıt bitirilirken kart kapatıldı; yeni kayıtta sıfırlanır.
@@ -192,6 +222,11 @@ final class AppModel {
     #if HOSTED_EDITION
     /// Abonelik: toplantının süre sınırını izleyen görev (bkz. `watchRecordingLimit`).
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
+    #if HOSTED_EDITION
+    /// Olağandan kısa toplantının bitiş anı (aylık sınıra az kaldı); kayıt panelinde kalan dakika gösterilir. Kısa
+    /// değilse ya da kayıt yoksa nil.
+    private(set) var shortMeetingDeadline: Date?
+    #endif
     #endif
 
     @ObservationIgnored private var engine: WhisperKitEngine?
@@ -199,6 +234,8 @@ final class AppModel {
     @ObservationIgnored private var speechEngine: AppleSpeechEngine?
     /// Cihaz içi konuşma modelinin indirme ilerlemesi (0…1); indirme yoksa nil.
     var speechModelProgress: Double?
+    /// WhisperKit modelinin (~630 MB) indirme ilerlemesi (0…1); indirme yoksa (ya da model diskte) nil.
+    var whisperModelProgress: Double?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
@@ -223,7 +260,12 @@ final class AppModel {
 
     /// Kayıt başlatılabilir mi: önceki kayıt bitmiş olmalı; Deepgram'da her zaman, yerel motorlarda model hazırsa.
     var isReadyToRecord: Bool {
-        !isFinishing && (liveEngine == .deepgram || modelStatus == .ready)
+        #if HOSTED_EDITION
+        // Abonelik: canlı motor kayıt başında seçilir; Mac modeli gerekirse kayıt sürerken hazırlanır.
+        !isFinishing && handingOffMeetingID == nil
+        #else
+        !isFinishing && handingOffMeetingID == nil && (liveEngine == .deepgram || modelStatus == .ready)
+        #endif
     }
 
     /// Ada ve panelin gösterdiği durum; girdiler değişmedikçe önbellekten (ada ve panel aynı değişiklikte iki kez okur).
@@ -235,7 +277,9 @@ final class AppModel {
             startedAt: recordingStartedAt, statusText: statusText,
             // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
             languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording),
-            noteLanguageText: selectedNoteLanguage().interfaceName, errors: errorMessages
+            noteLanguageText: selectedNoteLanguage().interfaceName,
+            // Çözülmüş hatalar (ör. abone olduktan sonra "deneme bitti") panelde de kalmaz.
+            errors: visibleErrorMessages(errors: errorMessages, shownElsewhere: [], resolved: resolvedErrorMessages())
         )
         if let cache = viewStateCache, cache.inputs == inputs {
             return cache.state
@@ -254,12 +298,47 @@ final class AppModel {
     /// hata varken dolu.
     private var statusText: String {
         switch (liveEngine, modelStatus) {
-        case (.deepgram, _), (.whisperKit, .ready): ""
-        case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
+        case (.deepgram, _), (.whisperKit, .ready), (_, .notLoaded): ""
+        case (.whisperKit, .loading): localModelNoticeText(progress: whisperModelProgress)
         case (.whisperKit, .failed(let message)): message
-        case (.appleSpeech, .loading): speechModelProgress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") } ?? String(localized: "Konuşma modeli hazırlanıyor…")
+        case (.appleSpeech, .loading): localModelNoticeText(progress: speechModelProgress)
         case (.appleSpeech, .ready): String(localized: "Hazır · Cihaz içi")
         case (.appleSpeech, .failed(let message)): message
+        }
+    }
+
+    /// Kayıt kartında gösterilen konuşma modeli durumu: model hazırlanıyor (ilerlemeyle) ya da hazırlanamadı. Model
+    /// gerekmiyorsa ya da hazırsa nil. Geliştirici sürümünde model hazır olmadan kayıt başlamaz (kart nedenini söyler);
+    /// abonelikte model yalnızca gerekince yüklenir ve kayıt beklemez (canlı metin model hazır olunca başlar).
+    var localModelNotice: LocalModelNotice? {
+        let progress: Double?
+        switch liveEngine {
+        case .deepgram:
+            return nil
+        case .whisperKit:
+            progress = whisperModelProgress
+        case .appleSpeech:
+            progress = speechModelProgress
+        }
+        switch modelStatus {
+        case .notLoaded, .ready:
+            return nil
+        case .loading:
+            return .preparing(progress: progress)
+        case .failed(let message):
+            return .failed(message: message)
+        }
+    }
+
+    /// Hazırlanamayan konuşma modelini yeniden dener (kayıt kartındaki düğme).
+    func retryLocalModel() async {
+        switch liveEngine {
+        case .deepgram:
+            return
+        case .whisperKit:
+            await loadModel()
+        case .appleSpeech:
+            await prepareSpeechModel()
         }
     }
 
@@ -503,6 +582,13 @@ final class AppModel {
 
     /// Seçili motor ve LLM için eksik anahtar/ayarları bulur (değer okunmaz, izin penceresi açılmaz).
     func refreshSetupProblems() async {
+        #if DEBUG
+        // Tanıtım modu sunucuya ve Anahtar Zinciri'ne bakmaz: kurulum eksiksiz görünür (bkz. App/DemoData.swift).
+        if isDemoMode {
+            setupProblems = []
+            return
+        }
+        #endif
         #if HOSTED_EDITION
         // Abonelik sürümünde anahtar yok: eksik yalnızca giriş (ya da sunucu adresi).
         setupProblems = await hostedSetupProblems()
@@ -593,33 +679,76 @@ final class AppModel {
             speechModelProgress = nil
             modelStatus = .ready
         } catch {
-            Self.logger.error("Cihaz içi konuşma modeli hazırlanamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Cihaz içi konuşma modeli hazırlanamadı, hata: \(String(describing: error), privacy: .private)")
             speechModelProgress = nil
             modelStatus = .failed(userFacingMessage(error: error))
         }
     }
 
-    /// Modeli (ilk seferde indirerek) yükler.
+    /// Modeli (ilk seferde indirerek) yükler; yükleme sürüyorsa onu bekler.
     func loadModel() async {
+        if let modelLoad {
+            await modelLoad.value
+            return
+        }
+        let task: Task<Void, Never> = Task { await self.performModelLoad() }
+        modelLoad = task
+        await task.value
+        modelLoad = nil
+    }
+
+    #if HOSTED_EDITION
+    /// Abonelik: Mac'teki motor (hibrit oturum Mac'e geçerken ya da Mac'te başlarken çağırır); yüklü değilse model
+    /// indirilip yüklenir (ilerleme menüde ve panelde görünür). Yüklenemezse `TranscriptionError.modelLoadFailed`.
+    func requireLocalEngine() async throws -> WhisperKitEngine {
+        if let engine {
+            return engine
+        }
+        await loadModel()
+        if let engine {
+            return engine
+        }
+        let reason: String
+        if case .failed(let message) = modelStatus {
+            reason = message
+        } else {
+            reason = "model yüklenmedi"
+        }
+        throw TranscriptionError.modelLoadFailed(model: liveWhisperModel, reason: reason)
+    }
+    #endif
+
+    private func performModelLoad() async {
         modelStatus = .loading
+        whisperModelProgress = nil
         do {
             let modelsDirectory: URL = try AppPaths.modelsDirectory()
-            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory)
+            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory) { [weak self] (fraction: Double) -> Void in
+                Task { @MainActor in
+                    // İndirme bitince (ya da model zaten indiyse) yükleme sürer: yüzde yerine "hazırlanıyor".
+                    self?.whisperModelProgress = fraction < 1 ? fraction : nil
+                }
+            }
+            whisperModelProgress = nil
             modelStatus = .ready
         } catch {
-            Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .private)")
+            whisperModelProgress = nil
             modelStatus = .failed(userFacingMessage(error: error))
             return
         }
+        #if !HOSTED_EDITION
         // Konuşmacı ayırma modeli de şimdi indirilir: ilk yerel toplantının son geçişi internetsiz çalışsın.
         // İndirilemezse canlı kayıt engellenmez; uyarı menüde görünür, son geçiş metni tek konuşmacı saklar.
+        // (Abonelik sürümünde konuşmacılar sunucunun son geçişinde ayrılır: ~40 MB model indirilmez.)
         do {
             try await prepareLocalDiarization(modelsDirectory: try AppPaths.modelsDirectory())
             localDiarizationWarning = nil
         } catch {
-            Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Konuşmacı ayırma modeli indirilemedi, hata: \(String(describing: error), privacy: .private)")
             localDiarizationWarning = String(localized: "Konuşmacı ayırma modeli indirilemedi; internete bağlanıp \"Modeli yeniden yükle\"ye bas.")
         }
+        #endif
     }
 
     // MARK: Kayıt
@@ -630,6 +759,13 @@ final class AppModel {
         guard !isRecording, !isStarting, isReadyToRecord else {
             return
         }
+        #if HOSTED_EDITION
+        // Giriş kapısı (ikinci savunma; kayıt yolları `toggleRecordingFlow`'da da kapılı): oturum yoksa kayıt başlamaz.
+        guard !HostedAccount.shared.requiresSignIn else {
+            Self.logger.info("Giriş yapılmadan kayıt istendi, başlatılmadı")
+            return
+        }
+        #endif
         isStarting = true
         defer { isStarting = false }
         // Motor bir kez okunur: izin pencereleri açıkken ayar değişse de bulut/yerel kararı ile kaydın motoru aynı kalır
@@ -657,7 +793,9 @@ final class AppModel {
             translationDisabled = true
         }
 
+        #if !HOSTED_EDITION
         // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz; eksiklerin hepsi bildirilir.
+        // (Abonelik sürümünde anahtar yoktur; canlı motor toplantı oturumu açıldıktan sonra seçilir.)
         let cloudKeys: (deepgram: String, elevenLabs: String)?
         switch engineAtStart {
         case .deepgram:
@@ -673,6 +811,7 @@ final class AppModel {
         case .whisperKit, .appleSpeech:
             cloudKeys = nil
         }
+        #endif
 
         // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
         linkedMeeting = pendingAutoMeeting ?? (UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
@@ -741,23 +880,6 @@ final class AppModel {
         guard !startedSpeakers.isEmpty else {
             return
         }
-        #if HOSTED_EDITION
-        // Abonelik: toplantı oturumu ses akışları başladıktan sonra açılır (yakalama başarısızsa deneme hakkı yanmasın);
-        // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, nedeni panelde görünür.
-        let meetingDeadline: Date
-        do {
-            let requestedAt: Date = Date()
-            let started: HostedStartedMeeting = try await HostedAccount.shared.startMeeting()
-            meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
-        } catch {
-            Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .public)")
-            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
-            microphone.stop()
-            systemAudio.stop()
-            return
-        }
-        #endif
-
         // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
         // kilitli kutuda birikir, ana aktöre çubuk aralığının yarısında bir geçilir (her parça için ayrı görev
         // açılmaz; bkz. `levelThrottleInterval`).
@@ -772,7 +894,74 @@ final class AppModel {
         }
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
+        #if HOSTED_EDITION
+        // Ses hemen diske yazılır: toplantı oturumu açılırken ve canlı motor seçilirken (ağ beklenirken) gelen ses de
+        // dosyada durur (uygulama bu arada kapansa bile).
+        let hybridRecording: HybridRecording = startHybridRecording(directory: directory, meAudio: meteredMe, othersAudio: meteredOthers)
+        // Abonelik: toplantı oturumu ses akışları başladıktan sonra açılır (yakalama başarısızsa deneme hakkı yanmasın);
+        // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, yazılan ses silinir ve nedeni
+        // panelde görünür.
+        let meetingDeadline: Date
+        do {
+            let requestedAt: Date = Date()
+            switch try await HostedAccount.shared.startMeeting(recordID: directory.lastPathComponent) {
+            case .online(let started):
+                meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
+                // Aylık sınıra az kaldıysa toplantı olağandan kısadır: kalan dakika kayıt panelinde görünür.
+                shortMeetingDeadline = isShortenedHostedMeeting(started: started) ? meetingDeadline : nil
+            case .offline(let maxMinutes):
+                // Sunucuya ulaşılamadı: kayıt sürer (canlı metin Mac'te), süre son bilinen hak durumuyla sınırlı; toplantı
+                // bağlantı gelince işlenir (bkz. `runOfflineQueue`).
+                meetingDeadline = requestedAt.addingTimeInterval(Double(maxMinutes) * 60)
+                shortMeetingDeadline = nil
+            }
+        } catch {
+            Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            // Ret aylık sınırdan ya da denemenin bitmesinden olabilir: göstergeler ve bildirim güncellensin.
+            Task { await HostedAccount.shared.refresh() }
+            microphone.stop()
+            systemAudio.stop()
+            audioLevels.stop()
+            discardRefusedRecording(directory: directory)
+            return
+        }
+        #endif
+
         let handle: LiveSessionHandle
+        #if HOSTED_EDITION
+        // Abonelik: sunucu izin veriyorsa canlı metin Deepgram'la, değilse (ya da akış durursa) Mac'te; kayıt kesintisiz.
+        // Deepgram akışı dil algılamaz: cihaz içi tanımadaki kural (sabit dil ya da ana toplantı dili).
+        let liveLanguage: MeetingLanguage = appleSpeechLanguage(mode: languageMode, primary: primaryMeetingLanguage())
+        let choice: HostedLiveChoice = await hostedLiveChoice(
+            language: liveLanguage, keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30)
+        )
+        hostedLiveStatus = choice.status
+        Self.logger.info("Canlı motor seçildi, motor: \(choice.status.engine.rawValue, privacy: .public)")
+        handle = runHybridLiveSession(
+            config: HybridLiveSessionConfig(
+                speakers: startedSpeakers,
+                local: LiveSessionConfig(
+                    languageMode: languageMode,
+                    segmenter: .live,
+                    recordingDirectory: directory,
+                    partialIntervalSec: 1.5,
+                    minPartialSpeechSec: 1.0,
+                    languageLockAfterSec: 30,
+                    candidateLanguages: automaticCandidates(primary: primaryMeetingLanguage())
+                ),
+                maxPendingAudioSec: 600
+            ),
+            start: choice.start,
+            localEngine: { [weak self] () async throws -> any TranscriptionEngine in
+                guard let self else {
+                    throw CancellationError()
+                }
+                return try await self.requireLocalEngine()
+            },
+            recording: hybridRecording
+        )
+        #else
         if let cloudKeys {
             handle = runCloudLiveSession(
                 config: CloudSessionConfig(
@@ -833,6 +1022,7 @@ final class AppModel {
             systemAudio.stop()
             return
         }
+        #endif
         isRecording = true
         #if HOSTED_EDITION
         watchRecordingLimit(deadline: meetingDeadline)
@@ -847,9 +1037,9 @@ final class AppModel {
         session = RecordingSession(directory: directory, startedAt: startedAt, engine: engineAtStart, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
         keepAwake(meetingID: directory.lastPathComponent)
-        startCheckpoints(directory: directory, startedAt: startedAt)
+        startCheckpoints(directory: directory, startedAt: startedAt, engine: engineAtStart)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
-        saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
+        saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, engine: engineAtStart, status: .recording, endedAt: nil), directory: directory)
         Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(engineAtStart.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in handle.events {
@@ -988,6 +1178,14 @@ final class AppModel {
             // tüm kayıt yeniden yazıya dökülmez. "Diğerleri" son geçişten zaten geçer.
             meStreamFailed = meStreamFailed || (speaker == .me && untranscribedSec >= incompleteTailFinalPassSec)
             Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
+        case .liveEngineFellBack(let message):
+            // Bulut canlı metni durdu, Mac'e geçildi: geçişte kesinleşmemiş "Sen" metni toplantı sonunda kayıttan
+            // yazıya dökülür ("Diğerleri" son geçişten zaten geçer). Ses kaydı kesilmedi.
+            meStreamFailed = meStreamFailed || startedSpeakers.contains(.me)
+            #if HOSTED_EDITION
+            hostedLiveStatus = HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Bulut canlı metni kayıt sırasında durdu: \(message)"))
+            #endif
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bulut canlı metni durdu; canlı metin bu Mac'te sürüyor, kayıt kesilmedi. (\(message))"))
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }
@@ -1010,6 +1208,13 @@ final class AppModel {
     /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı kaydedilip işlenir.
     private func sessionEnded() async {
         await waitForPendingTranslations(timeoutSec: 10)
+        // Biten kayıt ilk beklemeden önce oturumdan alınır ve "devrediliyor" sayılır: sunucu oturumu kapatılırken yeni
+        // kayıt bu kaydın `session`ını ezemez, kuyruk ve çıkış/güncelleme beklenir (isBusy), kayıt düzenlenemez.
+        let finished: RecordingSession? = session
+        session = nil
+        handingOffMeetingID = finished?.directory.lastPathComponent
+        activeMeetingID = nil
+        defer { handingOffMeetingID = nil }
         isRecording = false
         isFinishing = false
         recordingStartedAt = nil
@@ -1028,24 +1233,36 @@ final class AppModel {
         #if HOSTED_EDITION
         recordingLimitTask?.cancel()
         recordingLimitTask = nil
+        shortMeetingDeadline = nil
+        let recordedOffline: Bool = HostedAccount.shared.isOfflineRecording
+        // Kapatılacak oturum beklemeden önce alınır: geç dönen kapatma yeni kaydın oturumuna dokunmaz.
+        let serverMeetingID: String? = HostedAccount.shared.currentMeeting?.meetingId
         // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
         do {
-            try await HostedAccount.shared.endMeeting()
+            try await HostedAccount.shared.endMeeting(meetingID: serverMeetingID)
         } catch {
-            Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı oturumu kapatılamadı: \(userFacingMessage(error: error))"))
         }
         #endif
-        guard let finished = session else {
+        guard let finished else {
             return
         }
-        // Kayıt, oturum temizlenmeden yazılır: motoru (yerel ya da bulut) kaydın gerçek motorudur, şimdiki ayar değil.
-        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
-        session = nil
-        activeMeetingID = nil
-        // Kaydın hemen ardından not, toplantının sağlayıcısıyla (abonelikte toplantı bütçesi).
+        // Kaydın motoru kaydın gerçek motorudur (oturumdan), şimdiki ayar değil.
+        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, engine: finished.engine, status: .processing, endedAt: Date())
+        #if HOSTED_EDITION
+        if recordedOffline {
+            // Çevrimdışı kayıt: ses ve canlı metin bu Mac'te; son geçiş ve not bağlantı gelince (kayıt silinmez).
+            saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "Çevrimdışı kaydedildi; bağlantı gelince konuşmacılar ve not hazırlanır.")), directory: finished.directory)
+            reloadMeetings()
+            lastFinishedMeetingID = record.id
+            return
+        }
+        #endif
+        // Kaydın hemen ardından not, toplantının sağlayıcısıyla (abonelikte o kaydın sunucu oturumunun bütçesi).
+        let recordID: String = record.id
         process(record: record, directory: finished.directory) { [weak self] () async -> LLMProvider? in
-            await self?.optionalProvider(resolve: resolveLiveLLMProvider)
+            await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
         }
         lastFinishedMeetingID = record.id
     }
@@ -1068,14 +1285,15 @@ final class AppModel {
     }
 
     /// Canlı transkript ve çevirilerden toplantı kaydı.
-    private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
+    /// `engine`: kaydın başladığı motor (o anki ayar değil; bitirilen oturumun motoru).
+    private func liveRecord(directory: URL, startedAt: Date, engine: LiveEngine, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
         let base: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false,
-            engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
+            engine: engine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
         // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
@@ -1086,7 +1304,7 @@ final class AppModel {
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
-    private func startCheckpoints(directory: URL, startedAt: Date) {
+    private func startCheckpoints(directory: URL, startedAt: Date, engine: LiveEngine) {
         checkpointTask?.cancel()
         checkpointTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -1099,16 +1317,28 @@ final class AppModel {
                 guard let self, self.isRecording else {
                     return
                 }
-                self.saveRecord(record: self.liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
+                self.saveRecord(record: self.liveRecord(directory: directory, startedAt: startedAt, engine: engine, status: .recording, endedAt: nil), directory: directory)
             }
         }
     }
 
     // MARK: Toplantı kayıtları
 
+    #if HOSTED_EDITION
+    /// Sunucu toplantıyı reddetti (deneme bitti, sınır…): kayıt başlamadı, o ana dek diske yazılan ses ve klasör silinir.
+    private func discardRefusedRecording(directory: URL) {
+        do {
+            try FileManager.default.removeItem(at: directory)
+        } catch {
+            Self.logger.error("Reddedilen kaydın klasörü silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+    #endif
+
     /// Bu toplantı üzerinde değişiklik yapılabilir mi (kayıtta ya da işlemede değil).
     func isLocked(meetingID: String) -> Bool {
-        activeMeetingID == meetingID || processingMeetingIDs.contains(meetingID)
+        activeMeetingID == meetingID || handingOffMeetingID == meetingID || processingMeetingIDs.contains(meetingID)
     }
 
     /// Toplantıyı sonradan işler (son geçiş + not) ve kaydeder. Son geçiş kaydın motoruna göre yapılır
@@ -1137,6 +1367,15 @@ final class AppModel {
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
+            #if HOSTED_EDITION
+            // Son geçişin ses süresi aylık kullanıma sayılır: işleme bitince göstergeler yenilenir. Not hazırsa denemedeki
+            // kullanıcıya zamanı geldiyse abone olma teklifi açılır.
+            if saved.status == .done && saved.note != nil {
+                Task { await HostedAccount.shared.meetingNoteReady() }
+            } else {
+                Task { await HostedAccount.shared.refresh() }
+            }
+            #endif
             autoSendToDestinations(record: saved)
             if saved.status == .done {
                 await cloud.moveFinishedMeetings(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
@@ -1181,7 +1420,7 @@ final class AppModel {
             return
         }
         Self.logger.info("Kayıt sürerken uygulama kapanıyor, son durum saklanıyor, klasör: \(session.directory.lastPathComponent, privacy: .public)")
-        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, status: .recording, endedAt: nil), directory: session.directory)
+        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, engine: session.engine, status: .recording, endedAt: nil), directory: session.directory)
     }
 
     /// Toplantının kaydı ya da işlenmesi sürerken boşta uykuyu engeller (kapak kapatma yine uyutur).
@@ -1223,7 +1462,7 @@ final class AppModel {
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
         #if HOSTED_EDITION
         // Abonelik: kaydın motoru ne olursa olsun son geçiş sunucuda (konuşmacılar ayrılır).
-        return await hostedFinalPassPlan(keyterms: recognitionKeyterms)
+        return await hostedFinalPassPlan(keyterms: recognitionKeyterms, recordID: record.id)
         #else
         switch record.engine ?? .cloud {
         case .local where liveEngine == .appleSpeech:
@@ -1273,6 +1512,13 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
+        #if HOSTED_EDITION
+        // Bekleyen (çevrimdışı) kayıt önce sunucu oturumunu almalı: kuyruktan işlenir.
+        if record.status == .queued {
+            Task { await runOfflineQueue() }
+            return
+        }
+        #endif
         // Son geçiş konuşmacıları yeniden numaralar; eski öneriler başka kişileri gösterirdi.
         closeSpeakerReview(meetingID: meetingID)
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
@@ -1281,6 +1527,85 @@ final class AppModel {
             }
         }
     }
+
+    #if HOSTED_EDITION
+    /// Bekleyen ilk toplantıyı (çevrimdışı kaydedilmiş ya da içe aktarılmış) işler: kayıt ya da işleme yokken sunucu oturumu hazırlanır
+    /// (bkz. `HostedAccount.prepareQueuedMeeting`), sonra son geçiş ve not o oturumla üretilir. Sunucuya hâlâ
+    /// ulaşılamıyorsa bekler; sunucu şimdilik işlemiyorsa (deneme bitti, sınır) kayıt bekleyen kalır ve nedeni toplantıda
+    /// görünür. Ağ gelince, hak durumu okununca, uygulama öne gelince ve her işleme bitince tetiklenir; birer birer işler.
+    @ObservationIgnored private var isRunningQueue: Bool = false
+    /// Sunucunun reddettiği bekleyen kayıtlar ve reddin anı (bkz. `hostedQueueCandidates`).
+    @ObservationIgnored private var queueRejections: [String: Date] = [:]
+
+    func runOfflineQueue() async {
+        guard !isBusy, !isStarting, !isRunningQueue else {
+            return
+        }
+        // İlk beklemeden önce açılır: eşzamanlı tetiklemeler kuyruğu ikinci kez çalıştırmasın.
+        isRunningQueue = true
+        defer { isRunningQueue = false }
+        let userID: String
+        do {
+            guard let signedIn = try await HostedAccount.shared.signedInUserID() else {
+                return
+            }
+            userID = signedIn
+        } catch {
+            Self.logger.error("Kuyruk: oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
+            return
+        }
+        // Yüklü toplantılar giriş yapan hesabın değilse (başka hesapla giriş yapıldı, uygulama yeniden başlamayı
+        // bekliyor) hiçbiri işlenmez: kayıtlar sahiplerinin klasöründe bekler, başka hesaba faturalanmaz.
+        guard AppPaths.activeAccountKey() == accountDataKey(userId: userID) else {
+            Self.logger.info("Kuyruk: yüklü toplantılar giriş yapan hesabın değil, işlenmedi")
+            return
+        }
+        let queued: HostedQueuedRecords = hostedQueuedRecords(records: meetings, owners: loadHostedRecordOwners(), userId: userID)
+        for record in queued.foreign {
+            noteQueued(recordID: record.id, notice: String(localized: "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir."))
+        }
+        // Tetikleme başına en çok bir sunucu reddi: reddedilen kayıt nedeniyle işaretlenir, bir süre denenmez ve kuyruk
+        // durur (başlatma hız sınırı dolup canlı kayıt 429 almasın); sonraki tetiklemede sıradaki kayıt denenir. Hak
+        // durumundan (istek atmadan) engellenen kayıtlar sonrakileri bekletmez. İlk hazır olan işlenir, kalanlar işleme
+        // bitince yeniden tetiklenir.
+        for record in hostedQueueCandidates(records: queued.own, rejections: queueRejections, now: Date(), cooldownSec: hostedQueueRejectionCooldownSec) {
+            let recordID: String = record.id
+            switch await HostedAccount.shared.prepareQueuedMeeting(recordID: recordID) {
+            case .waitingForNetwork:
+                return
+            case .blocked(let reason):
+                noteQueued(recordID: recordID, notice: reason)
+            case .rejected(let reason):
+                queueRejections[recordID] = Date()
+                noteQueued(recordID: recordID, notice: reason)
+                return
+            case .ready:
+                // Hazırlık sürerken kayıt başlamış ya da toplantı silinmiş olabilir.
+                guard !isBusy, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
+                    return
+                }
+                Self.logger.info("Çevrimdışı kayıt işleniyor, toplantı: \(recordID, privacy: .public)")
+                withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+                    process(record: current.with(notice: nil), directory: directory) { [weak self] () async -> LLMProvider? in
+                        await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
+                    }
+                }
+                return
+            }
+        }
+    }
+
+    /// Bekleyen kaydın işlenememe nedenini toplantıya yazar (değişmediyse dokunmaz).
+    private func noteQueued(recordID: String, notice: String) {
+        guard let current = meetings.first(where: { $0.id == recordID }), current.status == .queued, current.notice != notice else {
+            return
+        }
+        withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+            saveRecord(record: current.with(notice: notice), directory: directory)
+        }
+        reloadMeetings()
+    }
+    #endif
 
     /// Yalnızca notu yeniden üretir (ad verdikten sonra notta da adlar görünsün); ses gerekmez.
     func regenerateNote(meetingID: String) {
@@ -1412,7 +1737,7 @@ final class AppModel {
             }
             refreshFolderCopy(meetingID: meetingID)
         } catch {
-            Self.logger.error("Not sürümü geri yüklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Not sürümü geri yüklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Not sürümü geri yüklenemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -1469,8 +1794,33 @@ final class AppModel {
 
     // MARK: Klasörler
 
+    #if HOSTED_EDITION
+    /// Oluşturulan klasörler (toplantısız olanlar dahil); abonelikte hesabın ayar alanından, hesap verisi yüklenince
+    /// okunur (bkz. `loadFolders`).
+    var savedFolders: [String] = []
+    #else
     /// Oluşturulan klasörler (toplantısız olanlar dahil).
     var savedFolders: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.folders) ?? []
+    #endif
+
+    /// Kayıtlı klasörleri okur (açılışta; abonelikte hesap verisi yüklenince). Okunamazsa neden gösterilir.
+    func loadFolders() {
+        do {
+            savedFolders = try userContentDefaults().stringArray(forKey: SettingsKey.folders) ?? []
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Klasör listesini saklar; saklanamazsa neden gösterilir.
+    private func storeFolders(folders: [String]) {
+        do {
+            try userContentDefaults().set(folders, forKey: SettingsKey.folders)
+            savedFolders = folders
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
 
     /// Klasörler ve toplantı sayıları.
     var folders: [FolderSummary] {
@@ -1483,14 +1833,12 @@ final class AppModel {
         guard !trimmed.isEmpty, !folders.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
             return
         }
-        savedFolders.append(trimmed)
-        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        storeFolders(folders: savedFolders + [trimmed])
     }
 
     /// Klasörü siler: toplantılar silinmez, klasörsüz kalır.
     func deleteFolder(name: String) {
-        savedFolders.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
-        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        storeFolders(folders: savedFolders.filter { $0.caseInsensitiveCompare(name) != .orderedSame })
         moveMeetings(ids: Set(meetingsInFolder(records: meetings, folder: name).map(\.id)), to: nil)
     }
 
@@ -1543,7 +1891,12 @@ final class AppModel {
     /// İçe aktarılmakta olan dosya sayısı (dönüştürme sürerken).
     var importingCount: Int = 0
     /// Kayıt, işleme ya da içe aktarma sürüyor mu (çıkış ve dil değişikliği bunu bekler).
-    var isBusy: Bool { phase != .idle || !processingMeetingIDs.isEmpty || importingCount > 0 }
+    var isBusy: Bool {
+        isRecorderBusy(
+            isRecording: isRecording, isFinishing: isFinishing, isHandingOff: handingOffMeetingID != nil,
+            processingCount: processingMeetingIDs.count, importingCount: importingCount
+        )
+    }
     /// Son içe aktarma hatası (Toplantılar listesinde gösterilir).
     var importError: String?
 
@@ -1578,10 +1931,27 @@ final class AppModel {
                 id: session.url.lastPathComponent, source: url, startedAt: session.startedAt, durationSec: duration,
                 engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
             )
+            #if HOSTED_EDITION
+            // Toplantının ses hakkını aşan dosya kuyruğa alınmaz: son geçiş yarıda kalır ve bekleyen kayıt hiç
+            // bitmezdi. Hak durumu okunamadıysa sunucu son geçişte denetler (yazıya dökülen parçalar korunur).
+            if case .signedIn(let entitlements) = HostedAccount.shared.state {
+                try requireHostedImportFits(durationSec: duration, entitlements: entitlements)
+            }
+            #endif
             Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
+            #if HOSTED_EDITION
+            // Abonelik: içe aktarılan dosya da kayıt gibi kendi sunucu oturumuyla işlenir (haklar, deneme ve aylık süre
+            // sunucuda denetlenir; süre sesin gerçek uzunluğundan sayılır). Kuyruğa girer: içe aktarma bitince
+            // `runOfflineQueue` oturumu `clientRef` ile açar, son geçiş ve not o oturumla yapılır; sunucu reddederse
+            // ses silinmez, neden toplantıda yazar.
+            try await HostedAccount.shared.claimQueuedRecord(recordID: record.id)
+            saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "İçe aktarıldı; sunucuda işlenmeyi bekliyor.")), directory: session.url)
+            reloadMeetings()
+            #else
             process(record: record, directory: session.url) { [weak self] () async -> LLMProvider? in
                 await self?.optionalLLMProvider()
             }
+            #endif
         } catch {
             Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
             importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")
@@ -1611,7 +1981,7 @@ final class AppModel {
                 do {
                     try await notifier.scheduleReminders(meetings: [])
                 } catch {
-                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .public)")
+                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .private)")
                 }
             }
             return
@@ -1629,9 +1999,21 @@ final class AppModel {
             }
         }
         calendarChangesTask = Task { [weak self] in
+            // Takvim eşitlemesi değişiklik bildirimlerini art arda gönderir; her biri takvimi ana iş parçacığında okur
+            // (çalma ve kayıt ekranı takılır). Bildirimler birleştirilir: son bildirimden 2 sn sonra bir kez okunur.
+            var pending: Task<Void, Never>?
             for await _ in changes {
-                await self?.refreshCalendar()
+                pending?.cancel()
+                pending = Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        return
+                    }
+                    await self?.refreshCalendar()
+                }
             }
+            pending?.cancel()
         }
         if UserDefaults.standard.bool(forKey: SettingsKey.micSuggestions) || UserDefaults.standard.bool(forKey: SettingsKey.autoRecord) {
             micMonitor.start { [weak self] in self?.microphoneStartedElsewhere() }
@@ -1683,7 +2065,7 @@ final class AppModel {
             try await notifier.scheduleReminders(meetings: remind)
             calendarError = nil
         } catch {
-            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .private)")
             calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
         }
     }
@@ -1692,6 +2074,11 @@ final class AppModel {
     /// açıksa kayıt başlar ve bildirilir; değilse (10 dk'da en fazla bir) "dinlemeye başla" önerisi.
     private func microphoneStartedElsewhere() {
         guard !isRecording, !isStarting else {
+            return
+        }
+        // Kayıt başlatılamıyorsa öneri ve kendiliğinden kayıt yapılmaz (neden Ana sayfada başlat düğmesinin yanında).
+        guard !isStartBlocked() else {
+            Self.logger.info("Görüşme algılandı ama kayıt şu an başlatılamıyor; öneri gösterilmedi")
             return
         }
         if UserDefaults.standard.bool(forKey: SettingsKey.autoRecord),
@@ -1711,7 +2098,7 @@ final class AppModel {
                         try await notifier.announceAutoRecordingFailed(title: meeting.title)
                     }
                 } catch {
-                    Self.logger.error("Kendiliğinden kayıt bildirilemedi, hata: \(String(describing: error), privacy: .public)")
+                    Self.logger.error("Kendiliğinden kayıt bildirilemedi, hata: \(String(describing: error), privacy: .private)")
                 }
             }
             return
@@ -1724,7 +2111,7 @@ final class AppModel {
             do {
                 try await notifier.suggestRecording()
             } catch {
-                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Görüşme önerisi gösterilemedi, hata: \(String(describing: error), privacy: .private)")
             }
         }
     }
@@ -1753,6 +2140,13 @@ final class AppModel {
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
         }
+        #if HOSTED_EDITION
+        // Hakkı yoksa (deneme bitti, abonelik sona erdi) soru gönderilmez: abone olma teklifi hemen açılır.
+        guard !HostedAccount.shared.requiresSubscription else {
+            HostedAccount.shared.requestSubscription()
+            return
+        }
+        #endif
         let history: [ArchiveTurn] = archiveHistory(exchanges: archiveExchanges)
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }
@@ -1845,7 +2239,7 @@ final class AppModel {
 
     private func storeUserRecipes(_ recipes: [Recipe]) {
         do {
-            try saveUserRecipes(recipes: recipes, defaults: .standard)
+            try saveUserRecipes(recipes: recipes, defaults: try userContentDefaults())
             userRecipes = recipes
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -1855,7 +2249,7 @@ final class AppModel {
     /// Kayıtlı kullanıcı tariflerini okur (açılışta); okunamazsa neden gösterilir, yerleşikler çalışır.
     func loadRecipes() {
         do {
-            userRecipes = try loadUserRecipes(defaults: .standard)
+            userRecipes = try loadUserRecipes(defaults: try userContentDefaults())
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -1892,7 +2286,7 @@ final class AppModel {
                 clearArchiveConversation()
             }
         } catch {
-            Self.logger.error("Sohbet silinemedi, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet silinemedi, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet silinemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -1906,13 +2300,13 @@ final class AppModel {
                 }.value
                 askConversations = result.conversations
                 for failure in result.failures {
-                    Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .public)")
+                    Self.logger.error("Sohbet okunamadı, dosya: \(failure.file, privacy: .public), neden: \(failure.reason, privacy: .private)")
                 }
                 if !result.failures.isEmpty {
                     errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişinden \(result.failures.count) sohbet okunamadı."))
                 }
             } catch {
-                Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Sohbet geçmişi okunamadı, hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet geçmişi okunamadı: \(userFacingMessage(error: error))"))
             }
         }
@@ -1937,7 +2331,7 @@ final class AppModel {
                 askConversations.removeAll { $0.id == old.id }
             }
         } catch {
-            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Sohbet saklanamadı, sohbet: \(id.uuidString, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Sohbet saklanamadı: \(userFacingMessage(error: error))"))
         }
     }
@@ -1985,7 +2379,7 @@ final class AppModel {
         do {
             try await eventKit.addReminder(draft: reminderDraft(record: record, task: task, language: note.writtenLanguage, calendar: Calendar.current))
         } catch {
-            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Anımsatıcı eklenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return eventKitMessage(error: error)
         }
         // Ekleme sürerken kayıt değişmiş olabilir: güncel kayıt işaretlenir. Toplantı bu arada işlenmeye başladıysa işaret
@@ -2020,12 +2414,12 @@ final class AppModel {
     @ObservationIgnored private var sendStateFades: [String: Task<Void, Never>] = [:]
 
     /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
-    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations) {
+    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations, clientName: appName) {
         (connection: ChannelConnection) async throws -> ChannelConnection in
         try await refreshConnectionTokens(connection: connection)
     }
     /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
-    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService)
+    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService, clientName: appName)
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
     /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
@@ -2102,7 +2496,7 @@ final class AppModel {
             let removed: NoteDestination = try await destinationVault.remove(id: id)
             destinations = try await destinationVault.all()
             do {
-                try await revokeDestination(destination: removed)
+                try await revokeDestination(destination: removed, clientName: appName)
             } catch {
                 Self.logger.warning("Hedef servis tarafında kapatılamadı, hedef: \(destinationName(destination: removed), privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: destinationName(destination: removed), appName: appName, error: error))
@@ -2256,7 +2650,7 @@ final class AppModel {
             do {
                 saveRecord(record: change(try loadMeeting(directory: directory)), directory: directory)
             } catch {
-                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Toplantı güncellenemedi, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
             }
         }
@@ -2366,7 +2760,7 @@ final class AppModel {
     private func revokeReplacedGrant(connection: MCPConnection, service: String) {
         Task {
             do {
-                try await revokeMCPConnection(connection: connection)
+                try await revokeMCPConnection(connection: connection, clientName: appName)
             } catch {
                 Self.logger.warning("Eski bağlantının izni geri alınamadı, servis: \(service, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: replacedGrantRevocationFailureMessage(service: service, error: error))
@@ -2419,7 +2813,7 @@ final class AppModel {
         do {
             try await trackerVault.withTracker(id: tracker.id) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
-                try await validateTracker(service: current.service, connection: current.connection, persist: persist)
+                try await validateTracker(service: current.service, connection: current.connection, clientName: appName, persist: persist)
             }
         } catch TaskTrackerError.noCreateTool(let name) {
             await revokeTracker(tracker: try await trackerVault.remove(id: tracker.id))
@@ -2460,7 +2854,7 @@ final class AppModel {
     /// (kullanıcı kaldırmak istedi); neden ve erişimin servisin ayarlarından nasıl kaldırılacağı gösterilir.
     private func revokeTracker(tracker: TaskTracker) async {
         do {
-            try await revokeMCPConnection(connection: tracker.connection)
+            try await revokeMCPConnection(connection: tracker.connection, clientName: appName)
         } catch {
             Self.logger.warning("Görev aracının izni geri alınamadı, servis: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: tracker.service.displayName, appName: appName, error: error))
@@ -2515,7 +2909,7 @@ final class AppModel {
             try requireOnDeviceLanguages(provider: llm, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language)
             let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
-                try await sendTasksToTracker(tracker: current, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
+                try await sendTasksToTracker(tracker: current, clientName: appName, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
             markTasksSent(meetingID: meetingID, tracker: tracker, tasks: result.createdTaskIndices.map { tasks[$0] })
             // Sonuç uygulamanın kendi cümlesiyle gösterilir: ajanın serbest özeti (kabul testinde) başarılı gönderimi
@@ -2572,7 +2966,7 @@ final class AppModel {
         // NSAppleScript yalnızca ana iş parçacığında güvenli.
         let failure: String? = runAppleScript(source: source)
         if let failure {
-            Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .public)")
+            Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .private)")
             return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da \(appName) için Notlar'a izin ver.")
         }
         Self.logger.info("Not Apple Notlar'a yazıldı, toplantı: \(meetingID, privacy: .public)")
@@ -2664,7 +3058,7 @@ final class AppModel {
         do {
             latest = try loadMeeting(directory: directory)
         } catch {
-            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Not işi sonrası kayıt diskten okunamadı, toplantı: \(start.id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Diğer cihazdaki işaretler okunamadı, not onlarsız kaydedildi: \(userFacingMessage(error: error))"))
             latest = start
         }
@@ -2690,7 +3084,7 @@ final class AppModel {
         do {
             return SpeakerKitVoiceEmbedder(modelsDirectory: try AppPaths.modelsDirectory())
         } catch {
-            Self.logger.error("Ses izi için model klasörü alınamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Ses izi için model klasörü alınamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
             return nil
         }
@@ -2701,7 +3095,7 @@ final class AppModel {
             registeredVoices = try loadRegisteredVoices(url: try voicesFileURL())
             voiceRegistryError = nil
         } catch {
-            Self.logger.error("Kayıtlı sesler okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kayıtlı sesler okunamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
         }
     }
@@ -2712,7 +3106,7 @@ final class AppModel {
             registeredVoices = voices
             voiceRegistryError = nil
         } catch {
-            Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kayıtlı sesler yazılamadı, hata: \(String(describing: error), privacy: .private)")
             voiceRegistryError = userFacingMessage(error: error)
         }
     }
@@ -2732,7 +3126,7 @@ final class AppModel {
             peopleBookLoaded = true
             peopleBookError = nil
         } catch {
-            Self.logger.error("Kişiler defteri okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kişiler defteri okunamadı, hata: \(String(describing: error), privacy: .private)")
             peopleBookError = userFacingMessage(error: error)
         }
     }
@@ -2747,7 +3141,7 @@ final class AppModel {
             peopleBook = book
             peopleBookError = nil
         } catch {
-            Self.logger.error("Kişiler defteri yazılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kişiler defteri yazılamadı, hata: \(String(describing: error), privacy: .private)")
             peopleBookError = userFacingMessage(error: error)
         }
     }
@@ -2930,16 +3324,20 @@ final class AppModel {
                 saveRecord(record: record.withAudioDeleted().with(voiceprints: nil), directory: directory)
             } catch {
                 // Silinemediyse "silindi" işaretlenmez; saklama süresi bir sonraki denemede yeniden dener.
-                Self.logger.error("Ses silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+                Self.logger.error("Ses silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                 errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             }
         }
     }
 
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
+    /// Abonelikte hesap verisi yüklenmeden çağrılmaz (bkz. `isAccountDataReady`); süreç başına bir kez.
     func performStartupMaintenance() {
         loadVoices()
         loadPeople()
+        #if HOSTED_EDITION
+        loadFolders()
+        #endif
         loadRecipes()
         loadAskHistory()
         // Toplantılar arka planda okunur (büyük arşivde açılış donmasın); listeye bağlı işler okuma bitince başlar.
@@ -2950,7 +3348,8 @@ final class AppModel {
             // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
             // Okuma sürerken başlatılmış kayıt (kilitli) yarıda kalmış sayılmaz.
             let local: Set<String> = localMeetingIDsReportingFailure()
-            for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) }) {
+            let interrupted: [MeetingRecord] = staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) })
+            for record in hostedRequeued(records: interrupted) {
                 withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                     saveRecord(record: record, directory: directory)
                 }
@@ -2963,6 +3362,24 @@ final class AppModel {
         startCloudSyncIfEnabled()
         Task { await refreshSetupProblems() }
         Task { await refreshSharedKeys() }
+    }
+
+    /// Abonelikte yarıda kalan çevrimdışı kayıt (sunucu oturumu yok) kuyruğa döner; geliştirici sürümünde değişmez.
+    private func hostedRequeued(records: [MeetingRecord]) -> [MeetingRecord] {
+        #if HOSTED_EDITION
+        do {
+            let requeued: [MeetingRecord] = queuingUnlinkedInterrupted(records: records, linkedRecordIDs: try hostedLinkedRecordIDs())
+            if requeued.contains(where: { $0.status == .queued }) {
+                Task { await runOfflineQueue() }
+            }
+            return requeued
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            return records
+        }
+        #else
+        return records
+        #endif
     }
 
     /// Yerel toplantı kimlikleri; okunamazsa boş (o turda hiçbir toplantıya dokunulmaz) ve neden gösterilir.
@@ -3030,7 +3447,7 @@ final class AppModel {
             // Süren bir arka plan okuması bu yazmayı görmemiş olabilir: sonucu bu kaydı geri almasın.
             meetingReloader.invalidate()
         } catch {
-            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Toplantı kaydedilemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı kaydedilemedi: \(userFacingMessage(error: error))"))
         }
     }
@@ -3089,7 +3506,7 @@ final class AppModel {
             }
             keySync = .idle
         } catch {
-            Self.logger.error("Anahtarlar iCloud'a kopyalanamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Anahtarlar iCloud'a kopyalanamadı, hata: \(String(describing: error), privacy: .private)")
             keySync = .failed(userFacingMessage(error: error))
         }
         await refreshSharedKeys()
@@ -3217,6 +3634,8 @@ func mediaImportMessage(error: any Error) -> String {
         String(localized: "okunamadı (\(reason))")
     case MediaImportError.writeFailed(_, let reason):
         String(localized: "kaydedilemedi (\(reason))")
+    case HostedImportError.longerThanMeetingAllowance(let durationMinutes, let maxMinutes):
+        String(localized: "dosya \(durationMinutes) dakika; bir toplantı şu an en çok \(maxMinutes) dakika işlenebilir. Dosyayı bölüp parçaları ayrı içe aktar.")
     default:
         userFacingMessage(error: error)
     }

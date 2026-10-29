@@ -64,13 +64,65 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let userId: String
     public let plan: HostedPlan
     public let trialMeetingsTotal: Int
-    /// Etkin kalan deneme (hesap ve doğrulanmış cihazın küçüğü).
-    public let trialMeetingsLeft: Int
+    /// Denemenin süresi (gün; ilk deneme toplantısından başlar); alanı bilmeyen eski sunucuda nil.
+    public let trialDays: Int?
+    /// Etkin kalan deneme (hesap ve doğrulanmış cihazın küçüğü). Sunucu bu Mac'te denemeyi reddettiyse uygulama 0 yapar
+    /// (bkz. `hostedEntitlementsOnThisMac`).
+    public internal(set) var trialMeetingsLeft: Int
     public let accountTrialMeetingsLeft: Int
     public let deviceTrialMeetingsLeft: Int?
+    /// Deneme süresinin bittiği an (ilk deneme toplantısı + deneme günleri); deneme başlamadıysa, abonelikte ya da
+    /// alanı bilmeyen eski sunucuda nil.
+    public let trialEndsAt: Date?
     public let monthlyHoursUsed: Double
     public let monthlyHoursCap: Double
     public let subscription: HostedSubscription?
+    /// Yeni toplantının canlı metin motoru (`deepgram` ya da `whisperkit`); bkz. `hostedLiveEngine(entitlements:)`.
+    /// Alanı bilmeyen eski sunucuda nil.
+    public let liveEngine: String?
+    /// Toplantı dışı yapay zekâ hakkı (Sor, not düzenleme…): dönemde sayılan token, sınır, dönem (`month` abonede,
+    /// `day` denemede) ve sıfırlanma anı. Alanları bilmeyen eski sunucuda nil (kullanım göstergesi gizlenir).
+    public let accountTokensUsed: Int?
+    public let accountTokensCap: Int?
+    public let accountTokensPeriod: String?
+    public let accountTokensResetsAt: Date?
+    /// Aylık sınırların sıfırlandığı an (sonraki UTC ayının başı); eski sunucuda nil.
+    public let monthlyResetsAt: Date?
+    /// Şimdi açılacak toplantının en çok süresi ve ses hakkı (dakika; abonede aylık kalanla sınırlı); eski sunucuda nil.
+    public let meetingMaxMinutes: Int?
+}
+
+/// Abonelik sürümünde canlı metni üreten motor.
+public enum HostedLiveEngine: String, Sendable, Equatable {
+    /// Bulut (Deepgram); jeton her bağlantıda sunucudan alınır.
+    case deepgram
+    /// Mac'te (WhisperKit).
+    case whisperKit = "whisperkit"
+}
+
+/// Sunucunun yeni toplantı için önerdiği canlı motor. Alanı bilmeyen eski sunucu Deepgram jetonu da vermez, tanınmayan
+/// değer de Deepgram'ı açmaz: ikisinde de Mac'te (WhisperKit). Saf fonksiyondur.
+public func hostedLiveEngine(entitlements: HostedEntitlements) -> HostedLiveEngine {
+    entitlements.liveEngine.flatMap { HostedLiveEngine(rawValue: $0) } ?? .whisperKit
+}
+
+/// `POST /v1/live/deepgram-token` yanıtı: tek bağlantılık kısa ömürlü Deepgram jetonu. Jeton saklanmaz ve loglanmaz.
+public struct HostedDeepgramGrant: Decodable, Sendable {
+    /// Deepgram JWT'si (`Authorization: Bearer`); yalnızca bağlantı kurulurken geçerli olmalı.
+    public let accessToken: String
+    /// Jetonun kalan ömrü (saniye).
+    public let expiresIn: Double
+    /// Akış modeli (ör. `nova-3`).
+    public let model: String
+    /// Bu toplantıda kalan jeton.
+    public let grantsLeft: Int
+}
+
+/// Abonelik sürümünün akış seçenekleri: model sunucunun jetonundan; model geliştirme programından her zaman çıkılır
+/// (`mip_opt_out=true`: Deepgram ses ve metni yalnızca işlerken tutar, eğitimde kullanmaz; gizlilik metni bunu söyler).
+/// Saf fonksiyondur.
+public func hostedDeepgramListenOptions(grant: HostedDeepgramGrant) -> DeepgramListenOptions {
+    DeepgramListenOptions(model: grant.model, optOutOfModelImprovement: true)
 }
 
 /// `POST /v1/meetings/start` yanıtı.
@@ -83,6 +135,13 @@ public struct HostedStartedMeeting: Decodable, Sendable, Equatable {
     public let expiresAt: Date
     /// Deneme toplantısında kalan deneme; abonelikte nil.
     public let trialMeetingsLeft: Int?
+}
+
+/// `POST /v1/meetings/{id}/reprocess` yanıtı.
+public struct HostedReprocessedMeeting: Decodable, Sendable, Equatable {
+    public let meetingId: String
+    public let usableUntil: Date
+    public let reprocessesLeft: Int
 }
 
 /// `POST /v1/meetings/{id}/end` yanıtı.
@@ -143,6 +202,33 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
     case grace(endsAt: Date)
+    /// Abonelik sona erdi (iptal edildi ya da ödenmedi) ve deneme hakkı kalmadı: yeni kayıt için yeniden abone olunmalı.
+    case expired(endedAt: Date)
+}
+
+/// Bu Mac'te görülen hak durumu: sunucu bu hesabın ücretsiz denemesini bu Mac'te reddettiyse (`trial_device_used`: Mac
+/// denemesini başka bir hesapla kullandı; Apple DeviceCheck yalnızca toplantı açılırken sorulur, hak yanıtı bunu
+/// bilemez) ve hesap denemedeyse kalan deneme 0 gösterilir; kenar çubuğu, Hesap kartı ve Başlat düğmesi böylece aynı
+/// şeyi söyler. Abonelikte değişmez. Saf fonksiyondur.
+public func hostedEntitlementsOnThisMac(entitlements: HostedEntitlements, trialRefusedOnThisMac: Bool) -> HostedEntitlements {
+    guard trialRefusedOnThisMac, case .trial = hostedPlanStatus(entitlements: entitlements) else {
+        return entitlements
+    }
+    var shown: HostedEntitlements = entitlements
+    shown.trialMeetingsLeft = 0
+    return shown
+}
+
+/// Bu Mac'teki deneme reddinin geçerli kaldığı süre (saniye): sonra Başlat sunucuya yeniden sorar (sunucuda düzeltilmiş
+/// ya da reddin yanlış çıktığı hesap kalıcı olarak kilitlenmesin).
+public let hostedTrialRefusalMaxAgeSec: Double = 24 * 60 * 60
+
+/// Deneme reddi hâlâ geçerli mi: kaydedildiyse ve `maxAgeSec`'ten yeniyse. Saf fonksiyondur.
+public func isHostedTrialRefusalActive(refusedAt: Date?, now: Date, maxAgeSec: Double) -> Bool {
+    guard let refusedAt else {
+        return false
+    }
+    return now.timeIntervalSince(refusedAt) < maxAgeSec
 }
 
 /// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.
@@ -157,7 +243,10 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
         case .grace:
             return .grace(endsAt: subscription.graceEndsAt ?? subscription.currentPeriodEnd)
         case .none:
-            break
+            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi".
+            if entitlements.trialMeetingsLeft == 0 {
+                return .expired(endedAt: subscription.cancelAt ?? subscription.currentPeriodEnd)
+            }
         }
     }
     return .trial(left: entitlements.trialMeetingsLeft, total: entitlements.trialMeetingsTotal)

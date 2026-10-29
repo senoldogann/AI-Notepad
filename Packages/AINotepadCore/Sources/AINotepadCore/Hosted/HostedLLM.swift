@@ -3,6 +3,12 @@ import Foundation
 /// Sunucunun kullandığı tek model (sunucuda sabittir; istemci model göndermez).
 public let hostedModelName: String = "claude-haiku-5-5"
 
+/// Sunucunun çağrı başı `max_tokens` sınırları (`server/wrangler.jsonc` `LLM_MAX_TOKENS`, `LLM_ACCOUNT_MAX_TOKENS`):
+/// toplantıya bağlı çağrı ve hesap çağrısı. İstek bunları aşmaz (sunucu zaten kırpar; istemci tahminini sınırla aynı
+/// tutar, kesilme mesajı yanıltmasın).
+public let hostedMeetingMaxTokens: Int = 8192
+public let hostedAccountMaxTokens: Int = 6144
+
 /// Yapay zekâ çağrısının kimliği: erişim jetonu ve (toplantıya bağlı çağrıda) toplantı oturumu; hesap çağrısında nil.
 public struct HostedLLMCredentials: Sendable, Equatable {
     public let accessToken: String
@@ -21,6 +27,8 @@ public protocol HostedLLMCredentialSource: AnyObject, Sendable {
     func meetingLLMCredentials() async throws -> HostedLLMCredentials
     /// Geçerli (gerekirse yenilenmiş) erişim jetonu; giriş yoksa `notSignedIn`.
     func validAccessToken() async throws -> String
+    /// Erişim jetonunu süresine bakmadan yeniler (sunucu jetonu 401 ile reddettiyse); oturum kapandıysa `sessionEnded`.
+    func refreshAccessToken() async throws
 }
 
 /// Çağrının sunucudaki bütçesi.
@@ -28,6 +36,9 @@ public enum HostedLLMScope: Sendable, Equatable {
     /// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) ve kaydın hemen ardından not: son
     /// açılan toplantının bütçesinden düşer; toplantı kapanıp ek süre geçince `meeting_not_active`.
     case meeting
+    /// Kaydı bitmiş belirli bir toplantının istekleri (kaydın ardından not): o toplantının sunucu oturumunun bütçesinden
+    /// düşer; bu arada yeni bir kayıt başlasa da onun bütçesine yazılmaz.
+    case recordedMeeting(serverMeetingID: String)
     /// Her zaman kullanılabilen istekler (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı):
     /// toplantı kimliği gönderilmez; sunucu abonelik ya da kalan deneme ister, kullanıcının sınırlarına sayar.
     case account
@@ -85,7 +96,7 @@ struct HostedLLMRequestBody: Encodable {
 
 /// İstek gövdesi; her zaman akışlıdır (Anthropic olayları aynen gelir, `classifyClaudeResponse` ile çözülür). Saf
 /// fonksiyondur.
-public func hostedLLMRequestBody(request: LLMRequest, effort: LLMEffort) throws -> Data {
+public func hostedLLMRequestBody(request: LLMRequest, effort: LLMEffort, maxTokensCap: Int) throws -> Data {
     let format: ClaudeRequestBody.OutputFormat? = try request.jsonSchema.map { (schemaText: String) throws -> ClaudeRequestBody.OutputFormat in
         ClaudeRequestBody.OutputFormat(type: "json_schema", schema: try parsedSchema(text: schemaText))
     }
@@ -93,7 +104,7 @@ public func hostedLLMRequestBody(request: LLMRequest, effort: LLMEffort) throws 
         effort: effort.rawValue,
         system: request.system,
         messages: [LLMChatMessage(role: "user", content: request.userText)],
-        maxTokens: request.maxTokens,
+        maxTokens: min(request.maxTokens, maxTokensCap),
         outputConfig: format.map { HostedLLMRequestBody.OutputConfig(format: $0) },
         stream: true
     )
@@ -106,7 +117,9 @@ public func hostedLLMURLRequest(baseURL: URL, credentials: HostedLLMCredentials,
     var urlRequest: URLRequest = URLRequest(url: baseURL.appending(path: "v1/llm/messages"))
     urlRequest.httpMethod = "POST"
     urlRequest.timeoutInterval = request.timeoutSec
-    urlRequest.httpBody = try hostedLLMRequestBody(request: request, effort: hostedEffort(tier: request.tier))
+    // Toplantıya bağlı çağrı ve hesap çağrısının sunucu sınırları farklı.
+    let cap: Int = credentials.meetingID == nil ? hostedAccountMaxTokens : hostedMeetingMaxTokens
+    urlRequest.httpBody = try hostedLLMRequestBody(request: request, effort: hostedEffort(tier: request.tier), maxTokensCap: cap)
     urlRequest.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "authorization")
     if let meetingID = credentials.meetingID {
         urlRequest.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
@@ -132,6 +145,8 @@ func prepareHostedCall(config: HostedLLMConfig, request: LLMRequest) async throw
     switch config.scope {
     case .meeting:
         credentials = try await config.credentials.meetingLLMCredentials()
+    case .recordedMeeting(let serverMeetingID):
+        credentials = HostedLLMCredentials(accessToken: try await config.credentials.validAccessToken(), meetingID: serverMeetingID)
     case .account:
         credentials = HostedLLMCredentials(accessToken: try await config.credentials.validAccessToken(), meetingID: nil)
     }

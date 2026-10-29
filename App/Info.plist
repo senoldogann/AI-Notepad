@@ -33,6 +33,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar.</string>
 	<key>NSAudioCaptureUsageDescription</key>
@@ -43,11 +45,15 @@
 	<string>AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler.</string>
 	<key>ReportsAPIBase</key>
 	<string>https://api.gistsmith.com</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
 	<string>https://github.com/$(RELEASES_REPO_AINOTEPAD)/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_KEY)</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>21600</integer>
 </dict>
 </plist>

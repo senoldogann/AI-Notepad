@@ -28,22 +28,36 @@ public func visibleStreamText(accumulated: String) -> String {
 /// başlamadan önceki 408/429/5xx/ağ hataları 3 deneme (uyarı logu); metin göründükten sonraki hata yeniden denenmez
 /// (kullanıcı yarım cevabı görmüştür), fırlatılır.
 public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTextHandler) async throws -> String {
-    let call: PreparedLLMCall
-    let textDelta: @Sendable (Substring) -> String?
+    let claudeDelta: @Sendable (Substring) -> String? = { (line: Substring) -> String? in claudeTextDelta(line: line) }
     switch provider {
     case .anthropic(let config):
-        call = try prepareClaudeCall(config: config, request: request)
-        textDelta = { (line: Substring) -> String? in claudeTextDelta(line: line) }
+        return try await streamPreparedLLM(call: try prepareClaudeCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
     case .openAICompatible(let config):
-        call = try prepareOpenAIStreamCall(config: config, request: request)
-        textDelta = { (line: Substring) -> String? in openAITextDelta(line: line) }
+        return try await streamPreparedLLM(
+            call: try prepareOpenAIStreamCall(config: config, request: request),
+            textDelta: { (line: Substring) -> String? in openAITextDelta(line: line) }, onText: onText
+        )
     case .onDevice(let config):
         return try await streamOnDevice(config: config, request: request, onText: onText)
     case .hosted(let config):
-        // Sunucu Anthropic'in akış olaylarını aynen iletir.
-        call = try await prepareHostedCall(config: config, request: request)
-        textDelta = { (line: Substring) -> String? in claudeTextDelta(line: line) }
+        // Sunucu Anthropic'in akış olaylarını aynen iletir. Jeton 401 ile reddedilirse (metin görünmeden) bir kez
+        // yenilenip yeniden denenir.
+        do {
+            return try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
+        } catch LLMError.hosted(let error) where error.status == 401 {
+            streamLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
+            try await config.credentials.refreshAccessToken()
+            return try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
+        } catch LLMError.hosted(let error) {
+            // Abonelik gerektiren ret (deneme bitti vb.): uygulama teklifi gösterir.
+            announceIfSubscriptionRequired(error: error)
+            throw LLMError.hosted(error)
+        }
     }
+}
+
+/// Hazırlanmış akış çağrısını gönderir (yeniden deneme kuralları `streamLLM`'deki gibi).
+private func streamPreparedLLM(call: PreparedLLMCall, textDelta: @escaping @Sendable (Substring) -> String?, onText: LLMTextHandler) async throws -> String {
     var lastError: any Error = LLMError.empty
     for attempt in 1...streamAttempts {
         var retryAfter: String?

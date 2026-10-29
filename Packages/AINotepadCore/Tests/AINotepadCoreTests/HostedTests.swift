@@ -42,11 +42,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
 
 @Suite struct HostedAudioTests {
     @Test func chunkSpansCoverRecordingWithoutGaps() {
-        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4) == [
+        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 0) == [
             WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 4, sampleCount: 4), WavChunkSpan(startSample: 8, sampleCount: 2),
         ])
-        #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4).isEmpty)
-        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+        #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4, overlapSamples: 1).isEmpty)
+        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4, overlapSamples: 1) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+        // Örtüşen parçalar: her parça öncekinin son örneğiyle başlar.
+        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 1) == [
+            WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 3, sampleCount: 4), WavChunkSpan(startSample: 6, sampleCount: 4),
+        ])
     }
 
     // 95 MB'lık WAV, 16 kHz mono 16 bitte ~49 dakikadır; başlıkla birlikte sınırı aşmaz.
@@ -63,9 +67,11 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let source: URL = try writeSineRecording(directory: directory, seconds: 2.5, sampleRate: 48000)
         let maxBytes: Int = 44 + 16000 * 2
-        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes)
+        let overlap: Int = 4000
+        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes, overlapSamples: overlap)
         #expect(chunks.count == 3)
         var expectedStart: Int = 0
+        var previousTail: Data?
         for chunk in chunks {
             let data: Data = try Data(contentsOf: chunk.url)
             #expect(data.count <= maxBytes)
@@ -75,19 +81,46 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             #expect(littleEndian32(data, at: 24) == hostedTranscribeSampleRate)
             #expect(littleEndian32(data, at: 40) == chunk.span.sampleCount * 2)
             #expect(chunk.span.startSample == expectedStart)
-            expectedStart += chunk.span.sampleCount
+            // Parça öncekinin son çeyrek saniyesiyle başlar (aynı örnekler).
+            if let previousTail {
+                #expect(data.subdata(in: 44..<(44 + overlap * 2)) == previousTail)
+            }
+            previousTail = data.subdata(in: (data.count - overlap * 2)..<data.count)
+            expectedStart += chunk.span.sampleCount - overlap
         }
-        #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 1])
+        #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 0.75])
         // Örnek hızı dönüştürücüsü uçlarda birkaç örnek oynatabilir.
-        #expect(abs(expectedStart - 40000) < 200)
+        #expect(abs(expectedStart + overlap - 40000) < 200)
         try FileManager.default.removeItem(at: directory)
     }
 
-    // Parça sonuçları kaydın zamanına kaydırılır; konuşmacılar parçalar arasında karışmaz; dil en olası parçanınki.
+    // Ortak dakikada aynı kelimeleri söyleyen etiketler aynı kişidir (ElevenLabs etiketleri parçada farklı olsa da);
+    // ortak bölgede konuşmayan kişi yeni kişi kalır; ortak bölgenin kelimeleri bir kez yazılır.
+    @Test func overlappingChunksKeepSpeakersAcrossBoundary() {
+        let first: DiarizationResult = DiarizationResult(words: [
+            word("Aino1", 10, 11, "speaker_0"), word("Mika1", 2950, 2951, "speaker_1"),
+            word("Aino2", 2970, 2972, "speaker_0"), word("Mika2", 2990, 2992, "speaker_1"), word("Aino3", 3010, 3012, "speaker_0"),
+        ], languageCode: "fin", languageProbability: 0.9)
+        // İkinci parça 2968'de başlar, 60 sn örtüşür; etiketler yer değiştirmiş, yeni bir kişi (speaker_2) var.
+        let second: DiarizationResult = DiarizationResult(words: [
+            word("Aino2", 2, 4, "speaker_1"), word("Mika2", 22, 24, "speaker_0"), word("Aino3", 42, 44, "speaker_1"),
+            word("Mika3", 70, 71, "speaker_0"), word("Uusi", 80, 81, "speaker_2"),
+        ], languageCode: "fin", languageProbability: 0.8)
+        let merged: DiarizationResult = mergeChunkTranscriptions(chunks: [
+            ChunkTranscription(offsetSec: 0, overlapSec: 0, result: first),
+            ChunkTranscription(offsetSec: 2968, overlapSec: 60, result: second),
+        ])
+        #expect(merged.words.map(\.text) == ["Aino1", "Mika1", "Aino2", "Mika2", "Aino3", "Mika3", "Uusi"])
+        #expect(merged.words.map(\.speaker) == ["speaker_0", "speaker_1", "speaker_0", "speaker_1", "speaker_0", "speaker_1", "2:speaker_2"])
+        // Karışık ya da az oy eşleme yapmaz.
+        #expect(overlapSpeakerMapping(previous: [word("a", 0, 1, "x")], current: [word("a", 0, 1, "y")]).isEmpty)
+    }
+
+    // Parça sonuçları kaydın zamanına kaydırılır; ortak konuşma yoksa konuşmacılar parçalar arasında karışmaz; dil en olası parçanınki.
     @Test func chunkResultsMergeWithOffsets() {
         let merged: DiarizationResult = mergeChunkTranscriptions(chunks: [
-            ChunkTranscription(offsetSec: 0, result: DiarizationResult(words: [word("Hei", 0.5, 0.9, "speaker_0")], languageCode: "fin", languageProbability: 0.6)),
-            ChunkTranscription(offsetSec: 2968.5, result: DiarizationResult(
+            ChunkTranscription(offsetSec: 0, overlapSec: 0, result: DiarizationResult(words: [word("Hei", 0.5, 0.9, "speaker_0")], languageCode: "fin", languageProbability: 0.6)),
+            ChunkTranscription(offsetSec: 2968.5, overlapSec: 0, result: DiarizationResult(
                 words: [word("Moi", 1, 1.4, "speaker_0"), word("Joo", 2, 2.2, "speaker_1")], languageCode: "swe", languageProbability: 0.9
             )),
         ])
@@ -105,9 +138,17 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedKeyterms(terms: ["a", "b", "c"], limit: 2) == ["a", "b"])
     }
 
-    @Test func transcribeURLEncodesQuery() throws {
-        let url: URL = hostedTranscribeURL(baseURL: try #require(URL(string: "http://localhost:8787")), languageCode: "fin", keyterms: ["C++ & Go", "Aino"])
-        #expect(url.absoluteString == "http://localhost:8787/v1/transcribe?language_code=fin&diarize=true&keyterms=C%2B%2B%20%26%20Go&keyterms=Aino")
+    // Anahtar terimler adreste değil, başlıkta: UTF-8 JSON dizisinin dolgusuz base64url'i.
+    @Test func transcribeKeytermsGoInHeader() throws {
+        let url: URL = hostedTranscribeURL(baseURL: try #require(URL(string: "http://localhost:8787")), languageCode: "fin")
+        #expect(url.absoluteString == "http://localhost:8787/v1/transcribe?language_code=fin&diarize=true")
+        #expect(try hostedKeytermsHeader(keyterms: []) == nil)
+        let header: String = try #require(try hostedKeytermsHeader(keyterms: ["C++ & Go", "Äino?"]))
+        #expect(!header.contains("=") && !header.contains("+") && !header.contains("/"))
+        let standard: String = header.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let padded: String = standard + String(repeating: "=", count: (4 - standard.count % 4) % 4)
+        let decoded: [String] = try JSONDecoder().decode([String].self, from: try #require(Data(base64Encoded: padded)))
+        #expect(decoded == ["C++ & Go", "Äino?"])
     }
 }
 
@@ -124,11 +165,17 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: status, serverMessage: "", path: "/v1/meetings/start"))
         }
         #expect(message(.trialExhausted, 402).contains("abone ol"))
+        // Deneme koşulları sunucu ayarından gelir; hata metnine sabit yazılmaz.
+        #expect(!message(.trialExhausted, 402).contains("7 gün"))
+        #expect(message(.trialNotStarted, 403).contains("önce bir toplantı"))
         #expect(message(.trialIPLimit, 429).contains("Yarın"))
+        #expect(message(.trialDeviceUsed, 403).contains("abone ol"))
+        #expect(hostedDeviceCheckMessage(error: .unsupported).contains("Abone"))
         #expect(message(.monthlyCapReached, 429).contains("ay başında"))
         #expect(message(.subscriptionExists, 409).contains("Hesabı yönet"))
         #expect(message(.spendCeilingReached, 503).contains("yoğun"))
-        #expect(message(.meetingNotActive, 409).contains("Yeni bir toplantı"))
+        #expect(message(.trialCapacityReached, 503).contains("abone ol"))
+        #expect(message(.meetingNotActive, 409).contains("Tekrar işle"))
         #expect(message(.transcriptionClosed, 409).contains("Canlı metin"))
     }
 
@@ -139,7 +186,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(unknown.code == nil && unknown.rawCode == "yeni_kod")
         let proxy: HostedAPIError = parseHostedAPIError(status: 502, data: Data("<html>Bad gateway</html>".utf8), path: "/v1/me")
         #expect(proxy.code == nil && proxy.rawCode == "http_502" && proxy.serverMessage.contains("Bad gateway"))
-        #expect(hostedErrorMessage(error: proxy).contains("502"))
+        // Kullanıcı metninde teknik ayrıntı (HTTP kodu) yok; ne yapılacağı yazar. Kod loglarda ve Tanılama'da kalır.
+        #expect(!hostedErrorMessage(error: proxy).contains("502") && hostedErrorMessage(error: proxy).contains("yeniden dene"))
     }
 
     // Hız sınırı ve geçici sunucu hataları yeniden denenir; harcama tavanı (503) ve kotalar denenmez.
@@ -194,6 +242,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(body["effort"] as? String == "medium")
         #expect(body["stream"] as? Bool == true)
         #expect(body["max_tokens"] as? Int == 2048)
+        // Sunucu sınırının üstündeki istek sınıra iner (toplantı 8192, hesap 6144).
+        let large: LLMRequest = LLMRequest(tier: .smart, system: "s", userText: "u", maxTokens: 16_000, jsonSchema: nil, timeoutSec: 30)
+        let local: URL = try #require(URL(string: "http://localhost:8787"))
+        let meetingRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: "m"), request: large)
+        let largeMeeting: [String: Any] = try jsonObject(try #require(meetingRequest.httpBody))
+        #expect(largeMeeting["max_tokens"] as? Int == hostedMeetingMaxTokens)
+        let accountRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: nil), request: large)
+        let largeAccount: [String: Any] = try jsonObject(try #require(accountRequest.httpBody))
+        #expect(largeAccount["max_tokens"] as? Int == hostedAccountMaxTokens)
         let messages: [[String: Any]] = try #require(body["messages"] as? [[String: Any]])
         #expect(messages.count == 1 && messages[0]["role"] as? String == "user")
         let format: [String: Any] = try #require((body["output_config"] as? [String: Any])?["format"] as? [String: Any])
@@ -267,7 +324,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         }
     }
 
-    // Yenileme ve toplantı başlatma zaman aşımında yinelenmez (jeton ikinci kez gönderilirse tüm oturumlar düşer).
+    // Toplantı başlatma ve nonce ile giriş zaman aşımında yinelenmez; yenileme tekrarı zararsız isteklerdendir (sunucu
+    // yanıtı kaybolan yenilemenin jetonunu 10 dakika yeniden kabul eder).
     @Test func oneShotRequestsRetryOnlyWhenNotSent() {
         #expect(isRetryableOneShotRequest(failure: .network(.cannotConnectToHost)))
         #expect(!isRetryableOneShotRequest(failure: .network(.timedOut)))
@@ -285,6 +343,16 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         """#
         let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
         #expect(entitlements.monthlyHoursUsed == 2.5)
+        // Eski sunucu `liveEngine` göndermez: Deepgram açılmaz.
+        #expect(hostedLiveEngine(entitlements: entitlements) == .whisperKit)
+        let deepgram: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"liveEngine":"deepgram","accountTokensUsed":15,"accountTokensCap":1500000,"accountTokensPeriod":"month","accountTokensResetsAt":"2026-11-01T00:00:00.000Z","monthlyResetsAt":"2026-11-01T00:00:00.000Z","#)
+        let withEngine: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(deepgram.utf8))
+        #expect(hostedLiveEngine(entitlements: withEngine) == .deepgram)
+        #expect(withEngine.accountTokensUsed == 15 && withEngine.accountTokensCap == 1_500_000)
+        // Eski sunucu `trialEndsAt` göndermez; yeni sunucu ISO 8601 gönderir.
+        #expect(entitlements.trialEndsAt == nil)
+        let withEnd: String = json.replacingOccurrences(of: #""deviceTrialMeetingsLeft":null"#, with: #""deviceTrialMeetingsLeft":null,"trialEndsAt":"2026-11-05T12:00:00.000Z""#)
+        #expect(try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(withEnd.utf8)).trialEndsAt == (try Date.ISO8601FormatStyle().parse("2026-11-05T12:00:00Z")))
         #expect(hostedPlanStatus(entitlements: entitlements) == .grace(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-08T00:00:00Z")))
         let trial: String = json.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trial.utf8))) == .trial(left: 1, total: 3))
@@ -293,6 +361,138 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             .replacingOccurrences(of: #""access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""access":"active","graceEndsAt":null"#)
             .replacingOccurrences(of: #""status":"past_due","#, with: #""status":"active","cancelAt":"2026-10-01T00:00:00.000Z","#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(ending.utf8))) == .ending(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Toplantı dışı yapay zekâ payı yeni alan: yoksa nil, varsa okunur.
+        #expect(entitlements.accountTokensCap == nil)
+        let withTokens: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"accountTokensUsed":250,"accountTokensCap":1000,"#)
+        let tokens: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(withTokens.utf8))
+        #expect(tokens.accountTokensUsed == 250 && tokens.accountTokensCap == 1000)
+    }
+
+    // Sunucu denemeyi bu Mac'te reddettiyse denemedeki hesap 0 kalan gösterir (başlat engeli de devreye girer); abone
+    // etkilenmez.
+    @Test func trialRefusedOnThisMac() throws {
+        let trialJSON: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":3,"accountTrialMeetingsLeft":3,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"subscription":null}
+        """#
+        let trial: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.utf8))
+        let refused: HostedEntitlements = hostedEntitlementsOnThisMac(entitlements: trial, trialRefusedOnThisMac: true)
+        #expect(hostedPlanStatus(entitlements: refused) == .trial(left: 0, total: 3))
+        #expect(hostedStartBlock(entitlements: refused) == .trialEnded)
+        #expect(hostedEntitlementsOnThisMac(entitlements: trial, trialRefusedOnThisMac: false) == trial)
+        let subscriberJSON: String = trialJSON
+            .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#)
+        let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(subscriberJSON.utf8))
+        #expect(hostedEntitlementsOnThisMac(entitlements: subscriber, trialRefusedOnThisMac: true) == subscriber)
+    }
+
+    // Abone olma teklifi: denemede günde en çok bir, deneme bitince hesap başına bir kez; abonede hiç.
+    @Test func upsellMoments() throws {
+        let trialJSON: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":2,"accountTrialMeetingsLeft":2,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"subscription":null}
+        """#
+        let now: Date = Date(timeIntervalSince1970: 2_000_000)
+        let trial: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.utf8))
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-3600), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-hostedUpsellIntervalSec), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        let ended: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.replacingOccurrences(of: #""trialMeetingsLeft":2"#, with: #""trialMeetingsLeft":0"#).utf8))
+        // Deneme bitince günlük aralık beklenmez, ama yalnızca bir kez.
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: now.addingTimeInterval(-60), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialEnded)
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: nil, trialEndedShown: true, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON
+            .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#).utf8))
+        #expect(hostedUpsellMoment(entitlements: subscriber, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+    }
+
+    // İçe aktarma toplantının ses hakkını aşarsa kuyruğa alınmadan reddedilir; eski sunucu (alan yok) denetlenmez.
+    @Test func importLongerThanMeetingAllowanceIsRejected() throws {
+        let json: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":2,"accountTrialMeetingsLeft":2,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"meetingMaxMinutes":90,"subscription":null}
+        """#
+        let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
+        try requireHostedImportFits(durationSec: 90 * 60, entitlements: entitlements)
+        #expect(throws: HostedImportError.longerThanMeetingAllowance(durationMinutes: 91, maxMinutes: 90)) {
+            try requireHostedImportFits(durationSec: 90 * 60 + 1, entitlements: entitlements)
+        }
+        let old: HostedEntitlements = try hostedJSONDecoder().decode(
+            HostedEntitlements.self, from: Data(json.replacingOccurrences(of: #""meetingMaxMinutes":90,"#, with: "").utf8)
+        )
+        try requireHostedImportFits(durationSec: 10 * 3600, entitlements: old)
+        // Örtüşme hesaba katılır: 90 dk'lık dosya 2 parça (+60 sn) gönderir; sunucunun payı da 60 sn.
+        #expect(hostedUploadedAudioSec(durationSec: 90 * 60) == 90 * 60 + hostedChunkOverlapSec)
+        #expect(hostedServerOverlapAllowanceSec(seconds: 90 * 60) == 60)
+        #expect(hostedUploadedAudioSec(durationSec: 30 * 60) == 30 * 60)
+        // 4 saatlik toplantı: 5 parça, 4 sınır; sunucunun payı 4 dakika.
+        #expect(hostedUploadedAudioSec(durationSec: 240 * 60) == 240 * 60 + 4 * hostedChunkOverlapSec)
+        #expect(hostedServerOverlapAllowanceSec(seconds: 240 * 60) == 240)
+    }
+
+    // Son geçiş yapılamadığında uyarı hangi metnin kaldığını doğru söyler: yeniden işlemede önceki son geçiş korunur.
+    @Test func finalPassNoticesTellWhichTranscriptRemains() {
+        #expect(skippedFinalPassNotice(reason: "x", hasFinalTranscript: true).contains("Önceki son geçiş metni korundu"))
+        #expect(skippedFinalPassNotice(reason: "x", hasFinalTranscript: false).contains("Canlı metin kullanıldı"))
+        let error: HostedAPIError = HostedAPIError(code: .reprocessLimitReached, rawCode: "reprocess_limit_reached", status: 409, serverMessage: "", path: "/v1/transcribe")
+        #expect(failedFinalPassNotice(error: error, hasFinalTranscript: true).contains("Önceki son geçiş metni korundu"))
+        #expect(failedFinalPassNotice(error: error, hasFinalTranscript: false).contains("canlı metinden"))
+        let me: StoredSegment = StoredSegment(key: "final-0", speaker: .me, person: nil, startSec: 0, endSec: 1, text: "a", words: nil)
+        let base: MeetingRecord = MeetingRecord(
+            id: "k", title: "T", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil, liveSegments: [],
+            finalSegments: [me], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        #expect(!hasOthersFinalTranscript(record: base))
+    }
+
+    // Canlı kaydın başlatması `deferred` alanını hiç göndermez (eski sunucu bilinmeyen alanı reddeder); bekleyen kayıt gönderir.
+    @Test func meetingStartOmitsDeferredUnlessTrue() throws {
+        let live: String = String(decoding: try meetingStartBody(device: nil, deviceCheckToken: nil, clientRef: "k", deferred: false), as: UTF8.self)
+        #expect(!live.contains("deferred"))
+        let pending: String = String(decoding: try meetingStartBody(device: nil, deviceCheckToken: nil, clientRef: "k", deferred: true), as: UTF8.self)
+        #expect(pending.contains(#""deferred":true"#))
+        #expect(hostedClientMessage(error: .serverOutdated(path: "/v1/meetings/{id}/reprocess")).contains("Tekrar işle"))
+    }
+
+    // Yükleme anahtarı sunucunun beklediği biçimde (32 bayt, dolgusuz base64url) ve her parçada farklı.
+    @Test func uploadKeysAreUniqueBase64URL() throws {
+        let first: String = try makeUploadKey()
+        let second: String = try makeUploadKey()
+        #expect(first != second)
+        #expect(first.wholeMatch(of: /[A-Za-z0-9_-]{43}/) != nil)
+    }
+
+    // Ölçer düzeyleri, ay sıfırlanması (UTC) ve bildirimler: abonede %80 ve %100, denemede son toplantı ve bitiş.
+    @Test func usageLevelsAndNotices() throws {
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 3.4, cap: 10)) == .normal)
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 8, cap: 10)) == .warning)
+        #expect(hostedUsageLevel(fraction: hostedUsageFraction(used: 12, cap: 10)) == .full)
+        #expect(hostedUsageFraction(used: 1, cap: 0) == 1)
+        let now: Date = try Date.ISO8601FormatStyle().parse("2026-10-31T23:30:00Z")
+        #expect(hostedMonthResetDate(now: now) == (try Date.ISO8601FormatStyle().parse("2026-11-01T00:00:00Z")))
+        #expect(hostedPeriodKey(now: now) == "2026-10")
+        func decoded(_ text: String) throws -> HostedEntitlements {
+            try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(text.utf8))
+        }
+        let subscriber: String = #"""
+        {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":8.5,"monthlyHoursCap":10,
+         "subscription":{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}}
+        """#
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber)) == .monthlyWarning)
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "10"))) == .monthlyFull)
+        #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "2"))) == nil)
+        // Hiç abone olmamış deneme hesabı (eski abone "abonelik sona erdi" görür; bkz. HostedOfflineTests).
+        let trial: String = subscriber.replacingOccurrences(
+            of: #"{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}"#, with: "null"
+        )
+        #expect(hostedUsageNotice(entitlements: try decoded(trial)) == .trialEnded)
+        #expect(hostedUsageNotice(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":1"#))) == .trialOneLeft)
+        #expect(hostedNoticeStorageKey(notice: .monthlyWarning, userId: "u", now: now) == "hosted.notice.monthlyWarning.u.2026-10")
+        #expect(hostedNoticeStorageKey(notice: .trialEnded, userId: "u", now: now) == "hosted.notice.trialEnded.u")
+        #expect(hostedMinutesLeft(deadline: now.addingTimeInterval(61), now: now) == 2)
     }
 }
 
@@ -317,34 +517,48 @@ private func googleTestToken(claims: String) -> String {
         try requireSecureHostedBaseURL(url: try parseHostedBaseURL(value: "https://api.ornek.fi"))
     }
 
-    // Giriş sayfası adresi: site kökü + /sign-in, app=1 ve nonce'un SHA-256'sı.
-    @Test func googleSignInPage() throws {
-        let page: URL = hostedGoogleSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"))
-        #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    // Giriş sayfası adresi: site kökü + /sign-in, app=1, nonce'un SHA-256'sı ve uygulamada seçilen sağlayıcı.
+    @Test func browserSignInPage() throws {
+        let page: URL = hostedBrowserSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"), provider: .google)
+        #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad&provider=google")
     }
 
-    // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür.
-    @Test func googleCallbackResolution() throws {
+    // Avatar: Google jetonundaki https resim adresi alınır; resim yoksa (Apple) ya da https değilse nil.
+    @Test func identityTokenPicture() throws {
+        let google: String = googleTestToken(claims: #"{"sub":"1","picture":"https://lh3.googleusercontent.com/a/abc=s96-c"}"#)
+        #expect(try hostedIDTokenPicture(identityToken: google)?.absoluteString == "https://lh3.googleusercontent.com/a/abc=s96-c")
+        #expect(try hostedIDTokenPicture(identityToken: googleTestToken(claims: #"{"sub":"1"}"#)) == nil)
+        #expect(try hostedIDTokenPicture(identityToken: googleTestToken(claims: #"{"sub":"1","picture":"http://ornek.fi/a.png"}"#)) == nil)
+    }
+
+    // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür, sağlayıcı
+    // yoldan (Apple ya da Google) okunur.
+    @Test func browserCallbackResolution() throws {
         let started: Date = Date(timeIntervalSince1970: 1_000_000)
-        let attempt: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "ham-nonce", startedAt: started)
+        let attempt: HostedBrowserSignInAttempt = HostedBrowserSignInAttempt(rawNonce: "ham-nonce", startedAt: started)
         let token: String = googleTestToken(claims: #"{"sub":"1","nonce":"\#(hostedNonceHash(nonce: "ham-nonce"))"}"#)
         let url: URL = try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)"))
-        let resolved: HostedGoogleSignInCallback = try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(599), lifetimeSec: hostedGoogleSignInLifetimeSec)
-        #expect(resolved == HostedGoogleSignInCallback(identityToken: token, rawNonce: "ham-nonce"))
-        #expect(throws: HostedGoogleSignInError.noPendingAttempt) {
-            try resolveHostedGoogleCallback(url: url, pending: nil, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        let resolved: HostedBrowserSignInCallback = try resolveHostedBrowserCallback(url: url, pending: attempt, now: started.addingTimeInterval(599), lifetimeSec: hostedBrowserSignInLifetimeSec)
+        #expect(resolved == HostedBrowserSignInCallback(provider: .google, identityToken: token, rawNonce: "ham-nonce"))
+        let appleURL: URL = try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/apple#idToken=\(token)"))
+        let apple: HostedBrowserSignInCallback = try resolveHostedBrowserCallback(url: appleURL, pending: attempt, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
+        #expect(apple == HostedBrowserSignInCallback(provider: .apple, identityToken: token, rawNonce: "ham-nonce"))
+        #expect(throws: HostedBrowserSignInError.noPendingAttempt) {
+            try resolveHostedBrowserCallback(url: url, pending: nil, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
-        #expect(throws: HostedGoogleSignInError.attemptExpired) {
-            try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(601), lifetimeSec: hostedGoogleSignInLifetimeSec)
+        #expect(throws: HostedBrowserSignInError.attemptExpired) {
+            try resolveHostedBrowserCallback(url: url, pending: attempt, now: started.addingTimeInterval(601), lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
-        let other: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "baska-nonce", startedAt: started)
-        #expect(throws: HostedGoogleSignInError.nonceMismatch) {
-            try resolveHostedGoogleCallback(url: url, pending: other, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        let other: HostedBrowserSignInAttempt = HostedBrowserSignInAttempt(rawNonce: "baska-nonce", startedAt: started)
+        #expect(throws: HostedBrowserSignInError.nonceMismatch) {
+            try resolveHostedBrowserCallback(url: url, pending: other, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
         let noNonce: String = googleTestToken(claims: #"{"sub":"1"}"#)
         for bad in [
             "com.senoldogan.ainotepad://auth/google#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/email#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/apple/x#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google?idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google?x=1#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)&extra=1",
@@ -354,8 +568,8 @@ private func googleTestToken(claims: String) -> String {
             "com.senoldogan.ainotepad.hosted://auth/google",
             "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(noNonce)",
         ] {
-            #expect(throws: HostedGoogleSignInError.self) {
-                try resolveHostedGoogleCallback(url: try #require(URL(string: bad)), pending: attempt, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+            #expect(throws: HostedBrowserSignInError.self) {
+                try resolveHostedBrowserCallback(url: try #require(URL(string: bad)), pending: attempt, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
             }
         }
     }

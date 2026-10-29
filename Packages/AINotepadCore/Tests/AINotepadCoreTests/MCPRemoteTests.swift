@@ -143,8 +143,8 @@ import Testing
             == .completed(url: URL(string: "http://127.0.0.1:5555/callback?code=c&state=s1")!, granted: true))
         #expect(loopbackDecision(request: "GET /callback?error=access_denied&state=s1 HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1")
             == .completed(url: URL(string: "http://127.0.0.1:5555/callback?error=access_denied&state=s1")!, granted: false))
-        #expect(loopbackResponse(decision: .foreign, appName: "Gistsmith").hasPrefix("HTTP/1.1 400"))
-        #expect(loopbackResponse(decision: .completed(url: URL(string: redirect)!, granted: true), appName: "Gistsmith").contains("Gistsmith'e dönebilirsin"))
+        #expect(loopbackResponse(decision: .foreign, appName: "Gistsmith", language: "tr").hasPrefix("HTTP/1.1 400"))
+        #expect(loopbackResponse(decision: .completed(url: URL(string: redirect)!, granted: true), appName: "Gistsmith", language: "tr").contains("Gistsmith'e dönebilirsin"))
     }
 
     // Keşif denetimi: kaynak bu sunucu, issuer bilginin alındığı kimlik ve tüm adresler https olmalı.
@@ -188,7 +188,7 @@ extension CloudTests {
 @Suite struct MCPRemoteLiveTests {
     @Test(arguments: MCPService.allCases)
     func officialServersOfferDynamicRegistration(service: MCPService) async throws {
-        let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: service.serverURL)
+        let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: service.serverURL, clientName: "AI-Notepad")
         #expect(metadata.registrationEndpoint != nil, "\(service.rawValue): kayıt adresi yok")
         #expect(metadata.authorizationEndpoint.scheme == "https" && metadata.tokenEndpoint.scheme == "https")
         // Bağlantı kaldırılınca izin geri alınır (RFC 7009): üç sunucu da geri alma adresini bildirir.
@@ -196,7 +196,7 @@ extension CloudTests {
     }
 
     @Test func publicServerSessionListsAndCallsTools() async throws {
-        let session: MCPRemoteSession = try await MCPRemoteSession.open(serverURL: URL(string: "https://mcp.deepwiki.com/mcp")!, accessToken: "")
+        let session: MCPRemoteSession = try await MCPRemoteSession.open(serverURL: URL(string: "https://mcp.deepwiki.com/mcp")!, accessToken: "", clientName: "AI-Notepad")
         let tools: [MCPRemoteTool] = try await session.listTools()
         #expect(!tools.isEmpty)
         let structure: String = try await session.callTool(name: "read_wiki_structure", arguments: .object(["repoName": .string("modelcontextprotocol/swift-sdk")]))

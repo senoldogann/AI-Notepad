@@ -74,7 +74,34 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Yapışkan üst çubuk (68 px) çapalı başlıkları örtmesin. */
   scroll-padding-top: 88px;
+}
+
+/* Sayfa içi bağlantılar (#features, içindekiler, SSS) bölüme kayarak gider; hareket azaltılmışsa atlar. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Sayfa sonundaki çekme etkinken (src/client/pull-reveal.ts; sayfa en üstte değilken) tarayıcının kendi esnemesi
+   kapanır. En üstte, kısa sayfalarda ve hareketi azaltanlarda doğal esneme ve "çekip yenile" sürer. */
+html.pull-armed {
+  overscroll-behavior-y: none;
+}
+
+/* Sayfanın kendisi: arkasındaki PullReveal katmanını örter; çekme bitince yaylanarak yerine döner. */
+.page-shell {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+}
+
+/* Çekmede içerik yukarı, yapışkan üst çubuk ters yönde aynı kadar kayar (yerinde kalır); bırakınca ikisi birlikte döner. */
+html.is-springing .page-shell,
+html.is-springing .site-header {
+  transition: transform 560ms cubic-bezier(0.22, 1.25, 0.36, 1);
 }
 
 body {
@@ -314,8 +341,8 @@ p {
   background: rgb(255 255 255 / 0.72);
   color: #0a0a0a;
   border-color: rgb(255 255 255 / 0.6);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .button--glass:hover {
@@ -444,8 +471,8 @@ p {
   border: 1px solid rgb(255 255 255 / 0.7);
   border-radius: var(--radius-m);
   box-shadow: 0 10px 30px rgb(90 58 42 / 0.12);
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   color: #0a0a0a;
 }
 
@@ -712,6 +739,64 @@ p {
 
 .prose tr:last-child td {
   border-bottom: 0;
+}
+
+/* Telefonda gizlilik tabloları kart gibi alt alta dizilir (yatay kaydırmada sütunlar ekran dışında kalıyordu);
+   başlık satırı gizlenir, her hücrenin başında sütunun adı yazar. */
+@media (max-width: 640px) {
+  .prose .stack-table {
+    min-width: 0;
+  }
+
+  .prose .stack-table thead {
+    display: none;
+  }
+
+  .prose .stack-table tr,
+  .prose .stack-table td {
+    display: block;
+  }
+
+  .prose .stack-table tr {
+    padding-block: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prose .stack-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .prose .stack-table td {
+    border-bottom: 0;
+    padding-block: 4px;
+  }
+
+  .prose .stack-table td + td::before {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .prose .table-data td:nth-child(2)::before {
+    content: "Purpose";
+  }
+
+  .prose .table-data td:nth-child(3)::before {
+    content: "Legal basis";
+  }
+
+  .prose .table-processors td:nth-child(2)::before {
+    content: "Role and purpose";
+  }
+
+  .prose .table-processors td:nth-child(3)::before {
+    content: "Data";
+  }
+
+  .prose .table-processors td:nth-child(4)::before {
+    content: "Location, safeguards and retention";
+  }
 }
 
 .prose a {

@@ -200,6 +200,7 @@ func meetingStatusText(status: MeetingStatus) -> String? {
     case .processing: String(localized: "Hazırlanıyor")
     case .failed: String(localized: "Hata")
     case .interrupted: String(localized: "Yarıda kaldı")
+    case .queued: String(localized: "İşlenmeyi bekliyor")
     case .done: nil
     }
 }

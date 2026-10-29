@@ -1,6 +1,9 @@
-// Yönetim paneli: özet kutuları, son 30 günün çubuk grafikleri (satır içi SVG, kütüphanesiz; her grafiğin metin özeti
-// var) ve bildirim kutusu (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme). Oturum
-// yoksa "önce giriş yap", sunucu 403 `forbidden` dönerse "yetkisiz" ve sunucunun bildirdiği giriş kimliği gösterilir.
+// Yönetim paneli: dört görünüm — genel bakış (özet kutuları ve son 30 günün çubuk grafikleri; satır içi SVG,
+// kütüphanesiz, her grafiğin metin özeti var), kullanıcılar (admin-users.ts), işletim (admin-ops.ts) ve bildirim kutusu
+// (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme). Panel yalnızca `/v1/admin/stats`
+// başarılı olunca şablondan eklenir; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
+// "sayfa bulunamadı" görünümü gösterilir, girişe yönlendirilmez (panelin varlığı belli olmaz). Kullanıcılar ve işletim
+// görünümleri ilk açılışlarında yüklenir; "Yenile" açık görünümü ve özet istatistikleri yeniler.
 import { ApiRequestError } from "./api";
 import {
   type AdminStats,
@@ -16,10 +19,12 @@ import {
   fetchStats,
   setReportStatus,
 } from "./admin-api";
+import { fillCounts, formatCount, formatCompact, formatDay, formatRate, formatTime, formatUsd } from "./admin-format";
+import { type OperationsView, createOperationsView } from "./admin-ops";
+import { type UsersView, createUsersView } from "./admin-users";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
-import { element, errorText, hideNotice, showNotice } from "./dom";
-import { SignedOutError, hasSession } from "./session";
-import { siteLocale } from "../config";
+import { MissingElementError, dataValue, element, errorText, hideNotice, showNotice } from "./dom";
+import { SignedOutError, claimTabSession, hasSession } from "./session";
 
 const svgNamespace: string = "http://www.w3.org/2000/svg";
 
@@ -27,6 +32,10 @@ const svgNamespace: string = "http://www.w3.org/2000/svg";
 const chartWidth: number = 300;
 const chartHeight: number = 60;
 const barGap: number = 3;
+
+/** Panelin görünümleri. */
+type AdminView = "overview" | "users" | "operations" | "inbox";
+const adminViews: readonly AdminView[] = ["overview", "users", "operations", "inbox"];
 
 /** Grafikteki bir günün çubuk parçaları (yığılmış: alttan üste). */
 interface ChartDay {
@@ -46,26 +55,6 @@ interface InboxState {
 
 const text: ClientCopy = clientCopy;
 const adminText: AdminClientCopy = clientCopy.admin;
-
-/** Sayı (binlik ayraçlı). Saf fonksiyondur. */
-function formatCount(value: number): string {
-  return new Intl.NumberFormat(siteLocale, { maximumFractionDigits: 1 }).format(value);
-}
-
-/** Dolar tutarı. Saf fonksiyondur. */
-function formatUsd(value: number): string {
-  return new Intl.NumberFormat(siteLocale, { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(value);
-}
-
-/** `YYYY-MM-DD` günü kısa yazar ("29 Oct"). Saf fonksiyondur. */
-function formatDay(day: string): string {
-  return new Intl.DateTimeFormat(siteLocale, { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
-}
-
-/** Zamanı tarih ve saatle yazar. Saf fonksiyondur. */
-function formatTime(ms: number): string {
-  return new Intl.DateTimeFormat(siteLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(ms));
-}
 
 /** Grafiğin metin özeti: toplam ve en yüksek gün. Saf fonksiyondur. */
 export function chartSummary(days: readonly ChartDay[], format: (value: number) => string): string {
@@ -139,21 +128,39 @@ function countDays(days: readonly DayCount[], format: (value: number) => string)
   return days.map((day: DayCount): ChartDay => ({ day: day.day, parts: [{ value: day.count, tone: "main" }], title: fill(adminText.barTitle, { day: formatDay(day.day), value: format(day.count) }) }));
 }
 
+/** Son `count` günün toplamı (seri eskiden yeniye). Saf fonksiyondur. */
+function lastDaysTotal(days: readonly DayCount[], count: number): number {
+  return days.slice(-count).reduce((total: number, day: DayCount): number => total + day.count, 0);
+}
+
 /** Kutunun değerini ve alt satırını yazar. */
 function setKpi(id: string, value: string, sub: string): void {
   element(`kpi-${id}`, HTMLElement).textContent = value;
   element(`kpi-${id}-sub`, HTMLElement).textContent = sub;
 }
 
-/** Özet kutularını ve grafikleri çizer. */
-function renderStats(stats: AdminStats): void {
-  element("admin-updated", HTMLElement).textContent = fill(adminText.updated, { time: formatTime(stats.generatedAt) });
-  const sum = (days: readonly DayCount[]): number => days.reduce((total: number, day: DayCount): number => total + day.count, 0);
+/** Ölçerli kutunun uyarı görünümünü (ölçer rengi, kenar, alt satır) açar ya da kapatır. */
+function setKpiWarning(id: string, meter: HTMLProgressElement, warn: boolean): void {
+  meter.classList.toggle("meter--warn", warn);
+  element(`kpi-${id}-card`, HTMLElement).classList.toggle("kpi--warn", warn);
+}
+
+/** Kutunun ölçerini doldurur (`max` en az 0,01: boş ölçer). */
+function setMeter(id: string, value: number, max: number): HTMLProgressElement {
+  const meter: HTMLProgressElement = element(`kpi-${id}-meter`, HTMLProgressElement);
+  meter.max = Math.max(max, 0.01);
+  meter.value = Math.min(value, meter.max);
+  return meter;
+}
+
+/** Büyüme ve gelir kutuları. */
+function renderGrowthAndRevenue(stats: AdminStats): void {
+  const sum = (days: readonly DayCount[]): number => lastDaysTotal(days, days.length);
   setKpi("downloads", formatCount(stats.downloads.total), fill(adminText.downloadsSub, { count: formatCount(sum(stats.downloads.last30Days)) }));
   setKpi(
     "users",
     formatCount(stats.users.total),
-    fill(adminText.usersSub, { count: formatCount(sum(stats.users.newLast30Days)), apple: formatCount(stats.users.byProvider.apple), google: formatCount(stats.users.byProvider.google) }),
+    `${fill(adminText.usersSub, { count: formatCount(sum(stats.users.newLast30Days)), apple: formatCount(stats.users.byProvider.apple), google: formatCount(stats.users.byProvider.google) })} · ${fillCounts(adminText.usersRecent, { today: lastDaysTotal(stats.users.newLast30Days, 1), week: lastDaysTotal(stats.users.newLast30Days, 7) })}`,
   );
   setKpi("trials", formatCount(stats.trials.activeTrialUsers), fill(adminText.trialsSub, { count: formatCount(stats.trials.exhaustedTrialUsers) }));
   setKpi(
@@ -161,14 +168,80 @@ function renderStats(stats: AdminStats): void {
     formatCount(stats.subscriptions.active),
     fill(adminText.subscribersSub, { grace: formatCount(stats.subscriptions.grace), ending: formatCount(stats.subscriptions.ending), canceled: formatCount(stats.subscriptions.canceledTotal) }),
   );
-  setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), adminText.mrrSub);
-  setKpi("spend", formatUsd(stats.spend.todayUsd), fill(adminText.spendSub, { ceiling: formatUsd(stats.spend.ceilingUsd) }));
-  const meter: HTMLProgressElement = element("kpi-spend-meter", HTMLProgressElement);
-  meter.max = Math.max(stats.spend.ceilingUsd, 0.01);
-  meter.value = Math.min(stats.spend.todayUsd, meter.max);
-  meter.classList.toggle("meter--warn", stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
+  setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), `${adminText.mrrSub} · ${stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest}`);
+
+  const conversion: AdminStats["conversion"] = stats.conversion;
+  setKpi(
+    "conversion",
+    formatRate(conversion.converted, conversion.trialStarted),
+    fill(adminText.conversionSub, {
+      converted: formatCount(conversion.converted),
+      started: formatCount(conversion.trialStarted),
+      recentRate: formatRate(conversion.convertedLast30Days, conversion.startedLast30Days),
+      direct: formatCount(conversion.subscribedWithoutTrial),
+    }),
+  );
+  setMeter("conversion", conversion.converted, conversion.trialStarted);
+  setKpi("churn", formatCount(stats.churn.canceledLast30Days), fillCounts(adminText.churnSub, { ending: stats.subscriptions.ending, pastDue: stats.churn.pastDue, unpaid: stats.churn.unpaid }));
+  const billing: AdminStats["billing"] = stats.billing;
+  const paymentIssues: number = billing.refundsLast30Days + billing.disputesLast30Days + billing.paymentFailuresLast30Days;
+  setKpi(
+    "payments",
+    formatCount(paymentIssues),
+    fillCounts(adminText.paymentsSub, {
+      refunds: billing.refundsLast30Days,
+      disputes: billing.disputesLast30Days,
+      failed: billing.paymentFailuresLast30Days,
+      duplicates: stats.churn.duplicateSubscriptions,
+    }),
+  );
+  // İtiraz her zaman uyarıdır (Stripe ücreti ve hesap riski); iade ve başarısız ödeme yalnızca bilgi.
+  element("kpi-payments-card", HTMLElement).classList.toggle("kpi--warn", billing.disputesLast30Days > 0);
+}
+
+/** Kullanım, maliyet ve kapasite kutuları. */
+function renderUsageAndCosts(stats: AdminStats): void {
+  const usage: AdminStats["usage"] = stats.usage;
+  setKpi("meetings", formatCount(usage.meetingsThisMonth), fillCounts(adminText.meetingsSub, { open: usage.openMeetings, deferred: usage.deferredThisMonth, reprocessed: usage.reprocessedThisMonth }));
   setKpi("hours", formatCount(stats.meetings.hoursThisMonth), adminText.hoursSub);
-  setKpi("tokens", formatCount(stats.tokens.thisMonth), adminText.tokensSub);
+  setKpi("audio", fill(adminText.hours, { hours: formatCount(usage.audioHoursThisMonth) }), fillCounts(adminText.audioSub, { minutes: stats.deepgram.streamMinutes }));
+  setKpi(
+    "tokens",
+    formatCompact(stats.tokens.thisMonth),
+    fill(adminText.tokensUsageSub, { account: formatCompact(usage.accountTokensThisMonth), near: formatCount(usage.usersNearTokenCap), cap: formatCompact(usage.monthlyTokenCapPerUser) }),
+  );
+  element("kpi-tokens-card", HTMLElement).classList.toggle("kpi--warn", usage.usersNearTokenCap > 0);
+
+  setKpi("spend", formatUsd(stats.spend.todayUsd), fill(adminText.spendSub, { ceiling: formatUsd(stats.spend.ceilingUsd) }));
+  setKpiWarning("spend", setMeter("spend", stats.spend.todayUsd, stats.spend.ceilingUsd), stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
+  setKpi(
+    "elevenlabs",
+    `${Math.round(stats.elevenLabs.percent)}%`,
+    fill(adminText.elevenLabsSub, { used: formatCount(stats.elevenLabs.usedHours), cap: formatCount(stats.elevenLabs.capHours) }),
+  );
+  setKpiWarning("elevenlabs", setMeter("elevenlabs", stats.elevenLabs.usedHours, stats.elevenLabs.capHours), stats.elevenLabs.percent >= 80);
+  setKpi("deepgram", `${Math.round(stats.deepgram.percent)}%`, fill(adminText.deepgramSub, { used: formatUsd(stats.deepgram.estimatedUsd), budget: formatUsd(stats.deepgram.budgetUsd) }));
+  setKpiWarning("deepgram", setMeter("deepgram", stats.deepgram.estimatedUsd, stats.deepgram.budgetUsd), stats.deepgram.percent >= 80);
+  const refusals: AdminStats["trialRefusals"] = stats.trialRefusals;
+  const refusalTotal = (counts: AdminStats["trialRefusals"]["today"]): number => counts.deviceUsed + counts.exhausted + counts.expired + counts.ipDailyLimit;
+  setKpi(
+    "refusals",
+    formatCount(refusalTotal(refusals.last30Days)),
+    fillCounts(adminText.refusalsSub, {
+      device: refusals.last30Days.deviceUsed,
+      ip: refusals.last30Days.ipDailyLimit,
+      exhausted: refusals.last30Days.exhausted,
+      expired: refusals.last30Days.expired,
+      today: refusalTotal(refusals.today),
+    }),
+  );
+}
+
+/** Özet kutularını, grafikleri ve bildirim sayaçlarını çizer. */
+function renderStats(stats: AdminStats): void {
+  element("admin-updated", HTMLElement).textContent = fill(adminText.updated, { time: formatTime(stats.generatedAt) });
+  renderGrowthAndRevenue(stats);
+  renderUsageAndCosts(stats);
 
   renderChart("downloads", countDays(stats.downloads.last30Days, formatCount), formatCount);
   renderChart("users", countDays(stats.users.newLast30Days, formatCount), formatCount);
@@ -195,6 +268,8 @@ function renderStats(stats: AdminStats): void {
   element("count-feedback", HTMLElement).textContent = formatCount(stats.reports.openFeedback);
   element("count-crash", HTMLElement).textContent = formatCount(stats.reports.openCrash);
   element("count-contact", HTMLElement).textContent = formatCount(stats.reports.openContact);
+  const openReports: number = stats.reports.openFeedback + stats.reports.openCrash + stats.reports.openContact;
+  element("count-inbox", HTMLElement).textContent = openReports === 0 ? "" : formatCount(openReports);
 }
 
 /** Bildirimin kim/ne zaman satırı. Saf fonksiyondur. */
@@ -266,31 +341,71 @@ function clearDetail(): void {
   element("detail-empty", HTMLElement).classList.remove("hidden");
 }
 
-/** Oturum yok, yetki yok ya da başka hata: uygun durumu gösterir. */
+/** Oturum yok (yenileme de başarısız) ya da sunucu yönetici erişimini reddetti (403). Saf fonksiyondur. */
+function isAccessDenied(error: unknown): boolean {
+  return error instanceof SignedOutError || (error instanceof ApiRequestError && (error.status === 403 || error.status === 401));
+}
+
+/** Panelin yerine standart "sayfa bulunamadı" görünümünü koyar (panel varsa kaldırılır). */
+function showNotFound(): void {
+  const notFound: HTMLElement = element("admin-not-found", HTMLElement);
+  element("admin", HTMLElement).remove();
+  document.documentElement.classList.remove("admin-app");
+  notFound.hidden = false;
+  document.title = dataValue(notFound, "title");
+}
+
+/** Erişim yoksa "sayfa bulunamadı"; başka hatada (ağ, sunucu) nötr bir bildirim. */
 function showFailure(error: unknown): void {
+  if (isAccessDenied(error)) {
+    showNotFound();
+    return;
+  }
   element("admin-loading", HTMLElement).classList.add("hidden");
-  if (error instanceof SignedOutError) {
-    element("admin-content", HTMLElement).classList.add("hidden");
-    element("admin-signed-out", HTMLElement).classList.remove("hidden");
-    return;
-  }
-  if (error instanceof ApiRequestError && error.status === 403) {
-    element("admin-content", HTMLElement).classList.add("hidden");
-    element("admin-identity", HTMLElement).textContent = error.identity ?? error.code;
-    element("admin-forbidden", HTMLElement).classList.remove("hidden");
-    return;
-  }
   showNotice(element("admin-error", HTMLElement), errorText(error, text));
+}
+
+/** Panel şablonunu sayfaya ekler ve sekme başlığını panelinkiyle değiştirir (erişim doğrulandıktan sonra). */
+function mountDashboard(): void {
+  const root: HTMLElement = element("admin", HTMLElement);
+  const template: HTMLTemplateElement | null = document.querySelector<HTMLTemplateElement>("template#admin-template");
+  if (template === null) {
+    throw new MissingElementError("template#admin-template bulunamadı.");
+  }
+  element("admin-mount", HTMLElement).replaceChildren(template.content.cloneNode(true));
+  element("admin-loading", HTMLElement).classList.add("hidden");
+  // Sitenin üst çubuğu ve alt bilgisi gizlenir; panel tam ekran kabuk olur (admin.astro).
+  document.documentElement.classList.add("admin-app");
+  document.title = dataValue(root, "title");
+}
+
+/** Görünümü gösterir (menü düğmesinin basılı durumu, panelin görünürlüğü ve üst çubuktaki başlık). */
+function showView(view: AdminView): void {
+  for (const other of adminViews) {
+    element(`view-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === view));
+    element(`panel-${other}`, HTMLElement).classList.toggle("hidden", other !== view);
+  }
+  element("admin-view-title", HTMLElement).textContent = dataValue(element(`view-${view}`, HTMLButtonElement), "title");
+}
+
+/** Adres çubuğundaki `#users` gibi görünüm adı; yoksa genel bakış. Saf fonksiyondur. */
+function viewFromHash(hash: string): AdminView {
+  return adminViews.find((view: AdminView): boolean => `#${view}` === hash) ?? "overview";
 }
 
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
+  await claimTabSession();
   if (!hasSession()) {
-    showFailure(new SignedOutError("Bu sekmede oturum yok."));
+    showNotFound();
     return;
   }
+  // Önce erişim doğrulanır; başarısızsa (403, oturum yok) panel hiç eklenmez.
+  const firstStats: AdminStats = await fetchStats();
+  mountDashboard();
   const notice: HTMLElement = element("admin-error", HTMLElement);
   const state: InboxState = { kind: "feedback", status: "open", items: [], nextBefore: null, selectedId: null };
+  const view: { current: AdminView } = { current: "overview" };
 
   const select = (id: string): void => {
     state.selectedId = id;
@@ -311,35 +426,69 @@ async function main(): Promise<void> {
     renderList(state, select);
   };
 
-  const refresh = async (): Promise<void> => {
-    hideNotice(notice);
-    const [stats] = await Promise.all([fetchStats(), loadList(false)]);
-    renderStats(stats);
-    element("admin-loading", HTMLElement).classList.add("hidden");
-    element("admin-content", HTMLElement).classList.remove("hidden");
+  const kinds: readonly ReportKind[] = ["feedback", "crash", "contact"];
+  const statuses: readonly ReportStatus[] = ["open", "done"];
+  const setInboxFilter = (kind: ReportKind, status: ReportStatus): void => {
+    state.kind = kind;
+    state.status = status;
+    state.selectedId = null;
+    for (const other of kinds) {
+      element(`tab-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === kind));
+    }
+    for (const other of statuses) {
+      element(`status-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === status));
+    }
+    clearDetail();
   };
 
-  const kinds: readonly ReportKind[] = ["feedback", "crash", "contact"];
+  const switchView = (next: AdminView): void => {
+    view.current = next;
+    showView(next);
+    history.replaceState(null, "", next === "overview" ? location.pathname : `#${next}`);
+    if (next === "users") {
+      users.ensureLoaded().catch(showFailure);
+    }
+    if (next === "operations") {
+      operations.ensureLoaded().catch(showFailure);
+    }
+  };
+
+  // Kullanıcı ayrıntısındaki ya da işletimdeki rapor bildirim kutusunda, kendi türü ve durumuyla açılır.
+  const openReport = (id: string, kind: ReportKind, status: ReportStatus): void => {
+    setInboxFilter(kind, status);
+    switchView("inbox");
+    loadList(false)
+      .then((): void => select(id))
+      .catch(showFailure);
+  };
+  const users: UsersView = createUsersView(showFailure, openReport);
+  const openUser = (id: string): void => {
+    switchView("users");
+    users.openUser(id).catch(showFailure);
+  };
+  const operations: OperationsView = createOperationsView(openUser, openReport);
+
+  const refresh = async (): Promise<void> => {
+    hideNotice(notice);
+    const current: AdminView = view.current;
+    const [stats] = await Promise.all([
+      fetchStats(),
+      current === "inbox" ? loadList(false) : Promise.resolve(),
+      current === "users" ? users.refresh() : Promise.resolve(),
+      current === "operations" ? operations.refresh() : Promise.resolve(),
+    ]);
+    renderStats(stats);
+  };
+
   for (const kind of kinds) {
     element(`tab-${kind}`, HTMLButtonElement).addEventListener("click", (): void => {
-      state.kind = kind;
-      state.selectedId = null;
-      for (const other of kinds) {
-        element(`tab-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === kind));
-      }
-      clearDetail();
+      setInboxFilter(kind, state.status);
       loadList(false).catch(showFailure);
     });
   }
-  const statuses: readonly ReportStatus[] = ["open", "done"];
   for (const status of statuses) {
     element(`status-${status}`, HTMLButtonElement).addEventListener("click", (): void => {
-      state.status = status;
-      state.selectedId = null;
-      for (const other of statuses) {
-        element(`status-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === status));
-      }
-      clearDetail();
+      setInboxFilter(state.kind, status);
       loadList(false).catch(showFailure);
     });
   }
@@ -364,6 +513,9 @@ async function main(): Promise<void> {
         toggle.disabled = false;
       });
   });
+  for (const each of adminViews) {
+    element(`view-${each}`, HTMLButtonElement).addEventListener("click", (): void => switchView(each));
+  }
   const refreshButton: HTMLButtonElement = element("admin-refresh", HTMLButtonElement);
   refreshButton.addEventListener("click", (): void => {
     refreshButton.disabled = true;
@@ -374,7 +526,9 @@ async function main(): Promise<void> {
       });
   });
 
-  await refresh();
+  renderStats(firstStats);
+  await loadList(false);
+  switchView(viewFromHash(location.hash));
 }
 
 main().catch(showFailure);

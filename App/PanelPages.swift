@@ -51,6 +51,23 @@ struct PanelHost: View {
                     ConsentBanner { withAnimation(.smooth(duration: 0.25)) { model.consentReminderVisible = false } }
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                #if HOSTED_EDITION
+                // Sunucuya ulaşılamadan süren kayıt: canlı metin Mac'te, işleme bağlantı gelince.
+                if model.isRecording, HostedAccount.shared.isOfflineRecording {
+                    NoticeBar(
+                        severity: .info,
+                        title: Text("Çevrimdışı kaydediliyor"),
+                        detail: Text("Canlı metin bu Mac'te yazılıyor; konuşmacılar ve not bağlantı gelince hazırlanır."),
+                        onDismiss: nil
+                    ) {
+                        EmptyView()
+                    }
+                }
+                // Aylık sınıra az kaldığı için kısaltılmış toplantı: kalan dakika.
+                if model.isRecording, let deadline = model.shortMeetingDeadline {
+                    HostedMeetingLimitStrip(deadline: deadline)
+                }
+                #endif
             TranscriptPanel(
                 state: model.viewState,
                 actions: PanelActions(
@@ -351,7 +368,8 @@ private struct ProcessingOverlay: View {
         Image(systemName: "waveform")
             .appFont(size: 34, weight: .medium)
             .foregroundStyle(appearance.accent.color)
-            .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
+            // Durağan: işleme dakikalarca sürer; sürekli sembol animasyonu bulanık ana pencereyle birlikte her karede
+            // yeniden çizim yaptırıyordu (oynatıcıda ölçülen ana iş parçacığı beklemesiyle aynı desen).
     }
 }
 
@@ -365,30 +383,13 @@ private struct ConsentBanner: View {
     @State private var copied: Bool = false
 
     var body: some View {
-        HStack(spacing: DesignTokens.Spacing.s) {
-            Image(systemName: "person.wave.2")
-                .foregroundStyle(Theme.muted)
-                .accessibilityHidden(true)
-            Text("Kayıt yapıyorsun: katılımcılara haber ver.")
-                .appFont(size: 12, weight: .medium)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: DesignTokens.Spacing.s)
+        NoticeBar(severity: .info, title: Text("Kayıt yapıyorsun: katılımcılara haber ver."), detail: nil, onDismiss: onDismiss) {
             Button(copied ? "Kopyalandı" : "Bildirimi kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(consentNoticeText, forType: .string)
                 copied = true
             }
-            .controlSize(.small)
             .hoverHint("Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır", alignment: .trailing, edge: .bottom)
-            Button("Kapat", systemImage: "xmark", action: onDismiss)
-                .labelStyle(.iconOnly)
-                .buttonStyle(.hoverPlain)
-                .foregroundStyle(Theme.muted)
         }
-        .padding(.horizontal, DesignTokens.Spacing.m)
-        .padding(.vertical, 8)
-        .background(Theme.soft)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }

@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { refreshRetryWindowMs } from "../src/auth/tokens";
+import { runAfterResponse } from "../src/background";
+import type { RequestContext } from "../src/platform";
 import { type Harness, type Session, type StartedMeetingBody, defaultHarness, req, signIn, startMeeting } from "./helpers";
 
 describe("log hijyeni", () => {
@@ -24,6 +27,8 @@ describe("log hijyeni", () => {
         }),
       );
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
+      // Yeniden deneme süresinden (10 dk) sonra eski jeton yeniden kullanımdır.
+      harness.clock.nowMs += refreshRetryWindowMs + 1_000;
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
 
       const ours: string[] = lines.filter((line: string): boolean => line.startsWith("{"));
@@ -42,5 +47,19 @@ describe("log hijyeni", () => {
         spy.mockRestore();
       }
     }
+  });
+});
+
+describe("yanıttan sonra süren iş", () => {
+  it("akış kesinleştirmesi gibi yanıttan sonraki işin hatası kaybolmaz: alarm yazılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const pending: Promise<void>[] = [];
+    const context: RequestContext = { platform: harness.platform, clientIp: "local", waitUntil: (promise: Promise<void>): void => void pending.push(promise) };
+    const alerts = vi.spyOn(console, "error");
+    runAfterResponse(context, Promise.reject(new Error("D1 yazılamadı")), "llm_settle_failed", { reservationId: "r1" });
+    await Promise.all(pending);
+    const lines: string[] = alerts.mock.calls.map((call: unknown[]): string => String(call[0]));
+    alerts.mockRestore();
+    expect(lines.some((line: string): boolean => line.includes('"event":"llm_settle_failed"') && line.includes('"reservationId":"r1"'))).toBe(true);
   });
 });

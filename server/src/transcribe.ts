@@ -1,50 +1,43 @@
 import { z } from "zod";
+import { continueAfterDisconnect } from "./background";
 import type { Config } from "./config";
-import { randomToken, utf8 } from "./crypto";
+import { Base64Error, base64Decode, decodeUtf8Strict, randomToken, utf8 } from "./crypto";
 import { ApiError, UpstreamError, isRetryableStatus } from "./errors";
 import { jsonResponse } from "./http";
+import { alertOnElevenLabsCrossing, requireElevenLabsHeadroom } from "./elevenLabsCapacity";
 import { errorName, log } from "./log";
 import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
-import { audioReservationSteps, reserveAll, settleAudioStatements } from "./reservations";
-import { addSpendStatement, transcriptionCostMicroUsd } from "./usage";
+import { cachedTranscription, storeTranscription, uploadKeyFrom } from "./transcriptionCache";
+import {
+  type UsageReservation,
+  audioReservation,
+  meetingAudioIdleLimit,
+  meetingAudioLimit,
+  monthlyAudioLimit,
+  reserveUsage,
+  settleAudioStatements,
+} from "./reservations";
+import { transcriptionCostMicroUsd } from "./usage";
 
 export const elevenLabsSpeechToTextUrl: string = "https://api.elevenlabs.io/v1/speech-to-text";
 export const scribeModel: string = "scribe_v2";
 
 /**
- * Sıkıştırılmış türlerde gerçekçi en düşük bit hızı (bayt/saniye). Süre tahmini = bayt / bu değer: gerçek sürenin
- * üst sınırıdır, ayırma bu tahminle yapılır. Opus 6 kbit/s ≈ 750 B/s; HE-AAC v2 ve MP3 8 kbit/s ≈ 1000 B/s.
- * FLAC kabul edilmez: sessizliği sınırsız sıkıştırdığı için boyuttan süreye üst sınır çıkmaz.
+ * ElevenLabs isteğinin toplam zaman aşımı: yükleme istemciden akarak gider (95 MB) ve uzun ses dakikalar sürer;
+ * istemcinin parça zaman aşımından (300 sn + dakika başına 10 sn, ~49 dakikalık parçada ~13 dk) uzundur.
  */
-const minBytesPerSecondByType: Readonly<Record<string, number>> = {
-  "audio/mp4": 1000,
-  "audio/m4a": 1000,
-  "audio/x-m4a": 1000,
-  "audio/aac": 1000,
-  "audio/mpeg": 1000,
-  "audio/ogg": 750,
-  "audio/webm": 750,
-};
+const elevenLabsTimeoutMs: number = 15 * 60_000;
 
-/** WAV türleri: süre başlıktan kesin hesaplanır (PCM, veri baytı / bayt hızı). */
+/**
+ * Kabul edilen ses türleri: yalnızca PCM WAV (Mac uygulamasının gönderdiği tek tür, `audio/wav`; eş adları). Süre
+ * başlıktan kesin hesaplanır (veri baytı / bayt hızı); sıkıştırılmış türlerde boyuttan süreye güvenilir üst sınır
+ * çıkmadığı için (düşük bit hızı, sessizlik) kabul edilmez.
+ */
 const wavTypes: ReadonlySet<string> = new Set(["audio/wav", "audio/x-wav", "audio/wave"]);
 
 /** WAV başlığı için okunacak en çok bayt. */
 const maxWavHeaderBytes: number = 64 * 1024;
-
-const fileExtensionByType: Readonly<Record<string, string>> = {
-  "audio/wav": "wav",
-  "audio/x-wav": "wav",
-  "audio/wave": "wav",
-  "audio/mp4": "m4a",
-  "audio/m4a": "m4a",
-  "audio/x-m4a": "m4a",
-  "audio/aac": "aac",
-  "audio/mpeg": "mp3",
-  "audio/ogg": "ogg",
-  "audio/webm": "webm",
-};
 
 /** ElevenLabs'e iletilecek izinli parametreler. */
 export interface TranscribeParams {
@@ -60,8 +53,53 @@ const keytermSchema = z
   .max(49)
   .refine((term: string): boolean => !/[<>{}[\]\\]/.test(term) && term.trim().split(/\s+/).length <= 5);
 
-/** Sorgu parametrelerini doğrular: `language_code`, `diarize`, tekrar eden `keyterms`; başka parametre reddedilir. */
-export function parseTranscribeParams(url: URL, maxKeyterms: number): TranscribeParams {
+/** `x-keyterms` başlığı: dolgusuz base64url (yalnızca `A–Z a–z 0–9 - _`). */
+const keytermsHeaderPattern: RegExp = /^[A-Za-z0-9_-]+$/;
+
+const keytermsJsonSchema = z.array(z.string());
+
+/**
+ * `x-keyterms` başlığını çözer: dolgusuz base64url, içinde UTF-8 JSON dizgi dizisi. Biçim bozuksa `invalid_body`
+ * (mesaj değer taşımaz; terimler loglanmaz). Saf fonksiyondur.
+ */
+export function decodeKeytermsHeader(value: string): string[] {
+  const invalid: ApiError = new ApiError("invalid_body", "x-keyterms başlığı dolgusuz base64url ile kodlanmış bir JSON dizgi dizisi olmalı.");
+  if (!keytermsHeaderPattern.test(value)) {
+    throw invalid;
+  }
+  let text: string;
+  try {
+    text = decodeUtf8Strict(base64Decode(value));
+  } catch (error: unknown) {
+    // `Base64Error`: bozuk base64; `TypeError`: geçersiz UTF-8 (katı çözücü).
+    if (error instanceof Base64Error || error instanceof TypeError) {
+      throw invalid;
+    }
+    throw error;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) {
+      throw invalid;
+    }
+    throw error;
+  }
+  const parsed = keytermsJsonSchema.safeParse(json);
+  if (!parsed.success) {
+    throw invalid;
+  }
+  return parsed.data;
+}
+
+/**
+ * Parametreleri doğrular: sorguda `language_code`, `diarize`; anahtar terimler `x-keyterms` başlığında
+ * (`decodeKeytermsHeader`) ya da tekrar eden `keyterms` sorgu parametresinde. Sorgu biçimi yayımlanmış 0.1.4 Mac
+ * uygulaması için kabul edilir; ikisi birlikte gelirse `invalid_body`. Terim sınırları iki biçimde aynıdır. Başka sorgu
+ * parametresi reddedilir.
+ */
+export function parseTranscribeParams(url: URL, keytermsHeader: string | null, maxKeyterms: number): TranscribeParams {
   const allowed: ReadonlySet<string> = new Set(["language_code", "diarize", "keyterms"]);
   for (const key of url.searchParams.keys()) {
     if (!allowed.has(key)) {
@@ -76,7 +114,12 @@ export function parseTranscribeParams(url: URL, maxKeyterms: number): Transcribe
   if (diarize !== null && diarize !== "true" && diarize !== "false") {
     throw new ApiError("invalid_body", "diarize true ya da false olmalı.");
   }
-  const keyterms: string[] = url.searchParams.getAll("keyterms");
+  // Sorgudaki `keyterms`: 0.1.4 Mac uygulaması uyumluluğu için.
+  const queryKeyterms: string[] = url.searchParams.getAll("keyterms");
+  if (keytermsHeader !== null && queryKeyterms.length > 0) {
+    throw new ApiError("invalid_body", "Anahtar terimler ya x-keyterms başlığında ya keyterms sorgu parametresinde gönderilmeli, ikisinde birden değil.");
+  }
+  const keyterms: string[] = keytermsHeader === null ? queryKeyterms : decodeKeytermsHeader(keytermsHeader);
   if (keyterms.length > maxKeyterms) {
     throw new ApiError("invalid_body", `En çok ${maxKeyterms} anahtar terim gönderilebilir.`);
   }
@@ -86,22 +129,13 @@ export function parseTranscribeParams(url: URL, maxKeyterms: number): Transcribe
   return { languageCode: language, diarize: diarize === "true", keyterms };
 }
 
-/** Ses türü (parametresiz, küçük harf); izinli değilse `unsupported_media_type`. Saf fonksiyondur. */
+/** Ses türü (parametresiz, küçük harf); WAV değilse `unsupported_media_type`. Saf fonksiyondur. */
 export function audioContentType(header: string | null): string {
   const type: string = (header ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
-  if (!wavTypes.has(type) && minBytesPerSecondByType[type] === undefined) {
-    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor (wav, m4a/mp4, aac, mp3, ogg, webm).");
+  if (!wavTypes.has(type)) {
+    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor; yalnızca PCM WAV (audio/wav) kabul edilir.");
   }
   return type;
-}
-
-/** Sıkıştırılmış ses için süre üst sınırı (saniye): bayt / en düşük gerçekçi bit hızı. Saf fonksiyondur. */
-export function compressedMaximumSeconds(bytes: number, contentType: string): number {
-  const rate: number | undefined = minBytesPerSecondByType[contentType];
-  if (rate === undefined) {
-    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor.");
-  }
-  return bytes / rate;
 }
 
 /** WAV veri bölümünün başladığı konum ve bayt hızı. */
@@ -170,7 +204,7 @@ export function wavLayout(head: Uint8Array): WavLayout | null {
   return null;
 }
 
-/** Gövdenin baştan okunmuş baytları ve süre üst sınırı. */
+/** Gövdenin baştan okunmuş baytları ve kesin süresi. */
 interface AudioHead {
   readonly head: Uint8Array;
   readonly seconds: number;
@@ -251,15 +285,26 @@ export function billableSeconds(transcription: Transcription, estimatedSeconds: 
   return Math.max(lastEnd, estimatedSeconds);
 }
 
+/** Üst servis çağrısının sonucu: değer ya da istemciye dönecek hata (kesinleştirme her iki durumda yapılmıştır). */
+type CallOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ApiError };
+
+/** ElevenLabs gönderiminin sonucu; başarısızlıkta sesin tamamının ElevenLabs'e gidip gitmediği (ücretlenmiş olabilir). */
+type ElevenLabsResult =
+  | { readonly ok: true; readonly transcription: Transcription }
+  | { readonly ok: false; readonly error: ApiError; readonly uploaded: boolean };
+
 /**
- * Ses dosyasını ElevenLabs Scribe v2 toplu konuşma tanımaya iletir (konuşmacı ayırma isteğe bağlı). Gövde ham sestir
- * (`Content-Type: audio/...`, `Content-Length` zorunlu); parametreler sorgudadır. Ses bellekte biriktirilmeden akış
- * olarak iletilir (Worker belleği 128 MB); bu yüzden üst istek yeniden denenemez, istemci yeniden dener.
+ * Ses dosyasını ElevenLabs Scribe v2 toplu konuşma tanımaya iletir (konuşmacı ayırma isteğe bağlı). Gövde ham PCM
+ * WAV'dır (`Content-Type: audio/wav`, `Content-Length` zorunlu); parametreler sorguda, anahtar terimler `x-keyterms`
+ * başlığındadır. Ses bellekte biriktirilmeden akış olarak iletilir (Worker belleği 128 MB); bu yüzden üst istek
+ * yeniden denenemez, istemci yeniden dener.
  *
- * Süre sınırı: istekten önce sürenin üst sınırı (WAV'da başlıktan kesin, sıkıştırılmışta en düşük bit hızından)
- * toplantının en uzun süresine ve aylık süreye karşı tek koşullu ifadelerle ayrılır; toplantının yüklemeleri
- * birikimli sayılır. Yanıttaki gerçek süreyle kesinleşir. Gerçek süre ayrılanı aşarsa (tahmin yanlıştı) süre yine de
- * yazılır, toplantının ses hakkı kapanır ve alarm logu yazılır. Hata durumunda ayırma geri verilir.
+ * Süre sınırı: istekten önce WAV başlığından kesin süre okunur ve toplantının kalan ses süresine ve aylık süreye karşı
+ * tek koşullu ifadeyle süreli bir ayırma satırı olarak ayrılır; toplantının yüklemeleri birikimli sayılır ve toplantıda
+ * aynı anda tek ses isteği olabilir (süren varsa `409 transcription_in_progress`). Yanıttaki gerçek süreyle kesinleşir;
+ * gerçek süre ayrılanı aşarsa süre yine de yazılır, toplantının ses hakkı kapanır ve alarm logu yazılır. Gönderim ve
+ * kesinleştirme istemci koparsa da tamamlanır (`continueAfterDisconnect`). Hata durumunda ayırma kapanır; ses
+ * ElevenLabs'e tamamen gittiyse tahmini maliyet harcamaya sayılır.
  */
 export async function proxyTranscription(
   db: D1Database,
@@ -281,45 +326,117 @@ export async function proxyTranscription(
   if (declaredBytes === 0 || request.body === null) {
     throw new ApiError("invalid_body", "Ses dosyası boş.");
   }
+  const now: Date = context.platform.now();
+  const uploadKey: string | null = uploadKeyFrom(request.headers.get("x-upload-key"));
   if (meeting.transcription_closed !== 0) {
     throw new ApiError("transcription_closed", "Bu toplantının ses işleme hakkı kapandı.");
   }
-  const now: Date = context.platform.now();
+  const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
   const reader: ReadableStreamDefaultReader<Uint8Array> = request.body.getReader();
   let audio: AudioHead;
+  let reservation: UsageReservation;
   try {
-    audio = wavTypes.has(contentType)
-      ? await readWavHead(reader, declaredBytes)
-      : { head: new Uint8Array(0), seconds: compressedMaximumSeconds(declaredBytes, contentType) };
-    await reserveAll(db, audioReservationSteps(db, config, meeting.id, meeting.user_id, audio.seconds, now));
+    audio = await readWavHead(reader, declaredBytes);
+    await requireElevenLabsHeadroom(db, config, audio.seconds, now);
+    reservation = audioReservation(meeting.user_id, meeting.id, audio.seconds, transcriptionCostMicroUsd(audio.seconds, usdPerHour), meeting.kind === "trial", now);
+    await reserveUsage(db, reservation, [
+      { limit: meetingAudioIdleLimit(meeting.id, now), amount: 1 },
+      { limit: meetingAudioLimit(meeting.id), amount: audio.seconds },
+      { limit: monthlyAudioLimit(config, meeting.user_id, meeting.id, now), amount: audio.seconds },
+    ]);
   } catch (error: unknown) {
     await reader.cancel();
     throw error;
   }
-  const reserved: number = audio.seconds;
-  let transcription: Transcription;
-  try {
-    transcription = await sendToElevenLabs(context, config, meeting, params, contentType, declaredBytes, reader, audio.head);
-  } catch (error: unknown) {
-    await db.batch(settleAudioStatements(db, meeting.id, meeting.user_id, reserved, 0, 0, now));
-    throw error;
+  const outcome: CallOutcome<Transcription> = await continueAfterDisconnect(
+    context,
+    transcribeAndSettle(db, context, config, meeting, params, contentType, declaredBytes, reader, audio, reservation, usdPerHour, uploadKey, now),
+    "transcription_settle_failed",
+    { userId: meeting.user_id, meetingId: meeting.id, reservationId: reservation.id },
+  );
+  if (!outcome.ok) {
+    throw outcome.error;
   }
-  const seconds: number = billableSeconds(transcription, reserved);
-  // Ayırma tahmini üst sınırdır; 1 saniyelik pay yuvarlama içindir.
+  return jsonResponse(200, outcome.value);
+}
+
+/** ElevenLabs'e gönderir ve ayırmayı kesinleştirir (başarıda gerçek süre ve maliyet; hatada ayırma kapanır). */
+async function transcribeAndSettle(
+  db: D1Database,
+  context: RequestContext,
+  config: Config,
+  meeting: MeetingRow,
+  params: TranscribeParams,
+  contentType: string,
+  declaredBytes: number,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  audio: AudioHead,
+  reservation: UsageReservation,
+  usdPerHour: number,
+  uploadKey: string | null,
+  now: Date,
+): Promise<CallOutcome<Transcription>> {
+  const result: ElevenLabsResult = await sendToElevenLabs(context, config, meeting, params, contentType, declaredBytes, reader, audio.head);
+  if (!result.ok) {
+    // Ses ElevenLabs'e tamamen gittiyse işlenmiş (ücretlenmiş) olabilir: tahmini maliyet ve süre ElevenLabs'e sayılır.
+    const providerSeconds: number = result.uploaded ? reservation.audioSeconds : 0;
+    await db.batch(settleAudioStatements(db, reservation, 0, false, result.uploaded ? reservation.estimatedMicroUsd : 0, providerSeconds, now));
+    if (providerSeconds > 0) {
+      await alertOnElevenLabsCrossing(db, config, providerSeconds, now);
+    }
+    return { ok: false, error: result.error };
+  }
+  const reserved: number = audio.seconds;
+  const seconds: number = billableSeconds(result.transcription, reserved);
+  // Ayırma WAV başlığından kesindir; 1 saniyelik pay yuvarlama içindir.
   const overrun: boolean = seconds > reserved + 1;
-  const usdPerHour: number = config.transcribe.usdPerHour + (params.keyterms.length > 0 ? config.transcribe.keytermsUsdPerHour : 0);
-  await db.batch([
-    ...settleAudioStatements(db, meeting.id, meeting.user_id, reserved, seconds, overrun ? 1 : 0, now),
-    addSpendStatement(db, now, transcriptionCostMicroUsd(seconds, usdPerHour)),
-  ]);
+  await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now));
+  // Kesinleşmeden sonraki denetim yanıtı düşürmez (ses faturalandı; istemci yeniden göndermesin).
+  try {
+    await alertOnElevenLabsCrossing(db, config, seconds, now);
+  } catch (error: unknown) {
+    log("alert", "elevenlabs_capacity_check_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
+  }
   if (overrun) {
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
   }
   log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
-  return jsonResponse(200, transcription);
+  if (uploadKey !== null) {
+    // Ses kesinleşti ve faturalandı: saklama hatası yanıtı düşürmez (düşürseydi istemci yeniden gönderir, ses yeniden
+    // faturalanırdı); alarm yazılır, sonuç döner.
+    try {
+      await storeTranscription(db, meeting.user_id, meeting.id, uploadKey, result.transcription, now);
+    } catch (error: unknown) {
+      log("alert", "transcription_cache_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
+    }
+  }
+  return { ok: true, value: result.transcription };
 }
 
-/** Çok parçalı gövdeyi akıtarak ElevenLabs'e gönderir ve yanıtı doğrular; hata gövdesi okunmaz ve iletilmez. */
+/**
+ * Aynı yükleme anahtarıyla tamamlanmış (ödenmiş) sonuç: varsa ses okunmadan ve faturalanmadan döner. Toplantının ek
+ * süresi, harcama tavanı ve ses hakkı denetimlerinden önce çağrılır: ödenmiş sonuç her zaman geri alınabilir (yanıtı
+ * yolda kaybolan istemci pencere kapandıktan sonra da sonucunu alır). Anahtar yoksa ya da sonuç yoksa null.
+ */
+export async function cachedTranscriptionResponse(db: D1Database, request: Request, userId: string, meetingId: string, now: Date): Promise<Response | null> {
+  const uploadKey: string | null = uploadKeyFrom(request.headers.get("x-upload-key"));
+  if (uploadKey === null) {
+    return null;
+  }
+  const cached: object | null = await cachedTranscription(db, userId, meetingId, uploadKey, now);
+  if (cached === null) {
+    return null;
+  }
+  await request.body?.cancel();
+  log("info", "transcription_repeated", { userId, meetingId });
+  return jsonResponse(200, cached);
+}
+
+/**
+ * Çok parçalı gövdeyi akıtarak ElevenLabs'e gönderir (toplam zaman aşımı `elevenLabsTimeoutMs`) ve yanıtı doğrular;
+ * hata gövdesi okunmaz ve iletilmez. Hata fırlatmaz, sonuç döndürür: başarısızlıkta sesin tamamı gönderildi mi
+ * (`uploaded`) bilgisiyle.
+ */
 async function sendToElevenLabs(
   context: RequestContext,
   config: Config,
@@ -329,11 +446,14 @@ async function sendToElevenLabs(
   declaredBytes: number,
   reader: ReadableStreamDefaultReader<Uint8Array>,
   head: Uint8Array,
-): Promise<Transcription> {
+): Promise<ElevenLabsResult> {
   const boundary: string = `ainotepad-${randomToken(18)}`;
-  const { prefix, suffix } = multipartEnvelope(boundary, multipartFields(params), `audio.${fileExtensionByType[contentType] ?? "bin"}`, contentType);
+  const { prefix, suffix } = multipartEnvelope(boundary, multipartFields(params), "audio.wav", contentType);
   const { readable, writable } = new FixedLengthStream(prefix.byteLength + declaredBytes + suffix.byteLength);
-  const upload: Promise<void> = pipeAudio(reader, head, writable, prefix, suffix, declaredBytes);
+  let uploaded: boolean = false;
+  const upload: Promise<void> = pipeAudio(reader, head, writable, prefix, suffix, declaredBytes).then((): void => {
+    uploaded = true;
+  });
 
   let response: Response;
   try {
@@ -341,20 +461,18 @@ async function sendToElevenLabs(
       method: "POST",
       headers: { "xi-api-key": config.secrets.elevenLabs, "content-type": `multipart/form-data; boundary=${boundary}` },
       body: readable,
+      signal: AbortSignal.timeout(elevenLabsTimeoutMs),
     });
   } catch (error: unknown) {
-    // Gönderim bizim tarafta kesildiyse (boyut uyuşmazlığı) asıl neden odur.
+    // Gönderim bizim tarafta kesildiyse (boyut uyuşmazlığı, istemci koptu) asıl neden odur.
     const uploadError: unknown = await upload.then((): null => null, (failure: unknown): unknown => failure);
     if (uploadError instanceof ApiError) {
-      throw uploadError;
+      return { ok: false, error: uploadError, uploaded: false };
     }
-    log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
-    throw new ApiError("upstream_unavailable", "Konuşma tanıma servisine ulaşılamadı; yeniden dene.");
+    log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error), uploaded });
+    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma servisine ulaşılamadı; yeniden dene."), uploaded };
   }
-  if (response.ok) {
-    // Başarılı yanıt gövdenin tamamı okunduktan sonra gelir.
-    await upload;
-  } else {
+  if (!response.ok) {
     // Üst servis gövdeyi okumadan yanıt verdiyse gönderim kendiliğinden kesilir; beklemeden kaydı arka planda tamamla.
     context.waitUntil(
       upload.catch((failure: unknown): void => {
@@ -363,17 +481,34 @@ async function sendToElevenLabs(
     );
     await response.body?.cancel();
     const upstream: UpstreamError = new UpstreamError("elevenlabs", response.status, isRetryableStatus(response.status), "yanıt başarısız");
-    log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, status: upstream.status });
-    throw upstream.retryable
+    log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, status: upstream.status, uploaded });
+    const error: ApiError = upstream.retryable
       ? new ApiError("upstream_unavailable", "Konuşma tanıma servisi şu an yanıt vermiyor; yeniden dene.")
       : new ApiError("upstream_rejected", `Konuşma tanıma isteği reddedildi (durum ${upstream.status}).`);
+    return { ok: false, error, uploaded };
   }
-  const parsed = transcriptionSchema.safeParse(await response.json());
+  // Başarılı yanıt gövdenin tamamı okunduktan sonra gelir; gönderim yine de başarısız olduysa yanıt kullanılmaz.
+  const uploadFailure: unknown = await upload.then((): null => null, (failure: unknown): unknown => failure);
+  if (uploadFailure !== null) {
+    await response.body?.cancel();
+    log("error", "elevenlabs_upload_failed_after_response", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(uploadFailure) });
+    const error: ApiError =
+      uploadFailure instanceof ApiError ? uploadFailure : new ApiError("upstream_unavailable", "Konuşma tanıma servisine ses gönderilemedi; yeniden dene.");
+    return { ok: false, error, uploaded: false };
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error: unknown) {
+    log("error", "elevenlabs_malformed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
+    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
+  }
+  const parsed = transcriptionSchema.safeParse(body);
   if (!parsed.success) {
     log("error", "elevenlabs_malformed", { userId: meeting.user_id, meetingId: meeting.id });
-    throw new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı.");
+    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
   }
-  return parsed.data;
+  return { ok: true, transcription: parsed.data };
 }
 
 /**

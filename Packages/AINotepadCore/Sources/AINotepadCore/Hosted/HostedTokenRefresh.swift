@@ -24,6 +24,12 @@ public func hostedTokenAction(tokens: HostedTokens?, now: Date, leewaySec: Doubl
     return .refresh(refreshToken: tokens.refreshToken)
 }
 
+/// Yenileme başladığından beri oturum değişmedi mi (çıkış, hesap silme, yeni giriş ya da ret kuşağı artırır): değiştiyse
+/// dönen jetonlar yazılmaz (çıkış yapılmış oturum geri gelmez) ve ret yeni oturumu silmez. Saf fonksiyondur.
+public func isCurrentSessionGeneration(started: Int, current: Int) -> Bool {
+    started == current
+}
+
 /// Yenileme isteğinin sonucu.
 public enum HostedRefreshResult: Sendable, Equatable {
     /// Yeni jetonlar (yenileme jetonu her seferinde döner; eskisi bir daha kullanılmamalı).
@@ -63,8 +69,10 @@ public enum HostedAttemptFailure: Sendable, Equatable {
     case server(HostedAPIError)
 }
 
-/// Tekrarı zararsız istekler (okuma, çıkış, hesap silme, ödeme sayfası, ses yükleme): ağ hatası ve geçici sunucu
-/// hatası yeniden denenir. Saf fonksiyondur.
+/// Tekrarı zararsız istekler (okuma, çıkış, hesap silme, ödeme sayfası, ses yükleme, yenileme jetonu döndürme): ağ
+/// hatası ve geçici sunucu hatası yeniden denenir. Yenileme de buradadır: sunucu, yanıtı kaybolan yenilemenin jetonunu
+/// halefi kullanılmadıkça 10 dakika boyunca yeniden kabul eder (aileyi düşürmez, yeni çift verir); zaman aşımından
+/// sonra aynı jetonla hemen yeniden denemek oturumu korur. Saf fonksiyondur.
 public func isRetryableRepeatableRequest(failure: HostedAttemptFailure) -> Bool {
     switch failure {
     case .network(let code):
@@ -74,10 +82,10 @@ public func isRetryableRepeatableRequest(failure: HostedAttemptFailure) -> Bool 
     }
 }
 
-/// Tekrarı zararlı olabilecek istekler (yenileme jetonu döndürme, tek kullanımlık nonce ile giriş, toplantı başlatma):
-/// yalnızca sunucunun isteği hiç işlemediği kesin olan durumlar yeniden denenir (bağlantı kurulamadı ya da hız
-/// sınırı). Zaman aşımında istek işlenmiş olabilir: yenileme jetonunu ikinci kez göndermek tüm oturumları kapatır,
-/// toplantıyı ikinci kez başlatmak bir deneme hakkı daha harcar. Saf fonksiyondur.
+/// Tekrarı zararlı olabilecek istekler (tek kullanımlık nonce ile giriş, cihaz doğrulama, toplantı başlatma): yalnızca
+/// sunucunun isteği hiç işlemediği kesin olan durumlar yeniden denenir (bağlantı kurulamadı ya da hız sınırı). Zaman
+/// aşımında istek işlenmiş olabilir: nonce ikinci kez kullanılamaz, toplantıyı ikinci kez başlatmak bir deneme hakkı
+/// daha harcar. Saf fonksiyondur.
 public func isRetryableOneShotRequest(failure: HostedAttemptFailure) -> Bool {
     switch failure {
     case .network(let code):

@@ -138,8 +138,35 @@ func storeInterfaceLanguage(language: InterfaceLanguage) {
     }
 }
 
+/// Varsayılan arayüz dilinin yazıldığını gösteren işaret (bir kez yazılır; kullanıcının sonraki seçimi ezilmez).
+private let defaultInterfaceLanguageAppliedKey: String = "interface.defaultLanguageApplied"
+
+/// Uygulamanın varsayılan arayüz dilini bir kez yazar: bu uygulamada hiç dil seçilmemişse (`AppleLanguages` yoksa)
+/// `language` kaydedilir; kullanıcı sonra "Sistem"i ya da başka bir dili seçerse bir daha dokunulmaz. Metinler
+/// yüklenmeden (`AppEntry.main` başında) çağrılmalı: dil, paket metinleri ilk kez okunurken belirlenir.
+func applyDefaultInterfaceLanguageOnce(bundleIdentifier: String, language: InterfaceLanguage) {
+    guard !UserDefaults.standard.bool(forKey: defaultInterfaceLanguageAppliedKey) else {
+        return
+    }
+    UserDefaults.standard.set(true, forKey: defaultInterfaceLanguageAppliedKey)
+    guard UserDefaults.standard.persistentDomain(forName: bundleIdentifier)?["AppleLanguages"] == nil else {
+        return
+    }
+    storeInterfaceLanguage(language: language)
+}
+
 /// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
 let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
+
+/// Kullanıcının oluşturduğu içeriğin (klasörler, Sor tarifleri) saklandığı ayar alanı: geliştirici sürümünde standart
+/// ayarlar; abonelikte yüklü hesabın kendi alanı (bkz. `hostedActiveAccountDefaults`), hesap yüklenmediyse hata.
+func userContentDefaults() throws -> UserDefaults {
+    #if HOSTED_EDITION
+    try hostedActiveAccountDefaults()
+    #else
+    UserDefaults.standard
+    #endif
+}
 
 /// Uygulamayı yeniden başlatır (arayüz dili değişince). Yeni kopya ancak bu kopya gerçekten kapandıktan sonra açılır:
 /// kapanış iptal edilirse (kayıt ya da işleme sürüyor, çıkış koruması) 30 sn bekleyip vazgeçer. İki kopya aynı anda
@@ -321,7 +348,7 @@ func storedKeyBinding(key: String, fallback: KeyBinding) -> KeyBinding {
         return try JSONDecoder().decode(KeyBinding.self, from: data)
     } catch {
         // Bozuk kayıt: varsayılan kullanılır, yeni seçim üzerine yazar.
-        settingsLogger.error("Kısayol ayarı okunamadı, anahtar: \(key, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+        settingsLogger.error("Kısayol ayarı okunamadı, anahtar: \(key, privacy: .public), hata: \(String(describing: error), privacy: .private)")
         return fallback
     }
 }
@@ -335,7 +362,8 @@ func storeKeyBinding(key: String, binding: KeyBinding) throws {
 /// `KeychainError.notFound`; OpenAI uyumlu ayar eksikse `LLMError.notConfigured`.
 func resolveLLMProvider() async throws -> LLMProvider {
     #if HOSTED_EDITION
-    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider (toplantıdan bağımsız).
+    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider (toplantıdan bağımsız); hakkı yoksa durur.
+    try await requireHostedAIAllowance()
     return try hostedAccountLLMProvider()
     #else
     switch selectedLLMProviderKind() {
@@ -355,12 +383,27 @@ func resolveLLMProvider() async throws -> LLMProvider {
     #endif
 }
 
-/// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) ve kaydın hemen ardından not için
-/// sağlayıcı. Kendi anahtarlı sürümde `resolveLLMProvider` ile aynıdır; abonelik sürümünde son açılan toplantının
+/// Kaydı biten toplantının notu için sağlayıcı: abonelikte o kaydın sunucu oturumunun bütçesi (bu arada yeni bir kayıt
+/// başlasa da onun bütçesine yazılmaz; oturumu olmayan kayıtta hesap çağrısı), kendi anahtarlı sürümde
+/// `resolveLLMProvider`.
+func resolveRecordedMeetingLLMProvider(recordID: String) async throws -> LLMProvider {
+    #if HOSTED_EDITION
+    let provider: LLMProvider = try hostedRecordedMeetingLLMProvider(recordID: recordID)
+    // Kaydın sunucu oturumu yoksa çağrı hesaptan gider: hakkı yoksa durur (oturumlu kayıt kendi bütçesini kullanır).
+    if case .hosted(let config) = provider, config.scope == .account {
+        try await requireHostedAIAllowance()
+    }
+    return provider
+    #else
+    return try await resolveLLMProvider()
+    #endif
+}
+
+/// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) için sağlayıcı. Kendi anahtarlı sürümde `resolveLLMProvider` ile aynıdır; abonelik sürümünde son açılan toplantının
 /// bütçesinden düşer.
 func resolveLiveLLMProvider() async throws -> LLMProvider {
     #if HOSTED_EDITION
-    return try hostedMeetingLLMProvider()
+    return try await hostedMeetingLLMProvider()
     #else
     return try await resolveLLMProvider()
     #endif
@@ -387,7 +430,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
             }
         } catch {
             // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
-            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return false
         }
     }
@@ -395,7 +438,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     do {
         config = try onDeviceConfig()
     } catch {
-        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .private)")
         return false
     }
     // Kayıtlı ana toplantı dili korunur (kurulumda bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
@@ -478,11 +521,23 @@ func primaryMeetingLanguage() -> MeetingLanguage {
 }
 
 /// Bu uygulamanın Anahtar Zinciri servis adı: geliştirici sürümünde `AINotepad` (iPhone ile paylaşılan), abonelik
-/// sürümünde kendi servisi (kanal ve görev aracı bağlantıları geliştirici sürümünün öğelerine yazılmasın).
+/// sürümünde Info.plist'teki kendi servisi (Release `AINotepadHosted`, Debug `AINotepadHosted.debug`; kanal ve görev
+/// aracı bağlantıları geliştirici sürümünün ya da yayındaki sürümün öğelerine yazılmasın). Abonelik sürümünde değer
+/// `AppEntry.main`'de açılışta doğrulanır; yoksa uygulama açılmaz.
 let appKeychainService: String = {
+    #if DEBUG
+    // Tanıtım modu sahibin Anahtar Zinciri öğelerini okumaz (bkz. App/DemoData.swift).
+    if isDemoMode {
+        return demoKeychainService
+    }
+    #endif
     #if HOSTED_EDITION
-    hostedKeychainService
+    do {
+        return try hostedKeychainService(bundle: .main)
+    } catch {
+        fatalError("Anahtar Zinciri servis adı tanımlı değil (Info.plist \(hostedKeychainServiceInfoKey)): \(error)")
+    }
     #else
-    keychainService
+    return keychainService
     #endif
 }()

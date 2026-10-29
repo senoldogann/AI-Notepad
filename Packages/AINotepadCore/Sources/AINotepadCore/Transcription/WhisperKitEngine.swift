@@ -22,14 +22,29 @@ public actor WhisperKitEngine: TranscriptionEngine {
 
     /// Modeli (gerekirse indirip) yükler ve hazır bir motor döndürür.
     public static func load(modelName: String, modelsDirectory: URL) async throws -> WhisperKitEngine {
+        try await load(modelName: modelName, modelsDirectory: modelsDirectory) { (_: Double) -> Void in }
+    }
+
+    /// Modeli (gerekirse indirip) yükler; indirme ilerlemesi (0…1) `onDownloadProgress`'e verilir (model zaten
+    /// indiyse hemen 1). Önce indirilir (WhisperKit'in kendi indirmesiyle aynı klasöre), sonra klasörden yüklenir.
+    public static func load(modelName: String, modelsDirectory: URL, onDownloadProgress: @escaping @Sendable (Double) -> Void) async throws -> WhisperKitEngine {
+        let folder: URL
+        do {
+            folder = try await WhisperKit.download(variant: modelName, downloadBase: modelsDirectory) { (progress: Progress) -> Void in
+                onDownloadProgress(progress.fractionCompleted)
+            }
+        } catch {
+            throw TranscriptionError.modelLoadFailed(model: modelName, reason: String(describing: error))
+        }
         let config: WhisperKitConfig = WhisperKitConfig(
             model: modelName,
             downloadBase: modelsDirectory,
+            modelFolder: folder.path,
             verbose: false,
             logLevel: .error,
             prewarm: true,
             load: true,
-            download: true
+            download: false
         )
         do {
             let whisperKit: WhisperKit = try await WhisperKit(config)

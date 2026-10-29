@@ -11,12 +11,34 @@
         }
       }
     },
+    "\"%1$@\" toplantısı öncesi brifing. Katılımcılar: %2$@. Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing for \"%1$@\" with %2$@: what was discussed in earlier meetings with these people or on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
+          }
+        }
+      }
+    },
     "\"%@\" klasörüne, hesap gerekmez": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Into a \"%@\" folder, no account needed"
+          }
+        }
+      }
+    },
+    "\"%@\" toplantısı öncesi brifing: Bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing for \"%@\": what was discussed in earlier meetings on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
           }
         }
       }
@@ -34,9 +56,39 @@
     "\"Ne kaçırdım?\" son %lld dakikayı özetler": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "\"What did I miss?\" summarizes the last %lld minutes"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"What did I miss?\" summarizes the last %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"What did I miss?\" summarizes the last %lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"Ne kaçırdım?\" son %lld dakikayı özetler"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "\"Ne kaçırdım?\" son %lld dakikayı özetler"
+                }
+              }
+            }
           }
         }
       }
@@ -83,6 +135,28 @@
         }
       }
     },
+    "%@ %@ hazır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is ready"
+          }
+        }
+      }
+    },
+    "%@ %@ çıktı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is available"
+          }
+        }
+      }
+    },
     "%@ / %@": {
       "extractionState": "manual",
       "localizations": {
@@ -90,6 +164,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ / %@"
+          }
+        }
+      }
+    },
+    "%@ / %@ sa": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@ h"
           }
         }
       }
@@ -104,13 +189,13 @@
         }
       }
     },
-    "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
+    "%@ anahtarı kabul edilmedi. Ayarlar'dan anahtarı kontrol et.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ key is invalid (HTTP %lld). Check it in Settings."
+            "value": "%@ didn't accept the key. Check the key in Settings."
           }
         }
       }
@@ -318,6 +403,17 @@
         }
       }
     },
+    "%@ girişinin dönüşü başka bir denemeye ait; Ayarlar › Bağlantılar'dan yeniden bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ sign-in returned from a different attempt; connect again from Settings › Connections."
+          }
+        }
+      }
+    },
     "%@ hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -338,33 +434,13 @@
         }
       }
     },
-    "%@ isteği başarısız (HTTP %lld). Biraz sonra tekrar dene.": {
+    "%@ isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ request failed (HTTP %lld). Try again in a moment."
-          }
-        }
-      }
-    },
-    "%@ isteği reddetti (%@).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ rejected the request (%@)."
-          }
-        }
-      }
-    },
-    "%@ isteği reddetti (HTTP %lld). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ rejected the request (HTTP %lld). Try again; if it persists, remove the connection and connect again."
+            "value": "%@ didn't accept the request. Try again; if it keeps happening, remove the connection and connect again."
           }
         }
       }
@@ -501,12 +577,24 @@
         }
       }
     },
-    "%@ webhook'u reddetti (HTTP %lld). Adresin doğru ve etkin olduğunu kontrol et.": {
+    "%@ uygulamasında bağlantıyı yeniden başlat.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ rejected the webhook (HTTP %lld). Check that the URL is correct and active."
+            "value": "Start connecting again in %@."
+          }
+        }
+      }
+    },
+    "%@ webhook'u kabul etmedi. Adresin doğru ve etkin olduğunu kontrol et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ didn't accept the webhook. Check that the address is correct and active."
           }
         }
       }
@@ -531,24 +619,13 @@
         }
       }
     },
-    "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
+    "%@ yanıtı yarıda kesildi. Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The %@ response failed midway (%@). Try again in a moment."
-          }
-        }
-      }
-    },
-    "%@ yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The %@ response hit the output limit and was cut off. Lower the effort in Settings › LLM and try again."
+            "value": "%@ stopped responding midway. Try again in a moment."
           }
         }
       }
@@ -604,12 +681,56 @@
         }
       }
     },
+    "%@ şu an yanıt veremedi. Biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ couldn't respond right now. Try again in a moment."
+          }
+        }
+      }
+    },
     "%@ — %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ — %@"
+          }
+        }
+      }
+    },
+    "%@ — Güncelle…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Update…"
+          }
+        }
+      }
+    },
+    "%@ — Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Restart and update"
+          }
+        }
+      }
+    },
+    "%@ — kayıt bitince güncellenebilir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — can update after recording"
           }
         }
       }
@@ -645,6 +766,17 @@
         }
       }
     },
+    "%@'e dönebilirsin; bu sekmeyi kapatabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can go back to %@ and close this tab."
+          }
+        }
+      }
+    },
     "%@: ": {
       "localizations": {
         "en": {
@@ -668,9 +800,39 @@
     "%@: %lld görev açıldı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@: %lld tasks created"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld task created"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld tasks created"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld görev açıldı"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%@: %lld görev açıldı"
+                }
+              }
+            }
           }
         }
       }
@@ -695,6 +857,17 @@
         }
       }
     },
+    "%@; sınır %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@; the limit resets on %@."
+          }
+        }
+      }
+    },
     "%lld": {
       "localizations": {
         "en": {
@@ -708,9 +881,39 @@
     "%lld an işaretlendi": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld moments marked"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moment marked"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moments marked"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld an işaretlendi"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld an işaretlendi"
+                }
+              }
+            }
           }
         }
       }
@@ -738,9 +941,39 @@
     "%lld beceri Sor'a tarif olarak eklendi.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld skills added to Ask as recipes."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld skill added to Ask as a recipe."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld skills added to Ask as recipes."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld beceri Sor'a tarif olarak eklendi."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld beceri Sor'a tarif olarak eklendi."
+                }
+              }
+            }
           }
         }
       }
@@ -768,9 +1001,39 @@
     "%lld görev": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld tasks"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld task"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tasks"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld görev"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld görev"
+                }
+              }
+            }
           }
         }
       }
@@ -778,9 +1041,39 @@
     "%lld gün": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld days"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld gün"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld gün"
+                }
+              }
+            }
           }
         }
       }
@@ -788,9 +1081,39 @@
     "%lld karar": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld decisions"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld decision"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld decisions"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld karar"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld karar"
+                }
+              }
+            }
           }
         }
       }
@@ -798,9 +1121,39 @@
     "%lld konuşmacı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld speakers"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld speaker"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld speakers"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld konuşmacı"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld konuşmacı"
+                }
+              }
+            }
           }
         }
       }
@@ -808,9 +1161,39 @@
     "%lld model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Found %lld models. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld model. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld models. Cloud models (\"cloud\") need the internet and send the text to Ollama."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir."
+                }
+              }
+            }
           }
         }
       }
@@ -838,9 +1221,39 @@
     "%lld sonuç": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld results"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld result"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld results"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sonuç"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sonuç"
+                }
+              }
+            }
           }
         }
       }
@@ -848,9 +1261,39 @@
     "%lld terim": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld terms"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld term"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld terms"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld terim"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld terim"
+                }
+              }
+            }
           }
         }
       }
@@ -858,9 +1301,39 @@
     "%lld toplantı": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı"
+                }
+              }
+            }
           }
         }
       }
@@ -868,9 +1341,39 @@
     "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move %lld meetings (text, note and audio) to the Trash?"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld meeting (text, note and audio) to the Trash?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld meetings (text, note and audio) to the Trash?"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?"
+                }
+              }
+            }
           }
         }
       }
@@ -878,9 +1381,39 @@
     "%lld toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: %@": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings could not be copied to this device; iCloud sync stays on, try again: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting could not be copied to this device; iCloud sync stays on, try again: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings could not be copied to this device; iCloud sync stays on, try again: %@"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı bu cihaza kopyalanamadı; iCloud eşitlemesi açık kaldı, yeniden dene: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -888,9 +1421,80 @@
     "%lld toplantı iCloud'dan iniyor…": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings downloading from iCloud…"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting downloading from iCloud…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings downloading from iCloud…"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı iCloud'dan iniyor…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı iCloud'dan iniyor…"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld toplantı kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings left"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı kaldı"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı kaldı"
+                }
+              }
+            }
           }
         }
       }
@@ -898,9 +1502,39 @@
     "%lld toplantı okunamadı: %@": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld meetings could not be read: %@"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting could not be read: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings could not be read: %@"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı okunamadı: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı okunamadı: %@"
+                }
+              }
+            }
           }
         }
       }
@@ -908,9 +1542,39 @@
     "%lld toplantı okunuyor…": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reading %lld meetings…"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reading %lld meeting…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Reading %lld meetings…"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı okunuyor…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı okunuyor…"
+                }
+              }
+            }
           }
         }
       }
@@ -918,9 +1582,50 @@
     "%lld toplantı taşınamadı: %@": {
       "localizations": {
         "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting couldn't be moved: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings couldn't be moved: %@"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı taşınamadı: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld toplantı taşınamadı: %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld toplantı ya da %lld gün": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld meetings couldn't be moved: %@"
+            "value": "%lld meetings or %lld days"
           }
         }
       }
@@ -1016,13 +1721,24 @@
         }
       }
     },
-    "3 toplantı ücretsiz": {
+    "3 toplantı ya da 7 gün ücretsiz": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "3 meetings free"
+            "value": "3 meetings or 7 days free"
+          }
+        }
+      }
+    },
+    "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly subscription."
           }
         }
       }
@@ -1068,6 +1784,17 @@
         }
       }
     },
+    "Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe and every meeting gets a note like this, automatically."
+          }
+        }
+      }
+    },
     "Abonelik etkin; dönem %@ tarihinde yenilenir.": {
       "extractionState": "manual",
       "localizations": {
@@ -1075,6 +1802,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscription active; renews on %@."
+          }
+        }
+      }
+    },
+    "Abonelik iptal edildi, bitiş %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription canceled, ends %@"
           }
         }
       }
@@ -1090,6 +1828,72 @@
         }
       }
     },
+    "Abonelik sona erdi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription ended"
+          }
+        }
+      }
+    },
+    "Abonelik sona erdi: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription ended: %@"
+          }
+        }
+      }
+    },
+    "Abonelik sürümü": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription edition"
+          }
+        }
+      }
+    },
+    "Abonelik, yenilenme %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription, renews %@"
+          }
+        }
+      }
+    },
+    "Aboneliğin %@ tarihinde sona erdi. Toplantıların ve notların bu Mac'te; yeni kayıt için yeniden abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription ended on %@. Your meetings and notes stay on this Mac; subscribe again to record."
+          }
+        }
+      }
+    },
+    "Aboneliğin %@ tarihinde sona erdi; toplantıların ve notların bu Mac'te.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription ended on %@; your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
     "Aboneliğin etkin.": {
       "extractionState": "manual",
       "localizations": {
@@ -1097,6 +1901,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your subscription is active."
+          }
+        }
+      }
+    },
+    "Aboneliğin sona erdi. Kayda devam etmek için yeniden abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription has ended. Subscribe again to keep recording."
+          }
+        }
+      }
+    },
+    "Aboneliğin sona erdi. Toplantıların ve notların bu Mac'te kalır; yeniden abone olunca kaldığın yerden devam edersin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription has ended. Your meetings and notes stay on this Mac; subscribe again to pick up where you left off."
+          }
+        }
+      }
+    },
+    "Aboneliğin sona erdi; yeni kayıt için yeniden abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription has ended; subscribe again to record."
+          }
+        }
+      }
+    },
+    "Aboneliğin sona erdiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; yeniden abone olunca kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed because your subscription has ended. The audio stays on this Mac; it's processed automatically once you subscribe again."
           }
         }
       }
@@ -1191,13 +2039,13 @@
         }
       }
     },
-    "Adil kullanım sınırı; ay başında sıfırlanır. Canlı metin bu Mac'te yazılır ve sınırdan düşmez.": {
+    "Adil kullanım sınırı; ay başında sıfırlanır (%@).": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fair-use limit; resets at the start of the month. Live text is transcribed on this Mac and doesn't count toward it."
+            "value": "Fair-use limit; resets at the start of each month (%@)."
           }
         }
       }
@@ -1208,6 +2056,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save names: %@"
+          }
+        }
+      }
+    },
+    "Adres": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
           }
         }
       }
@@ -1444,13 +2303,13 @@
         }
       }
     },
-    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma %@ sunucusundan. İlk 3 toplantı ücretsiz.": {
+    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma %@ sunucusundan. 3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No keys needed: notes, translation and speaker separation come from the %@ server. Your first 3 meetings are free."
+            "value": "No keys needed: notes, translation and speaker separation come from the %@ server. Free for 3 meetings or 7 days from your first meeting."
           }
         }
       }
@@ -1531,6 +2390,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save the reminder: %@"
+          }
+        }
+      }
+    },
+    "Anımsatıcılar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
           }
         }
       }
@@ -1655,6 +2525,17 @@
         }
       }
     },
+    "Apple Notlar (Apple Events)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Notes (Apple Events)"
+          }
+        }
+      }
+    },
     "Apple Notlar'a gönder": {
       "localizations": {
         "en": {
@@ -1675,35 +2556,13 @@
         }
       }
     },
-    "Apple ile giriş başarısız: %@": {
+    "Apple ile devam et": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sign in with Apple failed: %@"
-          }
-        }
-      }
-    },
-    "Apple ile giriş başlatılamadı; yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't start Sign in with Apple; try again."
-          }
-        }
-      }
-    },
-    "Apple kimlik jetonu gelmedi; yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple didn't return an identity token; try again."
+            "value": "Continue with Apple"
           }
         }
       }
@@ -1869,6 +2728,17 @@
         }
       }
     },
+    "Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, sunucuya erişim, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The info from Settings › Diagnostics (account status, permissions, server reachability, recent errors) is added to the end of your message; no audio, transcripts, notes, keys or tokens."
+          }
+        }
+      }
+    },
     "Ayarlar'ı aç": {
       "localizations": {
         "en": {
@@ -1895,6 +2765,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings…"
+          }
+        }
+      }
+    },
+    "Aylık abonelik, istediğin zaman iptal edebilirsin. Ödeme Stripe ile güvenle yapılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly subscription, cancel anytime. Payment is handled securely by Stripe."
+          }
+        }
+      }
+    },
+    "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your monthly limit leaves %lld minute for this meeting; recording ends at %@."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your monthly limit leaves %lld minutes for this meeting; recording ends at %@."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter."
+                }
+              }
+            }
           }
         }
       }
@@ -2040,6 +2962,28 @@
         }
       }
     },
+    "Bağlantı tamamlandı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "Bağlantı tamamlanmadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected"
+          }
+        }
+      }
+    },
     "Bağlantılar": {
       "localizations": {
         "en": {
@@ -2106,6 +3050,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected · %@"
+          }
+        }
+      }
+    },
+    "Başarısız: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed: %@"
+          }
+        }
+      }
+    },
+    "Başka bir hesapla giriş yaptın. Önceki hesabın kaydı ya da işlenen toplantısı bitince uygulama yeniden başlar ve bu hesabın toplantılarını açar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in with another account. Once the previous account's recording or processing finishes, the app restarts and opens this account's meetings."
+          }
+        }
+      }
+    },
+    "Başka bir hesapla giriş yapıldı; o hesabın toplantıları için uygulama yeniden başlamalı.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in with another account; the app needs to restart to open that account's meetings."
           }
         }
       }
@@ -2202,6 +3178,17 @@
         }
       }
     },
+    "Bekleyen güncelleme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending update"
+          }
+        }
+      }
+    },
     "Benim sesim de": {
       "localizations": {
         "en": {
@@ -2258,6 +3245,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Bilinmiyor (%d)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown (%d)"
           }
         }
       }
@@ -2368,6 +3366,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finished meetings move to iCloud Drive and also appear in AI-Notepad on your iPhone; meetings recorded on the iPhone come here. Recording and processing always happen on this Mac. Turning it off keeps a copy of the iCloud meetings on this Mac; the iPhone's aren't affected."
+          }
+        }
+      }
+    },
+    "Bitince kayıt başlatılabilir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can start recording when it's done."
           }
         }
       }
@@ -2494,13 +3502,35 @@
         }
       }
     },
-    "Bu Google girişi uygulamadan başlatılmamış ya da zaten kullanılmış. \"Google ile devam et\"e yeniden bas.": {
+    "Bu Mac Apple ile doğrulanamadı (DeviceCheck). İnternet bağlantını kontrol edip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This Google sign-in wasn't started from the app or was already used. Press \"Continue with Google\" again."
+            "value": "This Mac couldn't be verified with Apple (DeviceCheck). Check your internet connection and try again."
+          }
+        }
+      }
+    },
+    "Bu Mac Apple tarafından doğrulanamadı; uygulamayı yeniden açıp tekrar dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple couldn't verify this Mac; reopen the app and try again."
+          }
+        }
+      }
+    },
+    "Bu Mac Apple'ın cihaz doğrulamasını (DeviceCheck) desteklemiyor; ücretsiz deneme başlatılamıyor. Abone olarak devam edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac doesn't support Apple's device verification (DeviceCheck), so a free trial can't start. You can continue by subscribing."
           }
         }
       }
@@ -2526,12 +3556,78 @@
         }
       }
     },
+    "Bu Mac'te deneme kullanıldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial used on this Mac"
+          }
+        }
+      }
+    },
     "Bu Mac'te yüklü değil": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Not installed on this Mac"
+          }
+        }
+      }
+    },
+    "Bu Mac'te çıkış yapıldı. Sunucuya ulaşılamadı; sunucudaki oturum en geç 60 gün içinde kendiliğinden kapanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out on this Mac. The server couldn't be reached; your session on the server closes on its own within 60 days."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kayda devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial on this Mac was already used with another account. Subscribe to keep recording."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kaydetmeye ve not almaya devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has already used a free trial with another account. Subscribe to keep recording and getting notes."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı; devam etmek için abone ol. Toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial on this Mac was already used with another account; subscribe to continue. Your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has already used a free trial with another account. To continue, subscribe in Settings › Account."
           }
         }
       }
@@ -2543,6 +3639,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signs out on this Mac; your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
+    "Bu adres yalnızca %@ girişinin dönüşü içindir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This address is only for returning from %@ sign-in."
           }
         }
       }
@@ -2608,6 +3715,61 @@
         }
       }
     },
+    "Bu ayki kayıt saatlerin bu kaydı işlemeye yetmiyor; canlı metin kullanılır. Sınır ay başında sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's recording hours aren't enough to process this recording; the live transcript is used. The limit resets at the start of the month."
+          }
+        }
+      }
+    },
+    "Bu ayki kayıt saatlerin doldu; yeni kayıt ay başında açılır. Notların ve toplantıların kullanılabilir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's recording hours are used up; new recordings open at the start of the month. Your notes and meetings stay available."
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırın doldu; %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've used this month's limit; it resets on %@."
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırın dolduğu için bu toplantı işlenemedi. Ses bu Mac'te kalır; sınır sıfırlanınca kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed because this month's limit is used up. The audio stays on this Mac; it's processed automatically when the limit resets."
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırına ulaştın": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've reached this month's usage limit"
+          }
+        }
+      }
+    },
     "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.": {
       "extractionState": "manual",
       "localizations": {
@@ -2615,6 +3777,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "You've reached this month's usage limit; it resets at the start of the month."
+          }
+        }
+      }
+    },
+    "Bu ayki kullanımının yüzde 80'i doldu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've used 80 percent of this month's hours"
+          }
+        }
+      }
+    },
+    "Bu ayki sınır doldu: yeni kayıt başlatılamaz. Notların ve toplantıların erişilebilir kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's limit is used up: new recordings can't start. Your notes and meetings stay available."
+          }
+        }
+      }
+    },
+    "Bu ayki yapay zekâ payın doldu (Sor, notu yeniden yazma…); ay başında sıfırlanır. Kayıt yapmaya devam edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's AI allowance is used up (Ask, rewriting notes…); it resets at the start of the month. You can keep recording."
           }
         }
       }
@@ -2702,6 +3897,28 @@
         }
       }
     },
+    "Bu dönüş bu girişe ait değil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This return doesn't belong to this sign-in"
+          }
+        }
+      }
+    },
+    "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in wasn't started from the app or was already used. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
     "Bu görev aracı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.": {
       "localizations": {
         "en": {
@@ -2732,6 +3949,16 @@
         }
       }
     },
+    "Bu hesabın toplantıları bu Mac'te henüz yok. Uygulamayı bir kez açıp bu hesapla giriş yap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account's meetings aren't on this Mac yet. Open the app once and sign in with this account."
+          }
+        }
+      }
+    },
     "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -2750,6 +3977,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This action isn't allowed."
+          }
+        }
+      }
+    },
+    "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording was made with another account; it will be processed when you sign in with that account."
           }
         }
       }
@@ -2804,6 +4042,17 @@
         }
       }
     },
+    "Bu oturumda hata yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No errors in this session"
+          }
+        }
+      }
+    },
     "Bu sürüm cihaz doğrulaması istiyor; uygulamayı güncelle.": {
       "extractionState": "manual",
       "localizations": {
@@ -2815,12 +4064,34 @@
         }
       }
     },
+    "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version doesn't match the server. Update the app and try again."
+          }
+        }
+      }
+    },
     "Bu toplantı artık yok (silinmiş ya da taşınmış); listeyi yenileyip yeniden dene.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This meeting no longer exists (deleted or moved); refresh the list and try again."
+          }
+        }
+      }
+    },
+    "Bu toplantı en çok iki kez yeniden işlenebilir; mevcut metin ve not korunur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting can be reprocessed at most twice; the current transcript and note are kept."
           }
         }
       }
@@ -2841,6 +4112,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting may have been deleted."
+          }
+        }
+      }
+    },
+    "Bu toplantı sunucuda bir kayıt oturumuna bağlı değil; konuşmacılar canlı metinden kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting isn't linked to a recording session on the server; speakers stay as in the live transcript."
+          }
+        }
+      }
+    },
+    "Bu toplantı şimdilik işlenemedi; kendiliğinden yeniden denenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed yet; it will be retried automatically."
           }
         }
       }
@@ -2902,6 +4195,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting has no audio recording."
+          }
+        }
+      }
+    },
+    "Bu toplantının sesi zaten işleniyor; bitince yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting's audio is already being processed; try again when it finishes."
+          }
+        }
+      }
+    },
+    "Bu toplantının sunucu oturumu kapandı (kayıt bitiminden 30 dakika sonra ya da en çok süre dolunca). Kayıtlı toplantıyı \"Tekrar işle\" ile yeniden işleyebilir ya da yeni bir toplantı başlatabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting's server session has closed (30 minutes after the recording ended, or when the maximum length was reached). You can reprocess the saved meeting with \"Reprocess\" or start a new meeting."
           }
         }
       }
@@ -2969,6 +4284,17 @@
         }
       }
     },
+    "Bugün başlatılabilecek toplantı sayısına ulaştın; yarın yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've reached today's meeting limit; try again tomorrow."
+          }
+        }
+      }
+    },
     "Bugün biten toplantılar": {
       "localizations": {
         "en": {
@@ -2999,6 +4325,17 @@
         }
       }
     },
+    "Bugün çok fazla rapor gönderildi; yarın yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many reports were sent today; try again tomorrow."
+          }
+        }
+      }
+    },
     "Bugüne hazırlan": {
       "localizations": {
         "en": {
@@ -3015,7 +4352,18 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You've reached today's usage limit; try again tomorrow."
+            "value": "You hit today's usage limit; try again tomorrow."
+          }
+        }
+      }
+    },
+    "Bugünkü yapay zekâ payın doldu (Sor, notu yeniden yazma…); yarın yeniden dene. Kayıt yapmaya devam edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's AI allowance is used up (Ask, rewriting notes…); try again tomorrow. You can keep recording."
           }
         }
       }
@@ -3026,6 +4374,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bulgarian"
+          }
+        }
+      }
+    },
+    "Bulut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud"
           }
         }
       }
@@ -3050,12 +4409,86 @@
         }
       }
     },
+    "Bulut canlı metin servisine %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach the cloud live transcript service for %lld seconds; check your internet connection. Recording continues; the transcript is written from the recording when the meeting ends."
+          }
+        }
+      }
+    },
+    "Bulut canlı metni durdu; canlı metin bu Mac'te sürüyor, kayıt kesilmedi. (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript stopped; the live transcript continues on this Mac and the recording wasn't interrupted. (%@)"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni için jeton alınamadı: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't get access for the cloud live transcript: %@"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni kayıt sırasında durdu: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript stopped during the recording: %@"
+          }
+        }
+      }
+    },
+    "Bulut canlı metni şu an kullanılamıyor; canlı metin bu Mac'te üretiliyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript isn't available right now; the live transcript is being produced on this Mac."
+          }
+        }
+      }
+    },
+    "Bulut canlı metnine bu toplantıda çok sık yeniden bağlanıldı; canlı metin bu Mac'te sürüyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cloud live transcript reconnected too often in this meeting; the live transcript continues on this Mac."
+          }
+        }
+      }
+    },
     "Bulut ve Claude anahtarları": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Cloud and Claude keys"
+          }
+        }
+      }
+    },
+    "Bulut; model gerekmez": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud; no model needed"
           }
         }
       }
@@ -3141,6 +4574,17 @@
         }
       }
     },
+    "Canlı metin bu Mac'te yazılıyor; konuşmacılar ve not bağlantı gelince hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The live transcript is written on this Mac; speakers and the note are prepared when you're back online."
+          }
+        }
+      }
+    },
     "Canlı metin durdu: %@": {
       "localizations": {
         "en": {
@@ -3177,6 +4621,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live text and its translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+          }
+        }
+      }
+    },
+    "Canlı metin, konuşulurken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript as people speak"
           }
         }
       }
@@ -3237,6 +4692,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing answer"
+          }
+        }
+      }
+    },
+    "Cihaz doğrulaması": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device verification"
           }
         }
       }
@@ -3521,17 +4987,6 @@
         }
       }
     },
-    "Deepgram'a %lld sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't connect to Deepgram for %lld s; check your internet connection. Audio is still being recorded; the text will be transcribed from the recording after the meeting."
-          }
-        }
-      }
-    },
     "Deepgram, ElevenLabs ve LLM anahtarlarının bir kopyası iCloud Anahtar Zinciri ile iPhone'daki AI-Notepad'e gider; telefonda yeniden girmen gerekmez. Bu Mac'teki anahtarlar değişmez.": {
       "localizations": {
         "en": {
@@ -3552,13 +5007,79 @@
         }
       }
     },
-    "Deneme bitti; yeni toplantı için abone ol.": {
+    "Deneme": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your trial is over; subscribe to record new meetings."
+            "value": "Trial"
+          }
+        }
+      }
+    },
+    "Deneme %@ sürer. Kesintisiz devam etmek için şimdi abone olabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The trial lasts %@. Subscribe now to keep going without a break."
+          }
+        }
+      }
+    },
+    "Deneme %@ tarihinde biter (%@, hangisi önce dolarsa).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial ends on %@ (%@, whichever comes first)."
+          }
+        }
+      }
+    },
+    "Deneme bitişi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial ends"
+          }
+        }
+      }
+    },
+    "Deneme bitti": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial ended"
+          }
+        }
+      }
+    },
+    "Deneme bitti; yeni toplantılar için abone ol. Toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial has ended; subscribe for new meetings. Your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
+    "Deneme ilk toplantıyla başlar: %@, hangisi önce dolarsa.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The trial starts with your first meeting: %@, whichever comes first."
           }
         }
       }
@@ -3593,6 +5114,17 @@
         }
       }
     },
+    "Denetleniyor…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
+          }
+        }
+      }
+    },
     "Ders / eğitim": {
       "localizations": {
         "en": {
@@ -3609,6 +5141,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supported languages"
+          }
+        }
+      }
+    },
+    "Devam etmek için abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe to continue"
           }
         }
       }
@@ -3981,6 +5524,17 @@
         }
       }
     },
+    "Durum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
     "Dün": {
       "localizations": {
         "en": {
@@ -4203,6 +5757,28 @@
         }
       }
     },
+    "Erişilebilir, %lld ms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reachable, %lld ms"
+          }
+        }
+      }
+    },
+    "Erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reachability"
+          }
+        }
+      }
+    },
     "Estonca": {
       "localizations": {
         "en": {
@@ -4219,6 +5795,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask the tagged meetings…"
+          }
+        }
+      }
+    },
+    "Etkin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
           }
         }
       }
@@ -4373,6 +5960,17 @@
         }
       }
     },
+    "Geliştirici sürümü": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer edition"
+          }
+        }
+      }
+    },
     "Genel": {
       "localizations": {
         "en": {
@@ -4423,6 +6021,50 @@
         }
       }
     },
+    "Giriş 10 dakika içinde tamamlanmadı. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in wasn't completed within 10 minutes. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş başka bir denemeden döndü. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in came back from a different attempt. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in window couldn't open. Bring the app to the front and click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş penceresinde devam et. Vazgeçersen pencereyi kapatman yeter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue in the sign-in window. To cancel, just close it."
+          }
+        }
+      }
+    },
     "Giriş yapıldı": {
       "extractionState": "manual",
       "localizations": {
@@ -4430,6 +6072,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Giriş yapıldı, durum bilinmiyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in, status unknown"
+          }
+        }
+      }
+    },
+    "Giriş yapıldı; hesap durumu şu an okunamıyor. Bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're signed in, but your account status can't be read right now. It refreshes on its own when you're back online."
+          }
+        }
+      }
+    },
+    "Giriş yapılmamış": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in"
           }
         }
       }
@@ -4445,6 +6120,28 @@
         }
       }
     },
+    "Giriş yap…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in…"
+          }
+        }
+      }
+    },
+    "Girişten dönen bağlantı geçersiz. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link returned from sign-in is invalid. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
     "Git": {
       "localizations": {
         "en": {
@@ -4455,35 +6152,13 @@
         }
       }
     },
-    "Google girişi başka bir denemeden döndü. \"Google ile devam et\"e yeniden bas.": {
+    "Gizlilik": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google sign-in returned from a different attempt. Press \"Continue with Google\" again."
-          }
-        }
-      }
-    },
-    "Google girişinden dönen bağlantı geçersiz. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The link returned from Google sign-in is invalid. Press \"Continue with Google\" again."
-          }
-        }
-      }
-    },
-    "Google hesabını tarayıcıda seçersin; ardından Gistsmith açılır ve girişi tamamlar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You choose your Google account in the browser; then Gistsmith opens and completes sign-in."
+            "value": "Privacy"
           }
         }
       }
@@ -4495,17 +6170,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue with Google"
-          }
-        }
-      }
-    },
-    "Google ile giriş 10 dakika içinde tamamlanmadı. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Google sign-in wasn't completed within 10 minutes. Press \"Continue with Google\" again."
           }
         }
       }
@@ -4597,16 +6261,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Task tools"
-          }
-        }
-      }
-    },
-    "Görevim olanlar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "My tasks"
           }
         }
       }
@@ -4781,12 +6435,34 @@
         }
       }
     },
+    "Güncelleme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        }
+      }
+    },
     "Güncellemeleri denetle…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Check for Updates…"
+          }
+        }
+      }
+    },
+    "Güvenli bir giriş penceresi açılır; parolan Apple'da ya da Google'da kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A secure sign-in window opens; your password stays with Apple or Google."
           }
         }
       }
@@ -4839,16 +6515,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A bug, an idea or a question: write directly to Gistsmith's developer."
-          }
-        }
-      }
-    },
-    "Hataları kapat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dismiss errors"
           }
         }
       }
@@ -4929,6 +6595,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start right away on-device, or get higher quality with your own keys; you can change this later in Settings."
+          }
+        }
+      }
+    },
+    "Henüz denetlenmedi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked yet"
           }
         }
       }
@@ -5117,6 +6794,17 @@
         }
       }
     },
+    "Hesabın verisi henüz açılmadı. Giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account's data isn't open yet. Sign in."
+          }
+        }
+      }
+    },
     "Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.": {
       "extractionState": "manual",
       "localizations": {
@@ -5128,6 +6816,17 @@
         }
       }
     },
+    "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage your account, interface language, appearance, connections and shortcuts."
+          }
+        }
+      }
+    },
     "Hesap": {
       "extractionState": "manual",
       "localizations": {
@@ -5135,6 +6834,48 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account"
+          }
+        }
+      }
+    },
+    "Hesap durumu okunamadı (sunucuya ulaşılamıyor)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read the account status (the server can't be reached)"
+          }
+        }
+      }
+    },
+    "Hesap durumu okunuyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the account status"
+          }
+        }
+      }
+    },
+    "Hesap durumu şu an okunamıyor; bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account status can't be read right now; it refreshes on its own when you're back online."
+          }
+        }
+      }
+    },
+    "Hesap klasörü tanınmadı. Uygulamayı yeniden başlat; sürerse geri bildirim gönder.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account folder not recognized. Restart the app; if this keeps happening, send feedback."
           }
         }
       }
@@ -5260,6 +7001,17 @@
         }
       }
     },
+    "Kalan deneme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial left"
+          }
+        }
+      }
+    },
     "Kalan metin ve konuşmacılar tamamlanıyor.": {
       "localizations": {
         "en": {
@@ -5376,6 +7128,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change channel"
+          }
+        }
+      }
+    },
+    "Kapalı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        }
+      }
+    },
+    "Kapalı (imza anahtarı yok)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off (no signing key)"
           }
         }
       }
@@ -5592,6 +7366,47 @@
         }
       }
     },
+    "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The first %lld minute of the recording was transcribed; the rest could not be processed: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Kaydın tamamı işleniyor": {
       "localizations": {
         "en": {
@@ -5712,6 +7527,16 @@
         }
       }
     },
+    "Kayıt hemen başlayabilir; canlı metin model hazır olunca gelir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can start recording now; the live transcript appears once the model is ready."
+          }
+        }
+      }
+    },
     "Kayıt klasörü oluşturulamadı: %@": {
       "localizations": {
         "en": {
@@ -5812,12 +7637,56 @@
         }
       }
     },
+    "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app will restart and update when recording and processing finish."
+          }
+        }
+      }
+    },
     "Kayıt ve işleme bitince yeniden başlatılabilir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You can restart once recording and processing finish"
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app won't restart while recording or processing; you can update when it's done. It also installs on its own when you quit."
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürüyor; bitince hesabı silebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recording or processing is in progress; you can delete the account when it finishes."
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürüyor; bitince çıkış yapabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recording or processing is in progress; you can sign out when it finishes."
           }
         }
       }
@@ -5838,6 +7707,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not recording"
+          }
+        }
+      }
+    },
+    "Kayıt çevrimdışı sürüyor: canlı çeviri kapalı; not ve konuşmacılar bağlantı gelince hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording offline: live translation is off; the note and speakers are prepared when you're back online."
           }
         }
       }
@@ -5908,16 +7788,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telling participants before recording is a legal requirement in most places. When the period ends, audio files are deleted and the text and note remain; audio of interrupted or failed meetings is kept twice as long."
-          }
-        }
-      }
-    },
-    "Kayıttan önce tamamlanmalı": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Complete before recording"
           }
         }
       }
@@ -6008,6 +7878,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your template: describe what the note should emphasise"
+          }
+        }
+      }
+    },
+    "Kesintisiz devam etmek için şimdi abone olabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe now to keep going without a break."
           }
         }
       }
@@ -6344,6 +8225,17 @@
         }
       }
     },
+    "Konuşma tanımanın doğru yazması gereken adlar, şirket ve ürün adları, kısaltmalar; satır başına bir tane (2–40 karakter, en fazla 5 sözcük; en fazla 30 kullanılır). Canlı metinde ve kayıt bitince yapılan son geçişte uygulanır. Toplantılarda verdiğin konuşmacı adları ve sözlük terimleri zaten kendiliğinden eklenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names, company and product names and abbreviations transcription should get right; one per line (2–40 characters, up to 5 words; up to 30 are used). Applied to the live transcript and the final pass after recording. Speaker names you give in meetings and glossary terms are added automatically."
+          }
+        }
+      }
+    },
     "Konuşmacı %lld": {
       "localizations": {
         "en": {
@@ -6587,6 +8479,17 @@
         }
       }
     },
+    "Koşullar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms"
+          }
+        }
+      }
+    },
     "Kullan": {
       "localizations": {
         "en": {
@@ -6624,6 +8527,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Usage"
+          }
+        }
+      }
+    },
+    "Kullanım ve hesap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage and account"
+          }
+        }
+      }
+    },
+    "Kullanımı gör": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View usage"
           }
         }
       }
@@ -6758,6 +8683,17 @@
         }
       }
     },
+    "Kısıtlı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restricted"
+          }
+        }
+      }
+    },
     "LLM": {
       "localizations": {
         "en": {
@@ -6815,6 +8751,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lithuanian"
+          }
+        }
+      }
+    },
+    "Mac modeli": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac model"
           }
         }
       }
@@ -7051,23 +8998,23 @@
         }
       }
     },
+    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider ve hesabınla ilişkilendirilir; göndermek için giriş yapmış olmalısın. Toplantı içeriği gönderilmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer and are linked to your account; you need to be signed in to send. No meeting content is sent."
+          }
+        }
+      }
+    },
     "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider. Toplantı içeriği ve anahtarlar gönderilmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer. No meeting content and no keys are sent."
-          }
-        }
-      }
-    },
-    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider; giriş yaptıysan hesabınla ilişkilendirilir. Toplantı içeriği gönderilmez.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer; if you're signed in, they're linked to your account. No meeting content is sent."
           }
         }
       }
@@ -7339,6 +9286,17 @@
         }
       }
     },
+    "Neden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reason"
+          }
+        }
+      }
+    },
     "Norveççe": {
       "localizations": {
         "en": {
@@ -7435,6 +9393,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send automatically when the note is ready"
+          }
+        }
+      }
+    },
+    "Not hazırlama": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note writing"
           }
         }
       }
@@ -7607,6 +9576,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notion reconnected."
+          }
+        }
+      }
+    },
+    "Notlar açık değil; durum okunamıyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes isn't open; status can't be read"
           }
         }
       }
@@ -7821,12 +9801,34 @@
         }
       }
     },
+    "Notun hazır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your note is ready"
+          }
+        }
+      }
+    },
     "Odadaki herkes konuşmacılara ayrılır, %@ çevirisi canlı akar; bitince notu yazar.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Everyone in the room is separated into speakers with a live %@ translation; the note is written when you finish."
+          }
+        }
+      }
+    },
+    "Okunamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read"
           }
         }
       }
@@ -7851,6 +9853,17 @@
         }
       }
     },
+    "Okunuyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading"
+          }
+        }
+      }
+    },
     "Ollama bulunamadı (%@). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b": {
       "localizations": {
         "en": {
@@ -7861,12 +9874,13 @@
         }
       }
     },
-    "Ollama isteği reddetti (HTTP %lld). Adresi ve Ollama sürümünü kontrol et.": {
+    "Ollama isteği reddetti. Adresi ve Ollama sürümünü kontrol edip yeniden dene.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ollama rejected the request (HTTP %lld). Check the address and the Ollama version."
+            "value": "Ollama rejected the request. Check the address and your Ollama version, then try again."
           }
         }
       }
@@ -7971,6 +9985,17 @@
         }
       }
     },
+    "Otomatik indirme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic download"
+          }
+        }
+      }
+    },
     "Otomatik olarak güncelle": {
       "localizations": {
         "en": {
@@ -8060,6 +10085,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save as PDF"
+          }
+        }
+      }
+    },
+    "PDF olarak paylaş…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share as PDF…"
           }
         }
       }
@@ -8156,6 +10192,17 @@
         }
       }
     },
+    "Paylaşım penceresi açılamadı; uygulamayı öne getirip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The share sheet couldn't open; bring the app to the front and try again."
+          }
+        }
+      }
+    },
     "Pembe": {
       "localizations": {
         "en": {
@@ -8213,6 +10260,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "The report contains the version, the system and where the error happened; no meeting content and no keys. Pressing \"Send\" sends it to the developer's server."
+          }
+        }
+      }
+    },
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği yok. \"Gönder\"e basınca hesabına bağlı olarak geliştiricinin sunucusuna gider; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report contains the version, the system and where the error happened; no meeting content. Pressing \"Send\" sends it to the developer's server, linked to your account; you need to be signed in for this."
+          }
+        }
+      }
+    },
+    "Reddedildi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
           }
         }
       }
@@ -8388,6 +10457,17 @@
         }
       }
     },
+    "Sayfa yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page not found"
+          }
+        }
+      }
+    },
     "Sağlayıcı": {
       "localizations": {
         "en": {
@@ -8467,6 +10547,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The service is very busy today; new meetings and AI requests are paused for now. Try again a bit later."
+          }
+        }
+      }
+    },
+    "Ses": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
           }
         }
       }
@@ -8611,6 +10702,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't transcribe the audio: the final pass produced no text. You can try again with \"Reprocess\"."
+          }
+        }
+      }
+    },
+    "Ses yeniden yazıya dökülemedi: %@ Önceki son geçiş metni korundu, not ondan yazıldı.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio could not be transcribed again: %@ The previous final transcript was kept and the note was written from it."
+          }
+        }
+      }
+    },
+    "Ses yeniden yazıya dökülmedi: %@ Önceki son geçiş metni korundu.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio was not transcribed again: %@ The previous final transcript was kept."
           }
         }
       }
@@ -8841,9 +10954,39 @@
     "Sohbet geçmişinden %lld sohbet okunamadı.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't read %lld chats from the chat history."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Couldn't read %lld chat from the chat history."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Couldn't read %lld chats from the chat history."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Sohbet geçmişinden %lld sohbet okunamadı."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Sohbet geçmişinden %lld sohbet okunamadı."
+                }
+              }
+            }
           }
         }
       }
@@ -8901,9 +11044,39 @@
     "Son %lld dakikada konuşma yok.": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No speech in the last %lld minutes."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "No speech in the last %lld minute."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "No speech in the last %lld minutes."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Son %lld dakikada konuşma yok."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Son %lld dakikada konuşma yok."
+                }
+              }
+            }
           }
         }
       }
@@ -8938,6 +11111,17 @@
         }
       }
     },
+    "Son denetim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last check"
+          }
+        }
+      }
+    },
     "Son geçiş başarısız: %@ Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
       "extractionState": "manual",
       "localizations": {
@@ -8945,6 +11129,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Final pass failed: %@ The note was written from the live text; you can try again with \"Reprocess\"."
+          }
+        }
+      }
+    },
+    "Son geçiş başlatılamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The final pass couldn't start"
           }
         }
       }
@@ -8967,6 +11162,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "No final pass: %@ The live transcript was used."
+          }
+        }
+      }
+    },
+    "Son hatalar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent errors"
           }
         }
       }
@@ -9011,12 +11217,45 @@
         }
       }
     },
+    "Sonra": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        }
+      }
+    },
     "Sor": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Ask"
+          }
+        }
+      }
+    },
+    "Sor, notu yeniden yazma, paylaşım çevirisi ve görev araçları bu paydan düşer; toplantı sırasındakiler düşmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask, rewriting notes, share translations and task tools use this allowance; AI during meetings doesn't."
+          }
+        }
+      }
+    },
+    "Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Useful when reporting a problem: version, system, account status, server reachability, permissions, model, updates and recent errors. No audio, transcripts, notes, keys or tokens; nothing leaves this Mac unless you copy it."
           }
         }
       }
@@ -9031,46 +11270,65 @@
         }
       }
     },
-    "Sunucu adresi geçersiz: %@": {
+    "Sunucu": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server address is invalid: %@"
+            "value": "Server"
           }
         }
       }
     },
-    "Sunucu adresi güvenli değil (https olmalı): %@": {
+    "Sunucu bu işlemi henüz desteklemiyor (güncelleniyor). Toplantı işlenmedi; biraz sonra \"Tekrar işle\" ile yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server address isn't secure (must be https): %@"
+            "value": "The server doesn't support this yet (it's being updated). The meeting wasn't processed; try \"Reprocess\" again in a little while."
           }
         }
       }
     },
-    "Sunucu beklenmeyen bir yanıt verdi (HTTP %lld). Biraz sonra yeniden dene.": {
-      "extractionState": "manual",
+    "Sunucu bulut canlı metnine izin verdi": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server returned an unexpected response (HTTP %lld). Try again a bit later."
+            "value": "The server allowed the cloud live transcript"
           }
         }
       }
     },
-    "Sunucu isteği anlamadı (%@); uygulamayı güncelleyip yeniden dene.": {
+    "Sunucu bulut canlı metnine izin veriyor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server allows the cloud live transcript"
+          }
+        }
+      }
+    },
+    "Sunucu bulut canlı metnini kapattı ya da ayrılan kapasite doldu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server turned off the cloud live transcript or its capacity is used up"
+          }
+        }
+      }
+    },
+    "Sunucu isteği şu an tamamlayamadı. Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server didn't understand the request (%@); update the app and try again."
+            "value": "The server couldn't complete the request right now. Try again in a moment."
           }
         }
       }
@@ -9096,13 +11354,13 @@
         }
       }
     },
-    "Sunucudan beklenmeyen yanıt geldi (HTTP %lld). Uygulamayı güncelleyip yeniden dene.": {
+    "Sunucudan beklenmeyen bir yanıt geldi. Uygulamayı güncelleyip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unexpected response from the server (HTTP %lld). Update the app and try again."
+            "value": "The server sent an unexpected response. Update the app and try again."
           }
         }
       }
@@ -9114,6 +11372,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't reach the server; check your internet connection."
+          }
+        }
+      }
+    },
+    "Sunucuya ulaşılamıyor ve hesap durumun son 7 günde doğrulanmadı. Kayıt için internete bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server can't be reached and your account hasn't been checked in the last 7 days. Connect to the internet to record."
           }
         }
       }
@@ -9219,6 +11488,28 @@
         }
       }
     },
+    "Sürüm %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %@"
+          }
+        }
+      }
+    },
+    "Sürüm ve sistem bilgisini ekle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include version and system info"
+          }
+        }
+      }
+    },
     "Sürüm: %@": {
       "localizations": {
         "en": {
@@ -9235,6 +11526,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch the filter to \"All\" or search with another word."
+          }
+        }
+      }
+    },
+    "Sınır %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The limit resets on %@."
           }
         }
       }
@@ -9410,6 +11712,17 @@
         }
       }
     },
+    "Tam erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full access"
+          }
+        }
+      }
+    },
     "Tamamlanan görev yok": {
       "localizations": {
         "en": {
@@ -9450,12 +11763,35 @@
         }
       }
     },
-    "Tanılama bilgisi ekle": {
+    "Tanılama": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Include diagnostic info"
+            "value": "Diagnostics"
+          }
+        }
+      }
+    },
+    "Tanılama bilgisini ekle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include diagnostics"
+          }
+        }
+      }
+    },
+    "Tanılama bilgisini kopyala": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy diagnostics"
           }
         }
       }
@@ -9480,24 +11816,13 @@
         }
       }
     },
-    "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.": {
+    "Tarayıcıdaki giriş süresinde tamamlanmadı; Ayarlar › Bağlantılar'dan yeniden bağlan.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't open the browser; check your default browser and try again."
-          }
-        }
-      }
-    },
-    "Tarayıcıda Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose your Google account in the browser; Gistsmith then opens by itself. If it isn't completed within 10 minutes, press again."
+            "value": "Sign-in in the browser wasn't completed in time; connect again from Settings › Connections."
           }
         }
       }
@@ -9608,6 +11933,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Teams, Zoom and in-person meetings are transcribed live; when they end the note in %@ is ready, with your tasks on top."
+          }
+        }
+      }
+    },
+    "Teams, Zoom ve yüz yüze toplantılarını canlı yazıya döker; bitince notun hazır, görevlerin en üstte.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribes your Teams, Zoom and in-person meetings live; when they end, your note is ready with your tasks on top."
           }
         }
       }
@@ -9732,6 +12068,17 @@
         }
       }
     },
+    "Toplantı bitince not hazır, görevler en üstte": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your note is ready when the meeting ends, tasks on top"
+          }
+        }
+      }
+    },
     "Toplantı bitince not yazılır; içinde senin adına yazılan işler burada toplanır, tamamlayınca işaretlersin.": {
       "localizations": {
         "en": {
@@ -9790,6 +12137,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change meeting language"
+          }
+        }
+      }
+    },
+    "Toplantı dışı yapay zekâ": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI outside meetings"
           }
         }
       }
@@ -9935,17 +12293,6 @@
         }
       }
     },
-    "Toplantı oturumu kapandı: yapay zekâ özellikleri toplantı sırasında ve bittikten kısa süre sonrasına kadar açıktır. Yeni bir toplantı başlat.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The meeting session has closed: AI features are available during a meeting and for a short time after it ends. Start a new meeting."
-          }
-        }
-      }
-    },
     "Toplantı oturumu kapatılamadı: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -10083,6 +12430,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ask my meetings"
+          }
+        }
+      }
+    },
+    "Toplantıların ve notların bu Mac'te kalır. Yeni toplantıları kaydetmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your meetings and notes stay on this Mac. Subscribe to record new meetings."
           }
         }
       }
@@ -10287,6 +12645,17 @@
         }
       }
     },
+    "Tüm notlar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes"
+          }
+        }
+      }
+    },
     "Tüm sonuçları listede göster": {
       "localizations": {
         "en": {
@@ -10303,6 +12672,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "All meetings"
+          }
+        }
+      }
+    },
+    "Tüm toplantılarına soru sor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask questions across all your meetings"
           }
         }
       }
@@ -10399,6 +12779,17 @@
         }
       }
     },
+    "Tür": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edition"
+          }
+        }
+      }
+    },
     "Türkçe": {
       "localizations": {
         "en": {
@@ -10425,6 +12816,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ukrainian"
+          }
+        }
+      }
+    },
+    "Ulaşılamadı (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreachable (%@)"
           }
         }
       }
@@ -10477,6 +12879,49 @@
           "stringUnit": {
             "state": "translated",
             "value": "The app closed during recording or processing."
+          }
+        }
+      }
+    },
+    "Uygulamada başka bir hesapla giriş yapıldı. O hesabın toplantıları için MCP istemcisini yeniden başlat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another account is now signed in to the app. Restart your MCP client to use that account's meetings."
+          }
+        }
+      }
+    },
+    "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's Keychain setting is missing; reinstall the app."
+          }
+        }
+      }
+    },
+    "Uygulamanın sunucu ayarı eksik ya da bozuk; uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's server setting is missing or broken; reinstall the app."
+          }
+        }
+      }
+    },
+    "Uygulamanın sunucu ayarı güvenli değil; uygulamayı güncelle ya da yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's server setting isn't secure; update or reinstall the app."
           }
         }
       }
@@ -10692,12 +13137,45 @@
         }
       }
     },
+    "Yalnızca yazma": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write only"
+          }
+        }
+      }
+    },
     "Yanıt için e-posta (isteğe bağlı)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Email for a reply (optional)"
+          }
+        }
+      }
+    },
+    "Yanıt uzunluk sınırına takılıp yarıda kesildi. İsteği kısaltıp ya da daha az toplantı seçip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The answer hit its length limit and was cut off. Shorten the request or pick fewer meetings, then try again."
+          }
+        }
+      }
+    },
+    "Yanıt verdi ama sağlıklı değil (HTTP %lld), %lld ms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responded but not healthy (HTTP %lld), %lld ms"
           }
         }
       }
@@ -10866,6 +13344,17 @@
         }
       }
     },
+    "Yeni kayıt başlatılamaz. Bu, aylık adil kullanım sınırıdır ve %@ tarihinde sıfırlanır; notların ve toplantıların erişilebilir kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New recordings can't start. This is the monthly fair-use limit and it resets on %@; your notes and meetings stay available."
+          }
+        }
+      }
+    },
     "Yeni klasör": {
       "localizations": {
         "en": {
@@ -10908,12 +13397,46 @@
         }
       }
     },
-    "Yeni sürüm günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+    "Yeni sürüm hazır": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New versions are checked once a day. When on, they download in the background and install when you quit the app; when off, you are only notified."
+            "value": "New version ready"
+          }
+        }
+      }
+    },
+    "Yeni sürüm uygulama açıkken birkaç dakikada bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New versions are checked every few minutes while the app is open. When on, updates download in the background and install when you quit; when off, you're only notified."
+          }
+        }
+      }
+    },
+    "Yeni sürüm çıktı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New version available"
+          }
+        }
+      }
+    },
+    "Yeni toplantılar için abone ol; toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe for new meetings; your meetings and notes stay on this Mac."
           }
         }
       }
@@ -10924,6 +13447,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notes for new meetings are written for this type; you can rewrite a meeting's note with another template later (⋯ menu)."
+          }
+        }
+      }
+    },
+    "Yeniden abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe again"
           }
         }
       }
@@ -10958,6 +13492,17 @@
         }
       }
     },
+    "Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart and update"
+          }
+        }
+      }
+    },
     "Yeniden başlatılamadı: %@": {
       "localizations": {
         "en": {
@@ -10988,6 +13533,17 @@
         }
       }
     },
+    "Yenile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        }
+      }
+    },
     "Yerel model (ör. gpt-oss:20b, qwen3) ile not ve çeviri: anahtar gerekmez, toplantı metni Mac'ten çıkmaz. Konuşma tanıma için Genel › Canlı metin'de \"Mac'te (WhisperKit)\" seç.": {
       "localizations": {
         "en": {
@@ -11014,6 +13570,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit anyway"
+          }
+        }
+      }
+    },
+    "Yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
           }
         }
       }
@@ -11129,6 +13696,28 @@
         }
       }
     },
+    "ad@ornek.com": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "name@example.com"
+          }
+        }
+      }
+    },
+    "dosya %lld dakika; bir toplantı şu an en çok %lld dakika işlenebilir. Dosyayı bölüp parçaları ayrı içe aktar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the file is %lld minutes long; a meeting can currently be at most %lld minutes. Split the file and import the parts separately."
+          }
+        }
+      }
+    },
     "dosyada ses yok": {
       "localizations": {
         "en": {
@@ -11176,6 +13765,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "tasks"
+          }
+        }
+      }
+    },
+    "hata yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no errors"
           }
         }
       }
@@ -11250,6 +13850,17 @@
         }
       }
     },
+    "ilk toplantıyla başlar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "starts with the first meeting"
+          }
+        }
+      }
+    },
     "karar": {
       "localizations": {
         "en": {
@@ -11300,6 +13911,17 @@
         }
       }
     },
+    "macOS bu iznin durumunu bildirmiyor; ilk kayıtta sorulur": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS doesn't report this permission's status; it's asked on the first recording"
+          }
+        }
+      }
+    },
     "macOS bu iznin durumunu göstermez; deneyerek açılır": {
       "localizations": {
         "en": {
@@ -11320,12 +13942,34 @@
         }
       }
     },
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği yok) hesabına bağlı olarak geliştiricinin sunucusuna yollar; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by macOS are stored only on this Mac; none are sent automatically. \"Send\" sends a report (version, system and where the error happened; no meeting content) to the developer's server, linked to your account; you need to be signed in for this."
+          }
+        }
+      }
+    },
     "not": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "note"
+          }
+        }
+      }
+    },
+    "okunamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't read"
           }
         }
       }
@@ -11356,6 +14000,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "no chat model installed"
+          }
+        }
+      }
+    },
+    "son hata: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "last error: %@"
           }
         }
       }
@@ -11541,6 +14196,39 @@
         }
       }
     },
+    "Çevrimdışı kaydedildi; bağlantı gelince konuşmacılar ve not hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded offline; speakers and the note are prepared when you're back online."
+          }
+        }
+      }
+    },
+    "Çevrimdışı kaydediliyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording offline"
+          }
+        }
+      }
+    },
+    "Çevrimdışı kayıt yarıda kaldı; kaydedilen kısım bağlantı gelince işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The offline recording was interrupted; the recorded part will be processed when you're back online."
+          }
+        }
+      }
+    },
     "Çince": {
       "localizations": {
         "en": {
@@ -11696,12 +14384,33 @@
         }
       }
     },
+    "Ödeme bekleniyor, ek süre bitişi %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment due, grace period ends %@"
+          }
+        }
+      }
+    },
     "Önce Ayarlar › Bağlantılar'dan bir klasör seç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "First choose a folder in Settings › Connections."
+          }
+        }
+      }
+    },
+    "Önce bir toplantı kaydet: ücretsiz deneme ilk toplantıyla başlar, sonra toplantılarına soru sorabilirsin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record a meeting first: your free trial starts with your first meeting, then you can ask about your meetings."
           }
         }
       }
@@ -11736,6 +14445,17 @@
         }
       }
     },
+    "Önce uygulamayı açıp giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the app and sign in first."
+          }
+        }
+      }
+    },
     "Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır": {
       "localizations": {
         "en": {
@@ -11762,6 +14482,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Earlier versions"
+          }
+        }
+      }
+    },
+    "Önceki toplantılar hesabına taşınamadı (%@: %@). Hiçbir şey silinmedi; taşınamayanlar eski yerinde kaldı, yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't move your earlier meetings to your account (%@: %@). Nothing was deleted; anything not moved is still in its old location. Try again."
           }
         }
       }
@@ -11916,13 +14647,153 @@
         }
       }
     },
-    "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
+    "Ücretsiz deneme": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your free trial meetings are used up. To continue, subscribe in Settings › Account."
+            "value": "Free trial"
+          }
+        }
+      }
+    },
+    "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial starts with your first meeting; start a meeting first."
+          }
+        }
+      }
+    },
+    "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial needs Apple to verify this Mac; update the app and try again."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free trials are at capacity today. Try again tomorrow or subscribe in Settings › Account."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended"
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti. Devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended. Subscribe to continue."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti. Kayda devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended. Subscribe to keep recording."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti. Toplantıların ve notların bu Mac'te kalır; yeni toplantılar için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended. Your meetings and notes stay on this Mac; subscribe to record new meetings."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bittiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; abone olunca kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed because your free trial has ended. The audio stays on this Mac; it's processed automatically once you subscribe."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meeting left in your free trial. Subscribe and every meeting gets a note like this, automatically."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld meetings left in your free trial. Subscribe and every meeting gets a note like this, automatically."
+                }
+              }
+            }
+          }
+        },
+        "tr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Ücretsiz denemende 1 toplantı kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 meeting left in your free trial"
           }
         }
       }
@@ -12060,17 +14931,6 @@
         }
       }
     },
-    "İlk 3 toplantı ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your first 3 meetings are free, no keys needed. After that, a monthly subscription."
-          }
-        }
-      }
-    },
     "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.": {
       "localizations": {
         "en": {
@@ -12081,12 +14941,34 @@
         }
       }
     },
-    "İndirilenler'e kaydedildi: %@": {
+    "İndirilenler'e kaydedildi": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saved to Downloads: %@"
+            "value": "Saved to Downloads"
+          }
+        }
+      }
+    },
+    "İndiriliyor ya da yükleniyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading or loading"
+          }
+        }
+      }
+    },
+    "İndirilmedi; Mac'te canlı metin gerekince indirilir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not downloaded; it's downloaded when the live transcript needs to run on this Mac"
           }
         }
       }
@@ -12222,6 +15104,17 @@
         }
       }
     },
+    "İzin verilmedi; %@'e dönüp yeniden deneyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access wasn't granted; go back to %@ to try again."
+          }
+        }
+      }
+    },
     "İzinler": {
       "localizations": {
         "en": {
@@ -12242,6 +15135,17 @@
         }
       }
     },
+    "İzinler, hesap ve kısayollar adım adım.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions, account and shortcuts, step by step."
+          }
+        }
+      }
+    },
     "İzni reddettiysen:": {
       "localizations": {
         "en": {
@@ -12258,6 +15162,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import"
+          }
+        }
+      }
+    },
+    "İçe aktarıldı; sunucuda işlenmeyi bekliyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported; waiting to be processed on the server."
           }
         }
       }
@@ -12322,6 +15237,17 @@
         }
       }
     },
+    "İşlenmeyi bekliyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting to be processed"
+          }
+        }
+      }
+    },
     "Şablonla yeniden yaz": {
       "localizations": {
         "en": {
@@ -12358,6 +15284,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now"
+          }
+        }
+      }
+    },
+    "Şimdi dene": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try now"
+          }
+        }
+      }
+    },
+    "Şimdi değil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        }
+      }
+    },
+    "Şimdi güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update now"
           }
         }
       }

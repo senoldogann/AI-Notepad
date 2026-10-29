@@ -78,7 +78,37 @@ describe("üretim yapılandırmasında yer tutucular", () => {
     expect(parseConfig(envWith({ ADMIN_IDENTITIES: " google:123 , apple:000.abc " })).adminIdentities).toEqual(["google:123", "apple:000.abc"]);
     expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "123" }))).toEqual(["ADMIN_IDENTITIES"]);
     expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "email:kisi@ornek.test" }))).toEqual(["ADMIN_IDENTITIES"]);
+    // Cloudflare Access: AUD boşsa denetim kapalı (null), değilse 64 onaltılık karakter.
+    expect(parseConfig(envWith({})).access).toEqual({ teamDomain: "dry-heart-1ee2.cloudflareaccess.com", audience: null });
+    expect(parseConfig(envWith({ CF_ACCESS_AUD: "f".repeat(64) })).access.audience).toBe("f".repeat(64));
+    expect(configErrorFields(envWith({ CF_ACCESS_AUD: "kisa" }))).toEqual(["CF_ACCESS_AUD"]);
+    expect(configErrorFields(envWith({ CF_ACCESS_TEAM_DOMAIN: "ornek.com" }))).toEqual(["CF_ACCESS_TEAM_DOMAIN"]);
     expect(configErrorFields(envWith({ DMG_URL: "http://indir.ornek.test/a.dmg" }))).toEqual(["DMG_URL"]);
+  });
+
+  it("DeviceCheck `required` iken ekip ve anahtar kimliği Apple biçiminde, anahtar PEM olmalı; `off` diğerlerine bakmaz", () => {
+    expect(parseConfig(envWith({ DEVICECHECK_POLICY: "off", DEVICECHECK_KEY_ID: "DEVICECHECK_KEY_ID_PENDING" })).deviceCheck).toEqual({ policy: "off" });
+    expect(configErrorFields(envWith({ DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "DEVICECHECK_KEY_ID_PENDING" }))).toEqual([
+      "DEVICECHECK_KEY_ID",
+      "DEVICECHECK_PRIVATE_KEY",
+    ]);
+    const pem: string = "-----BEGIN PRIVATE KEY-----\nMIG\n-----END PRIVATE KEY-----";
+    const required: Env = envWith({ DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "ABCDE12345", DEVICECHECK_PRIVATE_KEY: pem });
+    expect(parseConfig(required).deviceCheck).toMatchObject({ policy: "required", environment: "development", teamId: "79DZ4AA4DW", keyId: "ABCDE12345" });
+    // Üretimde DeviceCheck geliştirme adresine bağlanamaz.
+    expect(configErrorFields(envWith({ ...productionFilledIn, DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "ABCDE12345", DEVICECHECK_PRIVATE_KEY: pem }))).toEqual([
+      "DEVICECHECK_ENVIRONMENT",
+    ]);
+  });
+
+  it("Stripe anahtarının modu önekten çıkar; tanınmayan önek, ayrı deneme sırrı ve hesap sınırı doğrulanır", () => {
+    expect(parseConfig(envWith({ STRIPE_SECRET_KEY: "sk_test_0000000000000000" })).stripeMode).toBe("test");
+    expect(parseConfig(envWith({ STRIPE_SECRET_KEY: "rk_test_0000000000000000" })).stripeMode).toBe("test");
+    expect(parseConfig(envWith({ STRIPE_SECRET_KEY: "sk_live_0000000000000000" })).stripeMode).toBe("live");
+    expect(parseConfig(envWith({ STRIPE_SECRET_KEY: "rk_live_0000000000000000" })).stripeMode).toBe("live");
+    expect(configErrorFields(envWith({ STRIPE_SECRET_KEY: "pk_live_0000000000000000" }))).toEqual(["STRIPE_SECRET_KEY"]);
+    expect(configErrorFields(envWith({ TRIAL_HASH_SECRET: "kısa" }))).toEqual(["TRIAL_HASH_SECRET"]);
+    expect(configErrorFields(envWith({ MONTHLY_ACCOUNT_TOKEN_CAP: "7000000" }))).toEqual(["MONTHLY_ACCOUNT_TOKEN_CAP"]);
   });
 
   it("yer tutuculu üretim sunucusu her istekte (sağlık dahil) 500 verir ve yalnızca ayar adlarını loglar", async () => {

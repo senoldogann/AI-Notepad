@@ -21,9 +21,9 @@ struct SecretField: View {
             case .saved:
                 Label("Kayıtlı", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             case .missing:
-                Label("Kayıtlı değil", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+                NoticeText("Kayıtlı değil", severity: .attention)
             case .failed(let message):
-                Text(message).foregroundStyle(.red)
+                NoticeText(message, severity: .error)
             }
         } control: {
             HStack(spacing: 8) {

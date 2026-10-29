@@ -34,6 +34,9 @@ npm run typecheck
 npm run build         # yayın yapılandırmasıyla dist/
 npm run build:local && npm run serve   # yerel yapılandırmayla derle, _headers başlıklarıyla (CSP dahil) sun
 npm run screenshots -- http://localhost:8788 /tmp/gistsmith-web "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# uçtan uca (giriş, uygulama adına giriş, hesap, sekme kopyası, CSP): build:local + serve, sunucu wrangler dev ile
+# (--var SITE_ORIGIN:<site adresi>; ayrıntı betiğin başında)
+node scripts/e2e.ts http://localhost:8788 http://127.0.0.1:8787 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 ```
 
 `screenshots` tüm sayfaları 1440/390 px, açık/koyu çeker; ana sayfa gösteriminin karelerini alır, tema düğmesinin
@@ -63,9 +66,9 @@ Tek kaynak `src/config.ts`; gizli değer yoktur.
 İşletmeci bilgileri (ad, Y-tunnus, adres, iletişim e-postası) ve yasal metinlerin tarihi `src/legal/operator.ts`'tedir.
 
 Ad değişince elle güncellenecekler: `public/og.png` (`make-og.ts` ile yeniden üretilir); uygulama simgesi
-(`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. İç kimlikler bilerek eski adı taşır:
-tarayıcı depolama anahtarları (`ainotepad.theme`, `ainotepad.session`), uygulama adres şeması
-(`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
+(`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. Tarayıcı depolama anahtarları
+(`gistsmith.theme`, `gistsmith.session`) ürün adını taşır ve gizlilik politikasında adlarıyla geçer. İç kimlikler bilerek
+eski adı taşır: uygulama adres şeması (`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
 
 **Tema.** `public/theme.js` `<head>`'de engelleyici harici betik olarak yüklenir (CSP satır içi betiğe izin vermez) ve
 ilk boyamadan önce `<html data-theme>` yazar: kullanıcının seçimi (`localStorage`) yoksa sistem tercihi. Renkler
@@ -82,8 +85,11 @@ pencereyle yapılır, Apple yine de adresi denetler).
 
 **CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Google Identity Services için Google'ın belgelediği kaynaklar:
 `script-src https://accounts.google.com/gsi/client`, `frame-src https://accounts.google.com/gsi/`,
-`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Apple ile giriş ve
-Turnstile kaynakları da açıktır; başka dış kaynak yoktur.
+`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Dış hizmetler yalnızca
+kullanıldıkları sayfada açıktır: Apple ve Google `/sign-in`'de, Turnstile `/contact`'ta. Pages aynı başlığı birden çok
+kurala uyan adreste virgülle birleştirir ve tarayıcı iki politikayı birlikte uygular: `/*` tüm hizmetlere izin veren geniş
+politikayı (sayfası olmayan adresler için), her sayfanın kuralı dar politikayı taşır. `npm run serve` başlıkları aynı
+biçimde birleştirir.
 
 ## Cloudflare Pages
 

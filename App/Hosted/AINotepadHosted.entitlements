@@ -11,10 +11,7 @@
 	<!-- Notu istendiğinde Apple Notlar'a yazmak için (AppleScript). -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
-	<!-- Apple ile giriş (abonelik hesabı). -->
-	<key>com.apple.developer.applesignin</key>
-	<array>
-		<string>Default</string>
-	</array>
+	<!-- Apple ile giriş yetkisi yok: Apple onu Developer ID profillerine vermez; giriş tarayıcıda yapılır
+	     (HostedBrowserSignIn.swift). -->
 </dict>
 </plist>

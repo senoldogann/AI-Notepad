@@ -1,0 +1,176 @@
+---
+// Uygulamanın gerçek ekran görüntüsü, durgun film gradyanı kartın üstünde süzülür (ElevenLabs tarzı): pencere kartın alt
+// kenarında kesilir, yumuşak gölgesi pencerenin saydam köşelerini izler. Görüntüler Retina çekimdir
+// (scripts/make-screenshots.sh); derlemede AVIF (WebP yedeğiyle) ve ekran genişliklerine göre küçültülür. Gradyan her
+// temada açık kalır; açık uygulama ekranı hem açık hem koyu sitede aynı görünür. Kartın yerleşimi (`variant`) Home'da.
+import { Picture } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import Film from "./Film.astro";
+import type { ShowcaseShot } from "../copy";
+import type { FilmLayout, FilmPalette } from "../lib/film";
+
+/** Kartın biçimi: geniş pencere (ana pencere) ya da dar panel (canlı panel). */
+export type AppShotVariant = "window" | "panel";
+
+/** Görselin üstündeki açıklama balonu: nokta görseldeki bir öğeyi gösterir, balon noktanın sağına ya da soluna açılır.
+ * Konum (`left`, `top`: görselin yüzdesi) sayfanın CSS'inde `class` ile verilir; site CSP'si satır içi stile izin
+ * vermez. Dar ekranda gizlenir; görselin metin karşılığı `alt`'tadır. */
+export interface ShotCallout {
+  readonly text: string;
+  readonly class: string;
+  readonly side: "left" | "right";
+}
+
+interface Props {
+  readonly image: ImageMetadata;
+  readonly shot: ShowcaseShot;
+  readonly palette: FilmPalette;
+  readonly layout: FilmLayout;
+  readonly variant: AppShotVariant;
+  /** Üretilecek görsel genişlikleri (piksel). */
+  readonly widths: readonly number[];
+  /** `sizes` özniteliği: görselin sayfadaki genişliği. */
+  readonly sizes: string;
+  readonly class: string;
+  readonly callouts: readonly ShotCallout[];
+}
+const { image, shot, palette, layout, variant, widths, sizes, class: extraClass, callouts } = Astro.props;
+---
+
+<figure class:list={["shot", `shot--${variant}`, extraClass]}>
+  <Film palette={palette} layout={layout} class="shot__cover">
+    <div class="shot__frame">
+    <Picture
+      src={image}
+      alt={shot.alt}
+      formats={["avif"]}
+      fallbackFormat="webp"
+      widths={[...widths]}
+      sizes={sizes}
+      quality={72}
+      loading="lazy"
+      decoding="async"
+      class="shot__image"
+    />
+    {
+      callouts.map((callout: ShotCallout) => (
+        <span class:list={["shot__callout", `shot__callout--${callout.side}`, callout.class]} aria-hidden="true">
+          <span class="shot__dot" />
+          <span class="glass shot__pill">{callout.text}</span>
+        </span>
+      ))
+    }
+    </div>
+  </Film>
+  <figcaption class="shot__caption">
+    <span class="shot__label">{shot.label}</span>
+    <span class="shot__title">{shot.title}</span>
+  </figcaption>
+</figure>
+
+<style>
+  .shot {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    margin: 0;
+  }
+
+  /* Kart: pencere üstten ve yanlardan boşlukla süzülür, alt kenarda kesilir. */
+  .shot :global(.shot__cover) {
+    display: block;
+    padding: var(--shot-top) var(--shot-side) 0;
+    aspect-ratio: var(--shot-ratio);
+    border-radius: var(--radius-l);
+  }
+
+  .shot--window {
+    --shot-ratio: 16 / 10;
+    --shot-top: clamp(22px, 5.5%, 64px);
+    --shot-side: clamp(18px, 7%, 96px);
+  }
+
+  .shot--panel {
+    --shot-ratio: 4 / 5;
+    --shot-top: clamp(22px, 9%, 56px);
+    --shot-side: clamp(18px, 14%, 72px);
+  }
+
+  .shot__frame {
+    position: relative;
+  }
+
+  .shot__frame > :global(picture) {
+    display: block;
+  }
+
+  /* Açıklama balonu: nokta öğenin üstünde (konum sayfanın CSS'inde), balon yanında. Durgundur. */
+  .shot__callout {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transform: translate(-7px, -50%);
+    pointer-events: none;
+  }
+
+  .shot__callout--left {
+    flex-direction: row-reverse;
+    transform: translate(calc(-100% + 7px), -50%);
+  }
+
+  .shot__dot {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow:
+      0 0 0 4px rgb(255 255 255 / 0.9),
+      0 4px 12px rgb(60 36 24 / 0.25);
+  }
+
+  .shot__pill {
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: clamp(0.75rem, 1.1vw, 0.875rem);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    .shot__callout {
+      display: none;
+    }
+  }
+
+  /* Dar ekranda Home pencereyi büyütüp kaydırabilir (`--shot-zoom`, `--shot-shift`); yoksa pencere kartın içine sığar. */
+  /* Gölge görselin saydamlığını izler (pencerenin yuvarlak köşeleri); görsel durgun, gölge bir kez çizilir. */
+  .shot :global(.shot__image) {
+    display: block;
+    width: var(--shot-zoom, 100%);
+    max-width: none;
+    margin-inline-start: var(--shot-shift, 0);
+    height: auto;
+    filter: drop-shadow(0 2px 3px rgb(60 36 24 / 0.1)) drop-shadow(0 22px 44px rgb(60 36 24 / 0.2));
+  }
+
+  /* Etiket üstte, başlık altta: yan yana kartlarda başlıklar aynı hizada kalır. */
+  .shot__caption {
+    display: grid;
+    gap: 2px;
+  }
+
+  .shot__label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .shot__title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+</style>

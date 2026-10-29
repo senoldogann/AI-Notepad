@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { cleanupExpiredRows } from "../src/cleanup";
+import { subscriptionRenewalGraceMs } from "../src/entitlements";
 import { type Harness, type Session, type StartedMeetingBody, defaultHarness, expectError, grantSubscription, refreshed, req, signIn } from "./helpers";
 
 interface MeBody {
@@ -39,6 +40,23 @@ describe("IP başına günlük yeni deneme sınırı", () => {
     harness.clock.nowMs += 86_400_000;
     const fifth: Session = await signIn(harness);
     expect((await startFrom(harness, fifth, ip)).status).toBe(201);
+  });
+});
+
+describe("IPv6 istemcileri /64 önekiyle sayılır", () => {
+  it("aynı /64 ağındaki farklı adresler aynı IP sınırına sayılır; başka /64 ve IPv4 eşlemeli adres ayrıdır", async () => {
+    const harness: Harness = await defaultHarness();
+    for (const ip of ["2001:db8:aa:1::1", "2001:db8:aa:1:ffff::2", "2001:0db8:00aa:0001:1234:5678:9abc:def0"]) {
+      expect((await startFrom(harness, await signIn(harness), ip)).status).toBe(201);
+    }
+    await expectError(await startFrom(harness, await signIn(harness), "2001:db8:aa:1::abcd"), 429, "trial_ip_limit");
+    expect((await startFrom(harness, await signIn(harness), "2001:db8:aa:2::1")).status).toBe(201);
+
+    // IPv4 eşlemeli IPv6 adresi IPv4 adresiyle aynı anahtardır.
+    for (let index: number = 0; index < 3; index += 1) {
+      expect((await startFrom(harness, await signIn(harness), "192.0.2.77")).status).toBe(201);
+    }
+    await expectError(await startFrom(harness, await signIn(harness), "::ffff:192.0.2.77"), 429, "trial_ip_limit");
   });
 });
 
@@ -111,5 +129,35 @@ describe("past_due ek süresi", () => {
     const session: Session = await signIn(harness);
     await grantSubscription(session.userId, "active", harness.clock.nowMs + 10 * 86_400_000);
     expect((await me(harness, session)).subscription).toMatchObject({ access: "active", graceEndsAt: null });
+  });
+
+  it("yenilenecek abonelik dönem sonunda yenileme webhook'u gelene dek (48 saat) erişimi korur; deneme yoluna ve DeviceCheck'e düşmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const periodEnd: number = harness.clock.nowMs + 60_000;
+    await grantSubscription(session.userId, "active", periodEnd);
+
+    // Dönem bitti, yenileme olayı henüz gelmedi.
+    harness.clock.nowMs = periodEnd + 3 * 3_600_000;
+    const renewing: Session = await refreshed(harness, session);
+    expect(await me(harness, renewing)).toMatchObject({ plan: "subscription", subscription: { status: "active", access: "active" } });
+    const meeting: StartedMeetingBody = await (await startFrom(harness, renewing, "198.51.100.7")).json<StartedMeetingBody>();
+    expect(meeting.kind).toBe("subscription");
+
+    // Yenileme hiç gelmezse ek süreden sonra erişim biter.
+    harness.clock.nowMs = periodEnd + subscriptionRenewalGraceMs + 1;
+    const lapsed: Session = await refreshed(harness, renewing);
+    expect(await me(harness, lapsed)).toMatchObject({ plan: "trial", subscription: { access: "none" } });
+  });
+
+  it("dönem sonunda bitecek (iptal edilmiş) abonelik yenileme ek süresi almaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const periodEnd: number = harness.clock.nowMs + 60_000;
+    await grantSubscription(session.userId, "active", periodEnd);
+    await env.DB.prepare("UPDATE subscriptions SET cancel_at = ? WHERE user_id = ?").bind(periodEnd, session.userId).run();
+    harness.clock.nowMs = periodEnd + 1;
+    const later: Session = await refreshed(harness, session);
+    expect(await me(harness, later)).toMatchObject({ plan: "trial", subscription: { access: "none" } });
   });
 });

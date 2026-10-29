@@ -40,19 +40,18 @@ export const appleIdOrigin: string = "https://appleid.apple.com";
 export const turnstileScriptUrl: string = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 /** Turnstile kaynağı (betik ve iframe). */
 export const turnstileOrigin: string = "https://challenges.cloudflare.com";
-/** Google Identity Services betiği; CSP Google'ın belgelediği kaynakları açar (src/lib/headers.ts). */
-export const googleScriptUrl: string = "https://accounts.google.com/gsi/client";
-/** Google Identity Services iframe, istek ve stil kaynaklarının ortak öneki. */
-export const googleGsiBase: string = "https://accounts.google.com/gsi/";
+/**
+ * Uygulama adına girişte (açılır pencere yok) sayfanın yönlendirdiği yetkilendirme adresleri. Üst düzey gezinti CSP'ye
+ * takılmaz; dönüş `<siteOrigin>/sign-in` adresine `#` parçasıyla gelir.
+ */
+export const appleAuthorizeUrl: string = `${appleIdOrigin}/auth/authorize`;
+export const googleAuthorizeUrl: string = "https://accounts.google.com/o/oauth2/v2/auth";
 
 /**
  * Google ile girişin web OAuth istemcisi (Google Cloud Console; onay ekranındaki ad "Gistsmith"). İzinli JavaScript
  * kaynakları: https://gistsmith.com, http://localhost:8788, http://localhost. Açık değerdir.
  */
 const googleWebClientId: string = "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com";
-
-/** Yayınlanmış en son sürüm (yalnızca sayfada gösterilir). */
-export const latestVersion: string = "0.1.4";
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {

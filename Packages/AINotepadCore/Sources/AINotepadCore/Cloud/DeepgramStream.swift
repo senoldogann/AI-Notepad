@@ -76,11 +76,45 @@ public struct DeepgramStream: Sendable {
 /// Geçersiz anahtar gibi 4xx el sıkışma hataları yeniden denenmez.
 /// Ses akışı bitince `CloseStream` gönderilir, kalan sonuçlar alınır ve olay akışı biter.
 public func startDeepgramStream(apiKey: String, language: MeetingLanguage, keyterms: [String], audio: AsyncStream<[Float]>) -> DeepgramStream {
+    startDeepgramStream(authorization: .apiKey(apiKey), options: developerDeepgramListenOptions, language: language, keyterms: keyterms, audio: audio)
+}
+
+/// Kısa ömürlü jetonla akış (abonelik sürümü): her bağlantı ve yeniden bağlanma `token`'dan yeni jeton alır
+/// (`Authorization: Bearer`); jeton saklanmaz ve loglanmaz. Jeton alınamazsa (sunucu reddi, ağ) akış yeniden denemeden
+/// kalıcı olarak durur (`.failed`): çağıran Mac'teki motora geçebilsin. Diğer davranış `startDeepgramStream(apiKey:…)`
+/// ile aynıdır.
+public func startDeepgramStream(
+    token: @escaping @Sendable () async throws -> String,
+    options: DeepgramListenOptions,
+    language: MeetingLanguage,
+    keyterms: [String],
+    audio: AsyncStream<[Float]>
+) -> DeepgramStream {
+    startDeepgramStream(authorization: .temporaryToken(token), options: options, language: language, keyterms: keyterms, audio: audio)
+}
+
+/// Deepgram bağlantısının kimliği.
+enum DeepgramAuthorization: Sendable {
+    /// Kalıcı API anahtarı (`Authorization: Token`).
+    case apiKey(String)
+    /// Her bağlantıda alınan kısa ömürlü jeton (`Authorization: Bearer`).
+    case temporaryToken(@Sendable () async throws -> String)
+}
+
+/// Bağlantı için kısa ömürlü Deepgram jetonu alınamadı; `underlying` jeton kaynağının hatasıdır (jeton içermez).
+public struct DeepgramTokenError: Error {
+    public let underlying: any Error
+}
+
+private func startDeepgramStream(
+    authorization: DeepgramAuthorization, options: DeepgramListenOptions, language: MeetingLanguage, keyterms: [String], audio: AsyncStream<[Float]>
+) -> DeepgramStream {
     let (events, sink): (AsyncStream<StreamingEvent>, AsyncStream<StreamingEvent>.Continuation) =
         AsyncStream.makeStream(of: StreamingEvent.self)
     let connection: DeepgramConnection = DeepgramConnection(
-        apiKey: apiKey,
-        url: deepgramListenURL(language: language, keyterms: keyterms),
+        authorization: authorization,
+        options: options,
+        url: deepgramListenURL(language: language, keyterms: keyterms, options: options),
         keyterms: keyterms,
         events: sink
     )
@@ -88,6 +122,20 @@ public func startDeepgramStream(apiKey: String, language: MeetingLanguage, keyte
         await connection.run(audio: audio)
     }
     return DeepgramStream(events: events, connection: connection)
+}
+
+/// Bağlantının `Authorization` başlığı; jeton alınamazsa `DeepgramTokenError`.
+private func authorizationHeader(authorization: DeepgramAuthorization) async throws -> String {
+    switch authorization {
+    case .apiKey(let key):
+        return "Token \(key)"
+    case .temporaryToken(let token):
+        do {
+            return "Bearer \(try await token())"
+        } catch {
+            throw DeepgramTokenError(underlying: error)
+        }
+    }
 }
 
 private let deepgramLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Deepgram")
@@ -104,7 +152,8 @@ private let maxSendSamples: Int = 8000
 
 /// Tek bir Deepgram akışının bağlantı durumu.
 private actor DeepgramConnection {
-    private let apiKey: String
+    private let authorization: DeepgramAuthorization
+    private let options: DeepgramListenOptions
     private let events: AsyncStream<StreamingEvent>.Continuation
     private let session: URLSession = URLSession(configuration: .default)
     /// İstenen dilin adresi; dil değişince güncellenir.
@@ -140,12 +189,16 @@ private actor DeepgramConnection {
     /// Kapanışta alma bağlantı hatasıyla bitti: Deepgram son sonuçları vermemiş olabilir.
     private var receiveFailedWhileClosing: Bool = false
     private var hasFailed: Bool = false
+    /// `session` geçersiz kılındı (kapanış ya da kalıcı hata): üzerinde yeni görev açılamaz (açılırsa
+    /// `NSGenericException` ile çöker). Jeton beklenirken kapanış biterse bağlanma burada durur.
+    private var isSessionInvalidated: Bool = false
 
     /// Adlar ve terimler; dil değişince yeni adrese de eklenir.
     private let keyterms: [String]
 
-    init(apiKey: String, url: URL, keyterms: [String], events: AsyncStream<StreamingEvent>.Continuation) {
-        self.apiKey = apiKey
+    init(authorization: DeepgramAuthorization, options: DeepgramListenOptions, url: URL, keyterms: [String], events: AsyncStream<StreamingEvent>.Continuation) {
+        self.authorization = authorization
+        self.options = options
         self.url = url
         self.keyterms = keyterms
         self.events = events
@@ -173,7 +226,7 @@ private actor DeepgramConnection {
     /// Dili değiştirir. Bağlıysa hemen yeni dille yeniden bağlanır; bağlantı kuruluyorsa
     /// kurulduktan sonra `reconnectIfLanguageChanged` yeni dile geçer.
     func switchLanguage(to language: MeetingLanguage) async {
-        url = deepgramListenURL(language: language, keyterms: keyterms)
+        url = deepgramListenURL(language: language, keyterms: keyterms, options: options)
         guard isConnected, !isReconnecting, !isClosing else {
             return
         }
@@ -186,10 +239,16 @@ private actor DeepgramConnection {
 
     // MARK: Bağlantı
 
-    /// Bağlanır ve el sıkışmanın bittiğini ping ile doğrular.
+    /// Bağlanır ve el sıkışmanın bittiğini ping ile doğrular. Kısa ömürlü jeton her bağlantıda yeniden alınır.
     private func connect() async throws {
+        let header: String = try await authorizationHeader(authorization: authorization)
+        // Jeton beklenirken (aktör yeniden girişi) kapanış bitmiş ya da akış kalıcı hata vermiş olabilir: oturum geçersiz
+        // kılındıysa yeni WebSocket görevi açılmaz.
+        guard canOpenConnection(sessionInvalidated: isSessionInvalidated, closeDeadlinePassed: closeDeadlinePassed, hasFailed: hasFailed) else {
+            throw CloudSTTError.connectionFailed(service: "deepgram", reason: "akış kapandı")
+        }
         var request: URLRequest = URLRequest(url: url)
-        request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(header, forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
         let task: URLSessionWebSocketTask = session.webSocketTask(with: request)
         task.resume()
@@ -239,7 +298,11 @@ private actor DeepgramConnection {
                 return
             } catch CloudSTTError.http(let service, let status, let body) where isPermanentHTTPRejection(status: status) {
                 throw CloudSTTError.http(service: service, status: status, body: body)
+            } catch let error as DeepgramTokenError where !isTransientDeepgramTokenFailure(error: error) {
+                // Sunucu jetonu bilerek reddetti (bütçe, yetki, toplantı kapalı): çağıran Mac'e hemen geçebilsin.
+                throw error
             } catch {
+                // Bağlantı ya da jeton için kısa ağ kesintisi (ya da sunucu 5xx): bütçe içinde yeniden denenir.
                 lastError = error
                 deepgramLogger.warning("Deepgram'a bağlanılamadı, deneme \(attempt + 1, privacy: .public): \(String(describing: error), privacy: .private)")
             }
@@ -295,6 +358,10 @@ private actor DeepgramConnection {
             isReconnecting = false
             // Anahtar reddi (4xx) kapanışta da bildirilir: kullanıcı nedenini görmeli.
             if case CloudSTTError.http(_, let status, _) = error, isPermanentHTTPRejection(status: status) {
+                fail(error: error)
+                return
+            }
+            if error is DeepgramTokenError {
                 fail(error: error)
                 return
             }
@@ -462,7 +529,7 @@ private actor DeepgramConnection {
         isConnected = false
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
-        session.finishTasksAndInvalidate()
+        invalidateSession()
         // Kalıcı hata zaten bildirildi; değilse yazıya dökülmeden kalan son ses bildirilir ki son geçiş onu kapsasın.
         let remaining: Int = unacknowledged.count + inFlight.count + pending.count
         if !hasFailed, let tailSec = untranscribedTailSec(remainingSamples: remaining, closedCleanly: closedCleanly, sampleRate: deepgramSampleRate) {
@@ -490,6 +557,15 @@ private actor DeepgramConnection {
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
+    /// Oturumu bir kez geçersiz kılar; sonra bağlanma denemeleri yeni görev açmaz (bkz. `canOpenConnection`).
+    private func invalidateSession() {
+        guard !isSessionInvalidated else {
+            return
+        }
+        isSessionInvalidated = true
+        session.finishTasksAndInvalidate()
+    }
+
     /// Kalıcı hata: kullanıcıya gösterilecek mesajı yayınla ve akışı bitir.
     private func fail(error: any Error) {
         guard !hasFailed else {
@@ -499,18 +575,33 @@ private actor DeepgramConnection {
         isConnected = false
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
-        session.finishTasksAndInvalidate()
+        invalidateSession()
         deepgramLogger.error("Deepgram akışı durdu: \(String(describing: error), privacy: .private)")
         events.yield(.failed(message: deepgramFailureMessage(error: error)))
         events.finish()
     }
 }
 
+/// Yeni WebSocket bağlantısı açılabilir mi: oturum geçersiz kılınmadıysa, kapanış süresi dolmadıysa ve akış kalıcı hata
+/// vermediyse. Saf fonksiyondur.
+func canOpenConnection(sessionInvalidated: Bool, closeDeadlinePassed: Bool, hasFailed: Bool) -> Bool {
+    !sessionInvalidated && !closeDeadlinePassed && !hasFailed
+}
+
+/// Jeton alınamaması geçici mi: ağ kesintisi ya da sunucu 5xx/408 (bkz. `isOfflineStartError`). Geçiciyse bağlanma
+/// bütçesi (`reconnectBudgetSec`) içinde yeniden denenir; sunucunun bilerek verdiği ret (bütçe, yetki, sınır) hemen
+/// bildirilir ve canlı metin Mac'e geçer. Saf fonksiyondur.
+func isTransientDeepgramTokenFailure(error: DeepgramTokenError) -> Bool {
+    error.underlying is URLError || isOfflineStartError(error: error.underlying)
+}
+
 /// Kullanıcıya gösterilecek Türkçe hata metni (anahtar içermez).
 private func deepgramFailureMessage(error: any Error) -> String {
     switch error {
     case CloudSTTError.connectionFailed:
-        return String(localized: "Deepgram'a \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.")
+        return String(localized: "Bulut canlı metin servisine \(Int(reconnectBudgetSec)) sn boyunca bağlanılamadı; internet bağlantını kontrol et. Ses kaydı sürüyor; metin toplantı sonunda kayıttan yazıya dökülür.")
+    case let error as DeepgramTokenError:
+        return userFacingMessage(error: error.underlying)
     default:
         return userFacingMessage(error: error)
     }

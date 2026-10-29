@@ -286,7 +286,7 @@ final class ShortcutController {
             try hotKeys.bind(action: action, binding: binding, handler: perform)
             errors[action] = nil
         } catch {
-            hotKeyLogger.error("Kısayol kurulamadı, eylem: \(action.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            hotKeyLogger.error("Kısayol kurulamadı, eylem: \(action.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errors[action] = shortcutErrorMessage(error: error, binding: binding)
         }
         publish()

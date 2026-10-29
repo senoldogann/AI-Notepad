@@ -6,6 +6,9 @@ import { fetchUpstream } from "../upstream";
 
 export const turnstileVerifyUrl: string = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
+/** Turnstile doğrulamasının deneme başına zaman aşımı. */
+const turnstileTimeoutMs: number = 10_000;
+
 const siteverifySchema = z.object({
   success: z.boolean(),
   "error-codes": z.array(z.string()).optional(),
@@ -23,6 +26,7 @@ export async function verifyTurnstile(platform: Platform, secretKey: string, tok
       body: JSON.stringify({ secret: secretKey, response: token, remoteip: clientIp }),
     }),
     3,
+    turnstileTimeoutMs,
   );
   const parsed = siteverifySchema.safeParse(await response.json());
   if (!parsed.success) {

@@ -138,7 +138,7 @@ public final class MicrophoneCapture {
         do {
             try activateRecordingSession()
         } catch {
-            Self.logger.error("Kesinti sonrası ses oturumu açılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Kesinti sonrası ses oturumu açılamadı, hata: \(String(describing: error), privacy: .private)")
             return
         }
         await restartAfterConfigurationChange()
@@ -163,7 +163,7 @@ public final class MicrophoneCapture {
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
-            Self.logger.error("Ses oturumu kapatılamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Ses oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
         }
     }
     #endif
@@ -219,7 +219,7 @@ public final class MicrophoneCapture {
                     try self.startEngine(continuation: continuation)
                 },
                 onFailure: { (attempt: Int, error: any Error) -> Void in
-                    Self.logger.warning("Mikrofon yeniden başlatılamadı, deneme \(attempt, privacy: .public): \(String(describing: error), privacy: .public)")
+                    Self.logger.warning("Mikrofon yeniden başlatılamadı, deneme \(attempt, privacy: .public): \(String(describing: error), privacy: .private)")
                 }
             )
             Self.logger.info("Mikrofon yeni giriş cihazıyla yeniden başlatıldı")
@@ -227,7 +227,7 @@ public final class MicrophoneCapture {
             guard generation == restartGeneration else {
                 return
             }
-            Self.logger.error("Mikrofon yeniden başlatılamadı, akış bitiriliyor: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Mikrofon yeniden başlatılamadı, akış bitiriliyor: \(String(describing: error), privacy: .private)")
             stop()
         }
     }
@@ -247,7 +247,7 @@ public final class MicrophoneCapture {
             } catch {
                 // Her tamponda tekrarlanır: dakikada bir loglanır.
                 if throttle.allow() {
-                    logger.error("Mikrofon sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .public)")
+                    logger.error("Mikrofon sesi dönüştürülemedi, hata: \(String(describing: error), privacy: .private)")
                 }
             }
         }

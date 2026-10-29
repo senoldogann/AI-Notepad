@@ -19,16 +19,25 @@ export type ErrorCode =
   | "subscription_required"
   | "subscription_exists"
   | "trial_exhausted"
+  | "trial_not_started"
   | "trial_ip_limit"
+  | "trial_device_used"
+  | "device_check_required"
+  | "device_check_invalid"
   | "monthly_cap_reached"
   | "daily_cap_reached"
   | "transcription_closed"
+  | "transcription_in_progress"
   | "meeting_not_active"
+  | "reprocess_limit_reached"
   | "meeting_budget_exhausted"
   | "audio_too_long"
   | "upstream_rejected"
   | "upstream_unavailable"
   | "spend_ceiling_reached"
+  | "trial_capacity_reached"
+  | "deepgram_unavailable"
+  | "deepgram_grant_limit"
   | "webhook_invalid"
   | "internal_error";
 
@@ -52,16 +61,25 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   subscription_required: 402,
   subscription_exists: 409,
   trial_exhausted: 402,
+  trial_not_started: 403,
   trial_ip_limit: 429,
+  trial_device_used: 403,
+  device_check_required: 400,
+  device_check_invalid: 400,
   monthly_cap_reached: 403,
   daily_cap_reached: 429,
   transcription_closed: 403,
+  transcription_in_progress: 409,
   meeting_not_active: 403,
+  reprocess_limit_reached: 409,
   meeting_budget_exhausted: 429,
   audio_too_long: 413,
   upstream_rejected: 502,
   upstream_unavailable: 502,
   spend_ceiling_reached: 503,
+  trial_capacity_reached: 503,
+  deepgram_unavailable: 503,
+  deepgram_grant_limit: 429,
   webhook_invalid: 400,
   internal_error: 500,
 };
@@ -82,22 +100,7 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Yönetici olmayan kullanıcının yönetici API'si isteği (`403 forbidden`). Hata gövdesi çağıranın kendi kimliklerini
- * (`<sağlayıcı>:<sub>`, virgülle ayrılmış) `identity` alanında taşır: sahip kendi kimliğini `ADMIN_IDENTITIES`
- * listesine kopyalayabilsin diye. Yalnızca kimliği doğrulanmış çağırana kendi kimliği döner.
- */
-export class ForbiddenIdentityError extends ApiError {
-  override readonly name: string = "ForbiddenIdentityError";
-  readonly identity: string;
-
-  constructor(message: string, identity: string) {
-    super("forbidden", message);
-    this.identity = identity;
-  }
-}
-
-/** Üst servis (Anthropic, ElevenLabs, Apple, Google, Stripe, Turnstile) hatası; gövde değil yalnızca durum taşır. */
+/** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
   readonly service: string;

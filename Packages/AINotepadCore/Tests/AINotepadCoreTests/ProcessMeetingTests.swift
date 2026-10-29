@@ -46,6 +46,24 @@ extension CloudTests {
         #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "others.caf").path))
     }
 
+    // Son geçiş durdurulursa (sunucu güncel değil) not canlı metinden yazılmaz: toplantı başarısız, neden görünür.
+    @Test func stoppedFinalPassFailsWithoutWritingNote() async throws {
+        let directory: URL = try temporaryDirectory()
+        let recording: MeetingRecord = MeetingRecord(
+            id: directory.lastPathComponent, title: "Toplantı", startedAt: Date(), endedAt: Date(), language: .finnish, status: .processing,
+            failureMessage: nil, liveSegments: longMeetingSegments(rounds: 1),
+            finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+        )
+        let result: MeetingRecord = await processMeeting(
+            record: recording, directory: directory, finalPass: .stop(HostedClientError.serverOutdated(path: "/v1/meetings/{id}/reprocess")),
+            llm: nil, languageMode: .automatic, userName: "Doğan", noteLanguage: .turkish, voiceEmbedder: nil, registry: [],
+            onStep: { (_: ProcessingStep) async -> Void in }
+        )
+        #expect(result.status == .failed)
+        #expect(result.note == nil)
+        #expect(result.failureMessage?.contains("Tekrar işle") == true)
+    }
+
     // Son geçiş başarısız olursa (ör. ElevenLabs kotası/anahtarı) not yine canlı metinden yazılır, uyarı kalır.
     @Test func finalPassFailureStillWritesNoteFromLiveText() async throws {
         let directory: URL = try temporaryDirectory()

@@ -8,6 +8,9 @@ public enum MeetingStatus: String, Sendable, Codable {
     case failed
     /// Uygulama kayıt ya da işleme sırasında kapandı; ses varsa yeniden işlenebilir.
     case interrupted
+    /// Sunucuya ulaşılamadan (çevrimdışı) kaydedildi; bağlantı gelince sunucuda işlenmeyi bekliyor (abonelik sürümü).
+    /// Ses ve canlı metin bu Mac'te; kendiliğinden silinmez.
+    case queued
 }
 
 /// Zamanı belli bir kelime (son geçişten); zamanlar kaydın başından itibaren saniye.

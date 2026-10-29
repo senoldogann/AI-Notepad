@@ -104,7 +104,8 @@ public struct LevelMeter: View {
             }
         }
         .frame(height: 16)
-        .animation(.easeOut(duration: 0.12), value: levels.values)
+        // Animasyonsuz: seviye saniyede 10 kez gelir; her değişimde animasyon başlasaydı ölçer kayıt boyunca saniyede
+        // 60 kez yeniden çizilirdi (işlemci). Adımlar 100 ms'de bir zaten akıcı görünür.
         .accessibilityHidden(true)
     }
 }
@@ -128,7 +129,8 @@ public struct LargeLevelMeter: View {
             }
         }
         .frame(height: 90)
-        .animation(.easeOut(duration: 0.12), value: levels.values)
+        // Animasyonsuz: seviye saniyede 10 kez gelir; her değişimde animasyon başlasaydı ölçer kayıt boyunca saniyede
+        // 60 kez yeniden çizilirdi (işlemci). Adımlar 100 ms'de bir zaten akıcı görünür.
         .accessibilityHidden(true)
     }
 }

@@ -77,15 +77,14 @@ struct MeetingsListPage: View {
             .padding(.vertical, DesignTokens.Spacing.s)
             if !model.meetings.isEmpty {
                 PillPicker(selection: $listFilter, options: [
-                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevim olanlar"), (MeetingListFilter.problems, "Hatalı"),
+                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevlerim"), (MeetingListFilter.problems, "Hatalı"),
                 ])
                 .padding(.horizontal, DesignTokens.Spacing.m)
                 .padding(.bottom, DesignTokens.Spacing.s)
             }
             if let error = model.importError {
-                Label(error, systemImage: "exclamationmark.triangle")
+                NoticeText(error, severity: .error)
                     .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(.red)
                     .padding(.horizontal, DesignTokens.Spacing.m)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -124,9 +123,8 @@ struct MeetingsListPage: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if !model.meetingLoadFailures.isEmpty {
-                Text("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))")
+                NoticeText("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))", severity: .error)
                     .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.red)
                     .padding(DesignTokens.Spacing.m)
             }
         }
@@ -184,12 +182,12 @@ struct MeetingsListPage: View {
         let selectable: Set<String> = Set(visible.map(\.id).filter { !model.isLocked(meetingID: $0) })
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             ForEach(deleteErrors, id: \.self) { (error: String) in
-                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
+                NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             if isConfirmingDelete {
                 Text("\(checked.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
                     .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Button("Sil", role: .destructive) { deleteChecked() }
                     Button("Vazgeç") { isConfirmingDelete = false }
@@ -295,7 +293,7 @@ private struct SendStatusLine: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+            NoticeText(message, severity: .attention).appFont(size: 12, weight: .regular)
         }
     }
 }
@@ -330,7 +328,8 @@ struct MeetingRow: View {
             Spacer(minLength: 0)
             let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
             if mine > 0 {
-                Label("\(mine)", systemImage: "star.fill")
+                // Görev simgesi (yıldız favori gibi okunuyordu); kenar çubuğundaki Görevlerim ile aynı.
+                Label("\(mine)", systemImage: "checkmark.circle")
                     .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(.tint)
                     .hoverHint("Sana düşen görev sayısı", alignment: .trailing, edge: .bottom)
@@ -357,7 +356,7 @@ struct MeetingRow: View {
         if let status = statusText(record: record, isProcessing: isProcessing) {
             var part: AttributedString = AttributedString(" · " + status)
             if record.status == .failed {
-                part.foregroundColor = Color.red
+                part.foregroundColor = NoticeSeverity.error.tint
             }
             line += part
         }
@@ -381,6 +380,7 @@ private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
     case .done: return nil
     case .failed: return String(localized: "Hata")
     case .interrupted: return String(localized: "Yarıda kaldı")
+    case .queued: return String(localized: "İşlenmeyi bekliyor")
     }
 }
 
@@ -392,7 +392,8 @@ private enum MeetingTab: String {
     case transcript
 }
 
-/// Dışa aktarmanın sonucu (sayfada satır içinde gösterilir; açılır pencere yok).
+/// Dışa aktarmanın sonucu: başarılar sağ alttaki kısa bildirimde (bkz. `ToastCenter`), hatalar ve onaylar sayfada satır
+/// içinde (açılır pencere yok).
 private enum ExportStatus: Equatable {
     case none
     case saved(URL)
@@ -404,6 +405,12 @@ private enum ExportStatus: Equatable {
     case confirmDelete
     /// "Sesi sil"e basıldı: ses kalıcı silinir, satır içi onay bekleniyor.
     case confirmDeleteAudio
+}
+
+/// Toplantının mesajını (hata ya da bilgi) toplantısıyla birlikte izlemek için.
+private struct RecordMessageKey: Equatable {
+    let recordID: String
+    let message: String?
 }
 
 /// Seçili toplantının sayfası: önce sana düşen görevler, sonra özet, kararlar, diğer görevler, sözlük,
@@ -444,6 +451,21 @@ struct MeetingDetailPage: View {
                     hero(paragraphs: paragraphs).zIndex(1)
                     exportLine
                         .transition(.move(edge: .top).combined(with: .opacity))
+                        // Başarılar sağ alttaki kısa bildirimde (3 sn) görünür, satırda kalmaz; hatalar ve onaylar satırda.
+                        .onChange(of: export) { (_: ExportStatus, status: ExportStatus) in
+                            announceSuccess(status: status)
+                        }
+                        // Yalnızca aynı toplantıda mesaj değişince (başka toplantıya geçince eski mesajı çıkmasın).
+                        .onChange(of: RecordMessageKey(recordID: record.id, message: record.failureMessage)) { (old: RecordMessageKey, new: RecordMessageKey) in
+                            if old.recordID == new.recordID {
+                                announceRecordMessage(message: new.message, kind: .warning)
+                            }
+                        }
+                        .onChange(of: RecordMessageKey(recordID: record.id, message: record.notice)) { (old: RecordMessageKey, new: RecordMessageKey) in
+                            if old.recordID == new.recordID {
+                                announceRecordMessage(message: new.message, kind: .info)
+                            }
+                        }
                     statusLines
                     // Sekmeler ve notun dili tek satırda: dil, iş arkadaşlarına göndermek için notun başka dildeki sürümü.
                     HStack(spacing: 10) {
@@ -560,19 +582,43 @@ struct MeetingDetailPage: View {
             }
             .appFont(size: 12, weight: .regular)
         }
-        if let message = record.failureMessage {
-            Text(message)
+        // Notu duran toplantıda hata ve bilgi son işlemle ilgilidir (not yenilenemedi, ses yeniden yazıya dökülmedi):
+        // sağ altta kısa bildirim olarak çıkar (bkz. `announceRecordMessage`), sayfada kalmaz. Notu olmayan toplantıda
+        // hata kalıcıdır, burada görünür.
+        if record.note == nil, let message = record.failureMessage {
+            NoticeText(message, severity: .error)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
         SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
         SendStatusLine(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
-        if let notice = record.notice {
-            Label(notice, systemImage: "info.circle")
+        if record.status == .queued {
+            // Çevrimdışı kaydedildi ya da içe aktarıldı: ses bu Mac'te; sunucuda işlenir (ya da neden yazar).
+            NoticeCard(
+                severity: .info,
+                title: Text("İşlenmeyi bekliyor"),
+                detail: record.notice.map { Text(verbatim: $0) },
+                onDismiss: nil
+            ) {
+                #if HOSTED_EDITION
+                Button("Şimdi dene") { Task { await model.runOfflineQueue() } }
+                    .buttonStyle(.pill)
+                    .disabled(model.isBusy)
+                #endif
+            }
+        } else if record.note == nil, let notice = record.notice {
+            NoticeText(notice, severity: .info)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.secondary)
         }
+    }
+
+    /// Notu duran toplantıda son işlemin yeni uyarısı ya da bilgisi sağ altta kısa bildirim olarak gösterilir (yalnızca
+    /// değişince; toplantıyı her açışta yeniden çıkmaz).
+    private func announceRecordMessage(message: String?, kind: ToastKind) {
+        guard record.note != nil, let message else {
+            return
+        }
+        ToastCenter.shared.show(kind: kind, title: message, detail: nil, action: nil)
     }
 
     /// Toplantıyı verilen andan iki kayıt birlikte çalar ve transkripte geçer (kelimeler vurgulansın).
@@ -636,7 +682,7 @@ struct MeetingDetailPage: View {
                         }
                     }
                     .padding(.trailing, 4)
-                    .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
+                    .hoverHint(verbatim: speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", "), alignment: .leading, edge: .bottom)
                 }
                 ForEach(heroChips(), id: \.self) { (chip: String) in
                     Text(chip)
@@ -838,7 +884,12 @@ struct MeetingDetailPage: View {
     private var webhookItem: some View {
         Button("Web sayfası olarak kaydet", systemImage: "globe") { exportHTML() }
             .disabled(record.note == nil)
+        #if HOSTED_EDITION
+        // Abonelik sürümünde iCloud yok: PDF geçici klasörden paylaşım seçicisiyle (Mail, AirDrop, Mesajlar…).
+        Button("PDF olarak paylaş…", systemImage: "square.and.arrow.up") { sharePDF() }
+        #else
         Button("Bağlantıyla paylaş…", systemImage: "link") { shareViaLink() }
+        #endif
         // Bağlı her hedefe ayrı ayrı ya da hepsine; gönderilmiş hedef işaretli.
         Menu("Kanala gönder", systemImage: "paperplane") {
             if model.destinations.isEmpty {
@@ -891,6 +942,13 @@ struct MeetingDetailPage: View {
         }
         .disabled(record.note == nil)
         Button("Klasöre Markdown kaydet", systemImage: "folder") {
+            // Klasör henüz seçilmediyse hata yerine seçim penceresi açılır; seçilince hemen yazılır.
+            if (UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? "").isEmpty {
+                guard let folder = pickMarkdownFolder() else {
+                    return
+                }
+                UserDefaults.standard.set(folder.path, forKey: SettingsKey.markdownFolder)
+            }
             if let error = model.exportToFolder(meetingID: record.id) {
                 export = .failed(error)
             } else {
@@ -1012,6 +1070,21 @@ struct MeetingDetailPage: View {
         return record.with(note: shared)
     }
 
+    /// Başarı durumunu sağ alttaki kısa bildirime taşır ve satırı temizler; diğer durumlara dokunmaz.
+    private func announceSuccess(status: ExportStatus) {
+        switch status {
+        case .saved(let url):
+            ToastCenter.shared.show(kind: .success, title: String(localized: "İndirilenler'e kaydedildi"), detail: url.lastPathComponent, action: .revealInFinder(url))
+        case .copied:
+            ToastCenter.shared.show(kind: .success, title: String(localized: "Markdown panoya kopyalandı"), detail: nil, action: nil)
+        case .done(let message):
+            ToastCenter.shared.show(kind: .success, title: message, detail: nil, action: nil)
+        case .none, .failed, .confirmDelete, .confirmDeleteAudio:
+            return
+        }
+        export = .none
+    }
+
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(meetingMarkdown(record: shownRecord), forType: .string)
@@ -1037,35 +1110,16 @@ struct MeetingDetailPage: View {
                     .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
-        case .saved(let url):
-            HStack(spacing: 6) {
-                Label("İndirilenler'e kaydedildi: \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.tint)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Button("Finder'da göster") {
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
-                .buttonStyle(.link)
-                        .pointerStyle(.link)
-            }
-            .appFont(size: 11, weight: .regular)
-        case .copied:
-            Label("Markdown panoya kopyalandı", systemImage: "checkmark.circle.fill")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.tint)
-        case .done(let message):
-            Label(message, systemImage: "checkmark.circle.fill")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.tint)
+        case .saved, .copied, .done:
+            // Sağ alttaki bildirimde gösterilir (bkz. `announceSuccess`).
+            EmptyView()
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.red)
         case .confirmDeleteAudio:
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Ses kalıcı olarak silinsin mi? Metin ve not kalır; geri alınamaz.", systemImage: "speaker.slash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sesi sil", role: .destructive) {
                     player.stop()
                     model.deleteAudio(meetingID: record.id)
@@ -1078,7 +1132,7 @@ struct MeetingDetailPage: View {
         case .confirmDelete:
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sil", role: .destructive) {
                     player.stop()
                     if let error = model.deleteMeeting(meetingID: record.id) {
@@ -1097,6 +1151,37 @@ struct MeetingDetailPage: View {
     private func exportPDF() {
         export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Notu (seçili dilde) PDF olarak geçici klasöre yazar ve paylaşım seçicisini açar (abonelik sürümü: iCloud yok).
+    /// Geçici dosyayı sistem temizler.
+    private func sharePDF() {
+        let pdf: Data
+        do {
+            pdf = try meetingPDF(record: shownRecord)
+        } catch {
+            meetingsLogger.error("Paylaşılacak PDF oluşturulamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: error))
+            return
+        }
+        let title: String = shownRecord.note?.title ?? record.title
+        let startedAt: Date = record.startedAt
+        do {
+            let directory: URL = FileManager.default.temporaryDirectory.appending(path: "paylasim-\(UUID().uuidString)", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url: URL = try exportFileURL(directory: directory, title: title, startedAt: startedAt, fileExtension: "pdf")
+            try pdf.write(to: url, options: .atomic)
+            guard let view = NSApp.keyWindow?.contentView else {
+                export = .failed(String(localized: "Paylaşım penceresi açılamadı; uygulamayı öne getirip yeniden dene."))
+                return
+            }
+            // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
+            let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
+            NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+        } catch {
+            meetingsLogger.error("PDF paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
+            export = .failed(userFacingMessage(error: StorageError.writeFailed(path: "PDF", reason: error.localizedDescription)))
         }
     }
 
@@ -2007,7 +2092,7 @@ struct ReminderButton: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: reminded ? "bell.badge.fill" : "bell")
-                            .foregroundStyle(reminded ? Color.orange : Theme.muted)
+                            .foregroundStyle(reminded ? NoticeSeverity.attention.tint : Theme.muted)
                     }
                 }
                 .frame(width: 22, height: 22)
@@ -2017,9 +2102,8 @@ struct ReminderButton: View {
             .disabled(reminded || isAdding || model.isLocked(meetingID: record.id))
             .hoverHint(reminded ? "Anımsatıcılar'da" : "Anımsatıcılar'a ekle", alignment: .trailing, edge: .bottom)
             if let error {
-                Text(error)
+                NoticeText(error, severity: .error)
                     .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.red)
                     .frame(maxWidth: 220, alignment: .trailing)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2314,9 +2398,8 @@ private struct SpeakerReviewCard: View {
             }
             .appFont(size: 12, weight: .regular)
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.red)
                 .textSelection(.enabled)
         case .ready(let review, let applied):
             ForEach(review.names) { (suggestion: SpeakerNameSuggestion) in
@@ -2478,7 +2561,7 @@ private struct TranscriptSection: View {
         let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
         LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
-                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
+                NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             ForEach(Array(paragraphs.enumerated()), id: \.element.id) { (item: (offset: Int, element: TranscriptParagraph)) in
                 let paragraph: TranscriptParagraph = item.element
@@ -2634,9 +2717,11 @@ private struct NowPlayingBar: View {
             HStack(spacing: DesignTokens.Spacing.s) {
                 Button(action: onOpen) {
                     HStack(spacing: 6) {
+                        // Durağan simge (çalarken vurgu renginde, duraklatılınca soluk): sürekli sembol animasyonu her karede
+                        // pencereyi yeniden çizdiriyor ve ana iş parçacığı çizim sunucusunu beklerken saniyeler boyunca
+                        // bloke oluyordu (ölçüm: zamanın %45'i); süre ve kelime vurgusu takılıyordu.
                         Image(systemName: "waveform")
-                            .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
-                            .foregroundStyle(appearance.accent.color)
+                            .foregroundStyle(player.isPlaying ? appearance.accent.color : Theme.muted)
                         Text(title)
                             .appFont(size: 12, weight: .semibold)
                             .lineLimit(1)

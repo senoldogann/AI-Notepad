@@ -20,8 +20,21 @@ private struct RefreshBody: Encodable {
     let refreshToken: String
 }
 
+/// Toplantı başlatma: App Attest onayı, Apple DeviceCheck jetonu (base64) ve istemcinin kayıt kimliği (`clientRef`:
+/// aynı kayıt için yinelenen başlatma sunucuda aynı oturumu döndürür, deneme hakkı ya da süre iki kez düşmez); nil
+/// alanlar gövdeye yazılmaz.
 private struct MeetingStartBody: Encodable {
     let device: HostedDeviceAssertion?
+    let deviceCheckToken: String?
+    let clientRef: String
+    /// Sonradan işlenen kayıt: sunucu açık toplantıyı (süren canlı kaydı) kapatmaz. Yalnızca `true` iken yazılır
+    /// (nil gövdeye yazılmaz): alanı bilmeyen eski sunucu canlı kaydın başlatmasını reddetmesin.
+    let deferred: Bool?
+}
+
+/// Toplantı başlatma gövdesi: `deferred` yalnızca `true` iken yazılır (eski sunucu bilinmeyen alanı reddeder).
+func meetingStartBody(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String, deferred: Bool) throws -> Data {
+    try JSONEncoder().encode(MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred ? true : nil))
 }
 
 private struct DeviceChallengeBody: Encodable {
@@ -34,21 +47,26 @@ private struct DeviceAttestBody: Encodable {
     let challenge: String
 }
 
-/// Sorgu değerinin kodlaması: `+`, `&` ve `=` da kodlanır (sunucu `+`'yı boşluk okur). Saf fonksiyondur.
-private func queryValue(text: String) -> String {
-    var allowed: CharacterSet = .urlQueryAllowed
-    allowed.remove(charactersIn: "+&=")
-    // `.urlQueryAllowed` dışındaki her karakter yüzde kodlanabilir; nil dönmez.
-    return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? text
+/// `POST /v1/transcribe` adresi: dil (sabitse) ve konuşmacı ayırma açık. Anahtar terimler adrese değil
+/// `x-keyterms` başlığına yazılır (bkz. `hostedKeytermsHeader`): adresler vekil ve sunucu loglarında kalabilir. Saf
+/// fonksiyondur.
+public func hostedTranscribeURL(baseURL: URL, languageCode: String?) -> URL {
+    let items: [URLQueryItem] = (languageCode.map { [URLQueryItem(name: "language_code", value: $0)] } ?? [])
+        + [URLQueryItem(name: "diarize", value: "true")]
+    return baseURL.appending(path: "v1/transcribe").appending(queryItems: items)
 }
 
-/// `POST /v1/transcribe` adresi: dil (sabitse), konuşmacı ayırma açık ve anahtar terimler. Saf fonksiyondur.
-public func hostedTranscribeURL(baseURL: URL, languageCode: String?, keyterms: [String]) -> URL {
-    let pairs: [(String, String)] = (languageCode.map { [("language_code", $0)] } ?? []) + [("diarize", "true")]
-        + keyterms.map { ("keyterms", $0) }
-    let query: String = pairs.map { "\($0.0)=\(queryValue(text: $0.1))" }.joined(separator: "&")
-    // Sorgu yalnızca kodlanmış karakterlerden oluşur: adres her zaman geçerlidir.
-    return URL(string: baseURL.appending(path: "v1/transcribe").absoluteString + "?" + query)!
+/// Anahtar terimler başlığı (`x-keyterms`): terimlerin UTF-8 JSON dizisinin dolgusuz base64url'i; terim yoksa nil
+/// (başlık gönderilmez). Saf fonksiyondur.
+public func hostedKeytermsHeader(keyterms: [String]) throws -> String? {
+    guard !keyterms.isEmpty else {
+        return nil
+    }
+    let json: Data = try JSONEncoder().encode(keyterms)
+    return json.base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
 }
 
 /// Abonelik sunucusunun bağlantısı: oturum (Anahtar Zinciri'nde), jeton yenileme, hak durumu, toplantı oturumu, ödeme,
@@ -64,6 +82,8 @@ public actor HostedClient: HostedLLMCredentialSource {
     private var cachedTokens: HostedTokens?
     private var tokensLoaded: Bool = false
     private var refreshTask: Task<HostedTokens, any Error>?
+    /// Oturumun kuşağı: giriş, çıkış, hesap silme ve yenileme reddinde artar (bkz. `isCurrentSessionGeneration`).
+    private var sessionGeneration: Int = 0
     /// Yapay zekâ çağrılarının bağlandığı toplantı: son başlatılan (bittikten sonra da ek süre boyunca kullanılır).
     private var meetingID: String?
     /// Doğrulanmış App Attest anahtarı (base64); `/v1/me` cihazın deneme hakkını da göstersin diye gönderilir.
@@ -99,6 +119,8 @@ public actor HostedClient: HostedLLMCredentialSource {
             return
         }
         meetingID = nil
+        // Süren yenileme bu oturumu geri yazmasın.
+        sessionGeneration += 1
         var logoutError: (any Error)?
         do {
             _ = try await send(path: "/v1/auth/logout", isRetryable: isRetryableRepeatableRequest, request: try jsonRequest(
@@ -120,6 +142,7 @@ public actor HostedClient: HostedLLMCredentialSource {
     public func deleteAccount() async throws {
         _ = try await authorized(path: "/v1/me", method: "DELETE", body: nil, isRetryable: isRetryableRepeatableRequest)
         meetingID = nil
+        sessionGeneration += 1
         try setTokens(nil)
         hostedLogger.info("Hesap silindi")
     }
@@ -131,13 +154,15 @@ public actor HostedClient: HostedLLMCredentialSource {
         try decode(HostedEntitlements.self, data: try await authorized(path: "/v1/me", method: "GET", body: nil, isRetryable: isRetryableRepeatableRequest), path: "/v1/me")
     }
 
-    /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `monthly_cap_reached`…) `HostedAPIError`. Açılan
-    /// toplantı yapay zekâ çağrılarının toplantısı olur.
-    public func startMeeting(device: HostedDeviceAssertion?) async throws -> HostedStartedMeeting {
+    /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `trial_device_used`, `monthly_cap_reached`…)
+    /// `HostedAPIError`. `deviceCheckToken` (Apple DeviceCheck, base64) denemesi henüz bir Mac'e bağlanmamış hesabın
+    /// deneme toplantısında gerekir. Açılan toplantı yapay zekâ çağrılarının toplantısı olur.
+    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let path: String = "/v1/meetings/start"
+        let body: Data = try meetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred)
         let started: HostedStartedMeeting = try decode(
             HostedStartedMeeting.self,
-            data: try await authorized(path: path, method: "POST", body: try encoded(body: MeetingStartBody(device: device)), isRetryable: isRetryableOneShotRequest),
+            data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableOneShotRequest),
             path: path
         )
         meetingID = started.meetingId
@@ -145,10 +170,29 @@ public actor HostedClient: HostedLLMCredentialSource {
         return started
     }
 
+    /// Ek süresi geçmiş toplantıyı yeniden işleme için açar (`POST /v1/meetings/{id}/reprocess`): son geçiş kaydın
+    /// kullanılmamış ses hakkıyla, toplantı kapsamlı yapay zekâ kendi bütçesiyle bir süre daha kullanılabilir. Toplantı
+    /// zaten açıksa hak harcanmaz. Sınır dolduysa `reprocess_limit_reached`.
+    public func reprocessMeeting(meetingID: String) async throws -> HostedReprocessedMeeting {
+        let path: String = "/v1/meetings/\(meetingID)/reprocess"
+        return try decode(HostedReprocessedMeeting.self, data: try await authorized(path: path, method: "POST", body: nil, isRetryable: isRetryableRepeatableRequest), path: path)
+    }
+
     /// Toplantıyı bitirir; not ve son geçiş sunucunun ek süresi boyunca aynı toplantıyla sürer.
     public func endMeeting(meetingID ended: String) async throws -> HostedEndedMeeting {
         let path: String = "/v1/meetings/\(ended)/end"
         return try decode(HostedEndedMeeting.self, data: try await authorized(path: path, method: "POST", body: nil, isRetryable: isRetryableRepeatableRequest), path: path)
+    }
+
+    /// Yapay zekâ çağrılarının toplantısını bırakır (çevrimdışı kayıt başladı): canlı istekler önceki bir toplantının
+    /// bütçesine yazılmasın.
+    public func clearCurrentMeeting() {
+        meetingID = nil
+    }
+
+    /// Oturumun kullanıcı kimliği (Anahtar Zinciri'nden; ağsız); oturum yoksa nil.
+    public func signedInUserID() throws -> String? {
+        try tokens()?.userId
     }
 
     /// Yapay zekâ çağrılarının toplantısı; yoksa nil.
@@ -194,9 +238,12 @@ public actor HostedClient: HostedLLMCredentialSource {
     // MARK: Ses ve yapay zekâ
 
     /// WAV dosyasını `/v1/transcribe`'a ham gövde olarak gönderir; ElevenLabs yanıtının JSON'unu döndürür.
-    public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], timeoutSec: Double) async throws -> Data {
+    /// `uploadKey`: parçanın yükleme anahtarı (32 bayt base64url; parçanın her yeniden denemesinde aynı): yanıt yolda
+    /// kaybolursa sunucu sesi yeniden işlemeden ve faturalamadan aynı sonucu döndürür.
+    public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], uploadKey: String, timeoutSec: Double) async throws -> Data {
         let path: String = "/v1/transcribe"
-        let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode, keyterms: keyterms)
+        let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode)
+        let keytermsHeader: String? = try hostedKeytermsHeader(keyterms: keyterms)
         let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { (accessToken: String) async throws -> (Data, URLResponse) in
             var request: URLRequest = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -204,9 +251,31 @@ public actor HostedClient: HostedLLMCredentialSource {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
             request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
             request.setValue("audio/wav", forHTTPHeaderField: "content-type")
+            request.setValue(uploadKey, forHTTPHeaderField: "x-upload-key")
+            if let keytermsHeader {
+                request.setValue(keytermsHeader, forHTTPHeaderField: "x-keyterms")
+            }
             return try await URLSession.shared.upload(for: request, fromFile: wavFile)
         }
         return try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt)
+    }
+
+    /// Açık toplantı için tek bağlantılık kısa ömürlü Deepgram jetonu (`POST /v1/live/deepgram-token`). Sunucu
+    /// reddederse (`deepgram_unavailable`, `deepgram_grant_limit`, `meeting_not_active`) `HostedAPIError`. Jeton
+    /// loglanmaz ve saklanmaz.
+    public func deepgramGrant(meetingID: String) async throws -> HostedDeepgramGrant {
+        let path: String = "/v1/live/deepgram-token"
+        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { [baseURL] (accessToken: String) async throws -> (Data, URLResponse) in
+            var request: URLRequest = try hostedJSONRequest(baseURL: baseURL, path: path, method: "POST", body: nil, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec)
+            request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
+            return try await URLSession.shared.data(for: request)
+        }
+        return try decode(HostedDeepgramGrant.self, data: try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt), path: path)
+    }
+
+    /// Erişim jetonunu süresine bakmadan yeniler (yapay zekâ çağrısı 401 aldıysa; tek uçuşlu).
+    public func refreshAccessToken() async throws {
+        _ = try await refreshedTokens()
     }
 
     /// Toplantıya bağlı yapay zekâ çağrısının jetonu ve toplantısı.
@@ -239,29 +308,37 @@ public actor HostedClient: HostedLLMCredentialSource {
         guard let current = try tokens() else {
             throw HostedClientError.notSignedIn
         }
-        let task: Task<HostedTokens, any Error> = Task { try await self.performRefresh(refreshToken: current.refreshToken) }
+        let generation: Int = sessionGeneration
+        let task: Task<HostedTokens, any Error> = Task { try await self.performRefresh(refreshToken: current.refreshToken, generation: generation) }
         refreshTask = task
         defer { refreshTask = nil }
         return try await task.value
     }
 
-    private func performRefresh(refreshToken: String) async throws -> HostedTokens {
+    private func performRefresh(refreshToken: String, generation: Int) async throws -> HostedTokens {
         let path: String = "/v1/auth/refresh"
         let request: URLRequest = try jsonRequest(
             path: path, method: "POST", body: try encoded(body: RefreshBody(refreshToken: refreshToken)), accessToken: nil, timeoutSec: hostedRequestTimeoutSec
         )
         let result: HostedRefreshResult
         do {
-            let response: (data: Data, status: Int) = try await send(path: path, isRetryable: isRetryableOneShotRequest, request: request)
+            // Zaman aşımı ve kopan bağlantıda aynı jetonla hemen yeniden denenir (bkz. `isRetryableRepeatableRequest`).
+            let response: (data: Data, status: Int) = try await send(path: path, isRetryable: isRetryableRepeatableRequest, request: request)
             result = try hostedRefreshResult(status: response.status, data: response.data, receivedAt: Date())
         } catch let error as HostedAPIError {
             result = hostedRefreshFailure(error: error)
         }
-        return try await settleRefresh(result: result)
+        return try await settleRefresh(result: result, generation: generation)
     }
 
     /// Yenileme sonucunu uygular: yeni jetonlar saklanır; ret oturumu siler ve bildirir; diğer hatalar fırlatılır.
-    private func settleRefresh(result: HostedRefreshResult) async throws -> HostedTokens {
+    /// Yenileme sürerken oturum değiştiyse (çıkış, hesap silme, yeni giriş) sonuç uygulanmaz: `notSignedIn` ya da yeni
+    /// oturumla yeniden denenir (bkz. `isCurrentSessionGeneration`).
+    private func settleRefresh(result: HostedRefreshResult, generation: Int) async throws -> HostedTokens {
+        guard isCurrentSessionGeneration(started: generation, current: sessionGeneration) else {
+            hostedLogger.info("Yenileme oturum değiştikten sonra döndü, sonucu uygulanmadı")
+            throw HostedClientError.notSignedIn
+        }
         switch result {
         case .refreshed(let refreshed):
             try setTokens(refreshed)
@@ -269,6 +346,7 @@ public actor HostedClient: HostedLLMCredentialSource {
         case .revoked(let error):
             hostedLogger.warning("Yenileme reddedildi, oturum kapatılıyor, kod: \(error.rawCode, privacy: .public)")
             meetingID = nil
+            sessionGeneration += 1
             try setTokens(nil)
             await onSessionEnded()
             throw HostedClientError.sessionEnded
@@ -284,6 +362,7 @@ public actor HostedClient: HostedLLMCredentialSource {
         )
         let session: HostedSessionResponse = try decode(HostedSessionResponse.self, data: response.data, path: path)
         meetingID = nil
+        sessionGeneration += 1
         try setTokens(hostedTokens(response: session, receivedAt: Date()))
         hostedLogger.info("Giriş yapıldı, yol: \(path, privacy: .public)")
     }
@@ -383,6 +462,7 @@ func sendHostedRequest(
                 return (data: data, status: http.statusCode)
             }
             let error: HostedAPIError = parseHostedAPIError(status: http.statusCode, data: data, path: path)
+            announceIfSubscriptionRequired(error: error)
             lastError = error
             failure = .server(error)
             retryAfter = http.value(forHTTPHeaderField: "retry-after")

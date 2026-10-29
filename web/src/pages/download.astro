@@ -1,13 +1,13 @@
 ---
-// İndirme sayfası: indirme düğmesi (sunucu indirmeyi sayıp DMG'ye yönlendirir), sistem gereksinimleri, Mac'e kurulum
-// adımları, güncellemeler ve yardım.
+// İndirme sayfası: indirme düğmesi (sunucu indirmeyi sayıp en son GitHub sürümündeki DMG'ye yönlendirir), sunucudan
+// okunan sürüm numarası ve gereksinimler tek satırda, üç kurulum adımı, güncellemeler ve yardım tek satırda.
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
 import Waveform from "../components/Waveform.astro";
-import { latestVersion, macDownloadUrl, productName } from "../config";
-import { copy, type DownloadCopy, type IconText, type TitledText } from "../copy";
+import { macDownloadUrl, productName } from "../config";
+import { copy, type DownloadCopy, type TitledText } from "../copy";
 import { routes } from "../routes";
 import { siteConfig } from "../site";
 
@@ -24,9 +24,14 @@ const text: DownloadCopy = copy.download;
           <Icon name="apple" size={18} class="button__apple" />
           {copy.common.downloadCta}
         </a>
-        <p class="small muted"><span class="pill">{text.versionLabel} {latestVersion}</span> {copy.common.requirementsShort}</p>
+        <p class="small muted download-hero__meta">
+          <span id="download-version" class="download-hero__version" hidden>
+            <span>{text.versionLabel} <span id="download-version-number" class="tabular"></span></span>
+            <span aria-hidden="true">·</span>
+          </span>
+          <span>{copy.common.requirementsShort}</span>
+        </p>
       </div>
-      <p class="small muted note">{text.buttonNote}</p>
     </div>
     <Film palette="mint" layout="clouds-left" class="download-hero__cover">
       <div class="app-tile">
@@ -37,54 +42,29 @@ const text: DownloadCopy = copy.download;
     </Film>
   </section>
 
-  <section class="section page" aria-labelledby="requirements-title">
-    <h2 class="title-l reveal" id="requirements-title">{text.requirementsTitle}</h2>
-    <dl class="requirements">
-      {
-        text.requirements.map((requirement: IconText) => (
-          <div class="card requirement reveal">
-            <span class="icon-chip">
-              <Icon name={requirement.icon} size={20} class="" />
-            </span>
-            <dt class="title-m">{requirement.title}</dt>
-            <dd class="muted">{requirement.text}</dd>
-          </div>
-        ))
-      }
-    </dl>
-  </section>
-
-  <section class="page install" aria-labelledby="install-title">
+  <section class="section page install" aria-labelledby="install-title">
     <h2 class="title-l reveal" id="install-title">{text.installTitle}</h2>
     <ol class="install__steps">
       {
         text.installSteps.map((step: TitledText, index: number) => (
           <li class="install__step reveal">
             <span class="install__number tabular" aria-hidden="true">{index + 1}</span>
-            <div>
-              <h3 class="title-m">{step.title}</h3>
-              <p class="muted">{step.text}</p>
-            </div>
+            <h3 class="title-m">{step.title}</h3>
+            <p class="muted">{step.text}</p>
           </li>
         ))
       }
     </ol>
-  </section>
-
-  <section class="section page more" aria-label={text.updatesTitle}>
-    <div class="card reveal">
-      <span class="icon-chip"><Icon name="refresh" size={20} class="" /></span>
-      <h2 class="title-m">{text.updatesTitle}</h2>
-      <p class="muted">{text.updatesText}</p>
-    </div>
-    <div class="card reveal">
-      <span class="icon-chip"><Icon name="message" size={20} class="" /></span>
-      <h2 class="title-m">{text.helpTitle}</h2>
-      <p class="muted">{text.helpText}</p>
+    <p class="install__footnote muted reveal">
+      {text.footnote}
       <a class="text-link" href={routes.contact}>{text.helpCta} <Icon name="arrow-right" size={16} class="" /></a>
-    </div>
+    </p>
   </section>
 </Base>
+
+<script>
+  import "../client/download";
+</script>
 
 <style>
   .download-hero {
@@ -114,12 +94,16 @@ const text: DownloadCopy = copy.download;
     font-size: 1rem;
   }
 
-  .download-hero__actions .pill {
-    margin-right: 6px;
+  .download-hero__meta,
+  .download-hero__version {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+    margin: 0;
   }
 
-  .note {
-    max-width: 30rem;
+  .download-hero__version[hidden] {
+    display: none;
   }
 
   .download-hero :global(.download-hero__cover) {
@@ -146,28 +130,7 @@ const text: DownloadCopy = copy.download;
     letter-spacing: -0.02em;
   }
 
-  .requirements {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-    margin: clamp(28px, 4vw, 44px) 0 0;
-  }
-
-  .requirement {
-    display: grid;
-    align-content: start;
-    justify-items: start;
-    gap: 6px;
-  }
-
-  .requirement .icon-chip {
-    margin-bottom: 10px;
-  }
-
-  .requirement dd {
-    margin: 0;
-  }
-
+  /* Kurulum: üç adım yan yana, numara üstte; altında tek satır not. */
   .install {
     display: grid;
     gap: clamp(28px, 4vw, 44px);
@@ -175,23 +138,24 @@ const text: DownloadCopy = copy.download;
 
   .install__steps {
     display: grid;
-    gap: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(20px, 3vw, 40px);
     margin: 0;
     padding: 0;
     list-style: none;
-    max-width: 52rem;
   }
 
   .install__step {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: 18px;
-    padding: 22px 0;
+    align-content: start;
+    gap: 10px;
+    padding-top: 22px;
     border-top: 1px solid var(--line);
   }
 
-  .install__step h3 {
-    margin-bottom: 6px;
+  .install__step h3,
+  .install__step p {
+    margin: 0;
   }
 
   .install__number {
@@ -199,6 +163,7 @@ const text: DownloadCopy = copy.download;
     place-items: center;
     width: 36px;
     height: 36px;
+    margin-bottom: 4px;
     border-radius: 50%;
     background: var(--primary);
     color: var(--on-primary);
@@ -206,32 +171,17 @@ const text: DownloadCopy = copy.download;
     font-weight: 600;
   }
 
-  .more {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .more .card {
-    display: grid;
-    gap: 10px;
-    align-content: start;
-    justify-items: start;
-  }
-
-  .more .icon-chip {
-    margin-bottom: 6px;
-  }
-
-  @media (max-width: 960px) {
-    .requirements {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .install__footnote {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    margin: 0;
   }
 
   @media (max-width: 760px) {
     .download-hero,
-    .more {
+    .install__steps {
       grid-template-columns: minmax(0, 1fr);
     }
 
@@ -242,12 +192,6 @@ const text: DownloadCopy = copy.download;
     .download-hero__actions {
       justify-items: stretch;
       width: 100%;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .requirements {
-      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>
