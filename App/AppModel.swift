@@ -1035,9 +1035,9 @@ final class AppModel {
         session = RecordingSession(directory: directory, startedAt: startedAt, engine: engineAtStart, handle: handle, pauseGate: pauseGate, micGate: micGate)
         activeMeetingID = directory.lastPathComponent
         keepAwake(meetingID: directory.lastPathComponent)
-        startCheckpoints(directory: directory, startedAt: startedAt)
+        startCheckpoints(directory: directory, startedAt: startedAt, engine: engineAtStart)
         // Uygulama kayıt sırasında kapanırsa toplantı açılışta "yarıda kaldı" olarak bulunur.
-        saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
+        saveRecord(record: liveRecord(directory: directory, startedAt: startedAt, engine: engineAtStart, status: .recording, endedAt: nil), directory: directory)
         Self.logger.info("Kayıt başladı, klasör: \(directory.lastPathComponent, privacy: .public), motor: \(engineAtStart.rawValue, privacy: .public)")
         sessionTask = Task { [weak self] in
             for await event in handle.events {
@@ -1247,7 +1247,7 @@ final class AppModel {
             return
         }
         // Kaydın motoru kaydın gerçek motorudur (oturumdan), şimdiki ayar değil.
-        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
+        let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, engine: finished.engine, status: .processing, endedAt: Date())
         #if HOSTED_EDITION
         if recordedOffline {
             // Çevrimdışı kayıt: ses ve canlı metin bu Mac'te; son geçiş ve not bağlantı gelince (kayıt silinmez).
@@ -1283,14 +1283,15 @@ final class AppModel {
     }
 
     /// Canlı transkript ve çevirilerden toplantı kaydı.
-    private func liveRecord(directory: URL, startedAt: Date, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
+    /// `engine`: kaydın başladığı motor (o anki ayar değil; bitirilen oturumun motoru).
+    private func liveRecord(directory: URL, startedAt: Date, engine: LiveEngine, status: MeetingStatus, endedAt: Date?) -> MeetingRecord {
         let base: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
             liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false,
-            engine: session?.engine.recordingEngine ?? liveEngine.recordingEngine, notice: nil,
+            engine: engine.recordingEngine, notice: nil,
             meNeedsFinalPass: meStreamFailed ? true : nil
         )
         // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
@@ -1301,7 +1302,7 @@ final class AppModel {
     }
 
     /// Kayıt sürerken her 30 sn'de transkripti saklar: uygulama çökerse metin "Yarıda kaldı" toplantısında durur.
-    private func startCheckpoints(directory: URL, startedAt: Date) {
+    private func startCheckpoints(directory: URL, startedAt: Date, engine: LiveEngine) {
         checkpointTask?.cancel()
         checkpointTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -1314,7 +1315,7 @@ final class AppModel {
                 guard let self, self.isRecording else {
                     return
                 }
-                self.saveRecord(record: self.liveRecord(directory: directory, startedAt: startedAt, status: .recording, endedAt: nil), directory: directory)
+                self.saveRecord(record: self.liveRecord(directory: directory, startedAt: startedAt, engine: engine, status: .recording, endedAt: nil), directory: directory)
             }
         }
     }
@@ -1412,7 +1413,7 @@ final class AppModel {
             return
         }
         Self.logger.info("Kayıt sürerken uygulama kapanıyor, son durum saklanıyor, klasör: \(session.directory.lastPathComponent, privacy: .public)")
-        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, status: .recording, endedAt: nil), directory: session.directory)
+        saveRecord(record: liveRecord(directory: session.directory, startedAt: session.startedAt, engine: session.engine, status: .recording, endedAt: nil), directory: session.directory)
     }
 
     /// Toplantının kaydı ya da işlenmesi sürerken boşta uykuyu engeller (kapak kapatma yine uyutur).
