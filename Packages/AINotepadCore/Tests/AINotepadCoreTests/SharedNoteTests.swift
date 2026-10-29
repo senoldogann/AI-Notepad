@@ -11,7 +11,10 @@ private let sampleNote: MeetingNote = MeetingNote(
         NoteTask(owner: "Mikko", description: "Raporu göndermek", dueDate: "Cuma", isMine: false),
     ],
     glossary: [GlossaryEntry(term: "talousarvio", meaning: "bütçe")]
-)
+).with(outline: [
+    OutlineItem(startSec: 12, title: "Gelecek yılın bütçesi", summary: "Aino bütçeyi sundu; pazarlama payı %10 artıyor."),
+    OutlineItem(startSec: 95, title: "Rapor takvimi", summary: "Mikko raporun Cuma'ya hazır olacağını söyledi."),
+])
 
 private func sampleRecord() -> MeetingRecord {
     MeetingRecord(
@@ -46,6 +49,26 @@ private func sampleRecord() -> MeetingRecord {
             try parseSharedNote(text: #"{"baslik":"T","ozet":"S","kararlar":["a"],"gorevler":[],"sozluk":[]}"#, original: sampleNote)
         }
     }
+
+    // Çeviri asıl notun tüm bölümlerini taşır: akış zamanları ve sözlük terimleri asıl nottan, metinler çeviriden; akışı
+    // ya da sözlüğü eksik çeviri kullanılmaz; eski (akışsız, sözlüksüz) saklı çeviri eksik sayılır.
+    @Test func sharedNoteKeepsOutlineAndGlossary() throws {
+        let tasks: String = #"[{"sahip":"Senol","aciklama":"Prepare the slides","tarih":"Thursday","benimMi":true},{"sahip":"Mikko","aciklama":"Send the report","tarih":"Friday","benimMi":false}]"#
+        let full: String = #"{"baslik":"Budget meeting","ozet":"Aino presented the budget.","kararlar":["Marketing budget up 10%."],"gorevler":"#
+            + tasks
+            + #","sozluk":[{"terim":"budget","anlam":"the yearly budget"}],"akis":[{"zaman":"00:13","baslik":"Next year's budget","ozet":"Aino presented it."},{"zaman":"01:30","baslik":"Report timing","ozet":"Report by Friday."}]}"#
+        let shared: MeetingNote = try parseSharedNote(text: full, original: sampleNote)
+        #expect(shared.outline?.map(\.startSec) == [12, 95])
+        #expect(shared.outline?.map(\.title) == ["Next year's budget", "Report timing"])
+        #expect(shared.glossary == [GlossaryEntry(term: "talousarvio", meaning: "the yearly budget")])
+        #expect(isSharedNoteComplete(shared: shared, original: sampleNote))
+        let withoutOutline: String = #"{"baslik":"B","ozet":"S","kararlar":["d"],"gorevler":"# + tasks + #","sozluk":[{"terim":"t","anlam":"m"}],"akis":[]}"#
+        #expect(throws: LLMError.self) {
+            try parseSharedNote(text: withoutOutline, original: sampleNote)
+        }
+        let old: MeetingNote = MeetingNote(title: "B", summary: "S", decisions: ["d"], tasks: sampleNote.tasks, glossary: [])
+        #expect(!isSharedNoteComplete(shared: old, original: sampleNote))
+    }
 }
 
 extension CloudTests {
@@ -60,7 +83,8 @@ extension CloudTests {
         }
         #expect(note.tasks.map(\.isMine) == [true, false])
         #expect(note.tasks.first?.owner == "Senol")
-        #expect(note.glossary.isEmpty)
+        #expect(note.glossary.map(\.term) == ["talousarvio"])
+        #expect(note.outline?.map(\.startSec) == [12, 95])
         let text: String = (note.summary + " " + note.tasks.map(\.description).joined(separator: " ")).lowercased()
         switch language {
         case .finnish:
