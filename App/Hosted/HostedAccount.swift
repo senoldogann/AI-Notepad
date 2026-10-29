@@ -138,7 +138,15 @@ final class HostedAccount {
     private(set) var queueTrigger: Int = 0
     /// Ödeme ya da müşteri portalı tarayıcıda açıldı: uygulama öne gelince hak durumu beklemeden yeniden okunur.
     @ObservationIgnored private var awaitingBillingReturn: Bool = false
-    @ObservationIgnored private var isRefreshing: Bool = false
+    /// Süren hak durumu okumaları (eşzamanlı okumalar birbirinin bayrağını indirmesin).
+    @ObservationIgnored private var refreshesInFlight: Int = 0
+    private var isRefreshing: Bool { refreshesInFlight > 0 }
+    /// Hesap durumunun kuşağı: her okuma, çıkış ve hesap silme artırır; geç dönen eski okuma yeni durumu ezmez (çıkıştan
+    /// sonra dönen okuma oturumu "giriş yapıldı" göstermez; bkz. `isCurrentSessionGeneration`).
+    @ObservationIgnored private var stateGeneration: Int = 0
+    /// Oturumdaki kullanıcı (Anahtar Zinciri'nden, her okumada); oturum yoksa nil. Çevrimdışı kayıt izni buna göre
+    /// denetlenir (başka hesabın izni kullanılmaz).
+    private(set) var signedInUserIDCache: String?
     /// Son başarılı hak durumu okuması (uygulama öne gelince eskimişse yenilenir).
     @ObservationIgnored private var lastRefreshAt: Date?
     /// Yenilemenin gösterdiği hata: sonraki başarılı yenileme onu kaldırır (bağlantı gelince eski hata kalmasın).
@@ -232,19 +240,30 @@ final class HostedAccount {
     /// atlanır, bkz. `HostedDeviceAttestation`). Oturum varken hak durumu okunamazsa (ağ, sunucu) çıkış yapılmış
     /// sayılmaz: önceden okunmuş hak durumu kalır ve hata gösterilir; hiç okunmamışsa durum "bilinmiyor" olur.
     func refresh() async {
-        isRefreshing = true
-        defer { isRefreshing = false }
+        refreshesInFlight += 1
+        defer { refreshesInFlight -= 1 }
+        stateGeneration += 1
+        let generation: Int = stateGeneration
         let client: HostedClient
         let hasSession: Bool
+        let userID: String?
         do {
             client = try HostedServices.requireClient()
             hasSession = try await client.isSignedIn()
+            userID = try await client.signedInUserID()
         } catch {
             accountLogger.error("Hesap okunamadı, hata: \(String(describing: error), privacy: .private)")
+            guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
+                return
+            }
             state = .unavailable(message: userFacingMessage(error: error))
             return
         }
+        guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
+            return
+        }
         self.hasSession = hasSession
+        signedInUserIDCache = userID
         guard hasSession else {
             state = .signedOut
             return
@@ -252,6 +271,10 @@ final class HostedAccount {
         do {
             await HostedDeviceAttestation.prepare(client: client)
             let entitlements: HostedEntitlements = try await client.entitlements()
+            // Bu arada çıkış yapıldıysa ya da daha yeni bir okuma başladıysa eski sonuç yazılmaz.
+            guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
+                return
+            }
             state = .signedIn(entitlements)
             lastRefreshAt = Date()
             saveHostedOfflinePermit(permit: hostedOfflinePermit(entitlements: entitlements, now: Date()))
@@ -262,11 +285,18 @@ final class HostedAccount {
             refreshErrorMessage = nil
             updateNotice(entitlements: entitlements, now: Date())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
+            guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
+                return
+            }
             self.hasSession = false
+            signedInUserIDCache = nil
             clearHostedOfflinePermit()
             state = .signedOut
         } catch {
             accountLogger.error("Hak durumu okunamadı, hata: \(String(describing: error), privacy: .private)")
+            guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
+                return
+            }
             let message: String = userFacingMessage(error: error)
             if case .signedIn = state {
                 errorMessage = message
@@ -433,6 +463,8 @@ final class HostedAccount {
         errorMessage = nil
         isWorking = true
         defer { isWorking = false }
+        // Süren hak durumu okuması çıkıştan sonra dönerse oturumu "giriş yapıldı" göstermesin.
+        stateGeneration += 1
         do {
             try await HostedServices.requireClient().signOut()
         } catch HostedClientError.network(let path, _) {
@@ -452,6 +484,7 @@ final class HostedAccount {
 
     /// Hesabı ve sunucudaki tüm verilerini siler (bitmemiş abonelik Stripe'ta iptal edilir).
     func deleteAccount() async {
+        stateGeneration += 1
         await perform { (client: HostedClient) async throws -> Void in
             try await client.deleteAccount()
         }

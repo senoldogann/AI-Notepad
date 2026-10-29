@@ -76,6 +76,8 @@ public actor HostedClient: HostedLLMCredentialSource {
     private var cachedTokens: HostedTokens?
     private var tokensLoaded: Bool = false
     private var refreshTask: Task<HostedTokens, any Error>?
+    /// Oturumun kuşağı: giriş, çıkış, hesap silme ve yenileme reddinde artar (bkz. `isCurrentSessionGeneration`).
+    private var sessionGeneration: Int = 0
     /// Yapay zekâ çağrılarının bağlandığı toplantı: son başlatılan (bittikten sonra da ek süre boyunca kullanılır).
     private var meetingID: String?
     /// Doğrulanmış App Attest anahtarı (base64); `/v1/me` cihazın deneme hakkını da göstersin diye gönderilir.
@@ -111,6 +113,8 @@ public actor HostedClient: HostedLLMCredentialSource {
             return
         }
         meetingID = nil
+        // Süren yenileme bu oturumu geri yazmasın.
+        sessionGeneration += 1
         var logoutError: (any Error)?
         do {
             _ = try await send(path: "/v1/auth/logout", isRetryable: isRetryableRepeatableRequest, request: try jsonRequest(
@@ -132,6 +136,7 @@ public actor HostedClient: HostedLLMCredentialSource {
     public func deleteAccount() async throws {
         _ = try await authorized(path: "/v1/me", method: "DELETE", body: nil, isRetryable: isRetryableRepeatableRequest)
         meetingID = nil
+        sessionGeneration += 1
         try setTokens(nil)
         hostedLogger.info("Hesap silindi")
     }
@@ -297,13 +302,14 @@ public actor HostedClient: HostedLLMCredentialSource {
         guard let current = try tokens() else {
             throw HostedClientError.notSignedIn
         }
-        let task: Task<HostedTokens, any Error> = Task { try await self.performRefresh(refreshToken: current.refreshToken) }
+        let generation: Int = sessionGeneration
+        let task: Task<HostedTokens, any Error> = Task { try await self.performRefresh(refreshToken: current.refreshToken, generation: generation) }
         refreshTask = task
         defer { refreshTask = nil }
         return try await task.value
     }
 
-    private func performRefresh(refreshToken: String) async throws -> HostedTokens {
+    private func performRefresh(refreshToken: String, generation: Int) async throws -> HostedTokens {
         let path: String = "/v1/auth/refresh"
         let request: URLRequest = try jsonRequest(
             path: path, method: "POST", body: try encoded(body: RefreshBody(refreshToken: refreshToken)), accessToken: nil, timeoutSec: hostedRequestTimeoutSec
@@ -315,11 +321,17 @@ public actor HostedClient: HostedLLMCredentialSource {
         } catch let error as HostedAPIError {
             result = hostedRefreshFailure(error: error)
         }
-        return try await settleRefresh(result: result)
+        return try await settleRefresh(result: result, generation: generation)
     }
 
     /// Yenileme sonucunu uygular: yeni jetonlar saklanır; ret oturumu siler ve bildirir; diğer hatalar fırlatılır.
-    private func settleRefresh(result: HostedRefreshResult) async throws -> HostedTokens {
+    /// Yenileme sürerken oturum değiştiyse (çıkış, hesap silme, yeni giriş) sonuç uygulanmaz: `notSignedIn` ya da yeni
+    /// oturumla yeniden denenir (bkz. `isCurrentSessionGeneration`).
+    private func settleRefresh(result: HostedRefreshResult, generation: Int) async throws -> HostedTokens {
+        guard isCurrentSessionGeneration(started: generation, current: sessionGeneration) else {
+            hostedLogger.info("Yenileme oturum değiştikten sonra döndü, sonucu uygulanmadı")
+            throw HostedClientError.notSignedIn
+        }
         switch result {
         case .refreshed(let refreshed):
             try setTokens(refreshed)
@@ -327,6 +339,7 @@ public actor HostedClient: HostedLLMCredentialSource {
         case .revoked(let error):
             hostedLogger.warning("Yenileme reddedildi, oturum kapatılıyor, kod: \(error.rawCode, privacy: .public)")
             meetingID = nil
+            sessionGeneration += 1
             try setTokens(nil)
             await onSessionEnded()
             throw HostedClientError.sessionEnded
@@ -342,6 +355,7 @@ public actor HostedClient: HostedLLMCredentialSource {
         )
         let session: HostedSessionResponse = try decode(HostedSessionResponse.self, data: response.data, path: path)
         meetingID = nil
+        sessionGeneration += 1
         try setTokens(hostedTokens(response: session, receivedAt: Date()))
         hostedLogger.info("Giriş yapıldı, yol: \(path, privacy: .public)")
     }

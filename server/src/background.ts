@@ -18,3 +18,15 @@ export function continueAfterDisconnect<T>(context: RequestContext, task: Promis
   );
   return task;
 }
+
+/**
+ * Yanıt döndükten sonra süren iş (ör. LLM akışının aktarımı ve kesinleştirmesi): `waitUntil`'e kaydedilir; hatası
+ * kimse beklemediği için kaybolmaz, `alert` olarak loglanır (muhasebe kaybı insan müdahalesi ister).
+ */
+export function runAfterResponse(context: RequestContext, task: Promise<void>, failureEvent: string, fields: LogFields): void {
+  context.waitUntil(
+    task.catch((error: unknown): void => {
+      log("alert", failureEvent, { ...fields, error: errorName(error) });
+    }),
+  );
+}

@@ -878,9 +878,27 @@ final class AppModel {
         guard !startedSpeakers.isEmpty else {
             return
         }
+        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
+        // kilitli kutuda birikir, ana aktöre çubuk aralığının yarısında bir geçilir (her parça için ayrı görev
+        // açılmaz; bkz. `levelThrottleInterval`).
+        audioLevels.start()
+        let levels: AudioLevels = audioLevels
+        let throttle: LevelThrottle = LevelThrottle(intervalSec: levelThrottleInterval(barInterval: levels.interval))
+        let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
+            guard let peak = throttle.add(level: level) else {
+                return
+            }
+            Task { @MainActor in levels.record(level: peak) }
+        }
+        let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
+        let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
         #if HOSTED_EDITION
+        // Ses hemen diske yazılır: toplantı oturumu açılırken ve canlı motor seçilirken (ağ beklenirken) gelen ses de
+        // dosyada durur (uygulama bu arada kapansa bile).
+        let hybridRecording: HybridRecording = startHybridRecording(directory: directory, meAudio: meteredMe, othersAudio: meteredOthers)
         // Abonelik: toplantı oturumu ses akışları başladıktan sonra açılır (yakalama başarısızsa deneme hakkı yanmasın);
-        // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, nedeni panelde görünür.
+        // sunucu reddederse (deneme bitti, aylık sınır, harcama tavanı…) kayıt başlamaz, yazılan ses silinir ve nedeni
+        // panelde görünür.
         let meetingDeadline: Date
         do {
             let requestedAt: Date = Date()
@@ -902,24 +920,12 @@ final class AppModel {
             Task { await HostedAccount.shared.refresh() }
             microphone.stop()
             systemAudio.stop()
+            audioLevels.stop()
+            discardRefusedRecording(directory: directory)
             return
         }
         #endif
 
-        // Ses seviyesi panelde görünür (sesin geldiği anlaşılsın); iki akışın en yükseği çubuğa düşer. En yüksek değer
-        // kilitli kutuda birikir, ana aktöre çubuk aralığının yarısında bir geçilir (her parça için ayrı görev
-        // açılmaz; bkz. `levelThrottleInterval`).
-        audioLevels.start()
-        let levels: AudioLevels = audioLevels
-        let throttle: LevelThrottle = LevelThrottle(intervalSec: levelThrottleInterval(barInterval: levels.interval))
-        let onLevel: @Sendable (Float) -> Void = { (level: Float) -> Void in
-            guard let peak = throttle.add(level: level) else {
-                return
-            }
-            Task { @MainActor in levels.record(level: peak) }
-        }
-        let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
-        let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
         let handle: LiveSessionHandle
         #if HOSTED_EDITION
         // Abonelik: sunucu izin veriyorsa canlı metin Deepgram'la, değilse (ya da akış durursa) Mac'te; kayıt kesintisiz.
@@ -932,7 +938,6 @@ final class AppModel {
         Self.logger.info("Canlı motor seçildi, motor: \(choice.status.engine.rawValue, privacy: .public)")
         handle = runHybridLiveSession(
             config: HybridLiveSessionConfig(
-                recordingDirectory: directory,
                 speakers: startedSpeakers,
                 local: LiveSessionConfig(
                     languageMode: languageMode,
@@ -952,8 +957,7 @@ final class AppModel {
                 }
                 return try await self.requireLocalEngine()
             },
-            meAudio: meteredMe,
-            othersAudio: meteredOthers
+            recording: hybridRecording
         )
         #else
         if let cloudKeys {
@@ -1316,6 +1320,18 @@ final class AppModel {
     }
 
     // MARK: Toplantı kayıtları
+
+    #if HOSTED_EDITION
+    /// Sunucu toplantıyı reddetti (deneme bitti, sınır…): kayıt başlamadı, o ana dek diske yazılan ses ve klasör silinir.
+    private func discardRefusedRecording(directory: URL) {
+        do {
+            try FileManager.default.removeItem(at: directory)
+        } catch {
+            Self.logger.error("Reddedilen kaydın klasörü silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+    #endif
 
     /// Bu toplantı üzerinde değişiklik yapılabilir mi (kayıtta ya da işlemede değil).
     func isLocked(meetingID: String) -> Bool {

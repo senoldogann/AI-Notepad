@@ -62,7 +62,7 @@ private func noteLanguagePrompts(language: ShareLanguage) throws -> [(name: Stri
         #expect(descriptions.contains("German (Deutsch)"))
         #expect(!descriptions.contains("Türkçe") && !descriptions.contains("Turkish"))
         let initialize: String = try #require(handleMCPMessage(
-            line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, loadRecords: { [] }, version: "test", noteLanguage: .german, appName: "Gistsmith"
+            line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, loadRecords: { [] }, accessDenial: { nil }, version: "test", noteLanguage: .german, appName: "Gistsmith"
         ))
         #expect(initialize.contains("German (Deutsch)"))
         #expect(!initialize.contains("Türkçe"))

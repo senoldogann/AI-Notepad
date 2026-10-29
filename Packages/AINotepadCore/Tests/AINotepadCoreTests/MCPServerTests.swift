@@ -36,7 +36,7 @@ import Testing
         let output: Pipe = Pipe()
         input.fileHandleForWriting.write(Data((requests.joined(separator: "\n") + "\n").utf8))
         try input.fileHandleForWriting.close()
-        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectories: [sessions], version: "test", noteLanguage: .english, appName: "AI-Notepad")
+        runMCPServer(input: input.fileHandleForReading, output: output.fileHandleForWriting, sessionsDirectories: [sessions], accessDenial: { nil }, version: "test", noteLanguage: .english, appName: "AI-Notepad")
         try output.fileHandleForWriting.close()
         let lines: [String] = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n").map(String.init)
         // Bildirime yanıt yok: 10 yanıt.
@@ -51,6 +51,27 @@ import Testing
         #expect(lines[7].contains("Ofis işleri"))
         #expect(lines[8].contains("-32600"))
         #expect(lines[9].contains(#""protocolVersion":"2025-06-18""#))
+    }
+}
+
+@Suite struct MCPAccessTests {
+    // Oturum sunucu açıldıktan sonra kapandıysa (abonelikte çıkış) araç çağrısı arşivi okumaz, nedeni hata olarak döner;
+    // tanışma ve araç listesi yine yanıtlanır.
+    @Test func toolCallsAreDeniedWhenSessionEnded() throws {
+        var reads: Int = 0
+        let call: String = #"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_meetings","arguments":{}}}"#
+        let denied: String = try #require(handleMCPMessage(
+            line: call, loadRecords: { reads += 1; return [] }, accessDenial: { "Önce giriş yap." }, version: "test", noteLanguage: .english, appName: "Gistsmith"
+        ))
+        #expect(reads == 0)
+        #expect(denied.contains("Önce giriş yap.") && denied.contains(#""isError":true"#))
+        let allowed: String = try #require(handleMCPMessage(
+            line: call, loadRecords: { reads += 1; return [] }, accessDenial: { nil }, version: "test", noteLanguage: .english, appName: "Gistsmith"
+        ))
+        #expect(reads == 1)
+        #expect(allowed.contains("No meetings."))
+        #expect(isCurrentSessionGeneration(started: 3, current: 3))
+        #expect(!isCurrentSessionGeneration(started: 3, current: 4))
     }
 }
 

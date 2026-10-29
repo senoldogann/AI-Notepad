@@ -83,12 +83,29 @@ enum AppEntry {
         #endif
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version, noteLanguage: selectedNoteLanguage(), appName: appName)
+            runMCPServer(
+                input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()),
+                accessDenial: mcpAccessDenial, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
+            )
         } catch {
             FileHandle.standardError.write(Data("\(appName) MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)
         }
     }
+}
+
+/// MCP araç çağrısının reddi: abonelik sürümünde oturum her çağrıda Anahtar Zinciri'nden yeniden okunur (sunucu
+/// açıldıktan sonra çıkış yapıldıysa arşiv okunmaz); geliştirici sürümünde oturum yoktur, ret de yoktur.
+private func mcpAccessDenial() -> String? {
+    #if HOSTED_EDITION
+    do {
+        return try hostedHasStoredSession(bundle: .main) ? nil : String(localized: "Önce uygulamayı açıp giriş yap.")
+    } catch {
+        return userFacingMessage(error: error)
+    }
+    #else
+    return nil
+    #endif
 }
 
 #if DEBUG

@@ -27,10 +27,31 @@ public enum HybridLiveStart: Sendable {
     case local
 }
 
+/// Hibrit oturumun kaydı (`startHybridRecording`): iki ses akışı oluşturulduğu anda `me.caf` ve `others.caf`'a yazılır;
+/// yazılan ses ve kayıt olayları oturuma aktarılır.
+public struct HybridRecording: Sendable {
+    let events: AsyncStream<LiveSessionEvent>
+    let sink: AsyncStream<LiveSessionEvent>.Continuation
+    let me: AsyncStream<[Float]>
+    let others: AsyncStream<[Float]>
+}
+
+/// İki ses akışını hemen diske yazmaya başlar (kayıt motordan bağımsız, kesintisizdir): toplantı oturumu açılırken ve
+/// canlı motor seçilirken (ağ beklenirken) gelen ses de bellekte değil dosyada durur. Yazılan ses, oturum başlayana dek
+/// bekletilir ve `runHybridLiveSession`'a verilir.
+public func startHybridRecording(directory: URL, meAudio: AsyncStream<[Float]>, othersAudio: AsyncStream<[Float]>) -> HybridRecording {
+    let (events, sink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
+        AsyncStream.makeStream(of: LiveSessionEvent.self)
+    return HybridRecording(
+        events: events,
+        sink: sink,
+        me: recordedStream(speaker: .me, audio: meAudio, directory: directory, events: sink),
+        others: recordedStream(speaker: .others, audio: othersAudio, directory: directory, events: sink)
+    )
+}
+
 /// Hibrit canlı oturum ayarları.
 public struct HybridLiveSessionConfig: Sendable {
-    /// `me.caf` ve `others.caf` dosyalarının yazılacağı klasör (kayıt motordan bağımsız, kesintisizdir).
-    public let recordingDirectory: URL
     /// Canlı metni üretilecek konuşmacılar (sesi başlamış olanlar): sessiz akış için Deepgram bağlantısı açılmaz.
     public let speakers: Set<Speaker>
     /// Mac'teki yazıya dökmenin ayarları; `recordingDirectory` alanı kullanılmaz.
@@ -39,8 +60,7 @@ public struct HybridLiveSessionConfig: Sendable {
     /// katılmaz (kayıtta durur, son geçiş kapsar).
     public let maxPendingAudioSec: Double
 
-    public init(recordingDirectory: URL, speakers: Set<Speaker>, local: LiveSessionConfig, maxPendingAudioSec: Double) {
-        self.recordingDirectory = recordingDirectory
+    public init(speakers: Set<Speaker>, local: LiveSessionConfig, maxPendingAudioSec: Double) {
         self.speakers = speakers
         self.local = local
         self.maxPendingAudioSec = maxPendingAudioSec
@@ -53,7 +73,7 @@ let localSegmentIndexBase: Int = 2_000_000
 private let hybridSampleRate: Int = 16000
 private let hybridLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "HybridLiveSession")
 
-/// Abonelik sürümünün canlı oturumu: iki ses akışını kesintisiz kaydeder ve canlı metni Deepgram'la (bulut) üretir;
+/// Abonelik sürümünün canlı oturumu: kaydı süren (`startHybridRecording`) iki ses akışının canlı metnini Deepgram'la (bulut) üretir;
 /// Deepgram akışı kalıcı olarak durursa (jeton alınamadı: bütçe, sunucu, ağ; ya da bağlantı kurulamadı) oturum Mac'teki
 /// motora (WhisperKit) geçer ve `.liveEngineFellBack` yayınlar. `localEngine` motoru gerektiğinde hazırlar (ilk seferde
 /// modeli indirir); hazırlanırken gelen ses `maxPendingAudioSec`'e dek bekletilip sonra yazıya dökülür. Motor
@@ -65,15 +85,11 @@ public func runHybridLiveSession(
     config: HybridLiveSessionConfig,
     start: HybridLiveStart,
     localEngine: @escaping @Sendable () async throws -> any TranscriptionEngine,
-    meAudio: AsyncStream<[Float]>,
-    othersAudio: AsyncStream<[Float]>
+    recording: HybridRecording
 ) -> LiveSessionHandle {
-    let (events, sink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
-        AsyncStream.makeStream(of: LiveSessionEvent.self)
-    let recorded: [(Speaker, AsyncStream<[Float]>)] = [
-        (.me, recordedStream(speaker: .me, audio: meAudio, directory: config.recordingDirectory, events: sink)),
-        (.others, recordedStream(speaker: .others, audio: othersAudio, directory: config.recordingDirectory, events: sink)),
-    ]
+    let events: AsyncStream<LiveSessionEvent> = recording.events
+    let sink: AsyncStream<LiveSessionEvent>.Continuation = recording.sink
+    let recorded: [(Speaker, AsyncStream<[Float]>)] = [(.me, recording.me), (.others, recording.others)]
     let maxPendingSamples: Int = Int(config.maxPendingAudioSec * Double(hybridSampleRate))
     let liveSpeakers: [Speaker] = [Speaker.me, Speaker.others].filter { config.speakers.contains($0) }
     let router: HybridRouter

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { continueAfterDisconnect } from "../background";
+import { continueAfterDisconnect, runAfterResponse } from "../background";
 import type { Config } from "../config";
 import { ApiError, isRetryableStatus } from "../errors";
 import { jsonResponse } from "../http";
@@ -243,7 +243,7 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     throw opened.error;
   }
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  context.waitUntil(pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, now));
+  runAfterResponse(context, pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, now), "llm_settle_failed", logFields);
   return new Response(readable, {
     status: 200,
     headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store" },

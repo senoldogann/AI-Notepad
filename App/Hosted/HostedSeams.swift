@@ -232,8 +232,9 @@ func hostedStartBlockNotice() -> StartBlockNotice? {
     // Hak durumu okunamıyorsa (çevrimdışı) kayıt, son bilinen hak durumu son 7 günde izin verdiyse çevrimdışı başlar;
     // vermediyse neden burada yazar (başlatıp hata göstermek yerine).
     if case .signedInStatusUnknown = HostedAccount.shared.state {
+        // İzin oturumdaki kullanıcınınsa geçer (başka hesabın son izni bu hesaba kayıt açmaz).
         let permit: HostedOfflinePermit? = loadHostedOfflinePermit()
-        guard hostedOfflineRecordingMinutes(permit: permit, userId: permit?.userId, now: Date(), maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil else {
+        guard hostedOfflineRecordingMinutes(permit: permit, userId: HostedAccount.shared.signedInUserIDCache, now: Date(), maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil else {
             return nil
         }
         return StartBlockNotice(reason: userFacingMessage(error: HostedClientError.offlineNotAllowed), action: .retry)

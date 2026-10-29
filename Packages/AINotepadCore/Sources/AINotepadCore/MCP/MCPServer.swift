@@ -98,9 +98,13 @@ func mcpTools(noteLanguage: ShareLanguage, appName: String) -> [MCPTool] {
 }
 
 /// Bir MCP iletisini yanıtlar; bildirimlere (id'siz) yanıt verilmez (nil). Toplantılar her çağrıda diskten okunur
-/// (uygulama açıkken eklenen toplantılar da görünür). Yönergeler ve araç açıklamaları notların dilini
-/// (`noteLanguage`) ve uygulamanın görünen adını (`appName`) anar. Saf değildir: `loadRecords` diski okur.
-public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], version: String, noteLanguage: ShareLanguage, appName: String) -> String? {
+/// (uygulama açıkken eklenen toplantılar da görünür). `accessDenial` her araç çağrısında sorulur: neden dönerse
+/// (ör. abonelik sürümünde çıkış yapılmış) arşiv okunmaz, neden araç hatası olarak döner. Yönergeler ve araç
+/// açıklamaları notların dilini (`noteLanguage`) ve uygulamanın görünen adını (`appName`) anar. Saf değildir:
+/// `loadRecords` diski okur.
+public func handleMCPMessage(
+    line: String, loadRecords: () -> [MeetingRecord], accessDenial: () -> String?, version: String, noteLanguage: ShareLanguage, appName: String
+) -> String? {
     let request: MCPRequest
     do {
         request = try JSONDecoder().decode(MCPRequest.self, from: Data(line.utf8))
@@ -135,6 +139,13 @@ public func handleMCPMessage(line: String, loadRecords: () -> [MeetingRecord], v
             return mcpError(id: id, code: -32602, message: "Invalid params: name is required")
         }
         let arguments: [String: JSONValue] = if case .object(let value) = request.params?["arguments"] { value } else { [:] }
+        if let denial = accessDenial() {
+            mcpLogger.info("MCP araç çağrısı reddedildi: oturum yok")
+            return mcpResult(id: id, result: .object([
+                "content": .array([.object(["type": .string("text"), "text": .string(denial)])]),
+                "isError": .bool(true),
+            ]))
+        }
         let output: (text: String, isError: Bool) = callMCPTool(name: name, arguments: arguments, records: loadRecords())
         return mcpResult(id: id, result: .object([
             "content": .array([.object(["type": .string("text"), "text": .string(output.text)])]),
@@ -225,7 +236,9 @@ let mcpMaxLineBytes: Int = 1_048_576
 /// stdio üzerinden MCP sunucusu: girişten satır satır okur, her yanıtı tek satır olarak yazar; giriş ya da çıkış
 /// kapanınca biter. `noteLanguage`: notların yazıldığı dil, `appName`: uygulamanın görünen adı (yönergelerde ve araç
 /// açıklamalarında anılır).
-public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirectories: [URL], version: String, noteLanguage: ShareLanguage, appName: String) {
+public func runMCPServer(
+    input: FileHandle, output: FileHandle, sessionsDirectories: [URL], accessDenial: () -> String?, version: String, noteLanguage: ShareLanguage, appName: String
+) {
     var buffer: Data = Data()
     while true {
         let chunk: Data = input.availableData
@@ -251,7 +264,10 @@ public func runMCPServer(input: FileHandle, output: FileHandle, sessionsDirector
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
                 continue
             }
-            if let response = handleMCPMessage(line: line, loadRecords: { loadMeetings(directories: sessionsDirectories).meetings }, version: version, noteLanguage: noteLanguage, appName: appName) {
+            if let response = handleMCPMessage(
+                line: line, loadRecords: { loadMeetings(directories: sessionsDirectories).meetings }, accessDenial: accessDenial,
+                version: version, noteLanguage: noteLanguage, appName: appName
+            ) {
                 do {
                     // Atan `write(contentsOf:)`: istemci boruyu kapatınca süreç ObjC istisnasıyla çökmez, temiz çıkar.
                     try output.write(contentsOf: Data((response + "\n").utf8))

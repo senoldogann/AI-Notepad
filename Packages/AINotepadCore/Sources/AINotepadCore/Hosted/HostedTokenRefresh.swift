@@ -24,6 +24,12 @@ public func hostedTokenAction(tokens: HostedTokens?, now: Date, leewaySec: Doubl
     return .refresh(refreshToken: tokens.refreshToken)
 }
 
+/// Yenileme başladığından beri oturum değişmedi mi (çıkış, hesap silme, yeni giriş ya da ret kuşağı artırır): değiştiyse
+/// dönen jetonlar yazılmaz (çıkış yapılmış oturum geri gelmez) ve ret yeni oturumu silmez. Saf fonksiyondur.
+public func isCurrentSessionGeneration(started: Int, current: Int) -> Bool {
+    started == current
+}
+
 /// Yenileme isteğinin sonucu.
 public enum HostedRefreshResult: Sendable, Equatable {
     /// Yeni jetonlar (yenileme jetonu her seferinde döner; eskisi bir daha kullanılmamalı).
