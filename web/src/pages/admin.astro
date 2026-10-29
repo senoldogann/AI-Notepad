@@ -5,12 +5,16 @@
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
 // yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
 // nötr bir yükleme satırı görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
-// "sayfa bulunamadı" görünümü.
+// "sayfa bulunamadı" görünümü. Panel eklenince sitenin üst çubuğu ve alt bilgisi gizlenir; panel solda menü, üstte
+// görünüm başlığı olan tam ekran bir yönetim kabuğudur.
 import Base from "../layouts/Base.astro";
 import Icon from "../components/Icon.astro";
+import Logo from "../components/Logo.astro";
 import NotFound from "../components/NotFound.astro";
+import { productName } from "../config";
 import { type AdminCopy, copy } from "../copy";
 import type { IconName } from "../lib/icons";
+import { routes } from "../routes";
 
 const text: AdminCopy = copy.admin;
 
@@ -184,316 +188,336 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
 
   {/* Panel: yönetici erişimi doğrulanınca `#admin-mount` içine kopyalanır (admin.ts). */}
   <template id="admin-template">
-    <div class="admin__head">
-      <div>
-        <h1 class="title-l">{text.title}</h1>
-        <p id="admin-updated" class="small muted" aria-live="polite"></p>
-      </div>
-      <button id="admin-refresh" class="button button--secondary button--small" type="button">
-        <Icon name="refresh" size={16} class="" />
-        {text.refresh}
-      </button>
-    </div>
+    <div class="console">
+      <aside class="console__sidebar">
+        <a class="console__brand" href={routes.home} aria-label={text.backToSite}>
+          <Logo size={26} />
+          <span class="console__brand-name">{productName}</span>
+          <span class="console__badge">{text.title}</span>
+        </a>
+        <nav class="console__nav" aria-label={text.views.label}>
+          {
+            views.map((view, index: number) => (
+              <button
+                id={`view-${view.id}`}
+                class="console__nav-item"
+                type="button"
+                aria-pressed={index === 0 ? "true" : "false"}
+                aria-controls={`panel-${view.id}`}
+                data-title={view.label}>
+                <Icon name={view.icon} size={18} class="" />
+                <span class="console__nav-label">{view.label}</span>
+                {view.id === "inbox" ? <span id="count-inbox" class="console__count tabular" /> : null}
+              </button>
+            ))
+          }
+        </nav>
+        <a class="console__site-link small" href={routes.home}>{text.backToSite}</a>
+      </aside>
 
-    <div class="segmented admin__views" role="group" aria-label={text.views.label}>
-      {
-        views.map((view, index: number) => (
-          <button id={`view-${view.id}`} class="segmented__button" type="button" aria-pressed={index === 0 ? "true" : "false"} aria-controls={`panel-${view.id}`}>
-            <Icon name={view.icon} size={16} class="" />
-            {view.label}
-            {view.id === "inbox" ? <span id="count-inbox" class="segmented__count tabular" /> : null}
+      <div class="console__main">
+        <header class="console__topbar">
+          <div class="console__heading">
+            <h1 id="admin-view-title" class="console__title">{views[0]?.label}</h1>
+            <p id="admin-updated" class="small muted" aria-live="polite"></p>
+          </div>
+          <button id="admin-refresh" class="button button--secondary button--small" type="button">
+            <Icon name="refresh" size={16} class="" />
+            {text.refresh}
           </button>
-        ))
-      }
-    </div>
+        </header>
 
-    {/* ---------- Genel bakış ---------- */}
-    <div id="panel-overview" class="admin__panel">
-      <div class="kpi-groups">
-        {
-          groups.map((group: KpiGroup) => (
-            <section class:list={["kpi-group", `kpi-group--${group.id}`]} aria-labelledby={`group-${group.id}`}>
-              <h2 class="eyebrow kpi-group__title" id={`group-${group.id}`}>
-                {group.title}
-              </h2>
-              <div class="kpi-group__grid">
-                {group.kpis.map((kpi: KpiSpec) => (
-                  <div class:list={["card", "kpi", { "kpi--meter": kpi.meter, "kpi--accent": kpi.id === "mrr" }]} id={`kpi-${kpi.id}-card`}>
+        <div class="console__content">
+          {/* ---------- Genel bakış ---------- */}
+          <div id="panel-overview" class="admin__panel">
+            <div class="kpi-groups">
+              {
+                groups.map((group: KpiGroup) => (
+                  <section class:list={["kpi-group", `kpi-group--${group.id}`]} aria-labelledby={`group-${group.id}`}>
+                    <h2 class="eyebrow kpi-group__title" id={`group-${group.id}`}>
+                      {group.title}
+                    </h2>
+                    <div class="kpi-group__grid">
+                      {group.kpis.map((kpi: KpiSpec) => (
+                        <div class:list={["card", "kpi", { "kpi--meter": kpi.meter, "kpi--accent": kpi.id === "mrr" }]} id={`kpi-${kpi.id}-card`}>
+                          <p class="kpi__label">
+                            <Icon name={kpi.icon} size={16} class="kpi__icon" />
+                            {kpi.label}
+                          </p>
+                          <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
+                          {kpi.meter ? <progress id={`kpi-${kpi.id}-meter`} class="meter kpi__meter" aria-label={kpi.label} max="1" value="0" /> : null}
+                          <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))
+              }
+            </div>
+
+            <section aria-labelledby="charts-title">
+              <h2 class="title-m section-title" id="charts-title">{text.chartsTitle}</h2>
+              <div class="charts">
+                {
+                  charts.map((chart) => (
+                    <figure class="card chart">
+                      <div class="chart__head">
+                        <h3 class="chart__title">{chart.title}</h3>
+                        {chart.legend ? (
+                          <p class="chart__legend small muted" aria-hidden="true">
+                            <span class="legend legend--main">{text.legendSubscription}</span>
+                            <span class="legend legend--accent">{text.legendTrial}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                      <div id={`chart-${chart.id}`} class="chart__plot" />
+                      <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
+                    </figure>
+                  ))
+                }
+              </div>
+            </section>
+          </div>
+
+          {/* ---------- Kullanıcılar ---------- */}
+          <div id="panel-users" class="admin__panel hidden">
+            <section id="users-list-view" class="users" aria-labelledby="users-title">
+              <h2 class="visually-hidden" id="users-title">{text.users.title}</h2>
+              <form id="users-form" class="users__toolbar" role="search">
+                <div class="field users__search">
+                  <label for="users-query">{text.users.searchLabel}</label>
+                  <input
+                    id="users-query"
+                    class="input input--small mono"
+                    type="search"
+                    placeholder={text.users.searchPlaceholder}
+                    autocomplete="off"
+                    spellcheck="false"
+                    maxlength="36"
+                  />
+                </div>
+                <div class="field">
+                  <label for="users-segment">{text.users.segmentLabel}</label>
+                  <select id="users-segment" class="input input--small select">
+                    {segments.map((segment) => <option value={segment.value}>{segment.label}</option>)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="users-provider">{text.users.providerLabel}</label>
+                  <select id="users-provider" class="input input--small select">
+                    {providerOptions.map((provider) => <option value={provider.value}>{provider.label}</option>)}
+                  </select>
+                </div>
+                <button class="button button--primary button--small users__submit" type="submit">
+                  <Icon name="search" size={16} class="" />
+                  {text.users.search}
+                </button>
+              </form>
+
+              <div class="card table-card">
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="users-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{userColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                    </thead>
+                    <tbody id="users-rows"></tbody>
+                  </table>
+                </div>
+                <p id="users-empty" class="muted table-empty hidden">{text.users.empty}</p>
+                <div class="table-foot">
+                  <span id="users-shown" class="small muted tabular"></span>
+                  <button id="users-more" class="button button--secondary button--small hidden" type="button">{text.users.loadMore}</button>
+                </div>
+              </div>
+            </section>
+
+            <section id="user-detail-view" class="user-detail hidden" aria-labelledby="user-title">
+              <div class="user-detail__head">
+                <button id="user-back" class="button button--secondary button--small" type="button">{text.users.back}</button>
+                <h2 id="user-title" class="title-m user-detail__title"></h2>
+                <div id="user-pills" class="pill-row"></div>
+              </div>
+
+              <div class="user-detail__grid">
+                <div class="card user-card">
+                  <dl class="detail__fields">
+                    {
+                      userFields.map((field) => (
+                        <div>
+                          <dt>{field.label}</dt>
+                          <dd id={`user-field-${field.id}`} class:list={{ mono: field.mono }} />
+                        </div>
+                      ))
+                    }
+                  </dl>
+                </div>
+                <div class="card user-card">
+                  <h3 class="detail__label">{text.users.usageTitle}</h3>
+                  <div class="usage-meters">
+                    {
+                      userMeters.map((meter) => (
+                        <div class="usage-meter">
+                          <p class="usage-meter__label">
+                            <span>{meter.label}</span>
+                            <span id={`user-meter-${meter.id}-text`} class="tabular muted" />
+                          </p>
+                          <progress id={`user-meter-${meter.id}`} class="meter" aria-label={meter.label} max="1" value="0" />
+                        </div>
+                      ))
+                    }
+                    <p class="usage-meter__label">
+                      <span>{text.users.usage.audio}</span>
+                      <span id="user-audio" class="tabular muted"></span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card table-card">
+                <h3 class="detail__label table-card__title">{text.users.meetingsTitle}</h3>
+                <div class="table-scroll" tabindex="0" role="region" aria-label={text.users.meetingsTitle}>
+                  <table class="data-table">
+                    <thead>
+                      <tr>{meetingColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                    </thead>
+                    <tbody id="user-meetings"></tbody>
+                  </table>
+                </div>
+                <p id="user-meetings-empty" class="muted table-empty hidden">{text.users.noMeetings}</p>
+              </div>
+
+              <div class="user-detail__grid">
+                <div class="card user-card">
+                  <h3 class="detail__label">{text.users.timelineTitle}</h3>
+                  <ol id="user-timeline" class="timeline"></ol>
+                  <p class="small muted">{text.users.timelineNote}</p>
+                </div>
+                <div class="card user-card">
+                  <h3 class="detail__label">{text.users.reportsTitle}</h3>
+                  <ul id="user-reports" class="link-list"></ul>
+                  <p id="user-reports-empty" class="muted hidden">{text.users.noReports}</p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* ---------- İşletim ---------- */}
+          <div id="panel-operations" class="admin__panel hidden">
+            <div class="kpi-group__grid ops-kpis">
+              {
+                opsKpis.map((kpi: KpiSpec) => (
+                  <div class="card kpi" id={`kpi-${kpi.id}-card`}>
                     <p class="kpi__label">
                       <Icon name={kpi.icon} size={16} class="kpi__icon" />
                       {kpi.label}
                     </p>
                     <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-                    {kpi.meter ? <progress id={`kpi-${kpi.id}-meter`} class="meter kpi__meter" aria-label={kpi.label} max="1" value="0" /> : null}
                     <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
                   </div>
-                ))}
+                ))
+              }
+            </div>
+
+            <div class="ops-grid">
+              <section class="card table-card ops-grid__wide" aria-labelledby="ops-open-title">
+                <h3 class="detail__label table-card__title" id="ops-open-title">{text.operations.openTitle}</h3>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-open-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{openColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                    </thead>
+                    <tbody id="ops-open-rows"></tbody>
+                  </table>
+                </div>
+                <p id="ops-open-empty" class="muted table-empty hidden">{text.operations.noOpen}</p>
+              </section>
+
+              <section class="card table-card" aria-labelledby="ops-stripe-title">
+                <h3 class="detail__label table-card__title" id="ops-stripe-title">{text.operations.stripeTitle}</h3>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-stripe-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{text.operations.stripeColumns.type}</th>
+                        <th scope="col" class="numeric">{text.operations.stripeColumns.count}</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ops-stripe-rows"></tbody>
+                  </table>
+                </div>
+                <p id="ops-stripe-empty" class="muted table-empty hidden">{text.operations.noStripe}</p>
+              </section>
+
+              <section class="card user-card" aria-labelledby="ops-crashes-title">
+                <h3 class="detail__label" id="ops-crashes-title">{text.operations.crashesTitle}</h3>
+                <ul id="ops-crashes" class="link-list"></ul>
+                <p id="ops-crashes-empty" class="muted hidden">{text.operations.noCrashes}</p>
+              </section>
+            </div>
+          </div>
+
+          {/* ---------- Bildirim kutusu ---------- */}
+          <div id="panel-inbox" class="admin__panel hidden">
+            <section class="inbox" aria-labelledby="inbox-title">
+              <div class="inbox__toolbar">
+                <h2 class="visually-hidden" id="inbox-title">{text.inboxTitle}</h2>
+                <div class="segmented" role="group" aria-label={text.inboxTitle}>
+                  {
+                    tabs.map((tab, index: number) => (
+                      <button id={`tab-${tab.kind}`} class="segmented__button" type="button" aria-pressed={index === 0 ? "true" : "false"}>
+                        <Icon name={tab.icon} size={16} class="" />
+                        {tab.label}
+                        <span id={`count-${tab.kind}`} class="segmented__count tabular" />
+                      </button>
+                    ))
+                  }
+                </div>
+                <div class="segmented segmented--quiet" role="group" aria-label={`${text.statusOpen} / ${text.statusDone}`}>
+                  <button id="status-open" class="segmented__button" type="button" aria-pressed="true">{text.statusOpen}</button>
+                  <button id="status-done" class="segmented__button" type="button" aria-pressed="false">{text.statusDone}</button>
+                </div>
+              </div>
+
+              <div class="inbox__body">
+                <div class="card inbox__list-card">
+                  <ul id="inbox-list" class="inbox__list"></ul>
+                  <p id="inbox-empty" class="muted inbox__empty hidden">{text.empty}</p>
+                  <button id="inbox-more" class="button button--secondary button--small hidden" type="button">{text.loadMore}</button>
+                </div>
+
+                <div id="inbox-detail" class="card inbox__detail">
+                  <p id="detail-empty" class="muted inbox__empty">{text.detailEmpty}</p>
+                  <div id="detail-body" class="detail hidden">
+                    <div class="detail__head">
+                      <span id="detail-status" class="pill"></span>
+                      <button
+                        id="detail-toggle"
+                        class="button button--secondary button--small"
+                        type="button"
+                        data-label-done={text.markDone}
+                        data-label-reopen={text.reopen}>{text.markDone}</button
+                      >
+                    </div>
+                    <dl class="detail__fields">
+                      <div><dt>{text.fields.received}</dt><dd id="detail-received"></dd></div>
+                      <div><dt>{text.fields.email}</dt><dd id="detail-email"></dd></div>
+                      <div><dt>{text.fields.user}</dt><dd id="detail-user" class="mono"></dd></div>
+                      <div><dt>{text.fields.app}</dt><dd id="detail-app"></dd></div>
+                      <div><dt>{text.fields.os}</dt><dd id="detail-os"></dd></div>
+                    </dl>
+                    <h3 class="detail__label">{text.messageTitle}</h3>
+                    <p id="detail-message" class="detail__message"></p>
+                    <div id="detail-payload-block" class="hidden">
+                      <h3 class="detail__label">{text.payloadTitle}</h3>
+                      <pre id="detail-payload" class="detail__payload" tabindex="0"></pre>
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
-          ))
-        }
+          </div>
+        </div>
       </div>
-
-      <section aria-labelledby="charts-title">
-        <h2 class="title-m section-title" id="charts-title">{text.chartsTitle}</h2>
-        <div class="charts">
-          {
-            charts.map((chart) => (
-              <figure class="card chart">
-                <div class="chart__head">
-                  <h3 class="chart__title">{chart.title}</h3>
-                  {chart.legend ? (
-                    <p class="chart__legend small muted" aria-hidden="true">
-                      <span class="legend legend--main">{text.legendSubscription}</span>
-                      <span class="legend legend--accent">{text.legendTrial}</span>
-                    </p>
-                  ) : null}
-                </div>
-                <div id={`chart-${chart.id}`} class="chart__plot" />
-                <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
-              </figure>
-            ))
-          }
-        </div>
-      </section>
-    </div>
-
-    {/* ---------- Kullanıcılar ---------- */}
-    <div id="panel-users" class="admin__panel hidden">
-      <section id="users-list-view" class="users" aria-labelledby="users-title">
-        <h2 class="visually-hidden" id="users-title">{text.users.title}</h2>
-        <form id="users-form" class="users__toolbar" role="search">
-          <div class="field users__search">
-            <label for="users-query">{text.users.searchLabel}</label>
-            <input
-              id="users-query"
-              class="input input--small mono"
-              type="search"
-              placeholder={text.users.searchPlaceholder}
-              autocomplete="off"
-              spellcheck="false"
-              maxlength="36"
-            />
-          </div>
-          <div class="field">
-            <label for="users-segment">{text.users.segmentLabel}</label>
-            <select id="users-segment" class="input input--small select">
-              {segments.map((segment) => <option value={segment.value}>{segment.label}</option>)}
-            </select>
-          </div>
-          <div class="field">
-            <label for="users-provider">{text.users.providerLabel}</label>
-            <select id="users-provider" class="input input--small select">
-              {providerOptions.map((provider) => <option value={provider.value}>{provider.label}</option>)}
-            </select>
-          </div>
-          <button class="button button--primary button--small users__submit" type="submit">
-            <Icon name="search" size={16} class="" />
-            {text.users.search}
-          </button>
-        </form>
-
-        <div class="card table-card">
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="users-title">
-            <table class="data-table">
-              <thead>
-                <tr>{userColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
-              </thead>
-              <tbody id="users-rows"></tbody>
-            </table>
-          </div>
-          <p id="users-empty" class="muted table-empty hidden">{text.users.empty}</p>
-          <div class="table-foot">
-            <span id="users-shown" class="small muted tabular"></span>
-            <button id="users-more" class="button button--secondary button--small hidden" type="button">{text.users.loadMore}</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="user-detail-view" class="user-detail hidden" aria-labelledby="user-title">
-        <div class="user-detail__head">
-          <button id="user-back" class="button button--secondary button--small" type="button">{text.users.back}</button>
-          <h2 id="user-title" class="title-m user-detail__title"></h2>
-          <div id="user-pills" class="pill-row"></div>
-        </div>
-
-        <div class="user-detail__grid">
-          <div class="card user-card">
-            <dl class="detail__fields">
-              {
-                userFields.map((field) => (
-                  <div>
-                    <dt>{field.label}</dt>
-                    <dd id={`user-field-${field.id}`} class:list={{ mono: field.mono }} />
-                  </div>
-                ))
-              }
-            </dl>
-          </div>
-          <div class="card user-card">
-            <h3 class="detail__label">{text.users.usageTitle}</h3>
-            <div class="usage-meters">
-              {
-                userMeters.map((meter) => (
-                  <div class="usage-meter">
-                    <p class="usage-meter__label">
-                      <span>{meter.label}</span>
-                      <span id={`user-meter-${meter.id}-text`} class="tabular muted" />
-                    </p>
-                    <progress id={`user-meter-${meter.id}`} class="meter" aria-label={meter.label} max="1" value="0" />
-                  </div>
-                ))
-              }
-              <p class="usage-meter__label">
-                <span>{text.users.usage.audio}</span>
-                <span id="user-audio" class="tabular muted"></span>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="card table-card">
-          <h3 class="detail__label table-card__title">{text.users.meetingsTitle}</h3>
-          <div class="table-scroll" tabindex="0" role="region" aria-label={text.users.meetingsTitle}>
-            <table class="data-table">
-              <thead>
-                <tr>{meetingColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
-              </thead>
-              <tbody id="user-meetings"></tbody>
-            </table>
-          </div>
-          <p id="user-meetings-empty" class="muted table-empty hidden">{text.users.noMeetings}</p>
-        </div>
-
-        <div class="user-detail__grid">
-          <div class="card user-card">
-            <h3 class="detail__label">{text.users.timelineTitle}</h3>
-            <ol id="user-timeline" class="timeline"></ol>
-            <p class="small muted">{text.users.timelineNote}</p>
-          </div>
-          <div class="card user-card">
-            <h3 class="detail__label">{text.users.reportsTitle}</h3>
-            <ul id="user-reports" class="link-list"></ul>
-            <p id="user-reports-empty" class="muted hidden">{text.users.noReports}</p>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    {/* ---------- İşletim ---------- */}
-    <div id="panel-operations" class="admin__panel hidden">
-      <div class="kpi-group__grid ops-kpis">
-        {
-          opsKpis.map((kpi: KpiSpec) => (
-            <div class="card kpi" id={`kpi-${kpi.id}-card`}>
-              <p class="kpi__label">
-                <Icon name={kpi.icon} size={16} class="kpi__icon" />
-                {kpi.label}
-              </p>
-              <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-              <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
-            </div>
-          ))
-        }
-      </div>
-
-      <div class="ops-grid">
-        <section class="card table-card ops-grid__wide" aria-labelledby="ops-open-title">
-          <h3 class="detail__label table-card__title" id="ops-open-title">{text.operations.openTitle}</h3>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-open-title">
-            <table class="data-table">
-              <thead>
-                <tr>{openColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
-              </thead>
-              <tbody id="ops-open-rows"></tbody>
-            </table>
-          </div>
-          <p id="ops-open-empty" class="muted table-empty hidden">{text.operations.noOpen}</p>
-        </section>
-
-        <section class="card table-card" aria-labelledby="ops-stripe-title">
-          <h3 class="detail__label table-card__title" id="ops-stripe-title">{text.operations.stripeTitle}</h3>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-stripe-title">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">{text.operations.stripeColumns.type}</th>
-                  <th scope="col" class="numeric">{text.operations.stripeColumns.count}</th>
-                </tr>
-              </thead>
-              <tbody id="ops-stripe-rows"></tbody>
-            </table>
-          </div>
-          <p id="ops-stripe-empty" class="muted table-empty hidden">{text.operations.noStripe}</p>
-        </section>
-
-        <section class="card user-card" aria-labelledby="ops-crashes-title">
-          <h3 class="detail__label" id="ops-crashes-title">{text.operations.crashesTitle}</h3>
-          <ul id="ops-crashes" class="link-list"></ul>
-          <p id="ops-crashes-empty" class="muted hidden">{text.operations.noCrashes}</p>
-        </section>
-      </div>
-    </div>
-
-    {/* ---------- Bildirim kutusu ---------- */}
-    <div id="panel-inbox" class="admin__panel hidden">
-      <section class="inbox" aria-labelledby="inbox-title">
-        <div class="inbox__toolbar">
-          <h2 class="title-m" id="inbox-title">{text.inboxTitle}</h2>
-          <div class="segmented" role="group" aria-label={text.inboxTitle}>
-            {
-              tabs.map((tab, index: number) => (
-                <button id={`tab-${tab.kind}`} class="segmented__button" type="button" aria-pressed={index === 0 ? "true" : "false"}>
-                  <Icon name={tab.icon} size={16} class="" />
-                  {tab.label}
-                  <span id={`count-${tab.kind}`} class="segmented__count tabular" />
-                </button>
-              ))
-            }
-          </div>
-          <div class="segmented segmented--quiet" role="group" aria-label={`${text.statusOpen} / ${text.statusDone}`}>
-            <button id="status-open" class="segmented__button" type="button" aria-pressed="true">{text.statusOpen}</button>
-            <button id="status-done" class="segmented__button" type="button" aria-pressed="false">{text.statusDone}</button>
-          </div>
-        </div>
-
-        <div class="inbox__body">
-          <div class="card inbox__list-card">
-            <ul id="inbox-list" class="inbox__list"></ul>
-            <p id="inbox-empty" class="muted inbox__empty hidden">{text.empty}</p>
-            <button id="inbox-more" class="button button--secondary button--small hidden" type="button">{text.loadMore}</button>
-          </div>
-
-          <div id="inbox-detail" class="card inbox__detail">
-            <p id="detail-empty" class="muted inbox__empty">{text.detailEmpty}</p>
-            <div id="detail-body" class="detail hidden">
-              <div class="detail__head">
-                <span id="detail-status" class="pill"></span>
-                <button
-                  id="detail-toggle"
-                  class="button button--secondary button--small"
-                  type="button"
-                  data-label-done={text.markDone}
-                  data-label-reopen={text.reopen}>{text.markDone}</button
-                >
-              </div>
-              <dl class="detail__fields">
-                <div><dt>{text.fields.received}</dt><dd id="detail-received"></dd></div>
-                <div><dt>{text.fields.email}</dt><dd id="detail-email"></dd></div>
-                <div><dt>{text.fields.user}</dt><dd id="detail-user" class="mono"></dd></div>
-                <div><dt>{text.fields.app}</dt><dd id="detail-app"></dd></div>
-                <div><dt>{text.fields.os}</dt><dd id="detail-os"></dd></div>
-              </dl>
-              <h3 class="detail__label">{text.messageTitle}</h3>
-              <p id="detail-message" class="detail__message"></p>
-              <div id="detail-payload-block" class="hidden">
-                <h3 class="detail__label">{text.payloadTitle}</h3>
-                <pre id="detail-payload" class="detail__payload" tabindex="0"></pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   </template>
 </Base>
@@ -509,17 +533,188 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     padding-top: clamp(28px, 5vw, 56px);
   }
 
-  .admin__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
+  /* ---------- Yönetim kabuğu ---------- */
+
+  /* Panel açılınca (admin.ts `admin-app`) sitenin üst çubuğu, alt bilgisi ve çekme katmanı gizlenir; panel tam ekran
+     bir uygulama kabuğudur: solda menü, sağda kendi içinde kayan içerik (sayfa kaymadığı için çekme de devreye girmez). */
+  :global(html.admin-app .site-header),
+  :global(html.admin-app .site-footer),
+  :global(html.admin-app .pull-reveal),
+  :global(html.admin-app .skip-link) {
+    display: none;
   }
 
-  /* Görünüm seçici: başlığın altında, sola yaslı; görünümler kendi aralıklarıyla akar. */
-  .admin__views {
-    justify-self: start;
+  :global(html.admin-app) .admin {
+    width: 100%;
+    padding: 0;
+  }
+
+  /* Hata bildirimi kabuğun üstünde, sağ altta durur. */
+  :global(html.admin-app) .admin > .notice {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 3;
+    max-width: min(420px, 100% - 48px);
+  }
+
+  .console {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    background: var(--bg);
+  }
+
+  .console__sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+    padding: 18px 12px;
+    border-right: 1px solid var(--line);
+    background: color-mix(in srgb, var(--soft) 55%, var(--bg));
+  }
+
+  .console__brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+  }
+
+  .console__badge {
+    margin-left: auto;
+    padding: 1px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .console__nav {
+    display: grid;
+    gap: 2px;
+  }
+
+  .console__nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .console__nav-item :global(.icon) {
+    flex: none;
+  }
+
+  .console__nav-item:hover {
+    background: var(--selected);
+    color: var(--ink);
+  }
+
+  .console__nav-item[aria-pressed="true"] {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow:
+      0 0 0 1px var(--line),
+      0 1px 2px var(--shadow-near);
+  }
+
+  .console__nav-label {
+    flex: 1;
+    white-space: nowrap;
+  }
+
+  .console__count {
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--line);
+    color: var(--ink);
+    font-size: 0.75rem;
+    line-height: 20px;
+    text-align: center;
+  }
+
+  .console__count:empty {
+    display: none;
+  }
+
+  .console__site-link {
+    margin-top: auto;
+    padding: 8px 10px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .console__site-link:hover {
+    color: var(--ink);
+  }
+
+  .console__main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-y: auto;
+  }
+
+  .console__topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px clamp(20px, 3vw, 36px);
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .console__heading {
+    display: grid;
+    min-width: 0;
+  }
+
+  .console__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.35;
+  }
+
+  .console__content {
+    display: grid;
+    width: 100%;
+    max-width: 1360px;
+    padding: 28px clamp(20px, 3vw, 36px) 56px;
+  }
+
+  /* Kabuk içinde kartlar daha sade: küçük köşe, gölgesiz. */
+  .console :global(.card) {
+    border-radius: 14px;
+    box-shadow: none;
   }
 
   .admin__panel {
@@ -576,9 +771,9 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     display: grid;
     grid-template-rows: auto auto 1fr;
     align-content: start;
-    gap: 10px;
-    min-height: 148px;
-    padding: 20px 22px;
+    gap: 8px;
+    min-height: 132px;
+    padding: 18px 20px;
   }
 
   .kpi--meter {
@@ -601,7 +796,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   .kpi__value {
     min-width: 0;
     overflow-wrap: anywhere;
-    font-size: clamp(1.75rem, 2.6vw, 2.125rem);
+    font-size: clamp(1.625rem, 2.2vw, 1.875rem);
     font-weight: 600;
     letter-spacing: -0.035em;
     line-height: 1.05;
@@ -744,8 +939,9 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     gap: 12px 16px;
   }
 
-  .inbox__toolbar h2 {
-    margin-right: auto;
+  /* Açık/bitti süzgeci sağa yaslı. */
+  .inbox__toolbar .segmented--quiet {
+    margin-left: auto;
   }
 
   .segmented {
@@ -1240,7 +1436,37 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     }
   }
 
+  /* Dar ekranda menü üstte, yatay kayan bir şerit olur. */
   @media (max-width: 860px) {
+    .console {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .console__sidebar {
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .console__nav {
+      display: flex;
+    }
+
+    .console__nav-item {
+      width: auto;
+    }
+
+    .console__brand-name,
+    .console__badge,
+    .console__site-link {
+      display: none;
+    }
+
     .charts,
     .inbox__body,
     .user-detail__grid,
@@ -1249,8 +1475,22 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     }
   }
 
-  /* Dar ekranda süzgeçler tek satırda, tam genişlikte. */
+  /* Dar ekranda süzgeçler tek satırda, tam genişlikte; menü yalnızca simgelerdir ve şeride sığar. */
   @media (max-width: 560px) {
+    .console__nav {
+      flex: 1;
+      justify-content: space-around;
+    }
+
+    .console__nav-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
     .segmented {
       flex-wrap: nowrap;
       width: 100%;

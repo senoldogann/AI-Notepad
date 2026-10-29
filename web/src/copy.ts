@@ -403,7 +403,10 @@ export interface AdminCopy {
   readonly meta: PageMeta;
   /** Erişim doğrulanınca sekme başlığı. */
   readonly documentTitle: string;
+  /** Sol menüde ürün adının yanındaki rozet. */
   readonly title: string;
+  /** Sol menüden siteye dönüş bağlantısı. */
+  readonly backToSite: string;
   readonly refresh: string;
   /** Nötr yükleme satırı. */
   readonly loading: string;
@@ -889,7 +892,8 @@ export const copy: Copy = {
   admin: {
     meta: { title: productName, description: tagline },
     documentTitle: `Dashboard — ${productName}`,
-    title: "Dashboard",
+    title: "Admin",
+    backToSite: "Back to site",
     refresh: "Refresh",
     loading: "Loading…",
     kpis: {

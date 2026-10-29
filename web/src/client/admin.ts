@@ -350,6 +350,7 @@ function isAccessDenied(error: unknown): boolean {
 function showNotFound(): void {
   const notFound: HTMLElement = element("admin-not-found", HTMLElement);
   element("admin", HTMLElement).remove();
+  document.documentElement.classList.remove("admin-app");
   notFound.hidden = false;
   document.title = dataValue(notFound, "title");
 }
@@ -373,15 +374,18 @@ function mountDashboard(): void {
   }
   element("admin-mount", HTMLElement).replaceChildren(template.content.cloneNode(true));
   element("admin-loading", HTMLElement).classList.add("hidden");
+  // Sitenin üst çubuğu ve alt bilgisi gizlenir; panel tam ekran kabuk olur (admin.astro).
+  document.documentElement.classList.add("admin-app");
   document.title = dataValue(root, "title");
 }
 
-/** Görünümü gösterir (düğmenin basılı durumu ve panelin görünürlüğü). */
+/** Görünümü gösterir (menü düğmesinin basılı durumu, panelin görünürlüğü ve üst çubuktaki başlık). */
 function showView(view: AdminView): void {
   for (const other of adminViews) {
     element(`view-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === view));
     element(`panel-${other}`, HTMLElement).classList.toggle("hidden", other !== view);
   }
+  element("admin-view-title", HTMLElement).textContent = dataValue(element(`view-${view}`, HTMLButtonElement), "title");
 }
 
 /** Adres çubuğundaki `#users` gibi görünüm adı; yoksa genel bakış. Saf fonksiyondur. */
