@@ -77,7 +77,7 @@ struct MeetingsListPage: View {
             .padding(.vertical, DesignTokens.Spacing.s)
             if !model.meetings.isEmpty {
                 PillPicker(selection: $listFilter, options: [
-                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevim olanlar"), (MeetingListFilter.problems, "Hatalı"),
+                    (MeetingListFilter.all, "Hepsi"), (MeetingListFilter.myTasks, "Görevlerim"), (MeetingListFilter.problems, "Hatalı"),
                 ])
                 .padding(.horizontal, DesignTokens.Spacing.m)
                 .padding(.bottom, DesignTokens.Spacing.s)
@@ -328,7 +328,8 @@ struct MeetingRow: View {
             Spacer(minLength: 0)
             let mine: Int = record.note?.tasks.filter(\.isMine).count ?? 0
             if mine > 0 {
-                Label("\(mine)", systemImage: "star.fill")
+                // Görev simgesi (yıldız favori gibi okunuyordu); kenar çubuğundaki Görevlerim ile aynı.
+                Label("\(mine)", systemImage: "checkmark.circle")
                     .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(.tint)
                     .hoverHint("Sana düşen görev sayısı", alignment: .trailing, edge: .bottom)

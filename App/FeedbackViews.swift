@@ -109,7 +109,7 @@ private struct FeedbackSheet: View {
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text("Yanıt için e-posta (isteğe bağlı)").appFont(size: 12, weight: .medium).foregroundStyle(Theme.muted)
-                TextField("Yanıt için e-posta (isteğe bağlı)", text: $email, prompt: Text(verbatim: "ad@ornek.com"))
+                TextField("Yanıt için e-posta (isteğe bağlı)", text: $email, prompt: Text("ad@ornek.com"))
                     .textFieldStyle(.plain)
                     .textContentType(.emailAddress)
                     .appFont(size: 14, weight: .regular)

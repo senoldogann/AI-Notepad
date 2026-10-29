@@ -160,9 +160,12 @@ private struct SettingsTabs: View {
                     Button {
                         selection = item
                     } label: {
+                        // Sekme adı bölünmez (dar pencerede "Appearanc/e" oluyordu).
                         Text(item.title)
                             .appFont(size: 14, weight: isSelected ? .medium : .regular)
                             .foregroundStyle(isSelected ? Theme.ink : Theme.muted)
+                            .lineLimit(1)
+                            .fixedSize()
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background {

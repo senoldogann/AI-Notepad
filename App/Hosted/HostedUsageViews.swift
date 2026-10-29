@@ -379,10 +379,10 @@ struct HostedUpsellSheet: View {
                             .frame(width: 80, height: 80)
                             .shadow(color: Color.black.opacity(0.2), radius: 16, y: 10)
                             .accessibilityHidden(true)
-                        Text(verbatim: "Gistsmith")
+                        // Büyük harf elle yazılır: Türkçe yerel ayarda büyük harfe çevirme "GİSTSMİTH" yapıyordu.
+                        Text(verbatim: "GISTSMITH")
                             .appFont(size: 11, weight: .semibold)
                             .tracking(1.2)
-                            .textCase(.uppercase)
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -402,6 +402,7 @@ struct HostedUpsellSheet: View {
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: 12) {
                     benefit(symbol: "waveform", text: "Canlı metin, konuşulurken")
                     benefit(symbol: "checklist", text: "Toplantı bitince not hazır, görevler en üstte")
@@ -432,6 +433,7 @@ struct HostedUpsellSheet: View {
                     .appFont(size: 11, weight: .regular)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 32)
             .padding(.top, 26)
@@ -485,6 +487,7 @@ struct HostedUpsellSheet: View {
             Text(text)
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

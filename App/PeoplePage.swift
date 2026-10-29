@@ -333,10 +333,13 @@ private struct PersonDetail: View {
                         if !person.role.isEmpty {
                             Text(person.role).appFont(size: 14, weight: .regular)
                         }
-                        HStack(spacing: 14) {
+                        // E-posta ve ses durumu alt alta (yan yanayken e-posta kesiliyordu).
+                        VStack(alignment: .leading, spacing: 4) {
                             if !person.email.isEmpty, let url = URL(string: "mailto:\(person.email)") {
                                 Link(destination: url) {
                                     Label(person.email, systemImage: "envelope")
+                                        .lineLimit(1)
+                                        .fixedSize()
                                 }
                             }
                             Label(person.hasVoiceprint ? "Sesinden tanınıyor" : "Sesi henüz kayıtlı değil", systemImage: person.hasVoiceprint ? "waveform.badge.checkmark" : "waveform")
