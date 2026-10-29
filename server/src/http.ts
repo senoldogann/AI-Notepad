@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { decodeUtf8Strict } from "./crypto";
-import { ApiError, ForbiddenIdentityError } from "./errors";
+import { ApiError } from "./errors";
 
 /** JSON yanıt; güvenlik başlıkları `app.ts` içinde her yanıta eklenir. */
 export function jsonResponse(status: number, body: object): Response {
@@ -10,10 +10,9 @@ export function jsonResponse(status: number, body: object): Response {
   });
 }
 
-/** Tek tip hata gövdesi: `{error: {code, message}}`; yönetici reddinde ayrıca çağıranın `identity`'si. */
+/** Tek tip hata gövdesi: `{error: {code, message}}`. */
 export function errorResponse(error: ApiError): Response {
-  const identity: { identity: string } | Record<string, never> = error instanceof ForbiddenIdentityError ? { identity: error.identity } : {};
-  return jsonResponse(error.status, { error: { code: error.code, message: error.message, ...identity } });
+  return jsonResponse(error.status, { error: { code: error.code, message: error.message } });
 }
 
 /**

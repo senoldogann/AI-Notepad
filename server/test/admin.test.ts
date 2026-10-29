@@ -155,21 +155,17 @@ describe("yönetici API'si", () => {
     expect(stats.elevenLabs).toEqual({ cycleStart: "2026-10-11", usedHours: 11, capHours: 110, percent: 10 });
   });
 
-  it("yönetici olmayan 403 alır; gövdede kendi kimliği vardır; liste boşsa kimse yönetici değildir", async () => {
+  it("yönetici olmayan düz 403 alır (gövdede kimlik yok); liste boşsa kimse yönetici değildir", async () => {
     const harness: Harness = await defaultHarness();
     const subject: string = `google-${randomId()}`;
     const user: Session = await signInWithGoogle(harness, subject);
-    const body: ErrorBody & { error: { identity?: string } } = await expectError(await adminGet(harness, user, "/v1/admin/stats"), 403, "forbidden");
-    expect(body.error.identity).toBe(`google:${subject}`);
+    const body: ErrorBody = await expectError(await adminGet(harness, user, "/v1/admin/stats"), 403, "forbidden");
+    expect(Object.keys(body.error).sort()).toEqual(["code", "message"]);
+    expect(JSON.stringify(body)).not.toContain(subject);
 
     const apple: Session = await signIn(harness);
-    const appleBody: ErrorBody & { error: { identity?: string } } = await expectError(await adminGet(harness, apple, "/v1/admin/reports"), 403, "forbidden");
-    expect(appleBody.error.identity).toMatch(/^apple:apple-/);
-
-    // Birden çok kimlik virgülle döner.
-    await env.DB.prepare("INSERT INTO auth_identities (provider, subject, user_id, created_at) VALUES ('apple', 'ikinci', ?, 0)").bind(user.userId).run();
-    const both: ErrorBody & { error: { identity?: string } } = await expectError(await adminGet(harness, user, "/v1/admin/stats"), 403, "forbidden");
-    expect(both.error.identity).toBe(`apple:ikinci,google:${subject}`);
+    const appleBody: ErrorBody = await expectError(await adminGet(harness, apple, "/v1/admin/reports"), 403, "forbidden");
+    expect(Object.keys(appleBody.error).sort()).toEqual(["code", "message"]);
 
     const admin: Session = await signInWithGoogle(harness, adminSubject);
     await expectError(await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken })), 403, "forbidden");

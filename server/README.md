@@ -167,8 +167,10 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
      `PRICE_USD_MONTHLY` (Stripe fiyatıyla aynı), `REPORT_BYTES_PER_DAY`. `APPLE_CLIENT_IDS` hazırdır:
      `com.senoldogan.AINotepad.hosted` (abonelik uygulamasının paket kimliği) ve `com.senoldogan.AINotepad.web` (sitenin
      Apple ile giriş Services ID'si; bkz. `web/README.md`).
-   - `ADMIN_IDENTITIES` önce boş kalır. Dağıtımdan sonra sitede kendi hesabınla giriş yapıp `GET /v1/admin/stats`
-     çağır: `403` yanıtındaki `error.identity` (`google:…` ya da `apple:…`) senin kimliğindir; onu yazıp yeniden dağıt.
+   - `ADMIN_IDENTITIES` önce boş kalır. Dağıtımdan sonra sitede kendi hesabınla giriş yap; kimliğin (`google:…` ya da
+     `apple:…`) D1'de: `npx wrangler d1 execute ainotepad-production --remote --env production --command
+     "SELECT provider || ':' || subject FROM auth_identities WHERE user_id = '<kullanıcı kimliği>'"` (kullanıcı kimliği
+     giriş yanıtındaki `userId` ya da `admin_forbidden` uyarısındaki `userId`); onu yazıp yeniden dağıt.
 4. Yukarıdaki gizli değerleri `wrangler secret put … --env production` ile gir.
 5. `npm run migrate:production`
 6. `npm run deploy`
@@ -208,8 +210,8 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `GET /v1/admin/reports/{id}` | Bearer + yönetici | `{id, kind, status, createdAt, userId, email, appVersion, os, message, payload}` |
 | `POST /v1/admin/reports/{id}` | Bearer + yönetici | `{status: "open" \| "done"}` → `204` |
 
-Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği
-`403 {"error": {"code": "forbidden", "message", "identity"}}` döner (`identity`: çağıranın kendi kimlikleri, virgülle).
+Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği düz
+`403 forbidden` döner (gövdede kimlik yok).
 Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner; günlük deneme
 harcaması tavanı aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` döner. Site kaynağı
 (`SITE_ORIGIN`) CORS'u yalnızca site uçlarında (giriş, `/v1/me`, ödeme, raporlar) ve yönetici uçlarında alır; her yanıt

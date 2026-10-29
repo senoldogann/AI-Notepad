@@ -1,7 +1,7 @@
 import type { Config, StripeMode } from "./config";
 import { type DeepgramUsage, deepgramUsage } from "./deepgram";
 import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
-import { ForbiddenIdentityError } from "./errors";
+import { ApiError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
 import { dayKey, monthKey, monthStartMs } from "./usage";
@@ -67,9 +67,9 @@ export interface AdminStats {
 }
 
 /**
- * Kullanıcının kimlikleri `<sağlayıcı>:<sub>` biçiminde; biri `ADMIN_IDENTITIES` listesindeyse geçer. Değilse
- * `403 forbidden`, gövdede çağıranın kendi kimlikleri (virgülle) — sahip kendi kimliğini listeye kopyalayabilsin.
- * Liste boşsa kimse yönetici değildir.
+ * Kullanıcının kimlikleri `<sağlayıcı>:<sub>` biçiminde; biri `ADMIN_IDENTITIES` listesindeyse geçer. Değilse düz
+ * `403 forbidden` (gövdede kimlik yok; `admin_forbidden` uyarısı yalnızca kullanıcı kimliğini loglar). Liste boşsa kimse
+ * yönetici değildir.
  */
 export async function requireAdmin(db: D1Database, config: Config, userId: string): Promise<void> {
   const rows = await db
@@ -81,7 +81,7 @@ export async function requireAdmin(db: D1Database, config: Config, userId: strin
     return;
   }
   log("warn", "admin_forbidden", { userId });
-  throw new ForbiddenIdentityError("Bu hesap yönetici değil.", identities.join(","));
+  throw new ApiError("forbidden", "Bu işleme izin yok.");
 }
 
 /** Bugün dahil son `count` UTC günü, eskiden yeniye. Saf fonksiyondur. */

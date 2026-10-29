@@ -38,8 +38,8 @@
     // Google OAuth istemci kimlikleri (açık değerler); kimlik jetonunun `aud`'u bunlardan biri olmalı. Mac uygulaması
     // Google kimlik jetonunu site üzerinden aldığı için tek istemci sitenin web istemcisidir.
     "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
-    // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğini
-    // öğrenmek için giriş yapıp `GET /v1/admin/stats` çağır: 403 yanıtındaki `error.identity`.
+    // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğin
+    // D1'deki `auth_identities` tablosundadır (bkz. README "İlk dağıtım").
     "ADMIN_IDENTITIES": "",
     // `GET /v1/download/mac` buraya yönlendirir (302) ve günlük sayacı artırır.
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",

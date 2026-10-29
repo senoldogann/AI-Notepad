@@ -98,21 +98,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Yönetici olmayan kullanıcının yönetici API'si isteği (`403 forbidden`). Hata gövdesi çağıranın kendi kimliklerini
- * (`<sağlayıcı>:<sub>`, virgülle ayrılmış) `identity` alanında taşır: sahip kendi kimliğini `ADMIN_IDENTITIES`
- * listesine kopyalayabilsin diye. Yalnızca kimliği doğrulanmış çağırana kendi kimliği döner.
- */
-export class ForbiddenIdentityError extends ApiError {
-  override readonly name: string = "ForbiddenIdentityError";
-  readonly identity: string;
-
-  constructor(message: string, identity: string) {
-    super("forbidden", message);
-    this.identity = identity;
-  }
-}
-
 /** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
