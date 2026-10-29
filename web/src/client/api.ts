@@ -1,6 +1,7 @@
 // Abonelik sunucusunun (server/src/app.ts) sitenin kullandığı uçları: giriş, oturum yenileme, hesap, ödeme, hesap
 // silme ve iletişim formu. Yanıtlar elle doğrulanır (bağımlılık yok); beklenmeyen biçim `ApiResponseError` verir.
 // Alan okuyucuları yönetim paneli istemcisi (admin-api.ts) de kullanır.
+import { type BillingPlan, billingPlanOf } from "../lib/plans";
 import { siteConfig } from "../site";
 
 /** Sunucunun döndürdüğü oturum (`sessionBody`). */
@@ -15,13 +16,39 @@ export interface SessionTokens {
 /** Aboneliğin erişim durumu (server/src/entitlements.ts). */
 export type SubscriptionAccess = "active" | "grace" | "none";
 
+/** Aboneliğin her durumda ortak alanları. `plan`: aylık ya da yıllık; sunucu fiyatı tanımıyorsa (eski fiyat) null. */
+interface SubscriptionBase {
+  readonly status: string;
+  readonly plan: BillingPlan | null;
+  readonly currentPeriodEnd: string;
+  readonly cancelAt: string | null;
+}
+
 /**
  * `GET /v1/me` yanıtındaki abonelik: ek sürenin bitişi yalnızca `grace` durumunda vardır. `cancelAt` iptal edilmiş
  * aboneliğin biteceği andır; yenilenecekse null.
  */
 export type SubscriptionInfo =
-  | { readonly status: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null; readonly access: "grace"; readonly graceEndsAt: string }
-  | { readonly status: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null; readonly access: "active" | "none"; readonly graceEndsAt: null };
+  | (SubscriptionBase & { readonly access: "grace"; readonly graceEndsAt: string })
+  | (SubscriptionBase & { readonly access: "active" | "none"; readonly graceEndsAt: null });
+
+/**
+ * `GET /v1/referral` yanıtı: davet programı açık mı, abonenin kodu ve davet adresi (abonelik erişimi yoksa ya da program
+ * kapalıysa null), katılan, ödülü verilen ve bekleyen arkadaş sayısı, bu yıl kalan ödül, yıllık en çok ödül, ödülün
+ * tutarı (USD) ve ödülden önce iadesiz geçmesi gereken gün.
+ */
+export interface ReferralInfo {
+  readonly enabled: boolean;
+  readonly code: string | null;
+  readonly inviteUrl: string | null;
+  readonly joined: number;
+  readonly rewarded: number;
+  readonly pending: number;
+  readonly rewardsLeftThisYear: number;
+  readonly rewardsPerYear: number;
+  readonly rewardUsd: number;
+  readonly holdDays: number;
+}
 
 /** `GET /v1/me` yanıtı. */
 export interface Entitlements {
@@ -297,15 +324,51 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
     throw new ApiResponseError(path, response.status, `bilinmeyen erişim "${access}"`, response.text);
   }
   const status: string = stringField(value, "status", response, path);
+  const rawPlan: string | null = nullableStringField(value, "plan", response, path);
+  const plan: BillingPlan | null = billingPlanOf(rawPlan);
+  if (rawPlan !== null && plan === null) {
+    throw new ApiResponseError(path, response.status, `bilinmeyen abonelik planı "${rawPlan}"`, response.text);
+  }
   const currentPeriodEnd: string = stringField(value, "currentPeriodEnd", response, path);
   const cancelAt: string | null = value["cancelAt"] === null ? null : stringField(value, "cancelAt", response, path);
   if (access === "grace") {
-    return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
+    return { status, plan, currentPeriodEnd, cancelAt, access, graceEndsAt: stringField(value, "graceEndsAt", response, path) };
   }
   if (value["graceEndsAt"] !== null) {
     throw new ApiResponseError(path, response.status, '"graceEndsAt" ek süre dışında null değil', response.text);
   }
-  return { status, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
+  return { status, plan, currentPeriodEnd, cancelAt, access, graceEndsAt: null };
+}
+
+/** Nesnedeki mantıksal alan; değilse `ApiResponseError`. */
+function booleanValue(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
+  const value: JsonValue | undefined = object[key];
+  if (typeof value !== "boolean") {
+    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değer değil`, response.text);
+  }
+  return value;
+}
+
+/** `GET /v1/referral` yanıtını okur. */
+export function parseReferral(response: RawResponse, path: string): ReferralInfo {
+  const body: JsonObject = parseObject(response, path);
+  return {
+    enabled: booleanValue(body, "enabled", response, path),
+    code: nullableStringField(body, "code", response, path),
+    inviteUrl: nullableStringField(body, "inviteUrl", response, path),
+    joined: numberField(body, "joined", response, path),
+    rewarded: numberField(body, "rewarded", response, path),
+    pending: numberField(body, "pending", response, path),
+    rewardsLeftThisYear: numberField(body, "rewardsLeftThisYear", response, path),
+    rewardsPerYear: numberField(body, "rewardsPerYear", response, path),
+    rewardUsd: numberField(body, "rewardUsd", response, path),
+    holdDays: numberField(body, "holdDays", response, path),
+  };
+}
+
+/** `POST /v1/referral/validate` yanıtını okur: sunucunun biçimlediği geçerli kod. */
+export function parseValidatedReferralCode(response: RawResponse, path: string): string {
+  return stringField(parseObject(response, path), "code", response, path);
 }
 
 /** `GET /v1/download/mac/version` yanıtını okur: yayınlanmış en son Mac sürümü (ör. "0.1.4"). */

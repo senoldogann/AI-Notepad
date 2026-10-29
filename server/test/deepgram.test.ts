@@ -248,4 +248,28 @@ describe("Deepgram canlı metin jetonu", () => {
       usdPerMinute: 0.0092,
     });
   });
+
+  it("bütçe toplamı tek satırdır: ekleme, gerçek süreye indirme ve silmede tablonun toplamıyla aynı kalır", async () => {
+    const totals = async (): Promise<{ counter: unknown; table: unknown }> => ({
+      counter: await env.DB.prepare("SELECT charged_seconds AS seconds, meetings, open_meetings AS open FROM deepgram_budget WHERE id = 1").first(),
+      table: await env.DB.prepare(
+        `SELECT COALESCE(SUM(charged_seconds), 0) AS seconds, COUNT(*) AS meetings,
+           COALESCE(SUM(CASE WHEN settled_at IS NULL THEN 1 ELSE 0 END), 0) AS open FROM deepgram_live_meetings`,
+      ).first(),
+    });
+    await env.DB.prepare("DELETE FROM deepgram_live_meetings").run();
+    expect(await totals()).toEqual({ counter: { seconds: 0, meetings: 0, open: 0 }, table: { seconds: 0, meetings: 0, open: 0 } });
+    await env.DB.prepare(
+      `INSERT INTO deepgram_live_meetings (meeting_id, grants, first_grant_at, charged_seconds, settled_at) VALUES
+         ('dg_a', 1, 0, 1000, NULL), ('dg_b', 1, 0, 400, NULL), ('dg_c', 1, 0, 50, 5)`,
+    ).run();
+    expect((await totals()).counter).toEqual({ seconds: 1450, meetings: 3, open: 2 });
+    // Peşin tahmin gerçek süreye indirilir; jeton sayacı (`grants`) toplamı değiştirmez.
+    await env.DB.prepare("UPDATE deepgram_live_meetings SET charged_seconds = 300, settled_at = 9 WHERE meeting_id = 'dg_a'").run();
+    await env.DB.prepare("UPDATE deepgram_live_meetings SET grants = grants + 1 WHERE meeting_id = 'dg_b'").run();
+    await env.DB.prepare("DELETE FROM deepgram_live_meetings WHERE meeting_id = 'dg_c'").run();
+    const after = await totals();
+    expect(after.counter).toEqual({ seconds: 700, meetings: 2, open: 1 });
+    expect(after.counter).toEqual(after.table);
+  });
 });

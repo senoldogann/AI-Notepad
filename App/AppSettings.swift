@@ -75,11 +75,12 @@ enum SettingsKey {
     static let autoRecord: String = "calendar.autoRecord"
     /// Yüz yüze toplantı: sistem sesi yerine mikrofon "Diğerleri" olarak konuşmacılara ayrılır.
     static let inPersonMode: String = "inPersonMode"
-    /// Her not hazır olunca Apple Notlar'a gönder.
+    /// Her not hazır olunca Apple Notlar'a gönder (varsayılan kapalı; `userContentDefaults` alanında).
     static let appleNotesAutoSend: String = "destinations.appleNotes"
-    /// Notların Markdown olarak yazılacağı klasör (Obsidian, iCloud Drive…); seçilmediyse boş.
+    /// Notların Markdown olarak yazılacağı klasör (Obsidian, iCloud Drive…); seçilmediyse yok (`userContentDefaults`
+    /// alanında).
     static let markdownFolder: String = "destinations.markdownFolder"
-    /// Her not hazır olunca klasöre yaz.
+    /// Her not hazır olunca klasöre yaz (varsayılan kapalı; `userContentDefaults` alanında).
     static let markdownAutoExport: String = "destinations.markdownAuto"
     /// Kullanıcının tanıma sözlüğü (satır başına bir ad ya da terim).
     static let customVocabulary: String = "customVocabulary"
@@ -87,7 +88,8 @@ enum SettingsKey {
     static let folders: String = "folders"
     /// Toplantı özetinde sözlük açık mı.
     static let glossaryExpanded: String = "meeting.glossaryExpanded"
-    /// Kişiler sayfasındaki liste açık (varsayılan kapalı: sayfa kişinin kendisine yer açar).
+    /// Kişiler sayfasındaki liste açık (varsayılan açık: kapalıyken diğer kişiler yalnız seçici menüde kalıp gözden
+    /// kaçıyordu; üst çubuktaki düğmeyle gizlenir).
     static let peopleListVisible: String = "people.listVisible"
     /// Toplantılar sayfasındaki toplantı listesi açık (üst çubuktaki düğmeyle gizlenir).
     static let meetingsListVisible: String = "meetings.listVisible"
@@ -158,13 +160,25 @@ func applyDefaultInterfaceLanguageOnce(bundleIdentifier: String, language: Inter
 /// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
 let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
 
-/// Kullanıcının oluşturduğu içeriğin (klasörler, Sor tarifleri) saklandığı ayar alanı: geliştirici sürümünde standart
-/// ayarlar; abonelikte yüklü hesabın kendi alanı (bkz. `hostedActiveAccountDefaults`), hesap yüklenmediyse hata.
+/// Kullanıcının oluşturduğu içeriğin (klasörler, Sor tarifleri) ve notu dışarı yazma ayarlarının (Markdown klasörü,
+/// klasöre ve Apple Notlar'a kendiliğinden gönderim) saklandığı ayar alanı: geliştirici sürümünde standart ayarlar;
+/// abonelikte yüklü hesabın kendi alanı (bkz. `hostedActiveAccountDefaults`), hesap yüklenmediyse hata.
 func userContentDefaults() throws -> UserDefaults {
     #if HOSTED_EDITION
     try hostedActiveAccountDefaults()
     #else
     UserDefaults.standard
+    #endif
+}
+
+/// Kullanıcının bağlantılarının (not hedefleri, görev araçları) Anahtar Zinciri servisi: geliştirici sürümünde
+/// uygulamanın servisi; abonelikte yüklü hesabın kendi servisi (bkz. `hostedActiveAccountKeychainService`), hesap
+/// yüklenmediyse hata.
+func userContentKeychainService() throws -> String {
+    #if HOSTED_EDITION
+    try hostedActiveAccountKeychainService()
+    #else
+    appKeychainService
     #endif
 }
 
@@ -265,13 +279,10 @@ func registerDefaultSettings() {
         SettingsKey.voiceRecognition: false,
         SettingsKey.consentReminder: true,
         SettingsKey.calendarEnabled: false,
-        SettingsKey.peopleListVisible: false,
+        SettingsKey.peopleListVisible: true,
         SettingsKey.meetingsListVisible: true,
         SettingsKey.askHistoryVisible: false,
         SettingsKey.inPersonMode: false,
-        SettingsKey.appleNotesAutoSend: false,
-        SettingsKey.markdownFolder: "",
-        SettingsKey.markdownAutoExport: false,
         SettingsKey.meetingReminders: true,
         SettingsKey.micSuggestions: true,
         SettingsKey.webhookAutoSend: false,

@@ -1,0 +1,162 @@
+---
+// Karşılaştırma tablosu: satırlar konular, sütunlar ürünler (ilk sütun bizim). Doğrulanmamış değer (`null`) tire olarak
+// görünür; ekran okuyucu "Not checked" okur. Telefonda her satır başlıklı bir karta dönüşür (sütun adı hücrenin üstünde).
+import { copy, type CompareCopy, type ComparisonTopic } from "../copy";
+
+/** Tablonun bir sütunu: ürün adı ve konulara göre değerleri. */
+export interface ComparisonColumn {
+  readonly name: string;
+  readonly values: Readonly<Record<ComparisonTopic, string | null>>;
+}
+
+interface Props {
+  readonly caption: string;
+  readonly topics: readonly ComparisonTopic[];
+  readonly columns: readonly ComparisonColumn[];
+}
+const { caption, topics, columns } = Astro.props;
+const text: CompareCopy = copy.compare;
+---
+
+<div class="comparison">
+  <table class="comparison__table">
+    <caption class="visually-hidden">{caption}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{text.topicColumn}</th>
+        {columns.map((column: ComparisonColumn) => <th scope="col">{column.name}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        topics.map((topic: ComparisonTopic) => (
+          <tr>
+            <th scope="row">{text.topics[topic]}</th>
+            {columns.map((column: ComparisonColumn) => {
+              const value: string | null = column.values[topic];
+              return (
+                <td data-label={column.name}>
+                  {value === null ? (
+                    <>
+                      <span class="comparison__dash" aria-hidden="true">—</span>
+                      <span class="visually-hidden">{text.notChecked}</span>
+                    </>
+                  ) : (
+                    value
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .comparison {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--card);
+    overflow: hidden;
+  }
+
+  .comparison__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .comparison__table th,
+  .comparison__table td {
+    padding: 14px 18px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .comparison__table tbody tr:last-child th,
+  .comparison__table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .comparison__table thead th {
+    background: var(--soft);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .comparison__table tbody th {
+    width: 22%;
+    font-weight: 600;
+  }
+
+  /* Bizim sütunumuz hafifçe vurgulu. */
+  .comparison__table td:nth-of-type(1) {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+
+  .comparison__table td {
+    color: var(--muted);
+  }
+
+  .comparison__table td:nth-of-type(1) {
+    color: var(--ink);
+  }
+
+  .comparison__dash {
+    color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .comparison__table thead {
+      display: none;
+    }
+
+    .comparison__table,
+    .comparison__table tbody,
+    .comparison__table tr,
+    .comparison__table th,
+    .comparison__table td {
+      display: block;
+      width: auto;
+    }
+
+    .comparison__table tr {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .comparison__table tbody tr:last-child {
+      border-bottom: 0;
+    }
+
+    .comparison__table th,
+    .comparison__table td,
+    .comparison__table tbody tr:last-child th,
+    .comparison__table tbody tr:last-child td {
+      padding: 4px 0;
+      border-bottom: 0;
+    }
+
+    .comparison__table tbody th {
+      width: auto;
+      margin-bottom: 4px;
+    }
+
+    .comparison__table td:nth-of-type(1) {
+      background: none;
+    }
+
+    .comparison__table td::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--muted);
+    }
+  }
+</style>

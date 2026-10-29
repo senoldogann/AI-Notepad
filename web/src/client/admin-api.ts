@@ -1,4 +1,4 @@
-// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, kullanıcı listesi ve ayrıntısı,
+// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, içgörüler, kullanıcı listesi ve ayrıntısı,
 // işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği. Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
 // Zaman alanları (`generatedAt`, `createdAt`) Unix ms sayısı ya da ISO 8601 metni olabilir; ikisi de ms'ye çevrilir.
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
@@ -15,6 +15,7 @@ import {
   stringField,
 } from "./api";
 import { authorizedSend } from "./session";
+import { type BillingPlan, billingPlans } from "../lib/plans";
 
 /** Bir günün değeri (`YYYY-MM-DD`, UTC). */
 export interface DayCount {
@@ -46,7 +47,22 @@ export interface AdminStats {
     readonly byProvider: { readonly apple: number; readonly google: number };
   };
   readonly trials: { readonly activeTrialUsers: number; readonly exhaustedTrialUsers: number };
-  readonly subscriptions: { readonly active: number; readonly grace: number; readonly ending: number; readonly canceledTotal: number; readonly mrrUsd: number };
+  /**
+   * Abonelikler: `monthly` ve `yearly` yenilenecek ödenmiş aboneliklerin plana göre sayısı; `mrrUsd` aylık × aylık fiyat
+   * + yıllık × yıllık fiyat / 12. `complimentary`: süren ücretsiz erişim (diğer sayılara ve gelire girmez).
+   */
+  readonly subscriptions: {
+    readonly active: number;
+    readonly grace: number;
+    readonly ending: number;
+    readonly canceledTotal: number;
+    readonly monthly: number;
+    readonly yearly: number;
+    readonly mrrUsd: number;
+    readonly complimentary: number;
+  };
+  /** Davet programı: katılan, 30 günlük bekleme süresindeki, ödülü verilen ve iptal edilen davetler. */
+  readonly referrals: { readonly joined: number; readonly pending: number; readonly granted: number; readonly voided: number };
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
   readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DaySpend[] };
   readonly tokens: { readonly thisMonth: number };
@@ -90,7 +106,7 @@ export interface TrialRefusalCounts {
 }
 
 /** Kullanıcı listesi kesimi. */
-export type UserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free";
+export type UserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free" | "no_meeting" | "trial_ended" | "inactive" | "failed";
 
 /** Giriş sağlayıcısı süzgeci. */
 export type UserProvider = "apple" | "google";
@@ -104,7 +120,11 @@ export type UserAccess = "active" | "grace" | "none";
 /** Kullanıcının aboneliği. Zamanlar Unix ms. */
 export interface UserSubscription {
   readonly status: string;
+  /** Aylık ya da yıllık; fiyat tanınmıyorsa null. */
+  readonly plan: BillingPlan | null;
   readonly access: UserAccess;
+  /** Yöneticinin verdiği ücretsiz erişim (Stripe'ta karşılığı yok; plan her zaman aylık görünür). */
+  readonly complimentary: boolean;
   readonly currentPeriodEnd: number;
   readonly cancelAt: number | null;
   readonly pastDueSince: number | null;
@@ -123,6 +143,9 @@ export interface UserSummary {
   readonly meetingsTotal: number;
   readonly hoursThisMonth: number;
   readonly lastActiveAt: number | null;
+  /** İsteği başarısız olmuş toplantı sayısı ve en son hatanın kodu. */
+  readonly failedMeetings: number;
+  readonly lastFailureCode: string | null;
 }
 
 /** Kullanıcı listesinin bir sayfası; `nextCursor` sonraki sayfanın imleci (yoksa null). */
@@ -148,6 +171,62 @@ export interface UserMeeting {
   readonly tokenBudget: number;
   readonly attested: boolean;
   readonly deepgram: boolean;
+  /** Toplantıda not tamamlandı mı. */
+  readonly noteCompleted: boolean;
+  /** Toplantıya bağlı başarısız istek sayısı, son hata kodu ve anı (Unix ms). */
+  readonly failureCount: number;
+  readonly lastFailureCode: string | null;
+  readonly lastFailureAt: number | null;
+}
+
+/** Hesabın son abonelik iptalinin nedeni (Stripe). Zaman Unix ms. */
+export interface UserCancellation {
+  readonly at: number;
+  readonly reason: string | null;
+  readonly feedback: string | null;
+  readonly comment: string | null;
+}
+
+/** Ayrıntı (hata kodu, servis, kaynak, alan adı, neden) başına sayı; boş ayrıntı `""`. */
+export interface DetailCount {
+  readonly detail: string;
+  readonly count: number;
+}
+
+/** Bir penceredeki sorunlar (listeler çoktan aza). */
+export interface ProblemWindow {
+  readonly trialCapacityReached: number;
+  readonly spendCeilingReached: number;
+  readonly refusals: readonly DetailCount[];
+  readonly providerErrors: readonly DetailCount[];
+  readonly serverErrors: readonly DetailCount[];
+  readonly serverErrorsTotal: number;
+}
+
+/** Huninin adımı. */
+export type FunnelStep = "downloads" | "accounts" | "first_meeting" | "first_note" | "three_meetings" | "subscribed" | "canceled";
+
+/** Son iptal (Unix ms). */
+export interface RecentCancellation {
+  readonly userId: string;
+  readonly at: number;
+  readonly reason: string | null;
+  readonly feedback: string | null;
+  readonly comment: string | null;
+}
+
+/** `GET /v1/admin/insights` yanıtı. */
+export interface Insights {
+  readonly generatedAt: number;
+  readonly problems: { readonly last7Days: ProblemWindow; readonly last30Days: ProblemWindow };
+  readonly funnel: { readonly days: number; readonly steps: readonly { readonly step: FunnelStep; readonly count: number }[] };
+  readonly downloads: { readonly total: number; readonly bySource: readonly DetailCount[]; readonly byReferrerHost: readonly DetailCount[] };
+  readonly cancellations: {
+    readonly total: number;
+    readonly byFeedback: readonly DetailCount[];
+    readonly byReason: readonly DetailCount[];
+    readonly recent: readonly RecentCancellation[];
+  };
 }
 
 /** Zaman çizelgesi olayı. */
@@ -182,6 +261,7 @@ export interface UserDetail {
   readonly user: UserSummary;
   readonly trialDeviceVerifiedAt: number | null;
   readonly stripeCustomerId: string | null;
+  readonly cancellation: UserCancellation | null;
   readonly usage: {
     readonly usedHours: number;
     readonly capHours: number;
@@ -357,6 +437,7 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
   const billing: JsonObject = objectField(body, "billing", response, path);
   const usage: JsonObject = objectField(body, "usage", response, path);
   const refusals: JsonObject = objectField(body, "trialRefusals", response, path);
+  const referrals: JsonObject = objectField(body, "referrals", response, path);
   const dayCounts =(owner: JsonObject, key: string): DayCount[] =>
     objectArrayField(owner, key, response, path).map((item: JsonObject): DayCount => ({ day: dayField(item, response, path), count: numberField(item, "count", response, path) }));
   return {
@@ -376,7 +457,16 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       grace: numberField(subscriptions, "grace", response, path),
       ending: numberField(subscriptions, "ending", response, path),
       canceledTotal: numberField(subscriptions, "canceledTotal", response, path),
+      monthly: numberField(subscriptions, "monthly", response, path),
+      yearly: numberField(subscriptions, "yearly", response, path),
       mrrUsd: numberField(subscriptions, "mrrUsd", response, path),
+      complimentary: numberField(subscriptions, "complimentary", response, path),
+    },
+    referrals: {
+      joined: numberField(referrals, "joined", response, path),
+      pending: numberField(referrals, "pending", response, path),
+      granted: numberField(referrals, "granted", response, path),
+      voided: numberField(referrals, "voided", response, path),
     },
     meetings: {
       last30Days: objectArrayField(meetings, "last30Days", response, path).map(
@@ -493,7 +583,8 @@ function nullableObjectField(object: JsonObject, key: string, response: RawRespo
   return object[key] === null ? null : objectField(object, key, response, path);
 }
 
-const segments: readonly UserSegment[] = ["subscribed", "past_due", "canceled", "trial", "free"];
+const segments: readonly UserSegment[] = ["subscribed", "past_due", "canceled", "trial", "free", "no_meeting", "trial_ended", "inactive", "failed"];
+const funnelSteps: readonly FunnelStep[] = ["downloads", "accounts", "first_meeting", "first_note", "three_meetings", "subscribed", "canceled"];
 const providers: readonly UserProvider[] = ["apple", "google"];
 const plans: readonly UserPlan[] = ["subscription", "trial", "free"];
 const accesses: readonly UserAccess[] = ["active", "grace", "none"];
@@ -534,7 +625,9 @@ function parseUserSummary(item: JsonObject, response: RawResponse, path: string)
         ? null
         : {
             status: stringField(subscription, "status", response, path),
+            plan: nullableLiteralField(subscription, "plan", billingPlans, response, path),
             access: literalField(subscription, "access", accesses, response, path),
+            complimentary: booleanField(subscription, "complimentary", response, path),
             currentPeriodEnd: timestampField(subscription, "currentPeriodEnd", response, path),
             cancelAt: nullableTimestampField(subscription, "cancelAt", response, path),
             pastDueSince: nullableTimestampField(subscription, "pastDueSince", response, path),
@@ -550,6 +643,8 @@ function parseUserSummary(item: JsonObject, response: RawResponse, path: string)
     meetingsTotal: numberField(item, "meetingsTotal", response, path),
     hoursThisMonth: numberField(item, "hoursThisMonth", response, path),
     lastActiveAt: nullableTimestampField(item, "lastActiveAt", response, path),
+    failedMeetings: numberField(item, "failedMeetings", response, path),
+    lastFailureCode: nullableStringField(item, "lastFailureCode", response, path),
   };
 }
 
@@ -570,6 +665,7 @@ export function parseUserDetail(response: RawResponse, path: string): UserDetail
     user: parseUserSummary(objectField(body, "user", response, path), response, path),
     trialDeviceVerifiedAt: nullableTimestampField(body, "trialDeviceVerifiedAt", response, path),
     stripeCustomerId: nullableStringField(body, "stripeCustomerId", response, path),
+    cancellation: parseCancellation(nullableObjectField(body, "cancellation", response, path), response, path),
     usage: {
       usedHours: numberField(usage, "usedHours", response, path),
       capHours: numberField(usage, "capHours", response, path),
@@ -593,6 +689,10 @@ export function parseUserDetail(response: RawResponse, path: string): UserDetail
         tokenBudget: numberField(item, "tokenBudget", response, path),
         attested: booleanField(item, "attested", response, path),
         deepgram: booleanField(item, "deepgram", response, path),
+        noteCompleted: booleanField(item, "noteCompleted", response, path),
+        failureCount: numberField(item, "failureCount", response, path),
+        lastFailureCode: nullableStringField(item, "lastFailureCode", response, path),
+        lastFailureAt: nullableTimestampField(item, "lastFailureAt", response, path),
       }),
     ),
     reports: objectArrayField(body, "reports", response, path).map(
@@ -611,6 +711,79 @@ export function parseUserDetail(response: RawResponse, path: string): UserDetail
         detail: nullableStringField(item, "detail", response, path),
       }),
     ),
+  };
+}
+
+/** İptal nedeni nesnesini okur (null korunur). */
+function parseCancellation(object: JsonObject | null, response: RawResponse, path: string): UserCancellation | null {
+  return object === null
+    ? null
+    : {
+        at: timestampField(object, "at", response, path),
+        reason: nullableStringField(object, "reason", response, path),
+        feedback: nullableStringField(object, "feedback", response, path),
+        comment: nullableStringField(object, "comment", response, path),
+      };
+}
+
+/** Ayrıntı sayıları dizisini okur. */
+function detailCounts(owner: JsonObject, key: string, response: RawResponse, path: string): DetailCount[] {
+  return objectArrayField(owner, key, response, path).map(
+    (item: JsonObject): DetailCount => ({ detail: stringField(item, "detail", response, path), count: numberField(item, "count", response, path) }),
+  );
+}
+
+/** Sorun penceresini okur. */
+function parseProblemWindow(object: JsonObject, response: RawResponse, path: string): ProblemWindow {
+  return {
+    trialCapacityReached: numberField(object, "trialCapacityReached", response, path),
+    spendCeilingReached: numberField(object, "spendCeilingReached", response, path),
+    refusals: detailCounts(object, "refusals", response, path),
+    providerErrors: detailCounts(object, "providerErrors", response, path),
+    serverErrors: detailCounts(object, "serverErrors", response, path),
+    serverErrorsTotal: numberField(object, "serverErrorsTotal", response, path),
+  };
+}
+
+/** `GET /v1/admin/insights` yanıtını okur. */
+export function parseInsights(response: RawResponse, path: string): Insights {
+  const body: JsonObject = parseObject(response, path);
+  const problems: JsonObject = objectField(body, "problems", response, path);
+  const funnel: JsonObject = objectField(body, "funnel", response, path);
+  const downloads: JsonObject = objectField(body, "downloads", response, path);
+  const cancellations: JsonObject = objectField(body, "cancellations", response, path);
+  return {
+    generatedAt: timestampField(body, "generatedAt", response, path),
+    problems: {
+      last7Days: parseProblemWindow(objectField(problems, "last7Days", response, path), response, path),
+      last30Days: parseProblemWindow(objectField(problems, "last30Days", response, path), response, path),
+    },
+    funnel: {
+      days: numberField(funnel, "days", response, path),
+      steps: objectArrayField(funnel, "steps", response, path).map((item: JsonObject): { readonly step: FunnelStep; readonly count: number } => ({
+        step: literalField(item, "step", funnelSteps, response, path),
+        count: numberField(item, "count", response, path),
+      })),
+    },
+    downloads: {
+      total: numberField(downloads, "total", response, path),
+      bySource: detailCounts(downloads, "bySource", response, path),
+      byReferrerHost: detailCounts(downloads, "byReferrerHost", response, path),
+    },
+    cancellations: {
+      total: numberField(cancellations, "total", response, path),
+      byFeedback: detailCounts(cancellations, "byFeedback", response, path),
+      byReason: detailCounts(cancellations, "byReason", response, path),
+      recent: objectArrayField(cancellations, "recent", response, path).map(
+        (item: JsonObject): RecentCancellation => ({
+          userId: stringField(item, "userId", response, path),
+          at: timestampField(item, "at", response, path),
+          reason: nullableStringField(item, "reason", response, path),
+          feedback: nullableStringField(item, "feedback", response, path),
+          comment: nullableStringField(item, "comment", response, path),
+        }),
+      ),
+    },
   };
 }
 
@@ -757,6 +930,24 @@ export async function fetchUsers(filter: UserFilter, cursor: string | null): Pro
 export async function fetchUser(id: string): Promise<UserDetail> {
   const path: string = `/v1/admin/users/${encodeURIComponent(id)}`;
   return parseUserDetail(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Kullanıcıya süresiz ücretsiz tam erişim verir; güncel ayrıntıyı döndürür. */
+export async function grantComplimentaryAccess(id: string): Promise<UserDetail> {
+  const path: string = `/v1/admin/users/${encodeURIComponent(id)}/complimentary`;
+  return parseUserDetail(await authorizedSend({ method: "POST", path, body: { grant: true }, attempts: 1 }), path);
+}
+
+/** Kullanıcının ücretsiz erişimini kaldırır; güncel ayrıntıyı döndürür. */
+export async function revokeComplimentaryAccess(id: string): Promise<UserDetail> {
+  const path: string = `/v1/admin/users/${encodeURIComponent(id)}/complimentary`;
+  return parseUserDetail(await authorizedSend({ method: "POST", path, body: { grant: false }, attempts: 1 }), path);
+}
+
+/** Kullanıcıyı anlama görünümü (sorunlar, huni, indirme kaynakları, iptal nedenleri). */
+export async function fetchInsights(): Promise<Insights> {
+  const path: string = "/v1/admin/insights";
+  return parseInsights(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
 }
 
 /** İşletim görünümü. */

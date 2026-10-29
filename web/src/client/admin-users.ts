@@ -5,6 +5,7 @@ import {
   type ReportKind,
   type ReportStatus,
   type TimelineEntry,
+  type UserCancellation,
   type UserDetail,
   type UserFilter,
   type UserMeeting,
@@ -14,11 +15,14 @@ import {
   type UserSummary,
   fetchUser,
   fetchUsers,
+  grantComplimentaryAccess,
+  revokeComplimentaryAccess,
   userProviderOf,
   userSegmentOf,
 } from "./admin-api";
 import {
   fillCounts,
+  fillTable,
   formatCount,
   formatDate,
   formatOptionalTime,
@@ -31,6 +35,7 @@ import {
 } from "./admin-format";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
+import type { BillingPlan } from "../lib/plans";
 
 const adminText: AdminClientCopy = clientCopy.admin;
 
@@ -72,9 +77,23 @@ function subscriptionBadge(subscription: UserSubscription | null): HTMLElement |
   return ended;
 }
 
-/** Planın rozeti. */
+/** Hesabın yöneticinin verdiği ücretsiz erişimi var mı (süresi geçmiş olsa da satırı duruyor). Saf fonksiyondur. */
+function hasComplimentaryRow(user: UserSummary): boolean {
+  return user.subscription !== null && user.subscription.complimentary;
+}
+
+/**
+ * Planın rozeti: abonede aylık ya da yıllık da yazılır (fiyat tanınmıyorsa yalnızca "abone"); süren ücretsiz erişimde
+ * "ücretsiz erişim" (aylık plan yalnızca uygulamaya uyumluluk içindir, faturalanmaz). Saf fonksiyondur (yeni öğe
+ * üretir).
+ */
 function planBadge(user: UserSummary): HTMLSpanElement {
-  return pill(adminText.plans[user.plan], user.plan === "subscription" ? "ok" : "");
+  if (user.plan === "subscription" && hasComplimentaryRow(user)) {
+    return pill(adminText.freeAccess.pill, "ok");
+  }
+  const billing: BillingPlan | null = user.plan === "subscription" && user.subscription !== null ? user.subscription.plan : null;
+  const label: string = billing === null ? adminText.plans[user.plan] : `${adminText.plans[user.plan]} · ${adminText.billingPlans[billing]}`;
+  return pill(label, user.plan === "subscription" ? "ok" : "");
 }
 
 /** Deneme hücresinin metni. Saf fonksiyondur. */
@@ -99,6 +118,22 @@ function idButton(id: string, onOpen: (id: string) => void): HTMLButtonElement {
   return button;
 }
 
+/** Hata kodu: eş aralıklı, uzun kod kısaltılmadan (tablo yatay kayar). */
+function failureCode(code: string): HTMLSpanElement {
+  return node("span", "mono failure-code", code);
+}
+
+/** Kullanıcının "ne ters gitti" hücresi: hatalı toplantı sayısı ve en son kod (ipucunda açıklaması); yoksa "—". */
+function userProblems(user: UserSummary): HTMLElement | string {
+  if (user.failedMeetings === 0 || user.lastFailureCode === null) {
+    return adminText.none;
+  }
+  const cell: HTMLSpanElement = failureCode(fill(adminText.meetingFailure, { count: formatCount(user.failedMeetings), code: user.lastFailureCode }));
+  cell.classList.add("failure-code--warn");
+  cell.title = fillCounts(adminText.failedMeetings, { count: user.failedMeetings });
+  return cell;
+}
+
 /** Kullanıcı tablosunun satırı. */
 function userRow(user: UserSummary, nowMs: number, onOpen: (id: string) => void): HTMLTableRowElement {
   const row: HTMLTableRowElement = tableRow([
@@ -111,11 +146,9 @@ function userRow(user: UserSummary, nowMs: number, onOpen: (id: string) => void)
     formatCount(user.meetingsTotal),
     formatCount(user.hoursThisMonth),
     user.lastActiveAt === null ? adminText.none : formatRelative(user.lastActiveAt, nowMs),
+    userProblems(user),
   ]);
   row.className = "is-clickable";
-  for (const index of [6, 7]) {
-    row.cells.item(index)?.classList.add("numeric");
-  }
   row.addEventListener("click", (): void => onOpen(user.id));
   return row;
 }
@@ -123,15 +156,21 @@ function userRow(user: UserSummary, nowMs: number, onOpen: (id: string) => void)
 /** Kullanıcı listesini çizer. */
 function renderUsers(state: UsersState, onOpen: (id: string) => void): void {
   const nowMs: number = Date.now();
-  element("users-rows", HTMLElement).replaceChildren(...state.items.map((user: UserSummary): HTMLTableRowElement => userRow(user, nowMs, onOpen)));
+  fillTable(
+    element("users-rows", HTMLTableSectionElement),
+    state.items.map((user: UserSummary): HTMLTableRowElement => userRow(user, nowMs, onOpen)),
+  );
   element("users-empty", HTMLElement).classList.toggle("hidden", state.items.length > 0);
   element("users-more", HTMLButtonElement).classList.toggle("hidden", state.nextCursor === null);
   element("users-shown", HTMLElement).textContent = fillCounts(adminText.shown, { count: state.items.length });
 }
 
-/** Toplantının not rozetleri (sonradan işlenen, yeniden işlenen, Deepgram, doğrulanmış Mac). */
+/** Toplantının not rozetleri (not hazır, sonradan işlenen, yeniden işlenen, Deepgram, doğrulanmış Mac). */
 function meetingNotes(meeting: UserMeeting): HTMLElement {
   const notes: HTMLElement = node("span", "pill-row", "");
+  if (meeting.noteCompleted) {
+    notes.append(pill(adminText.noteDone, "ok"));
+  }
   const labels: readonly string[] = [
     meeting.deferred ? adminText.meetingNotes.deferred : "",
     meeting.reprocessCount > 0 ? fillCounts(adminText.meetingNotes.reprocessed, { count: meeting.reprocessCount }) : "",
@@ -148,21 +187,42 @@ function meetingStateBadge(meeting: UserMeeting): HTMLSpanElement {
   return pill(adminText.meetingStates[meeting.state], tone);
 }
 
+/** Toplantının "ne ters gitti" hücresi: başarısız istek sayısı ve son kod (ipucunda anı); yoksa "—". */
+function meetingProblem(meeting: UserMeeting): HTMLElement | string {
+  if (meeting.failureCount === 0 || meeting.lastFailureCode === null) {
+    return adminText.none;
+  }
+  const cell: HTMLSpanElement = failureCode(fill(adminText.meetingFailure, { count: formatCount(meeting.failureCount), code: meeting.lastFailureCode }));
+  cell.classList.add("failure-code--warn");
+  cell.title = formatOptionalTime(meeting.lastFailureAt);
+  return cell;
+}
+
 /** Toplantı tablosunun satırı. */
 function meetingRow(meeting: UserMeeting): HTMLTableRowElement {
-  const row: HTMLTableRowElement = tableRow([
+  return tableRow([
     formatTime(meeting.startedAt),
     adminText.meetingKinds[meeting.kind],
     meetingStateBadge(meeting),
     fill(adminText.minutes, { minutes: formatCount(meeting.durationMinutes) }),
     fill(adminText.minutes, { minutes: formatCount(meeting.audioMinutes) }),
     fill(adminText.ofCap, { used: formatCount(meeting.tokensUsed), cap: formatCount(meeting.tokenBudget) }),
+    meetingProblem(meeting),
     meetingNotes(meeting),
   ]);
-  for (const index of [3, 4, 5]) {
-    row.cells.item(index)?.classList.add("numeric");
+}
+
+/** İptal nedeninin metni: portal seçeneği, Stripe nedeni ve yorum; nedeni saklanmamışsa "—". Saf fonksiyondur. */
+function cancellationText(cancellation: UserCancellation | null): string {
+  if (cancellation === null) {
+    return adminText.none;
   }
-  return row;
+  const feedback: string =
+    cancellation.feedback === null ? adminText.cancellationNoFeedback : (adminText.cancellationFeedback[cancellation.feedback] ?? cancellation.feedback);
+  const reason: string | null = cancellation.reason === null ? null : (adminText.cancellationReasons[cancellation.reason] ?? cancellation.reason);
+  return [feedback, reason, cancellation.comment === null ? null : `“${cancellation.comment}”`, formatDate(cancellation.at)]
+    .filter((part: string | null): part is string => part !== null)
+    .join(" · ");
 }
 
 /** Zaman çizelgesi satırı. */
@@ -200,8 +260,24 @@ function subscriptionText(subscription: UserSubscription | null): string {
   if (subscription === null) {
     return adminText.none;
   }
+  if (subscription.complimentary) {
+    return subscription.cancelAt === null ? adminText.freeAccess.noEnd : fill(adminText.freeAccess.until, { date: formatDate(subscription.cancelAt) });
+  }
   const end: number = subscription.graceEndsAt ?? subscription.cancelAt ?? subscription.currentPeriodEnd;
-  return `${subscription.status} · ${formatDate(end)}`;
+  const plan: string = subscription.plan === null ? "" : `${adminText.billingPlans[subscription.plan]} · `;
+  return `${plan}${subscription.status} · ${formatDate(end)}`;
+}
+
+/**
+ * Ücretsiz erişim düğmesi: ücretsiz erişim satırı varsa "kaldır", Stripe aboneliğiyle erişimi olan hesapta gizli
+ * (sunucu üzerine vermez), diğerlerinde "ver". Sonraki işlem `data-next`'tedir.
+ */
+function renderComplimentaryButton(user: UserSummary): void {
+  const button: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
+  const complimentary: boolean = hasComplimentaryRow(user);
+  button.classList.toggle("hidden", !complimentary && user.plan === "subscription");
+  button.dataset["next"] = complimentary ? "remove" : "grant";
+  button.textContent = complimentary ? adminText.freeAccess.remove : adminText.freeAccess.grant;
 }
 
 /** Kullanıcı ayrıntısını çizer. */
@@ -212,6 +288,7 @@ function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
   element("user-pills", HTMLElement).replaceChildren(
     ...[planBadge(user), subscriptionBadge(user.subscription)].filter((badge: HTMLElement | string): badge is HTMLElement => typeof badge !== "string"),
   );
+  renderComplimentaryButton(user);
   const fields: Readonly<Record<string, string>> = {
     provider: providerText(user),
     created: formatTime(user.createdAt),
@@ -220,6 +297,7 @@ function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
     trial: trialText(user),
     "trial-device": formatOptionalTime(detail.trialDeviceVerifiedAt),
     stripe: detail.stripeCustomerId ?? adminText.none,
+    cancellation: cancellationText(detail.cancellation),
   };
   for (const [id, value] of Object.entries(fields)) {
     element(`user-field-${id}`, HTMLElement).textContent = value;
@@ -228,7 +306,7 @@ function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
   setMeter("tokens", detail.usage.tokens, detail.usage.tokenCap, formatCount);
   setMeter("account", detail.usage.accountTokens, detail.usage.accountTokenCap, formatCount);
   element("user-audio", HTMLElement).textContent = fill(adminText.hours, { hours: formatCount(detail.usage.audioHours) });
-  element("user-meetings", HTMLElement).replaceChildren(...detail.meetings.map(meetingRow));
+  fillTable(element("user-meetings", HTMLTableSectionElement), detail.meetings.map(meetingRow));
   element("user-meetings-empty", HTMLElement).classList.toggle("hidden", detail.meetings.length > 0);
   element("user-timeline", HTMLElement).replaceChildren(...detail.timeline.map((entry: TimelineEntry): HTMLLIElement => timelineItem(entry, nowMs)));
   element("user-reports", HTMLElement).replaceChildren(...detail.reports.map((report: UserReport): HTMLLIElement => reportItem(report, onOpenReport)));
@@ -288,6 +366,24 @@ export function createUsersView(onFailure: (error: unknown) => void, onOpenRepor
   }
   element("users-more", HTMLButtonElement).addEventListener("click", (): void => {
     loadList(true).catch(onFailure);
+  });
+  const complimentaryButton: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
+  complimentaryButton.addEventListener("click", (): void => {
+    const id: string | null = state.openId;
+    const next: string | undefined = complimentaryButton.dataset["next"];
+    if (id === null || (next !== "grant" && next !== "remove")) {
+      return;
+    }
+    complimentaryButton.disabled = true;
+    (next === "grant" ? grantComplimentaryAccess(id) : revokeComplimentaryAccess(id))
+      .then(async (detail: UserDetail): Promise<void> => {
+        renderDetail(detail, onOpenReport);
+        await loadList(false);
+      })
+      .catch(onFailure)
+      .finally((): void => {
+        complimentaryButton.disabled = false;
+      });
   });
   element("user-back", HTMLButtonElement).addEventListener("click", (): void => {
     state.openId = null;

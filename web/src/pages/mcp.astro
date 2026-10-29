@@ -1,0 +1,333 @@
+---
+// MCP sayfası: uygulamanın yerel MCP sunucusunun araçları (MCPServer.swift `mcpTools`), bağlama adımları (Ayarlar ›
+// Bağlantılar), kopyalanan yapılandırma (lib/mcp-config.ts), istemcilerin yapılandırma dosyaları, örnek sorular ve
+// sınırlar. Metinler copy.ts `mcp`'den.
+import Base from "../layouts/Base.astro";
+import CtaBand from "../components/CtaBand.astro";
+import Film from "../components/Film.astro";
+import McpChat from "../components/McpChat.astro";
+import { productName } from "../config";
+import { copy, type McpClientFileCopy, type McpCopy, type McpToolCopy, type PickCopy, type TitledText } from "../copy";
+import { mcpClientConfigText } from "../lib/mcp-config";
+
+const text: McpCopy = copy.mcp;
+const config: string = mcpClientConfigText(productName);
+const setups: readonly PickCopy[] = [text.oneClick, text.manual];
+---
+
+<Base page="mcp" meta={text.meta} indexed={true}>
+  <section class="page mcp-hero">
+    <div class="mcp-hero__text">
+      <p class="eyebrow">{text.eyebrow}</p>
+      <h1 class="title-xl">{text.title}</h1>
+      <p class="lead">{text.lead}</p>
+    </div>
+    <Film palette="sunset" layout="clouds-right" class="mcp-hero__cover">
+      <McpChat />
+    </Film>
+  </section>
+
+  <section class="page mcp-section" aria-labelledby="tools-title">
+    <div class="mcp-section__head">
+      <h2 class="title-l" id="tools-title">{text.toolsTitle}</h2>
+      <p class="muted">{text.toolsLead}</p>
+    </div>
+    <ul class="mcp-tools">
+      {
+        text.tools.map((tool: McpToolCopy) => (
+          <li class="card mcp-tool">
+            <h3 class="mcp-tool__name"><code>{tool.name}</code></h3>
+            <p>{tool.text}</p>
+            <p class="small muted">
+              <span class="mcp-tool__label">{text.toolInputLabel}:</span> {tool.input}
+            </p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="page mcp-section" aria-labelledby="setup-title">
+    <div class="mcp-section__head">
+      <h2 class="title-l" id="setup-title">{text.setupTitle}</h2>
+      <p class="muted">{text.setupLead}</p>
+    </div>
+    <div class="mcp-setups">
+      {
+        setups.map((setup: PickCopy) => (
+          <article class="card mcp-setup">
+            <h3 class="title-m">{setup.title}</h3>
+            <ol>
+              {setup.points.map((point: string) => (
+                <li>{point}</li>
+              ))}
+            </ol>
+          </article>
+        ))
+      }
+    </div>
+    <figure class="mcp-config">
+      <figcaption class="small">{text.configLabel}</figcaption>
+      <pre><code>{config}</code></pre>
+      <p class="small muted">{text.configNote}</p>
+    </figure>
+  </section>
+
+  <section class="page mcp-section" aria-labelledby="files-title">
+    <h2 class="title-m" id="files-title">{text.filesTitle}</h2>
+    <div class="mcp-files">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{text.fileColumns.client}</th>
+            <th scope="col">{text.fileColumns.file}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            text.files.map((file: McpClientFileCopy) => (
+              <tr>
+                <th scope="row">{file.client}</th>
+                <td>
+                  <code>{file.file}</code>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">{text.filesNote}</p>
+  </section>
+
+  <section class="page mcp-section" aria-labelledby="questions-title">
+    <div class="mcp-section__head">
+      <h2 class="title-l" id="questions-title">{text.questionsTitle}</h2>
+      <p class="muted">{text.questionsLead}</p>
+    </div>
+    <ul class="mcp-questions">
+      {text.questions.map((question: string) => <li class="mcp-question">“{question}”</li>)}
+    </ul>
+  </section>
+
+  <section class="page mcp-section" aria-labelledby="limits-title">
+    <h2 class="title-l" id="limits-title">{text.privacyTitle}</h2>
+    <ul class="mcp-limits">
+      {
+        text.privacy.map((item: TitledText) => (
+          <li>
+            <h3 class="mcp-limits__title">{item.title}</h3>
+            <p class="muted">{item.text}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <CtaBand id="mcp-cta-title" title={copy.compare.ctaTitle} text={copy.compare.ctaText} palette="ocean" layout="clouds-left" />
+</Base>
+
+<style>
+  .mcp-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: clamp(32px, 6vw, 72px);
+    align-items: center;
+    padding-top: clamp(48px, 8vw, 96px);
+  }
+
+  .mcp-hero__text {
+    display: grid;
+    gap: 18px;
+  }
+
+  .mcp-hero :global(.mcp-hero__cover) {
+    display: grid;
+    place-items: center;
+    padding: clamp(24px, 4vw, 44px);
+  }
+
+  .mcp-section {
+    display: grid;
+    gap: 22px;
+    margin-top: clamp(56px, 8vw, 104px);
+  }
+
+  .mcp-section__head {
+    display: grid;
+    gap: 10px;
+    max-width: 44rem;
+  }
+
+  .mcp-tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mcp-tool {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+  }
+
+  .mcp-tool__name {
+    font-size: 1rem;
+    letter-spacing: 0;
+  }
+
+  .mcp-tool__name code,
+  .mcp-files code,
+  .mcp-config code {
+    font-family: var(--mono);
+  }
+
+  .mcp-tool__label {
+    font-weight: 600;
+  }
+
+  .mcp-setups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .mcp-setup {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+  }
+
+  .mcp-setup ol {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding-left: 1.3em;
+    color: var(--muted);
+  }
+
+  .mcp-config {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .mcp-config figcaption {
+    font-weight: 600;
+  }
+
+  /* Uzun yol dar ekranda satır kırar (yalnızca görünüm; kopyalanan metin aynı kalır), sayfa taşmaz. */
+  .mcp-config pre {
+    margin: 0;
+    padding: 18px 20px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--soft);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+
+  .mcp-files {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+  }
+
+  .mcp-files table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .mcp-files th,
+  .mcp-files td {
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .mcp-files tbody tr:last-child th,
+  .mcp-files tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .mcp-files thead th {
+    background: var(--soft);
+    font-weight: 600;
+  }
+
+  .mcp-files tbody th {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .mcp-files td code {
+    overflow-wrap: anywhere;
+  }
+
+  .mcp-questions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mcp-question {
+    padding: 20px 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--soft);
+    font-size: 1.0625rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+  }
+
+  .mcp-limits {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 28px 32px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mcp-limits li {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+
+  .mcp-limits__title {
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  @media (max-width: 960px) {
+    .mcp-questions,
+    .mcp-limits {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .mcp-hero,
+    .mcp-tools,
+    .mcp-setups,
+    .mcp-questions,
+    .mcp-limits {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

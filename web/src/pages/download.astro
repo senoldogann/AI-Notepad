@@ -20,7 +20,7 @@ const text: DownloadCopy = copy.download;
       <h1 class="title-xl">{text.title}</h1>
       <p class="lead">{text.lead}</p>
       <div class="download-hero__actions">
-        <a class="button button--primary download-button" href={macDownloadUrl(siteConfig)}>
+        <a class="button button--primary download-button" href={macDownloadUrl(siteConfig, "download-page")}>
           <Icon name="apple" size={18} class="button__apple" />
           {copy.common.downloadCta}
         </a>

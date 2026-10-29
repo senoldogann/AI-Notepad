@@ -6,8 +6,9 @@
 // geniş politikayı taşır (sayfası olmayan adresler, ör. bilinmeyen adresin 404'ü, için); her sayfanın kendi kuralı
 // yalnızca o sayfanın kullandığı hizmetlere izin veren dar politikayı ekler. Böylece Apple betiği yalnızca giriş
 // sayfasında, Turnstile yalnızca iletişim sayfasında çalışabilir. Google ile giriş Google'a yönlendirir; betik yüklenmez.
+// Cloudflare Web Analytics işaretçisi her sayfada olduğundan iki katmanın da tüm politikalarında açıktır.
 import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
-import { type PageKey, privatePages, routes } from "../routes";
+import { blogPostPattern, type PageKey, privatePages, routes } from "../routes";
 
 /** Sayfaların yüklediği dış hizmetler. */
 export type ExternalService = "appleSignIn" | "turnstile";
@@ -34,6 +35,14 @@ const serviceSources: Readonly<Record<ExternalService, ServiceSources>> = {
   turnstile: { script: [turnstileOrigin], style: [], connect: [], frame: [turnstileOrigin], formAction: [] },
 };
 
+/**
+ * Cloudflare Web Analytics (çerezsiz): Pages projesinde panelden açılır ve işaretçi betiğini her sayfaya kendisi ekler.
+ * Betik bu kaynaktan yüklenir, ölçümleri ikinci kaynağa gönderir. Her sayfada çalıştığı için hizmet listesine değil
+ * geniş ve dar politikaların hepsine eklenir (birleşen politikalardan biri izin vermezse betik engellenir).
+ */
+const webAnalyticsScriptOrigin: string = "https://static.cloudflareinsights.com";
+const webAnalyticsConnectOrigin: string = "https://cloudflareinsights.com";
+
 /** Tüm dış hizmetler (geniş politika). */
 const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile"];
 
@@ -42,8 +51,14 @@ export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>>
   home: [],
   pricing: [],
   download: [],
+  compare: [],
+  vsGranola: [],
+  vsOtter: [],
+  blog: [],
+  mcp: [],
   signIn: ["appleSignIn"],
   account: [],
+  invite: [],
   contact: ["turnstile"],
   admin: [],
   privacy: [],
@@ -64,11 +79,13 @@ function directive(name: string, base: readonly string[], services: readonly Ext
 export function contentSecurityPolicy(config: SiteConfig, services: readonly ExternalService[]): string {
   const directives: readonly string[] = [
     "default-src 'none'",
-    directive("script-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.script),
+    directive("script-src", ["'self'", webAnalyticsScriptOrigin], services, (sources: ServiceSources): readonly string[] => sources.script),
     directive("style-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.style),
     "img-src 'self'",
+    // Ana sayfadaki tanıtım videosu (public/video) yalnızca siteden yüklenir.
+    "media-src 'self'",
     "font-src 'self'",
-    directive("connect-src", ["'self'", originOf(config.apiBase)], services, (sources: ServiceSources): readonly string[] => sources.connect),
+    directive("connect-src", ["'self'", originOf(config.apiBase), webAnalyticsConnectOrigin], services, (sources: ServiceSources): readonly string[] => sources.connect),
     directive("frame-src", [], services, (sources: ServiceSources): readonly string[] => sources.frame),
     "manifest-src 'self'",
     directive("form-action", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.formAction),
@@ -120,12 +137,20 @@ export function pagesHeaders(config: SiteConfig): string {
       ...(privatePages.includes(page) ? ["  Cache-Control: no-store"] : []),
       "",
     ]),
+    // Blog yazıları (`/blog/<kısa ad>`) sayfa kimliği taşımaz; hepsi dış hizmetsiz dar politikayı alır.
+    blogPostPattern,
+    `  Content-Security-Policy: ${contentSecurityPolicy(config, [])}`,
+    "",
     // Adı içerik özeti taşıyan derleme çıktıları değişmez.
     "/_astro/*",
     "  Cache-Control: public, max-age=31536000, immutable",
     "",
     // Yazı tipinin adında özet yok: güncellenirse ayda bir tazelenir.
     "/fonts/*",
+    "  Cache-Control: public, max-age=2592000",
+    "",
+    // Tanıtım videosu ve kapak görseli: adlarında özet yok, ayda bir tazelenir.
+    "/video/*",
     "  Cache-Control: public, max-age=2592000",
     "",
   ];

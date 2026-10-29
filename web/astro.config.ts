@@ -46,6 +46,8 @@ export default defineConfig({
       assetsInlineLimit: 0,
     },
   },
+  // Blog yazılarındaki kod blokları renklendirilmez: Shiki satır içi `style` yazar, CSP buna izin vermez.
+  markdown: { syntaxHighlight: false },
   devToolbar: { enabled: false },
   integrations: [cloudflarePagesFiles(config)],
 });

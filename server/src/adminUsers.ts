@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isoOrNull } from "./admin";
-import type { Config } from "./config";
+import type { Config, SubscriptionPlan } from "./config";
 import {
   type SubscriptionAccess,
   type SubscriptionState,
@@ -30,8 +30,18 @@ export const adminUserMeetingLimit: number = 100;
 /** Ayrıntıdaki en çok rapor (yeniden eskiye). */
 export const adminUserReportLimit: number = 20;
 
-/** Kullanıcı listesi kesimi: abone (erişimi var), ödemesi gecikmiş, iptal edilmiş, denemede ya da hiçbiri. */
-export type AdminUserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free";
+/** Etkin sayılmak için son toplantının geriye bakış süresi (`inactive` kesimi). */
+export const inactiveAfterMs: number = 7 * 86_400_000;
+
+/**
+ * Kullanıcı listesi kesimi. Plan kesimleri: abone (erişimi var), ödemesi gecikmiş, iptal edilmiş, denemede ya da
+ * hiçbiri. Bırakma kesimleri (kesişebilir):
+ * - `no_meeting`: giriş yapmış ama hiç toplantı başlatmamış;
+ * - `trial_ended`: denemesi bitmiş (toplantıları harcanmış ya da süresi dolmuş), ödemesi tamamlanmış aboneliği yok;
+ * - `inactive`: en az bir toplantısı var ama son `inactiveAfterMs` içinde toplantı başlatmamış;
+ * - `failed`: en az bir toplantısında istek başarısız olmuş (`meeting_sessions.failure_count`).
+ */
+export type AdminUserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free" | "no_meeting" | "trial_ended" | "inactive" | "failed";
 
 /** Giriş sağlayıcısı. */
 export type AdminUserProvider = "apple" | "google";
@@ -61,7 +71,11 @@ export interface AdminSubscription {
   readonly cancelAt: string | null;
   readonly pastDueSince: string | null;
   readonly graceEndsAt: string | null;
-  /** Webhook'un satırı son yazdığı an. */
+  /** Plan (aylık ya da yıllık); fiyatı tanınmayan abonelikte null. */
+  readonly plan: SubscriptionPlan | null;
+  /** Yöneticinin verdiği ücretsiz erişim mi (`complimentary.ts`; Stripe'ta karşılığı yok). */
+  readonly complimentary: boolean;
+  /** Webhook'un (ücretsiz erişimde yöneticinin) satırı son yazdığı an. */
   readonly updatedAt: string;
 }
 
@@ -85,6 +99,9 @@ export interface AdminUserSummary {
   readonly hoursThisMonth: number;
   /** Son etkinlik: son toplantı başlangıcı ya da son oturum yenilemesinin geç olanı; hiç yoksa null. */
   readonly lastActiveAt: string | null;
+  /** İsteği başarısız olmuş toplantı sayısı ve en son hatanın kodu (yoksa 0 ve null). */
+  readonly failedMeetings: number;
+  readonly lastFailureCode: string | null;
 }
 
 /** Liste sayfası; `nextCursor` sonraki sayfanın `cursor` değeri, son sayfada null. */
@@ -115,6 +132,20 @@ export interface AdminMeeting {
   readonly attested: boolean;
   /** Canlı metin Deepgram'dan mı (jeton almış). */
   readonly deepgram: boolean;
+  /** Toplantıda not tamamlandı mı (`first_note_at`; izleme göç 0035'ten beri). */
+  readonly noteCompleted: boolean;
+  /** Toplantıya bağlı başarısız istek sayısı, son hata kodu ve anı (yoksa 0, null, null). */
+  readonly failureCount: number;
+  readonly lastFailureCode: string | null;
+  readonly lastFailureAt: string | null;
+}
+
+/** Hesabın son abonelik iptalinin nedeni (Stripe `cancellation_details`). */
+export interface AdminUserCancellation {
+  readonly at: string;
+  readonly reason: string | null;
+  readonly feedback: string | null;
+  readonly comment: string | null;
 }
 
 /** Ayrıntıdaki rapor (içerik olmadan). */
@@ -163,13 +194,15 @@ export interface AdminUserDetail {
   readonly trialDeviceVerifiedAt: string | null;
   /** Stripe panelinde müşteriyi bulmak için (gizli değer değildir); hiç ödeme sayfası açmadıysa null. */
   readonly stripeCustomerId: string | null;
+  /** Son iptalin nedeni; nedeni saklanmış iptal yoksa null. */
+  readonly cancellation: AdminUserCancellation | null;
   readonly usage: AdminUserUsage;
   readonly meetings: readonly AdminMeeting[];
   readonly reports: readonly AdminUserReport[];
   readonly timeline: readonly AdminTimelineEntry[];
 }
 
-const segmentSchema = z.enum(["subscribed", "past_due", "canceled", "trial", "free"]);
+const segmentSchema = z.enum(["subscribed", "past_due", "canceled", "trial", "free", "no_meeting", "trial_ended", "inactive", "failed"]);
 const providerSchema = z.enum(["apple", "google"]);
 
 /** `?q=&segment=&provider=&cursor=`; boş ya da eksik değer süzgeç yok demektir, başka parametre reddedilir. */
@@ -204,7 +237,14 @@ const accessSql: string = `COALESCE((s.status IN ('active', 'trialing') AND (CAS
 /** Denemeye başlamış (ya da silinmiş hesabından deneme devralmış) hesap için SQL koşulu (`users u`). */
 const trialStartedSql: string = "(u.trial_started_at IS NOT NULL OR u.carried_trial_meetings > 0)";
 
-/** Kesimin SQL koşulu (sabit metin; kullanıcı girdisi içermez). Saf fonksiyondur. */
+/** Hesabın en az bir toplantısı var mı (`users u`; `meeting_sessions_user` dizini). */
+const hasMeetingSql: string = "EXISTS (SELECT 1 FROM meeting_sessions m WHERE m.user_id = u.id)";
+
+/**
+ * Kesimin SQL koşulu (sabit metin; kullanıcı girdisi içermez). Bağlar: ?1 = şimdi, ?2 = ek süre (ms), ?8 = deneme
+ * toplantı sayısı, ?9 = deneme süresi (ms), ?10 = etkinlik sınırı (şimdi − `inactiveAfterMs`). Abonelik satırı kullanıcı
+ * başına tektir (`subscriptions s`, LEFT JOIN). Saf fonksiyondur.
+ */
 function segmentSql(segment: AdminUserSegment | null): string {
   switch (segment) {
     case null:
@@ -219,6 +259,16 @@ function segmentSql(segment: AdminUserSegment | null): string {
       return `${trialStartedSql} AND ${accessSql} = 0`;
     case "free":
       return `s.user_id IS NULL AND NOT ${trialStartedSql}`;
+    case "no_meeting":
+      return `u.carried_trial_meetings = 0 AND NOT ${hasMeetingSql}`;
+    case "trial_ended":
+      return `${trialStartedSql} AND (s.user_id IS NULL OR s.status IN ('incomplete', 'incomplete_expired'))
+        AND (u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') >= ?8
+          OR u.trial_started_at + ?9 <= ?1)`;
+    case "inactive":
+      return `${hasMeetingSql} AND NOT EXISTS (SELECT 1 FROM meeting_sessions m WHERE m.user_id = u.id AND m.started_at >= ?10)`;
+    case "failed":
+      return "EXISTS (SELECT 1 FROM meeting_sessions m WHERE m.user_id = u.id AND m.failure_count > 0)";
   }
 }
 
@@ -235,11 +285,15 @@ interface UserRow {
   readonly cancel_at: number | null;
   readonly past_due_since: number | null;
   readonly updated_at: number | null;
+  readonly plan: SubscriptionPlan | null;
+  readonly complimentary: number | null;
   readonly meetings: number;
   readonly trial_meetings: number;
   readonly month_ms: number;
   readonly last_meeting_at: number | null;
   readonly last_token_at: number | null;
+  readonly failed_meetings: number;
+  readonly last_failure_code: string | null;
 }
 
 /**
@@ -248,19 +302,28 @@ interface UserRow {
  */
 const userColumnsSql: string = `u.id, u.created_at, u.trial_started_at, u.trial_device_verified_at, u.carried_trial_meetings,
   (SELECT provider FROM auth_identities a WHERE a.user_id = u.id ORDER BY provider LIMIT 1) AS provider,
-  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at,
+  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at, s.plan, s.complimentary,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id) AS meetings,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS trial_meetings,
   (SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(m.ended_at, ?1), m.max_ends_at, ?1) - m.started_at)), 0)
      FROM meeting_sessions m WHERE m.user_id = u.id AND m.started_at >= ?3) AS month_ms,
   (SELECT MAX(m.started_at) FROM meeting_sessions m WHERE m.user_id = u.id) AS last_meeting_at,
-  (SELECT MAX(t.created_at) FROM refresh_families f JOIN refresh_tokens t ON t.family_id = f.id WHERE f.user_id = u.id) AS last_token_at`;
+  (SELECT MAX(t.created_at) FROM refresh_families f JOIN refresh_tokens t ON t.family_id = f.id WHERE f.user_id = u.id) AS last_token_at,
+  (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.failure_count > 0) AS failed_meetings,
+  (SELECT m.last_failure_code FROM meeting_sessions m WHERE m.user_id = u.id AND m.failure_count > 0
+     ORDER BY m.last_failure_at DESC LIMIT 1) AS last_failure_code`;
 
 /** Satırın abonelik durumu (satır yoksa null). Saf fonksiyondur. */
 function subscriptionOf(row: UserRow): SubscriptionState | null {
   return row.status === null || row.current_period_end === null
     ? null
-    : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at, pastDueSince: row.past_due_since };
+    : {
+        status: row.status,
+        currentPeriodEnd: row.current_period_end,
+        cancelAt: row.cancel_at,
+        pastDueSince: row.past_due_since,
+        complimentary: row.complimentary === 1,
+      };
 }
 
 /** Satırın listedeki özeti. Saf fonksiyondur. */
@@ -285,6 +348,8 @@ function userSummary(row: UserRow, config: Config, now: Date): AdminUserSummary 
             cancelAt: isoOrNull(subscription.cancelAt),
             pastDueSince: isoOrNull(subscription.pastDueSince),
             graceEndsAt: isoOrNull(graceEndsAtMs(subscription, config.pastDueGraceMs)),
+            plan: row.plan,
+            complimentary: subscription.complimentary,
             updatedAt: new Date(row.updated_at ?? 0).toISOString(),
           },
     trial: {
@@ -296,6 +361,8 @@ function userSummary(row: UserRow, config: Config, now: Date): AdminUserSummary 
     meetingsTotal: row.meetings,
     hoursThisMonth: Math.round((row.month_ms / 3_600_000) * 100) / 100,
     lastActiveAt: isoOrNull(lastActive),
+    failedMeetings: row.failed_meetings,
+    lastFailureCode: row.last_failure_code,
   };
 }
 
@@ -312,7 +379,7 @@ export async function listAdminUsers(db: D1Database, config: Config, filter: Adm
          AND (?5 IS NULL OR EXISTS (SELECT 1 FROM auth_identities a WHERE a.user_id = u.id AND a.provider = ?5))
          AND (?6 IS NULL OR u.created_at < ?6 OR (u.created_at = ?6 AND u.id < ?7))
          AND ${segmentSql(filter.segment)}
-       ORDER BY u.created_at DESC, u.id DESC LIMIT ?8`,
+       ORDER BY u.created_at DESC, u.id DESC LIMIT ?11`,
     )
     .bind(
       now.getTime(),
@@ -322,6 +389,9 @@ export async function listAdminUsers(db: D1Database, config: Config, filter: Adm
       filter.provider,
       filter.cursor === null ? null : filter.cursor.createdAt,
       filter.cursor === null ? "" : filter.cursor.id,
+      config.trialMeetings,
+      config.trialDurationMs,
+      now.getTime() - inactiveAfterMs,
       adminUserPageSize + 1,
     )
     .all<UserRow>();
@@ -349,6 +419,10 @@ interface MeetingRow {
   readonly token_budget: number;
   readonly attested: number;
   readonly deepgram: number;
+  readonly first_note_at: number | null;
+  readonly failure_count: number;
+  readonly last_failure_code: string | null;
+  readonly last_failure_at: number | null;
 }
 
 /** Toplantının durumu. Saf fonksiyondur. */
@@ -377,6 +451,10 @@ function adminMeeting(row: MeetingRow, nowMs: number): AdminMeeting {
     tokenBudget: row.token_budget,
     attested: row.attested === 1,
     deepgram: row.deepgram === 1,
+    noteCompleted: row.first_note_at !== null,
+    failureCount: row.failure_count,
+    lastFailureCode: row.last_failure_code,
+    lastFailureAt: isoOrNull(row.last_failure_at),
   };
 }
 
@@ -402,6 +480,14 @@ export function userTimeline(user: AdminUserSummary, trialDeviceVerifiedAt: stri
     .sort((left: AdminTimelineEntry, right: AdminTimelineEntry): number => Date.parse(right.at) - Date.parse(left.at));
 }
 
+/** İptal nedeni satırı (ayrıntı). */
+interface CancellationRow {
+  readonly created_at: number;
+  readonly reason: string | null;
+  readonly feedback: string | null;
+  readonly comment: string | null;
+}
+
 /** Ayın kullanım satırı. */
 interface MonthlyRow {
   readonly audio_seconds: number;
@@ -424,18 +510,20 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
   if (userRow === null) {
     throw new ApiError("not_found", "Kullanıcı bulunamadı.");
   }
-  const [meetingRows, reportRows, customerRow, monthlyRow, usage]: [
+  const [meetingRows, reportRows, customerRow, monthlyRow, usage, cancellationRow]: [
     D1Result<MeetingRow>,
     D1Result<AdminUserReportRow>,
     { stripe_customer_id: string } | null,
     MonthlyRow | null,
     MonthlyUsage,
+    CancellationRow | null,
   ] = await Promise.all([
     db
       .prepare(
         `SELECT m.id, m.kind, m.started_at, m.max_ends_at, m.ended_at, m.end_reason, m.deferred, m.reprocess_count,
            m.audio_seconds, m.tokens_used, m.token_budget, m.device_id IS NOT NULL AS attested,
-           EXISTS (SELECT 1 FROM deepgram_live_meetings d WHERE d.meeting_id = m.id) AS deepgram
+           EXISTS (SELECT 1 FROM deepgram_live_meetings d WHERE d.meeting_id = m.id) AS deepgram,
+           m.first_note_at, m.failure_count, m.last_failure_code, m.last_failure_at
          FROM meeting_sessions m WHERE m.user_id = ? ORDER BY m.started_at DESC LIMIT ?`,
       )
       .bind(userId, adminUserMeetingLimit)
@@ -450,6 +538,10 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
       .bind(userId, monthKey(now))
       .first<MonthlyRow>(),
     monthlyUsage(db, userId, now),
+    db
+      .prepare("SELECT created_at, reason, feedback, comment FROM subscription_cancellations WHERE user_id = ? ORDER BY created_at DESC LIMIT 1")
+      .bind(userId)
+      .first<CancellationRow>(),
   ]);
   const user: AdminUserSummary = userSummary(userRow, config, now);
   const trialDeviceVerifiedAt: string | null = isoOrNull(userRow.trial_device_verified_at);
@@ -457,6 +549,15 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
     user,
     trialDeviceVerifiedAt,
     stripeCustomerId: customerRow?.stripe_customer_id ?? null,
+    cancellation:
+      cancellationRow === null
+        ? null
+        : {
+            at: new Date(cancellationRow.created_at).toISOString(),
+            reason: cancellationRow.reason,
+            feedback: cancellationRow.feedback,
+            comment: cancellationRow.comment,
+          },
     usage: {
       usedHours: hoursOf(usage.usedSeconds),
       capHours: hoursOf(config.monthlyCapSeconds),

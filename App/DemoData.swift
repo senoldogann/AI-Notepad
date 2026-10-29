@@ -31,10 +31,31 @@ enum DemoScene: String {
     case live = "canli"
     /// Ana sayfa ve abone olma teklifi (deneme notu hazır; yalnız abonelik sürümünde).
     case upsell = "abone"
+    /// Deneme bitmek üzere teklifi: bu Mac'teki özet ve planlar (yalnız abonelik sürümünde).
+    case trialEnding = "deneme-bitiyor"
+    /// Deneme bitti teklifi: bu Mac'teki özet ve planlar (yalnız abonelik sürümünde).
+    case trialEnded = "deneme-bitti"
     /// Ana sayfa ve sağ altta güncelleme kartı (sahte sürüm ve notlar).
     case update = "guncelleme"
     /// Ayarlar (sekme `--ayar` ile seçilir; görsel kontrol için).
     case settings = "ayarlar"
+    /// Kişiler (görsel kontrol için).
+    case people = "kisiler"
+    /// Görevlerim (görsel kontrol için).
+    case tasks = "gorevler"
+}
+
+/// `--tanitim-boyut <genişlik>x<yükseklik>` argümanından ana pencerenin boyutu (dar pencere denetimi için); yoksa ya da
+/// biçim tanınmazsa nil. Saf fonksiyondur.
+func demoWindowSize(arguments: [String]) -> NSSize? {
+    guard let index = arguments.firstIndex(of: "--tanitim-boyut"), arguments.indices.contains(index + 1) else {
+        return nil
+    }
+    let parts: [Double] = arguments[index + 1].split(separator: "x").compactMap { (part: Substring) -> Double? in Double(part) }
+    guard parts.count == 2 else {
+        return nil
+    }
+    return NSSize(width: parts[0], height: parts[1])
 }
 
 /// Tanıtım modu hataları.
@@ -53,7 +74,7 @@ enum DemoModeError: Error, CustomStringConvertible {
         case .dataFolderOutsideHome(let dataFolder, let home):
             "Tanıtım modu: veri klasörü (\(dataFolder)) geçici evin (\(home)) dışında; kullanıcının verisine yazılmaz."
         case .unknownScene(let value):
-            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor, canli ya da abone olmalı."
+            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor, canli, abone, deneme-bitiyor, deneme-bitti, guncelleme, ayarlar, kisiler ya da gorevler olmalı."
         }
     }
 }
@@ -133,6 +154,14 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
         }
     case .settings:
         router.section = .settings
+        #if HOSTED_EDITION
+        // Ayarlar › Hesap: yıllık abone, davet kodu ve sayıları.
+        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: nil, now: now), referral: demoReferral())
+        #endif
+    case .people:
+        router.section = .people
+    case .tasks:
+        router.section = .tasks
     case .update:
         router.section = .home
         updater.showUpdateForDemo(update: AvailableAppUpdate(
@@ -153,7 +182,20 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
     case .upsell:
         router.section = .home
         #if HOSTED_EDITION
+        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: 2, now: now), referral: nil)
         HostedAccount.shared.showUpsellForDemo(moment: .trialNoteReady)
+        #endif
+    case .trialEnding:
+        router.section = .home
+        #if HOSTED_EDITION
+        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: 1, now: now), referral: nil)
+        HostedAccount.shared.showUpsellForDemo(moment: .trialEnding)
+        #endif
+    case .trialEnded:
+        router.section = .home
+        #if HOSTED_EDITION
+        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: 0, now: now), referral: nil)
+        HostedAccount.shared.showUpsellForDemo(moment: .trialEnded)
         #endif
     case .live:
         router.section = .home
@@ -176,10 +218,49 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
         } catch {
             return
         }
-        // Sor sahnesi küçük pencerede: cevap pencereyi doldurur, sitedeki dar kartta okunur kalır.
-        placeDemoWindows(mainSize: scene == .ask ? NSSize(width: 940, height: 600) : NSSize(width: 1200, height: 780))
+        // Sor sahnesi küçük pencerede: cevap pencereyi doldurur, sitedeki dar kartta okunur kalır. `--tanitim-boyut`
+        // verilirse o boyut (dar pencere denetimi).
+        let sceneSize: NSSize = scene == .ask ? NSSize(width: 940, height: 600) : NSSize(width: 1200, height: 780)
+        placeDemoWindows(mainSize: demoWindowSize(arguments: CommandLine.arguments) ?? sceneSize)
     }
 }
+
+#if HOSTED_EDITION
+/// Tanıtım hesabının hak durumu: `trialLeft` doluysa 3 toplantılık denemede o kadar toplantı kalmış (süre 5 gün sonra
+/// biter), nil ise yıllık abone. Sunucu yanıtıyla aynı JSON'dan çözülür (alanlar değişirse burada da görünür).
+@MainActor
+private func demoEntitlements(trialLeft: Int?, now: Date) -> HostedEntitlements {
+    let iso: (Date) -> String = { (date: Date) -> String in date.formatted(Date.ISO8601FormatStyle()) }
+    let subscription: String = trialLeft == nil
+        ? #"{"status":"active","currentPeriodEnd":"\#(iso(now.addingTimeInterval(300 * 86_400)))","cancelAt":null,"access":"active","graceEndsAt":null,"plan":"yearly"}"#
+        : "null"
+    let left: Int = trialLeft ?? 0
+    let json: String = """
+    {"userId":"tanitim","plan":"\(trialLeft == nil ? "subscription" : "trial")","trialMeetingsTotal":3,"trialDays":7,
+     "trialMeetingsLeft":\(left),"accountTrialMeetingsLeft":\(left),"deviceTrialMeetingsLeft":null,
+     "trialEndsAt":\(trialLeft == nil ? "null" : "\"\(iso(now.addingTimeInterval(5 * 86_400)))\""),
+     "monthlyHoursUsed":3.4,"monthlyHoursCap":10,"subscription":\(subscription),"liveEngine":"deepgram",
+     "accountTokensUsed":180000,"accountTokensCap":1500000,"accountTokensPeriod":"month",
+     "accountTokensResetsAt":"\(iso(now.addingTimeInterval(20 * 86_400)))","monthlyResetsAt":"\(iso(now.addingTimeInterval(20 * 86_400)))",
+     "meetingMaxMinutes":240}
+    """
+    let decoder: JSONDecoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    do {
+        return try decoder.decode(HostedEntitlements.self, from: Data(json.utf8))
+    } catch {
+        fatalError("Tanıtım hak durumu çözülemedi: \(error)")
+    }
+}
+
+/// Tanıtım hesabının davet bilgisi: iki arkadaş katılmış, biri için bir ay kazanılmış.
+private func demoReferral() -> HostedReferral {
+    HostedReferral(
+        enabled: true, code: "K7M2QX9D", inviteUrl: URL(string: "https://gistsmith.com/invite?code=K7M2QX9D"), joined: 2, rewarded: 1,
+        pending: 1, rewardsLeftThisYear: 11, rewardsPerYear: 12, rewardUsd: 5.99, holdDays: 30
+    )
+}
+#endif
 
 /// Ana pencereyi ve canlı paneli Retina (2x) ekranın ortasına taşır; ana pencere verilen boyuta getirilir. Retina ekran
 /// yoksa uyarı loglanır ve pencereler yerinde kalır (görüntüler 1x olur).

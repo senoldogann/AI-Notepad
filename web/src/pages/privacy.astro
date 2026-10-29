@@ -75,9 +75,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         apply the plan limits.
       </li>
       <li>
-        We set no cookies of our own and use no analytics or advertising trackers on this website; Apple and Google
-        sign-in and Cloudflare Turnstile may use their own on the pages where you use them (see section 6). We don't sell
-        your data.
+        We set no cookies of our own and use no advertising trackers on this website. We count visits with Cloudflare Web
+        Analytics, which uses no cookies and collects no personal data. Apple and Google sign-in and Cloudflare Turnstile
+        may use their own cookies on the pages where you use them (see section 6). We don't sell your data.
       </li>
       <li>
         You can delete your account yourself at any time; the data on our server is deleted immediately, except a
@@ -179,9 +179,11 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Usage.</strong> Start and end time and length of each meeting session, audio duration and AI tokens
-              used; daily and monthly totals
+              used; daily and monthly totals. For each meeting session we also note when its first note was finished and,
+              if a request for it failed, how many failed and the last error code (for example “transcription service
+              unavailable”) — no content
             </td>
-            <td>Applying the trial and plan limits; controlling costs</td>
+            <td>Applying the trial and plan limits; controlling costs; finding and fixing problems</td>
             <td>(b) contract</td>
           </tr>
           <tr>
@@ -219,8 +221,29 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           </tr>
           <tr>
             <td>
+              <strong>Invites.</strong> If you subscribe, your personal invite code. When someone subscribes with an
+              invite code: which account the code belongs to, which account used it, when it was used, when the first
+              payment was made, and the reward's status (waiting, given or cancelled) with the time it changed. To stop the
+              same person using an invite twice, we also keep a keyed one-way hash of the sign-in identity of the account
+              that used it. The reward itself is a credit Stripe holds on the inviter's customer record.
+            </td>
+            <td>Running the invite programme: giving the discount and the reward, and preventing self-referral and abuse</td>
+            <td>(b) contract; (f) legitimate interest in preventing fraud and abuse</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Cancellation reason.</strong> If you cancel and choose a reason or write a comment in Stripe's
+              cancellation form, Stripe passes it to us: the reason you picked (for example “too expensive”), your comment
+              and Stripe's own reason (for example a failed payment). It is linked only to your account ID.
+            </td>
+            <td>Understanding why people cancel and improving the product</td>
+            <td>(f) legitimate interest in improving the service</td>
+          </tr>
+          <tr>
+            <td>
               <strong>Technical logs.</strong> Endpoint, result or error code, account ID and time. Logs never contain
-              meeting audio or text.
+              meeting audio or text. We also keep daily error totals (for example how many requests were refused because a
+              limit was reached), not linked to anyone.
             </td>
             <td>Operating the service, finding errors, security</td>
             <td>(f) legitimate interest in a reliable and secure service</td>
@@ -234,10 +257,20 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
             <td>
               <strong>Downloads and updates.</strong> The app and its updates are downloaded from GitHub, which processes
               your IP address and browser or app information to deliver the files (see section 7). We count downloads per
-              day; no IP address or other identifier is stored with the count.
+              day, by which button on our site was used and by the domain of the referring page (only the domain, never the
+              full address); no IP address or other identifier is stored with the counts. To count each network once a day,
+              we keep a keyed one-way hash of your IP address with the date until the end of that day.
             </td>
             <td>Delivering the app and its updates; knowing how many people download it</td>
             <td>(f) legitimate interest in distributing the app</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Website statistics.</strong> Aggregated page views, referring sites, countries and device types,
+              counted by Cloudflare Web Analytics without cookies or personal data (see section 6)
+            </td>
+            <td>Understanding how the website is used and improving it</td>
+            <td>(f) legitimate interest in a useful website</td>
           </tr>
         </tbody>
       </table>
@@ -270,8 +303,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
 
   <LegalSection sections={sections} id="website">
     <p>
-      This website sets no cookies of its own and uses no analytics, advertising or tracking tools. Fonts are served from
-      our own domain. The site stores the following in your browser:
+      This website sets no cookies of its own and uses no advertising or tracking tools. Fonts are served from our own
+      domain. The site stores the following in your browser:
     </p>
     <ul>
       <li>
@@ -293,6 +326,15 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         you back; removed as soon as you're back or the tab closes.
       </li>
       <li>
+        <strong>Invite code</strong> (<code>localStorage</code>, key <code>gistsmith.invite</code>): saved only if you
+        open an invite link or enter an invite code, so it can be applied when you subscribe; removed after you subscribe
+        or remove the code.
+      </li>
+      <li>
+        <strong>Chosen plan</strong> (<code>sessionStorage</code>, key <code>gistsmith.plan</code>): the plan (monthly or
+        yearly) you picked on the pricing page, so it is still selected after you sign in; removed when the tab closes.
+      </li>
+      <li>
         <strong>Tab identifier</strong> (<code>sessionStorage</code>, key <code>gistsmith.tab</code>): a random value that
         lets a duplicated tab notice it is a copy, so it asks you to sign in again instead of signing you out everywhere.
       </li>
@@ -305,6 +347,12 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <a href={routes.contact}>contact page</a>, Cloudflare Turnstile checks that the form is used by a person; it
       processes technical data such as your IP address and browser characteristics. Cloudflare, which hosts the site,
       processes IP addresses to deliver and protect it.
+    </p>
+    <p>
+      <strong>Visitor statistics.</strong> To see how the site is used, we use Cloudflare Web Analytics, with Cloudflare as
+      our processor. Its script sets no cookies, uses no local or session storage and doesn't fingerprint your browser or
+      follow you across sites. We see only aggregated numbers: page views, referring sites, countries and device types.
+      Cloudflare doesn't use your IP address or browser details to identify you. Our legal basis is our legitimate interest in understanding and improving the website (GDPR Art. 6(1)(f)).
     </p>
   </LegalSection>
 
@@ -324,7 +372,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         <tbody>
           <tr>
             <td>Cloudflare, Inc.</td>
-            <td>Processor: hosting this website and our server (Workers), database (D1), rate limiting, Turnstile, logs</td>
+            <td>Processor: hosting this website and our server (Workers), database (D1), rate limiting, Turnstile, Web Analytics, logs</td>
             <td>Account, usage, message and technical data; IP addresses; meeting content in transit</td>
             <td>
               Database stored in the EU. Cloudflare's network is global and the company is based in the USA: EU–US Data
@@ -412,7 +460,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       your payment, billing and tax details as independent controllers under the{" "}
       <a href={stripePrivacyUrl}>Stripe privacy policy</a> and <a href={linkPrivacyUrl}>Link's privacy policy</a>, and the
       purchase itself is governed by <a href={linkTermsUrl}>Link's terms</a>. From them we receive only your Stripe customer
-      ID and your subscription status and period — never your card details. We do not sell personal
+      ID, your subscription status and period and, if you cancel and give one, your cancellation reason — never your card
+      details. We do not sell personal
       data or share it for advertising.
     </p>
   </LegalSection>
@@ -435,9 +484,16 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       </li>
       <li>The DeviceCheck bit for your Mac is stored by Apple, not by us; it holds no personal details, only that the Mac has already given a free trial.</li>
       <li>Sign-in tokens: up to 60 days; deleted within a day after they expire or you sign out.</li>
-      <li>Daily usage totals: 2 days. The hashed IP record for new trials: until the end of that day.</li>
+      <li>Daily usage totals: 2 days. The hashed IP records for new trials and for counting downloads: until the end of that day.</li>
       <li>Contact messages, feedback and crash reports: 180 days. Emails: for as long as needed to handle your request.</li>
+      <li>Cancellation reasons and comments: 180 days; deleted immediately when you delete your account.</li>
+      <li>
+        Invite records: while the accounts involved exist. When you delete your account, your invite code and the records
+        that link an invite to your account are deleted; for an account that used an invite, the keyed hash of its
+        sign-in identity and the dates are kept for up to 24 months so the same person can't use an invite again.
+      </li>
       <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
+      <li>Daily download and error totals (not linked to you): 400 days.</li>
       <li>Technical logs: kept for a short period by Cloudflare, normally no more than a few days.</li>
       <li>Database backups (Cloudflare D1 point-in-time recovery): up to 30 days, after which deleted data is gone from backups too.</li>
       <li>
@@ -451,16 +507,17 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
     <p>
       You can delete your account at any time with “Delete account” on your <a href={routes.account}>account page</a>.
       Any unfinished subscription is first cancelled immediately at Stripe; then your account, sign-in identities,
-      sessions, device registrations, meeting session records, usage, subscription record and Stripe customer link are
-      deleted together in a single step.
+      sessions, device registrations, meeting session records, usage, subscription record, cancellation reasons, invite
+      code and invite records linked to your account, and Stripe customer link are deleted together in a single step.
     </p>
     <p>
       What remains: a pseudonymous record of your free-trial use (a keyed one-way hash of your sign-in identity, the
       number of free-trial meetings used, when the trial started, whether a Mac was verified and that month's usage
       totals), kept for up to 24 months to prevent abuse — if you sign in again with the same Apple or Google account, your
       new account continues the trial where the old one left off and, within the same month, starts from the old
-      account's usage; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for
-      your network (a hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by
+      account's usage; the DeviceCheck bit for your Mac, which Apple stores; today's trial and download counters for
+      your network (a hashed IP address, not linked to any account, deleted at the end of the day); if your account used an
+      invite code, a keyed hash of your sign-in identity with the dates, for up to 24 months; payment records kept by
       Stripe and Link; messages you sent through the contact form until their 180 days run out (ask us if you want them
       deleted sooner — feedback and crash reports linked to your account are deleted with it); if a duplicate
       subscription was ever created by mistake, its Stripe identifiers for up to 400 days so a double charge can be

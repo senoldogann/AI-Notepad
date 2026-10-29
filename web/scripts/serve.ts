@@ -26,6 +26,8 @@ const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".mp4": "video/mp4",
   ".webp": "image/webp",
   ".avif": "image/avif",
   ".woff2": "font/woff2",

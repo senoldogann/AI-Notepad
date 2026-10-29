@@ -5,8 +5,11 @@ Google), hesap, iletişim formu, yönetim paneli ve yasal metinler. Abonelik sun
 https://api.gistsmith.com) tarayıcıdan konuşur.
 
 **Yığın:** Astro (durağan çıktı) ve katı TypeScript. Sayfalar derlemede HTML olur; tarayıcıya yalnızca küçük betikler
-gider. Satır içi betik ve stil yoktur (CSP `'unsafe-inline'` istemez). İzleyici, analiz ve CDN yazı tipi yoktur; Inter
-uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur.
+gider. Satır içi betik ve stil yoktur (CSP `'unsafe-inline'` istemez). Reklam ya da izleme betiği ve CDN yazı tipi
+yoktur; Inter uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur. Ziyaret istatistiği yalnızca Cloudflare Web
+Analytics'tir: Cloudflare panelinde Pages projesi (`ainotepad`) için açılır ve işaretçi betiğini Cloudflare her sayfaya
+kendisi ekler (repoda kodu yoktur). Çerez ya da tarayıcı depolaması kullanmaz, kişisel veri ya da parmak izi toplamaz;
+yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü sayar. Gizlilik politikasında anlatılır.
 
 ## Adresler
 
@@ -15,6 +18,9 @@ uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur.
 | `/` | Ana sayfa |
 | `/pricing` | Fiyat (Stripe Checkout iptali buraya döner) |
 | `/download` | İndirme ve kurulum |
+| `/compare`, `/vs/granola`, `/vs/otter` | Karşılaştırma (rakip değerleri yalnızca kendi fiyat sayfalarından; `copy.ts` `compare`) |
+| `/blog`, `/blog/<kısa ad>`, `/blog/rss.xml` | Blog: yazılar `src/content/blog/*.md` (içerik koleksiyonu, `src/content.config.ts`) |
+| `/mcp` | Uygulamanın yerel MCP sunucusu: araçlar, bağlama, yapılandırma |
 | `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
 | `/account` | Hesap (`?payment=done`: Stripe Checkout dönüşü; Müşteri Portalı dönüşü `/account`) |
 | `/contact` | İletişim formu |
@@ -22,7 +28,9 @@ uygulamanın dosyasından (`../App/Fonts`) küçültülüp sunulur.
 | `/privacy`, `/terms` | Yasal metinler |
 
 Yollar `src/routes.ts`'tedir; `/account` ve `/admin` `Cache-Control: no-store` alır. Tüm indirme düğmeleri
-`<apiBase>/v1/download/mac` adresine gider: sunucu indirmeyi günlük sayaca ekler ve DMG'ye yönlendirir (302).
+`<apiBase>/v1/download/mac?src=<yer>` adresine gider (`macDownloadUrl`; yer: `home-hero`, `home-cta`, `download-page`,
+`account`): sunucu indirmeyi ağ başına günde bir kez, düğmenin yeri ve Referer alan adıyla sayar ve DMG'ye yönlendirir
+(302). Yeni bir indirme düğmesi eklerken yerini sunucunun izin listesine de (`server/src/downloads.ts`) ekle.
 
 ## Geliştirme
 
@@ -42,13 +50,13 @@ node scripts/e2e.ts http://localhost:8788 http://127.0.0.1:8787 "/Applications/G
 `screenshots` tüm sayfaları 1440/390 px, açık/koyu çeker; ana sayfa gösteriminin karelerini alır, tema düğmesinin
 seçimi hatırladığını ve gösterimin 5 saniyelik ana iş parçacığı maliyetini denetler. Yatay taşma, konsol hatası ya da CSP
 ihlali varsa çıkış kodu 1'dir. Hesap ve yönetim sayfaları için sekmeye örnek bir oturum yazılır ve API yanıtları
-betikteki örnek verilerle karşılanır (yalnızca görünüm denetimi; sunucu akışı sunucunun testlerindedir). Google Identity
-Services'in sayfaya eklediği `<style>` öğeleri ve yer tutucu simgesi CSP'ye takılır (Google'ın belgelediği CSP bunlara
-izin vermez; asıl düğme iframe'de çizilir ve etkilenmez); betik bunları beklenen hata sayar.
+betikteki örnek verilerle karşılanır (yalnızca görünüm denetimi; sunucu akışı sunucunun testlerindedir).
 
 Yalnızca kaynak değişince elle çalıştırılanlar (çıktıları repodadır): `scripts/subset-font.sh` (yazı tipi),
 `node scripts/make-grain.ts <chrome>` (film greni, `scripts/grain.svg`'den), `node scripts/make-og.ts <site> <chrome>`
-(paylaşım kartı `public/og.png`, site sunulurken; ürün adını `productName`'den alır).
+(paylaşım kartı `public/og.png`, site sunulurken; ürün adını `productName`'den alır). Betiğin çıktısı ~1,1 MB'tır;
+bazı önizleyiciler (ör. WhatsApp) büyük görseli atladığı için repodaki kopya 128 renkli paletli PNG'ye indirilir (300 KB
+altı, ör. Pillow: `Image.open(p).convert("RGB").quantize(colors=128, method=Image.Quantize.MAXCOVERAGE).save(p, optimize=True)`).
 
 ## Yapılandırma
 
@@ -76,20 +84,22 @@ ilk boyamadan önce `<html data-theme>` yazar: kullanıcının seçimi (`localSt
 
 **Giriş.** Apple ve Google'da tarayıcı ham bir nonce üretir, sağlayıcıya SHA-256 özetini verir, kimlik jetonunu ham
 nonce'la sunucuya yollar (`/v1/auth/apple`, `/v1/auth/google`); oturum sekmeye özgü `sessionStorage`'da tutulur. Mac
-uygulaması `/sign-in?app=1&nonce=<özet>` ile açtığında yalnızca Google düğmesi görünür, uygulamanın özeti Google'a
-olduğu gibi verilir ve jeton sunucuya değil `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile uygulamaya
-iletilir (`src/client/app-handoff.ts`). Geçerli `nonce` yoksa sayfa açık bir hata gösterir.
+uygulaması `/sign-in?app=1&nonce=<özet>&provider=<apple|google>` ile açtığında sayfa düğme göstermeden seçilen
+sağlayıcıya yönlendirir (`provider` yoksa ya da sağlayıcıdan vazgeçilip dönülürse Apple ve Google düğmeleri birlikte
+görünür; ikisi de açılır pencere yerine yönlendirme kullanır). Uygulamanın özeti sağlayıcıya olduğu gibi verilir ve jeton
+sunucuya değil `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` ile uygulamaya iletilir
+(`src/client/app-handoff.ts`). Geçerli `nonce` ya da bilinen bir `provider` yoksa sayfa açık bir hata gösterir.
 
 Apple Services ID ayarı: alan adı `gistsmith.com`, dönüş adresi `https://gistsmith.com/sign-in` (giriş açılır
 pencereyle yapılır, Apple yine de adresi denetler).
 
-**CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Google Identity Services için Google'ın belgelediği kaynaklar:
-`script-src https://accounts.google.com/gsi/client`, `frame-src https://accounts.google.com/gsi/`,
-`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Dış hizmetler yalnızca
-kullanıldıkları sayfada açıktır: Apple ve Google `/sign-in`'de, Turnstile `/contact`'ta. Pages aynı başlığı birden çok
-kurala uyan adreste virgülle birleştirir ve tarayıcı iki politikayı birlikte uygular: `/*` tüm hizmetlere izin veren geniş
-politikayı (sayfası olmayan adresler için), her sayfanın kuralı dar politikayı taşır. `npm run serve` başlıkları aynı
-biçimde birleştirir.
+**CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Dış hizmetler yalnızca kullanıldıkları sayfada açıktır: Apple'ın
+betiği `/sign-in`'de, Turnstile `/contact`'ta (Google ile giriş Google'a yönlendirir, betik yüklenmez). Pages aynı başlığı
+birden çok kurala uyan adreste virgülle birleştirir ve tarayıcı iki politikayı birlikte uygular: `/*` tüm hizmetlere izin
+veren geniş politikayı (sayfası olmayan adresler için), her sayfanın kuralı dar politikayı taşır. Her sayfada çalışan
+Cloudflare Web Analytics işaretçisi bu yüzden iki katmanın da tüm politikalarında açıktır:
+`script-src https://static.cloudflareinsights.com`, `connect-src https://cloudflareinsights.com`. `npm run serve`
+başlıkları aynı biçimde birleştirir.
 
 ## Cloudflare Pages
 

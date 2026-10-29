@@ -145,24 +145,48 @@ export function deepgramUsageOf(deepgram: DeepgramConfig, seconds: number, meeti
   };
 }
 
-/** Bütçeye sayılan toplam akış saniyesi. */
-async function chargedSeconds(db: D1Database): Promise<number> {
-  const row: { seconds: number } | null = await db
-    .prepare("SELECT COALESCE(SUM(charged_seconds), 0) AS seconds FROM deepgram_live_meetings")
-    .first<{ seconds: number }>();
-  return row?.seconds ?? 0;
+/**
+ * Bütçe toplamının SQL'i: tek satırlık `deepgram_budget`; tetikleyiciler onu `SUM(deepgram_live_meetings.charged_seconds)`
+ * ile aynı tutar (bkz. göç 0032). Tabloyu taramaz.
+ */
+const chargedSecondsSql: string = "(SELECT charged_seconds FROM deepgram_budget WHERE id = 1)";
+
+/** Bütçe toplamı satırı. */
+interface BudgetRow {
+  readonly charged_seconds: number;
+  readonly meetings: number;
+  readonly open_meetings: number;
 }
 
-/** Yönetici istatistiği: bütçe, tahmini harcama ve toplantı sayıları. */
+/** `deepgram_budget` satırı yok: göç 0032 uygulanmamış (bütçe sessizce sıfır sayılmaz). */
+export class DeepgramBudgetMissingError extends Error {
+  override readonly name: string = "DeepgramBudgetMissingError";
+
+  constructor() {
+    super("deepgram_budget satırı yok: göç 0032 uygulanmamış.");
+  }
+}
+
+/** Bütçe toplamı satırı; yoksa `DeepgramBudgetMissingError`. */
+async function budgetRow(db: D1Database): Promise<BudgetRow> {
+  const row: BudgetRow | null = await db
+    .prepare("SELECT charged_seconds, meetings, open_meetings FROM deepgram_budget WHERE id = 1")
+    .first<BudgetRow>();
+  if (row === null) {
+    throw new DeepgramBudgetMissingError();
+  }
+  return row;
+}
+
+/** Bütçeye sayılan toplam akış saniyesi (tek satır okur). */
+async function chargedSeconds(db: D1Database): Promise<number> {
+  return (await budgetRow(db)).charged_seconds;
+}
+
+/** Yönetici istatistiği: bütçe, tahmini harcama ve toplantı sayıları (tek satır okur). */
 export async function deepgramUsage(db: D1Database, config: Config): Promise<DeepgramUsage> {
-  const row: { seconds: number; meetings: number; open: number } | null = await db
-    .prepare(
-      `SELECT COALESCE(SUM(charged_seconds), 0) AS seconds, COUNT(*) AS meetings,
-         COALESCE(SUM(CASE WHEN settled_at IS NULL THEN 1 ELSE 0 END), 0) AS open
-       FROM deepgram_live_meetings`,
-    )
-    .first<{ seconds: number; meetings: number; open: number }>();
-  return deepgramUsageOf(config.deepgram, row?.seconds ?? 0, row?.meetings ?? 0, row?.open ?? 0);
+  const row: BudgetRow = await budgetRow(db);
+  return deepgramUsageOf(config.deepgram, row.charged_seconds, row.meetings, row.open_meetings);
 }
 
 /**
@@ -232,7 +256,7 @@ async function insertFirstGrant(db: D1Database, meetingId: string, chargeSeconds
   const row: { grants: number } | null = await db
     .prepare(
       `INSERT INTO deepgram_live_meetings (meeting_id, grants, first_grant_at, charged_seconds, settled_at, window_started_at, window_grants)
-       SELECT ?1, 1, ?2, ?3, NULL, ?2, 1 WHERE (SELECT COALESCE(SUM(charged_seconds), 0) FROM deepgram_live_meetings) < ?4
+       SELECT ?1, 1, ?2, ?3, NULL, ?2, 1 WHERE ${chargedSecondsSql} < ?4
        ON CONFLICT(meeting_id) DO NOTHING RETURNING grants`,
     )
     .bind(meetingId, now.getTime(), chargeSeconds, budgetSeconds)

@@ -25,4 +25,4 @@ export const operator: Operator = {
 };
 
 /** Yasal metinlerin son güncellenme tarihi (ISO). */
-export const legalUpdated: string = "2026-10-29";
+export const legalUpdated: string = "2026-10-30";

@@ -18,6 +18,8 @@ export interface Env {
   readonly DMG_URL: string;
   readonly APPCAST_URL: string;
   readonly PRICE_USD_MONTHLY: string;
+  readonly PRICE_USD_YEARLY: string;
+  readonly REFERRAL_POLICY: string;
   readonly REPORT_BYTES_PER_DAY: string;
   readonly APP_ATTEST_POLICY: string;
   readonly APP_ATTEST_ENVIRONMENT: string;
@@ -59,6 +61,7 @@ export interface Env {
   readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
   readonly STRIPE_PRICE_ID: string;
+  readonly STRIPE_YEARLY_PRICE_ID: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
   /** Kimlik deneme defteri ve deneme IP özetlerinin HMAC sırrı (erişim jetonu sırrından ayrı). */

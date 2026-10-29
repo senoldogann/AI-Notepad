@@ -1,0 +1,147 @@
+---
+// Blog yazısı: başlık, yazar, tarih ve okuma süresi, Markdown gövdesi, `BlogPosting` JSON-LD ve sonda indirme çağrısı.
+// Yazılar src/content/blog'dan; kısa ad dosya adıdır.
+import type { GetStaticPaths } from "astro";
+import { type CollectionEntry, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import CtaBand from "../../components/CtaBand.astro";
+import Icon from "../../components/Icon.astro";
+import { productName } from "../../config";
+import { copy, type BlogCopy } from "../../copy";
+import { operator } from "../../legal/operator";
+import { type BlogPost, blogEntries, blogPost, publishedIso, publishedText } from "../../lib/blog";
+import { blogPostingStructuredData, structuredDataJson } from "../../lib/structured-data";
+import { blogPostPath, routes } from "../../routes";
+import { siteConfig } from "../../site";
+
+interface Props {
+  readonly entry: CollectionEntry<"blog">;
+}
+
+export const getStaticPaths = (async () =>
+  (await blogEntries()).map((entry: CollectionEntry<"blog">) => ({ params: { slug: entry.id }, props: { entry } }))) satisfies GetStaticPaths;
+
+const { entry } = Astro.props;
+const text: BlogCopy = copy.blog;
+const post: BlogPost = blogPost(entry);
+const { Content } = await render(entry);
+const url: string = `${siteConfig.siteOrigin}${blogPostPath(post.slug)}`;
+const structuredData: string = structuredDataJson(
+  blogPostingStructuredData(siteConfig, operator, {
+    url,
+    title: post.title,
+    description: post.description,
+    author: post.author,
+    published: publishedIso(post.published),
+  }),
+);
+---
+
+<Base page={{ blogPostSlug: post.slug }} meta={{ title: `${post.title} — ${productName}`, description: post.description }} indexed={true}>
+  {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
+  <script is:inline type="application/ld+json" set:html={structuredData} />
+  <article class="narrow post">
+    <header class="post__head">
+      <a class="text-link small post__back" href={routes.blog}>{text.backToBlog}</a>
+      <h1 class="title-xl">{post.title}</h1>
+      <p class="lead">{post.description}</p>
+      <p class="small muted post__meta">
+        <span>{text.byline} {post.author}</span>
+        <span aria-hidden="true">·</span>
+        <time datetime={publishedIso(post.published)}>{publishedText(post.published)}</time>
+        <span aria-hidden="true">·</span>
+        <span>{post.minutes} {text.minutesRead}</span>
+      </p>
+    </header>
+    <div class="prose post__body">
+      <Content />
+    </div>
+    <a class="text-link post__back-end" href={routes.blog}>{text.backToBlog} <Icon name="arrow-right" size={16} class="" /></a>
+  </article>
+
+  <CtaBand id="post-cta-title" title={text.ctaTitle} text={text.ctaText} palette="coral" layout="clouds-left" />
+</Base>
+
+<style>
+  .post {
+    padding-top: clamp(40px, 7vw, 88px);
+  }
+
+  .post__head {
+    display: grid;
+    gap: 16px;
+    justify-items: start;
+    padding-bottom: 28px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .post__head h1 {
+    font-size: clamp(2rem, 4.4vw, 3rem);
+  }
+
+  .post__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .post__body {
+    font-size: 1.0625rem;
+  }
+
+  /* Markdown başlıkları sayfanın yazı ölçeğine uyar. */
+  .post__body :global(h2) {
+    margin-top: 40px;
+    font-size: 1.5rem;
+  }
+
+  .post__body :global(h3) {
+    font-size: 1.1875rem;
+  }
+
+  .post__body :global(li > p) {
+    margin: 0;
+  }
+
+  .post__body :global(blockquote) {
+    margin: 0 0 14px;
+    padding: 14px 20px;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    background: var(--soft);
+  }
+
+  .post__body :global(blockquote p) {
+    margin: 0;
+  }
+
+  .post__body :global(blockquote p + p) {
+    margin-top: 12px;
+  }
+
+  /* Kod bloğu (ör. kopyalanacak şablon): tek kutu; satır içi kod zemini bloğun içinde tekrarlanmaz. */
+  .post__body :global(pre) {
+    margin: 0 0 18px;
+    padding: 18px 20px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--soft);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .post__body :global(pre code) {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    font-family: var(--mono);
+    font-size: inherit;
+  }
+
+  .post__back-end {
+    margin-top: 32px;
+  }
+</style>

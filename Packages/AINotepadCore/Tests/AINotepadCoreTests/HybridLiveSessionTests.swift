@@ -100,7 +100,9 @@ private func hybridConfig(directory: URL) -> HybridLiveSessionConfig {
         othersInput.yield(samples)
         let file: URL = directory.appending(path: "others.caf")
         var written: Int = 0
-        for _ in 0..<50 where written < samples.count * 2 {
+        // Yazma beklenir; sınır geniş (10 sn): yüklü CI makinesinde 1 sn yetmeyebilir.
+        let deadline: ContinuousClock.Instant = .now + .seconds(10)
+        while written < samples.count * 2 && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
             written = (try? Data(contentsOf: file).count) ?? 0
         }

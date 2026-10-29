@@ -25,7 +25,7 @@
   // yeniden bağlanma; ayrıca toplantı başına toplam ve 5 dakikalık pencere sınırı, bkz. src/deepgram.ts).
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
-    { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
+    { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 1200, "period": 60 } },
     { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
     { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } },
     { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } },
@@ -49,8 +49,14 @@
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
     // DMG ile aynı sürümdeki Sparkle akışı: `GET /v1/download/mac/version` sitedeki sürüm numarasını buradan okur.
     "APPCAST_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml",
-    // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
+    // Fiyatlar Stripe fiyatlarıyla elle aynı tutulur (Stripe çağrılmaz). Aylık: yönetici MRR tahmini, davet indirimi
+    // (yıllık planda tek seferlik indirim) ve davet ödülü (davet edenin müşteri bakiyesi alacağı). Yıllık: yalnızca MRR
+    // (ayda 1/12'si).
     "PRICE_USD_MONTHLY": "5.99",
+    "PRICE_USD_YEARLY": "49",
+    // Davet programı (src/referrals.ts): "on" ise abonelere davet kodu verilir ve Checkout kodu kabul eder; "off" ise
+    // yeni kod verilmez, kod reddedilir (`503 referral_unavailable`); hak kazanmış bekleyen ödüller yine verilir.
+    "REFERRAL_POLICY": "on",
     // Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günde en çok saklanan bayt; aşılınca
     // `429 daily_cap_reached`. 2 MB ≈ 30 en büyük (64 KB) çökme raporu ya da ~400 uzun geri bildirim. Üst sınır:
     // 3 tür × 2 MB × 180 günlük saklama ≈ 1,1 GB.
@@ -139,7 +145,9 @@
     // (kötüye kullanılan deneme genel tavanı tüketip aboneleri durduramaz). Açık deneme toplantıları sürer.
     "DAILY_TRIAL_SPEND_CEILING_USD": "10",
     "REFRESH_TOKEN_DAYS": "60",
-    "STRIPE_PRICE_ID": "price_placeholder"
+    // Aynı ürünün iki fiyatı: aylık (varsayılan plan) ve yıllık. İkisi de "bizim" sayılır (webhook, iade, itiraz).
+    "STRIPE_PRICE_ID": "price_placeholder",
+    "STRIPE_YEARLY_PRICE_ID": "price_yearly_placeholder"
   },
   "env": {
     "production": {
@@ -159,7 +167,7 @@
       ],
       "ratelimits": [
         { "name": "AUTH_IP_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
-        { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 300, "period": 60 } },
+        { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 1200, "period": 60 } },
         { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
         { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } },
         { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } },
@@ -181,7 +189,10 @@
         "CF_ACCESS_AUD": "",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
         "APPCAST_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/appcast.xml",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Yıllık fiyat vergi dahil 49 $ (`gistsmith_yearly`).
         "PRICE_USD_MONTHLY": "5.99",
+        "PRICE_USD_YEARLY": "49",
+        "REFERRAL_POLICY": "on",
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "REPORT_BYTES_PER_DAY": "2000000",
         "APP_ATTEST_POLICY": "optional",
@@ -241,7 +252,9 @@
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "DAILY_TRIAL_SPEND_CEILING_USD": "25",
         "REFRESH_TOKEN_DAYS": "60",
-        "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt"
+        "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt",
+        // Yıllık fiyat (arama anahtarı `gistsmith_yearly`, vergi dahil, aylıkla aynı ürün).
+        "STRIPE_YEARLY_PRICE_ID": "price_1UW0JgLYGoRn8lDPf8gFeNSz"
       }
     }
   }

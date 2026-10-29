@@ -6,18 +6,19 @@ import Header from "../components/Header.astro";
 import PullReveal from "../components/PullReveal.astro";
 import { productName } from "../config";
 import { copy, type PageMeta } from "../copy";
-import { type PageKey, pageUrl } from "../routes";
+import { blogFeedPath, type SitePage, sitePageKey, sitePagePath } from "../routes";
 import { siteConfig } from "../site";
 
 interface Props {
-  readonly page: PageKey;
+  /** Sabit sayfa ya da blog yazısı: kanonik adres ve üst çubuktaki etkin bağlantı bundan. */
+  readonly page: SitePage;
   readonly meta: PageMeta;
   /** Kişiye özel sayfalar (hesap, yönetim) ve 404 arama motorlarına kapalıdır; kanonik adresleri de verilmez. */
   readonly indexed: boolean;
 }
 const { page, meta, indexed } = Astro.props;
 const origin: string = siteConfig.siteOrigin;
-const canonical: string = pageUrl(page, origin);
+const canonical: string = `${origin}${sitePagePath(page)}`;
 ---
 
 <!doctype html>
@@ -33,6 +34,7 @@ const canonical: string = pageUrl(page, origin);
     <link rel="preload" href="/fonts/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="alternate" type="application/rss+xml" title={copy.blog.feedTitle} href={blogFeedPath} />
     <meta name="theme-color" content="#fdfcfc" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
@@ -51,7 +53,7 @@ const canonical: string = pageUrl(page, origin);
     <a class="skip-link" href="#main">{copy.common.skipLink}</a>
     {/* Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. */}
     <div id="page-shell" class="page-shell">
-      <Header page={page} />
+      <Header page={sitePageKey(page)} />
       <main id="main" tabindex="-1">
         <slot />
       </main>

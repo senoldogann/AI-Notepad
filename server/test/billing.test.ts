@@ -299,6 +299,44 @@ describe("Stripe webhook", () => {
     expect((await plan(harness, session)).subscription?.cancelAt).toBe(new Date(periodEnd * 1000).toISOString());
   });
 
+  it("iptal nedeni (cancellation_details) hesaba bağlı saklanır; iptalden vazgeçilince silinir, eski olay yeniyi ezmez, hesap silinince gider", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+    const { session, customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    const periodEnd: number = now + 30 * 86_400;
+    const active: FakeSubscription = fakeSubscription(id("sub"), customer, "active", now - 20, periodEnd);
+    const stored = async (): Promise<{ user_id: string; reason: string | null; feedback: string | null; comment: string | null } | null> =>
+      env.DB.prepare("SELECT user_id, reason, feedback, comment FROM subscription_cancellations WHERE stripe_subscription_id = ?")
+        .bind(active.id)
+        .first<{ user_id: string; reason: string | null; feedback: string | null; comment: string | null }>();
+    const details = (feedback: string, comment: string): object => ({ cancellation_details: { reason: "cancellation_requested", feedback, comment, feedback_option: null } });
+    await send.change(id("evt_n1"), "customer.subscription.created", now - 20, active);
+    // Nedeni olmayan yenilenen abonelik yazılmaz.
+    expect(await stored()).toBeNull();
+
+    const longComment: string = `  ${"ç".repeat(1200)}  `;
+    await send.change(id("evt_n2"), "customer.subscription.updated", now - 10, { ...active, cancel_at_period_end: true, ...details("too_expensive", longComment) });
+    const first = await stored();
+    expect(first).toMatchObject({ user_id: session.userId, reason: "cancellation_requested", feedback: "too_expensive" });
+    expect(first?.comment).toHaveLength(1000);
+
+    // Geç gelen eski olay (iptalden önceki durum) satırı silmez.
+    await send.replay(id("evt_n0"), "customer.subscription.updated", now - 15, active);
+    expect(await stored()).not.toBeNull();
+
+    // İptalden vazgeçilince satır silinir; yeniden iptal yeni nedenle yazılır.
+    await send.change(id("evt_n3"), "customer.subscription.updated", now - 8, active);
+    expect(await stored()).toBeNull();
+    await send.change(id("evt_n4"), "customer.subscription.deleted", now - 5, { ...active, status: "canceled", ...details("missing_features", "Takvim yok") });
+    expect(await stored()).toMatchObject({ feedback: "missing_features", comment: "Takvim yok" });
+
+    expect((await harness.call(req("DELETE", "/v1/me", { token: session.accessToken }))).status).toBe(204);
+    expect(await stored()).toBeNull();
+  });
+
   it("past_due ek süresi dönem sonundan değil past_due'ya geçişten sayılır; past_due sürdükçe başlangıç korunur", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
@@ -487,6 +525,7 @@ describe("Stripe webhook", () => {
       id: id("ch"),
       object: "charge",
       customer,
+      payment_intent: null,
       amount_refunded: 100,
       currency: "usd",
       refunded: false,
@@ -672,6 +711,7 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
       eventOf(eventId, "invoice.paid", now - 100, {
         id: invoice,
         object: "invoice",
+        customer,
         status: "paid",
         created: now - 100,
         parent: { type: "subscription_details", subscription_details: { subscription, metadata: null } },
@@ -755,6 +795,7 @@ describe("Stripe webhook: kopya iadesinin sınırları", () => {
     const latePaid: string = eventOf(id("evt_late"), "invoice.paid", now - 50, {
       id: id("in_A5"),
       object: "invoice",
+      customer,
       status: "paid",
       created: now - 20 * 86_400,
       parent: { type: "subscription_details", subscription_details: { subscription: id("sub_A"), metadata: null } },

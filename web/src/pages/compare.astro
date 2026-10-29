@@ -1,0 +1,99 @@
+---
+// Karşılaştırma dizini: üç ürünün kısa özet tablosu ve her karşılaştırma sayfasına bir kart. Değerler copy.ts `compare`'den.
+import Base from "../layouts/Base.astro";
+import ComparisonTable, { type ComparisonColumn } from "../components/ComparisonTable.astro";
+import CtaBand from "../components/CtaBand.astro";
+import Icon from "../components/Icon.astro";
+import { productName } from "../config";
+import { copy, type CompareCopy, type Competitor, type CompetitorCopy } from "../copy";
+import { type PageKey, routes } from "../routes";
+
+const text: CompareCopy = copy.compare;
+/** Rakiplerin karşılaştırma sayfaları (dizindeki sırayla). */
+const competitorPages: readonly { readonly competitor: Competitor; readonly page: PageKey }[] = [
+  { competitor: "granola", page: "vsGranola" },
+  { competitor: "otter", page: "vsOtter" },
+];
+const columns: readonly ComparisonColumn[] = [
+  { name: productName, values: text.us },
+  ...competitorPages.map((entry): ComparisonColumn => ({ name: text.competitors[entry.competitor].name, values: text.competitors[entry.competitor].values })),
+];
+---
+
+<Base page="compare" meta={text.meta} indexed={true}>
+  <section class="page compare-intro">
+    <p class="eyebrow">{text.eyebrow}</p>
+    <h1 class="title-xl">{text.title}</h1>
+    <p class="lead">{text.lead}</p>
+  </section>
+
+  <section class="page compare-cards" aria-label={text.pickTitle}>
+    {
+      competitorPages.map((entry) => {
+        const them: CompetitorCopy = text.competitors[entry.competitor];
+        return (
+          <a class="card compare-card" href={routes[entry.page]}>
+            <h2 class="title-m">{them.title}</h2>
+            <p class="muted">{them.summary}</p>
+            <span class="text-link">
+              {text.readComparison} <Icon name="arrow-right" size={16} class="" />
+            </span>
+          </a>
+        );
+      })
+    }
+  </section>
+
+  <section class="page compare-overview" aria-labelledby="overview-title">
+    <h2 class="title-l" id="overview-title">{text.overviewTitle}</h2>
+    <p class="small muted">{text.checked}</p>
+    <ComparisonTable caption={text.overviewTitle} topics={text.overviewTopics} columns={columns} />
+    <p class="small muted">{text.missingNote}</p>
+  </section>
+
+  <CtaBand id="compare-cta-title" title={text.ctaTitle} text={text.ctaText} palette="mint" layout="clouds-left" />
+
+  <p class="page small muted compare-trademarks">{text.trademarks}</p>
+</Base>
+
+<style>
+  .compare-intro {
+    display: grid;
+    gap: 18px;
+    padding-block: clamp(48px, 8vw, 96px) clamp(28px, 4vw, 44px);
+  }
+
+  .compare-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .compare-card {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    text-decoration: none;
+    transition: border-color 160ms ease;
+  }
+
+  .compare-card:hover {
+    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+  }
+
+  .compare-overview {
+    display: grid;
+    gap: 16px;
+    margin-top: clamp(48px, 7vw, 88px);
+  }
+
+  .compare-trademarks {
+    margin-top: 32px;
+  }
+
+  @media (max-width: 760px) {
+    .compare-cards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

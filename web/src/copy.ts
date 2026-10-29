@@ -2,6 +2,7 @@
 // işletme bilgisi tek yerden gelir (config.ts `productName`, legal/operator.ts).
 import { cardStatementDescriptor, productName } from "./config";
 import type { IconName } from "./lib/icons";
+import type { BillingPlan } from "./lib/plans";
 import { operator } from "./legal/operator";
 
 /** Başlık ve açıklama (arama motorları ve paylaşım kartı). */
@@ -53,6 +54,9 @@ export interface CommonCopy {
     readonly contact: string;
     readonly privacy: string;
     readonly terms: string;
+    readonly compare: string;
+    readonly blog: string;
+    readonly mcp: string;
   };
   readonly downloadCta: string;
   readonly headerDownload: string;
@@ -60,6 +64,9 @@ export interface CommonCopy {
   readonly darkMode: string;
   readonly price: string;
   readonly perMonth: string;
+  /** Yıllık planın fiyatı (`$49`) ve dönemi. */
+  readonly yearlyPrice: string;
+  readonly perYear: string;
   readonly offer: string;
   readonly requirementsShort: string;
   /** Fiyatın vergiler dahil olduğu (fiyatın hemen altında). */
@@ -71,6 +78,8 @@ export interface CommonCopy {
   readonly footer: {
     readonly tagline: string;
     readonly product: string;
+    /** Karşılaştırma, blog ve MCP bağlantılarının sütunu. */
+    readonly learn: string;
     readonly account: string;
     readonly company: string;
     readonly fontLicense: string;
@@ -125,6 +134,15 @@ export interface HomeCopy {
   /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
   readonly assurances: readonly string[];
   readonly demo: DemoCopy;
+  /** Kahramanın altındaki tanıtım videosu (public/video; kendiliğinden oynamaz). */
+  readonly launchVideo: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly caption: string;
+    /** Video oynatılamazsa görünen metin ve dosya bağlantısı. */
+    readonly fallback: string;
+    readonly fallbackLink: string;
+  };
   readonly library: {
     readonly label: string;
     readonly meetings: readonly { readonly title: string; readonly meta: string }[];
@@ -173,6 +191,8 @@ export interface HomeCopy {
     readonly notes: TitledText;
     readonly tasks: TitledText;
     readonly ai: TitledText;
+    /** Yapay zekâ kartından MCP sayfasına bağlantı. */
+    readonly mcpLink: string;
     readonly files: TitledText;
     /** Claude'da toplantılar üstüne bir soru örneği (MCP). */
     readonly mcpDemo: {
@@ -195,10 +215,26 @@ export interface HomeCopy {
   readonly pricingTitle: string;
   readonly pricingLead: string;
   readonly pricingCta: string;
+  /** Fiyat bandından karşılaştırma sayfasına bağlantı. */
+  readonly pricingCompare: string;
   readonly faqTitle: string;
   readonly faq: readonly Faq[];
   readonly finalTitle: string;
   readonly finalLead: string;
+}
+
+/** Fiyat sayfasında ve hesap sayfasının plan seçiminde bir plan. */
+export interface PlanOptionCopy {
+  readonly plan: BillingPlan;
+  readonly name: string;
+  readonly price: string;
+  readonly per: string;
+  /** Fiyatın altındaki kısa satır (ör. aylık karşılığı ve faturalama sıklığı). */
+  readonly detail: string;
+  /** Öne çıkan planın rozeti (ör. "Save 32%"); yoksa null. */
+  readonly badge: string | null;
+  /** Fiyat sayfasındaki düğme. */
+  readonly cta: string;
 }
 
 /** Fiyat sayfası. */
@@ -206,11 +242,16 @@ export interface PricingCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  readonly planName: string;
+  /** Plan kartlarının başlığı (ekran okuyucular için). */
+  readonly plansTitle: string;
+  readonly plans: readonly PlanOptionCopy[];
+  /** Plan kartlarının altındaki not: deneme ve davet kodu ("{invite}" bağlantının yeri). */
+  readonly plansNote: string;
+  readonly plansInviteLink: string;
+  readonly includedTitle: string;
   readonly planTagline: string;
   readonly included: readonly IconItem[];
   readonly startFree: string;
-  readonly subscribe: string;
   readonly limitsTitle: string;
   readonly limits: readonly IconText[];
   readonly taxTitle: string;
@@ -290,12 +331,31 @@ export interface AccountCopy {
   readonly hoursNote: string;
   readonly renewalLabel: string;
   readonly subscribe: string;
-  /** Abone ol düğmesinin yanında: fiyat (vergiler dahil), otomatik yenileme, iptal, satıcı. */
+  /** Abone olmadan önce plan seçimi (seçenekler `copy.pricing.plans`'tan). */
+  readonly planChoiceLegend: string;
+  /** Davet kodu alanı (abone ol düğmesinin üstünde, varsayılan kapalı). */
+  readonly invite: {
+    readonly summary: string;
+    readonly label: string;
+    readonly placeholder: string;
+    readonly apply: string;
+    readonly remove: string;
+  };
+  /** Abone ol düğmesinin yanında: vergiler dahil, otomatik yenileme, iptal, satıcı. */
   readonly subscribeNote: string;
   readonly manage: string;
   /** Aboneliği yönet düğmesinin yanında (kart, iptal; makbuzlar Link'ten e-postayla, sipariş geçmişi link.com'da). */
   readonly manageNote: string;
   readonly signOut: string;
+  /** Abonenin davet kartı ("bir ay ver, bir ay kazan"). */
+  readonly referral: {
+    readonly title: string;
+    readonly text: string;
+    readonly codeLabel: string;
+    readonly copyLink: string;
+    readonly copied: string;
+    readonly howItWorks: string;
+  };
   /** "Uygulamayı indir" kartı. */
   readonly appTitle: string;
   readonly appText: string;
@@ -318,6 +378,28 @@ export interface AccountCopy {
   readonly noScript: string;
 }
 
+/** Davet sayfası ("bir ay ver, bir ay kazan"). */
+export interface InviteCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly stepsTitle: string;
+  readonly steps: readonly IconText[];
+  readonly rulesTitle: string;
+  readonly rules: readonly string[];
+  /** Adresteki `?code=` ile gelen kodun kutusu. */
+  readonly codeLabel: string;
+  readonly codeNote: string;
+  readonly subscribeWithCode: string;
+  /** Davet edenin kendi kodu: hesap sayfası ve uygulama. */
+  readonly ownCodeTitle: string;
+  readonly ownCodeText: string;
+  readonly ownCodeLink: string;
+  readonly termsNote: string;
+  readonly termsLink: string;
+}
+
 /** Yönetim panelinin kullanıcılar görünümü. */
 export interface AdminUsersCopy {
   readonly title: string;
@@ -325,6 +407,8 @@ export interface AdminUsersCopy {
   readonly searchPlaceholder: string;
   readonly search: string;
   readonly segmentLabel: string;
+  /** Kesim seçiminin grupları: plan ve bırakma kesimleri. */
+  readonly segmentGroups: { readonly plan: string; readonly dropOff: string };
   readonly segments: {
     readonly all: string;
     readonly subscribed: string;
@@ -332,6 +416,10 @@ export interface AdminUsersCopy {
     readonly canceled: string;
     readonly trial: string;
     readonly free: string;
+    readonly noMeeting: string;
+    readonly trialEnded: string;
+    readonly inactive: string;
+    readonly failed: string;
   };
   readonly providerLabel: string;
   readonly providers: { readonly all: string; readonly apple: string; readonly google: string };
@@ -345,6 +433,7 @@ export interface AdminUsersCopy {
     readonly meetings: string;
     readonly hours: string;
     readonly lastActive: string;
+    readonly problems: string;
   };
   readonly empty: string;
   readonly loadMore: string;
@@ -357,6 +446,7 @@ export interface AdminUsersCopy {
     readonly trialDevice: string;
     readonly subscription: string;
     readonly trial: string;
+    readonly cancellation: string;
   };
   readonly usageTitle: string;
   readonly usage: { readonly hours: string; readonly tokens: string; readonly accountTokens: string; readonly audio: string };
@@ -371,6 +461,7 @@ export interface AdminUsersCopy {
     readonly audio: string;
     readonly tokens: string;
     readonly notes: string;
+    readonly problem: string;
   };
   readonly noMeetings: string;
   readonly reportsTitle: string;
@@ -395,6 +486,26 @@ export interface AdminOperationsCopy {
   readonly noStripe: string;
   readonly crashesTitle: string;
   readonly noCrashes: string;
+}
+
+/** Yönetim panelinin içgörüler görünümü (sorunlar, huni, indirme kaynakları, iptal nedenleri). */
+export interface AdminInsightsCopy {
+  readonly problemsTitle: string;
+  readonly problemsColumns: { readonly problem: string; readonly last7: string; readonly last30: string };
+  readonly noProblems: string;
+  readonly funnelTitle: string;
+  readonly funnelColumns: { readonly step: string; readonly count: string; readonly fromPrevious: string; readonly lost: string };
+  readonly funnelNote: string;
+  readonly sourcesTitle: string;
+  readonly sourceColumns: { readonly source: string; readonly count: string };
+  readonly referrersTitle: string;
+  readonly referrerColumns: { readonly host: string; readonly count: string };
+  readonly noDownloads: string;
+  readonly downloadsNote: string;
+  readonly cancellationsTitle: string;
+  readonly cancellationColumns: { readonly reason: string; readonly count: string };
+  readonly noCancellations: string;
+  readonly recentCancellationsTitle: string;
 }
 
 /** Yönetim panelinin durgun metinleri (değerlere bağlı olanlar client/copy.ts'te). */
@@ -431,9 +542,17 @@ export interface AdminCopy {
   /** Özet kutusu gruplarının başlıkları. */
   readonly groups: { readonly growth: string; readonly revenue: string; readonly usage: string; readonly costs: string };
   /** Panelin görünümleri (üstteki sekmeler). */
-  readonly views: { readonly label: string; readonly overview: string; readonly users: string; readonly operations: string; readonly inbox: string };
+  readonly views: {
+    readonly label: string;
+    readonly overview: string;
+    readonly insights: string;
+    readonly users: string;
+    readonly operations: string;
+    readonly inbox: string;
+  };
   readonly users: AdminUsersCopy;
   readonly operations: AdminOperationsCopy;
+  readonly insights: AdminInsightsCopy;
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -463,6 +582,134 @@ export interface AdminCopy {
   readonly reopen: string;
 }
 
+/** Karşılaştırma tablosunun satırları (konular). */
+export type ComparisonTopic =
+  | "price"
+  | "free"
+  | "capture"
+  | "platforms"
+  | "limits"
+  | "languages"
+  | "notes"
+  | "ask"
+  | "integrations"
+  | "storage"
+  | "plans";
+
+/** Karşılaştırılan ürünler. */
+export type Competitor = "granola" | "otter";
+
+/** "Kim hangisini seçmeli" kutusu: başlık ve maddeler. */
+export interface PickCopy {
+  readonly title: string;
+  readonly points: readonly string[];
+}
+
+/**
+ * Bir rakiple karşılaştırma sayfası. Rakibin değerleri yalnızca kendi fiyat sayfasında doğrulanmış gerçeklerdir; o
+ * konuda doğrulanmış bilgi yoksa değer `null` olur ve tabloda tire görünür (özelliğin olmadığı anlamına gelmez).
+ */
+export interface CompetitorCopy {
+  readonly meta: PageMeta;
+  readonly name: string;
+  readonly title: string;
+  readonly lead: string;
+  /** Karşılaştırma dizinindeki kartın kısa özeti. */
+  readonly summary: string;
+  readonly pricingUrl: string;
+  readonly values: Readonly<Record<ComparisonTopic, string | null>>;
+  /** Rakibin daha güçlü olduğu yerler (adil karşılaştırma). */
+  readonly strengthsTitle: string;
+  readonly strengths: readonly string[];
+  readonly pickCompetitor: PickCopy;
+  readonly pickUs: PickCopy;
+}
+
+/** Karşılaştırma sayfalarının ortak metinleri ve dizin sayfası. */
+export interface CompareCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  /** Dizindeki özet tablonun konuları. */
+  readonly overviewTopics: readonly ComparisonTopic[];
+  readonly overviewTitle: string;
+  readonly topics: Readonly<Record<ComparisonTopic, string>>;
+  /** Bizim değerlerimiz (copy.ts, fiyat sayfası ve sunucu sınırlarıyla aynı). */
+  readonly us: Readonly<Record<ComparisonTopic, string>>;
+  readonly topicColumn: string;
+  readonly tableTitle: string;
+  readonly checked: string;
+  readonly source: string;
+  readonly missingNote: string;
+  /** Tirenin ekran okuyucudaki karşılığı. */
+  readonly notChecked: string;
+  readonly pickTitle: string;
+  readonly readComparison: string;
+  readonly trademarks: string;
+  readonly ctaTitle: string;
+  readonly ctaText: string;
+  readonly competitors: Readonly<Record<Competitor, CompetitorCopy>>;
+}
+
+/** Blog dizini, yazı sayfası ve RSS akışı. */
+export interface BlogCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly feedTitle: string;
+  readonly feedLink: string;
+  readonly byline: string;
+  /** "6 min read" gibi okuma süresinin eki. */
+  readonly minutesRead: string;
+  readonly readPost: string;
+  readonly backToBlog: string;
+  readonly ctaTitle: string;
+  readonly ctaText: string;
+}
+
+/** MCP aracının açıklaması (MCPServer.swift `mcpTools` ile aynı araçlar). */
+export interface McpToolCopy {
+  readonly name: string;
+  readonly text: string;
+  /** Girdileri (yoksa "No input"). */
+  readonly input: string;
+}
+
+/** MCP istemcisinin yapılandırma dosyası (MCPClients.swift `configRelativePath`). */
+export interface McpClientFileCopy {
+  readonly client: string;
+  readonly file: string;
+}
+
+/** MCP sayfası. */
+export interface McpCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly toolsTitle: string;
+  readonly toolsLead: string;
+  readonly toolInputLabel: string;
+  readonly tools: readonly McpToolCopy[];
+  readonly setupTitle: string;
+  readonly setupLead: string;
+  readonly oneClick: PickCopy;
+  readonly manual: PickCopy;
+  readonly configLabel: string;
+  readonly configNote: string;
+  readonly filesTitle: string;
+  readonly fileColumns: { readonly client: string; readonly file: string };
+  readonly files: readonly McpClientFileCopy[];
+  readonly filesNote: string;
+  readonly questionsTitle: string;
+  readonly questionsLead: string;
+  readonly questions: readonly string[];
+  readonly privacyTitle: string;
+  readonly privacy: readonly TitledText[];
+}
+
 /** 404 sayfası. */
 export interface NotFoundCopy {
   readonly meta: PageMeta;
@@ -477,9 +724,13 @@ export interface Copy {
   readonly home: HomeCopy;
   readonly pricing: PricingCopy;
   readonly download: DownloadCopy;
+  readonly compare: CompareCopy;
+  readonly blog: BlogCopy;
+  readonly mcp: McpCopy;
   readonly signIn: SignInCopy;
   readonly contact: ContactCopy;
   readonly account: AccountCopy;
+  readonly invite: InviteCopy;
   readonly admin: AdminCopy;
   readonly notFound: NotFoundCopy;
   readonly privacyMeta: PageMeta;
@@ -503,20 +754,26 @@ export const copy: Copy = {
       contact: "Contact",
       privacy: "Privacy policy",
       terms: "Terms of service",
+      compare: "Compare",
+      blog: "Blog",
+      mcp: "MCP for AI apps",
     },
     downloadCta: "Download for Mac",
     headerDownload: "Download",
     darkMode: "Dark mode",
     price: "$5.99",
     perMonth: "/ month",
-    offer: "3 meetings or 7 days free, then $5.99 a month, taxes included",
-    requirementsShort: "macOS 26 or later · Apple silicon",
+    yearlyPrice: "$49",
+    perYear: "/ year",
+    offer: "3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included",
+    requirementsShort: "macOS 15 or later · Apple silicon",
     taxNote: "Taxes included.",
-    renewalNote: "Renews automatically every month until you cancel. Cancel anytime.",
+    renewalNote: "Renews automatically every month or year, depending on your plan, until you cancel. Cancel anytime.",
     ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
     footer: {
       tagline,
       product: "Product",
+      learn: "Learn",
       account: "Account",
       company: "Company",
       fontLicense: "Inter font licence",
@@ -535,7 +792,7 @@ export const copy: Copy = {
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
-    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
+    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and no one else in the meeting needs to install anything.`,
     secondaryCta: "See pricing",
     assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
     facts: {
@@ -585,6 +842,14 @@ export const copy: Copy = {
       pause: "Pause the demo",
       play: "Play the demo",
       replay: "Replay the demo",
+    },
+    launchVideo: {
+      eyebrow: "In one minute",
+      title: "See it at work.",
+      caption:
+        "A 66-second tour, with music: the live transcript and translation, your tasks on top of the note, asking across your meetings, and sending notes where your team works.",
+      fallback: "Your browser can't play this video here.",
+      fallbackLink: "Open the video file",
     },
     library: {
       label: "Recent meetings",
@@ -695,6 +960,7 @@ export const copy: Copy = {
         title: "Your AI apps, through MCP",
         text: "Claude, Cursor and VS Code can search and read your meetings. Connect them with one click in Settings; they can only read, never change anything.",
       },
+      mcpLink: "How MCP works",
       files: {
         title: "Your files and calendar",
         text: "Save every note as Markdown to a folder, such as your Obsidian vault or iCloud Drive. Your calendar shows what's next and can start recording when a meeting begins.",
@@ -708,14 +974,15 @@ export const copy: Copy = {
         source: "Client call · Nordia",
       },
     },
-    pricingTitle: "One plan. Simple pricing.",
-    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
+    pricingTitle: "Simple pricing, monthly or yearly.",
+    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month or $49 a year, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
+    pricingCompare: "Compare with Granola and Otter",
     faqTitle: "Questions",
     faq: [
       {
         question: "How does the free trial work?",
-        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month, taxes included.",
+        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that, the subscription is $5.99 a month or $49 a year, taxes included.",
       },
       {
         question: "Does a bot join my meetings?",
@@ -745,11 +1012,34 @@ export const copy: Copy = {
   pricing: {
     meta: {
       title: `Pricing — ${productName}`,
-      description: "One plan: $5.99 a month, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
+      description: "$5.99 a month or $49 a year, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
-    title: "One plan. Simple pricing.",
-    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, taxes included.",
-    planName: productName,
+    title: "Simple pricing, monthly or yearly.",
+    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, or $49 a year and save 32%. Taxes included.",
+    plansTitle: "Plans",
+    plans: [
+      {
+        plan: "monthly",
+        name: "Monthly",
+        price: "$5.99",
+        per: "/ month",
+        detail: "Billed every month. Taxes included.",
+        badge: null,
+        cta: "Choose monthly",
+      },
+      {
+        plan: "yearly",
+        name: "Yearly",
+        price: "$49",
+        per: "/ year",
+        detail: "About $4.08 a month, billed once a year. Taxes included.",
+        badge: "Save 32%",
+        cta: "Choose yearly",
+      },
+    ],
+    plansNote: "Both plans include everything below and start with 3 meetings or 7 days free. Got an invite from a friend? {invite}",
+    plansInviteLink: "How invites work",
+    includedTitle: "Everything included",
     planTagline: "Everything from live transcript to tasks.",
     included: [
       { icon: "gift", text: "3 meetings or 7 days free, no card needed" },
@@ -761,7 +1051,6 @@ export const copy: Copy = {
       { icon: "check-circle", text: "Cancel anytime" },
     ],
     startFree: "Start free",
-    subscribe: "Subscribe",
     limitsTitle: "The limits, plainly",
     limits: [
       { icon: "gift", title: "Trial", text: "3 meetings or 7 days from your first meeting, whichever comes first; each meeting up to 90 minutes. Opening a new account does not reset the trial." },
@@ -775,7 +1064,7 @@ export const copy: Copy = {
     ],
     taxTitle: "Payments and taxes",
     taxText:
-      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
+      `Checkout is hosted by Stripe, and your purchase is sold through Link, Stripe's payment service, as the merchant of record. The price of $5.99 a month or $49 a year includes sales tax, VAT or GST: Link calculates and remits the tax for your location, and checkout shows the included tax before you pay. You may see the price in your local currency. Receipts come from Link, and your card statement shows ${cardStatementDescriptor}. Your card details stay with Stripe and Link and never reach us. Purchases aren't available in some countries where Stripe can't sell, such as China, Cuba, Iran, North Korea, Russia and Syria.`,
     faqTitle: "Questions",
     faq: [
       {
@@ -785,6 +1074,16 @@ export const copy: Copy = {
       {
         question: "What if a payment fails?",
         answer: "The payment is retried over a few days. You keep access meanwhile and can update your card under “Manage subscription” or at link.com.",
+      },
+      {
+        question: "Can I switch between monthly and yearly?",
+        answer:
+          "Not with a single click yet. Cancel your current plan with “Manage subscription” on your account page; you keep access until the end of the period you paid for. When it has ended, subscribe again from your account page and choose the other plan.",
+      },
+      {
+        question: "How do invites work?",
+        answer:
+          "Subscribers get a personal invite code in the app and on their account page. A friend who subscribes with it gets their first month free on the monthly plan, or $5.99 off their first year on the yearly plan. Once your friend's first payment has gone through and hasn't been refunded for 30 days, you get $5.99 off your next payment. You can earn up to 12 rewards a year.",
       },
       {
         question: "Can I get a refund?",
@@ -800,7 +1099,7 @@ export const copy: Copy = {
   download: {
     meta: {
       title: `Download — ${productName}`,
-      description: `Download ${productName} for your Mac: macOS 26 or later on Apple silicon. 3 meetings or 7 days free.`,
+      description: `Download ${productName} for your Mac: macOS 15 or later on Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
@@ -813,6 +1112,263 @@ export const copy: Copy = {
     ],
     footnote: "Updates arrive automatically inside the app.",
     helpCta: "Questions? Contact us",
+  },
+  // Rakip değerleri yalnızca rakiplerin kendi fiyat sayfalarından (29 Ekim 2026'da denetlendi); bizimkiler bu dosyadaki
+  // fiyat ve SSS metinleriyle ve sunucu sınırlarıyla (server/wrangler.jsonc) aynıdır. Yeni bir değer eklerken kaynağını
+  // denetle; doğrulanmamış rakip bilgisi yazma (değer `null` kalır).
+  compare: {
+    meta: {
+      title: `Compare ${productName} with Granola and Otter`,
+      description: `How ${productName} compares with Granola and Otter.ai on price, free plans, how audio is captured, platforms and limits. Prices checked October 2026.`,
+    },
+    eyebrow: "Compare",
+    title: `${productName} next to Granola and Otter`,
+    lead: "Three meeting note apps that work in different ways. Here are the plain differences in price, how each one hears the meeting and where it runs, so you can pick the one that fits.",
+    overviewTopics: ["price", "free", "capture", "platforms"],
+    overviewTitle: "At a glance",
+    topics: {
+      price: "Price",
+      free: "Free option",
+      capture: "How it hears the meeting",
+      platforms: "Platforms",
+      limits: "Meeting limits",
+      languages: "Languages",
+      notes: "Notes",
+      ask: "Questions across meetings",
+      integrations: "Integrations",
+      storage: "Where notes are kept",
+      plans: "Plans for teams",
+    },
+    us: {
+      price: "$5.99 a month or $49 a year, taxes included",
+      free: "Free trial: 3 meetings or 7 days, whichever comes first; no card needed",
+      capture: "No bot. Listens to your Mac's system audio and microphone",
+      platforms: "Mac with Apple silicon, macOS 15 or later",
+      limits: "Up to 10 meeting hours a month and up to 4 hours per meeting",
+      languages: "30+ languages, with live translation during the meeting",
+      notes: "The note starts with your own tasks, then decisions and a summary; templates for different kinds of meetings",
+      ask: "Ask across all your meetings; answers link to the meetings they came from",
+      integrations: "Slack, Microsoft Teams, Discord, Notion, Apple Notes, an Obsidian folder, webhooks and MCP",
+      storage: "Notes, transcripts and recordings are saved on your Mac",
+      plans: "One personal plan, billed monthly or yearly",
+    },
+    topicColumn: "Topic",
+    tableTitle: "Side by side",
+    checked: "Prices checked October 2026.",
+    source: "Source",
+    missingNote: "A dash means the point wasn't part of what we checked on the vendor's pricing page. It doesn't mean the feature is missing.",
+    notChecked: "Not checked",
+    pickTitle: "Who should pick which",
+    readComparison: "Read the comparison",
+    trademarks: `Granola and Otter.ai are trademarks of their owners. ${productName} isn't affiliated with either company. Plans and prices change; check the vendor's site before you buy.`,
+    ctaTitle: `Try ${productName} on your next meeting`,
+    ctaText: "3 meetings or 7 days free, no card needed. Then $5.99 a month or $49 a year, taxes included.",
+    competitors: {
+      granola: {
+        meta: {
+          title: `${productName} vs Granola: meeting notes without a bot`,
+          description: `${productName} and Granola both take meeting notes without a bot. Compare price, free plans, platforms, languages and integrations. Prices checked October 2026.`,
+        },
+        name: "Granola",
+        title: `${productName} vs Granola`,
+        lead: "Both take notes without a bot joining the call. Granola runs on more devices and has team plans; Gistsmith is a Mac app with simple pricing, notes that start with your tasks and live translation.",
+        summary: "Both work without a bot. Granola has a free plan, mobile apps and team plans; Gistsmith is Mac-only, with one personal plan.",
+        pricingUrl: "https://www.granola.ai/pricing",
+        values: {
+          price: "Basic $0; Business $14 per user a month; Enterprise $35 per user a month",
+          free: "Basic plan at $0, with 30 days of meeting history",
+          capture: "No bot. Captures your device's audio",
+          platforms: "Desktop, iOS, Android and Apple Watch",
+          limits: null,
+          languages: "Multi-language support",
+          notes: "Note templates",
+          ask: "AI chat across meetings",
+          integrations: "Slack on all plans; Notion, HubSpot, Zapier, Attio, MCP and an API on Business",
+          storage: null,
+          plans: "Per-user Business and Enterprise plans",
+        },
+        strengthsTitle: "Where Granola is stronger",
+        strengths: [
+          "A free Basic plan, with 30 days of meeting history.",
+          "Apps for iOS, Android and Apple Watch as well as the desktop.",
+          "Per-user Business and Enterprise plans for teams.",
+          "HubSpot, Attio and Zapier integrations and an API on the Business plan.",
+        ],
+        pickCompetitor: {
+          title: "Pick Granola if",
+          points: [
+            "you want a free plan and 30 days of history is enough",
+            "you also take notes on an Android phone, an iPhone or an Apple Watch",
+            "your team wants one shared plan with per-user billing",
+            "your notes need to reach HubSpot or Attio, or you want an API",
+          ],
+        },
+        pickUs: {
+          title: `Pick ${productName} if`,
+          points: [
+            "you work on a Mac and want simple pricing: $5.99 a month or $49 a year, taxes included",
+            "you want every note to open with your own tasks",
+            "your meetings are in another language and you want a live translation as people talk",
+            "you want notes, transcripts and recordings saved on your own Mac",
+          ],
+        },
+      },
+      otter: {
+        meta: {
+          title: `${productName} vs Otter.ai: a Mac notepad without a meeting bot`,
+          description: `Otter joins calls as a bot; ${productName} listens on your Mac. Compare price, free plans, minutes, meeting length and languages. Prices checked October 2026.`,
+        },
+        name: "Otter.ai",
+        title: `${productName} vs Otter.ai`,
+        lead: "Otter joins Zoom, Microsoft Teams and Google Meet as a bot to write notes. Gistsmith listens on your Mac instead, so nothing extra appears in the call. Otter has a free tier and team plans; Gistsmith has one personal plan.",
+        summary: "Otter joins calls as a bot and has a free tier. Gistsmith listens on your Mac, with no bot in the call.",
+        pricingUrl: "https://otter.ai/pricing",
+        values: {
+          price: "Basic free; Pro $16.99 per user a month billed monthly ($8.33 a month billed annually); Business $19.99 per user a month billed annually",
+          free: "Basic plan: 300 transcription minutes a month and 3 file imports in total",
+          capture: "Joins Zoom, Microsoft Teams and Google Meet as a bot to write notes",
+          platforms: "Mobile apps available",
+          limits: "Pro: 1,200 minutes a month, up to 90 minutes per meeting. Business: unlimited meetings, up to 4 hours per meeting",
+          languages: "Automatic transcription in English, Spanish, French, German, Japanese and Chinese",
+          notes: null,
+          ask: null,
+          integrations: null,
+          storage: null,
+          plans: "Per-user Pro and Business plans",
+        },
+        strengthsTitle: "Where Otter is stronger",
+        strengths: [
+          "A free Basic plan with 300 transcription minutes a month.",
+          "Mobile apps.",
+          "Per-user Pro and Business plans for teams.",
+          "Unlimited meetings on the Business plan.",
+        ],
+        pickCompetitor: {
+          title: "Pick Otter if",
+          points: [
+            "you want a free tier and 300 minutes a month covers you",
+            "you'd like a note-taker to join the call as a participant",
+            "you need mobile apps or team plans",
+            "you want unlimited meetings on a business plan",
+          ],
+        },
+        pickUs: {
+          title: `Pick ${productName} if`,
+          points: [
+            "you'd rather no bot joins your calls",
+            "you meet in a language beyond the six on Otter's pricing page, or you want a live translation",
+            "you want every note to open with your own tasks",
+            "you work on a Mac and want simple pricing: $5.99 a month or $49 a year, taxes included",
+          ],
+        },
+      },
+    },
+  },
+  blog: {
+    meta: {
+      title: `Blog — ${productName}`,
+      description: "Practical guides on meeting notes, task lists and recording calls on a Mac, from the team behind Gistsmith.",
+    },
+    eyebrow: "Blog",
+    title: "Notes on better meetings",
+    lead: "Practical guides on meeting notes, follow-ups and recording calls on a Mac. Short, specific and useful whether or not you use our app.",
+    feedTitle: `${productName} blog`,
+    feedLink: "RSS feed",
+    byline: "By",
+    minutesRead: "min read",
+    readPost: "Read the post",
+    backToBlog: "All posts",
+    ctaTitle: `Try ${productName}`,
+    ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included.",
+  },
+  mcp: {
+    meta: {
+      title: `MCP server — ${productName}`,
+      description: `${productName} includes a local, read-only MCP server. Let Claude, Cursor, VS Code and other MCP apps list, search and read your meeting notes and tasks.`,
+    },
+    eyebrow: "MCP",
+    title: "Ask your AI apps about your meetings.",
+    lead: `${productName} includes a small MCP server. Claude, Cursor, Visual Studio Code and other MCP apps can use it to list, search and read your meetings and your open tasks. It only reads; it never changes anything.`,
+    toolsTitle: "What it offers",
+    toolsLead: "The server gives your AI app four tools. The app decides when to call them, usually starting with a list or a search and then opening a meeting.",
+    toolInputLabel: "Input",
+    tools: [
+      {
+        name: "list_meetings",
+        text: "Lists your recorded meetings, newest first: ID, date, title, length and whether the note is ready.",
+        input: "limit (optional; 20 if not given)",
+      },
+      {
+        name: "search_meetings",
+        text: "Searches your notes and transcripts by keyword and returns the matching passages, with the meeting and the moment in it.",
+        input: "query (required)",
+      },
+      {
+        name: "get_meeting",
+        text: "Returns a meeting's note as Markdown: summary, decisions, tasks and glossary. Add the transcript when you need the exact words.",
+        input: "id from list_meetings (required); include_transcript (optional)",
+      },
+      {
+        name: "list_my_tasks",
+        text: "Lists the tasks from your meeting notes that are yours and not yet done, with due dates and the meeting each one came from.",
+        input: "No input",
+      },
+    ],
+    setupTitle: "Connect it",
+    setupLead: `Keep ${productName} in your Applications folder and sign in to the app first: the server reads the meetings of the account you're signed in with.`,
+    oneClick: {
+      title: "One click: Claude, Cursor and VS Code",
+      points: [
+        `In ${productName}, open Settings › Connections.`,
+        "Under AI apps, click Connect on the Claude, Cursor or Visual Studio Code card. A card is dimmed if that app isn't in your Applications folder.",
+        `Quit and reopen the AI app. ${productName} now appears among its tools.`,
+      ],
+    },
+    manual: {
+      title: "Any other MCP app",
+      points: [
+        "In Settings › Connections, open “Advanced: skills and manual MCP setup”.",
+        "Under Other MCP clients, click Copy configuration.",
+        "Paste it into your app's MCP settings. In Claude Desktop that's Settings › Developer › Edit Config.",
+      ],
+    },
+    configLabel: "The configuration, for the app in your Applications folder",
+    configNote: `The app copies this with the real location of ${productName} on your Mac. If you keep it somewhere else, use the copy from the app.`,
+    filesTitle: "Where the one-click setup writes",
+    fileColumns: { client: "App", file: "Configuration file" },
+    files: [
+      { client: "Claude", file: "~/Library/Application Support/Claude/claude_desktop_config.json" },
+      { client: "Cursor", file: "~/.cursor/mcp.json" },
+      { client: "Visual Studio Code", file: "~/Library/Application Support/Code/User/mcp.json" },
+    ],
+    filesNote: `Connect adds a single “${productName.toLowerCase()}” entry and leaves everything else in the file as it was. VS Code keeps its servers under “servers” with “type”: “stdio”; Connect writes that form for you. If the file contains comments, which VS Code allows, ${productName} won't overwrite it and tells you why.`,
+    questionsTitle: "Questions to try",
+    questionsLead: "Ask in your own words. A few that work well:",
+    questions: [
+      "What did I promise Nordia last week?",
+      "List my open tasks from this week's meetings, grouped by due date.",
+      "Find the meetings where we discussed the budget and summarise what we decided.",
+    ],
+    privacyTitle: "What it can and can't do",
+    privacy: [
+      { title: "Read only", text: "The tools list, search and read. Nothing can be edited, deleted or sent through them." },
+      {
+        title: "Runs on your Mac",
+        text: `Your AI app starts ${productName} in the background and talks to it through standard input and output. The server doesn't open a network port.`,
+      },
+      {
+        title: "Your AI app's provider sees what it reads",
+        text: "Notes and transcripts your AI app reads go to that app's AI provider, such as Anthropic or OpenAI, under its own terms.",
+      },
+      {
+        title: "Your signed-in account only",
+        text: `If you sign out of ${productName}, the tools stop returning meetings until you sign in again. If you switch accounts, restart the AI app.`,
+      },
+      {
+        title: "Meeting text is data, not instructions",
+        text: "The server tells your AI app that notes and transcripts are what people said, and that it shouldn't follow requests found inside them.",
+      },
+    ],
   },
   signIn: {
     meta: { title: `Sign in — ${productName}`, description: `Sign in to your ${productName} account with Apple or Google.` },
@@ -865,10 +1421,26 @@ export const copy: Copy = {
     hoursNote: "Resets on the first day of each month (UTC).",
     renewalLabel: "Subscription",
     subscribe: "Subscribe",
-    subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
+    planChoiceLegend: "Choose a plan",
+    invite: {
+      summary: "Have an invite code?",
+      label: "Invite code",
+      placeholder: "For example K7M2QX9D",
+      apply: "Apply",
+      remove: "Remove",
+    },
+    subscribeNote: "Taxes included. Your plan renews automatically every month or year until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
-    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Renews automatically every month until you cancel.",
+    manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Your plan renews automatically until you cancel.",
     signOut: "Sign out",
+    referral: {
+      title: "Give a month, get a month",
+      text: "Friends who subscribe with your code get their first month free. For each one who stays, you get $5.99 off your next payment, up to 12 times a year.",
+      codeLabel: "Your invite code",
+      copyLink: "Copy invite link",
+      copied: "Link copied",
+      howItWorks: "How invites work",
+    },
     appTitle: "Get the app",
     appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,
     helpTitle: "Need help?",
@@ -888,6 +1460,49 @@ export const copy: Copy = {
     deletedRedirect: "Taking you to the home page…",
     backHome: "Back to the home page",
     noScript: "The account page needs JavaScript.",
+  },
+  invite: {
+    meta: {
+      title: `Invite a friend — ${productName}`,
+      description: `Give a month, get a month: a friend who subscribes to ${productName} with your invite code gets their first month free, and you get $5.99 off your next payment.`,
+    },
+    eyebrow: "Invite a friend",
+    title: "Give a month, get a month.",
+    lead: `Share ${productName} with a friend. They get their first month free, and when they stay, you get a month too.`,
+    stepsTitle: "How it works",
+    steps: [
+      {
+        icon: "gift",
+        title: "Share your code",
+        text: "Every subscriber gets a personal invite code, shown in the app under Settings › Account and on your account page. Send the code or your invite link to a friend.",
+      },
+      {
+        icon: "card",
+        title: "Your friend subscribes with it",
+        text: "On the monthly plan their first month is free; on the yearly plan they get $5.99 off their first year. Invites are for people who haven't subscribed before.",
+      },
+      {
+        icon: "check-circle",
+        title: "You get a month",
+        text: "Once your friend's first payment has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month.",
+      },
+    ],
+    rulesTitle: "The rules, plainly",
+    rules: [
+      "Up to 12 rewards per person in any 12 months.",
+      "One reward for each new paying account. Your own account, or another account of yours, doesn't count.",
+      "A reward is cancelled if your friend's first payment is refunded or disputed.",
+      "Rewards are credit on your next payments, not cash, and can't be exchanged or transferred.",
+      "We may change or end the invite programme; rewards already earned stay yours.",
+    ],
+    codeLabel: "Your invite code",
+    codeNote: "We've saved it in this browser. Subscribe here, or sign in to the Mac app and enter it when you subscribe.",
+    subscribeWithCode: "Subscribe with this code",
+    ownCodeTitle: "Looking for your own code?",
+    ownCodeText: "Subscribers find it in the app under Settings › Account and on their account page.",
+    ownCodeLink: "Go to your account",
+    termsNote: "The full rules are in the",
+    termsLink: "terms of service",
   },
   admin: {
     meta: { title: productName, description: tagline },
@@ -915,14 +1530,26 @@ export const copy: Copy = {
       refusals: "Trials refused, 30 days",
     },
     groups: { growth: "Growth", revenue: "Revenue", usage: "Usage", costs: "Costs & capacity" },
-    views: { label: "Dashboard sections", overview: "Overview", users: "Users", operations: "Operations", inbox: "Inbox" },
+    views: { label: "Dashboard sections", overview: "Overview", insights: "Insights", users: "Users", operations: "Operations", inbox: "Inbox" },
     users: {
       title: "Users",
       searchLabel: "Account ID",
       searchPlaceholder: "Search by account ID prefix",
       search: "Search",
-      segmentLabel: "Plan",
-      segments: { all: "All", subscribed: "Subscribed", pastDue: "Payment due", canceled: "Cancelled", trial: "Trial", free: "No plan" },
+      segmentLabel: "Segment",
+      segmentGroups: { plan: "Plan", dropOff: "Drop-off" },
+      segments: {
+        all: "All",
+        subscribed: "Subscribed",
+        pastDue: "Payment due",
+        canceled: "Cancelled",
+        trial: "Trial",
+        free: "No plan",
+        noMeeting: "Signed in, no meeting",
+        trialEnded: "Trial ended, not subscribed",
+        inactive: "Inactive for 7+ days",
+        failed: "Meetings with errors",
+      },
       providerLabel: "Sign-in",
       providers: { all: "Any", apple: "Apple", google: "Google" },
       columns: {
@@ -933,8 +1560,9 @@ export const copy: Copy = {
         trial: "Trial",
         subscription: "Subscription",
         meetings: "Meetings",
-        hours: "Hours this month",
+        hours: "Hours, month",
         lastActive: "Last active",
+        problems: "Problems",
       },
       empty: "No accounts match.",
       loadMore: "Load more",
@@ -947,13 +1575,23 @@ export const copy: Copy = {
         trialDevice: "Trial tied to a Mac",
         subscription: "Subscription",
         trial: "Trial",
+        cancellation: "Why they cancelled",
       },
       usageTitle: "This month",
       usage: { hours: "Meeting hours", tokens: "AI tokens", accountTokens: "AI outside meetings", audio: "Transcribed audio" },
       timelineTitle: "Timeline",
       timelineNote: "Built from the account's current dates; past subscription changes aren't stored.",
       meetingsTitle: "Meetings",
-      meetingColumns: { started: "Started", kind: "Plan", state: "Status", duration: "Length", audio: "Audio", tokens: "Tokens", notes: "Notes" },
+      meetingColumns: {
+        started: "Started",
+        kind: "Plan",
+        state: "Status",
+        duration: "Length",
+        audio: "Audio",
+        tokens: "Tokens",
+        notes: "Notes",
+        problem: "What went wrong",
+      },
       noMeetings: "No meetings yet.",
       reportsTitle: "Reports from this account",
       noReports: "No reports.",
@@ -975,6 +1613,25 @@ export const copy: Copy = {
       noStripe: "No Stripe events in the last 7 days.",
       crashesTitle: "Latest crash reports",
       noCrashes: "No crash reports.",
+    },
+    insights: {
+      problemsTitle: "Problems",
+      problemsColumns: { problem: "Problem", last7: "7 days", last30: "30 days" },
+      noProblems: "No refusals, service errors or server errors in the last 30 days.",
+      funnelTitle: "Funnel, last 30 days",
+      funnelColumns: { step: "Step", count: "People", fromPrevious: "Of previous step", lost: "Lost" },
+      funnelNote:
+        "Downloads count each network once a day. The other steps follow the accounts created in the last 30 days and aren't nested: someone can subscribe without a meeting. “First note” counts only meetings held since the server began tracking finished notes.",
+      sourcesTitle: "Downloads by button, 30 days",
+      sourceColumns: { source: "Button", count: "Downloads" },
+      referrersTitle: "Downloads by referring site, 30 days",
+      referrerColumns: { host: "Site", count: "Downloads" },
+      noDownloads: "No downloads with a source yet.",
+      downloadsNote: "Visitors to the website itself are in Cloudflare Web Analytics.",
+      cancellationsTitle: "Why people cancel",
+      cancellationColumns: { reason: "Reason", count: "Cancellations" },
+      noCancellations: "No cancellation reasons yet. They appear once the cancellation reason form is on in Stripe's customer portal.",
+      recentCancellationsTitle: "Latest cancellations",
     },
     chartsTitle: "Last 30 days",
     charts: {

@@ -283,17 +283,16 @@ private struct GeneralSettings: View {
                 case .whisperKit: Text("Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
                 case .appleSpeech: Text("Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.")
                 }
+                if !appleSpeechSupportedBySystem() {
+                    Text("Cihaz içi konuşma tanıma macOS 26 gerektirir.")
+                }
             } control: {
                 SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
                     set: { (engine: LiveEngine) -> Void in
                         Task { await model.selectEngine(engine: engine) }
                     }
-                ), options: [
-                    (LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)")),
-                    (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
-                    (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
-                ])
+                ), options: liveEngineOptions())
                 .disabled(model.isRecording || model.isStarting)
             }
             #endif
@@ -647,26 +646,28 @@ private struct AppearanceSettings: View {
             SettingsRow(title: Text("Arayüz boyutu: \(Int((uiScale * 100).rounded()))%")) {
                 Text("Menüler, başlıklar ve düğmeler dahil tüm yazılar.")
             } control: {
-                HStack(spacing: 10) {
-                    Image(systemName: "textformat.size.smaller").foregroundStyle(Theme.muted)
-                    Slider(value: $uiScale, in: SettingsRange.uiScale, step: 0.05).frame(width: 200)
-                    Image(systemName: "textformat.size.larger").foregroundStyle(Theme.muted)
-                }
+                SettingsSlider(value: $uiScale, range: SettingsRange.uiScale, step: 0.05, minSymbol: "textformat.size.smaller", maxSymbol: "textformat.size.larger")
             }
             SettingsRow(title: Text("Metin boyutu: \(Int(textSize)) pt")) {
-                EmptyView()
+                Text("Canlı metin ve notlar.")
             } control: {
-                Slider(value: $textSize, in: SettingsRange.textSize, step: 1).frame(width: 240)
+                SettingsSlider(value: $textSize, range: SettingsRange.textSize, step: 1, minSymbol: "textformat.size.smaller", maxSymbol: "textformat.size.larger")
             }
             SettingsRow(title: Text("Satır aralığı: \(Int(lineSpacing))")) {
                 EmptyView()
             } control: {
-                Slider(value: $lineSpacing, in: SettingsRange.lineSpacing, step: 1).frame(width: 240)
+                SettingsSlider(
+                    value: $lineSpacing, range: SettingsRange.lineSpacing, step: 1,
+                    minSymbol: "arrow.down.right.and.arrow.up.left", maxSymbol: "arrow.up.left.and.arrow.down.right"
+                )
             }
             SettingsRow(title: Text("Alt boşluk: \(Int(bottomSpacing)) pt")) {
                 EmptyView()
             } control: {
-                Slider(value: $bottomSpacing, in: SettingsRange.bottomSpacing, step: 4).frame(width: 240)
+                SettingsSlider(
+                    value: $bottomSpacing, range: SettingsRange.bottomSpacing, step: 4,
+                    minSymbol: "arrow.down.right.and.arrow.up.left", maxSymbol: "arrow.up.left.and.arrow.down.right"
+                )
             }
             // Önizleme seçilen yazı tipi ve boyutla.
             VStack(alignment: .leading, spacing: 4) {
@@ -782,6 +783,30 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
+/// Canlı metin motoru seçenekleri: cihaz içi tanıma yalnızca sistem destekliyorsa (macOS 26+) listelenir.
+private func liveEngineOptions() -> [(LiveEngine, Text)] {
+    let others: [(LiveEngine, Text)] = [
+        (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
+        (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
+    ]
+    guard appleSpeechSupportedBySystem() else {
+        return others
+    }
+    return [(LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)"))] + others
+}
+
+/// LLM sağlayıcı seçenekleri: cihaz içi model yalnızca sistem destekliyorsa (macOS 26+) listelenir.
+private func llmProviderOptions() -> [(String, Text)] {
+    let others: [(String, Text)] = [
+        (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
+        (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
+    ]
+    guard onDeviceLLMSupportedBySystem() else {
+        return others
+    }
+    return [(LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)"))] + others
+}
+
 /// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı, desteklenen diller ve ana toplantı
 /// dili ya da not dili desteklenmiyorsa uyarı.
 private struct OnDeviceLLMStatus: View {
@@ -847,13 +872,11 @@ private struct LLMSettings: View {
         VStack(alignment: .leading, spacing: 0) {
             LocalLLMSetup(model: model)
             SettingsRow(title: Text("Sağlayıcı")) {
-                EmptyView()
+                if !onDeviceLLMSupportedBySystem() {
+                    Text("Cihaz içi model (Apple Intelligence) macOS 26 gerektirir.")
+                }
             } control: {
-                SettingsMenu(selection: $provider, options: [
-                    (LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)")),
-                    (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
-                    (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
-                ])
+                SettingsMenu(selection: $provider, options: llmProviderOptions())
             }
             if provider == LLMProviderKind.onDevice.rawValue {
                 OnDeviceLLMStatus()
@@ -1231,7 +1254,9 @@ private struct ConnectionCard<Action: View>: View {
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+        // Satırdaki en uzun kart kadar uzar: Apple Notlar'daki anahtar ya da iki satırlık açıklama yanındaki kartı
+        // kısa bırakmasın.
+        .frame(maxWidth: .infinity, minHeight: 70, maxHeight: .infinity, alignment: .leading)
         .background(Theme.card, in: shape)
         .overlay(shape.strokeBorder(Theme.line))
     }
@@ -1458,9 +1483,6 @@ private func channelSetupFadeDelay(setup: ChannelSetup) -> Duration? {
 private struct WebhookSettings: View {
     let model: AppModel
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
-    @AppStorage(SettingsKey.appleNotesAutoSend) private var notesAutoSend: Bool = false
-    @AppStorage(SettingsKey.markdownFolder) private var markdownFolder: String = ""
-    @AppStorage(SettingsKey.markdownAutoExport) private var markdownAuto: Bool = false
     @State private var setup: ChannelSetup = .idle
     /// Tarayıcıda süren Notion girişi: "Vazgeç" bunu iptal eder (yerel dönüş dinleyicisi kapanır).
     @State private var notionSignIn: Task<Void, Never>?
@@ -1709,25 +1731,33 @@ private struct WebhookSettings: View {
             tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
             detail: notesStatus.map { Text(verbatim: $0) } ?? Text("\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
         ) {
-            Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
-                .settingsToggle()
-                .onChange(of: notesAutoSend) { (_: Bool, enabled: Bool) in
-                    // İlk açılışta izin penceresi çıksın ve doğru çalıştığı görülsün: son not gönderilir.
-                    if enabled, let latest = model.meetings.first(where: { $0.note != nil }) {
-                        Task {
-                            let error: String? = await model.sendToAppleNotes(meetingID: latest.id)
-                            notesStatus = error ?? String(localized: "Son not Notlar'a yazıldı.")
-                            if error != nil {
-                                notesAutoSend = false
-                            }
-                        }
-                    }
-                }
+            Toggle("Apple Notlar'a gönder", isOn: Binding<Bool>(
+                get: { model.appleNotesAutoSend },
+                set: { (enabled: Bool) -> Void in setNotesAutoSend(enabled: enabled) }
+            ))
+            .settingsToggle()
+        }
+    }
+
+    /// Apple Notlar'a kendiliğinden gönderimi açar ya da kapatır. Açılınca izin penceresi çıksın ve doğru çalıştığı
+    /// görülsün diye son not gönderilir; gönderilemezse ayar yeniden kapanır.
+    private func setNotesAutoSend(enabled: Bool) {
+        model.setAppleNotesAutoSend(enabled: enabled)
+        guard enabled, let latest = model.meetings.first(where: { $0.note != nil }) else {
+            return
+        }
+        Task {
+            let error: String? = await model.sendToAppleNotes(meetingID: latest.id)
+            notesStatus = error ?? String(localized: "Son not Notlar'a yazıldı.")
+            if error != nil {
+                model.setAppleNotesAutoSend(enabled: false)
+            }
         }
     }
 
     private var folderCard: some View {
-        ConnectionCard(
+        let markdownFolder: String = model.markdownFolder
+        return ConnectionCard(
             tile: BrandTile(mark: .symbol("folder.fill"), palette: .ocean, seed: "klasor", size: 38), title: Text("Klasör (Obsidian, iCloud)"),
             detail: folderStatus.map { Text(verbatim: $0) } ?? (markdownFolder.isEmpty ? Text("Markdown dosyası olarak") : Text(verbatim: (markdownFolder as NSString).abbreviatingWithTildeInPath)),
             badge: nil
@@ -1739,7 +1769,11 @@ private struct WebhookSettings: View {
             } else {
                 HStack(spacing: 6) {
                     Button("Değiştir") { chooseFolder() }.controlSize(.small)
-                    Toggle("Klasöre yaz", isOn: $markdownAuto).settingsToggle()
+                    Toggle("Klasöre yaz", isOn: Binding<Bool>(
+                        get: { model.markdownAutoExport },
+                        set: { (enabled: Bool) -> Void in model.setMarkdownAutoExport(enabled: enabled) }
+                    ))
+                    .settingsToggle()
                 }
             }
         }
@@ -1913,8 +1947,8 @@ private struct WebhookSettings: View {
         guard let url = pickMarkdownFolder() else {
             return
         }
-        markdownFolder = url.path
-        markdownAuto = true
+        model.setMarkdownFolder(path: url.path)
+        model.setMarkdownAutoExport(enabled: true)
         folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
             ?? String(localized: "Son not klasöre yazıldı.")
     }
@@ -2255,6 +2289,30 @@ struct SettingsRow<Detail: View, Control: View>: View {
             }
             .padding(.vertical, 16)
             SettingsDivider()
+        }
+    }
+}
+
+/// Ayar kaydırıcısı: iki ucunda küçük ve büyük ucu gösteren soluk simgeler, hepsinde aynı genişlik (Görünüm'deki
+/// kaydırıcılar alt alta hizalı dursun).
+private struct SettingsSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let minSymbol: String
+    let maxSymbol: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: minSymbol)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            Slider(value: $value, in: range, step: step).frame(width: 220)
+            Image(systemName: maxSymbol)
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18)
+                .accessibilityHidden(true)
         }
     }
 }

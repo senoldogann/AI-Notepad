@@ -215,7 +215,7 @@ struct HostedUsageCard: View {
             .appFont(size: 12, weight: .regular)
             .foregroundStyle(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
-            Button("Abone ol") { Task { await account.subscribe() } }
+            Button("Abone ol") { account.showPlans() }
                 .buttonStyle(.pillPrimary)
                 .disabled(account.isWorking)
                 .padding(.top, 2)
@@ -235,7 +235,7 @@ extension HostedUsageCard {
                 .appFont(size: 12, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Yeniden abone ol") { Task { await account.subscribe() } }
+            Button("Yeniden abone ol") { account.showPlans() }
                 .buttonStyle(.pillPrimary)
                 .disabled(account.isWorking)
         }
@@ -293,7 +293,7 @@ struct HostedUsageBanner: View {
             case .trialOneLeft, .trialEnded:
                 Button("Abone ol") {
                     account.dismissNotice()
-                    Task { await account.subscribe() }
+                    account.showPlans()
                 }
                 .buttonStyle(.pill)
                 .disabled(account.isWorking)
@@ -355,139 +355,6 @@ struct HostedMeetingLimitStrip: View {
             ) {
                 EmptyView()
             }
-        }
-    }
-}
-
-/// Abone olma teklifi (ana pencerede açılan kart): üstte durağan film gradyanı, uygulama simgesi ve "Gistsmith" rozeti;
-/// başlık, kısa açıklama, simgeli üç fayda, tam genişlikte "Abone ol" (doğrudan ödeme sayfası) ve altında "Şimdi değil".
-/// Deneme notu hazır olunca (günde en çok bir), deneme bitince bir kez (bkz. `HostedAccount.meetingNoteReady`) ve
-/// abonelik gerektiren bir şey denenince (bkz. `HostedAccount.requestSubscription`) açılır; kayıt ve işleme sürerken
-/// açılmaz.
-struct HostedUpsellSheet: View {
-    let account: HostedAccount
-    let moment: HostedUpsellMoment
-
-    var body: some View {
-        VStack(spacing: 0) {
-            FilmGradient(seed: "gistsmith-abone", palette: .sunset)
-                .frame(height: 168)
-                .overlay {
-                    VStack(spacing: 12) {
-                        Image(nsImage: NSApplication.shared.applicationIconImage)
-                            .resizable()
-                            .frame(width: 80, height: 80)
-                            .shadow(color: Color.black.opacity(0.2), radius: 16, y: 10)
-                            .accessibilityHidden(true)
-                        // Büyük harf elle yazılır: Türkçe yerel ayarda büyük harfe çevirme "GİSTSMİTH" yapıyordu.
-                        Text(verbatim: "GISTSMITH")
-                            .appFont(size: 11, weight: .semibold)
-                            .tracking(1.2)
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.22), in: Capsule())
-                    }
-                }
-            VStack(spacing: 22) {
-                VStack(spacing: 8) {
-                    Text(title)
-                        .appFont(size: 26, weight: .medium)
-                        .tracking(-0.5)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.ink)
-                    Text(verbatim: subtitle)
-                        .appFont(size: 14, weight: .regular)
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                VStack(alignment: .leading, spacing: 12) {
-                    benefit(symbol: "waveform", text: "Canlı metin, konuşulurken")
-                    benefit(symbol: "checklist", text: "Toplantı bitince not hazır, görevler en üstte")
-                    benefit(symbol: "text.magnifyingglass", text: "Tüm toplantılarına soru sor")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Theme.soft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(spacing: 10) {
-                    Button {
-                        account.dismissUpsell()
-                        Task { await account.subscribe() }
-                    } label: {
-                        Label("Abone ol", systemImage: "arrow.up.right")
-                            .labelStyle(.titleAndIcon)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.pillPrimary)
-                    .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(account.isWorking)
-                    Button("Şimdi değil") { account.dismissUpsell() }
-                        .buttonStyle(.hoverPlain)
-                        .foregroundStyle(Theme.muted)
-                        .keyboardShortcut(.cancelAction)
-                }
-                Text("Aylık abonelik, istediğin zaman iptal edebilirsin. Ödeme Stripe ile güvenle yapılır.")
-                    .appFont(size: 11, weight: .regular)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 26)
-            .padding(.bottom, 24)
-        }
-        .frame(width: 440)
-    }
-
-    private var title: LocalizedStringKey {
-        switch moment {
-        case .trialNoteReady: "Notun hazır"
-        case .trialEnded: "Ücretsiz denemen bitti"
-        case .subscriptionRequired: "Devam etmek için abone ol"
-        }
-    }
-
-    private var subtitle: String {
-        switch moment {
-        case .trialNoteReady:
-            guard case .signedIn(let entitlements) = account.state, case .trial(let left, _) = hostedPlanStatus(entitlements: entitlements) else {
-                return String(localized: "Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
-            }
-            return String(localized: "Ücretsiz denemende \(left) toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
-        case .trialEnded:
-            return String(localized: "Toplantıların ve notların bu Mac'te kalır. Yeni toplantıları kaydetmek için abone ol.")
-        case .subscriptionRequired:
-            return subscriptionRequiredReason
-        }
-    }
-
-    /// Neden abone olmak gerektiği: bu Mac'te deneme kullanıldı, abonelik sona erdi ya da deneme bitti.
-    private var subscriptionRequiredReason: String {
-        if account.isTrialRefusedOnThisMac {
-            return String(localized: "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kaydetmeye ve not almaya devam etmek için abone ol.")
-        }
-        if case .signedIn(let entitlements) = account.state, case .expired = hostedPlanStatus(entitlements: entitlements), entitlements.subscription != nil {
-            return String(localized: "Aboneliğin sona erdi. Toplantıların ve notların bu Mac'te kalır; yeniden abone olunca kaldığın yerden devam edersin.")
-        }
-        return String(localized: "Ücretsiz denemen bitti. Toplantıların ve notların bu Mac'te kalır; yeni toplantılar için abone ol.")
-    }
-
-    private func benefit(symbol: String, text: LocalizedStringKey) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 28, height: 28)
-                .background(Theme.card, in: Circle())
-                .overlay(Circle().strokeBorder(Theme.line))
-                .accessibilityHidden(true)
-            Text(text)
-                .appFont(size: 13, weight: .regular)
-                .foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

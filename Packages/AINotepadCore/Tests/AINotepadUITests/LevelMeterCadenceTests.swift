@@ -25,16 +25,22 @@ import Testing
     }
 
     // Gerçek saat: kayma 100 ms'de bir. Değer her adımda yarılanır, sıfıra inmez: sıfır olmayan çubuk sayısı kayma
-    // sayısıdır. Saat ana aktörde çalışır; paralel testler ana aktörü meşgul ettiğinde (CI) adımlar gecikir, bu yüzden
-    // alt sınır oran değil "saat ilerliyor" (en az 3 kayma) denetimidir. Üst sınır ölçülen süreden: fazla kayma yakalanır.
+    // sayısıdır. Saat ana aktörde çalışır; paralel testler ana aktörü meşgul ettiğinde (CI'da ~2 sn) adımlar gecikir, bu
+    // yüzden sabit bir bekleme yerine en az 1,05 sn geçip en az 3 kayma görülene dek (en çok 10 sn) yoklanır: alt sınır
+    // oran değil "saat ilerliyor" denetimidir. Üst sınır ölçülen süreden: fazla kayma yakalanır.
     @Test func clockAdvancesSteadily() async throws {
         let levels: AudioLevels = AudioLevels(count: 60, interval: 0.1)
         let clock: ContinuousClock = ContinuousClock()
         let started: ContinuousClock.Instant = clock.now
+        let deadline: ContinuousClock.Instant = started + .seconds(10)
         levels.start()
         levels.record(level: 1)
-        try await Task.sleep(for: .milliseconds(1_050))
-        let shifts: Int = levels.values.filter { $0 > 0 }.count
+        var shifts: Int = 0
+        repeat {
+            try await Task.sleep(for: .milliseconds(50))
+            shifts = levels.values.filter { $0 > 0 }.count
+        } while (shifts < 3 || clock.now - started < .milliseconds(1_050)) && clock.now < deadline
+        // Süre kayma sayısı okunduktan sonra ölçülür: üst sınır hiçbir zaman gerçek süreden dar olmaz.
         let duration: Duration = clock.now - started
         let elapsed: Double = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
         levels.stop()

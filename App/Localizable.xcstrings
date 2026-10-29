@@ -1732,17 +1732,6 @@
         }
       }
     },
-    "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly subscription."
-          }
-        }
-      }
-    },
     "35 dil; konuşmacılar ayrılır, %@ çevirisi altında akar.": {
       "localizations": {
         "en": {
@@ -2765,17 +2754,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings…"
-          }
-        }
-      }
-    },
-    "Aylık abonelik, istediğin zaman iptal edebilirsin. Ödeme Stripe ile güvenle yapılır.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Monthly subscription, cancel anytime. Payment is handled securely by Stripe."
           }
         }
       }
@@ -15357,6 +15335,471 @@
           "stringUnit": {
             "state": "translated",
             "value": "↩ open"
+          }
+        }
+      }
+    },
+    "Kişi seç": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose person"
+          }
+        }
+      }
+    },
+    "Konuşma payı %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of talk"
+          }
+        }
+      }
+    },
+    "Canlı metin ve notlar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and notes."
+          }
+        }
+      }
+    },
+    "Bu davet kodu bulunamadı. Kodu kontrol edip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We couldn't find this invite code. Check it and try again."
+          }
+        }
+      }
+    },
+    "Kendi davet kodunu kullanamazsın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can't use your own invite code."
+          }
+        }
+      }
+    },
+    "Davet kodu yalnızca ilk aboneliğinde kullanılabilir; bu hesap için geçerli değil.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite codes only work for a first subscription, so this one doesn't apply to this account."
+          }
+        }
+      }
+    },
+    "Davet programı şu an kapalı; davet kodu olmadan abone olabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The invite program is paused right now. You can still subscribe without a code."
+          }
+        }
+      }
+    },
+    "Davet kodu 8 karakterdir, ör. K7M2QX9D.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite codes have 8 characters, like K7M2QX9D."
+          }
+        }
+      }
+    },
+    "Aylık": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly"
+          }
+        }
+      }
+    },
+    "Yıllık": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yearly"
+          }
+        }
+      }
+    },
+    "%@/ay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@/month"
+          }
+        }
+      }
+    },
+    "%@/yıl": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@/year"
+          }
+        }
+      }
+    },
+    "Aylık plan · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly plan · %@"
+          }
+        }
+      }
+    },
+    "Yıllık plan · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yearly plan · %@"
+          }
+        }
+      }
+    },
+    "%@ tasarruf": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save %@"
+          }
+        }
+      }
+    },
+    "Her ay yenilenir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renews every month"
+          }
+        }
+      }
+    },
+    "Aylık yaklaşık %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About %@ a month"
+          }
+        }
+      }
+    },
+    "Aylık plana abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe monthly"
+          }
+        }
+      }
+    },
+    "Yıllık plana abone ol": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribe yearly"
+          }
+        }
+      }
+    },
+    "Vergiler dahil. İstediğin zaman iptal edebilirsin; ödeme Stripe ile güvenle yapılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taxes included. Cancel anytime; payment is handled securely by Stripe."
+          }
+        }
+      }
+    },
+    "Davet kodun var mı?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Have an invite code?"
+          }
+        }
+      }
+    },
+    "Davet kodu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite code"
+          }
+        }
+      }
+    },
+    "Davet uygulandı: ilk ayın ücretsiz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite applied: your first month is free."
+          }
+        }
+      }
+    },
+    "Davet uygulandı: ilk yılın %@ (%@ indirim).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite applied: your first year is %@ (%@ off)."
+          }
+        }
+      }
+    },
+    "Denemen bitmek üzere": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial is almost over"
+          }
+        }
+      }
+    },
+    "Planını seç": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your plan"
+          }
+        }
+      }
+    },
+    "Kesintisiz devam etmek için bir plan seç. Toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a plan to keep going without a break. Your meetings and notes stay on this Mac."
+          }
+        }
+      }
+    },
+    "Canlı metin, hazır not ve görevler; ayda 10 saate kadar kayıt. İstediğin zaman iptal edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript, a ready note and tasks, up to 10 hours of recording a month. Cancel anytime."
+          }
+        }
+      }
+    },
+    "Bu Mac'te şimdiye dek": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "So far on this Mac"
+          }
+        }
+      }
+    },
+    "Kaydedilen toplantı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings recorded"
+          }
+        }
+      }
+    },
+    "Çıkan görev": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks captured"
+          }
+        }
+      }
+    },
+    "Yazıya dökülen saat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hours transcribed"
+          }
+        }
+      }
+    },
+    "Arkadaşını davet et": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite a friend"
+          }
+        }
+      }
+    },
+    "Arkadaşın davet koduyla abone olunca ilk ayı ücretsiz olur. Onun ilk ödemesinden %lld gün sonra sana bir ay ücretsiz yazılır (yılda en çok %lld).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a friend subscribes with your code, their first month is free. %lld days after their first payment, you get a free month too (up to %lld a year)."
+          }
+        }
+      }
+    },
+    "Davet metnini kopyala": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy invite text"
+          }
+        }
+      }
+    },
+    "Katılan arkadaş: %lld · Kazandığın ay: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends joined: %lld · Months earned: %lld"
+          }
+        }
+      }
+    },
+    "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan ilk ayın ücretsiz: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I use Gistsmith for my meetings: it transcribes the conversation live and has the note and tasks ready when the meeting ends. Subscribe with this link and your first month is free: %@"
+          }
+        }
+      }
+    },
+    "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık ya da yıllık abonelikle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly or yearly subscription."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma macOS 26 gerektirir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition requires macOS 26."
+          }
+        }
+      }
+    },
+    "Cihaz içi model (Apple Intelligence) macOS 26 gerektirir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model (Apple Intelligence) requires macOS 26."
+          }
+        }
+      }
+    },
+    "macOS 26 gerektirir: Apple Intelligence ve cihaz içi konuşma tanıma bu macOS sürümünde yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires macOS 26: Apple Intelligence and on-device speech recognition aren't available on this version of macOS."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma macOS 26 gerektirir. Ayarlar'dan Mac'te (WhisperKit) ya da bulut (Deepgram) motorunu seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition requires macOS 26. In Settings, choose the On this Mac (WhisperKit) or cloud (Deepgram) engine."
+          }
+        }
+      }
+    },
+    "Cihaz içi model macOS 26 gerektirir. Ayarlar'da kendi anahtarınla bir sağlayıcı seç (ör. Anthropic).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model requires macOS 26. In Settings, choose a provider with your own key (e.g. Anthropic)."
           }
         }
       }

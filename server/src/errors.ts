@@ -18,6 +18,7 @@ export type ErrorCode =
   | "challenge_invalid"
   | "subscription_required"
   | "subscription_exists"
+  | "complimentary_subscription"
   | "trial_exhausted"
   | "trial_not_started"
   | "trial_ip_limit"
@@ -38,6 +39,10 @@ export type ErrorCode =
   | "trial_capacity_reached"
   | "deepgram_unavailable"
   | "deepgram_grant_limit"
+  | "referral_invalid"
+  | "referral_self"
+  | "referral_not_eligible"
+  | "referral_unavailable"
   | "webhook_invalid"
   | "internal_error";
 
@@ -60,6 +65,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   challenge_invalid: 400,
   subscription_required: 402,
   subscription_exists: 409,
+  complimentary_subscription: 409,
   trial_exhausted: 402,
   trial_not_started: 403,
   trial_ip_limit: 429,
@@ -80,6 +86,10 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   trial_capacity_reached: 503,
   deepgram_unavailable: 503,
   deepgram_grant_limit: 429,
+  referral_invalid: 404,
+  referral_self: 403,
+  referral_not_eligible: 409,
+  referral_unavailable: 503,
   webhook_invalid: 400,
   internal_error: 500,
 };
@@ -97,6 +107,21 @@ export class ApiError extends Error {
     super(message);
     this.code = code;
     this.status = statusByCode[code];
+  }
+}
+
+/**
+ * Üst servisin başarısızlığından doğan istemci hatası (`upstream_rejected` ya da `upstream_unavailable`): hangi servisin
+ * (`anthropic`, `elevenlabs`, `stripe`, `turnstile`, kimlik sağlayıcısı anahtarları) başarısız olduğunu taşır; yönetim
+ * panelindeki servis hatası sayacı bundan yazılır (`opsEvents.ts`). İstemciye giden gövde `ApiError` ile aynıdır.
+ */
+export class ProviderApiError extends ApiError {
+  override readonly name: string = "ProviderApiError";
+  readonly service: string;
+
+  constructor(service: string, code: "upstream_rejected" | "upstream_unavailable", message: string) {
+    super(code, message);
+    this.service = service;
   }
 }
 

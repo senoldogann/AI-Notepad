@@ -20,10 +20,26 @@ export interface ClientCopy {
     readonly storageUnavailable: string;
     readonly upstream: string;
     readonly messageTooLong: string;
+    /** Ücretsiz erişimi olan hesapta Portal ya da Checkout (`complimentary_subscription`). */
+    readonly complimentary: string;
     /** Bilinmeyen hata; `{code}` sunucunun hata koduyla değişir. */
     readonly generic: string;
   };
-  readonly plan: { readonly trial: string; readonly subscription: string };
+  /** Davet kodu doğrulamasının ve Checkout'un davet hataları (sunucu kodlarıyla). */
+  readonly inviteErrors: {
+    readonly format: string;
+    readonly referral_invalid: string;
+    readonly referral_self: string;
+    readonly referral_not_eligible: string;
+    readonly referral_unavailable: string;
+  };
+  /** Davet kodu durum satırı: denetleniyor, plan başına uygulanan indirim. */
+  readonly inviteChecking: string;
+  readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
+  /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
+  readonly referralStats: string;
+  /** `plan`: abonelik planı bilinmiyorsa (eski fiyat) `subscription`. */
+  readonly plan: { readonly trial: string; readonly subscription: string; readonly monthly: string; readonly yearly: string };
   /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
   /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
@@ -60,8 +76,10 @@ export interface AdminClientCopy {
   readonly usersSub: string;
   /** `{count}`. */
   readonly trialsSub: string;
-  /** `{grace}`, `{ending}`, `{canceled}`. */
+  /** `{monthly}`, `{yearly}`, `{grace}`, `{ending}`, `{canceled}`, `{free}` (ücretsiz erişim; sayıya ve gelire girmez). */
   readonly subscribersSub: string;
+  /** Davet programı: `{joined}`, `{pending}`, `{granted}`, `{voided}`. */
+  readonly referralsSub: string;
   readonly mrrSub: string;
   /** MRR alt satırına eklenir: Stripe'ın modu. */
   readonly stripeTest: string;
@@ -101,7 +119,14 @@ export interface AdminClientCopy {
   /** Değer yok. */
   readonly none: string;
   readonly plans: { readonly subscription: string; readonly trial: string; readonly free: string };
+  /** Abonelik planı (aylık, yıllık); bilinmeyen fiyatta gösterilmez. */
+  readonly billingPlans: { readonly monthly: string; readonly yearly: string };
   readonly providers: { readonly apple: string; readonly google: string };
+  /**
+   * Ücretsiz tam erişim: plan rozeti, ayrıntıdaki abonelik metni (`{date}` bitiş tarihi ya da süresiz) ve ayrıntıdaki
+   * verme ve kaldırma düğmeleri.
+   */
+  readonly freeAccess: { readonly pill: string; readonly until: string; readonly noEnd: string; readonly grant: string; readonly remove: string };
   /** Abonelik durumu rozetleri (Stripe durumu ve erişim). */
   readonly subscriptionPills: { readonly active: string; readonly ending: string; readonly grace: string; readonly ended: string };
   /** Deneme hücresi: `{used}`, `{left}`. */
@@ -144,6 +169,43 @@ export interface AdminClientCopy {
   readonly opsReportsSub: string;
   /** Göreli zaman: `{value}` önce. */
   readonly ago: string;
+  /** Huni adımlarının adları. */
+  readonly funnelSteps: {
+    readonly downloads: string;
+    readonly accounts: string;
+    readonly first_meeting: string;
+    readonly first_note: string;
+    readonly three_meetings: string;
+    readonly subscribed: string;
+    readonly canceled: string;
+  };
+  /** İndirme düğmelerinin adları (sunucunun `src` değerleri); bilinmeyen değer olduğu gibi gösterilir. */
+  readonly downloadSources: Readonly<Record<string, string>>;
+  /** Referer alan adı yok ya da okunamadı. */
+  readonly referrerNone: string;
+  readonly referrerOther: string;
+  /** Stripe Müşteri Portalı iptal seçenekleri (`feedback`); bilinmeyen değer olduğu gibi gösterilir. */
+  readonly cancellationFeedback: Readonly<Record<string, string>>;
+  readonly cancellationNoFeedback: string;
+  /** Stripe'ın iptal nedenleri (`reason`). */
+  readonly cancellationReasons: Readonly<Record<string, string>>;
+  /** Stripe nedenlerinin özet satırı: `{list}`. */
+  readonly cancellationReasonsLine: string;
+  /** Sorun satırları: `{code}`, `{service}`. */
+  readonly problemRows: {
+    readonly trialCapacity: string;
+    readonly spendCeiling: string;
+    readonly serverErrors: string;
+    readonly refusal: string;
+    readonly provider: string;
+    readonly server: string;
+  };
+  /** Kullanıcı listesindeki sorun hücresi: `{count}` hatalı toplantı. */
+  readonly failedMeetings: string;
+  /** Toplantının hata hücresi: `{count}`, `{code}`. */
+  readonly meetingFailure: string;
+  /** Toplantı rozetleri: not tamamlandı. */
+  readonly noteDone: string;
 }
 
 /** Tarayıcı metinleri. */
@@ -161,9 +223,23 @@ export const clientCopy: ClientCopy = {
     storageUnavailable: "Your browser blocked the storage this sign-in needs. Allow site data for this page and try again.",
     upstream: "A connected service isn't responding right now. Try again shortly.",
     messageTooLong: "Your message is too long. Please shorten it to 5,000 characters.",
+    complimentary: "This account has free access; there is nothing to manage.",
     generic: "Something went wrong (code: {code}). Try again.",
   },
-  plan: { trial: "Free trial", subscription: `${productName} monthly` },
+  inviteErrors: {
+    format: "That doesn't look like an invite code. Check it and try again.",
+    referral_invalid: "We couldn't find that invite code. Check it and try again.",
+    referral_self: "That's your own invite code; share it with a friend instead.",
+    referral_not_eligible: "Invite codes are for new subscribers, so this account can't use one. You can still subscribe without it.",
+    referral_unavailable: "Invite codes can't be used right now. You can still subscribe without one.",
+  },
+  inviteChecking: "Checking the code…",
+  inviteApplied: {
+    monthly: "Invite applied: your first month is free.",
+    yearly: "Invite applied: $5.99 off your first year.",
+  },
+  referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
+  plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly` },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",
   trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
   trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
@@ -185,8 +261,9 @@ export const clientCopy: ClientCopy = {
     downloadsSub: "{count} in the last 30 days",
     usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
     trialsSub: "{count} used up",
-    subscribersSub: "{grace} in grace · {ending} ending · {canceled} cancelled in total",
-    mrrSub: "From renewing subscriptions, taxes included",
+    subscribersSub: "{monthly} monthly · {yearly} yearly · {grace} in grace · {ending} ending · {canceled} cancelled in total · {free} with free access, not counted",
+    referralsSub: "Invites: {joined} joined · {pending} waiting · {granted} rewarded · {voided} voided",
+    mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, taxes included",
     stripeTest: "Stripe test mode",
     stripeLive: "Stripe live",
     elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",
@@ -210,7 +287,15 @@ export const clientCopy: ClientCopy = {
     refusalsSub: "Mac already used {device} · same network {ip} · used up {exhausted} · expired {expired} · {today} today",
     none: "—",
     plans: { subscription: "Subscribed", trial: "Trial", free: "No plan" },
+    billingPlans: { monthly: "Monthly", yearly: "Yearly" },
     providers: { apple: "Apple", google: "Google" },
+    freeAccess: {
+      pill: "Free access",
+      until: "Free access until {date}, not billed",
+      noEnd: "Free access with no end date, not billed",
+      grant: "Grant free access",
+      remove: "Remove free access",
+    },
     subscriptionPills: { active: "Active", ending: "Ending", grace: "Payment due", ended: "Ended" },
     trialCell: "{used} used · {left} left",
     trialNotStarted: "Not started",
@@ -241,6 +326,54 @@ export const clientCopy: ClientCopy = {
     opsWebhookNever: "No events stored in the last 90 days",
     opsReportsSub: "{feedback} feedback · {crash} crashes · {contact} contact",
     ago: "{value} ago",
+    funnelSteps: {
+      downloads: "Downloads",
+      accounts: "Accounts created",
+      first_meeting: "Started a meeting",
+      first_note: "Got a finished note",
+      three_meetings: "3 or more meetings",
+      subscribed: "Subscribed",
+      canceled: "Cancelled",
+    },
+    downloadSources: {
+      "home-hero": "Home page, top",
+      "home-cta": "Home page, bottom",
+      "download-page": "Download page",
+      account: "Account page",
+      direct: "Direct link (no button)",
+      other: "Unknown button",
+    },
+    referrerNone: "No referrer",
+    referrerOther: "Unreadable referrer",
+    cancellationFeedback: {
+      too_expensive: "Too expensive",
+      missing_features: "Missing features",
+      switched_service: "Switched to another service",
+      unused: "Not using it enough",
+      too_complex: "Too complicated",
+      low_quality: "Quality not good enough",
+      customer_service: "Customer service",
+      other: "Other",
+    },
+    cancellationNoFeedback: "No reason picked",
+    cancellationReasons: {
+      cancellation_requested: "cancelled by the customer",
+      payment_failed: "payment failed",
+      payment_disputed: "payment disputed",
+      canceled_by_retention_policy: "retention policy",
+    },
+    cancellationReasonsLine: "Stripe: {list}",
+    problemRows: {
+      trialCapacity: "Trials refused: daily trial ceiling",
+      spendCeiling: "Requests refused: daily spend ceiling",
+      serverErrors: "Server errors (5xx)",
+      refusal: "Refused: {code}",
+      provider: "Service failed: {service}",
+      server: "5xx: {code}",
+    },
+    failedMeetings: "{count} meetings with errors; the latest error is shown",
+    meetingFailure: "{count}× {code}",
+    noteDone: "Note ready",
   },
 };
 

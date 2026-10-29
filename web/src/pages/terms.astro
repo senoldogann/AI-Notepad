@@ -2,7 +2,8 @@
 // Kullanım şartları. Sınırlar ve ödeme davranışı sunucuyla aynıdır (server/wrangler.jsonc `vars`, server/src/billing.ts,
 // server/src/account.ts, trialLedger.ts, deviceCheck.ts). Ödeme Stripe Managed Payments ile alınır: satıcı (merchant of
 // record) Link'tir; iade ve cayma hakkı Link'in şartlarına bağlıdır (link.com/terms "Sold Through Link Terms": AB
-// tüketicisine erişimden itibaren 14 gün, Link desteğine "cooling off period" gerekçesiyle başvurulur).
+// tüketicisine erişimden itibaren 14 gün, Link desteğine "cooling off period" gerekçesiyle başvurulur). Davet programının
+// kuralları (ödül, bekleme süresi, yıllık sınır) sunucunun davet kurallarıyla aynı tutulur.
 import LegalSection from "../components/LegalSection.astro";
 import Legal from "../layouts/Legal.astro";
 import { cardStatementDescriptor, productName } from "../config";
@@ -19,6 +20,7 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "subscription", title: "Subscription, price and payment" },
   { id: "cancel", title: "Cancelling" },
   { id: "withdrawal", title: "Refunds and right of withdrawal" },
+  { id: "invites", title: "Invites: give a month, get a month" },
   { id: "limits", title: "Fair use and limits" },
   { id: "use", title: "Acceptable use and recording consent" },
   { id: "content", title: "Your content" },
@@ -67,7 +69,7 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
     </p>
     <p>
       Subject to these terms, you may download and use the app on Macs you own or control, for as long as you have an
-      account. The service requires macOS 26 or later on a Mac with Apple silicon, and an internet connection.
+      account. The service requires macOS 15 or later on a Mac with Apple silicon, and an internet connection.
     </p>
   </LegalSection>
 
@@ -103,9 +105,10 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
   <LegalSection sections={sections} id="subscription">
     <ul>
       <li>
-        The subscription costs <strong>USD 5.99 per month, taxes included</strong>: any sales tax, VAT or GST that applies
-        where you live is part of that price. The price is shown at checkout before you pay; it may be shown in your local
-        currency.
+        The subscription is billed either monthly, at <strong>USD 5.99 per month</strong>, or yearly, at{" "}
+        <strong>USD 49 per year</strong>, <strong>taxes included</strong>: any sales tax, VAT or GST that applies where
+        you live is part of that price. You choose the plan when you subscribe. The price is shown at checkout before you
+        pay; it may be shown in your local currency.
       </li>
       <li>
         Subscriptions are sold through <strong>Link</strong>, Stripe's payment service, which acts as the{" "}
@@ -115,9 +118,14 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
         <code>{cardStatementDescriptor}</code>. We never see your card details.
       </li>
       <li>
-        You subscribe from your <a href={routes.account}>account page</a>. The subscription starts when the payment is
-        confirmed. <strong>It renews automatically every month</strong> on the same day of the month, and each renewal is
-        charged to your saved payment method, <strong>until you cancel</strong>. You can cancel at any time (see section 6).
+        You subscribe from your <a href={routes.account}>account page</a> or in the app. The subscription starts when the
+        payment is confirmed. <strong>It renews automatically</strong> at the end of each billing period — every month on
+        the same day of the month, or every year on the same date — and each renewal is charged to your saved payment
+        method, <strong>until you cancel</strong>. You can cancel at any time (see section 6).
+      </li>
+      <li>
+        To move between the monthly and yearly plan, cancel your current plan and, once it has ended, subscribe again with
+        the other plan. A subscription can't be bought while another one is still running.
       </li>
       <li>
         If a payment fails, it is retried over the following days. You keep access for up to 7 days after the end of the
@@ -176,6 +184,40 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
       You can also write to us at <a href={mail}>{operator.email}</a> and we will help you with a request to Link. Nothing in
       these terms limits any statutory right you have as a consumer.
     </p>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="invites">
+    <p>
+      Subscribers get a personal invite code. The invite programme works as follows; it doesn't change the rest of these
+      terms.
+    </p>
+    <ul>
+      <li>
+        <strong>Your friend's discount.</strong> A new subscriber who enters a valid invite code when subscribing gets their
+        first month free on the monthly plan, or USD 5.99 off the first year on the yearly plan. Invite codes are only for
+        accounts that have never subscribed before, and each person can use one invite only once.
+      </li>
+      <li>
+        <strong>Your reward.</strong> When your friend's first payment has gone through and has not been refunded or
+        disputed for 30 days, a credit of USD 5.99 is added to your Stripe customer balance and taken off your next
+        payment (on the monthly plan, that covers a month). The reward is cancelled if that payment is refunded or
+        disputed before then.
+      </li>
+      <li>
+        <strong>Limits.</strong> You can earn up to 12 rewards in any 12 months, and one reward per new paying account.
+        Using your own code, a code from another account of yours, or an account created to collect rewards doesn't
+        count; we may cancel rewards and discounts obtained that way, or in breach of these terms.
+      </li>
+      <li>
+        <strong>No cash value.</strong> Rewards and discounts are credit towards future payments for {productName} only.
+        They have no cash value and can't be exchanged, transferred or paid out. Credit that hasn't been used when your
+        subscription ends stays with your Stripe customer record and is used if you subscribe again.
+      </li>
+      <li>
+        <strong>Changes.</strong> We may change or end the invite programme at any time by updating these terms. Rewards
+        already earned before a change remain yours.
+      </li>
+    </ul>
   </LegalSection>
 
   <LegalSection sections={sections} id="limits">

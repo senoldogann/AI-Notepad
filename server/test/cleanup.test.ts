@@ -88,6 +88,23 @@ describe("süresi dolmuş satırların temizliği", () => {
         new Date(nowMs - 430 * dayMs).toISOString().slice(0, 7),
         new Date(nowMs - 360 * dayMs).toISOString().slice(0, 7),
       ),
+      // İndirme tekilleştirmesi yalnızca bugün; sayaçlar 400 gün; iptal nedenleri 180 gün.
+      env.DB.prepare("INSERT INTO download_visitors (day, visitor_hash) VALUES (?, 'v'), (?, 'v')").bind(day(-1), day(0)),
+      env.DB.prepare("INSERT INTO download_sources (day, source, referrer_host, count) VALUES (?, 'direct', '', 1), (?, 'direct', '', 1)").bind(
+        day(-401),
+        day(-399),
+      ),
+      env.DB.prepare("INSERT INTO ops_events (day, kind, detail, count) VALUES (?, 'refusal', 'x', 1), (?, 'refusal', 'x', 1)").bind(day(-401), day(-399)),
+      env.DB.prepare(
+        `INSERT INTO subscription_cancellations (stripe_subscription_id, user_id, created_at, event_created, reason) VALUES
+           ('sub_c_old', ?1, ?2, 0, 'cancellation_requested'), ('sub_c_new', ?1, ?3, 0, 'cancellation_requested')`,
+      ).bind(first, nowMs - 181 * dayMs, nowMs - 179 * dayMs),
+      // Hesabı silinmiş davet edilenin satırı 730 gün; hesabı yaşayanınki kalır.
+      env.DB.prepare(
+        `INSERT INTO referral_redemptions (id, referred_user_id, referred_identity_hash, referrer_user_id, code, status, created_at, updated_at, joined_at) VALUES
+           ('ref_old', NULL, 'h_old', ?1, 'AAAAAAAA', 'granted', 0, ?2, 0), ('ref_recent', NULL, 'h_recent', ?1, 'AAAAAAAA', 'granted', 0, ?3, 0),
+           ('ref_live', ?1, 'h_live', NULL, 'AAAAAAAA', 'granted', 0, ?2, 0)`,
+      ).bind(first, nowMs - 731 * dayMs, nowMs - 729 * dayMs),
     ]);
 
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
@@ -110,7 +127,13 @@ describe("süresi dolmuş satırların temizliği", () => {
       monthly_usage: 1,
       reports: 2,
       trial_identity_ledger: 1,
+      download_visitors: 1,
+      download_sources: 1,
+      ops_events: 1,
+      subscription_cancellations: 1,
+      referral_redemptions: 1,
     });
+    expect(await ids("SELECT id FROM referral_redemptions")).toEqual(["ref_live", "ref_recent"]);
     // Silinen eski deneme toplantısı kullanıcının devraldığı denemeye eklendi; başlangıç korunur.
     const user = await env.DB.prepare("SELECT carried_trial_meetings, trial_started_at FROM users WHERE id = ?").bind(first).first<{
       carried_trial_meetings: number;
@@ -138,6 +161,10 @@ describe("süresi dolmuş satırların temizliği", () => {
     expect(await ids("SELECT day AS id FROM daily_usage")).toEqual([day(-1), day(0)]);
     // Kimlik deneme defteri son güncellemeden 730 gün tutulur.
     expect(await ids("SELECT identity_hash AS id FROM trial_identity_ledger")).toEqual(["l_recent"]);
+    expect(await ids("SELECT day AS id FROM download_visitors")).toEqual([day(0)]);
+    expect(await ids("SELECT day AS id FROM download_sources")).toEqual([day(-399)]);
+    expect(await ids("SELECT day AS id FROM ops_events")).toEqual([day(-399)]);
+    expect(await ids("SELECT stripe_subscription_id AS id FROM subscription_cancellations")).toEqual(["sub_c_new"]);
   });
 
   it("tablo başına tur sayısı sınırlıdır; kalan satırlar sonraki çalışmada silinir", async () => {

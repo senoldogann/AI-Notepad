@@ -40,6 +40,10 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case trialCapacityReached = "trial_capacity_reached"
     case deepgramUnavailable = "deepgram_unavailable"
     case deepgramGrantLimit = "deepgram_grant_limit"
+    case referralInvalid = "referral_invalid"
+    case referralSelf = "referral_self"
+    case referralNotEligible = "referral_not_eligible"
+    case referralUnavailable = "referral_unavailable"
     case webhookInvalid = "webhook_invalid"
     case internalError = "internal_error"
 }
@@ -216,6 +220,14 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bulut canlı metnine bu toplantıda çok sık yeniden bağlanıldı; canlı metin bu Mac'te sürüyor.")
     case .meetingBudgetExhausted:
         return String(localized: "Bu toplantının yapay zekâ kullanım hakkı doldu.")
+    case .referralInvalid:
+        return String(localized: "Bu davet kodu bulunamadı. Kodu kontrol edip yeniden dene.")
+    case .referralSelf:
+        return String(localized: "Kendi davet kodunu kullanamazsın.")
+    case .referralNotEligible:
+        return String(localized: "Davet kodu yalnızca ilk aboneliğinde kullanılabilir; bu hesap için geçerli değil.")
+    case .referralUnavailable:
+        return String(localized: "Davet programı şu an kapalı; davet kodu olmadan abone olabilirsin.")
     case .audioTooLong:
         return String(localized: "Ses, toplantının süresinden ya da bu ay kalan süreden uzun; gönderilemedi.")
     case .unauthorized, .invalidToken:

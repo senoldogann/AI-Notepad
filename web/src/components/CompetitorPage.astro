@@ -1,0 +1,172 @@
+---
+// Bir rakiple karşılaştırma sayfası (/vs/granola, /vs/otter): giriş ve kaynak satırı, yan yana tablo, rakibin güçlü
+// olduğu yerler, "kim hangisini seçmeli" ve indirme çağrısı. Metinler ve değerler copy.ts `compare`'den.
+import Base from "../layouts/Base.astro";
+import ComparisonTable from "./ComparisonTable.astro";
+import CtaBand from "./CtaBand.astro";
+import Icon from "./Icon.astro";
+import { productName } from "../config";
+import { copy, type CompareCopy, type Competitor, type CompetitorCopy, type ComparisonTopic, type PickCopy } from "../copy";
+import { type PageKey, routes } from "../routes";
+
+interface Props {
+  readonly page: PageKey;
+  readonly competitor: Competitor;
+}
+const { page, competitor } = Astro.props;
+const text: CompareCopy = copy.compare;
+const them: CompetitorCopy = text.competitors[competitor];
+const topics: readonly ComparisonTopic[] = Object.keys(text.topics) as ComparisonTopic[];
+const picks: readonly PickCopy[] = [them.pickCompetitor, them.pickUs];
+/** Kaynak bağlantısının metni: alan adı (www'suz) ve yol, ör. granola.ai/pricing. */
+const pricingAddress: URL = new URL(them.pricingUrl);
+const sourceLabel: string = `${pricingAddress.host.replace(/^www\./, "")}${pricingAddress.pathname}`;
+---
+
+<Base page={page} meta={them.meta} indexed={true}>
+  <section class="page narrow-intro">
+    <a class="eyebrow eyebrow--link" href={routes.compare}>{text.eyebrow}</a>
+    <h1 class="title-xl">{them.title}</h1>
+    <p class="lead">{them.lead}</p>
+    <p class="small muted vs-source">
+      {text.checked}
+      <span>
+        {text.source}: <a href={them.pricingUrl} rel="noopener">{sourceLabel}</a>
+      </span>
+    </p>
+  </section>
+
+  <section class="page vs-section" aria-labelledby="vs-table-title">
+    <h2 class="title-l" id="vs-table-title">{text.tableTitle}</h2>
+    <ComparisonTable
+      caption={them.title}
+      topics={topics}
+      columns={[
+        { name: productName, values: text.us },
+        { name: them.name, values: them.values },
+      ]}
+    />
+    <p class="small muted">{text.missingNote}</p>
+  </section>
+
+  <section class="page vs-section" aria-labelledby="vs-strengths-title">
+    <h2 class="title-l" id="vs-strengths-title">{them.strengthsTitle}</h2>
+    <ul class="vs-strengths">
+      {
+        them.strengths.map((item: string) => (
+          <li>
+            <Icon name="check" size={16} class="vs-strengths__check" />
+            {item}
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="page vs-section" aria-labelledby="vs-pick-title">
+    <h2 class="title-l" id="vs-pick-title">{text.pickTitle}</h2>
+    <div class="vs-picks">
+      {
+        picks.map((pick: PickCopy) => (
+          <article class="card vs-pick">
+            <h3 class="title-m">{pick.title}</h3>
+            <ul>
+              {pick.points.map((point: string) => (
+                <li>{point}</li>
+              ))}
+            </ul>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+
+  <CtaBand id="vs-cta-title" title={text.ctaTitle} text={text.ctaText} palette="violet" layout="clouds-right" />
+
+  <p class="page small muted vs-trademarks">{text.trademarks}</p>
+</Base>
+
+<style>
+  .narrow-intro {
+    display: grid;
+    gap: 18px;
+    justify-items: start;
+    padding-block: clamp(48px, 8vw, 96px) clamp(24px, 4vw, 40px);
+  }
+
+  .eyebrow--link {
+    text-decoration: none;
+  }
+
+  .eyebrow--link:hover {
+    text-decoration: underline;
+  }
+
+  .vs-source {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .vs-source a {
+    overflow-wrap: anywhere;
+  }
+
+  .vs-section {
+    display: grid;
+    gap: 20px;
+    margin-top: clamp(40px, 6vw, 72px);
+  }
+
+  .vs-strengths {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 32px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .vs-strengths li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+
+  .vs-strengths :global(.vs-strengths__check) {
+    flex: none;
+    transform: translateY(3px);
+    color: var(--ok);
+  }
+
+  .vs-picks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .vs-pick {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+  }
+
+  .vs-pick ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding-left: 1.2em;
+    color: var(--muted);
+  }
+
+  .vs-trademarks {
+    margin-top: 32px;
+  }
+
+  @media (max-width: 760px) {
+    .vs-strengths,
+    .vs-picks {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

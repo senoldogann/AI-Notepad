@@ -28,6 +28,27 @@ describe("GET /v1/download/mac", () => {
     expect(columns.results.map((column: { name: string }): string => column.name)).toEqual(["day", "count"]);
   });
 
+  it("aynı ağdan aynı gün tekrar indirme sayılmaz (IPv6'da /64 önek); özet IP taşımaz, ertesi gün yeniden sayılır", async () => {
+    const harness: Harness = await defaultHarness();
+    harness.clock.nowMs += 10 * 86_400_000;
+    const day: string = new Date(harness.clock.nowMs).toISOString().slice(0, 10);
+    const today = async (): Promise<number> =>
+      (await env.DB.prepare("SELECT count FROM downloads WHERE day = ?").bind(day).first<{ count: number }>())?.count ?? 0;
+    for (const ip of ["192.0.2.44", "192.0.2.44", "2001:db8:1:2::a", "2001:db8:1:2::b"]) {
+      expect((await harness.call(req("GET", "/v1/download/mac?src=download-page", { clientIp: ip }))).status).toBe(302);
+    }
+    expect(await today()).toBe(2);
+    const sources = await env.DB.prepare("SELECT source, referrer_host, count FROM download_sources WHERE day = ?").bind(day).all();
+    expect(sources.results).toEqual([{ source: "download-page", referrer_host: "", count: 2 }]);
+    const visitors = await env.DB.prepare("SELECT visitor_hash FROM download_visitors WHERE day = ?").bind(day).all<{ visitor_hash: string }>();
+    expect(visitors.results).toHaveLength(2);
+    expect(visitors.results.every((row: { visitor_hash: string }): boolean => /^[0-9a-f]{64}$/.test(row.visitor_hash))).toBe(true);
+    harness.clock.nowMs += 86_400_000;
+    expect((await harness.call(req("GET", "/v1/download/mac", { clientIp: "192.0.2.44" }))).status).toBe(302);
+    const next = await env.DB.prepare("SELECT count FROM downloads WHERE day = ?").bind(new Date(harness.clock.nowMs).toISOString().slice(0, 10)).first<{ count: number }>();
+    expect(next?.count).toBe(1);
+  });
+
   it("API IP hız sınırına tabidir", async () => {
     const harness: Harness = await defaultHarness();
     await expectError(await harness.call(req("GET", "/v1/download/mac", { env: envWith({ API_IP_LIMITER: blockingLimiter }) })), 429, "rate_limited");

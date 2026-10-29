@@ -279,7 +279,7 @@ struct MainWindowView: View {
             }
         )) {
             if let moment = HostedAccount.shared.upsell {
-                HostedUpsellSheet(account: .shared, moment: moment)
+                HostedUpsellSheet(account: .shared, moment: moment, trialValue: hostedTrialValue(meetings: model.meetings))
             }
         }
         #endif
@@ -454,7 +454,7 @@ private struct TopBar: View {
     let onShowPanel: @MainActor () -> Void
 
     @AppStorage(SettingsKey.meetingsListVisible) private var meetingsListVisible: Bool = true
-    @AppStorage(SettingsKey.peopleListVisible) private var peopleListVisible: Bool = false
+    @AppStorage(SettingsKey.peopleListVisible) private var peopleListVisible: Bool = true
     @AppStorage(SettingsKey.askHistoryVisible) private var askHistoryVisible: Bool = false
 
     var body: some View {
@@ -803,11 +803,13 @@ private struct RecordBar: View {
         .padding(.vertical, 28)
         .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, minHeight: 240)
+        // İçerik her temada açık görünümde; zemin sonra eklenir ki uygulamanın temasını görsün ve koyu temada kısılsın.
+        .environment(\.colorScheme, .light)
         .background {
             FilmGradient(seed: "kayit-karti", palette: .sunset)
+                .dimmedInDarkTheme()
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-        .environment(\.colorScheme, .light)
     }
 
     private func orb(size: CGFloat) -> some View {
@@ -1053,7 +1055,12 @@ private struct HomeTasks: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { (item: (offset: Int, element: (record: MeetingRecord, task: NoteTask))) in
-                        TaskLine(model: model, record: item.element.record, task: item.element.task) {
+                        // Ana sayfada görevler toplantılarıyla karışık: tarihin yanında toplantının adı.
+                        let record: MeetingRecord = item.element.record
+                        TaskLine(
+                            model: model, record: record, task: item.element.task,
+                            detail: ([item.element.task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · ")
+                        ) {
                             router.selectedMeetingID = item.element.record.id
                             router.section = .meetings
                         }
@@ -1187,6 +1194,8 @@ private struct TaskLine: View {
     let model: AppModel
     let record: MeetingRecord
     let task: NoteTask
+    /// İşin altındaki soluk satır (tarih, gerekirse toplantı); boşsa gösterilmez.
+    let detail: String
     let onOpen: @MainActor () -> Void
 
     var body: some View {
@@ -1201,9 +1210,11 @@ private struct TaskLine: View {
                             .appFont(size: 14, weight: .regular)
                             .strikethrough(isDone, color: Theme.muted)
                             .foregroundStyle(isDone ? Theme.muted : Theme.ink)
-                        Text(([task.dueDate].compactMap { $0 } + [record.note?.title ?? record.title]).joined(separator: " · "))
-                            .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(Theme.muted)
+                        if !detail.isEmpty {
+                            Text(verbatim: detail)
+                                .appFont(size: 12, weight: .regular)
+                                .foregroundStyle(Theme.muted)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -1374,7 +1385,8 @@ private struct TasksPage: View {
                         }
                         .buttonStyle(.hoverPlain)
                         ForEach(Array(group.tasks.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
-                            TaskLine(model: model, record: group.record, task: item.element) {
+                            // Toplantının adı kartın başlığında: altta yalnız tarih.
+                            TaskLine(model: model, record: group.record, task: item.element, detail: item.element.dueDate ?? "") {
                                 router.selectedMeetingID = group.record.id
                                 router.section = .meetings
                             }
