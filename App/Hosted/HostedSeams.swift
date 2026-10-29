@@ -84,7 +84,9 @@ func hostedExpectedLiveStatus(account: HostedAccount) -> HostedLiveStatus {
 /// Sunucu çağrılmaz; diğer retler (deneme bitti, sınır) sunucunun hatasıyla gösterilir.
 @MainActor
 func hostedAskUnavailableReason(account: HostedAccount) -> String? {
-    guard case .signedIn(let entitlements) = account.state, entitlements.plan == .trial, entitlements.trialEndsAt == nil else {
+    // Hakkı yoksa (deneme bitti, bu Mac'te kullanıldı) "önce toplantı kaydet" denmez: sorunca abone olma teklifi açılır.
+    guard case .signedIn(let entitlements) = account.state, entitlements.plan == .trial, entitlements.trialEndsAt == nil,
+          !account.requiresSubscription else {
         return nil
     }
     return String(localized: "Önce bir toplantı kaydet: ücretsiz deneme ilk toplantıyla başlar, sonra toplantılarına soru sorabilirsin.")

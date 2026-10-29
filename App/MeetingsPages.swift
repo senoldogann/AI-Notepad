@@ -391,7 +391,8 @@ private enum MeetingTab: String {
     case transcript
 }
 
-/// Dışa aktarmanın sonucu (sayfada satır içinde gösterilir; açılır pencere yok).
+/// Dışa aktarmanın sonucu: başarılar sağ alttaki kısa bildirimde (bkz. `ToastCenter`), hatalar ve onaylar sayfada satır
+/// içinde (açılır pencere yok).
 private enum ExportStatus: Equatable {
     case none
     case saved(URL)
@@ -443,6 +444,10 @@ struct MeetingDetailPage: View {
                     hero(paragraphs: paragraphs).zIndex(1)
                     exportLine
                         .transition(.move(edge: .top).combined(with: .opacity))
+                        // Başarılar sağ alttaki kısa bildirimde (3 sn) görünür, satırda kalmaz; hatalar ve onaylar satırda.
+                        .onChange(of: export) { (_: ExportStatus, status: ExportStatus) in
+                            announceSuccess(status: status)
+                        }
                     statusLines
                     // Sekmeler ve notun dili tek satırda: dil, iş arkadaşlarına göndermek için notun başka dildeki sürümü.
                     HStack(spacing: 10) {
@@ -907,6 +912,13 @@ struct MeetingDetailPage: View {
         }
         .disabled(record.note == nil)
         Button("Klasöre Markdown kaydet", systemImage: "folder") {
+            // Klasör henüz seçilmediyse hata yerine seçim penceresi açılır; seçilince hemen yazılır.
+            if (UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? "").isEmpty {
+                guard let folder = pickMarkdownFolder() else {
+                    return
+                }
+                UserDefaults.standard.set(folder.path, forKey: SettingsKey.markdownFolder)
+            }
             if let error = model.exportToFolder(meetingID: record.id) {
                 export = .failed(error)
             } else {
@@ -1028,6 +1040,21 @@ struct MeetingDetailPage: View {
         return record.with(note: shared)
     }
 
+    /// Başarı durumunu sağ alttaki kısa bildirime taşır ve satırı temizler; diğer durumlara dokunmaz.
+    private func announceSuccess(status: ExportStatus) {
+        switch status {
+        case .saved(let url):
+            ToastCenter.shared.show(title: String(localized: "İndirilenler'e kaydedildi"), detail: url.lastPathComponent, action: .revealInFinder(url))
+        case .copied:
+            ToastCenter.shared.show(title: String(localized: "Markdown panoya kopyalandı"), detail: nil, action: nil)
+        case .done(let message):
+            ToastCenter.shared.show(title: message, detail: nil, action: nil)
+        case .none, .failed, .confirmDelete, .confirmDeleteAudio:
+            return
+        }
+        export = .none
+    }
+
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(meetingMarkdown(record: shownRecord), forType: .string)
@@ -1053,27 +1080,9 @@ struct MeetingDetailPage: View {
                     .appFont(size: 11, weight: .regular)
                     .foregroundStyle(.secondary)
             }
-        case .saved(let url):
-            HStack(spacing: 6) {
-                Label("İndirilenler'e kaydedildi: \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.tint)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Button("Finder'da göster") {
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
-                .buttonStyle(.link)
-                        .pointerStyle(.link)
-            }
-            .appFont(size: 11, weight: .regular)
-        case .copied:
-            Label("Markdown panoya kopyalandı", systemImage: "checkmark.circle.fill")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.tint)
-        case .done(let message):
-            Label(message, systemImage: "checkmark.circle.fill")
-                .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.tint)
+        case .saved, .copied, .done:
+            // Sağ alttaki bildirimde gösterilir (bkz. `announceSuccess`).
+            EmptyView()
         case .failed(let message):
             NoticeText(message, severity: .error)
                 .appFont(size: 11, weight: .regular)

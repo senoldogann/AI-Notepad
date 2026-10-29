@@ -92,6 +92,8 @@ private struct PillButtonBody: View {
         let metrics: PillMetrics = pillMetrics(controlSize: controlSize)
         configuration.label
             .appFont(size: metrics.size, weight: .medium)
+            // Hap düğmenin yazısı hiçbir zaman iki satıra bölünmez (dar yerde kapsülün içinde "Chang/e" gibi kırılıyordu).
+            .lineLimit(1)
             .foregroundStyle(foreground)
             .padding(.horizontal, metrics.horizontal)
             .padding(.vertical, metrics.vertical)

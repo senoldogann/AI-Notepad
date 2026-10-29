@@ -2140,6 +2140,13 @@ final class AppModel {
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
         }
+        #if HOSTED_EDITION
+        // Hakkı yoksa (deneme bitti, abonelik sona erdi) soru gönderilmez: abone olma teklifi hemen açılır.
+        guard !HostedAccount.shared.requiresSubscription else {
+            HostedAccount.shared.requestSubscription()
+            return
+        }
+        #endif
         let history: [ArchiveTurn] = archiveHistory(exchanges: archiveExchanges)
         let id: UUID = UUID()
         let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }

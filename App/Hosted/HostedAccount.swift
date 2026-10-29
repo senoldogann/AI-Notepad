@@ -498,6 +498,20 @@ final class HostedAccount {
     }
     #endif
 
+    /// Ücretli özellikler (kayıt, Sor, not) için abone olmak gerekiyor mu: deneme bitti ya da abonelik sona erdi (aylık
+    /// sınırın dolması abonelikle çözülmez; hak durumu bilinmiyorsa sunucu karar verir).
+    var requiresSubscription: Bool {
+        guard case .signedIn(let entitlements) = state, let block = hostedStartBlock(entitlements: entitlements) else {
+            return false
+        }
+        switch block {
+        case .trialEnded, .subscriptionEnded:
+            return true
+        case .monthlyCapReached:
+            return false
+        }
+    }
+
     /// Kullanıcı abonelik gerektiren bir şey denedi (Başlat'a bastı) ama hakkı yok: abone olma teklifi hemen açılır.
     func requestSubscription() {
         lastSubscriptionPromptAt = Date()

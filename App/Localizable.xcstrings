@@ -14475,12 +14475,13 @@
         }
       }
     },
-    "İndirilenler'e kaydedildi: %@": {
+    "İndirilenler'e kaydedildi": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saved to Downloads: %@"
+            "value": "Saved to Downloads"
           }
         }
       }

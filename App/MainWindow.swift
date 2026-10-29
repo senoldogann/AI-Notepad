@@ -211,14 +211,22 @@ struct MainWindowView: View {
                     }
                     .animation(.smooth(duration: 0.25), value: router.section)
                 }
-                // Bulunan ya da indirilen güncelleme: sağ altta küçük kart (zamanlanmış denetimde Sparkle penceresi açılmaz).
+                // Sağ alt: kısa başarı bildirimleri (kaydedildi, kopyalandı) ve bulunan güncelleme kartı (zamanlanmış
+                // denetimde Sparkle penceresi açılmaz).
                 .overlay(alignment: .bottomTrailing) {
-                    if updater.showsBanner, let update = updater.availableUpdate {
-                        UpdateToast(updater: updater, update: update, isBusy: model.isBusy)
-                            .padding(20)
+                    VStack(alignment: .trailing, spacing: 12) {
+                        if let toast = ToastCenter.shared.current {
+                            ToastView(toast: toast, center: .shared)
+                                .id(toast.id)
+                        }
+                        if updater.showsBanner, let update = updater.availableUpdate {
+                            UpdateToast(updater: updater, update: update, isBusy: model.isBusy)
+                        }
                     }
+                    .padding(20)
                 }
                 .animation(.smooth(duration: 0.35), value: updater.showsBanner)
+                .animation(.smooth(duration: 0.3), value: ToastCenter.shared.current?.id)
                 .transition(.opacity)
             }
         }
@@ -437,7 +445,7 @@ private struct SidebarAvatar: View {
 
 /// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
 /// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
-/// Ana penceredeki kenar çubuğunun genişliği (arama penceresi içerik alanına göre ortalanır).
+/// Ana penceredeki kenar çubuğunun genişliği.
 private let sidebarWidth: CGFloat = 228
 
 private struct TopBar: View {
@@ -1663,10 +1671,9 @@ private struct SearchComposer: View {
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
             .shadow(color: .black.opacity(0.25), radius: 40, y: 18)
-            .padding(.top, 96)
-            // Kenar çubuğundan sonraki içerik alanının ortasında (pencerenin ortasında kenar çubuğu yüzünden sola kaymış
+            // Pencerenin tam ortasında (sağdan ve soldan eşit; büyük ekranda içerik alanına göre ortalanınca sağa kaymış
             // görünüyordu).
-            .padding(.leading, sidebarWidth)
+            .padding(.top, 96)
         }
         .onAppear {
             query = router.searchQuery

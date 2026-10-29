@@ -1223,7 +1223,9 @@ private struct ConnectionCard<Action: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 6)
+            // Düğmeler sıkıştırılmaz (dar kartta "Değiştir" iki satıra bölünüyordu); yer daralınca başlık kırılır.
             action
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
@@ -1905,13 +1907,7 @@ private struct WebhookSettings: View {
     }
 
     private func chooseFolder() {
-        let panel: NSOpenPanel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = String(localized: "Seç")
-        panel.message = String(localized: "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)")
-        guard panel.runModal() == .OK, let url = panel.url else {
+        guard let url = pickMarkdownFolder() else {
             return
         }
         markdownFolder = url.path
@@ -1919,6 +1915,22 @@ private struct WebhookSettings: View {
         folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
             ?? String(localized: "Son not klasöre yazıldı.")
     }
+}
+
+/// Notların Markdown olarak yazılacağı klasörü sorar (Ayarlar › Bağlantılar ve toplantıdaki "Klasöre Markdown kaydet");
+/// vazgeçilirse nil.
+@MainActor
+func pickMarkdownFolder() -> URL? {
+    let panel: NSOpenPanel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = true
+    panel.prompt = String(localized: "Seç")
+    panel.message = String(localized: "Notların Markdown olarak yazılacağı klasör (ör. Obsidian kasası)")
+    guard panel.runModal() == .OK, let url = panel.url else {
+        return nil
+    }
+    return url
 }
 
 /// Görev araçları: Linear ve Jira'ya tek tıkla bağlanma (MCP, tarayıcıda izin; API anahtarı gerekmez), görevlerin

@@ -33,6 +33,8 @@ enum DemoScene: String {
     case upsell = "abone"
     /// Ana sayfa ve sağ altta güncelleme kartı (sahte sürüm ve notlar).
     case update = "guncelleme"
+    /// Ayarlar (sekme `--ayar` ile seçilir; görsel kontrol için).
+    case settings = "ayarlar"
 }
 
 /// Tanıtım modu hataları.
@@ -129,6 +131,8 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
             }
             model.openConversation(id: demoAskConversationID)
         }
+    case .settings:
+        router.section = .settings
     case .update:
         router.section = .home
         updater.showUpdateForDemo(update: AvailableAppUpdate(

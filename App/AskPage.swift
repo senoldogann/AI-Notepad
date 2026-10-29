@@ -216,6 +216,13 @@ struct AskPage: View {
     }
 
     private func send() {
+        #if HOSTED_EDITION
+        // Hakkı yoksa soru alanı temizlenmez (abone olunca yeniden gönderilebilsin); teklif açılır.
+        if HostedAccount.shared.requiresSubscription {
+            HostedAccount.shared.requestSubscription()
+            return
+        }
+        #endif
         // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
         guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe, unavailableReason == nil,
               !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
