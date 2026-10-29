@@ -170,13 +170,6 @@ export const brands: Readonly<Record<Brand, BrandMark>> = {
   },
 };
 
-/** Entegrasyon bölümünün grupları: notların ve görevlerin gittiği yerler, MCP ile toplantıları okuyan yapay zekâ
- * uygulamaları (Claude, Cursor, VS Code; bkz. MCPClient), Mac'teki dosyalar ve Apple uygulamaları. */
-export const noteDestinationBrands: readonly Brand[] = ["notion", "apple-notes", "slack", "teams", "discord", "zoom", "webhook"];
-export const taskBrands: readonly Brand[] = ["linear", "jira", "reminders"];
-export const mcpBrands: readonly Brand[] = ["claude", "cursor", "vscode"];
-export const fileBrands: readonly Brand[] = ["obsidian", "markdown", "calendar"];
-
 /** Kayan şeridin sırası: bütün entegrasyonlar, gruplar karışık. */
 export const marqueeBrands: readonly Brand[] = [
   "notion",

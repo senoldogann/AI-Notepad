@@ -156,7 +156,7 @@ export interface HomeCopy {
     readonly missed: TitledText & { readonly button: string; readonly answer: string };
     readonly ask: TitledText & { readonly question: string; readonly source: string };
     readonly followUp: TitledText & { readonly recipe: string; readonly subject: string; readonly lines: readonly string[] };
-    readonly privacy: TitledText & { readonly badge: string };
+    readonly templates: TitledText & { readonly sample: readonly string[] };
   };
   /** Kayan entegrasyon şeridinin etiketi. */
   readonly marqueeLabel: string;
@@ -184,22 +184,6 @@ export interface HomeCopy {
       readonly source: string;
     };
   };
-  /** Toplantı botu ile karşılaştırma (rakip adı yok). */
-  readonly noBot: {
-    readonly eyebrow: string;
-    readonly title: string;
-    readonly lead: string;
-    readonly botLabel: string;
-    readonly usLabel: string;
-    readonly rows: readonly { readonly bot: string; readonly us: string }[];
-  };
-  /** Toplantı türleri (not şablonları) ve hazır tarifler. */
-  readonly useCases: {
-    readonly eyebrow: string;
-    readonly title: string;
-    readonly lead: string;
-    readonly items: readonly (TitledText & { readonly focus: readonly string[] })[];
-  };
   /** Gizlilik ve güven ızgarası. */
   readonly trust: {
     readonly eyebrow: string;
@@ -208,8 +192,6 @@ export interface HomeCopy {
     readonly items: readonly TitledText[];
     readonly link: string;
   };
-  readonly stepsTitle: string;
-  readonly steps: readonly TitledText[];
   readonly pricingTitle: string;
   readonly pricingLead: string;
   readonly pricingCta: string;
@@ -583,10 +565,10 @@ export const copy: Copy = {
         subject: "Subject: Product weekly, next steps",
         lines: ["Beta opens on 14 November.", "Alex: release notes by Friday."],
       },
-      privacy: {
-        title: "Privacy",
-        text: "Audio is processed only to be transcribed and is not stored on our servers. Your notes and recordings stay on your Mac. No bot joins the call.",
-        badge: "Not stored on our servers",
+      templates: {
+        title: "Meeting templates",
+        text: "Client calls, one-on-ones, interviews and lectures each get a note that puts the right things first. Or write your own.",
+        sample: ["Client call", "One-on-one", "Interview", "Lecture", "Your own"],
       },
     },
     trust: {
@@ -637,36 +619,6 @@ export const copy: Copy = {
         source: "Client call · Nordia",
       },
     },
-    noBot: {
-      eyebrow: "Why no bot",
-      title: "Nothing extra in the call.",
-      lead: `Many note takers send a bot into your meeting as another participant. ${productName} listens on your Mac instead.`,
-      botLabel: "A meeting bot",
-      usLabel: productName,
-      rows: [
-        { bot: "Joins the call as an extra participant", us: "Listens on your Mac; nobody sees anything extra" },
-        { bot: "Often waits for the host to let it in", us: "Nothing to admit, invite or schedule" },
-        { bot: "Works only in the meeting apps it supports", us: "Works with any call on your Mac, and in the room" },
-        { bot: "Recordings often kept in the provider's cloud", us: "Notes and recordings stay on your Mac" },
-      ],
-    },
-    useCases: {
-      eyebrow: "For every kind of meeting",
-      title: "A note shaped for the conversation.",
-      lead: "Pick a template for the kind of meeting, or write your own, and the note puts the right things first.",
-      items: [
-        { title: "Client calls", text: "Needs and objections, budget and timing, competitors mentioned and the next steps.", focus: ["Needs", "Budget", "Next steps"] },
-        { title: "One-on-ones", text: "Feedback, goals and concerns, what to follow up on and what you agreed.", focus: ["Feedback", "Goals", "Follow-ups"] },
-        { title: "Interviews", text: "Experience and strengths, open questions, and terms like salary and start date.", focus: ["Strengths", "Questions", "Terms"] },
-        { title: "Lectures and training", text: "Key concepts with explanations, examples, homework and exam details, and a full glossary.", focus: ["Concepts", "Homework", "Glossary"] },
-      ],
-    },
-    stepsTitle: "In three steps",
-    steps: [
-      { title: "Download and sign in", text: `Download the app, drag ${productName} to Applications and sign in with Apple or Google.` },
-      { title: "Start listening", text: "One click as the meeting starts. Zoom, Meet, Teams or in person; your voice and the other side's." },
-      { title: "Get your note", text: "The meeting ends, the note is ready: tasks first, then decisions and a summary. Share it or send it on." },
-    ],
     pricingTitle: "One plan. Simple pricing.",
     pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
