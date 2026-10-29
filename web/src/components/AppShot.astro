@@ -12,6 +12,15 @@ import type { FilmLayout, FilmPalette } from "../lib/film";
 /** Kartın biçimi: geniş pencere (ana pencere) ya da dar panel (canlı panel). */
 export type AppShotVariant = "window" | "panel";
 
+/** Görselin üstündeki açıklama balonu: nokta görseldeki bir öğeyi gösterir, balon noktanın sağına ya da soluna açılır.
+ * Konum (`left`, `top`: görselin yüzdesi) sayfanın CSS'inde `class` ile verilir; site CSP'si satır içi stile izin
+ * vermez. Dar ekranda gizlenir; görselin metin karşılığı `alt`'tadır. */
+export interface ShotCallout {
+  readonly text: string;
+  readonly class: string;
+  readonly side: "left" | "right";
+}
+
 interface Props {
   readonly image: ImageMetadata;
   readonly shot: ShowcaseShot;
@@ -23,12 +32,14 @@ interface Props {
   /** `sizes` özniteliği: görselin sayfadaki genişliği. */
   readonly sizes: string;
   readonly class: string;
+  readonly callouts: readonly ShotCallout[];
 }
-const { image, shot, palette, layout, variant, widths, sizes, class: extraClass } = Astro.props;
+const { image, shot, palette, layout, variant, widths, sizes, class: extraClass, callouts } = Astro.props;
 ---
 
 <figure class:list={["shot", `shot--${variant}`, extraClass]}>
   <Film palette={palette} layout={layout} class="shot__cover">
+    <div class="shot__frame">
     <Picture
       src={image}
       alt={shot.alt}
@@ -41,6 +52,15 @@ const { image, shot, palette, layout, variant, widths, sizes, class: extraClass 
       decoding="async"
       class="shot__image"
     />
+    {
+      callouts.map((callout: ShotCallout) => (
+        <span class:list={["shot__callout", `shot__callout--${callout.side}`, callout.class]} aria-hidden="true">
+          <span class="shot__dot" />
+          <span class="glass shot__pill">{callout.text}</span>
+        </span>
+      ))
+    }
+    </div>
   </Film>
   <figcaption class="shot__caption">
     <span class="shot__label">{shot.label}</span>
@@ -76,8 +96,53 @@ const { image, shot, palette, layout, variant, widths, sizes, class: extraClass 
     --shot-side: clamp(18px, 14%, 72px);
   }
 
-  .shot :global(.shot__cover > picture) {
+  .shot__frame {
+    position: relative;
+  }
+
+  .shot__frame > :global(picture) {
     display: block;
+  }
+
+  /* Açıklama balonu: nokta öğenin üstünde (konum sayfanın CSS'inde), balon yanında. Durgundur. */
+  .shot__callout {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transform: translate(-7px, -50%);
+    pointer-events: none;
+  }
+
+  .shot__callout--left {
+    flex-direction: row-reverse;
+    transform: translate(calc(-100% + 7px), -50%);
+  }
+
+  .shot__dot {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow:
+      0 0 0 4px rgb(255 255 255 / 0.9),
+      0 4px 12px rgb(60 36 24 / 0.25);
+  }
+
+  .shot__pill {
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: clamp(0.75rem, 1.1vw, 0.875rem);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    .shot__callout {
+      display: none;
+    }
   }
 
   /* Dar ekranda Home pencereyi büyütüp kaydırabilir (`--shot-zoom`, `--shot-shift`); yoksa pencere kartın içine sığar. */

@@ -1,8 +1,9 @@
 ---
-// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, uygulamanın gerçek ekranları,
-// özellikler, üç adım, fiyat, SSS.
+// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, ürün gerçekleri, uygulamanın
+// gerçek ekranları, özellikler, entegrasyonlar (MCP dahil), bot karşılaştırması, toplantı türleri, gizlilik, üç adım,
+// fiyat, SSS.
 import Base from "../layouts/Base.astro";
-import AppShot from "../components/AppShot.astro";
+import AppShot, { type ShotCallout } from "../components/AppShot.astro";
 import BrandLogo from "../components/BrandLogo.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
@@ -12,7 +13,7 @@ import MeetingCard from "../components/MeetingCard.astro";
 import Waveform from "../components/Waveform.astro";
 import { macDownloadUrl } from "../config";
 import { copy, type CommonCopy, type HomeCopy } from "../copy";
-import { type Brand, integrationBrands } from "../lib/brands";
+import { type Brand, brands, fileBrands, mcpBrands, noteDestinationBrands, taskBrands } from "../lib/brands";
 import type { FilmLayout, FilmPalette } from "../lib/film";
 import type { IconName } from "../lib/icons";
 import { cyclic } from "../lib/list";
@@ -40,9 +41,27 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   tasks: "check-circle",
   missed: "rewind",
   ask: "search",
-  integrations: "plug",
+  followUp: "mail",
   privacy: "lock",
 };
+/** Not ekranındaki açıklama balonları (konumları stilde, note.webp'deki öğelere göre). */
+const noteCallouts: readonly ShotCallout[] = [
+  { text: text.noteCallouts.transcript, class: "note-callout--transcript", side: "right" },
+  { text: text.noteCallouts.dueDate, class: "note-callout--due", side: "right" },
+];
+/** Entegrasyon gruplarının logoları ve simgeleri (yapay zekâ grubu ayrı, geniş kartta). */
+const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; readonly icon: IconName; readonly brands: readonly Brand[] }[] = [
+  { key: "notes", icon: "message", brands: noteDestinationBrands },
+  { key: "tasks", icon: "check-circle", brands: taskBrands },
+  { key: "files", icon: "disk", brands: fileBrands },
+];
+/** Toplantı türü kartlarının simgeleri ve kapakları (metinlerle aynı sırada). */
+const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmPalette; readonly layout: FilmLayout }[] = [
+  { icon: "message", palette: "coral", layout: "clouds-right" },
+  { icon: "users", palette: "mint", layout: "clouds-left" },
+  { icon: "user", palette: "violet", layout: "streaks" },
+  { icon: "note", palette: "ocean", layout: "clouds-right" },
+];
 ---
 
 <Base page="home" meta={text.meta} indexed={true}>
@@ -87,17 +106,53 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     </section>
   </section>
 
-  <section class="page facts reveal" aria-label={text.featuresEyebrow}>
-    <dl class="facts__grid">
-      {
-        text.facts.map((fact) => (
-          <div class="facts__item">
-            <dt class="facts__value">{fact.value}</dt>
-            <dd class="facts__label muted">{fact.label}</dd>
+  <section class="page facts" aria-label={text.facts.label}>
+    <ul class="facts__grid">
+      <li class="fact reveal">
+        <Film palette="mint" layout="clouds-right" class="fact__cover">
+          <div class="glass fact__roster">
+            <span class="fact__avatars">{text.facts.noBot.people.map((initial: string) => <span class="fact__avatar">{initial}</span>)}</span>
+            <span class="fact__roster-note">{text.facts.noBot.note}</span>
           </div>
-        ))
-      }
-    </dl>
+        </Film>
+        <p class="fact__value">{text.facts.noBot.value}</p>
+        <p class="fact__label muted">{text.facts.noBot.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="ocean" layout="clouds-left" class="fact__cover">
+          <div class="glass fact__live">
+            <span class="fact__status"><span class="fact__rec" aria-hidden="true" />{text.facts.live.status}</span>
+            <Waveform seed={text.facts.live.line} width={112} height={22} class="fact__wave" />
+            <span class="fact__line">{text.facts.live.line}</span>
+          </div>
+        </Film>
+        <p class="fact__value">{text.facts.live.value}</p>
+        <p class="fact__label muted">{text.facts.live.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="violet" layout="streaks" class="fact__cover">
+          <ul class="fact__languages">{text.facts.languages.sample.map((language: string) => <li class="glass fact__language">{language}</li>)}</ul>
+        </Film>
+        <p class="fact__value tabular">{text.facts.languages.value}</p>
+        <p class="fact__label muted">{text.facts.languages.label}</p>
+      </li>
+      <li class="fact reveal">
+        <Film palette="coral" layout="clouds-left" class="fact__cover">
+          <ul class="glass fact__tasks">
+            {
+              text.facts.tasks.sample.map((task: string) => (
+                <li class="fact__task">
+                  <span class="sample-tasks__box" aria-hidden="true" />
+                  {task}
+                </li>
+              ))
+            }
+          </ul>
+        </Film>
+        <p class="fact__value">{text.facts.tasks.value}</p>
+        <p class="fact__label muted">{text.facts.tasks.label}</p>
+      </li>
+    </ul>
   </section>
 
   <section class="section page showcase" aria-labelledby="showcase-title">
@@ -117,6 +172,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[720, 1200, 1680, 2160]}
         sizes="(max-width: 640px) 160vw, min(1040px, 86vw)"
         class="showcase__note reveal"
+        callouts={noteCallouts}
       />
       <AppShot
         image={askShot}
@@ -127,6 +183,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[640, 960, 1360]}
         sizes="(max-width: 640px) 130vw, (max-width: 960px) 86vw, 680px"
         class="showcase__ask reveal"
+        callouts={[]}
       />
       <AppShot
         image={liveShot}
@@ -137,6 +194,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[360, 560, 840]}
         sizes="(max-width: 640px) 76vw, (max-width: 960px) 72vw, 320px"
         class="showcase__live reveal"
+        callouts={[]}
       />
       <AppShot
         image={homeShot}
@@ -147,6 +205,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         widths={[720, 1200, 1680, 2160]}
         sizes="(max-width: 640px) 120vw, min(1040px, 86vw)"
         class="showcase__home reveal"
+        callouts={[]}
       />
     </div>
   </section>
@@ -211,18 +270,16 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
 
       <article class="feature reveal">
         <Film palette="mint" layout="clouds-right" class="feature__cover">
-          <ul class="logos">
-            {
-              integrationBrands.map((brand: Brand) => (
-                <li class="glass logos__tile">
-                  <BrandLogo brand={brand} size={22} />
-                </li>
-              ))
-            }
-          </ul>
+          <div class="follow-up">
+            <span class="glass follow-up__recipe"><Icon name="sparkle" size={14} class="" />{text.features.followUp.recipe}</span>
+            <div class="glass follow-up__mail">
+              <p class="follow-up__subject">{text.features.followUp.subject}</p>
+              {text.features.followUp.lines.map((line: string) => <p class="follow-up__line">{line}</p>)}
+            </div>
+          </div>
         </Film>
-        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.integrations} size={18} class="" /></span>{text.features.integrations.title}</h3>
-        <p class="muted">{text.features.integrations.text}</p>
+        <h3 class="feature__title title-m"><span class="icon-chip icon-chip--small"><Icon name={featureIcons.followUp} size={18} class="" /></span>{text.features.followUp.title}</h3>
+        <p class="muted">{text.features.followUp.text}</p>
       </article>
 
       <article class="feature reveal">
@@ -236,6 +293,131 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         <p class="muted">{text.features.privacy.text}</p>
       </article>
     </div>
+  </section>
+
+  <section class="section page" id="integrations" aria-labelledby="integrations-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.integrations.eyebrow}</p>
+      <h2 class="title-xl" id="integrations-title">{text.integrations.title}</h2>
+      <p class="lead">{text.integrations.lead}</p>
+    </div>
+
+    <div class="integrations">
+      <article class="card integration integration--ai reveal">
+        <div class="integration__text">
+          <h3 class="integration__title"><span class="icon-chip icon-chip--small"><Icon name="sparkle" size={18} class="" /></span>{text.integrations.ai.title}</h3>
+          <p class="muted">{text.integrations.ai.text}</p>
+          <ul class="brand-tiles">
+            {
+              mcpBrands.map((brand: Brand) => (
+                <li class="brand-tile">
+                  <span class="brand-tile__mark"><BrandLogo brand={brand} size={26} fill={brands[brand].color} /></span>
+                  <span class="brand-tile__name">{brands[brand].name}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+        <Film palette="sunset" layout="clouds-right" class="integration__cover">
+          <div class="glass mcp-chat">
+            <p class="mcp-chat__label"><span class="mcp-chat__mark"><BrandLogo brand="claude" size={14} fill={brands.claude.color} /></span>{text.integrations.mcpDemo.label}</p>
+            <p class="mcp-chat__question">{text.integrations.mcpDemo.question}</p>
+            <p class="mcp-chat__tool"><Icon name="search" size={13} class="" />{text.integrations.mcpDemo.tool}</p>
+            <p class="mcp-chat__answer">{text.integrations.mcpDemo.answerLead}</p>
+            <ul class="mcp-chat__list">{text.integrations.mcpDemo.answer.map((item: string) => <li>{item}</li>)}</ul>
+            <p class="mcp-chat__source">{text.integrations.mcpDemo.source}</p>
+          </div>
+        </Film>
+      </article>
+
+      {
+        integrationGroups.map((group) => (
+          <article class="card integration reveal">
+            <h3 class="integration__title">
+              <span class="icon-chip icon-chip--small">
+                <Icon name={group.icon} size={18} class="" />
+              </span>
+              {text.integrations[group.key].title}
+            </h3>
+            <p class="muted">{text.integrations[group.key].text}</p>
+            <ul class="brand-tiles">
+              {group.brands.map((brand: Brand) => (
+                <li class="brand-tile">
+                  <span class="brand-tile__mark">
+                    <BrandLogo brand={brand} size={26} fill={brands[brand].color} />
+                  </span>
+                  <span class="brand-tile__name">{brands[brand].name}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="section page" aria-labelledby="nobot-title">
+    <div class="nobot">
+      <div class="nobot__text reveal">
+        <p class="eyebrow">{text.noBot.eyebrow}</p>
+        <h2 class="title-xl" id="nobot-title">{text.noBot.title}</h2>
+        <p class="lead">{text.noBot.lead}</p>
+      </div>
+      <table class="nobot__table reveal">
+        <thead>
+          <tr>
+            <th scope="col" class="nobot__head">{text.noBot.botLabel}</th>
+            <th scope="col" class="nobot__head nobot__head--us">{text.noBot.usLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            text.noBot.rows.map((row) => (
+              <tr>
+                <td class="nobot__bot">
+                  <span class="nobot__mark" aria-hidden="true" />
+                  {row.bot}
+                </td>
+                <td class="nobot__us">
+                  <Icon name="check" size={16} class="nobot__check" />
+                  {row.us}
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section page" aria-labelledby="usecases-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.useCases.eyebrow}</p>
+      <h2 class="title-xl" id="usecases-title">{text.useCases.title}</h2>
+      <p class="lead">{text.useCases.lead}</p>
+    </div>
+    <ul class="usecases">
+      {
+        text.useCases.items.map((item, index: number) => (
+          <li class="card usecase reveal">
+            <Film palette={cyclic(useCaseStyles, index).palette} layout={cyclic(useCaseStyles, index).layout} class="usecase__cover">
+              <span class="glass usecase__icon">
+                <Icon name={cyclic(useCaseStyles, index).icon} size={22} class="" />
+              </span>
+            </Film>
+            <div class="usecase__body">
+              <h3 class="usecase__title">{item.title}</h3>
+              <p class="muted">{item.text}</p>
+              <ul class="usecase__focus">
+                {item.focus.map((focus: string) => (
+                  <li>{focus}</li>
+                ))}
+              </ul>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
   </section>
 
   <section class="section page" aria-labelledby="trust-title">
@@ -357,6 +539,7 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   }
 
   /* Ürün gerçekleri: dört sütun, büyük değer ve kısa açıklama; ince ayraçlarla sakin bir şerit. */
+  /* Ürün gerçekleri: dört kart, her birinde durgun film kapak üstünde küçük bir örnek ve altında büyük değer. */
   .facts {
     margin-top: clamp(40px, 6vw, 72px);
   }
@@ -364,32 +547,472 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   .facts__grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(12px, 1.6vw, 20px);
     margin: 0;
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
+    padding: 0;
+    list-style: none;
   }
 
-  .facts__item {
+  .fact {
     display: grid;
+    align-content: start;
     gap: 6px;
-    padding: 24px 24px 26px;
+    padding: 8px 8px 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--card);
+    box-shadow: var(--elevation);
   }
 
-  .facts__item + .facts__item {
-    border-left: 1px solid var(--line);
+  .fact :global(.fact__cover) {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 5 / 3.4;
+    padding: 14px;
+    margin-bottom: 12px;
+    border-radius: calc(var(--radius-m) - 6px);
   }
 
-  .facts__value {
-    font-size: clamp(1.5rem, 2.4vw, 2rem);
+  .fact__value {
+    margin: 0;
+    padding: 0 14px;
+    font-size: clamp(1.375rem, 2.2vw, 1.75rem);
     font-weight: 600;
     letter-spacing: -0.03em;
     line-height: 1.1;
   }
 
-  .facts__label {
+  .fact__label {
     margin: 0;
+    padding: 0 14px;
     font-size: 0.9375rem;
     line-height: 1.45;
+  }
+
+  .fact__roster,
+  .fact__live,
+  .fact__tasks {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+  }
+
+  .fact__roster {
+    justify-items: center;
+  }
+
+  .fact__avatars {
+    display: flex;
+  }
+
+  .fact__avatar {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-left: -6px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    background: #e7efe9;
+    color: #1d2a23;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .fact__avatar:first-child {
+    margin-left: 0;
+  }
+
+  .fact__avatar:nth-child(2) {
+    background: #e6ecf6;
+  }
+
+  .fact__avatar:nth-child(3) {
+    background: #f6e9e1;
+  }
+
+  .fact__avatar:nth-child(4) {
+    background: #eee7f5;
+  }
+
+  .fact__roster-note {
+    font-weight: 600;
+  }
+
+  .fact__live {
+    max-width: 220px;
+  }
+
+  .fact__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+
+  .fact__rec {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e5484d;
+  }
+
+  .fact__live :global(.fact__wave) {
+    color: #4f7cb8;
+  }
+
+  .fact__line {
+    line-height: 1.35;
+  }
+
+  .fact__languages {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    max-width: 230px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fact__language {
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .fact__tasks {
+    margin: 0;
+    list-style: none;
+  }
+
+  .fact__task {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .fact__task .sample-tasks__box {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+  }
+
+  /* Entegrasyonlar: geniş yapay zekâ kartı (MCP örneğiyle), altında üç grup. Logolar markanın renginde, beyaz karoda. */
+  .integrations {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(14px, 1.8vw, 22px);
+    margin-top: clamp(32px, 4vw, 48px);
+  }
+
+  .integration {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .integration p {
+    margin: 0;
+  }
+
+  .integration--ai {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: clamp(20px, 3vw, 40px);
+    padding: clamp(10px, 1.2vw, 14px) clamp(10px, 1.2vw, 14px) clamp(10px, 1.2vw, 14px) clamp(20px, 3vw, 36px);
+  }
+
+  .integration__text {
+    display: grid;
+    gap: 12px;
+    align-content: center;
+  }
+
+  .integration__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .integration--ai .integration__title {
+    font-size: clamp(1.25rem, 2vw, 1.5rem);
+  }
+
+  .integration :global(.integration__cover) {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+    padding: clamp(20px, 3vw, 36px);
+    border-radius: calc(var(--radius-m) - 6px);
+  }
+
+  .brand-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 6px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .brand-tile {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    width: 56px;
+  }
+
+  .brand-tile__mark {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid rgb(10 10 10 / 0.08);
+    box-shadow:
+      0 1px 2px rgb(10 10 10 / 0.06),
+      0 6px 16px rgb(10 10 10 / 0.08);
+  }
+
+  .brand-tile__name {
+    font-size: 0.75rem;
+    line-height: 1.25;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .mcp-chat {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 400px);
+    padding: 18px 20px;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .mcp-chat p,
+  .mcp-chat ul {
+    margin: 0;
+  }
+
+  .mcp-chat__label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__mark {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: #ffffff;
+    border: 1px solid rgb(10 10 10 / 0.08);
+  }
+
+  .mcp-chat__question {
+    justify-self: end;
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 14px 14px 4px 14px;
+    background: #f1ece6;
+    font-weight: 500;
+  }
+
+  .mcp-chat__tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: start;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgb(10 10 10 / 0.1);
+    font-size: 0.75rem;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__list {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .mcp-chat__source {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #5a4a40;
+  }
+
+  /* Bot karşılaştırması: solda başlık, sağda iki sütunlu tablo; bizim sütun hafif tonlu. */
+  .nobot {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+
+  .nobot__text {
+    display: grid;
+    gap: 14px;
+  }
+
+  .nobot__text > * {
+    margin: 0;
+  }
+
+  .nobot__table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
+  .nobot__table th,
+  .nobot__table td {
+    width: 50%;
+    padding: 16px 20px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nobot__table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .nobot__head {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .nobot__head--us,
+  .nobot__us {
+    background: light-dark(#fbf3ee, #241b17);
+  }
+
+  .nobot__head--us {
+    border-radius: var(--radius-s) var(--radius-s) 0 0;
+    color: var(--ink);
+  }
+
+  .nobot__table tr:last-child .nobot__us {
+    border-radius: 0 0 var(--radius-s) var(--radius-s);
+  }
+
+  .nobot__bot {
+    color: var(--muted);
+  }
+
+  .nobot__us {
+    font-weight: 500;
+  }
+
+  .nobot__table td.nobot__bot,
+  .nobot__table td.nobot__us {
+    position: relative;
+    padding-left: 46px;
+  }
+
+  .nobot__mark {
+    position: absolute;
+    left: 20px;
+    top: 25px;
+    width: 12px;
+    height: 1.5px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+
+  .nobot__us :global(.nobot__check) {
+    position: absolute;
+    left: 18px;
+    top: 18px;
+    color: var(--ok);
+  }
+
+  /* Toplantı türleri: dört kart, üstte küçük durgun kapak ve cam simge, altta odak etiketleri. */
+  .usecases {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(12px, 1.6vw, 20px);
+    margin: clamp(32px, 4vw, 48px) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .usecase {
+    display: grid;
+    align-content: start;
+    padding: 8px;
+  }
+
+  .usecase :global(.usecase__cover) {
+    display: grid;
+    place-items: center;
+    height: 120px;
+    border-radius: calc(var(--radius-m) - 6px);
+  }
+
+  .usecase__icon {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+
+  .usecase__body {
+    display: grid;
+    gap: 8px;
+    padding: 18px 14px 14px;
+  }
+
+  .usecase__body p {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+
+  .usecase__title {
+    margin: 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .usecase__focus {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .usecase__focus li {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--soft);
+    border: 1px solid var(--line);
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 
   /* Gizlilik ızgarası: üç sütun, kartsız sakin hücreler. */
@@ -425,16 +1048,26 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   }
 
   @media (max-width: 860px) {
-    .facts__grid {
+    .facts__grid,
+    .usecases {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .facts__item:nth-child(3) {
-      border-left: 0;
+    .integrations {
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    .facts__item:nth-child(n + 3) {
-      border-top: 1px solid var(--line);
+    .integration--ai,
+    .nobot {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .integration--ai {
+      padding: clamp(20px, 3vw, 32px) 10px 10px;
+    }
+
+    .integration--ai .integration__text {
+      padding: 0 10px;
     }
 
     .trust {
@@ -505,6 +1138,17 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   /* Geniş pencereler alt kenarda kesilir. */
   .showcase__grid > :global(.showcase__note) {
     --shot-ratio: 16 / 9;
+  }
+
+  /* Not ekranının balonları: görseldeki öğelerin yeri (görselin yüzdesi). */
+  .showcase__grid :global(.note-callout--transcript) {
+    left: 66.8%;
+    top: 59%;
+  }
+
+  .showcase__grid :global(.note-callout--due) {
+    left: 60.2%;
+    top: 73.4%;
   }
 
   .showcase__grid > :global(.showcase__home) {
@@ -625,23 +1269,40 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     color: #2a2238;
   }
 
-  /* Entegrasyon logoları: tek renk, cam karolar, 4 × 2. */
-  .logos {
+  /* Takip e-postası: tarif düğmesi ve taslak. */
+  .follow-up {
     display: grid;
-    grid-template-columns: repeat(4, 48px);
     gap: 10px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    justify-items: center;
+    width: min(100%, 260px);
   }
 
-  .logos__tile {
+  .follow-up__recipe {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .follow-up__mail {
     display: grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
+    gap: 4px;
+    width: 100%;
+    padding: 12px 14px;
     border-radius: 14px;
-    color: #1d2a23;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .follow-up__mail p {
+    margin: 0;
+  }
+
+  .follow-up__subject {
+    font-weight: 600;
   }
 
   .privacy-badge {
@@ -801,6 +1462,43 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     .pricing-band,
     .faq-layout {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .facts__grid,
+    .usecases {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .fact :global(.fact__cover) {
+      aspect-ratio: auto;
+      min-height: 150px;
+      padding: 18px;
+    }
+
+    .usecase :global(.usecase__cover) {
+      height: 96px;
+    }
+
+    .nobot__table th,
+    .nobot__table td {
+      padding: 14px 12px;
+    }
+
+    .nobot__table td.nobot__bot,
+    .nobot__table td.nobot__us {
+      padding-left: 34px;
+    }
+
+    .nobot__mark {
+      left: 12px;
+      top: 23px;
+    }
+
+    .nobot__us :global(.nobot__check) {
+      left: 10px;
+      top: 16px;
     }
   }
 

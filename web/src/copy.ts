@@ -22,6 +22,12 @@ export interface TitledText {
   readonly text: string;
 }
 
+/** Ürün gerçekleri kartı: büyük değer ve kısa açıklama. */
+export interface FactCopy {
+  readonly value: string;
+  readonly label: string;
+}
+
 /** Simgeli, başlıklı kısa metin (kartlar). */
 export interface IconText extends TitledText {
   readonly icon: IconName;
@@ -133,8 +139,14 @@ export interface HomeCopy {
     readonly ask: ShowcaseShot;
     readonly home: ShowcaseShot;
   };
-  /** Doğrulanabilir ürün gerçekleri şeridi (uydurma kullanıcı sayısı yok). */
-  readonly facts: readonly { readonly value: string; readonly label: string }[];
+  /** Doğrulanabilir ürün gerçekleri kartları (uydurma kullanıcı sayısı yok); her kartın küçük bir örnek görseli var. */
+  readonly facts: {
+    readonly label: string;
+    readonly noBot: FactCopy & { readonly people: readonly string[]; readonly note: string };
+    readonly live: FactCopy & { readonly status: string; readonly line: string };
+    readonly languages: FactCopy & { readonly sample: readonly string[] };
+    readonly tasks: FactCopy & { readonly sample: readonly string[] };
+  };
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
   readonly featuresLead: string;
@@ -143,8 +155,48 @@ export interface HomeCopy {
     readonly tasks: TitledText & { readonly sample: readonly string[] };
     readonly missed: TitledText & { readonly button: string; readonly answer: string };
     readonly ask: TitledText & { readonly question: string; readonly source: string };
-    readonly integrations: TitledText;
+    readonly followUp: TitledText & { readonly recipe: string; readonly subject: string; readonly lines: readonly string[] };
     readonly privacy: TitledText & { readonly badge: string };
+  };
+  /** Not ekranındaki açıklama balonları (ekran görüntüsüne göre konumlar Home'da). */
+  readonly noteCallouts: {
+    readonly dueDate: string;
+    readonly transcript: string;
+  };
+  /** Entegrasyonlar: notların ve görevlerin gittiği yerler, MCP ile yapay zekâ uygulamaları, dosyalar ve takvim. */
+  readonly integrations: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly notes: TitledText;
+    readonly tasks: TitledText;
+    readonly ai: TitledText;
+    readonly files: TitledText;
+    /** Claude'da toplantılar üstüne bir soru örneği (MCP). */
+    readonly mcpDemo: {
+      readonly label: string;
+      readonly question: string;
+      readonly tool: string;
+      readonly answerLead: string;
+      readonly answer: readonly string[];
+      readonly source: string;
+    };
+  };
+  /** Toplantı botu ile karşılaştırma (rakip adı yok). */
+  readonly noBot: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly botLabel: string;
+    readonly usLabel: string;
+    readonly rows: readonly { readonly bot: string; readonly us: string }[];
+  };
+  /** Toplantı türleri (not şablonları) ve hazır tarifler. */
+  readonly useCases: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly items: readonly (TitledText & { readonly focus: readonly string[] })[];
   };
   /** Gizlilik ve güven ızgarası. */
   readonly trust: {
@@ -413,12 +465,31 @@ export const copy: Copy = {
     lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
     secondaryCta: "See pricing",
     assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
-    facts: [
-      { value: "No bot", label: "Nothing joins your call. Gistsmith listens on your Mac." },
-      { value: "Live", label: "Transcript and translation appear while people talk." },
-      { value: "30+", label: "Languages for your meetings, notes and translations." },
-      { value: "Tasks first", label: "Every note opens with who does what, by when." },
-    ],
+    facts: {
+      label: "At a glance",
+      noBot: {
+        value: "No bot",
+        label: `Nothing joins your call. ${productName} listens on your Mac.`,
+        people: ["E", "M", "A", "Y"],
+        note: "4 people · no bots",
+      },
+      live: {
+        value: "Live",
+        label: "Transcript and translation appear while people talk.",
+        status: "Listening · 23:20",
+        line: "So the beta opens on the fourteenth?",
+      },
+      languages: {
+        value: "30+",
+        label: "Languages for your meetings, notes and translations.",
+        sample: ["English", "Suomi", "Türkçe", "Deutsch", "Español", "日本語"],
+      },
+      tasks: {
+        value: "Tasks first",
+        label: "Every note opens with who does what, by when.",
+        sample: ["Release notes · Fri", "Pricing table · Today"],
+      },
+    },
     demo: {
       label: `${productName} recording a meeting and writing the note`,
       listening: "Listening",
@@ -503,9 +574,12 @@ export const copy: Copy = {
         question: "What did we decide about the budget?",
         source: "Sources: Investor update, Product weekly",
       },
-      integrations: {
-        title: "Integrations",
-        text: "Send notes and tasks where they belong: Notion, Slack, Microsoft Teams, Discord and Zoom; tasks to Linear, Jira or Reminders. Connected with their official sign-ins.",
+      followUp: {
+        title: "Follow-up in one click",
+        text: "Recipes turn a meeting into the next step: a follow-up email, a project plan, risks and open questions. Save your own for the questions you ask every week.",
+        recipe: "Follow-up email",
+        subject: "Subject: Product weekly, next steps",
+        lines: ["Beta opens on 14 November.", "Alex: release notes by Friday."],
       },
       privacy: {
         title: "Privacy",
@@ -526,6 +600,63 @@ export const copy: Copy = {
         { title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
       ],
       link: "Read the privacy policy",
+    },
+    noteCallouts: {
+      dueDate: "Owner and due date",
+      transcript: "Full transcript, by speaker",
+    },
+    integrations: {
+      eyebrow: "Integrations",
+      title: "Works with the tools you already use.",
+      lead: "Send the note where your team works, put tasks in your tracker, and let your AI apps read your meetings.",
+      notes: {
+        title: "Notes to your team",
+        text: "Send the finished note to a Notion page or a channel in Slack, Microsoft Teams, Discord or Zoom Team Chat.",
+      },
+      tasks: {
+        title: "Tasks to your tracker",
+        text: "Turn your tasks into Linear or Jira issues, or into Apple Reminders.",
+      },
+      ai: {
+        title: "Your AI apps, through MCP",
+        text: "Claude, Cursor and VS Code can search and read your meetings. Connect them with one click in Settings; they can only read, never change anything.",
+      },
+      files: {
+        title: "Your files and calendar",
+        text: "Save every note as Markdown to a folder, such as your Obsidian vault or iCloud Drive. Your calendar shows what's next and can start recording when a meeting begins.",
+      },
+      mcpDemo: {
+        label: "In Claude",
+        question: "What did I promise Nordia last week?",
+        tool: "Searched your meetings",
+        answerLead: "In the client call on 27 October you said you'd:",
+        answer: ["Send the revised quote by Friday", "Share the onboarding checklist"],
+        source: "Client call · Nordia",
+      },
+    },
+    noBot: {
+      eyebrow: "Why no bot",
+      title: "Nothing extra in the call.",
+      lead: `Many note takers send a bot into your meeting as another participant. ${productName} listens on your Mac instead.`,
+      botLabel: "A meeting bot",
+      usLabel: productName,
+      rows: [
+        { bot: "Joins the call as an extra participant", us: "Listens on your Mac; nobody sees anything extra" },
+        { bot: "Often waits for the host to let it in", us: "Nothing to admit, invite or schedule" },
+        { bot: "Works only in the meeting apps it supports", us: "Works with any call on your Mac, and in the room" },
+        { bot: "Recordings often kept in the provider's cloud", us: "Notes and recordings stay on your Mac" },
+      ],
+    },
+    useCases: {
+      eyebrow: "For every kind of meeting",
+      title: "A note shaped for the conversation.",
+      lead: "Pick a template for the kind of meeting, or write your own, and the note puts the right things first.",
+      items: [
+        { title: "Client calls", text: "Needs and objections, budget and timing, competitors mentioned and the next steps.", focus: ["Needs", "Budget", "Next steps"] },
+        { title: "One-on-ones", text: "Feedback, goals and concerns, what to follow up on and what you agreed.", focus: ["Feedback", "Goals", "Follow-ups"] },
+        { title: "Interviews", text: "Experience and strengths, open questions, and terms like salary and start date.", focus: ["Strengths", "Questions", "Terms"] },
+        { title: "Lectures and training", text: "Key concepts with explanations, examples, homework and exam details, and a full glossary.", focus: ["Concepts", "Homework", "Glossary"] },
+      ],
     },
     stepsTitle: "In three steps",
     steps: [
