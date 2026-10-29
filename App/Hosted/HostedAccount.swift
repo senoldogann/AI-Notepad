@@ -132,6 +132,10 @@ final class HostedAccount {
     /// güncellenir; okunamadıysa nil. Giriş kapısı buna bakar (bkz. `requiresSignIn`).
     private(set) var hasSession: Bool?
     @ObservationIgnored private var isRefreshing: Bool = false
+    /// Son başarılı hak durumu okuması (uygulama öne gelince eskimişse yenilenir).
+    @ObservationIgnored private var lastRefreshAt: Date?
+    /// Yenilemenin gösterdiği hata: sonraki başarılı yenileme onu kaldırır (bağlantı gelince eski hata kalmasın).
+    @ObservationIgnored private var refreshErrorMessage: String?
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
     /// Ağ geri gelince hak durumu yeniden okunur (bkz. `retryUnknownStatus`).
     @ObservationIgnored private let pathMonitor: NWPathMonitor = NWPathMonitor()
@@ -160,7 +164,10 @@ final class HostedAccount {
                 guard let self else {
                     return
                 }
-                Task { await self.retryUnknownStatus() }
+                Task {
+                    await self.retryUnknownStatus()
+                    await self.refreshIfStale()
+                }
             }
         })
         pathMonitor.pathUpdateHandler = { [weak self] (path: NWPath) -> Void in
@@ -232,6 +239,11 @@ final class HostedAccount {
             await HostedDeviceAttestation.prepare(client: client)
             let entitlements: HostedEntitlements = try await client.entitlements()
             state = .signedIn(entitlements)
+            lastRefreshAt = Date()
+            if let refreshErrorMessage, errorMessage == refreshErrorMessage {
+                errorMessage = nil
+            }
+            refreshErrorMessage = nil
             updateNotice(entitlements: entitlements, now: Date())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
             self.hasSession = false
@@ -241,6 +253,7 @@ final class HostedAccount {
             let message: String = userFacingMessage(error: error)
             if case .signedIn = state {
                 errorMessage = message
+                refreshErrorMessage = message
             } else {
                 state = .signedInStatusUnknown(message: message)
             }
@@ -273,6 +286,15 @@ final class HostedAccount {
     }
 
     /// Hak durumu bilinmiyorsa (çevrimdışı açılış) yeniden okur; ağ geri gelince ve uygulama öne gelince çağrılır.
+    /// Hak durumu uzun süredir okunmadıysa (uygulama öne gelince) yeniler: kullanım göstergeleri ve bildirimler
+    /// eskimesin.
+    private func refreshIfStale() async {
+        guard case .signedIn = state, !isRefreshing, isHostedRefreshDue(lastRefresh: lastRefreshAt, now: Date(), intervalSec: hostedStaleRefreshIntervalSec) else {
+            return
+        }
+        await refresh()
+    }
+
     private func retryUnknownStatus() async {
         guard case .signedInStatusUnknown = state, !isRefreshing else {
             return
