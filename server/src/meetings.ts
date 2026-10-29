@@ -16,6 +16,7 @@ import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
+import { type TrialRefusalReason, recordTrialRefusal } from "./trialRefusals";
 import { type MonthlyUsage, chunkOverlapAllowance, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
@@ -298,6 +299,7 @@ async function requireTrialDevice(
   const bits: DeviceBits = await queryDeviceBits(platform, deviceCheck, deviceCheckToken, now);
   if (bits.bit0) {
     log("info", "trial_refused", { userId, attested: false, reason: "device_used" });
+    await recordTrialRefusal(db, "device_used", now);
     throw new ApiError("trial_device_used", "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için abone ol.");
   }
   await updateDeviceBits(platform, deviceCheck, deviceCheckToken, { bit0: true, bit1: bits.bit1 }, now);
@@ -391,7 +393,10 @@ async function startTrialMeeting(
   const trial: TrialState = await userTrialState(db, userId);
   const deviceUsed: number | null = deviceId === null ? null : await deviceTrialMeetingsUsed(db, deviceId);
   if (!inserted) {
-    throw trialRefusal(config, userId, deviceId, trial, deviceUsed, now);
+    const reason: TrialRefusalReason = trialRefusalReason(config, trial, deviceUsed, now);
+    log("info", "trial_refused", { userId, attested: deviceId !== null, reason });
+    await recordTrialRefusal(db, reason, now);
+    throw trialRefusalError(config, reason);
   }
   log("info", "meeting_started", { userId, meetingId, kind: "trial", attested: deviceId !== null });
   return {
@@ -405,18 +410,25 @@ async function startTrialMeeting(
 }
 
 /**
- * Reddedilen deneme başlatmanın hatası (nedeni loglanır): toplantılar harcandıysa (hesap ya da cihaz) ya da süre
- * dolduysa `trial_exhausted` (0.1.4 Mac uygulaması da bu kodu tanır), değilse IP başına günlük sınır `trial_ip_limit`.
+ * Reddedilen deneme başlatmanın nedeni: toplantılar harcandıysa (hesap ya da cihaz) `exhausted`, süre dolduysa
+ * `expired`, değilse IP başına günlük sınır `ip_daily_limit`. Saf fonksiyondur.
  */
-function trialRefusal(config: Config, userId: string, deviceId: string | null, trial: TrialState, deviceUsed: number | null, now: Date): ApiError {
-  const usedUp: boolean = trial.used >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings;
-  const expired: boolean = !usedUp && isTrialExpired(trial, config.trialDurationMs, now);
-  const reason: string = usedUp ? "exhausted" : expired ? "expired" : "ip_daily_limit";
-  log("info", "trial_refused", { userId, attested: deviceId !== null, reason });
-  if (usedUp) {
+function trialRefusalReason(config: Config, trial: TrialState, deviceUsed: number | null, now: Date): Exclude<TrialRefusalReason, "device_used"> {
+  if (trial.used >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings) {
+    return "exhausted";
+  }
+  return isTrialExpired(trial, config.trialDurationMs, now) ? "expired" : "ip_daily_limit";
+}
+
+/**
+ * Reddedilen deneme başlatmanın hatası: harcanmış ya da süresi dolmuş denemede `trial_exhausted` (0.1.4 Mac uygulaması
+ * da bu kodu tanır), IP başına günlük sınırda `trial_ip_limit`. Saf fonksiyondur.
+ */
+function trialRefusalError(config: Config, reason: Exclude<TrialRefusalReason, "device_used">): ApiError {
+  if (reason === "exhausted") {
     return new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
   }
-  if (expired) {
+  if (reason === "expired") {
     return new ApiError("trial_exhausted", `Ücretsiz deneme süren doldu (${config.trialDays} gün). Devam etmek için abone ol.`);
   }
   return new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");

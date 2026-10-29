@@ -4,6 +4,7 @@ import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
+import type { TrialRefusalReason } from "./trialRefusals";
 import { dayKey, monthKey, monthStartMs } from "./usage";
 
 const dayMs: number = 86_400_000;
@@ -64,6 +65,72 @@ export interface AdminStats {
   readonly elevenLabs: ElevenLabsUsage;
   /** Deepgram canlı metni: politika, ömür boyu bütçe ve tahmini harcama (bütçeye ulaşınca yeni toplantılar Mac'e geçer). */
   readonly deepgram: DeepgramUsage;
+  readonly conversion: ConversionStats;
+  readonly churn: ChurnStats;
+  readonly billing: BillingStats;
+  readonly usage: UsageStats;
+  readonly trialRefusals: TrialRefusalStats;
+}
+
+/**
+ * Denemeden aboneliğe dönüşüm. `trialStarted`: denemeye başlamış hesaplar (`users.trial_started_at` dolu);
+ * `converted`: bunlardan abonelik satırı olanlar (ödemesi tamamlanmamış `incomplete`/`incomplete_expired` sayılmaz;
+ * sonradan iptal edilen de dönüşmüş sayılır). `…Last30Days` alanları denemesi son 30 günde başlayan kohorttur.
+ * `subscribedWithoutTrial`: denemeye hiç başlamadan abone olanlar. Silinen hesaplar sayılmaz.
+ */
+export interface ConversionStats {
+  readonly trialStarted: number;
+  readonly converted: number;
+  readonly startedLast30Days: number;
+  readonly convertedLast30Days: number;
+  readonly subscribedWithoutTrial: number;
+}
+
+/**
+ * Kayıp ve ödeme sorunları. `canceledLast30Days`: durumu `canceled` olup son güncellemesi (iptal olayının işlendiği an)
+ * son 30 günde olanlar; `pastDue`: ödemesi başarısız (`past_due`; ek sürede ya da sonrasında); `unpaid`: Stripe'ın
+ * yeniden denemeleri bitmiş; `duplicateSubscriptions`: iade edilen kopya abonelik kayıtları (400 gün tutulur).
+ */
+export interface ChurnStats {
+  readonly canceledLast30Days: number;
+  readonly pastDue: number;
+  readonly unpaid: number;
+  readonly duplicateSubscriptions: number;
+}
+
+/** Son 30 günde işlenen Stripe olaylarından ödeme sorunları (olaylar 90 gün tutulur). */
+export interface BillingStats {
+  readonly refundsLast30Days: number;
+  readonly disputesLast30Days: number;
+  readonly paymentFailuresLast30Days: number;
+}
+
+/**
+ * Bu ayın (UTC) kullanımı. `meetingsThisMonth`, `deferredThisMonth`, `reprocessedThisMonth`: bu ay başlayan
+ * toplantılar, bunların sonradan işlenenleri ve en az bir kez yeniden işlenenleri; `openMeetings`: şu an açık (bitmemiş,
+ * en çok süresi dolmamış) toplantılar; `audioHoursThisMonth`: yazıya dökülen kesinleşmiş ses; `accountTokensThisMonth`:
+ * kesinleşmiş toplantı dışı token (tümü `tokens.thisMonth`); `usersNearTokenCap`: kullanıcı başına aylık token
+ * sınırının (`MONTHLY_TOKEN_CAP`) en az %80'ine ulaşan kullanıcılar.
+ */
+export interface UsageStats {
+  readonly meetingsThisMonth: number;
+  readonly deferredThisMonth: number;
+  readonly reprocessedThisMonth: number;
+  readonly openMeetings: number;
+  readonly audioHoursThisMonth: number;
+  readonly accountTokensThisMonth: number;
+  readonly monthlyTokenCapPerUser: number;
+  readonly monthlyAccountTokenCapPerUser: number;
+  readonly usersNearTokenCap: number;
+}
+
+/** Neden başına reddedilen deneme başlatma sayısı (eksik neden 0). */
+export type TrialRefusalCounts = Readonly<Record<TrialRefusalReason, number>>;
+
+/** Reddedilen deneme başlatmaları (`trial_refusals`): son 30 gün (bugün dahil) ve bugün. */
+export interface TrialRefusalStats {
+  readonly last30Days: TrialRefusalCounts;
+  readonly today: TrialRefusalCounts;
 }
 
 /**
@@ -130,6 +197,59 @@ interface KeyCountRow {
   readonly count: number;
 }
 
+interface ConversionRow {
+  readonly started: number;
+  readonly converted: number;
+  readonly started_recent: number;
+  readonly converted_recent: number;
+  readonly direct: number;
+}
+
+interface ChurnRow {
+  readonly canceled_recent: number;
+  readonly past_due: number;
+  readonly unpaid: number;
+  readonly duplicates: number;
+}
+
+interface MeetingMonthRow {
+  readonly started: number;
+  readonly deferred: number;
+  readonly reprocessed: number;
+  readonly open: number;
+}
+
+interface MonthlyUsageRow {
+  readonly audio_seconds: number;
+  readonly tokens: number;
+  readonly account_tokens: number;
+  readonly near_cap: number;
+}
+
+/** Ödemesi tamamlanmış (abone olmuş) sayılan abonelik satırı için SQL koşulu (`subscriptions s`). */
+export const paidSubscriptionSql: string = "s.status NOT IN ('incomplete', 'incomplete_expired')";
+
+/** Ms zamanını ISO 8601'e çevirir (null korunur). Saf fonksiyondur. */
+export function isoOrNull(ms: number | null): string | null {
+  return ms === null ? null : new Date(ms).toISOString();
+}
+
+/** Açık toplantı aramasının geriye bakış süresi: en uzun toplantı süresi (dizinli `started_at` aralığı için). Saf fonksiyondur. */
+export function longestMeetingMs(config: Config): number {
+  return Math.max(config.trialMaxMeetingMinutes, config.subscriberMaxMeetingMinutes) * 60_000;
+}
+
+/** Neden → sayı satırlarını tüm nedenleri içeren sayaca çevirir (eksikler 0). Saf fonksiyondur. */
+function refusalCounts(rows: readonly KeyCountRow[]): TrialRefusalCounts {
+  const counts: Map<string, number> = keyMap(rows);
+  return {
+    device_used: counts.get("device_used") ?? 0,
+    exhausted: counts.get("exhausted") ?? 0,
+    expired: counts.get("expired") ?? 0,
+    ip_daily_limit: counts.get("ip_daily_limit") ?? 0,
+  };
+}
+
 /** Satırları gün → değer eşlemine çevirir. Saf fonksiyondur. */
 function dayMap(rows: readonly DayValueRow[]): Map<string, number> {
   return new Map(rows.map((row: DayValueRow): [string, number] => [row.day, row.value]));
@@ -179,10 +299,16 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     meetingMsRow,
     spendRows,
     trialSpendRow,
-    tokenRow,
     reportRows,
     elevenLabs,
     deepgram,
+    conversionRow,
+    churnRow,
+    billingRows,
+    meetingMonthRow,
+    monthlyUsageRow,
+    refusalRows,
+    refusalTodayRows,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -235,13 +361,61 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .first<{ value: number }>(),
     db.prepare("SELECT day, micro_usd AS value FROM daily_spend WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
     db.prepare("SELECT trial_micro_usd AS value FROM daily_spend WHERE day = ?").bind(dayKey(now)).first<{ value: number }>(),
-    db
-      .prepare("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS value FROM monthly_usage WHERE month = ?")
-      .bind(monthKey(now))
-      .first<{ value: number }>(),
     db.prepare("SELECT kind AS key, COUNT(*) AS count FROM reports WHERE status = 'open' GROUP BY kind").all<KeyCountRow>(),
     elevenLabsUsage(db, config, now),
     deepgramUsage(db, config),
+    db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM users WHERE trial_started_at IS NOT NULL) AS started,
+           (SELECT COUNT(*) FROM users u WHERE u.trial_started_at IS NOT NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id AND ${paidSubscriptionSql})) AS converted,
+           (SELECT COUNT(*) FROM users WHERE trial_started_at >= ?1) AS started_recent,
+           (SELECT COUNT(*) FROM users u WHERE u.trial_started_at >= ?1
+             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id AND ${paidSubscriptionSql})) AS converted_recent,
+           (SELECT COUNT(*) FROM subscriptions s JOIN users u ON u.id = s.user_id
+             WHERE u.trial_started_at IS NULL AND ${paidSubscriptionSql}) AS direct`,
+      )
+      .bind(firstDayMs)
+      .first<ConversionRow>(),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN status = 'canceled' AND updated_at >= ?1 THEN 1 ELSE 0 END), 0) AS canceled_recent,
+           COALESCE(SUM(CASE WHEN status = 'past_due' THEN 1 ELSE 0 END), 0) AS past_due,
+           COALESCE(SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END), 0) AS unpaid,
+           (SELECT COUNT(*) FROM duplicate_subscriptions) AS duplicates
+         FROM subscriptions`,
+      )
+      .bind(firstDayMs)
+      .first<ChurnRow>(),
+    db
+      .prepare(
+        `SELECT type AS key, COUNT(*) AS count FROM stripe_events
+         WHERE processed_at >= ? AND type IN ('charge.refunded', 'charge.dispute.created', 'invoice.payment_failed') GROUP BY type`,
+      )
+      .bind(firstDayMs)
+      .all<KeyCountRow>(),
+    db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM meeting_sessions WHERE started_at >= ?1) AS started,
+           (SELECT COALESCE(SUM(deferred), 0) FROM meeting_sessions WHERE started_at >= ?1) AS deferred,
+           (SELECT COUNT(*) FROM meeting_sessions WHERE started_at >= ?1 AND reprocess_count > 0) AS reprocessed,
+           (SELECT COUNT(*) FROM meeting_sessions WHERE started_at >= ?3 AND ended_at IS NULL AND max_ends_at > ?2) AS open`,
+      )
+      .bind(monthStartMs(now), nowMs, nowMs - longestMeetingMs(config))
+      .first<MeetingMonthRow>(),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(audio_seconds), 0) AS audio_seconds, COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
+           COALESCE(SUM(account_tokens), 0) AS account_tokens,
+           COALESCE(SUM(CASE WHEN input_tokens + output_tokens >= ?2 * 0.8 THEN 1 ELSE 0 END), 0) AS near_cap
+         FROM monthly_usage WHERE month = ?1`,
+      )
+      .bind(monthKey(now), config.monthlyTokenCap)
+      .first<MonthlyUsageRow>(),
+    db.prepare("SELECT reason AS key, SUM(count) AS count FROM trial_refusals WHERE day >= ? GROUP BY reason").bind(firstDay).all<KeyCountRow>(),
+    db.prepare("SELECT reason AS key, count FROM trial_refusals WHERE day = ?").bind(dayKey(now)).all<KeyCountRow>(),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -252,6 +426,8 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
   const providers: Map<string, number> = keyMap(providerRows.results);
   const openReports: Map<string, number> = keyMap(reportRows.results);
   const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0 };
+  const billingEvents: Map<string, number> = keyMap(billingRows.results);
+  const monthly: MonthlyUsageRow = monthlyUsageRow ?? { audio_seconds: 0, tokens: 0, account_tokens: 0, near_cap: 0 };
 
   return {
     generatedAt: now.toISOString(),
@@ -285,7 +461,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       trialCeilingUsd: config.dailyTrialSpendCeilingMicroUsd / 1_000_000,
       last30Days: days.map((day: string, index: number): DayUsd => ({ day, usd: (spendByDay[index] ?? 0) / 1_000_000 })),
     },
-    tokens: { thisMonth: tokenRow?.value ?? 0 },
+    tokens: { thisMonth: monthly.tokens },
     reports: {
       openFeedback: openReports.get("feedback") ?? 0,
       openCrash: openReports.get("crash") ?? 0,
@@ -294,5 +470,35 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     stripe: { mode: config.stripeMode },
     elevenLabs,
     deepgram,
+    conversion: {
+      trialStarted: conversionRow?.started ?? 0,
+      converted: conversionRow?.converted ?? 0,
+      startedLast30Days: conversionRow?.started_recent ?? 0,
+      convertedLast30Days: conversionRow?.converted_recent ?? 0,
+      subscribedWithoutTrial: conversionRow?.direct ?? 0,
+    },
+    churn: {
+      canceledLast30Days: churnRow?.canceled_recent ?? 0,
+      pastDue: churnRow?.past_due ?? 0,
+      unpaid: churnRow?.unpaid ?? 0,
+      duplicateSubscriptions: churnRow?.duplicates ?? 0,
+    },
+    billing: {
+      refundsLast30Days: billingEvents.get("charge.refunded") ?? 0,
+      disputesLast30Days: billingEvents.get("charge.dispute.created") ?? 0,
+      paymentFailuresLast30Days: billingEvents.get("invoice.payment_failed") ?? 0,
+    },
+    usage: {
+      meetingsThisMonth: meetingMonthRow?.started ?? 0,
+      deferredThisMonth: meetingMonthRow?.deferred ?? 0,
+      reprocessedThisMonth: meetingMonthRow?.reprocessed ?? 0,
+      openMeetings: meetingMonthRow?.open ?? 0,
+      audioHoursThisMonth: roundCents(monthly.audio_seconds / 3600),
+      accountTokensThisMonth: monthly.account_tokens,
+      monthlyTokenCapPerUser: config.monthlyTokenCap,
+      monthlyAccountTokenCapPerUser: config.monthlyAccountTokenCap,
+      usersNearTokenCap: monthly.near_cap,
+    },
+    trialRefusals: { last30Days: refusalCounts(refusalRows.results), today: refusalCounts(refusalTodayRows.results) },
   };
 }

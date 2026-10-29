@@ -50,6 +50,24 @@ interface StatsBody {
   readonly reports: { openFeedback: number; openCrash: number; openContact: number };
   readonly stripe: { mode: string };
   readonly elevenLabs: { cycleStart: string; usedHours: number; capHours: number; percent: number };
+  readonly conversion: { trialStarted: number; converted: number; startedLast30Days: number; convertedLast30Days: number; subscribedWithoutTrial: number };
+  readonly churn: { canceledLast30Days: number; pastDue: number; unpaid: number; duplicateSubscriptions: number };
+  readonly billing: { refundsLast30Days: number; disputesLast30Days: number; paymentFailuresLast30Days: number };
+  readonly usage: {
+    meetingsThisMonth: number;
+    deferredThisMonth: number;
+    reprocessedThisMonth: number;
+    openMeetings: number;
+    audioHoursThisMonth: number;
+    accountTokensThisMonth: number;
+    monthlyTokenCapPerUser: number;
+    monthlyAccountTokenCapPerUser: number;
+    usersNearTokenCap: number;
+  };
+  readonly trialRefusals: {
+    last30Days: { device_used: number; exhausted: number; expired: number; ip_daily_limit: number };
+    today: { device_used: number; exhausted: number; expired: number; ip_daily_limit: number };
+  };
 }
 
 interface ListBody {
@@ -65,6 +83,67 @@ interface ListBody {
     summary: string;
   }>;
   readonly nextBefore: number | null;
+}
+
+/** Kullanıcı listesindeki öğe. */
+interface UserItemBody {
+  readonly id: string;
+  readonly provider: string | null;
+  readonly createdAt: string;
+  readonly plan: string;
+  readonly subscription: {
+    status: string;
+    access: string;
+    currentPeriodEnd: string;
+    cancelAt: string | null;
+    pastDueSince: string | null;
+    graceEndsAt: string | null;
+    updatedAt: string;
+  } | null;
+  readonly trial: { used: number; left: number; startedAt: string | null; endsAt: string | null };
+  readonly meetingsTotal: number;
+  readonly hoursThisMonth: number;
+  readonly lastActiveAt: string | null;
+}
+
+interface UserPageBody {
+  readonly items: UserItemBody[];
+  readonly nextCursor: string | null;
+}
+
+interface MeetingItemBody {
+  readonly id: string;
+  readonly state: string;
+  readonly durationMinutes: number;
+  readonly deferred: boolean;
+  readonly reprocessCount: number;
+  readonly audioMinutes: number;
+}
+
+interface UserDetailBody {
+  readonly user: UserItemBody;
+  readonly trialDeviceVerifiedAt: string | null;
+  readonly stripeCustomerId: string | null;
+  readonly usage: { usedHours: number; capHours: number; audioHours: number; tokens: number; tokenCap: number; accountTokens: number; accountTokenCap: number };
+  readonly meetings: MeetingItemBody[];
+  readonly reports: Array<{ id: string; kind: string; status: string; createdAt: string; summary: string }>;
+  readonly timeline: Array<{ kind: string; at: string; detail: string | null }>;
+}
+
+interface OperationsBody {
+  readonly generatedAt: string;
+  readonly meetings: {
+    open: number;
+    openItems: Array<{ id: string; userId: string; kind: string; startedAt: string; maxEndsAt: string; deferred: boolean; deepgram: boolean }>;
+    unendedLast7Days: number;
+  };
+  readonly reservations: { active: number; expired: number; oldestExpiredAt: string | null };
+  readonly deepgram: { unsettled: number; stale: number };
+  readonly stripe: { lastEventAt: string | null; eventsLast24Hours: number; last7DaysByType: Array<{ type: string; count: number }> };
+  readonly reports: {
+    last7Days: { feedback: number; crash: number; contact: number };
+    recentCrashes: Array<{ id: string; status: string; createdAt: string; appVersion: string | null; os: string | null; summary: string }>;
+  };
 }
 
 describe("yönetici API'si", () => {
@@ -90,15 +169,22 @@ describe("yönetici API'si", () => {
     // Toplantılar: bugün bir deneme ve bir abonelik toplantısı; dün denemesi biten kullanıcının üç 30 dakikalık toplantısı.
     expect((await startMeeting(harness, trialUser)).status).toBe(201);
     expect((await startMeeting(harness, admin)).status).toBe(201);
+    // İlki sonradan işlenmiş, ikincisi iki kez yeniden işlenmiş.
     for (let index: number = 0; index < 3; index += 1) {
       const startedAt: number = nowMs - dayMs + index * 3_600_000;
       await env.DB.prepare(
-        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, token_budget)
-         VALUES (?, ?, 'trial', ?, ?, ?, 1)`,
+        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, token_budget, deferred, reprocess_count)
+         VALUES (?, ?, 'trial', ?, ?, ?, 1, ?, ?)`,
       )
-        .bind(randomId(), exhaustedUser.userId, startedAt, startedAt + 90 * 60_000, startedAt + 30 * 60_000)
+        .bind(randomId(), exhaustedUser.userId, startedAt, startedAt + 90 * 60_000, startedAt + 30 * 60_000, index === 0 ? 1 : 0, index === 1 ? 2 : 0)
         .run();
     }
+    // Dönüşüm: deneme kullanıcıları son 30 günde başladı; iptal eden (`ending`) 40 gün önce denemeden aboneliğe geçti.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET trial_started_at = ? WHERE id = ?").bind(nowMs - dayMs, exhaustedUser.userId),
+      env.DB.prepare("UPDATE users SET trial_started_at = ? WHERE id = ?").bind(nowMs - 40 * dayMs, ending),
+      env.DB.prepare("UPDATE subscriptions SET updated_at = ? WHERE user_id = ?").bind(nowMs - 2 * dayMs, canceled),
+    ]);
 
     const month: string = dayOf(nowMs, 0).slice(0, 7);
     await env.DB.batch([
@@ -108,10 +194,24 @@ describe("yönetici API'si", () => {
         dayOf(nowMs, 0),
         dayOf(nowMs, -5),
       ),
-      env.DB.prepare("INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens) VALUES (?, ?, 1000, 500), (?, '2026-09', 999, 0)").bind(
-        admin.userId,
-        month,
-        trialUser.userId,
+      // `grace` kullanıcısı aylık token sınırının %80'ini aştı.
+      env.DB.prepare(
+        `INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens, audio_seconds, account_tokens)
+         VALUES (?1, ?2, 1000, 500, 7200, 300), (?3, '2026-09', 999, 0, 0, 0), (?4, ?2, 5200000, 0, 0, 0)`,
+      ).bind(admin.userId, month, trialUser.userId, grace),
+      // Ödeme olayları: 30 gün içinde bir iade ve bir başarısız ödeme; 40 gün önceki iade ve abonelik güncellemesi sayılmaz.
+      env.DB.prepare(
+        `INSERT INTO stripe_events (id, type, processed_at) VALUES
+           ('evt_a', 'charge.refunded', ?1), ('evt_b', 'charge.refunded', ?2), ('evt_c', 'invoice.payment_failed', ?1),
+           ('evt_d', 'customer.subscription.updated', ?1)`,
+      ).bind(nowMs - dayMs, nowMs - 40 * dayMs),
+      env.DB.prepare(
+        "INSERT INTO duplicate_subscriptions (stripe_subscription_id, user_id, stripe_customer_id, created_at) VALUES ('sub_dup', ?, 'cus_dup', ?)",
+      ).bind(admin.userId, nowMs),
+      env.DB.prepare("INSERT INTO trial_refusals (day, reason, count) VALUES (?1, 'device_used', 2), (?2, 'ip_daily_limit', 1), (?3, 'exhausted', 5)").bind(
+        dayOf(nowMs, 0),
+        dayOf(nowMs, -3),
+        dayOf(nowMs, -40),
       ),
       env.DB.prepare(
         `INSERT INTO reports (id, kind, status, created_at, summary) VALUES
@@ -151,10 +251,28 @@ describe("yönetici API'si", () => {
     expect(stats.spend.trialTodayUsd).toBe(0.4);
     expect(stats.spend.trialCeilingUsd).toBe(10);
     expect(stats.spend.last30Days[24]).toEqual({ day: days[24], usd: 0.5 });
-    expect(stats.tokens).toEqual({ thisMonth: 1500 });
+    expect(stats.tokens).toEqual({ thisMonth: 5_201_500 });
     expect(stats.reports).toEqual({ openFeedback: 2, openCrash: 1, openContact: 0 });
     expect(stats.stripe).toEqual({ mode: "test" });
     expect(stats.elevenLabs).toEqual({ cycleStart: "2026-10-11", usedHours: 11, capHours: 110, percent: 10 });
+    expect(stats.conversion).toEqual({ trialStarted: 3, converted: 1, startedLast30Days: 2, convertedLast30Days: 0, subscribedWithoutTrial: 3 });
+    expect(stats.churn).toEqual({ canceledLast30Days: 1, pastDue: 1, unpaid: 0, duplicateSubscriptions: 1 });
+    expect(stats.billing).toEqual({ refundsLast30Days: 1, disputesLast30Days: 0, paymentFailuresLast30Days: 1 });
+    expect(stats.usage).toEqual({
+      meetingsThisMonth: 5,
+      deferredThisMonth: 1,
+      reprocessedThisMonth: 1,
+      openMeetings: 2,
+      audioHoursThisMonth: 2,
+      accountTokensThisMonth: 300,
+      monthlyTokenCapPerUser: 6_500_000,
+      monthlyAccountTokenCapPerUser: 1_500_000,
+      usersNearTokenCap: 1,
+    });
+    expect(stats.trialRefusals).toEqual({
+      last30Days: { device_used: 2, exhausted: 0, expired: 0, ip_daily_limit: 1 },
+      today: { device_used: 2, exhausted: 0, expired: 0, ip_daily_limit: 0 },
+    });
   });
 
   it("yönetici olmayan düz 403 alır (gövdede kimlik yok); liste boşsa kimse yönetici değildir", async () => {
@@ -168,6 +286,11 @@ describe("yönetici API'si", () => {
     const apple: Session = await signIn(harness);
     const appleBody: ErrorBody = await expectError(await adminGet(harness, apple, "/v1/admin/reports"), 403, "forbidden");
     expect(Object.keys(appleBody.error).sort()).toEqual(["code", "message"]);
+    // Kullanıcı ve işletim uçları da aynı yönetici denetiminden geçer (kendi kaydına bile erişemez).
+    for (const path of ["/v1/admin/users", `/v1/admin/users/${apple.userId}`, "/v1/admin/operations"]) {
+      await expectError(await adminGet(harness, apple, path), 403, "forbidden");
+      await expectError(await harness.call(req("GET", path, { env: adminEnv })), 401, "unauthorized");
+    }
 
     const admin: Session = await signInWithGoogle(harness, adminSubject);
     await expectError(await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken })), 403, "forbidden");
@@ -294,5 +417,257 @@ describe("yönetici API'si", () => {
     await expectError(await adminGet(harness, admin, "/v1/admin/reports?sayfa=2"), 400, "invalid_body");
     await expectError(await adminGet(harness, admin, "/v1/admin/reports?before=-5"), 400, "invalid_body");
     await expectError(await adminGet(harness, admin, "/v1/admin/yok"), 404, "not_found");
+  });
+
+  it("kullanıcı listesi: biçim, süzgeçler ve imleçli sayfalama; sağlayıcı kimliği dönmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const nowMs: number = harness.clock.nowMs;
+    const iso = (ms: number): string => new Date(ms).toISOString();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const subject: string = `google-${randomId()}`;
+    const subscriber: Session = await signInWithGoogle(harness, subject);
+    await grantSubscription(subscriber.userId, "active", nowMs + 20 * dayMs);
+    expect((await startMeeting(harness, subscriber)).status).toBe(201);
+    const trialUser: Session = await signIn(harness);
+    expect((await startMeeting(harness, trialUser)).status).toBe(201);
+    // 60 boş hesap; üçer üçer aynı milisaniyede: imleç (`created_at`, `id`) sayfa sınırında bölmez.
+    await env.DB.batch(
+      Array.from({ length: 60 }, (_: unknown, index: number): D1PreparedStatement =>
+        env.DB.prepare("INSERT INTO users (id, created_at) VALUES (?, ?)").bind(randomId(), nowMs - 10 * dayMs - Math.floor(index / 3)),
+      ),
+    );
+
+    const total: number = (await env.DB.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>())?.count ?? 0;
+    const seen: string[] = [];
+    let cursor: string | null = "";
+    let pages: number = 0;
+    while (cursor !== null) {
+      const page: UserPageBody = await (await adminGet(harness, admin, `/v1/admin/users?cursor=${encodeURIComponent(cursor)}`)).json<UserPageBody>();
+      expect(page.items.length).toBeLessThanOrEqual(50);
+      seen.push(...page.items.map((item: UserItemBody): string => item.id));
+      cursor = page.nextCursor;
+      pages += 1;
+    }
+    expect(seen).toHaveLength(total);
+    expect(new Set(seen).size).toBe(total);
+    expect(pages).toBe(Math.ceil(total / 50));
+
+    // Kimlik öneki büyük harfle de aranır; öğenin tüm alanları.
+    const prefix: string = subscriber.userId.slice(0, 8);
+    const found: UserPageBody = await (await adminGet(harness, admin, `/v1/admin/users?q=${prefix.toUpperCase()}`)).json<UserPageBody>();
+    expect(found.items.every((item: UserItemBody): boolean => item.id.startsWith(prefix))).toBe(true);
+    expect(found.items.find((item: UserItemBody): boolean => item.id === subscriber.userId)).toEqual({
+      id: subscriber.userId,
+      provider: "google",
+      createdAt: iso(nowMs),
+      plan: "subscription",
+      subscription: {
+        status: "active",
+        access: "active",
+        currentPeriodEnd: iso(nowMs + 20 * dayMs),
+        cancelAt: null,
+        pastDueSince: null,
+        graceEndsAt: null,
+        updatedAt: iso(0),
+      },
+      trial: { used: 0, left: 3, startedAt: null, endsAt: null },
+      meetingsTotal: 1,
+      hoursThisMonth: 0,
+      lastActiveAt: iso(nowMs),
+    });
+    expect(JSON.stringify(found)).not.toContain(subject);
+
+    const segment = async (query: string): Promise<UserItemBody[]> => (await (await adminGet(harness, admin, `/v1/admin/users?${query}`)).json<UserPageBody>()).items;
+    const subscribed: UserItemBody[] = await segment("segment=subscribed");
+    expect(subscribed.map((item: UserItemBody): string => item.id)).toContain(subscriber.userId);
+    expect(subscribed.every((item: UserItemBody): boolean => item.plan === "subscription")).toBe(true);
+    const trials: UserItemBody[] = await segment("segment=trial");
+    expect(trials.find((item: UserItemBody): boolean => item.id === trialUser.userId)).toMatchObject({
+      provider: "apple",
+      plan: "trial",
+      subscription: null,
+      trial: { used: 1, left: 2, startedAt: iso(nowMs), endsAt: iso(nowMs + 7 * dayMs) },
+    });
+    expect(trials.every((item: UserItemBody): boolean => item.plan === "trial")).toBe(true);
+    const free: UserItemBody[] = await segment("segment=free");
+    expect(free.length).toBeGreaterThan(0);
+    expect(free.every((item: UserItemBody): boolean => item.plan === "free" && item.subscription === null && item.trial.used === 0)).toBe(true);
+    const google: UserItemBody[] = await segment("provider=google");
+    expect(google.every((item: UserItemBody): boolean => item.provider === "google")).toBe(true);
+    expect(google.map((item: UserItemBody): string => item.id)).not.toContain(trialUser.userId);
+
+    for (const query of ["segment=vip", "q=abc%21", "cursor=abc", "provider=email", "sayfa=2"]) {
+      await expectError(await adminGet(harness, admin, `/v1/admin/users?${query}`), 400, "invalid_body");
+    }
+  });
+
+  it("kullanıcı ayrıntısı: toplantılar, bu ayın kullanımı, raporlar ve zaman çizelgesi; bilinmeyen kullanıcı 404", async () => {
+    const harness: Harness = await defaultHarness();
+    const nowMs: number = harness.clock.nowMs;
+    const iso = (ms: number): string => new Date(ms).toISOString();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const subject: string = `google-${randomId()}`;
+    const user: Session = await signInWithGoogle(harness, subject);
+    await grantSubscription(user.userId, "active", nowMs + 20 * dayMs);
+    expect((await startMeeting(harness, user)).status).toBe(201);
+    const ended: string = randomId();
+    const expired: string = randomId();
+    const reportId: string = randomId();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE subscriptions SET cancel_at = ?, updated_at = ? WHERE user_id = ?").bind(nowMs + 19 * dayMs, nowMs - dayMs, user.userId),
+      // Dün: 45 dakika, sonradan işlenmiş, bir kez yeniden işlenmiş. Önceki gün: bitirilmeden 90 dakikası dolmuş.
+      env.DB.prepare(
+        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, end_reason, token_budget, tokens_used,
+           audio_seconds, deferred, reprocess_count)
+         VALUES (?1, ?3, 'subscription', ?4, ?5, ?6, 'ended', 1000, 400, 2700, 1, 1),
+                (?2, ?3, 'subscription', ?7, ?8, NULL, NULL, 1000, 0, 0, 0, 0)`,
+      ).bind(
+        ended,
+        expired,
+        user.userId,
+        nowMs - dayMs,
+        nowMs - dayMs + 240 * 60_000,
+        nowMs - dayMs + 45 * 60_000,
+        nowMs - 2 * dayMs,
+        nowMs - 2 * dayMs + 90 * 60_000,
+      ),
+      env.DB.prepare(
+        "INSERT INTO monthly_usage (user_id, month, audio_seconds, input_tokens, output_tokens, account_tokens) VALUES (?, ?, 2700, 4000, 1000, 700)",
+      ).bind(user.userId, dayOf(nowMs, 0).slice(0, 7)),
+      env.DB.prepare("INSERT INTO reports (id, kind, status, created_at, user_id, message, summary) VALUES (?, 'feedback', 'open', ?, ?, 'ileti', 'özet')").bind(
+        reportId,
+        nowMs - 3_600_000,
+        user.userId,
+      ),
+    ]);
+    const customer = await env.DB.prepare("SELECT stripe_customer_id FROM stripe_customers WHERE user_id = ?").bind(user.userId).first<{ stripe_customer_id: string }>();
+
+    const response: Response = await adminGet(harness, admin, `/v1/admin/users/${user.userId}`);
+    expect(response.status).toBe(200);
+    const detail: UserDetailBody = await response.json<UserDetailBody>();
+    expect(detail.user).toMatchObject({ id: user.userId, plan: "subscription", meetingsTotal: 3, hoursThisMonth: 2.25, lastActiveAt: iso(nowMs) });
+    expect(detail.user.subscription).toMatchObject({ status: "active", access: "active", cancelAt: iso(nowMs + 19 * dayMs), updatedAt: iso(nowMs - dayMs) });
+    expect(detail.trialDeviceVerifiedAt).toBeNull();
+    expect(detail.stripeCustomerId).toBe(customer?.stripe_customer_id);
+    expect(detail.usage).toEqual({ usedHours: 2.25, capHours: 10, audioHours: 0.75, tokens: 5000, tokenCap: 6_500_000, accountTokens: 700, accountTokenCap: 1_500_000 });
+    expect(
+      detail.meetings.map((meeting: MeetingItemBody): Array<string | number | boolean> => [
+        meeting.state,
+        meeting.durationMinutes,
+        meeting.deferred,
+        meeting.reprocessCount,
+        meeting.audioMinutes,
+      ]),
+    ).toEqual([
+      ["open", 0, false, 0, 0],
+      ["ended", 45, true, 1, 45],
+      ["expired", 90, false, 0, 0],
+    ]);
+    expect(detail.meetings.slice(1).map((meeting: MeetingItemBody): string => meeting.id)).toEqual([ended, expired]);
+    expect(detail.reports).toEqual([{ id: reportId, kind: "feedback", status: "open", createdAt: iso(nowMs - 3_600_000), summary: "özet" }]);
+    expect(detail.timeline).toEqual([
+      { kind: "subscription_period_end", at: iso(nowMs + 20 * dayMs), detail: "active" },
+      { kind: "subscription_cancel_at", at: iso(nowMs + 19 * dayMs), detail: null },
+      { kind: "account_created", at: iso(nowMs), detail: null },
+      { kind: "subscription_updated", at: iso(nowMs - dayMs), detail: "active" },
+    ]);
+    // Sağlayıcı kimliği ve rapor içeriği ayrıntıda yoktur.
+    const text: string = JSON.stringify(detail);
+    expect(text).not.toContain(subject);
+    expect(text).not.toContain("ileti");
+
+    await expectError(await adminGet(harness, admin, `/v1/admin/users/${randomId()}`), 404, "not_found");
+    await expectError(await adminGet(harness, admin, "/v1/admin/users/kisa"), 404, "not_found");
+  });
+
+  it("işletim görünümü: açık ve bitirilmemiş toplantılar, takılı ayırmalar, Deepgram tahminleri, Stripe olayları ve son çökmeler", async () => {
+    const harness: Harness = await defaultHarness();
+    const nowMs: number = harness.clock.nowMs;
+    const iso = (ms: number): string => new Date(ms).toISOString();
+    const hourMs: number = 3_600_000;
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    // Önceki testlerin satırları sayıları etkilemesin.
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM meeting_sessions"),
+      env.DB.prepare("DELETE FROM usage_reservations"),
+      env.DB.prepare("DELETE FROM deepgram_live_meetings"),
+      env.DB.prepare("DELETE FROM stripe_events"),
+      env.DB.prepare("DELETE FROM reports"),
+    ]);
+    const userId: string = await insertUser(nowMs - dayMs);
+    const open: string = randomId();
+    const crash: string = randomId();
+    const month: string = dayOf(nowMs, 0).slice(0, 7);
+    await env.DB.batch([
+      // Açık (10 dk önce), bitirilmeden süresi dolmuş (2 gün önce), pencere dışında kalan (10 gün önce) ve bitmiş toplantı.
+      env.DB.prepare(
+        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, token_budget) VALUES
+           (?1, ?2, 'subscription', ?3, ?4, NULL, 1),
+           (?5, ?2, 'trial', ?6, ?7, NULL, 1),
+           (?8, ?2, 'trial', ?9, ?10, NULL, 1),
+           (?11, ?2, 'trial', ?6, ?7, ?7, 1)`,
+      ).bind(
+        open,
+        userId,
+        nowMs - 10 * 60_000,
+        nowMs + 80 * 60_000,
+        randomId(),
+        nowMs - 2 * dayMs,
+        nowMs - 2 * dayMs + 90 * 60_000,
+        randomId(),
+        nowMs - 10 * dayMs,
+        nowMs - 10 * dayMs + 90 * 60_000,
+        randomId(),
+      ),
+      env.DB.prepare(
+        `INSERT INTO deepgram_live_meetings (meeting_id, grants, first_grant_at, charged_seconds, settled_at)
+         VALUES (?1, 1, ?2, 600, NULL), (?3, 1, ?4, 600, NULL), (?5, 1, ?4, 60, ?2)`,
+      ).bind(open, nowMs - 10 * 60_000, randomId(), nowMs - 2 * dayMs, randomId()),
+      env.DB.prepare(
+        `INSERT INTO usage_reservations (id, user_id, meeting_id, kind, month, day, tokens, trial_account_tokens, account_tokens, audio_seconds,
+           estimated_micro_usd, trial_spend, created_at, expires_at)
+         VALUES (?1, ?4, NULL, 'llm', ?5, ?6, 10, 0, 0, 0, 1, 0, ?7, ?8), (?2, ?4, NULL, 'llm', ?5, ?6, 10, 0, 0, 0, 1, 0, ?7, ?9),
+                (?3, ?4, NULL, 'llm', ?5, ?6, 10, 0, 0, 0, 1, 0, ?7, ?10)`,
+      ).bind(randomId(), randomId(), randomId(), userId, month, dayOf(nowMs, 0), nowMs - 3 * dayMs, nowMs + 10 * 60_000, nowMs - 2 * hourMs, nowMs - 2 * dayMs),
+      env.DB.prepare(
+        `INSERT INTO stripe_events (id, type, processed_at) VALUES
+           ('evt_1', 'invoice.paid', ?1), ('evt_2', 'invoice.paid', ?2), ('evt_3', 'customer.subscription.updated', ?3), ('evt_4', 'charge.refunded', ?4)`,
+      ).bind(nowMs - hourMs, nowMs - 3 * dayMs, nowMs - 2 * dayMs, nowMs - 10 * dayMs),
+      env.DB.prepare(
+        `INSERT INTO reports (id, kind, status, created_at, app_version, os, summary) VALUES
+           (?1, 'crash', 'open', ?3, '0.1.4', 'macOS 26.1', 'EXC_BAD_ACCESS · SIGSEGV'), (?2, 'crash', 'done', ?4, NULL, NULL, 'eski'),
+           (?5, 'feedback', 'open', ?6, NULL, NULL, 'f'), (?7, 'contact', 'open', ?8, NULL, NULL, 'c')`,
+      ).bind(crash, randomId(), nowMs - hourMs, nowMs - 9 * dayMs, randomId(), nowMs - dayMs, randomId(), nowMs - 2 * dayMs),
+    ]);
+
+    const response: Response = await adminGet(harness, admin, "/v1/admin/operations");
+    expect(response.status).toBe(200);
+    const ops: OperationsBody = await response.json<OperationsBody>();
+    expect(ops.generatedAt).toBe(iso(nowMs));
+    expect(ops.meetings).toEqual({
+      open: 1,
+      openItems: [{ id: open, userId, kind: "subscription", startedAt: iso(nowMs - 10 * 60_000), maxEndsAt: iso(nowMs + 80 * 60_000), deferred: false, deepgram: true }],
+      unendedLast7Days: 1,
+    });
+    expect(ops.reservations).toEqual({ active: 1, expired: 2, oldestExpiredAt: iso(nowMs - 2 * dayMs) });
+    expect(ops.deepgram).toEqual({ unsettled: 2, stale: 1 });
+    expect(ops.stripe).toEqual({
+      lastEventAt: iso(nowMs - hourMs),
+      eventsLast24Hours: 1,
+      last7DaysByType: [
+        { type: "invoice.paid", count: 2 },
+        { type: "customer.subscription.updated", count: 1 },
+      ],
+    });
+    expect(ops.reports.last7Days).toEqual({ feedback: 1, crash: 1, contact: 1 });
+    expect(ops.reports.recentCrashes).toHaveLength(2);
+    expect(ops.reports.recentCrashes[0]).toEqual({
+      id: crash,
+      status: "open",
+      createdAt: iso(nowMs - hourMs),
+      appVersion: "0.1.4",
+      os: "macOS 26.1",
+      summary: "EXC_BAD_ACCESS · SIGSEGV",
+    });
   });
 });

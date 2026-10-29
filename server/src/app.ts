@@ -4,6 +4,8 @@ import { verifyAppleIdentityToken } from "./auth/apple";
 import { verifyGoogleIdentityToken } from "./auth/google";
 import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
+import { adminOperations } from "./adminOps";
+import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
 import { requireCloudflareAccess } from "./auth/access";
 import {
   type AuthedUser,
@@ -387,6 +389,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 }
 
 const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
+const adminUserPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})$/;
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
@@ -397,6 +400,16 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
   const method: string = request.method;
   if (path === "/v1/admin/stats" && method === "GET") {
     return jsonResponse(200, await adminStats(db, config, now));
+  }
+  if (path === "/v1/admin/operations" && method === "GET") {
+    return jsonResponse(200, await adminOperations(db, config, now));
+  }
+  if (path === "/v1/admin/users" && method === "GET") {
+    return jsonResponse(200, await listAdminUsers(db, config, parseAdminUserFilter(new URL(request.url)), now));
+  }
+  const userMatch: RegExpExecArray | null = adminUserPath.exec(path);
+  if (userMatch !== null && userMatch[1] !== undefined && method === "GET") {
+    return jsonResponse(200, await adminUserDetail(db, config, userMatch[1], now));
   }
   if (path === "/v1/admin/reports" && method === "GET") {
     return jsonResponse(200, await listReports(db, parseReportFilter(new URL(request.url))));

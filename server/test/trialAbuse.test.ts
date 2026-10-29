@@ -262,7 +262,12 @@ describe("Apple DeviceCheck ile Mac başına deneme", () => {
     expect(fake.calls).toHaveLength(2);
 
     const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    const refusals = async (): Promise<number> =>
+      (await env.DB.prepare("SELECT COALESCE(SUM(count), 0) AS count FROM trial_refusals WHERE reason = 'device_used'").first<{ count: number }>())?.count ?? 0;
+    const refusedBefore: number = await refusals();
     await expectError(await start(harness, other, fake.env, mac), 403, "trial_device_used");
+    // Ret yönetim paneli için neden sayacına yazılır (kullanıcı ya da IP tutulmaz).
+    expect(await refusals()).toBe(refusedBefore + 1);
     const meetings = await env.DB.prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ?").bind(other.userId).first<{ count: number }>();
     expect(meetings?.count).toBe(0);
     // Başka bir Mac'te ikinci hesap denemeye başlar.
@@ -393,6 +398,10 @@ describe("deneme süresi (ilk deneme toplantısından 7 gün)", () => {
     expect(refused.error.message).toContain("süren doldu (7 gün)");
     expect(logs.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"reason":"expired"'))).toBe(true);
     logs.mockRestore();
+    const expiredRefusals = await env.DB.prepare("SELECT count FROM trial_refusals WHERE day = ? AND reason = 'expired'")
+      .bind(new Date(harness.clock.nowMs).toISOString().slice(0, 10))
+      .first<{ count: number }>();
+    expect(expiredRefusals?.count).toBe(1);
     expect(await trialMe(harness, session)).toMatchObject({ plan: "trial", trialMeetingsLeft: 0, accountTrialMeetingsLeft: 0, trialEndsAt: endsAt });
     const account: Response = await harness.call(
       req("POST", "/v1/llm/messages", { token: session.accessToken, json: { effort: "low", max_tokens: 10, messages: [{ role: "user", content: "x" }] } }),
