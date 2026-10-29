@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 import { parseConfig } from "../src/config";
-import { deepgramGrantUrl, deepgramGrantsPerMeeting, deepgramUsage } from "../src/deepgram";
+import { deepgramGrantUrl, deepgramGrantWindowMs, deepgramGrantsPerWindow, deepgramTrialGrantsPerMeeting, deepgramUsage } from "../src/deepgram";
 import type { Env } from "../src/env";
 import {
   type Harness,
@@ -10,6 +10,7 @@ import {
   defaultHarness,
   envWith,
   expectError,
+  refreshed,
   req,
   signIn,
   startMeeting,
@@ -92,7 +93,7 @@ describe("Deepgram canlı metin jetonu", () => {
       expiresIn: 30,
       model: "nova-3",
       mipOptOut: true,
-      grantsLeft: deepgramGrantsPerMeeting - 1,
+      grantsLeft: deepgramTrialGrantsPerMeeting - 1,
     });
     expect(requests).toHaveLength(1);
     expect(requests[0]?.method).toBe("POST");
@@ -118,17 +119,59 @@ describe("Deepgram canlı metin jetonu", () => {
     expect(requests).toHaveLength(1);
   });
 
-  it("toplantı başına jeton sınırı: sınırdan sonra yeniden bağlanma reddedilir, Deepgram çağrılmaz", async () => {
+  it("toplantı başına jeton sınırı (deneme): sınırdan sonra yeniden bağlanma reddedilir, Deepgram çağrılmaz", async () => {
     const harness: Harness = await defaultHarness();
     const requests: Request[] = stubGrant(harness);
-    const session: Session = await signIn(harness);
+    let session: Session = await signIn(harness);
     const meetingId: string = await openMeeting(harness, session);
-    for (let index: number = 0; index < deepgramGrantsPerMeeting; index += 1) {
+    for (let index: number = 0; index < deepgramTrialGrantsPerMeeting; index += 1) {
+      if (index > 0 && index % deepgramGrantsPerWindow === 0) {
+        harness.clock.nowMs += deepgramGrantWindowMs;
+        session = await refreshed(harness, session);
+      }
+      expect((await tokenRequest(harness, session, meetingId, deepgramOn)).status).toBe(200);
+    }
+    harness.clock.nowMs += deepgramGrantWindowMs;
+    session = await refreshed(harness, session);
+    await expectError(await tokenRequest(harness, session, meetingId, deepgramOn), 429, "deepgram_grant_limit");
+    expect(requests).toHaveLength(deepgramTrialGrantsPerMeeting);
+    expect((await chargedSecondsOf(meetingId))?.grants).toBe(deepgramTrialGrantsPerMeeting);
+  });
+
+  it("kısa pencerede çok sayıda jeton (aynı anda çok akış) reddedilir; pencere geçince yeniden bağlanma sürer", async () => {
+    const harness: Harness = await defaultHarness();
+    const requests: Request[] = stubGrant(harness);
+    let session: Session = await signIn(harness);
+    const meetingId: string = await openMeeting(harness, session);
+    for (let index: number = 0; index < deepgramGrantsPerWindow; index += 1) {
       expect((await tokenRequest(harness, session, meetingId, deepgramOn)).status).toBe(200);
     }
     await expectError(await tokenRequest(harness, session, meetingId, deepgramOn), 429, "deepgram_grant_limit");
-    expect(requests).toHaveLength(deepgramGrantsPerMeeting);
-    expect((await chargedSecondsOf(meetingId))?.grants).toBe(deepgramGrantsPerMeeting);
+    expect(requests).toHaveLength(deepgramGrantsPerWindow);
+
+    harness.clock.nowMs += deepgramGrantWindowMs;
+    session = await refreshed(harness, session);
+    expect((await tokenRequest(harness, session, meetingId, deepgramOn)).status).toBe(200);
+    expect(requests).toHaveLength(deepgramGrantsPerWindow + 1);
+  });
+
+  it("jetonun ömrü toplantının en çok süresinin sonunu geçmez; en çok süre geçince jeton verilmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const requests: Request[] = stubGrant(harness);
+    let session: Session = await signIn(harness);
+    const started: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    const maxEndsAt: number = Date.parse(started.expiresAt);
+
+    harness.clock.nowMs = maxEndsAt - 10_000;
+    session = await refreshed(harness, session);
+    const response: Response = await tokenRequest(harness, session, started.meetingId, deepgramOn);
+    expect(response.status).toBe(200);
+    expect((await response.json<GrantBody>()).expiresIn).toBe(10);
+    expect(await requests[0]?.json()).toEqual({ ttl_seconds: 10 });
+
+    harness.clock.nowMs = maxEndsAt;
+    await expectError(await tokenRequest(harness, session, started.meetingId, deepgramOn), 403, "meeting_not_active");
+    expect(requests).toHaveLength(1);
   });
 
   it("Deepgram'ın geçici hatası uyarıyla yeniden denenir, sonra 502; kalıcı ret denenmez; hak ayrılmaz", async () => {

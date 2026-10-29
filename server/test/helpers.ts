@@ -243,6 +243,8 @@ export interface StartedMeetingBody {
   readonly kind: "trial" | "subscription";
   readonly tokenBudget: number;
   readonly maxDurationMinutes: number;
+  /** Toplantının en çok süresinin bittiği an (ISO 8601). */
+  readonly expiresAt: string;
   readonly trialMeetingsLeft: number | null;
 }
 

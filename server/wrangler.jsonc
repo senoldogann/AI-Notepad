@@ -22,7 +22,7 @@
   // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
   // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
   // DEEPGRAM_USER_LIMITER: `POST /v1/live/deepgram-token` kullanıcı başına dakikada 10 (kayıt başında iki akış, kopmada
-  // yeniden bağlanma; ayrıca toplantı başına en çok 30 jeton).
+  // yeniden bağlanma; ayrıca toplantı başına toplam ve 5 dakikalık pencere sınırı, bkz. src/deepgram.ts).
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },

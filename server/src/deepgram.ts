@@ -11,7 +11,14 @@ import { fetchUpstream } from "./upstream";
  * Deepgram canlı metni (abonelik sürümü). Mac uygulaması sesi Deepgram'a doğrudan akıtır; sunucu yalnızca kısa ömürlü
  * jeton verir (`POST https://api.deepgram.com/v1/auth/grant`, anahtar yalnızca Worker'da). Jeton yalnızca bağlantı
  * kurulurken geçerli olmalıdır; kurulan akış jetonun süresi dolsa da sürer. Her bağlantı ve yeniden bağlanma yeni jeton
- * ister; toplantı başına en çok `deepgramGrantsPerMeeting` jeton.
+ * ister.
+ *
+ * Sunucu akışı göremez ve kesemez; kullanım jetonlarla sınırlanır:
+ * - jeton yalnızca açık toplantıya verilir (bitmiş ya da en çok süresi geçmiş toplantıya verilmez) ve ömrü
+ *   toplantının en çok süresinin sonunu geçmez (`grantTtlSeconds`): sonradan yeni bağlantı kurulamaz;
+ * - toplantı başına toplam jeton türüne göre sınırlıdır (`deepgramGrantLimit`: deneme daha az);
+ * - kısa pencerede (`deepgramGrantWindowMs`) en çok `deepgramGrantsPerWindow` jeton: yeniden bağlanmalar sürer ama
+ *   aynı anda çok sayıda akış açılamaz.
  *
  * Bütçe: sahibin Deepgram ücretsiz kredisinin bir kısmı (`DEEPGRAM_BUDGET_USD`, ömür boyu). Sunucu akışı görmediği için
  * harcama tahminidir ve temkinlidir: toplantının ilk jetonunda toplantının kalan en çok süresi × akış sayısı
@@ -26,8 +33,17 @@ export const deepgramGrantUrl: string = "https://api.deepgram.com/v1/auth/grant"
 /** Jetonun ömrü (saniye): yalnızca bağlantı kurulurken gerekir, olabildiğince kısa. */
 export const deepgramGrantTtlSeconds: number = 30;
 
-/** Toplantı başına en çok jeton: iki akışın ilk bağlantıları ve yeniden bağlanmaları. */
+/** Abonelik toplantısı başına en çok jeton: iki akışın ilk bağlantıları ve yeniden bağlanmaları (en çok 4 saat). */
 export const deepgramGrantsPerMeeting: number = 30;
+
+/** Deneme toplantısı başına en çok jeton (toplantı daha kısa; kötüye kullanıma daha açık). */
+export const deepgramTrialGrantsPerMeeting: number = 12;
+
+/** Kısa süreli jeton penceresi: bu sürede bir toplantıya en çok `deepgramGrantsPerWindow` jeton. */
+export const deepgramGrantWindowMs: number = 5 * 60_000;
+
+/** Pencere başına en çok jeton: iki akışın ilk bağlantısı ve birkaç yeniden bağlanma (ağ kopması, dil değişimi). */
+export const deepgramGrantsPerWindow: number = 8;
 
 /** Toplantı başına en çok eşzamanlı akış ("Sen" ve "Diğerleri"); peşin tahmin bununla çarpılır. */
 export const deepgramStreamsPerMeeting: number = 2;
@@ -74,6 +90,35 @@ export interface DeepgramUsage {
 }
 
 const grantResponseSchema = z.object({ access_token: z.string().min(1), expires_in: z.number().positive().optional() });
+
+/** Toplantı türünün toplam jeton sınırı. Saf fonksiyondur. */
+export function deepgramGrantLimit(kind: MeetingRow["kind"]): number {
+  return kind === "trial" ? deepgramTrialGrantsPerMeeting : deepgramGrantsPerMeeting;
+}
+
+/**
+ * İstenecek jeton ömrü (saniye): `deepgramGrantTtlSeconds`, toplantının en çok süresinin sonuna kalan süreyi geçmez
+ * (en az 1). Saf fonksiyondur.
+ */
+export function grantTtlSeconds(meeting: MeetingRow, now: Date): number {
+  return Math.max(1, Math.min(deepgramGrantTtlSeconds, Math.floor((meeting.max_ends_at - now.getTime()) / 1000)));
+}
+
+/** Toplantının jeton sayaçları. */
+export interface GrantCounters {
+  readonly grants: number;
+  readonly window_started_at: number;
+  readonly window_grants: number;
+}
+
+/**
+ * Bir jeton daha verilebilir mi: toplam sınırın altında ve pencere bitmiş ya da pencerede yer var. Saf fonksiyondur.
+ * SQL karşılığı `incrementGrant`'tadır.
+ */
+export function mayGrantMore(counters: GrantCounters, limit: number, nowMs: number): boolean {
+  const windowOver: boolean = counters.window_started_at + deepgramGrantWindowMs <= nowMs;
+  return counters.grants < limit && (windowOver || counters.window_grants < deepgramGrantsPerWindow);
+}
 
 /** Bütçenin akış saniyesi karşılığı. Saf fonksiyondur. */
 export function deepgramBudgetSeconds(deepgram: DeepgramConfig): number {
@@ -152,33 +197,42 @@ export async function settleDeepgramMeetings(db: D1Database, now: Date): Promise
   return result.meta.changes;
 }
 
-/** Toplantının jeton sayısı; jeton almamışsa null. */
-async function meetingGrants(db: D1Database, meetingId: string): Promise<number | null> {
-  const row: { grants: number } | null = await db
-    .prepare("SELECT grants FROM deepgram_live_meetings WHERE meeting_id = ?")
+/** Toplantının jeton sayaçları; jeton almamışsa null. */
+async function meetingGrantCounters(db: D1Database, meetingId: string): Promise<GrantCounters | null> {
+  return db
+    .prepare("SELECT grants, window_started_at, window_grants FROM deepgram_live_meetings WHERE meeting_id = ?")
     .bind(meetingId)
-    .first<{ grants: number }>();
-  return row?.grants ?? null;
+    .first<GrantCounters>();
 }
 
-/** Jeton almış toplantının jeton sayısını sınırın altındaysa artırır; yeni sayıyı ya da (satır yok ya da sınırda) null döndürür. */
-async function incrementGrant(db: D1Database, meetingId: string): Promise<number | null> {
+/**
+ * Jeton almış toplantının sayaçlarını `mayGrantMore` koşuluyla (tek koşullu ifade) artırır: pencere bittiyse yeni
+ * pencere şimdi başlar. Yeni toplam sayıyı ya da (satır yok ya da sınırda) null döndürür.
+ */
+async function incrementGrant(db: D1Database, meetingId: string, limit: number, now: Date): Promise<number | null> {
   const row: { grants: number } | null = await db
-    .prepare("UPDATE deepgram_live_meetings SET grants = grants + 1 WHERE meeting_id = ? AND grants < ? RETURNING grants")
-    .bind(meetingId, deepgramGrantsPerMeeting)
+    .prepare(
+      `UPDATE deepgram_live_meetings
+       SET grants = grants + 1,
+         window_grants = CASE WHEN window_started_at + ?1 <= ?2 THEN 1 ELSE window_grants + 1 END,
+         window_started_at = CASE WHEN window_started_at + ?1 <= ?2 THEN ?2 ELSE window_started_at END
+       WHERE meeting_id = ?3 AND grants < ?4 AND (window_started_at + ?1 <= ?2 OR window_grants < ?5)
+       RETURNING grants`,
+    )
+    .bind(deepgramGrantWindowMs, now.getTime(), meetingId, limit, deepgramGrantsPerWindow)
     .first<{ grants: number }>();
   return row?.grants ?? null;
 }
 
 /**
  * Toplantının ilk jetonu: satır yalnızca tahmini harcama bütçenin altındaysa eklenir (tek koşullu ifade); peşin tahmin
- * `chargeSeconds`. Eklendiyse true.
+ * `chargeSeconds`, jeton penceresi şimdi başlar. Eklendiyse true.
  */
 async function insertFirstGrant(db: D1Database, meetingId: string, chargeSeconds: number, budgetSeconds: number, now: Date): Promise<boolean> {
   const row: { grants: number } | null = await db
     .prepare(
-      `INSERT INTO deepgram_live_meetings (meeting_id, grants, first_grant_at, charged_seconds, settled_at)
-       SELECT ?, 1, ?, ?, NULL WHERE (SELECT COALESCE(SUM(charged_seconds), 0) FROM deepgram_live_meetings) < ?
+      `INSERT INTO deepgram_live_meetings (meeting_id, grants, first_grant_at, charged_seconds, settled_at, window_started_at, window_grants)
+       SELECT ?1, 1, ?2, ?3, NULL, ?2, 1 WHERE (SELECT COALESCE(SUM(charged_seconds), 0) FROM deepgram_live_meetings) < ?4
        ON CONFLICT(meeting_id) DO NOTHING RETURNING grants`,
     )
     .bind(meetingId, now.getTime(), chargeSeconds, budgetSeconds)
@@ -197,12 +251,13 @@ function grantLimitReached(): ApiError {
 }
 
 /**
- * Jeton hakkını ayırır: jeton almış toplantının sayacı artar (sınırda `deepgram_grant_limit`); ilk jetonda bütçe
- * koşuluyla satır eklenir (bütçe dolduysa `deepgram_unavailable`). Eşzamanlı ilk jetonlarda ekleme yarışı kaybeden
- * istek sayacı artırır. Bütçe eşiği (%80, %95) aşılınca `alert` yazar. Toplantının jeton sayısını döndürür.
+ * Jeton hakkını ayırır: jeton almış toplantının sayaçları artar (toplam ya da pencere sınırında `deepgram_grant_limit`);
+ * ilk jetonda bütçe koşuluyla satır eklenir (bütçe dolduysa `deepgram_unavailable`). Eşzamanlı ilk jetonlarda ekleme
+ * yarışı kaybeden istek sayacı artırır. Bütçe eşiği (%80, %95) aşılınca `alert` yazar. Toplantının jeton sayısını
+ * döndürür.
  */
-async function reserveGrant(db: D1Database, deepgram: DeepgramConfig, meeting: MeetingRow, now: Date): Promise<number> {
-  const incremented: number | null = await incrementGrant(db, meeting.id);
+async function reserveGrant(db: D1Database, deepgram: DeepgramConfig, meeting: MeetingRow, limit: number, now: Date): Promise<number> {
+  const incremented: number | null = await incrementGrant(db, meeting.id, limit, now);
   if (incremented !== null) {
     return incremented;
   }
@@ -218,11 +273,11 @@ async function reserveGrant(db: D1Database, deepgram: DeepgramConfig, meeting: M
     }
     return 1;
   }
-  const raced: number | null = await incrementGrant(db, meeting.id);
+  const raced: number | null = await incrementGrant(db, meeting.id, limit, now);
   if (raced !== null) {
     return raced;
   }
-  if ((await meetingGrants(db, meeting.id)) !== null) {
+  if ((await meetingGrantCounters(db, meeting.id)) !== null) {
     throw grantLimitReached();
   }
   const usage: DeepgramUsage = deepgramUsageOf(deepgram, before, 0, 0);
@@ -231,11 +286,11 @@ async function reserveGrant(db: D1Database, deepgram: DeepgramConfig, meeting: M
 }
 
 /**
- * Deepgram'dan kısa ömürlü jeton ister (`Authorization: Token <anahtar>`, `{"ttl_seconds": 30}`). 5xx, 429, ağ hatası
- * ve zaman aşımı uyarıyla `grantAttempts` kez denenir, sonra `UpstreamError` (gövde okunmaz). Yanıt beklenen biçimde
- * değilse `UpstreamError` (yeniden denenmez). Jeton loglanmaz.
+ * Deepgram'dan `ttlSeconds` ömürlü jeton ister (`Authorization: Token <anahtar>`, `{"ttl_seconds": …}`). 5xx, 429, ağ
+ * hatası ve zaman aşımı uyarıyla `grantAttempts` kez denenir, sonra `UpstreamError` (gövde okunmaz). Yanıt beklenen
+ * biçimde değilse `UpstreamError` (yeniden denenmez). Jeton loglanmaz.
  */
-async function requestDeepgramToken(platform: Platform, apiKey: string): Promise<{ accessToken: string; expiresIn: number }> {
+async function requestDeepgramToken(platform: Platform, apiKey: string, ttlSeconds: number): Promise<{ accessToken: string; expiresIn: number }> {
   const response: Response = await fetchUpstream(
     platform,
     "deepgram",
@@ -243,7 +298,7 @@ async function requestDeepgramToken(platform: Platform, apiKey: string): Promise
     (): RequestInit => ({
       method: "POST",
       headers: { authorization: `Token ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ ttl_seconds: deepgramGrantTtlSeconds }),
+      body: JSON.stringify({ ttl_seconds: ttlSeconds }),
     }),
     grantAttempts,
     grantTimeoutMs,
@@ -261,16 +316,17 @@ async function requestDeepgramToken(platform: Platform, apiKey: string): Promise
   if (!parsed.success) {
     throw new UpstreamError("deepgram", response.status, false, "jeton yanıtı beklenen biçimde değil");
   }
-  // `expires_in` Deepgram'da isteğe bağlıdır; yoksa jetonun ömrü istenen süredir.
-  return { accessToken: parsed.data.access_token, expiresIn: parsed.data.expires_in ?? deepgramGrantTtlSeconds };
+  // `expires_in` Deepgram'da isteğe bağlıdır; yoksa jetonun ömrü istenen süredir. Uzun bildirilse de istenenden uzun sayılmaz.
+  return { accessToken: parsed.data.access_token, expiresIn: Math.min(parsed.data.expires_in ?? ttlSeconds, ttlSeconds) };
 }
 
 /**
  * Açık toplantıya Deepgram jetonu verir. Politika kapalıysa ya da bütçe dolduysa `deepgram_unavailable`; toplantı
- * bitmişse (ek süre dahil: canlı metin yalnızca kayıt sırasında) `meeting_not_active`; jeton sınırı dolduysa
- * `deepgram_grant_limit`. Önce biten toplantıların tahmini indirilir ve hak okunur (boşuna Deepgram çağrılmasın),
- * sonra jeton alınır, sonra hak tek koşullu ifadeyle ayrılır (ayrılamazsa alınan jeton atılır; kullanılmayan jeton
- * ücretsizdir).
+ * bitmişse ya da en çok süresi geçtiyse (ek süre dahil: canlı metin yalnızca kayıt sırasında) `meeting_not_active`;
+ * toplam ya da pencere sınırı dolduysa (`mayGrantMore`) `deepgram_grant_limit`. Jetonun ömrü toplantının en çok
+ * süresinin sonunu geçmez (`grantTtlSeconds`). Önce biten toplantıların tahmini indirilir ve hak okunur (boşuna
+ * Deepgram çağrılmasın), sonra jeton alınır, sonra hak tek koşullu ifadeyle ayrılır (ayrılamazsa alınan jeton atılır;
+ * kullanılmayan jeton ücretsizdir).
  */
 export async function issueDeepgramGrant(db: D1Database, platform: Platform, config: Config, meeting: MeetingRow, now: Date): Promise<DeepgramGrant> {
   const access: Config["deepgram"]["access"] = config.deepgram.access;
@@ -280,22 +336,24 @@ export async function issueDeepgramGrant(db: D1Database, platform: Platform, con
   if (meeting.ended_at !== null || now.getTime() >= meeting.max_ends_at) {
     throw new ApiError("meeting_not_active", "Toplantı kaydı bitti; bulut canlı metni yalnızca kayıt sırasında kullanılır.");
   }
+  const limit: number = deepgramGrantLimit(meeting.kind);
   await settleDeepgramMeetings(db, now);
-  const grants: number | null = await meetingGrants(db, meeting.id);
-  if (grants !== null && grants >= deepgramGrantsPerMeeting) {
+  const counters: GrantCounters | null = await meetingGrantCounters(db, meeting.id);
+  if (counters !== null && !mayGrantMore(counters, limit, now.getTime())) {
+    log("warn", "deepgram_grant_refused", { userId: meeting.user_id, meetingId: meeting.id, grants: counters.grants, windowGrants: counters.window_grants });
     throw grantLimitReached();
   }
-  if (grants === null && (await chargedSeconds(db)) >= deepgramBudgetSeconds(config.deepgram)) {
+  if (counters === null && (await chargedSeconds(db)) >= deepgramBudgetSeconds(config.deepgram)) {
     throw budgetExhausted();
   }
-  const token: { accessToken: string; expiresIn: number } = await requestDeepgramToken(platform, access.apiKey);
-  const reserved: number = await reserveGrant(db, config.deepgram, meeting, now);
+  const token: { accessToken: string; expiresIn: number } = await requestDeepgramToken(platform, access.apiKey, grantTtlSeconds(meeting, now));
+  const reserved: number = await reserveGrant(db, config.deepgram, meeting, limit, now);
   log("info", "deepgram_grant_issued", { userId: meeting.user_id, meetingId: meeting.id, grants: reserved });
   return {
     accessToken: token.accessToken,
     expiresIn: token.expiresIn,
     model: deepgramLiveModel,
     mipOptOut: true,
-    grantsLeft: deepgramGrantsPerMeeting - reserved,
+    grantsLeft: limit - reserved,
   };
 }
