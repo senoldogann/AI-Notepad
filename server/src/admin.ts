@@ -141,7 +141,8 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  * Yönetici istatistikleri; tümü mevcut tablolardan, toplama sorgularıyla (aralıklar dizinli). Tanımlar:
  * - `trials.activeTrialUsers`: abonelik erişimi olmayan, en az bir deneme toplantısı başlatmış ve denemesi bitmemiş
  *   kullanıcılar; `exhaustedTrialUsers`: abonelik erişimi olmayan, tüm deneme toplantılarını kullanmış kullanıcılar.
- *   Harcanan deneme, aynı kimliğin silinmiş hesaplarından devralınanı da içerir (`users.carried_trial_meetings`).
+ *   Harcanan deneme, aynı kimliğin silinmiş hesaplarından devralınanı da içerir (`users.carried_trial_meetings`);
+ *   deneme süresi (`TRIAL_DAYS`) dolmuş olan da `exhaustedTrialUsers`'a sayılır.
  * - `subscriptions.active`: erişimi `active` (ödenmiş dönem); `grace`: `past_due` ek sürede; `ending`: `active` olup
  *   iptal edilmiş (`cancel_at` dolu, dönem sonunda biter); `canceledTotal`: durumu `canceled` olan satırlar (hesabı
  *   silinenler sayılmaz).
@@ -185,16 +186,17 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     db.prepare("SELECT provider AS key, COUNT(*) AS count FROM auth_identities GROUP BY provider").all<KeyCountRow>(),
     db
       .prepare(
-        `SELECT COALESCE(SUM(CASE WHEN t.used < ?3 THEN 1 ELSE 0 END), 0) AS active,
-           COALESCE(SUM(CASE WHEN t.used >= ?3 THEN 1 ELSE 0 END), 0) AS exhausted
+        `SELECT COALESCE(SUM(CASE WHEN t.used < ?3 AND NOT t.expired THEN 1 ELSE 0 END), 0) AS active,
+           COALESCE(SUM(CASE WHEN t.used >= ?3 OR t.expired THEN 1 ELSE 0 END), 0) AS exhausted
          FROM (
            SELECT u.id AS user_id,
-             u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS used
+             u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS used,
+             COALESCE(u.trial_started_at + ?4 <= ?1, 0) AS expired
            FROM users u
          ) t
          WHERE t.used > 0 AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = t.user_id AND ((${activeAccessSql}) OR (${graceAccessSql})))`,
       )
-      .bind(nowMs, config.pastDueGraceMs, config.trialMeetings)
+      .bind(nowMs, config.pastDueGraceMs, config.trialMeetings, config.trialDurationMs)
       .first<{ active: number; exhausted: number }>(),
     db
       .prepare(

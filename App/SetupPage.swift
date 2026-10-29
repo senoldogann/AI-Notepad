@@ -76,7 +76,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
         #endif
         #if HOSTED_EDITION
-        case .keys: "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma \(appName) sunucusundan. İlk 3 toplantı ücretsiz."
+        case .keys: "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma \(appName) sunucusundan. 3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz."
         #else
         case .keys: "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider."
         #endif

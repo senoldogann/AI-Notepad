@@ -1444,13 +1444,13 @@
         }
       }
     },
-    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma %@ sunucusundan. İlk 3 toplantı ücretsiz.": {
+    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma %@ sunucusundan. 3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No keys needed: notes, translation and speaker separation come from the %@ server. Your first 3 meetings are free."
+            "value": "No keys needed: notes, translation and speaker separation come from the %@ server. Free for 3 meetings or 7 days from your first meeting."
           }
         }
       }
@@ -3559,6 +3559,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Test"
+          }
+        }
+      }
+    },
+    "Deneme %@ tarihinde biter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial ends on %@."
           }
         }
       }

@@ -21,7 +21,12 @@ export interface ClientCopy {
   };
   readonly plan: { readonly trial: string; readonly subscription: string };
   /** `{left}` ve `{total}` sayılarla değişir. */
+  /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
+  /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
+  readonly trialNotStarted: string;
+  /** Deneme bitti (toplantılar harcandı ya da süre doldu). */
+  readonly trialEnded: string;
   readonly trialNotUsed: string;
   /** `{used}` ve `{cap}` saatlerle değişir. */
   readonly hours: string;
@@ -89,7 +94,9 @@ export const clientCopy: ClientCopy = {
     generic: "Something went wrong (code: {code}). Try again.",
   },
   plan: { trial: "Free trial", subscription: `${productName} monthly` },
-  trialLeft: "{left} / {total} meetings left",
+  trialLeft: "{left} of {total} meetings left · Trial ends {date}",
+  trialNotStarted: "{total} meetings, {days} days from your first meeting",
+  trialEnded: "Trial ended",
   trialNotUsed: "Not counted while subscribed",
   hours: "{used} / {cap} hours",
   subscriptionNone: "No subscription",

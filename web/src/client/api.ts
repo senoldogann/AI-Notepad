@@ -28,7 +28,12 @@ export interface Entitlements {
   readonly userId: string;
   readonly plan: "trial" | "subscription";
   readonly trialMeetingsTotal: number;
+  /** Denemenin süresi (gün; ilk deneme toplantısından başlar). */
+  readonly trialDays: number;
+  /** Kalan deneme toplantısı; deneme süresi dolduysa 0. */
   readonly trialMeetingsLeft: number;
+  /** Deneme süresinin bittiği an (ISO 8601); deneme başlamadıysa ya da abonelikte null. */
+  readonly trialEndsAt: string | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
   readonly subscription: SubscriptionInfo | null;
@@ -314,7 +319,9 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
     userId: stringField(body, "userId", response, path),
     plan,
     trialMeetingsTotal: numberField(body, "trialMeetingsTotal", response, path),
+    trialDays: numberField(body, "trialDays", response, path),
     trialMeetingsLeft: numberField(body, "trialMeetingsLeft", response, path),
+    trialEndsAt: body["trialEndsAt"] === null ? null : stringField(body, "trialEndsAt", response, path),
     monthlyHoursUsed: numberField(body, "monthlyHoursUsed", response, path),
     monthlyHoursCap: numberField(body, "monthlyHoursCap", response, path),
     subscription: parseSubscription(body["subscription"], response, path),

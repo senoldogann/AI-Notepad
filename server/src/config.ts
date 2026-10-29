@@ -51,6 +51,10 @@ export interface Config {
   };
   readonly deviceCheck: DeviceCheckConfig;
   readonly trialMeetings: number;
+  /** Denemenin süresi (gün): hesabın ilk deneme toplantısından başlar; `trialMeetings` ya da bu süre, hangisi önce dolarsa. */
+  readonly trialDays: number;
+  /** `trialDays` milisaniye olarak. */
+  readonly trialDurationMs: number;
   /** Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrılarının günlük token sınırı. */
   readonly trialAccountDailyTokens: number;
   /** Bir IP'den bir günde denemeye başlayabilecek yeni hesap sayısı. */
@@ -190,6 +194,7 @@ const envSchema = z.object({
   DEVICECHECK_KEY_ID: z.string(),
   DEVICECHECK_PRIVATE_KEY: z.string().optional(),
   TRIAL_MEETINGS: positiveInt,
+  TRIAL_DAYS: positiveInt,
   TRIAL_ACCOUNT_DAILY_TOKENS: positiveInt,
   TRIAL_ACCOUNTS_PER_IP_PER_DAY: positiveInt,
   TRIAL_MAX_MEETING_MINUTES: positiveInt,
@@ -270,6 +275,8 @@ export function parseConfig(env: Env): Config {
     },
     deviceCheck,
     trialMeetings: value.TRIAL_MEETINGS,
+    trialDays: value.TRIAL_DAYS,
+    trialDurationMs: value.TRIAL_DAYS * 86_400_000,
     trialAccountDailyTokens: value.TRIAL_ACCOUNT_DAILY_TOKENS,
     trialAccountsPerIpPerDay: value.TRIAL_ACCOUNTS_PER_IP_PER_DAY,
     trialMaxMeetingMinutes: value.TRIAL_MAX_MEETING_MINUTES,

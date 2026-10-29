@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { type CryptoKey as JoseKey, decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { deviceCheckUrl } from "../src/deviceCheck";
 import type { Env } from "../src/env";
 import { trialIdentityHash } from "../src/trialLedger";
@@ -12,9 +12,12 @@ import {
   envWith,
   expectError,
   grantSubscription,
+  refreshed,
   req,
   signInWithGoogle,
 } from "./helpers";
+
+const dayMs: number = 86_400_000;
 
 const teamId: string = "79DZ4AA4DW";
 const keyId: string = "TESTKEY123";
@@ -247,5 +250,95 @@ describe("Apple DeviceCheck ile Mac başına deneme", () => {
     await env.DB.prepare("UPDATE users SET carried_trial_meetings = 3 WHERE id = ?").bind(session.userId).run();
     await expectError(await start(harness, session, fake.env, null), 402, "trial_exhausted");
     expect(fake.calls).toHaveLength(0);
+  });
+
+  it("süresi dolmuş deneme Mac'i sorgulamadan `trial_exhausted` alır", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await env.DB.prepare("UPDATE users SET trial_started_at = ? WHERE id = ?").bind(harness.clock.nowMs - 8 * dayMs, session.userId).run();
+    await expectError(await start(harness, session, fake.env, macToken("f")), 402, "trial_exhausted");
+    expect(fake.calls).toHaveLength(0);
+  });
+});
+
+/** `GET /v1/me` alanlarının deneme kısmı. */
+interface TrialMe {
+  readonly plan: string;
+  readonly trialMeetingsLeft: number;
+  readonly accountTrialMeetingsLeft: number;
+  readonly trialEndsAt: string | null;
+}
+
+async function trialMe(harness: Harness, session: Session): Promise<TrialMe> {
+  const response: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
+  expect(response.status).toBe(200);
+  return response.json<TrialMe>();
+}
+
+async function trialStartedAt(userId: string): Promise<number | null> {
+  const row = await env.DB.prepare("SELECT trial_started_at FROM users WHERE id = ?").bind(userId).first<{ trial_started_at: number | null }>();
+  return row?.trial_started_at ?? null;
+}
+
+describe("deneme süresi (ilk deneme toplantısından 7 gün)", () => {
+  it("süre ilk toplantıyla başlar; dolunca kalan toplantılar da düşer ve toplantı dışı yapay zekâ kapanır", async () => {
+    const harness: Harness = await defaultHarness();
+    const startMs: number = harness.clock.nowMs;
+    let session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    expect(await trialMe(harness, session)).toMatchObject({ trialMeetingsLeft: 3, trialEndsAt: null });
+    expect(await trialStartedAt(session.userId)).toBeNull();
+
+    expect((await start(harness, session, null, null)).status).toBe(201);
+    expect(await trialStartedAt(session.userId)).toBe(startMs);
+    const endsAt: string = new Date(startMs + 7 * dayMs).toISOString();
+    expect(await trialMe(harness, session)).toMatchObject({ trialMeetingsLeft: 2, accountTrialMeetingsLeft: 2, trialEndsAt: endsAt });
+
+    // 6. gün: ikinci toplantı başlar, süre ilk toplantıdan sayılmaya devam eder.
+    harness.clock.nowMs = startMs + 6 * dayMs;
+    session = await refreshed(harness, session);
+    expect((await start(harness, session, null, null)).status).toBe(201);
+    expect(await trialStartedAt(session.userId)).toBe(startMs);
+
+    // 7. gün: bir toplantı kalsa da deneme bitti.
+    harness.clock.nowMs = startMs + 7 * dayMs;
+    session = await refreshed(harness, session);
+    const logs = vi.spyOn(console, "log");
+    const refused = await expectError(await start(harness, session, null, null), 402, "trial_exhausted");
+    expect(refused.error.message).toContain("süren doldu (7 gün)");
+    expect(logs.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"reason":"expired"'))).toBe(true);
+    logs.mockRestore();
+    expect(await trialMe(harness, session)).toMatchObject({ plan: "trial", trialMeetingsLeft: 0, accountTrialMeetingsLeft: 0, trialEndsAt: endsAt });
+    const account: Response = await harness.call(
+      req("POST", "/v1/llm/messages", { token: session.accessToken, json: { effort: "low", max_tokens: 10, messages: [{ role: "user", content: "x" }] } }),
+    );
+    await expectError(account, 402, "subscription_required");
+
+    // Abone olunca deneme bitişi gösterilmez ve toplantı abonelikten açılır.
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * dayMs);
+    expect(await trialMe(harness, session)).toMatchObject({ plan: "subscription", trialEndsAt: null });
+    expect((await start(harness, session, null, null)).status).toBe(201);
+  });
+
+  it("silinip aynı kimlikle yeniden açılan hesap denemenin başlangıcını devralır", async () => {
+    const harness: Harness = await defaultHarness();
+    const startMs: number = harness.clock.nowMs;
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const first: Session = await signInWithGoogle(harness, subject);
+    expect((await start(harness, first, null, null)).status).toBe(201);
+    harness.clock.nowMs = startMs + 3 * dayMs;
+    expect((await deleteMe(harness, await refreshed(harness, first), null)).status).toBe(204);
+    const identityHash: string = await trialIdentityHash(env.ACCESS_TOKEN_SECRET, "google", subject);
+    const ledger = await env.DB.prepare("SELECT trial_started_at FROM trial_identity_ledger WHERE identity_hash = ?").bind(identityHash).first();
+    expect(ledger).toEqual({ trial_started_at: startMs });
+
+    const again: Session = await signInWithGoogle(harness, subject);
+    expect(await trialStartedAt(again.userId)).toBe(startMs);
+    expect(await trialMe(harness, again)).toMatchObject({ trialMeetingsLeft: 2, trialEndsAt: new Date(startMs + 7 * dayMs).toISOString() });
+    expect((await start(harness, again, null, null)).status).toBe(201);
+    expect(await trialStartedAt(again.userId)).toBe(startMs);
+
+    harness.clock.nowMs = startMs + 8 * dayMs;
+    await expectError(await start(harness, await refreshed(harness, again), null, null), 402, "trial_exhausted");
   });
 });

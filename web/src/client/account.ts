@@ -1,4 +1,4 @@
-// Hesap sayfası: `/v1/me` (plan, kalan deneme, aylık saat, abonelik ve ek süre), Abone ol (Checkout), Aboneliği yönet
+// Hesap sayfası: `/v1/me` (plan, kalan deneme ve bitiş tarihi, abonede aylık saat, abonelik ve ek süre), Abone ol (Checkout), Aboneliği yönet
 // (Portal), çıkış ve onaylı hesap silme (`DELETE /v1/me`). Oturum yoksa giriş sayfasına geçilir.
 import { ApiRequestError, type Entitlements, type RawResponse, type SubscriptionInfo, parseEntitlements, parseRedirectUrl } from "./api";
 import { type ClientCopy, clientCopy, fill } from "./copy";
@@ -24,6 +24,8 @@ interface AccountView {
   readonly plan: string;
   readonly planPill: { readonly text: string; readonly tone: PillTone };
   readonly trial: string;
+  /** Aylık saat kartı yalnızca abonede görünür (sınır aboneliğindir; denemede kafa karıştırır). */
+  readonly showHours: boolean;
   readonly hours: string;
   readonly hoursUsed: number;
   readonly hoursCap: number;
@@ -43,8 +45,22 @@ function formatHours(hours: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
+/** Deneme kartının metni: abonede sayılmaz; başlamadıysa toplantı ve gün; bittiyse "bitti"; sürüyorsa kalan ve bitiş. Saf fonksiyondur. */
+function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
+  if (me.plan === "subscription") {
+    return text.trialNotUsed;
+  }
+  if (me.trialEndsAt === null) {
+    return fill(text.trialNotStarted, { total: String(me.trialMeetingsTotal), days: String(me.trialDays) });
+  }
+  if (me.trialMeetingsLeft === 0 || new Date(me.trialEndsAt).getTime() <= now.getTime()) {
+    return text.trialEnded;
+  }
+  return fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal), date: formatDate(me.trialEndsAt, locale) });
+}
+
 /** Sunucu yanıtından gösterilecek değerleri üretir. Saf fonksiyondur. */
-export function accountView(me: Entitlements, text: ClientCopy, locale: string): AccountView {
+export function accountView(me: Entitlements, text: ClientCopy, locale: string, now: Date): AccountView {
   const subscription: SubscriptionInfo | null = me.subscription;
   const subscribed: boolean = me.plan === "subscription";
   let subscriptionText: string = text.subscriptionNone;
@@ -65,7 +81,8 @@ export function accountView(me: Entitlements, text: ClientCopy, locale: string):
   return {
     plan: subscribed ? text.plan.subscription : text.plan.trial,
     planPill: subscribed ? { text: text.pillActive, tone: "ok" } : { text: text.pillTrial, tone: "plain" },
-    trial: subscribed ? text.trialNotUsed : fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal) }),
+    trial: trialText(me, text, locale, now),
+    showHours: subscribed,
     hours: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
     hoursUsed: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
     hoursCap: me.monthlyHoursCap,
@@ -89,6 +106,7 @@ function render(view: AccountView): void {
   element("plan-value", HTMLElement).textContent = view.plan;
   renderPill(element("plan-pill", HTMLElement), view.planPill);
   element("trial-value", HTMLElement).textContent = view.trial;
+  element("hours-card", HTMLElement).classList.toggle("hidden", !view.showHours);
   element("hours-value", HTMLElement).textContent = view.hours;
   const meter: HTMLProgressElement = element("hours-meter", HTMLProgressElement);
   meter.max = view.hoursCap;
@@ -244,7 +262,7 @@ async function main(): Promise<void> {
 
   try {
     const me: Entitlements = paymentDone ? await fetchMeAfterPayment() : await fetchMe();
-    render(accountView(me, text, siteLocale));
+    render(accountView(me, text, siteLocale, new Date()));
     element("account-loading", HTMLElement).classList.add("hidden");
     element("account-content", HTMLElement).classList.remove("hidden");
   } catch (error: unknown) {

@@ -24,9 +24,14 @@ export interface Entitlements {
   readonly userId: string;
   readonly plan: Plan;
   readonly trialMeetingsTotal: number;
-  /** Etkin kalan deneme: hesap ve (bildirilen doğrulanmış cihaz varsa) cihaz kalanının küçüğü. */
+  /** Denemenin süresi (gün; ilk deneme toplantısından başlar). */
+  readonly trialDays: number;
+  /** Etkin kalan deneme: hesap ve (bildirilen doğrulanmış cihaz varsa) cihaz kalanının küçüğü; süre dolduysa 0. */
   readonly trialMeetingsLeft: number;
+  /** Hesabın kalan denemesi; süre dolduysa 0. */
   readonly accountTrialMeetingsLeft: number;
+  /** Deneme süresinin bittiği an (ilk deneme toplantısı + `TRIAL_DAYS`); deneme başlamadıysa ya da abonelikte null. */
+  readonly trialEndsAt: string | null;
   /** Bildirilen cihazın kalan denemesi; cihaz bildirilmediyse ya da kayıtlı değilse null. */
   readonly deviceTrialMeetingsLeft: number | null;
   readonly monthlyHoursUsed: number;
@@ -86,19 +91,44 @@ export async function subscriptionState(db: D1Database, userId: string): Promise
   return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at };
 }
 
+/** Hesabın deneme durumu. */
+export interface TrialState {
+  /** Harcanan deneme toplantısı: toplantılar + aynı kimliğin silinmiş hesaplarından devralınan. */
+  readonly used: number;
+  /** İlk deneme toplantısının başladığı an (ms; devralınmış olabilir); deneme başlamadıysa null. */
+  readonly startedAt: number | null;
+}
+
 /**
- * Kullanıcının harcadığı deneme toplantısı sayısı: deneme toplantıları + aynı kimliğin silinmiş hesaplarından
- * devralınan (`users.carried_trial_meetings`, bkz. `trialLedger.ts`).
+ * Kullanıcının deneme durumu: harcanan deneme toplantısı (deneme toplantıları + `users.carried_trial_meetings`, bkz.
+ * `trialLedger.ts`) ve denemenin başladığı an (`users.trial_started_at`).
  */
-export async function userTrialMeetingsUsed(db: D1Database, userId: string): Promise<number> {
-  const row: { count: number } | null = await db
+export async function userTrialState(db: D1Database, userId: string): Promise<TrialState> {
+  const row: { used: number; started_at: number | null } | null = await db
     .prepare(
       `SELECT (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ?1 AND kind = 'trial')
-         + COALESCE((SELECT carried_trial_meetings FROM users WHERE id = ?1), 0) AS count`,
+         + COALESCE((SELECT carried_trial_meetings FROM users WHERE id = ?1), 0) AS used,
+         (SELECT trial_started_at FROM users WHERE id = ?1) AS started_at`,
     )
     .bind(userId)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
+    .first<{ used: number; started_at: number | null }>();
+  return { used: row?.used ?? 0, startedAt: row?.started_at ?? null };
+}
+
+/** Deneme süresinin bittiği an (ms); deneme başlamadıysa null. Saf fonksiyondur. */
+export function trialEndsAtMs(state: TrialState, trialDurationMs: number): number | null {
+  return state.startedAt === null ? null : state.startedAt + trialDurationMs;
+}
+
+/** Deneme süresi doldu mu (başlamamış deneme dolmaz). Saf fonksiyondur. */
+export function isTrialExpired(state: TrialState, trialDurationMs: number, now: Date): boolean {
+  const endsAt: number | null = trialEndsAtMs(state, trialDurationMs);
+  return endsAt !== null && endsAt <= now.getTime();
+}
+
+/** Kalan deneme toplantısı: süre dolduysa 0, yoksa toplam − harcanan. Saf fonksiyondur. */
+export function trialMeetingsLeft(state: TrialState, config: Config, now: Date): number {
+  return isTrialExpired(state, config.trialDurationMs, now) ? 0 : Math.max(0, config.trialMeetings - state.used);
 }
 
 /** Kayıtlı cihazda (tüm hesaplarca) harcanan deneme sayısı; cihaz kayıtlı değilse null. */
@@ -118,19 +148,20 @@ export type AccountLLMAccess = "subscription" | "trial";
 
 /**
  * Toplantıya bağlı olmayan yapay zekâ çağrısı (Sor, notu yeniden yazma, düzenleme, görev aracı) hakkı: erişimi olan
- * abonelik (`active` ya da `grace`) ya da hesabın kullanılmamış deneme toplantısı. Deneme bitmiş ve abonelik yoksa
- * `subscription_required`. Hak toplantı bütçesiyle değil, kullanıcının günlük ve aylık token sınırıyla ve küçük çağrı
- * başı `max_tokens` ile sınırlanır; denemede ayrıca `TRIAL_ACCOUNT_DAILY_TOKENS`.
+ * abonelik (`active` ya da `grace`) ya da hesabın kullanılmamış ve süresi dolmamış deneme toplantısı. Deneme bitmiş
+ * (toplantılar harcanmış ya da süre dolmuş) ve abonelik yoksa `subscription_required`. Hak toplantı bütçesiyle değil,
+ * kullanıcının günlük ve aylık token sınırıyla ve küçük çağrı başı `max_tokens` ile sınırlanır; denemede ayrıca
+ * `TRIAL_ACCOUNT_DAILY_TOKENS`.
  */
 export async function requireAccountLLMAccess(db: D1Database, config: Config, userId: string, now: Date): Promise<AccountLLMAccess> {
-  const [subscription, trialUsed]: [SubscriptionState | null, number] = await Promise.all([
+  const [subscription, trial]: [SubscriptionState | null, TrialState] = await Promise.all([
     subscriptionState(db, userId),
-    userTrialMeetingsUsed(db, userId),
+    userTrialState(db, userId),
   ]);
   if (hasSubscriptionAccess(subscription, now, config.pastDueGraceMs)) {
     return "subscription";
   }
-  if (trialUsed < config.trialMeetings) {
+  if (trialMeetingsLeft(trial, config, now) > 0) {
     return "trial";
   }
   throw new ApiError("subscription_required", "Deneme bitti; toplantı dışında yapay zekâ özellikleri için abone ol.");
@@ -142,26 +173,29 @@ export function hoursRoundedUp(seconds: number): number {
 }
 
 /**
- * Hak durumu: plan, etkin kalan deneme (cihaz bildirildiyse hesap ve cihazın küçüğü), aylık kullanım, sınır ve
- * abonelik erişimi (ek süre dahil). `deviceId` istemcinin bildirdiği App Attest anahtar kimliğidir; yalnızca
+ * Hak durumu: plan, etkin kalan deneme (cihaz bildirildiyse hesap ve cihazın küçüğü; süre dolduysa 0), denemenin
+ * bitiş anı, aylık kullanım, sınır ve abonelik erişimi (ek süre dahil). `deviceId` istemcinin bildirdiği App Attest anahtar kimliğidir; yalnızca
  * gösterim içindir, hak toplantı başlatırken imzalı onayla yeniden denetlenir.
  */
 export async function entitlements(db: D1Database, config: Config, userId: string, deviceId: string | null, now: Date): Promise<Entitlements> {
-  const [subscription, trialUsed, deviceUsed, usage]: [SubscriptionState | null, number, number | null, MonthlyUsage] = await Promise.all([
+  const [subscription, trial, deviceUsed, usage]: [SubscriptionState | null, TrialState, number | null, MonthlyUsage] = await Promise.all([
     subscriptionState(db, userId),
-    userTrialMeetingsUsed(db, userId),
+    userTrialState(db, userId),
     deviceId === null ? Promise.resolve(null) : deviceTrialMeetingsUsed(db, deviceId),
     monthlyUsage(db, userId, now),
   ]);
   const access: SubscriptionAccess = subscriptionAccess(subscription, now, config.pastDueGraceMs);
-  const accountLeft: number = Math.max(0, config.trialMeetings - trialUsed);
+  const accountLeft: number = trialMeetingsLeft(trial, config, now);
+  const trialEnd: number | null = access === "none" ? trialEndsAtMs(trial, config.trialDurationMs) : null;
   const deviceLeft: number | null = deviceUsed === null ? null : Math.max(0, config.trialMeetings - deviceUsed);
   return {
     userId,
     plan: access === "none" ? "trial" : "subscription",
     trialMeetingsTotal: config.trialMeetings,
+    trialDays: config.trialDays,
     trialMeetingsLeft: deviceLeft === null ? accountLeft : Math.min(accountLeft, deviceLeft),
     accountTrialMeetingsLeft: accountLeft,
+    trialEndsAt: trialEnd === null ? null : new Date(trialEnd).toISOString(),
     deviceTrialMeetingsLeft: deviceLeft,
     monthlyHoursUsed: hoursRoundedUp(usage.usedSeconds),
     monthlyHoursCap: config.monthlyCapSeconds / 3600,

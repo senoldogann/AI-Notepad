@@ -68,6 +68,9 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let trialMeetingsLeft: Int
     public let accountTrialMeetingsLeft: Int
     public let deviceTrialMeetingsLeft: Int?
+    /// Deneme süresinin bittiği an (ilk deneme toplantısı + deneme günleri); deneme başlamadıysa, abonelikte ya da
+    /// alanı bilmeyen eski sunucuda nil.
+    public let trialEndsAt: Date?
     public let monthlyHoursUsed: Double
     public let monthlyHoursCap: Double
     public let subscription: HostedSubscription?

@@ -24,6 +24,7 @@ export interface Env {
   readonly DEVICECHECK_TEAM_ID: string;
   readonly DEVICECHECK_KEY_ID: string;
   readonly TRIAL_MEETINGS: string;
+  readonly TRIAL_DAYS: string;
   readonly TRIAL_ACCOUNT_DAILY_TOKENS: string;
   readonly TRIAL_ACCOUNTS_PER_IP_PER_DAY: string;
   readonly TRIAL_MAX_MEETING_MINUTES: string;
