@@ -1,5 +1,6 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
+import { warnIfStripeTestMode } from "./billing";
 import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
 import { type Config, parseConfig } from "./config";
 import { settleDeepgramMeetings } from "./deepgram";
@@ -32,6 +33,7 @@ export default {
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const now: Date = new Date(controller.scheduledTime);
     const config: Config = parseConfig(env);
+    warnIfStripeTestMode(config, "scheduled");
     await dailyElevenLabsCapacityCheck(env.DB, config, now);
     await settleDeepgramMeetings(env.DB, now);
     await cleanupExpiredRows(env.DB, now, scheduledCleanupLimits);

@@ -197,6 +197,38 @@ describe("Stripe webhook", () => {
     expect(accepted.status).toBe(200);
   });
 
+  it("ilgisiz ayar hatası webhook'u durdurmaz (yalnızca Stripe ayarları gerekir); üretimde test anahtarı açık uyarı yazar", async () => {
+    const harness: Harness = await defaultHarness();
+    // DeviceCheck zorunlu ama anahtar yok, Deepgram açık ama anahtar yok: diğer uçlar 500 döner.
+    const broken = envWith({ ENVIRONMENT: "production", DEVICECHECK_POLICY: "required", DEVICECHECK_PRIVATE_KEY: "", DEEPGRAM_POLICY: "on", DEEPGRAM_API_KEY: "" });
+    await expectError(await harness.call(req("GET", "/v1/health", { env: broken })), 500, "internal_error");
+    const id = uniqueIds();
+    const payload: string = eventOf(id("evt_cfg"), "invoice.paid", 1, { id: "in_1", object: "invoice" });
+    const signature: string = await Stripe.webhooks.generateTestHeaderStringAsync({
+      payload,
+      secret: env.STRIPE_WEBHOOK_SECRET,
+      timestamp: Math.floor(harness.clock.nowMs / 1000),
+      cryptoProvider: Stripe.createSubtleCryptoProvider(),
+    });
+    const warnings = vi.spyOn(console, "warn");
+    const accepted: Response = await harness.call(
+      req("POST", "/v1/billing/webhook", { body: payload, env: broken, headers: { "stripe-signature": signature, "content-type": "application/json" } }),
+    );
+    expect(accepted.status).toBe(200);
+    expect(warnings.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"stripe_test_mode_in_production"'))).toBe(true);
+    warnings.mockRestore();
+    // Stripe sırrı eksikse webhook da açıkça durur (alan adıyla alarm).
+    const alerts = vi.spyOn(console, "error");
+    const noSecret = envWith({ STRIPE_WEBHOOK_SECRET: "" });
+    await expectError(
+      await harness.call(req("POST", "/v1/billing/webhook", { body: payload, env: noSecret, headers: { "stripe-signature": signature } })),
+      500,
+      "internal_error",
+    );
+    expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"fields":"STRIPE_WEBHOOK_SECRET"'))).toBe(true);
+    alerts.mockRestore();
+  });
+
   it("abonelik durumunu Stripe'taki güncel halinden yazar, aynı olayı bir kez işler, geç gelen eski olay yeni durumu ezmez", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);

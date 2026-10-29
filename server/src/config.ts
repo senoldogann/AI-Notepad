@@ -137,6 +137,20 @@ export interface Config {
   };
 }
 
+/**
+ * Stripe webhook'unun yapılandırması: yalnızca ortam ve Stripe sırları. Webhook bununla çalışır; ilgisiz bir ayarın
+ * (ör. `DEVICECHECK_PRIVATE_KEY`, `DEEPGRAM_API_KEY`) hatası ödeme olaylarını durdurmaz. `Config` bunu kapsar.
+ */
+export interface StripeWebhookConfig {
+  readonly environment: "development" | "production";
+  /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
+  readonly stripeMode: StripeMode;
+  readonly secrets: {
+    readonly stripe: string;
+    readonly stripeWebhook: string;
+  };
+}
+
 /** Yapılandırma eksik ya da geçersiz: dağıtım hatasıdır, istemciye ayrıntı verilmez. */
 export class ConfigError extends Error {
   override readonly name: string = "ConfigError";
@@ -274,6 +288,32 @@ const envSchema = z.object({
   TURNSTILE_SECRET_KEY: secret,
 });
 
+/** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası). */
+const stripeWebhookSchema = envSchema.pick({ ENVIRONMENT: true, STRIPE_SECRET_KEY: true, STRIPE_WEBHOOK_SECRET: true });
+
+/** Anahtarın modu. Saf fonksiyondur. */
+function stripeModeOf(key: string): StripeMode {
+  return stripeKeyPattern.exec(key)?.[1] === "live" ? "live" : "test";
+}
+
+/** Yalnızca webhook'un ayarlarını doğrular; hatada alan adlarını taşıyan `ConfigError`. */
+export function parseStripeWebhookConfig(env: Env): StripeWebhookConfig {
+  const parsed = stripeWebhookSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new ConfigError(parsed.error.issues.map((issue: z.core.$ZodIssue): string => issue.path.join(".")));
+  }
+  return {
+    environment: parsed.data.ENVIRONMENT,
+    stripeMode: stripeModeOf(parsed.data.STRIPE_SECRET_KEY),
+    secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET },
+  };
+}
+
+/** Üretimde test modu Stripe anahtarı mı (gerçek ödemeler alınmaz; uyarı yazılır). Saf fonksiyondur. */
+export function isStripeTestModeInProduction(config: StripeWebhookConfig): boolean {
+  return config.environment === "production" && config.stripeMode === "test";
+}
+
 /**
  * Ortamı doğrular ve tipli yapılandırmaya çevirir; hatada yalnızca alan adlarını taşıyan `ConfigError` fırlatır.
  * Üretimde yer tutucu değer kalmışsa (`placeholderSettings`) `ConfigPlaceholderError`: sunucu ödeme anında değil, ilk
@@ -360,7 +400,7 @@ export function parseConfig(env: Env): Config {
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
-    stripeMode: stripeKeyPattern.exec(value.STRIPE_SECRET_KEY)?.[1] === "live" ? "live" : "test",
+    stripeMode: stripeModeOf(value.STRIPE_SECRET_KEY),
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
       trialHash: value.TRIAL_HASH_SECRET,

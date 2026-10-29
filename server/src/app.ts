@@ -18,7 +18,7 @@ import { findOrCreateUser } from "./auth/users";
 import { trialIdentityHash } from "./trialLedger";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
-import { type Config, ConfigError, parseConfig } from "./config";
+import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
 import { countDownload, latestMacVersion } from "./downloads";
@@ -208,16 +208,6 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/health" && method === "GET") {
     return jsonResponse(200, { status: "ok" });
   }
-  if (path === "/v1/billing/webhook" && method === "POST") {
-    const signature: string | null = request.headers.get("stripe-signature");
-    if (signature === null) {
-      throw new ApiError("webhook_invalid", "Stripe-Signature başlığı gerekli.");
-    }
-    const payload: string = new TextDecoder().decode(await readBodyBytes(request, webhookBodyBytes));
-    const result: { duplicate: boolean } = await handleStripeWebhook(db, context.platform, config, payload, signature);
-    return jsonResponse(200, { received: true, duplicate: result.duplicate });
-  }
-
   // Hız sınırı ve IP özeti IPv6'da /64 önekine göredir (`clientIpKey`); Turnstile gerçek IP'yi alır.
   const ipKey: string = clientIpKey(context.clientIp);
   await enforceLimit(env.API_IP_LIMITER, `ip:${ipKey}`);
@@ -413,10 +403,45 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
   throw new ApiError("not_found", "Böyle bir uç yok.");
 }
 
+/**
+ * Stripe webhook'u: yalnızca Stripe ayarlarıyla (`parseStripeWebhookConfig`) çalışır; ilgisiz bir ayarın hatası (ör.
+ * DeviceCheck ya da Deepgram anahtarı) ödeme olaylarını durdurmaz.
+ */
+async function stripeWebhook(request: Request, env: Env, context: RequestContext): Promise<Response> {
+  let config: StripeWebhookConfig;
+  try {
+    config = parseStripeWebhookConfig(env);
+  } catch (error: unknown) {
+    if (error instanceof ConfigError) {
+      log("alert", "stripe_webhook_config_invalid", { fields: error.fields.join(",") });
+      return finalizeResponse(errorResponse(new ApiError("internal_error", "Sunucu yapılandırması eksik.")), null);
+    }
+    throw error;
+  }
+  try {
+    const signature: string | null = request.headers.get("stripe-signature");
+    if (signature === null) {
+      throw new ApiError("webhook_invalid", "Stripe-Signature başlığı gerekli.");
+    }
+    const payload: string = new TextDecoder().decode(await readBodyBytes(request, webhookBodyBytes));
+    const result: { duplicate: boolean } = await handleStripeWebhook(env.DB, context.platform, config, payload, signature);
+    return finalizeResponse(jsonResponse(200, { received: true, duplicate: result.duplicate }), null);
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      return finalizeResponse(errorResponse(error), null);
+    }
+    log("error", "unhandled_error", { path: "/v1/billing/webhook", error: errorName(error) });
+    return finalizeResponse(errorResponse(new ApiError("internal_error", "Beklenmeyen bir sunucu hatası oluştu.")), null);
+  }
+}
+
 /** Worker'ın istek işleyicisi: yapılandırma, CORS, yönlendirme, tek tip hata ve güvenlik başlıkları. */
 export async function handleRequest(request: Request, env: Env, context: RequestContext): Promise<Response> {
   const url: URL = new URL(request.url);
   const path: string = url.pathname;
+  if (path === "/v1/billing/webhook" && request.method === "POST") {
+    return stripeWebhook(request, env, context);
+  }
   let config: Config;
   try {
     config = parseConfig(env);

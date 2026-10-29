@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import type { Config } from "./config";
+import { type Config, type StripeWebhookConfig, isStripeTestModeInProduction } from "./config";
 import { type SubscriptionState, isTerminalSubscription, subscriptionState } from "./entitlements";
 import { ApiError } from "./errors";
 import { errorName, log } from "./log";
@@ -9,8 +9,15 @@ import { withRetries } from "./retry";
 /** Stripe isteğinin zaman aşımı (SDK'nın fetch istemcisi isteğin tamamına uygular). */
 const stripeTimeoutMs: number = 20_000;
 
+/** Üretimde test modu anahtarı varsa açık uyarı yazar (ödemeler gerçek değildir). */
+export function warnIfStripeTestMode(config: StripeWebhookConfig, operation: string): void {
+  if (isStripeTestModeInProduction(config)) {
+    log("warn", "stripe_test_mode_in_production", { operation });
+  }
+}
+
 /** Stripe istemcisi (dış sistem bağlantısı): fetch tabanlı; yeniden denemeyi `withRetries` yapar. */
-export function stripeClient(platform: Platform, config: Config): Stripe {
+export function stripeClient(platform: Platform, config: StripeWebhookConfig): Stripe {
   return new Stripe(config.secrets.stripe, {
     httpClient: Stripe.createFetchHttpClient(platform.fetch),
     maxNetworkRetries: 0,
@@ -193,6 +200,7 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
     "subscription_exists",
     "Zaten bir aboneliğin var; yeni abonelik açılmaz. Ödeme yöntemini güncellemek ya da aboneliği yönetmek için Müşteri Portalı'nı aç.",
   );
+  warnIfStripeTestMode(config, "checkout");
   const current: SubscriptionState | null = await subscriptionState(db, userId);
   if (current !== null && !isTerminalSubscription(current, platform.now())) {
     throw subscriptionExists;
@@ -513,7 +521,7 @@ async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform
 }
 
 /** Olay türüne göre Stripe yan etkileri ve veritabanı ifadeleri; tanınmayan olay yalnızca kaydedilir. */
-async function eventStatements(db: D1Database, platform: Platform, config: Config, event: Stripe.Event): Promise<EventStatements> {
+async function eventStatements(db: D1Database, platform: Platform, config: StripeWebhookConfig, event: Stripe.Event): Promise<EventStatements> {
   const subscription: Stripe.Subscription | null = subscriptionFromEvent(event);
   if (subscription !== null) {
     return subscriptionEventStatements(db, stripeClient(platform, config), platform, event, subscription);
@@ -532,7 +540,7 @@ async function eventStatements(db: D1Database, platform: Platform, config: Confi
 }
 
 /**
- * Stripe webhook'u: imza `constructEventAsync` ile doğrulanır (5 dakika tolerans). Olayın modu (`livemode`) anahtarın
+ * Stripe webhook'u (yalnızca Stripe ayarlarıyla çalışır: `StripeWebhookConfig`): imza `constructEventAsync` ile doğrulanır (5 dakika tolerans). Olayın modu (`livemode`) anahtarın
  * moduyla (`sk_live`/`rk_live` ↔ `sk_test`/`rk_test`) uyuşmazsa alarm yazılır ve `500` döner (yapılandırma hatası;
  * Stripe yeniden dener, düzeltilince olay işlenir). İşlenmiş olay Stripe çağrılmadan `duplicate` döner. Olay kimliği
  * `stripe_events` tablosuna, durum değişiklikleri aynı toplu işlemde yazılır: aynı olay eşzamanlı ikinci kez gelirse
@@ -540,7 +548,8 @@ async function eventStatements(db: D1Database, platform: Platform, config: Confi
  * `customer.deleted`, `charge.refunded` (alarm; tam iadede abonelik biter), `charge.dispute.created` (alarm ve abonelik iptali); diğerleri
  * yalnızca kaydedilir.
  */
-export async function handleStripeWebhook(db: D1Database, platform: Platform, config: Config, payload: string, signature: string): Promise<{ duplicate: boolean }> {
+export async function handleStripeWebhook(db: D1Database, platform: Platform, config: StripeWebhookConfig, payload: string, signature: string): Promise<{ duplicate: boolean }> {
+  warnIfStripeTestMode(config, "webhook");
   let event: Stripe.Event;
   try {
     event = await Stripe.webhooks.constructEventAsync(
