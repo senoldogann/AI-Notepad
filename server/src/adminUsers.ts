@@ -7,6 +7,7 @@ import {
   type TrialState,
   graceEndsAtMs,
   subscriptionAccess,
+  subscriptionRenewalGraceMs,
   trialEndsAtMs,
   trialMeetingsLeft,
 } from "./entitlements";
@@ -196,7 +197,8 @@ export function parseAdminUserFilter(url: URL): AdminUserFilter {
  * Abonelik erişimi için SQL koşulu (`subscriptions s`, LEFT JOIN: satır yoksa 0); `entitlements.subscriptionAccess`
  * ile aynıdır. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
  */
-const accessSql: string = `COALESCE((s.status IN ('active', 'trialing') AND s.current_period_end > ?1)
+const accessSql: string = `COALESCE((s.status IN ('active', 'trialing') AND (CASE WHEN s.cancel_at IS NULL OR s.cancel_at > s.current_period_end
+  THEN s.current_period_end + ${subscriptionRenewalGraceMs} ELSE s.current_period_end END) > ?1)
   OR (s.status = 'past_due' AND s.past_due_since + ?2 > ?1), 0)`;
 
 /** Denemeye başlamış (ya da silinmiş hesabından deneme devralmış) hesap için SQL koşulu (`users u`). */

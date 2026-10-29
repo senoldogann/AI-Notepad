@@ -61,11 +61,16 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
 
   <LegalSection sections={sections} id="summary">
     <ul>
-      <li>Your notes, transcripts and recordings are stored on your Mac. Our servers do not keep a copy.</li>
+      <li>
+        Your notes, transcripts and recordings are stored on your Mac. Our servers keep no audio, notes or translations;
+        the only exception is the final transcript, held encrypted for up to 2 hours so it can be re-sent if the
+        connection drops, then deleted.
+      </li>
       <li>
         Meeting audio and text go only to our AI providers to be transcribed and summarised: Deepgram for the live
         transcript (directly from your Mac), ElevenLabs for the final transcript and Anthropic for notes (both through our
-        server, which does not store them). Deepgram keeps nothing after transcribing; the others may keep request data for
+        server, which keeps no audio or notes and holds the final transcript encrypted for up to 2 hours). Deepgram keeps no
+        audio or text after transcribing; the others may keep request data for
         a time under their own retention rules (see section 7). We keep only usage numbers (how long, how many tokens) to
         apply the plan limits.
       </li>
@@ -94,7 +99,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <li>
         <strong>Final transcript and speaker separation.</strong> When a meeting ends, the app sends the recording
         through our server to ElevenLabs, which returns the transcript. Our server streams the audio through without
-        writing it to storage and records only its duration.
+        writing it to storage and records its duration. It keeps the returned transcript encrypted for up to 2 hours, so
+        the app can fetch it again if the reply is lost on the way; after that it is deleted automatically, or immediately
+        when you delete your account.
       </li>
       <li>
         <strong>Notes, live translation, “What did I miss?” and Ask.</strong> The relevant parts of the transcript (and
@@ -109,9 +116,11 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       </li>
       <li>
         <strong>Integrations.</strong> When you send a note or tasks to Notion, Slack, Microsoft Teams, Discord, Zoom,
-        Linear, Jira or Reminders, the app sends that content from your Mac directly to the service you chose, using the
-        account you connected. It does not pass through our server, and the receiving service processes it under its own
-        terms.
+        Linear, Jira, Reminders or Apple Notes, save it as Markdown to a folder you choose (for example an Obsidian
+        vault), or send it to a webhook you set up (such as Zapier, Make or n8n), the app sends that content from your Mac
+        directly to the destination you chose, using the account or address you connected. It does not pass through our
+        server, and the receiving service processes it under its own terms. If you connect an AI assistant on your Mac
+        through the app's MCP connection, that assistant can read your meetings and handles them under its own terms.
       </li>
     </ul>
     <p>
@@ -128,7 +137,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
 
   <LegalSection sections={sections} id="data">
     <div class="table-wrap">
-      <table>
+      <table class="stack-table table-data">
         <thead>
           <tr><th scope="col">Data</th><th scope="col">Purpose</th><th scope="col">Legal basis (GDPR Art. 6(1))</th></tr>
         </thead>
@@ -136,8 +145,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Meeting content.</strong> Meeting audio, transcripts, notes, the questions you ask, and the
-              participant names and terms you add. Passed through our server only while it is processed; not stored on
-              our servers.
+              participant names and terms you add. Passed through our server only while it is processed; no audio or notes
+              are stored on our servers, and the final transcript is held encrypted for up to 2 hours so it can be
+              re-sent.
             </td>
             <td>Transcribing meetings; writing notes, translations and answers</td>
             <td>
@@ -305,7 +315,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       policies.
     </p>
     <div class="table-wrap">
-      <table>
+      <table class="stack-table table-processors">
         <thead>
           <tr>
             <th scope="col">Provider</th><th scope="col">Role and purpose</th><th scope="col">Data</th><th scope="col">Location, safeguards and retention</th>
@@ -410,7 +420,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
   <LegalSection sections={sections} id="retention">
     <ul>
       <li>
-        Meeting content: not stored on our servers. At our AI providers: Deepgram keeps the live audio and transcript only
+        Meeting content: no audio, notes or translations are stored on our servers; the final transcript is kept
+        encrypted for up to 2 hours (see section 3), then deleted. At our AI providers: Deepgram keeps the live audio and
+        transcript only
         while processing them; Anthropic deletes it within 30 days (up to 2 years if flagged under its usage policy);
         ElevenLabs keeps it under its own retention rules (see section 7).
       </li>
@@ -449,7 +461,10 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       new account continues the trial where the old one left off and, within the same month, starts from the old
       account's usage; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for
       your network (a hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by
-      Stripe and Link; messages and reports until their 180 days run out (ask us if you want them deleted sooner); and
+      Stripe and Link; messages you sent through the contact form until their 180 days run out (ask us if you want them
+      deleted sooner — feedback and crash reports linked to your account are deleted with it); if a duplicate
+      subscription was ever created by mistake, its Stripe identifiers for up to 400 days so a double charge can be
+      refunded; and
       technical logs and backups until they expire. Notes and recordings on your Mac stay where they are; you delete them
       in the app.
     </p>
@@ -497,8 +512,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
 
   <LegalSection sections={sections} id="changes">
     <p>
-      When we change this policy we update the date at the top. We announce material changes in the app or by email
-      before they take effect.
+      When we change this policy we update the date at the top. We announce material changes in the app and on this
+      page before they take effect.
     </p>
   </LegalSection>
 

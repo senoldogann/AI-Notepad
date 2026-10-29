@@ -4,7 +4,7 @@ import type { Config } from "./config";
 import { Base64Error, base64Decode, decodeUtf8Strict, randomToken, utf8 } from "./crypto";
 import { ApiError, UpstreamError, isRetryableStatus } from "./errors";
 import { jsonResponse } from "./http";
-import { alertOnElevenLabsCrossing } from "./elevenLabsCapacity";
+import { alertOnElevenLabsCrossing, requireElevenLabsHeadroom } from "./elevenLabsCapacity";
 import { errorName, log } from "./log";
 import type { MeetingRow } from "./meetings";
 import type { RequestContext } from "./platform";
@@ -337,6 +337,7 @@ export async function proxyTranscription(
   let reservation: UsageReservation;
   try {
     audio = await readWavHead(reader, declaredBytes);
+    await requireElevenLabsHeadroom(db, config, audio.seconds, now);
     reservation = audioReservation(meeting.user_id, meeting.id, audio.seconds, transcriptionCostMicroUsd(audio.seconds, usdPerHour), meeting.kind === "trial", now);
     await reserveUsage(db, reservation, [
       { limit: meetingAudioIdleLimit(meeting.id, now), amount: 1 },

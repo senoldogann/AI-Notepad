@@ -67,13 +67,16 @@ describe("ElevenLabs kapasite sayacı", () => {
       expect(crossings()[0]).toContain('"threshold":0.8');
       expect(await transcribe(5)).toBe(200);
       expect(crossings()).toHaveLength(1);
-      expect(await transcribe(20)).toBe(200);
+      expect(await transcribe(19)).toBe(200);
       expect(crossings()).toHaveLength(2);
       expect(crossings()[1]).toContain('"threshold":0.95');
+      // %97'yi aşacak istek ElevenLabs'e gitmeden anlaşılır 503 ile durur (kredi bitip sağlayıcıda düşmesin).
+      expect(await transcribe(5)).toBe(503);
+      expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"elevenlabs_capacity_exhausted"'))).toBe(true);
 
       const counted = await env.DB.prepare("SELECT audio_seconds FROM daily_spend WHERE day = '2027-03-20'").first<{ audio_seconds: number }>();
-      expect(counted?.audio_seconds).toBe(35);
-      expect((await dailyElevenLabsCapacityCheck(env.DB, config, now)).percent).toBe(97.2);
+      expect(counted?.audio_seconds).toBe(34);
+      expect((await dailyElevenLabsCapacityCheck(env.DB, config, now)).percent).toBe(96.7);
       expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"elevenlabs_capacity_high","threshold":0.95'))).toBe(true);
     } finally {
       alerts.mockRestore();

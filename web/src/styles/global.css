@@ -741,6 +741,64 @@ p {
   border-bottom: 0;
 }
 
+/* Telefonda gizlilik tabloları kart gibi alt alta dizilir (yatay kaydırmada sütunlar ekran dışında kalıyordu);
+   başlık satırı gizlenir, her hücrenin başında sütunun adı yazar. */
+@media (max-width: 640px) {
+  .prose .stack-table {
+    min-width: 0;
+  }
+
+  .prose .stack-table thead {
+    display: none;
+  }
+
+  .prose .stack-table tr,
+  .prose .stack-table td {
+    display: block;
+  }
+
+  .prose .stack-table tr {
+    padding-block: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prose .stack-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .prose .stack-table td {
+    border-bottom: 0;
+    padding-block: 4px;
+  }
+
+  .prose .stack-table td + td::before {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .prose .table-data td:nth-child(2)::before {
+    content: "Purpose";
+  }
+
+  .prose .table-data td:nth-child(3)::before {
+    content: "Legal basis";
+  }
+
+  .prose .table-processors td:nth-child(2)::before {
+    content: "Role and purpose";
+  }
+
+  .prose .table-processors td:nth-child(3)::before {
+    content: "Data";
+  }
+
+  .prose .table-processors td:nth-child(4)::before {
+    content: "Location, safeguards and retention";
+  }
+}
+
 .prose a {
   color: var(--ink);
   text-decoration-color: color-mix(in srgb, var(--ink) 35%, transparent);

@@ -1,4 +1,5 @@
 import type { Config } from "./config";
+import { ApiError } from "./errors";
 import { log } from "./log";
 import { dayKey } from "./usage";
 
@@ -11,6 +12,10 @@ import { dayKey } from "./usage";
 
 /** Uyarı eşikleri (kullanım oranı). */
 export const elevenLabsAlertThresholds: readonly number[] = [0.8, 0.95];
+/** Bu orandan sonra yeni ses işleme isteği kabul edilmez: kredi tükenip abonelerin isteği sağlayıcıda düşmesin. */
+export const elevenLabsHardStopRatio: number = 0.97;
+/** Bu orandan sonra yeni deneme toplantısı açılmaz: kalan kapasite abonelere kalır. */
+export const elevenLabsTrialStopRatio: number = 0.85;
 
 /** Bu dönemin ElevenLabs kullanımı. */
 export interface ElevenLabsUsage {
@@ -80,6 +85,31 @@ export async function alertOnElevenLabsCrossing(db: D1Database, config: Config, 
     const usage: ElevenLabsUsage = elevenLabsUsageOf(seconds, config.elevenLabs.monthlyAudioHours, cycleStart);
     log("alert", "elevenlabs_capacity_threshold", { threshold, ...usage });
   }
+}
+
+/**
+ * Ses işleme isteğinden önce: bu dönemin kullanımı + `addedSeconds` kapasitenin `elevenLabsHardStopRatio`'sunu aşacaksa
+ * istek ElevenLabs'e gitmeden `spend_ceiling_reached` (anlaşılır 503; aksi halde kredi bitince istek sağlayıcıda 502 ile
+ * düşerdi) ve `alert` yazılır.
+ */
+export async function requireElevenLabsHeadroom(db: D1Database, config: Config, addedSeconds: number, now: Date): Promise<void> {
+  const { cycleStart, seconds } = await cycleAudioSeconds(db, config, now);
+  const capSeconds: number = config.elevenLabs.monthlyAudioHours * 3600;
+  if (seconds + addedSeconds <= elevenLabsHardStopRatio * capSeconds) {
+    return;
+  }
+  log("alert", "elevenlabs_capacity_exhausted", { addedSeconds, ...elevenLabsUsageOf(seconds, config.elevenLabs.monthlyAudioHours, cycleStart) });
+  throw new ApiError("spend_ceiling_reached", "Konuşma tanıma kapasitesi bu dönem doldu; biraz sonra yeniden dene.");
+}
+
+/** Yeni deneme toplantısından önce: kullanım `elevenLabsTrialStopRatio`'yu geçtiyse `trial_capacity_reached`. */
+export async function requireElevenLabsTrialHeadroom(db: D1Database, config: Config, now: Date): Promise<void> {
+  const { cycleStart, seconds } = await cycleAudioSeconds(db, config, now);
+  if (seconds < elevenLabsTrialStopRatio * config.elevenLabs.monthlyAudioHours * 3600) {
+    return;
+  }
+  log("warn", "elevenlabs_trial_stop", { ...elevenLabsUsageOf(seconds, config.elevenLabs.monthlyAudioHours, cycleStart) });
+  throw new ApiError("trial_capacity_reached", "Ücretsiz denemeler şu an kapasitede; yarın yeniden dene ya da abone ol.");
 }
 
 /** Günlük denetim (Cron): kullanım bir eşiğin üstündeyse günde bir `alert` yazar. Kullanımı döndürür. */

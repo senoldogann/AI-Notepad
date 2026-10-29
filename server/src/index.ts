@@ -9,6 +9,7 @@ import { type Config, parseConfig } from "./config";
 import { settleDeepgramMeetings } from "./deepgram";
 import { dailyElevenLabsCapacityCheck } from "./elevenLabsCapacity";
 import type { Env } from "./env";
+import { errorName, log } from "./log";
 import type { Platform } from "./platform";
 
 /** Üretim platformu: gerçek fetch, saat, Apple App Attestation kökü ve Worker örneği ömrünce JWKS önbelleği. */
@@ -37,11 +38,27 @@ export default {
     const now: Date = new Date(controller.scheduledTime);
     const config: Config = parseConfig(env);
     warnIfStripeTestMode(config, "scheduled");
-    await dailyElevenLabsCapacityCheck(env.DB, config, now);
-    await settleDeepgramMeetings(env.DB, now);
-    await cleanupExpiredRows(env.DB, now, scheduledCleanupLimits);
-    // Apple ve Google anahtarları önceden alınır: girişler sağlayıcıyı beklemesin (bkz. `persistedIssuerKeys`).
-    await refreshPersistedIssuerKeys(env.DB, platform, appleTokenIssuer(config));
-    await refreshPersistedIssuerKeys(env.DB, platform, googleTokenIssuer(config));
+    // Adımlar birbirinden bağımsız: biri başarısız olsa da diğerleri çalışır; her hata `alert` yazılır, sonunda hepsi
+    // birlikte fırlatılır (Cron çalışması başarısız görünsün).
+    const steps: ReadonlyArray<{ name: string; run: () => Promise<unknown> }> = [
+      { name: "elevenlabs_capacity", run: () => dailyElevenLabsCapacityCheck(env.DB, config, now) },
+      { name: "deepgram_settle", run: () => settleDeepgramMeetings(env.DB, now) },
+      { name: "cleanup", run: () => cleanupExpiredRows(env.DB, now, scheduledCleanupLimits) },
+      // Apple ve Google anahtarları önceden alınır: girişler sağlayıcıyı beklemesin (bkz. `persistedIssuerKeys`).
+      { name: "apple_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, appleTokenIssuer(config)) },
+      { name: "google_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, googleTokenIssuer(config)) },
+    ];
+    const failures: unknown[] = [];
+    for (const step of steps) {
+      try {
+        await step.run();
+      } catch (error: unknown) {
+        log("alert", "scheduled_step_failed", { step: step.name, error: errorName(error) });
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `Zamanlanmış görevde ${failures.length} adım başarısız.`);
+    }
   },
 } satisfies ExportedHandler<Env>;

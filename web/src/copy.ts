@@ -507,7 +507,7 @@ export const copy: Copy = {
     price: "$5.99",
     perMonth: "/ month",
     offer: "3 meetings or 7 days free, then $5.99 a month, taxes included",
-    requirementsShort: "macOS 26 · Apple silicon",
+    requirementsShort: "macOS 26 or later · Apple silicon",
     taxNote: "Taxes included.",
     renewalNote: "Renews automatically every month until you cancel. Cancel anytime.",
     ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
@@ -663,7 +663,7 @@ export const copy: Copy = {
       lead: "Built for conversations you'd rather keep private, by a small company in Finland.",
       items: [
         { title: "No bot in your call", text: "Gistsmith listens on your Mac. Nobody sees an extra participant, and you don't have to ask anyone to let it in." },
-        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers never keep a copy." },
+        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers don't keep your notes or recordings." },
         { title: "Audio isn't kept by us", text: "Audio is sent only to be transcribed. Our servers don't store it, and your recordings stay on your Mac." },
         { title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
         { title: "EU company, GDPR", text: "Gistsmith is run from Finland under EU data protection law. Our account database is hosted in the EU." },
@@ -721,11 +721,11 @@ export const copy: Copy = {
       {
         question: "Where does my audio go?",
         answer:
-          "While you record, the audio streams from your Mac to Deepgram for the live transcript; Deepgram is asked not to keep it or use it for training. If that isn't available, the live transcript is produced on your Mac instead. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or text; they only count the duration. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
+          "While you record, the audio streams from your Mac to Deepgram for the live transcript; Deepgram is asked not to keep it or use it for training. If that isn't available, the live transcript is produced on your Mac instead. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or notes; they count the duration and hold the final transcript encrypted for up to 2 hours, only so it can be re-sent if the connection drops. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
       },
       {
         question: "Where are my notes stored?",
-        answer: "On your Mac. Notes, transcripts and recordings live in the app's folder on your Mac; our servers never keep a copy. You can export, share or delete them in the app.",
+        answer: "On your Mac. Notes, transcripts and recordings live in the app's folder on your Mac; our servers don't keep them (the final transcript is held encrypted for up to 2 hours so it can be re-sent, then deleted). You can export, share or delete them in the app.",
       },
       {
         question: "Which languages are supported?",
@@ -797,7 +797,7 @@ export const copy: Copy = {
   download: {
     meta: {
       title: `Download — ${productName}`,
-      description: `Download ${productName} for your Mac: macOS 26 and Apple silicon. 3 meetings or 7 days free.`,
+      description: `Download ${productName} for your Mac: macOS 26 or later on Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",

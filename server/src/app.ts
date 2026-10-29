@@ -379,6 +379,10 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     await countDownload(db, now);
     return new Response(null, { status: 302, headers: { location: config.dmgUrl } });
   }
+  // Bağlantı denetleyicileri HEAD sorar: aynı yönlendirme, indirme sayılmaz.
+  if (path === "/v1/download/mac" && method === "HEAD") {
+    return new Response(null, { status: 302, headers: { location: config.dmgUrl } });
+  }
 
   if (path.startsWith(adminPrefix)) {
     await requireCloudflareAccess(context.platform, config.access, request);

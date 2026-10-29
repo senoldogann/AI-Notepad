@@ -18,6 +18,7 @@ import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform, RequestContext } from "./platform";
 import { type TrialRefusalReason, recordTrialRefusal } from "./trialRefusals";
+import { requireElevenLabsTrialHeadroom } from "./elevenLabsCapacity";
 import { type MonthlyUsage, chunkOverlapAllowance, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
@@ -222,6 +223,7 @@ export async function startMeeting(
   await requireSpendHeadroom(db, config, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
     await requireTrialSpendHeadroom(db, config, now);
+    await requireElevenLabsTrialHeadroom(db, config, now);
     await requireTrialDevice(db, context, config, userId, request.deviceCheckToken, now);
     return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, request.deferred, now);
   }
