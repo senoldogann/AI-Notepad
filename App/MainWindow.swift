@@ -658,6 +658,13 @@ private struct HomePage: View {
                 .padding(.top, 24)
                 Shortcuts(model: model, router: router, onShowPanel: onShowPanel)
                 UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
+                    #if HOSTED_EDITION
+                    // Hakkı yoksa mevcut sohbet silinmez; teklif açılır.
+                    if HostedAccount.shared.requiresSubscription {
+                        HostedAccount.shared.requestSubscription()
+                        return
+                    }
+                    #endif
                     // Brifing yeni bir konu: önceki sohbet bağlam olmasın.
                     model.clearArchiveConversation()
                     model.askArchive(question: briefingQuestion(meeting: meeting), meetingIDs: [], recipeTitle: nil)

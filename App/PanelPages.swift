@@ -368,7 +368,8 @@ private struct ProcessingOverlay: View {
         Image(systemName: "waveform")
             .appFont(size: 34, weight: .medium)
             .foregroundStyle(appearance.accent.color)
-            .symbolEffect(.variableColor.iterative.reversing, options: .repeat(.continuous))
+            // Durağan: işleme dakikalarca sürer; sürekli sembol animasyonu bulanık ana pencereyle birlikte her karede
+            // yeniden çizim yaptırıyordu (oynatıcıda ölçülen ana iş parçacığı beklemesiyle aynı desen).
     }
 }
 

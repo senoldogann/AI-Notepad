@@ -598,7 +598,10 @@ final class HostedAccount {
                 return
             }
             let subscribed: Bool = await self.pollForSubscription(attempts: hostedCheckoutWatchAttempts)
-            self.checkoutWatch = nil
+            // İptal edilen (yerine yenisi açılan) izleme, yenisinin referansını silmesin.
+            if !Task.isCancelled {
+                self.checkoutWatch = nil
+            }
             if subscribed, !NSApp.isActive {
                 accountLogger.info("Abonelik göründü, uygulama öne getiriliyor")
                 NSApp.activate()
@@ -779,23 +782,30 @@ final class HostedAccount {
     /// Stripe Checkout'u tarayıcıda açar ve abonelik görününce uygulamayı öne getirir (bkz. `watchCheckout`); bitmemiş
     /// abonelik varsa Müşteri Portalı açılır.
     func subscribe() async {
-        awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
             do {
                 NSWorkspace.shared.open(try await client.checkoutURL())
+                await self.markAwaitingBillingReturn()
                 await self.watchCheckout()
             } catch let error as HostedAPIError where error.code == .subscriptionExists {
                 NSWorkspace.shared.open(try await client.portalURL())
+                await self.markAwaitingBillingReturn()
             }
         }
     }
 
     /// Stripe Müşteri Portalı (kart, iptal; makbuzlar Link'ten e-postayla gelir).
     func manageSubscription() async {
-        awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
             NSWorkspace.shared.open(try await client.portalURL())
+            await self.markAwaitingBillingReturn()
         }
+    }
+
+    /// Ödeme ya da portal sayfası gerçekten açıldı: uygulamaya dönünce hak durumu beklemeden okunur (sayfa açılamadıysa
+    /// boşuna yoklama başlamasın).
+    private func markAwaitingBillingReturn() {
+        awaitingBillingReturn = true
     }
 
     // MARK: Toplantı
@@ -1117,7 +1127,9 @@ private func endOpenMeetingBeforeQuit() {
         for meetingID in meetingIDs {
             do {
                 _ = try await client.endMeeting(meetingID: meetingID)
-                await MainActor.run { removeHostedOpenMeetingID(meetingID: meetingID) }
+                // Ana aktöre geçilmez: ana iş parçacığı aşağıda bu görevi bekliyor (geçseydi kapanış her seferinde 3 sn
+                // takılırdı); UserDefaults iş parçacığı güvenlidir.
+                removeHostedOpenMeetingID(meetingID: meetingID)
             } catch {
                 accountLogger.warning("Kapanışta toplantı oturumu kapatılamadı, sonraki açılışta denenecek, hata: \(String(describing: error), privacy: .private)")
             }

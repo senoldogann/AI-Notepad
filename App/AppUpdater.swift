@@ -198,6 +198,7 @@ final class AppUpdater {
     /// Sık denetim: otomatik denetim açıksa, bir denetim sürmüyorsa ve bulunmuş bir güncelleme beklemiyorsa arka planda
     /// denetlenir (sonuç şeritte değil sağ alttaki kartta gösterilir; Sparkle penceresi açılmaz).
     private func checkInBackground() {
+        // Bulunan sürüm beklerken (kart kapatılsa da) denetlenmez; daha yenisi çıkarsa açılışta görülür.
         guard let updater = controller?.updater, updater.automaticallyChecksForUpdates, updater.canCheckForUpdates, availableUpdate == nil else {
             return
         }

@@ -11,12 +11,34 @@
         }
       }
     },
+    "\"%1$@\" toplantısı öncesi brifing. Katılımcılar: %2$@. Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing for \"%1$@\" with %2$@: what was discussed in earlier meetings with these people or on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
+          }
+        }
+      }
+    },
     "\"%@\" klasörüne, hesap gerekmez": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Into a \"%@\" folder, no account needed"
+          }
+        }
+      }
+    },
+    "\"%@\" toplantısı öncesi brifing: Bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing for \"%@\": what was discussed in earlier meetings on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
           }
         }
       }
@@ -12971,17 +12993,6 @@
         }
       }
     },
-    "Yeni sürüm açılışta ve 6 saatte bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New versions are checked at launch and every 6 hours. When on, they download in the background and install when you quit the app; when off, you are only notified."
-          }
-        }
-      }
-    },
     "Yeni sürüm hazır": {
       "extractionState": "manual",
       "localizations": {
@@ -12989,6 +13000,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "New version ready"
+          }
+        }
+      }
+    },
+    "Yeni sürüm uygulama açıkken birkaç dakikada bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New versions are checked every few minutes while the app is open. When on, updates download in the background and install when you quit; when off, you're only notified."
+          }
+        }
+      }
+    },
+    "Yeni sürüm çıktı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New version available"
           }
         }
       }

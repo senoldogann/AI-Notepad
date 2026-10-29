@@ -216,6 +216,11 @@ struct AskPage: View {
     }
 
     private func send() {
+        // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
+        guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe, unavailableReason == nil,
+              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
         #if HOSTED_EDITION
         // Hakkı yoksa soru alanı temizlenmez (abone olunca yeniden gönderilebilsin); teklif açılır.
         if HostedAccount.shared.requiresSubscription {
@@ -223,11 +228,6 @@ struct AskPage: View {
             return
         }
         #endif
-        // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
-        guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe, unavailableReason == nil,
-              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
         model.askArchive(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)
         question = ""
         // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.

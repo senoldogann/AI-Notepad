@@ -12,7 +12,7 @@ struct UpdateSettingsRow: View {
     var body: some View {
         if updater.isEnabled {
             SettingsRow(title: Text("Otomatik olarak güncelle")) {
-                Text("Yeni sürüm açılışta ve 6 saatte bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.")
+                Text("Yeni sürüm uygulama açıkken birkaç dakikada bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.")
             } control: {
                 HStack(spacing: 8) {
                     Button("Güncellemeleri denetle…") { updater.checkForUpdates() }
@@ -69,7 +69,7 @@ struct UpdateToast: View {
                     .frame(width: 38, height: 38)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Yeni sürüm hazır")
+                    Text(update.isReadyToInstall ? "Yeni sürüm hazır" : "Yeni sürüm çıktı")
                         .appFont(size: 14, weight: .semibold)
                         .foregroundStyle(Theme.ink)
                     Text("Sürüm \(update.version)")
