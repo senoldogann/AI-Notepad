@@ -27,8 +27,14 @@ private struct MeetingStartBody: Encodable {
     let device: HostedDeviceAssertion?
     let deviceCheckToken: String?
     let clientRef: String
-    /// Sonradan işlenen kayıt: sunucu açık toplantıyı (süren canlı kaydı) kapatmaz.
-    let deferred: Bool
+    /// Sonradan işlenen kayıt: sunucu açık toplantıyı (süren canlı kaydı) kapatmaz. Yalnızca `true` iken yazılır
+    /// (nil gövdeye yazılmaz): alanı bilmeyen eski sunucu canlı kaydın başlatmasını reddetmesin.
+    let deferred: Bool?
+}
+
+/// Toplantı başlatma gövdesi: `deferred` yalnızca `true` iken yazılır (eski sunucu bilinmeyen alanı reddeder).
+func meetingStartBody(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String, deferred: Bool) throws -> Data {
+    try JSONEncoder().encode(MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred ? true : nil))
 }
 
 private struct DeviceChallengeBody: Encodable {
@@ -153,7 +159,7 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// deneme toplantısında gerekir. Açılan toplantı yapay zekâ çağrılarının toplantısı olur.
     public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let path: String = "/v1/meetings/start"
-        let body: Data = try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred))
+        let body: Data = try meetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred)
         let started: HostedStartedMeeting = try decode(
             HostedStartedMeeting.self,
             data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableOneShotRequest),

@@ -87,6 +87,8 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case network(path: String, reason: String)
     /// Yanıt beklenen biçimde değil; gövde hata ayıklama içindir (jeton içermez).
     case malformedResponse(path: String, status: Int, body: String)
+    /// Sunucu bu uç noktayı tanımıyor (uygulama sunucudan yeni): işlem yapılmaz.
+    case serverOutdated(path: String)
 }
 
 /// Apple DeviceCheck jetonu üretilemedi (ücretsiz deneme toplantısı için gerekir).
@@ -258,6 +260,8 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Sunucuya ulaşılamadı; internet bağlantını kontrol et.")
     case .malformedResponse(_, let status, _):
         String(localized: "Sunucudan beklenmeyen bir yanıt geldi. Uygulamayı güncelleyip yeniden dene.")
+    case .serverOutdated:
+        String(localized: "Sunucu bu işlemi henüz desteklemiyor (güncelleniyor). Toplantı işlenmedi; biraz sonra \"Tekrar işle\" ile yeniden dene.")
     }
 }
 
@@ -282,7 +286,8 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
         return isClosedHostedAccess(error: hosted)
     case let client as HostedClientError:
         switch client {
-        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured, .offlineNotAllowed, .offlineRecording:
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured, .offlineNotAllowed, .offlineRecording,
+             .serverOutdated:
             return true
         case .network, .malformedResponse:
             return false

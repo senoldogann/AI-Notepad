@@ -153,11 +153,32 @@ func hostedFinalPassPlan(keyterms: [String], recordID: String) async -> FinalPas
     do {
         let reopened: HostedReprocessedMeeting = try await client.reprocessMeeting(meetingID: meetingID)
         seamsLogger.info("Kaydın sunucu oturumu işlemeye açık, kalan yeniden işleme: \(reopened.reprocessesLeft, privacy: .public)")
+    } catch let error as HostedAPIError where error.code == .notFound {
+        // Toplantı sunucuda varsa (kapatma isteği yanıtlanıyorsa) 404 yeniden işleme ucunun olmadığıdır: sunucu güncel
+        // değil. İşleme açıkça durur; son geçiş sessizce atlanmaz.
+        if await hostedMeetingExists(client: client, meetingID: meetingID) {
+            seamsLogger.error("Sunucu yeniden işleme ucunu tanımıyor, işleme durdu")
+            return .stop(HostedClientError.serverOutdated(path: "/v1/meetings/{id}/reprocess"))
+        }
+        seamsLogger.warning("Kaydın sunucu oturumu yok, son geçiş yapılmadı")
+        return .skip(reason: userFacingMessage(error: error))
     } catch {
         seamsLogger.warning("Kaydın sunucu oturumu yeniden açılamadı, hata: \(String(describing: error), privacy: .private)")
         return .skip(reason: userFacingMessage(error: error))
     }
     return .run(HostedFinalTranscriber(client: client, meetingID: meetingID, keyterms: keyterms))
+}
+
+/// Toplantı sunucuda var mı: kapatma isteği (bitmiş toplantıda etkisiz) yanıtlanıyorsa evet, `not_found` ise hayır; diğer
+/// hatalarda bilinmez sayılır (hayır).
+private func hostedMeetingExists(client: HostedClient, meetingID: String) async -> Bool {
+    do {
+        _ = try await client.endMeeting(meetingID: meetingID)
+        return true
+    } catch {
+        seamsLogger.warning("Toplantının varlığı doğrulanamadı, hata: \(String(describing: error), privacy: .private)")
+        return false
+    }
 }
 
 /// Kayıt–sunucu oturumu bağlarının UserDefaults anahtarı.

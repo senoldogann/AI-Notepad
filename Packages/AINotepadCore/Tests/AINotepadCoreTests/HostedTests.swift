@@ -405,6 +405,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(!hasOthersFinalTranscript(record: base))
     }
 
+    // Canlı kaydın başlatması `deferred` alanını hiç göndermez (eski sunucu bilinmeyen alanı reddeder); bekleyen kayıt gönderir.
+    @Test func meetingStartOmitsDeferredUnlessTrue() throws {
+        let live: String = String(decoding: try meetingStartBody(device: nil, deviceCheckToken: nil, clientRef: "k", deferred: false), as: UTF8.self)
+        #expect(!live.contains("deferred"))
+        let pending: String = String(decoding: try meetingStartBody(device: nil, deviceCheckToken: nil, clientRef: "k", deferred: true), as: UTF8.self)
+        #expect(pending.contains(#""deferred":true"#))
+        #expect(hostedClientMessage(error: .serverOutdated(path: "/v1/meetings/{id}/reprocess")).contains("Tekrar işle"))
+    }
+
     // Yükleme anahtarı sunucunun beklediği biçimde (32 bayt, dolgusuz base64url) ve her parçada farklı.
     @Test func uploadKeysAreUniqueBase64URL() throws {
         let first: String = try makeUploadKey()

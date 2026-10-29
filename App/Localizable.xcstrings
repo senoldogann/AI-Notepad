@@ -10179,6 +10179,17 @@
         }
       }
     },
+    "Son geçiş başlatılamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The final pass couldn't start"
+          }
+        }
+      }
+    },
     "Son geçiş yapılmadı: \"Diğerleri\" sesi kaydedilmemiş. Canlı metin kullanıldı.": {
       "extractionState": "manual",
       "localizations": {
@@ -10312,6 +10323,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server"
+          }
+        }
+      }
+    },
+    "Sunucu bu işlemi henüz desteklemiyor (güncelleniyor). Toplantı işlenmedi; biraz sonra \"Tekrar işle\" ile yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server doesn't support this yet (it's being updated). The meeting wasn't processed; try \"Reprocess\" again in a little while."
           }
         }
       }

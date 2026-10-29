@@ -37,6 +37,9 @@ public enum ProcessingStep: Int, Sendable, Equatable, CaseIterable {
 public enum FinalPassPlan: Sendable {
     case run(any FinalTranscriber)
     case skip(reason: String)
+    /// Son geçiş şimdi yapılamaz ve atlanmamalı (ör. sunucu güncel değil): işleme durur, toplantı "başarısız" olur ve
+    /// "Tekrar işle" ile yeniden denenebilir (not canlı metinden yazılmaz).
+    case stop(any Error)
 }
 
 /// Bulut son geçişi: ElevenLabs Scribe v2, konuşmacı ayırma açık.
@@ -107,6 +110,8 @@ public func processMeeting(
     switch finalPass {
     case .skip(let reason):
         current = current.with(notice: skippedFinalPassNotice(reason: reason, hasFinalTranscript: hasOthersFinalTranscript(record: current)))
+    case .stop(let error):
+        return failed(record: current, step: String(localized: "Son geçiş başlatılamadı"), error: error)
     case .run(let transcriber):
         current = await transcribeOthers(record: current, directory: directory, transcriber: transcriber, languageMode: languageMode)
         if current.meNeedsFinalPass == true {
