@@ -1,7 +1,7 @@
 A faster live transcript, clearer limits and recordings that survive a lost connection.
 
 ## What's new
-- **Faster live transcript.** Words appear in about a third of a second, with no large download on first launch. If the cloud service isn't available, Gistsmith switches to on-device transcription by itself.
+- **Faster live transcript.** Words appear as people speak, with no large download on first launch. If the cloud service isn't available, Gistsmith switches to on-device transcription by itself.
 - **Sign in inside the app.** Choose Continue with Apple or Continue with Google on the start screen; sign-in opens in a secure window in Gistsmith and the app is ready once you've signed in.
 - **See your usage.** Meeting hours and your free trial are shown in the sidebar and in Settings › Account, with a calm notice before you reach a limit.
 - **Updates in the app.** New versions download in the background; a short notice lets you restart when it suits you, never during a recording.
