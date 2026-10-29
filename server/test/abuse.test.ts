@@ -98,6 +98,22 @@ describe("deneme ses süresi birikimli sınırı", () => {
     expect(await meetingAudio(meeting.meetingId)).toEqual({ audio_seconds: 100, open_reservations: 0, transcription_closed: 0 });
   });
 
+  it("49 dakikadan uzun toplantıda parça sınırı başına bir dakika örtüşme payı vardır; payın ötesi reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    // 50 dakikalık toplantı: bir parça sınırı, 60 sn pay (3000 + 60 sn).
+    const long: Env = envWith({ TRIAL_MAX_MEETING_MINUTES: "50" });
+    const meeting: StartedMeetingBody = await (await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: {}, env: long }))).json<StartedMeetingBody>();
+    const scribe = stubScribe(harness, 1530);
+    // 8 kHz, 8 bit, tek kanal: 8000 B/s; 1530 saniye.
+    const part: Uint8Array = wavFile(8000, 1, 8, 8000 * 1530);
+    expect((await transcribe(harness, session, meeting.meetingId, part, "audio/wav", long)).status).toBe(200);
+    expect((await transcribe(harness, session, meeting.meetingId, part, "audio/wav", long)).status).toBe(200);
+    await expectError(await transcribe(harness, session, meeting.meetingId, wavFile(8000, 1, 8, 8000), "audio/wav", long), 413, "audio_too_long");
+    expect(scribe.calls).toBe(2);
+    expect(await meetingAudio(meeting.meetingId)).toEqual({ audio_seconds: 3060, open_reservations: 0, transcription_closed: 0 });
+  });
+
   it("yalnızca PCM WAV kabul edilir: sıkıştırılmış türler (süresi boyuttan kestirilemez) 415 alır", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);

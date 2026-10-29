@@ -174,12 +174,21 @@ export function subscriberAccountTokenLimit(config: Config, userId: string, now:
 }
 
 /**
- * Toplantının ses süresinden kalan (en uzun süresi − yazılmış ses; ses hakkı kapandıysa 0). Toplantıda aynı anda tek
- * ses isteği olabildiği için (`meetingAudioIdleLimit`) süren ayırma düşülmez.
+ * Uzun kaydın parçaları (`TRANSCRIBE_MAX_BYTES`, ~49 dk) birer dakika örtüşür (istemci `hostedChunkOverlapSec`):
+ * ortak bölgeler ikinci kez yazıya döküldüğü için toplantının ses hakkına her parça sınırı için bir dakika pay eklenir.
+ * Sınır sayısı toplantının en uzun süresinin parça adımına (`chunkStepSeconds`, gerçek adımdan biraz kısa: yukarı
+ * yuvarlar) bölümüdür; 49 dakikadan kısa toplantıda pay yoktur.
+ */
+export const chunkOverlapSeconds: number = 60;
+export const chunkStepSeconds: number = 2900;
+
+/**
+ * Toplantının ses süresinden kalan (en uzun süresi + parça örtüşme payı − yazılmış ses; ses hakkı kapandıysa 0). Toplantıda
+ * aynı anda tek ses isteği olabildiği için (`meetingAudioIdleLimit`) süren ayırma düşülmez.
  */
 export function meetingAudioLimit(meetingId: string): ReservationLimit {
   return {
-    remainingSql: "(SELECT CASE WHEN transcription_closed = 0 THEN (max_ends_at - started_at) / 1000.0 - audio_seconds ELSE 0 END FROM meeting_sessions WHERE id = ?)",
+    remainingSql: `(SELECT CASE WHEN transcription_closed = 0 THEN (max_ends_at - started_at) / 1000.0 + CAST((max_ends_at - started_at) / 1000.0 / ${chunkStepSeconds} AS INTEGER) * ${chunkOverlapSeconds} - audio_seconds ELSE 0 END FROM meeting_sessions WHERE id = ?)`,
     binds: [meetingId],
     error: new ApiError("audio_too_long", "Ses bu toplantının kalan ses süresini aşıyor."),
   };

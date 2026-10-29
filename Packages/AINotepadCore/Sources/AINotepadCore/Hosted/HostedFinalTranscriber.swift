@@ -6,7 +6,9 @@ private let finalLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", 
 
 /// Abonelik sürümünün son geçişi: kayıt 16 kHz mono WAV parçalarına (≤95 MB, ~49 dk) çevrilir, her parça sunucunun
 /// `/v1/transcribe` ucuna (ElevenLabs Scribe vekili, konuşmacı ayırma açık) sırayla gönderilir, sonuçlar parça
-/// konumlarıyla kaydırılıp birleştirilir. Parçalar geçici klasörde tutulur ve iş bitince silinir.
+/// konumlarıyla kaydırılıp birleştirilir; ardışık parçalar bir dakika örtüşür ve konuşmacılar ortak bölgedeki
+/// kelimelerle eşlenir (bkz. `mergeChunkTranscriptions`). Sınır: ortak dakikada konuşmayan kişi sonraki parçada yeni
+/// kişi olarak görünür (adlandırırken aynı ad verilebilir). Parçalar geçici klasörde tutulur ve iş bitince silinir.
 public struct HostedFinalTranscriber: FinalTranscriber {
     private let client: HostedClient
     /// Sesin sayıldığı toplantı oturumu (kayıt bitince ek süre boyunca açıktır).
@@ -28,18 +30,24 @@ public struct HostedFinalTranscriber: FinalTranscriber {
             throw StorageError.writeFailed(path: directory.path, reason: error.localizedDescription)
         }
         defer { removeChunkDirectory(directory: directory) }
-        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: audioURL, directory: directory, maxBytes: hostedTranscribeMaxBytes)
+        let chunks: [WavChunkFile] = try writeHostedWavChunks(
+            source: audioURL, directory: directory, maxBytes: hostedTranscribeMaxBytes,
+            overlapSamples: Int(hostedChunkOverlapSec * Double(hostedTranscribeSampleRate))
+        )
         let terms: [String] = hostedKeyterms(terms: keyterms, limit: 30)
         var results: [ChunkTranscription] = []
         var stoppedNotice: String?
-        for chunk in chunks {
+        for (index, chunk) in chunks.enumerated() {
+            let overlapSec: Double = index == 0 ? 0 : Double(chunks[index - 1].span.startSample + chunks[index - 1].span.sampleCount - chunk.span.startSample) / Double(hostedTranscribeSampleRate)
             let durationSec: Double = Double(chunk.span.sampleCount) / Double(hostedTranscribeSampleRate)
             do {
                 let data: Data = try await transcribeChunk(
                     url: chunk.url, languageCode: elevenLabsLanguageCode(languageMode: languageMode), keyterms: terms,
                     uploadKey: try makeUploadKey(), timeoutSec: hostedTranscribeTimeoutSec(durationSec: durationSec)
                 )
-                results.append(ChunkTranscription(offsetSec: chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate), result: try parseElevenLabsResponse(data: data)))
+                results.append(ChunkTranscription(
+                    offsetSec: chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate), overlapSec: overlapSec, result: try parseElevenLabsResponse(data: data)
+                ))
                 finalLogger.info("Son geçiş parçası yazıya döküldü, parça: \(results.count, privacy: .public)/\(chunks.count, privacy: .public), saniye: \(durationSec, privacy: .public)")
             } catch let error as HostedAPIError where !results.isEmpty {
                 // Sonraki parça reddedildi (ör. toplantının ses hakkı ya da aylık süre doldu): yazıya dökülmüş (ve

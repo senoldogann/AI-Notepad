@@ -42,11 +42,15 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
 
 @Suite struct HostedAudioTests {
     @Test func chunkSpansCoverRecordingWithoutGaps() {
-        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4) == [
+        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 0) == [
             WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 4, sampleCount: 4), WavChunkSpan(startSample: 8, sampleCount: 2),
         ])
-        #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4).isEmpty)
-        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+        #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4, overlapSamples: 1).isEmpty)
+        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4, overlapSamples: 1) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+        // Örtüşen parçalar: her parça öncekinin son örneğiyle başlar.
+        #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 1) == [
+            WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 3, sampleCount: 4), WavChunkSpan(startSample: 6, sampleCount: 4),
+        ])
     }
 
     // 95 MB'lık WAV, 16 kHz mono 16 bitte ~49 dakikadır; başlıkla birlikte sınırı aşmaz.
@@ -63,9 +67,11 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let source: URL = try writeSineRecording(directory: directory, seconds: 2.5, sampleRate: 48000)
         let maxBytes: Int = 44 + 16000 * 2
-        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes)
+        let overlap: Int = 4000
+        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes, overlapSamples: overlap)
         #expect(chunks.count == 3)
         var expectedStart: Int = 0
+        var previousTail: Data?
         for chunk in chunks {
             let data: Data = try Data(contentsOf: chunk.url)
             #expect(data.count <= maxBytes)
@@ -75,19 +81,46 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             #expect(littleEndian32(data, at: 24) == hostedTranscribeSampleRate)
             #expect(littleEndian32(data, at: 40) == chunk.span.sampleCount * 2)
             #expect(chunk.span.startSample == expectedStart)
-            expectedStart += chunk.span.sampleCount
+            // Parça öncekinin son çeyrek saniyesiyle başlar (aynı örnekler).
+            if let previousTail {
+                #expect(data.subdata(in: 44..<(44 + overlap * 2)) == previousTail)
+            }
+            previousTail = data.subdata(in: (data.count - overlap * 2)..<data.count)
+            expectedStart += chunk.span.sampleCount - overlap
         }
-        #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 1])
+        #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 0.75])
         // Örnek hızı dönüştürücüsü uçlarda birkaç örnek oynatabilir.
-        #expect(abs(expectedStart - 40000) < 200)
+        #expect(abs(expectedStart + overlap - 40000) < 200)
         try FileManager.default.removeItem(at: directory)
     }
 
-    // Parça sonuçları kaydın zamanına kaydırılır; konuşmacılar parçalar arasında karışmaz; dil en olası parçanınki.
+    // Ortak dakikada aynı kelimeleri söyleyen etiketler aynı kişidir (ElevenLabs etiketleri parçada farklı olsa da);
+    // ortak bölgede konuşmayan kişi yeni kişi kalır; ortak bölgenin kelimeleri bir kez yazılır.
+    @Test func overlappingChunksKeepSpeakersAcrossBoundary() {
+        let first: DiarizationResult = DiarizationResult(words: [
+            word("Aino1", 10, 11, "speaker_0"), word("Mika1", 2950, 2951, "speaker_1"),
+            word("Aino2", 2970, 2972, "speaker_0"), word("Mika2", 2990, 2992, "speaker_1"), word("Aino3", 3010, 3012, "speaker_0"),
+        ], languageCode: "fin", languageProbability: 0.9)
+        // İkinci parça 2968'de başlar, 60 sn örtüşür; etiketler yer değiştirmiş, yeni bir kişi (speaker_2) var.
+        let second: DiarizationResult = DiarizationResult(words: [
+            word("Aino2", 2, 4, "speaker_1"), word("Mika2", 22, 24, "speaker_0"), word("Aino3", 42, 44, "speaker_1"),
+            word("Mika3", 70, 71, "speaker_0"), word("Uusi", 80, 81, "speaker_2"),
+        ], languageCode: "fin", languageProbability: 0.8)
+        let merged: DiarizationResult = mergeChunkTranscriptions(chunks: [
+            ChunkTranscription(offsetSec: 0, overlapSec: 0, result: first),
+            ChunkTranscription(offsetSec: 2968, overlapSec: 60, result: second),
+        ])
+        #expect(merged.words.map(\.text) == ["Aino1", "Mika1", "Aino2", "Mika2", "Aino3", "Mika3", "Uusi"])
+        #expect(merged.words.map(\.speaker) == ["speaker_0", "speaker_1", "speaker_0", "speaker_1", "speaker_0", "speaker_1", "2:speaker_2"])
+        // Karışık ya da az oy eşleme yapmaz.
+        #expect(overlapSpeakerMapping(previous: [word("a", 0, 1, "x")], current: [word("a", 0, 1, "y")]).isEmpty)
+    }
+
+    // Parça sonuçları kaydın zamanına kaydırılır; ortak konuşma yoksa konuşmacılar parçalar arasında karışmaz; dil en olası parçanınki.
     @Test func chunkResultsMergeWithOffsets() {
         let merged: DiarizationResult = mergeChunkTranscriptions(chunks: [
-            ChunkTranscription(offsetSec: 0, result: DiarizationResult(words: [word("Hei", 0.5, 0.9, "speaker_0")], languageCode: "fin", languageProbability: 0.6)),
-            ChunkTranscription(offsetSec: 2968.5, result: DiarizationResult(
+            ChunkTranscription(offsetSec: 0, overlapSec: 0, result: DiarizationResult(words: [word("Hei", 0.5, 0.9, "speaker_0")], languageCode: "fin", languageProbability: 0.6)),
+            ChunkTranscription(offsetSec: 2968.5, overlapSec: 0, result: DiarizationResult(
                 words: [word("Moi", 1, 1.4, "speaker_0"), word("Joo", 2, 2.2, "speaker_1")], languageCode: "swe", languageProbability: 0.9
             )),
         ])
