@@ -523,6 +523,14 @@ private func googleTestToken(claims: String) -> String {
         #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad&provider=google")
     }
 
+    // Avatar: Google jetonundaki https resim adresi alınır; resim yoksa (Apple) ya da https değilse nil.
+    @Test func identityTokenPicture() throws {
+        let google: String = googleTestToken(claims: #"{"sub":"1","picture":"https://lh3.googleusercontent.com/a/abc=s96-c"}"#)
+        #expect(try hostedIDTokenPicture(identityToken: google)?.absoluteString == "https://lh3.googleusercontent.com/a/abc=s96-c")
+        #expect(try hostedIDTokenPicture(identityToken: googleTestToken(claims: #"{"sub":"1"}"#)) == nil)
+        #expect(try hostedIDTokenPicture(identityToken: googleTestToken(claims: #"{"sub":"1","picture":"http://ornek.fi/a.png"}"#)) == nil)
+    }
+
     // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür, sağlayıcı
     // yoldan (Apple ya da Google) okunur.
     @Test func browserCallbackResolution() throws {

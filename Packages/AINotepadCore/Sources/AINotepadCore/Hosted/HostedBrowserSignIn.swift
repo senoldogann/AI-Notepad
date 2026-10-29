@@ -134,6 +134,29 @@ public func hostedIDTokenNonce(identityToken: String) throws -> String {
     return nonce
 }
 
+/// Kimlik jetonundaki profil resmi (`picture`, yalnızca Google verir; Apple vermez): yalnızca https adresi kabul edilir.
+/// Resim yoksa nil; gövde çözülemezse `invalidCallback`. Resim yalnızca bu Mac'te hesabın avatarı için saklanır,
+/// sunucuya gönderilmez. Saf fonksiyondur.
+public func hostedIDTokenPicture(identityToken: String) throws -> URL? {
+    struct Claims: Decodable {
+        let picture: String?
+    }
+    let parts: [Substring] = identityToken.split(separator: ".", omittingEmptySubsequences: false)
+    guard parts.count == 3, let payload = base64URLDecoded(text: String(parts[1])) else {
+        throw HostedBrowserSignInError.invalidCallback(reason: "jeton gövdesi base64url değil")
+    }
+    let claims: Claims
+    do {
+        claims = try JSONDecoder().decode(Claims.self, from: payload)
+    } catch {
+        throw HostedBrowserSignInError.invalidCallback(reason: "jeton gövdesi JSON değil: \(error)")
+    }
+    guard let picture = claims.picture, let url = URL(string: picture), url.scheme == "https", url.host() != nil else {
+        return nil
+    }
+    return url
+}
+
 /// base64url (dolgusuz) metni çözer; geçersizse nil. Saf fonksiyondur.
 private func base64URLDecoded(text: String) -> Data? {
     let standard: String = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")

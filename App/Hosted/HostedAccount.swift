@@ -91,6 +91,20 @@ private final class HostedWebSignInPresenter: NSObject, ASWebAuthenticationPrese
     }
 }
 
+/// Hesabın profil resmi adresinin anahtarı (hesap başına, yalnızca bu Mac'te). Saf fonksiyondur.
+private func hostedAvatarKey(userId: String) -> String {
+    "hosted.avatarURL.\(userId)"
+}
+
+/// Girişte jetondan gelen profil resmini hesaba yazar; resim yoksa (Apple) eskisi silinir.
+private func saveHostedAvatar(picture: URL?, userId: String) {
+    if let picture {
+        UserDefaults.standard.set(picture, forKey: hostedAvatarKey(userId: userId))
+    } else {
+        UserDefaults.standard.removeObject(forKey: hostedAvatarKey(userId: userId))
+    }
+}
+
 /// Ödeme ya da portaldan uygulamaya dönünce aboneliğin beklendiği deneme sayısı (5 sn arayla, 2 dk).
 private let hostedBillingReturnPollAttempts: Int = 24
 /// Ödeme sayfası açıkken aboneliğin beklendiği deneme sayısı (5 sn arayla, 15 dk: kart bilgisi girmeye yeter).
@@ -167,6 +181,15 @@ final class HostedAccount {
     /// Oturumdaki kullanıcı (Anahtar Zinciri'nden, her okumada); oturum yoksa nil. Çevrimdışı kayıt izni buna göre
     /// denetlenir (başka hesabın izni kullanılmaz).
     private(set) var signedInUserIDCache: String?
+    /// Avatar resmi kaydedildikçe artar (aynı hesap yeniden girince de görünüm yenilensin; bkz. `avatarURL`).
+    private(set) var avatarRevision: Int = 0
+
+    /// Oturumdaki hesabın profil resmi (Google ile girişte jetondan alınır, yalnızca bu Mac'te saklanır); yoksa nil
+    /// (Apple resim vermez): kenar çubuğunda hesaba özel küre görünür.
+    var avatarURL: URL? {
+        _ = avatarRevision
+        return signedInUserIDCache.flatMap { (userID: String) -> URL? in UserDefaults.standard.url(forKey: hostedAvatarKey(userId: userID)) }
+    }
     /// Son başarılı hak durumu okuması (uygulama öne gelince eskimişse yenilenir).
     @ObservationIgnored private var lastRefreshAt: Date?
     /// Yenilemenin gösterdiği hata: sonraki başarılı yenileme onu kaldırır (bağlantı gelince eski hata kalmasın).
@@ -572,6 +595,7 @@ final class HostedAccount {
     /// jetonu ham nonce'la sağlayıcının giriş ucuna gider. Kullanıcı pencereyi kapatırsa hata gösterilmez. (Developer ID
     /// ile dağıtılan uygulama Apple ile girişi kendisi yapamaz; giriş sitede yapılır.)
     func signIn(provider: HostedSignInProvider) async {
+        defer { avatarRevision += 1 }
         guard pendingBrowserSignIn == nil else {
             return
         }
@@ -619,6 +643,14 @@ final class HostedAccount {
             errorMessage = userFacingMessage(error: error)
             return
         }
+        let picture: URL?
+        do {
+            picture = try hostedIDTokenPicture(identityToken: callback.identityToken)
+        } catch {
+            // Avatar girişe engel değil: resim yerine küre görünür.
+            accountLogger.warning("Profil resmi jetondan okunamadı, hata: \(String(describing: error), privacy: .private)")
+            picture = nil
+        }
         await perform { (client: HostedClient) async throws -> Void in
             try await endPreviousSession(client: client)
             switch callback.provider {
@@ -626,6 +658,9 @@ final class HostedAccount {
                 try await client.signInWithApple(identityToken: callback.identityToken, nonce: callback.rawNonce)
             case .google:
                 try await client.signInWithGoogle(identityToken: callback.identityToken, nonce: callback.rawNonce)
+            }
+            if let userID = try await client.signedInUserID() {
+                saveHostedAvatar(picture: picture, userId: userID)
             }
         }
     }

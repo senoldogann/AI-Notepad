@@ -357,7 +357,11 @@ private struct Sidebar: View {
             HostedSidebarUsage(account: .shared) { openAccountSettings(router: router) }
                 .padding(.bottom, 4)
             #endif
-            item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
+            // Ayarlar ve hesabın avatarı yan yana (avatar hesaba götürür).
+            HStack(spacing: 6) {
+                item(title: "Ayarlar", symbol: "gearshape", section: .settings, badge: nil)
+                SidebarAvatar(router: router)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
@@ -398,6 +402,32 @@ private struct Sidebar: View {
             .background(isSelected ? Theme.selected : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.hoverPlain)
+    }
+}
+
+/// Kenar çubuğunun altındaki avatar: abonelikte oturumdaki hesabın Google resmi ya da hesaba özel küre, tıklanınca
+/// Ayarlar › Hesap; geliştirici sürümünde kullanıcı adına özel küre, tıklanınca Ayarlar.
+private struct SidebarAvatar: View {
+    let router: MainWindowRouter
+    @AppStorage(SettingsKey.userName) private var userName: String = ""
+
+    var body: some View {
+        Button {
+            #if HOSTED_EDITION
+            openAccountSettings(router: router)
+            #else
+            router.section = .settings
+            #endif
+        } label: {
+            #if HOSTED_EDITION
+            ProfileAvatar(imageURL: HostedAccount.shared.avatarURL, seed: HostedAccount.shared.signedInUserIDCache ?? userName, size: 28)
+            #else
+            AvatarOrb(seed: userName, size: 28)
+            #endif
+        }
+        .buttonStyle(.hoverPlain)
+        .hoverHint("Hesap", alignment: .trailing, edge: .top)
+        .accessibilityLabel(Text("Hesap"))
     }
 }
 
