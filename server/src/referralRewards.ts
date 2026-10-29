@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { callStripe, paymentTargetOf, storedCustomerId, stripeClient } from "./billing";
 import type { Config } from "./config";
+import { type SubscriptionState, subscriptionState } from "./entitlements";
 import { errorName, log } from "./log";
 import type { Platform } from "./platform";
 import { type ReferralVoidReason, recentRewardCount, referralRewardsPerYear, sharesDevice, usdCents } from "./referrals";
@@ -114,7 +115,9 @@ async function rewardRefusal(db: D1Database, stripe: Stripe, platform: Platform,
 }
 
 /**
- * Tek ödülü sonuçlandırır. Sıra: davet eden silinmiş → `referrer_deleted`; iki hesap aynı cihazı paylaşıyor →
+ * Tek ödülü sonuçlandırır. Sıra: davet eden silinmiş → `referrer_deleted`; davet edenin ücretsiz erişimi var
+ * (`complimentary.ts`; bakiye yazılacak bir Stripe aboneliği yok) → `referrer_complimentary`, Stripe çağrılmaz; iki
+ * hesap aynı cihazı paylaşıyor →
  * `self_referral`; ödeme iade ya da itiraz almış → `refunded`; son 365 günde 12 ödül → `capped`; davet edenin Stripe
  * müşterisi yok → `referrer_no_customer`; değilse bakiye alacağı yazılır → `granted`.
  */
@@ -123,6 +126,12 @@ async function settleReward(db: D1Database, stripe: Stripe, platform: Platform, 
   if (referrer === null) {
     await settle(db, reward, "referrer_deleted", null, nowMs);
     return "referrer_deleted";
+  }
+  const referrerSubscription: SubscriptionState | null = await subscriptionState(db, referrer);
+  if (referrerSubscription !== null && referrerSubscription.complimentary) {
+    await settle(db, reward, "referrer_complimentary", null, nowMs);
+    log("info", "referral_reward_skipped_complimentary", { rewardId: reward.id, referrerUserId: referrer });
+    return "referrer_complimentary";
   }
   const refusal: RewardOutcome | null = await rewardRefusal(db, stripe, platform, reward, referrer, nowMs);
   if (refusal !== null) {

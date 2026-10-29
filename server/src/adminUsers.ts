@@ -73,7 +73,9 @@ export interface AdminSubscription {
   readonly graceEndsAt: string | null;
   /** Plan (aylık ya da yıllık); fiyatı tanınmayan abonelikte null. */
   readonly plan: SubscriptionPlan | null;
-  /** Webhook'un satırı son yazdığı an. */
+  /** Yöneticinin verdiği ücretsiz erişim mi (`complimentary.ts`; Stripe'ta karşılığı yok). */
+  readonly complimentary: boolean;
+  /** Webhook'un (ücretsiz erişimde yöneticinin) satırı son yazdığı an. */
   readonly updatedAt: string;
 }
 
@@ -284,6 +286,7 @@ interface UserRow {
   readonly past_due_since: number | null;
   readonly updated_at: number | null;
   readonly plan: SubscriptionPlan | null;
+  readonly complimentary: number | null;
   readonly meetings: number;
   readonly trial_meetings: number;
   readonly month_ms: number;
@@ -299,7 +302,7 @@ interface UserRow {
  */
 const userColumnsSql: string = `u.id, u.created_at, u.trial_started_at, u.trial_device_verified_at, u.carried_trial_meetings,
   (SELECT provider FROM auth_identities a WHERE a.user_id = u.id ORDER BY provider LIMIT 1) AS provider,
-  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at, s.plan,
+  s.status, s.current_period_end, s.cancel_at, s.past_due_since, s.updated_at, s.plan, s.complimentary,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id) AS meetings,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS trial_meetings,
   (SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(m.ended_at, ?1), m.max_ends_at, ?1) - m.started_at)), 0)
@@ -314,7 +317,13 @@ const userColumnsSql: string = `u.id, u.created_at, u.trial_started_at, u.trial_
 function subscriptionOf(row: UserRow): SubscriptionState | null {
   return row.status === null || row.current_period_end === null
     ? null
-    : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at, pastDueSince: row.past_due_since };
+    : {
+        status: row.status,
+        currentPeriodEnd: row.current_period_end,
+        cancelAt: row.cancel_at,
+        pastDueSince: row.past_due_since,
+        complimentary: row.complimentary === 1,
+      };
 }
 
 /** Satırın listedeki özeti. Saf fonksiyondur. */
@@ -340,6 +349,7 @@ function userSummary(row: UserRow, config: Config, now: Date): AdminUserSummary 
             pastDueSince: isoOrNull(subscription.pastDueSince),
             graceEndsAt: isoOrNull(graceEndsAtMs(subscription, config.pastDueGraceMs)),
             plan: row.plan,
+            complimentary: subscription.complimentary,
             updatedAt: new Date(row.updated_at ?? 0).toISOString(),
           },
     trial: {

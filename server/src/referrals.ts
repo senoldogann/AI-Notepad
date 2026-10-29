@@ -40,8 +40,8 @@ export const referralRewardWindowMs: number = 365 * 86_400_000;
 /** Davet satırının durumu (bkz. `migrations/0038_referrals.sql`). */
 export type ReferralStatus = "checkout" | "joined" | "qualified" | "granted" | "capped" | "void";
 
-/** Ödülün düşme nedeni. */
-export type ReferralVoidReason = "refunded" | "disputed" | "self_referral" | "referrer_deleted" | "referrer_no_customer";
+/** Ödülün düşme nedeni (`referrer_complimentary`: davet edenin ücretsiz erişimi var, bkz. `complimentary.ts`). */
+export type ReferralVoidReason = "refunded" | "disputed" | "self_referral" | "referrer_deleted" | "referrer_no_customer" | "referrer_complimentary";
 
 /** Davet indirimi: aylıkta ilk ay ücretsiz, yıllıkta ilk yıla bir aylık fiyat kadar indirim. */
 export type ReferralDiscount = "first_month_free" | "first_year_month_off";
