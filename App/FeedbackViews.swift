@@ -97,7 +97,7 @@ private struct FeedbackSheet: View {
                     Spacer(minLength: 8)
                     Text(verbatim: "\(length) / \(reportMessageLimit)")
                         .appFont(size: 11, weight: .regular)
-                        .foregroundStyle(length > reportMessageLimit ? Color.red : Theme.muted)
+                        .foregroundStyle(length > reportMessageLimit ? NoticeSeverity.error.tint : Theme.muted)
                 }
                 TextEditor(text: $message)
                     .appFont(size: 14, weight: .regular)
@@ -148,9 +148,8 @@ private struct FeedbackSheet: View {
             .foregroundStyle(Theme.muted)
             .fixedSize(horizontal: false, vertical: true)
         if case .failed(let reason) = state {
-            Text(verbatim: reason)
+            NoticeText(reason as String, severity: .error)
                 .appFont(size: 13, weight: .regular)
-                .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
         }
         HStack(spacing: 8) {

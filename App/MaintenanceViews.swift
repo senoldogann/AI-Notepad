@@ -58,36 +58,24 @@ struct UpdateBanner: View {
     @State private var showsNotes: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: "arrow.down.circle")
-                    .foregroundStyle(Theme.muted)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: updateHeadline(update: update))
-                        .appFont(size: 12, weight: .medium)
-                        .foregroundStyle(Theme.ink)
-                    Text(subtitle)
-                        .appFont(size: 11, weight: .regular)
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 0) {
+            NoticeBar(severity: .info, title: Text(verbatim: updateHeadline(update: update)), detail: Text(subtitle), onDismiss: { updater.dismissBanner() }) {
+                HStack(spacing: 8) {
+                    notesLink
+                    Button(update.isReadyToInstall ? "Yeniden başlat ve güncelle" : "Güncelle…") { updater.installUpdate() }
+                        .buttonStyle(.pill)
+                        .disabled(isBusy)
                 }
-                Spacer(minLength: 8)
-                notesLink
-                Button(update.isReadyToInstall ? "Yeniden başlat ve güncelle" : "Güncelle…") { updater.installUpdate() }
-                    .buttonStyle(.pill)
-                    .disabled(isBusy)
-                Button("Sonra") { updater.dismissBanner() }
-                    .buttonStyle(.hoverPlain)
             }
             if showsNotes, let notes = update.releaseNotes {
                 ReleaseNotesText(markdown: notes)
-                    .padding(.leading, 26)
+                    .padding(.horizontal, 14)
+                    .padding(.leading, 23)
+                    .padding(.vertical, 10)
+                    .background(Theme.soft)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Theme.soft)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -169,25 +157,14 @@ struct CrashReportBanner: View {
 
     var body: some View {
         let state: CrashReportSendState? = center.sendStates[report.id]
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "exclamationmark.bubble")
-                .foregroundStyle(Theme.muted)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(appName) beklenmedik şekilde kapandı — raporu gönder?")
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                Text(crashBannerPrivacyNote)
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if case .failed(let message) = state {
-                    Text(verbatim: message)
-                        .appFont(size: 11, weight: .regular)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 8)
+        // Gönderilemediyse neden ikinci satırda (hata); değilse neyin gönderileceği.
+        let failure: String? = if case .failed(let message) = state { message } else { nil }
+        NoticeBar(
+            severity: failure == nil ? .attention : .error,
+            title: Text("\(appName) beklenmedik şekilde kapandı — raporu gönder?"),
+            detail: failure.map { Text(verbatim: $0) } ?? Text(crashBannerPrivacyNote),
+            onDismiss: state == .sending ? nil : { center.markSeen(id: report.id) }
+        ) {
             if state == .sending {
                 ProgressView().controlSize(.small)
             } else {
@@ -196,15 +173,7 @@ struct CrashReportBanner: View {
                 }
                 .buttonStyle(.pill)
             }
-            Button("Kapat") { center.markSeen(id: report.id) }
-                .buttonStyle(.hoverPlain)
-                .disabled(state == .sending)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Theme.soft)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
@@ -217,7 +186,7 @@ struct CrashReportsSettings: View {
         SettingsRow(title: Text("Çökme raporları")) {
             Text(crashSettingsPrivacyNote)
             if let problem = center.problem {
-                Text(problem).foregroundStyle(.red)
+                NoticeText(problem, severity: .error)
             }
         } control: {
             Button(isExpanded ? "Çökme raporlarını gizle" : "Çökme raporlarını göster") { isExpanded.toggle() }
@@ -236,7 +205,7 @@ struct CrashReportsSettings: View {
                 SettingsRow(title: Text(crashReportHeadline(diagnostic: diagnostic))) {
                     Text(verbatim: "\(report.receivedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))) · \(diagnostic.appVersion) · \(diagnostic.osVersion)")
                     if case .failed(let message) = state {
-                        Text(verbatim: message).foregroundStyle(.red)
+                        NoticeText(message as String, severity: .error)
                     }
                 } control: {
                     HStack(spacing: 8) {

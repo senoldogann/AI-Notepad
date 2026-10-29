@@ -151,3 +151,20 @@ func hostedReportDestination() async throws -> ReportDestination {
     let client: HostedClient = try HostedServices.requireClient()
     return ReportDestination(baseURL: client.baseURL, accessToken: try await client.validAccessToken())
 }
+
+/// Abonelikte kaydı engelleyen hak durumu (deneme bitti, aylık sınır doldu); hak durumu okunmamışsa ya da kayıt
+/// başlayabilirse nil (bkz. `hostedStartBlock`).
+@MainActor
+func hostedStartBlockNotice() -> StartBlockNotice? {
+    guard case .signedIn(let entitlements) = HostedAccount.shared.state, let block = hostedStartBlock(entitlements: entitlements) else {
+        return nil
+    }
+    switch block {
+    case .trialEnded:
+        return StartBlockNotice(reason: String(localized: "Ücretsiz denemen bitti. Kayda devam etmek için abone ol."), action: .subscribe)
+    case .monthlyCapReached:
+        return StartBlockNotice(
+            reason: String(localized: "Bu ayki kullanım sınırın doldu; \(hostedResetDayText(now: Date())) tarihinde sıfırlanır."), action: .openAccount
+        )
+    }
+}

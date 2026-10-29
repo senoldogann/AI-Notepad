@@ -137,13 +137,13 @@
         }
       }
     },
-    "%@ anahtarı geçersiz (HTTP %lld). Ayarlar'dan kontrol et.": {
+    "%@ anahtarı kabul edilmedi. Ayarlar'dan anahtarı kontrol et.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ key is invalid (HTTP %lld). Check it in Settings."
+            "value": "%@ didn't accept the key. Check the key in Settings."
           }
         }
       }
@@ -371,33 +371,13 @@
         }
       }
     },
-    "%@ isteği başarısız (HTTP %lld). Biraz sonra tekrar dene.": {
+    "%@ isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ request failed (HTTP %lld). Try again in a moment."
-          }
-        }
-      }
-    },
-    "%@ isteği reddetti (%@).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ rejected the request (%@)."
-          }
-        }
-      }
-    },
-    "%@ isteği reddetti (HTTP %lld). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ rejected the request (HTTP %lld). Try again; if it persists, remove the connection and connect again."
+            "value": "%@ didn't accept the request. Try again; if it keeps happening, remove the connection and connect again."
           }
         }
       }
@@ -534,12 +514,13 @@
         }
       }
     },
-    "%@ webhook'u reddetti (HTTP %lld). Adresin doğru ve etkin olduğunu kontrol et.": {
+    "%@ webhook'u kabul etmedi. Adresin doğru ve etkin olduğunu kontrol et.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ rejected the webhook (HTTP %lld). Check that the URL is correct and active."
+            "value": "%@ didn't accept the webhook. Check that the address is correct and active."
           }
         }
       }
@@ -564,24 +545,13 @@
         }
       }
     },
-    "%@ yanıtı yarıda hata verdi (%@). Biraz sonra tekrar dene.": {
+    "%@ yanıtı yarıda kesildi. Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The %@ response failed midway (%@). Try again in a moment."
-          }
-        }
-      }
-    },
-    "%@ yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The %@ response hit the output limit and was cut off. Lower the effort in Settings › LLM and try again."
+            "value": "%@ stopped responding midway. Try again in a moment."
           }
         }
       }
@@ -633,6 +603,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · not read: %@ meetings (the on-device model doesn't support these languages)"
+          }
+        }
+      }
+    },
+    "%@ şu an yanıt veremedi. Biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ couldn't respond right now. Try again in a moment."
           }
         }
       }
@@ -2871,6 +2852,17 @@
         }
       }
     },
+    "Bu ayki kullanım sınırın doldu; %@ tarihinde sıfırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've used this month's limit; it resets on %@."
+          }
+        }
+      }
+    },
     "Bu ayki kullanım sınırına ulaştın": {
       "extractionState": "manual",
       "localizations": {
@@ -3129,6 +3121,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This version requires device verification; update the app."
+          }
+        }
+      }
+    },
+    "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version doesn't match the server. Update the app and try again."
           }
         }
       }
@@ -5454,16 +5457,6 @@
         }
       }
     },
-    "Hataları kapat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dismiss errors"
-          }
-        }
-      }
-    },
     "Hatalı": {
       "localizations": {
         "en": {
@@ -6637,16 +6630,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telling participants before recording is a legal requirement in most places. When the period ends, audio files are deleted and the text and note remain; audio of interrupted or failed meetings is kept twice as long."
-          }
-        }
-      }
-    },
-    "Kayıttan önce tamamlanmalı": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Complete before recording"
           }
         }
       }
@@ -8711,12 +8694,13 @@
         }
       }
     },
-    "Ollama isteği reddetti (HTTP %lld). Adresi ve Ollama sürümünü kontrol et.": {
+    "Ollama isteği reddetti. Adresi ve Ollama sürümünü kontrol edip yeniden dene.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ollama rejected the request (HTTP %lld). Check the address and the Ollama version."
+            "value": "Ollama rejected the request. Check the address and your Ollama version, then try again."
           }
         }
       }
@@ -9980,39 +9964,6 @@
         }
       }
     },
-    "Sunucu adresi geçersiz: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server address is invalid: %@"
-          }
-        }
-      }
-    },
-    "Sunucu adresi güvenli değil (https olmalı): %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server address isn't secure (must be https): %@"
-          }
-        }
-      }
-    },
-    "Sunucu beklenmeyen bir yanıt verdi (HTTP %lld). Biraz sonra yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server returned an unexpected response (HTTP %lld). Try again a bit later."
-          }
-        }
-      }
-    },
     "Sunucu bulut canlı metnine izin verdi": {
       "localizations": {
         "en": {
@@ -10043,13 +9994,13 @@
         }
       }
     },
-    "Sunucu isteği anlamadı (%@); uygulamayı güncelleyip yeniden dene.": {
+    "Sunucu isteği şu an tamamlayamadı. Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server didn't understand the request (%@); update the app and try again."
+            "value": "The server couldn't complete the request right now. Try again in a moment."
           }
         }
       }
@@ -10075,13 +10026,13 @@
         }
       }
     },
-    "Sunucudan beklenmeyen yanıt geldi (HTTP %lld). Uygulamayı güncelleyip yeniden dene.": {
+    "Sunucudan beklenmeyen bir yanıt geldi. Uygulamayı güncelleyip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unexpected response from the server (HTTP %lld). Update the app and try again."
+            "value": "The server sent an unexpected response. Update the app and try again."
           }
         }
       }
@@ -11538,13 +11489,35 @@
         }
       }
     },
-    "Uygulamanın Anahtar Zinciri ayarı eksik (%@); uygulamayı yeniden kur.": {
+    "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The app's Keychain setting is missing (%@); reinstall the app."
+            "value": "The app's Keychain setting is missing; reinstall the app."
+          }
+        }
+      }
+    },
+    "Uygulamanın sunucu ayarı eksik ya da bozuk; uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's server setting is missing or broken; reinstall the app."
+          }
+        }
+      }
+    },
+    "Uygulamanın sunucu ayarı güvenli değil; uygulamayı güncelle ya da yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's server setting isn't secure; update or reinstall the app."
           }
         }
       }
@@ -11787,6 +11760,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email for a reply (optional)"
+          }
+        }
+      }
+    },
+    "Yanıt uzunluk sınırına takılıp yarıda kesildi. İsteği kısaltıp ya da daha az toplantı seçip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The answer hit its length limit and was cut off. Shorten the request or pick fewer meetings, then try again."
           }
         }
       }
@@ -13221,6 +13205,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your free trial has ended (3 meetings or 7 days). Subscribe to continue."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti. Kayda devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended. Subscribe to keep recording."
           }
         }
       }

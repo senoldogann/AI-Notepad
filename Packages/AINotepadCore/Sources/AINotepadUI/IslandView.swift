@@ -65,7 +65,7 @@ public struct IslandView: View {
                     // Panel gizliyken de sorun fark edilsin.
                     Image(systemName: "exclamationmark.triangle.fill")
                         .appFont(size: 11, weight: .semibold)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(NoticeSeverity.error.tint)
                         .accessibilityLabel("Hata var")
                 }
                 if isExpanded {
@@ -138,7 +138,7 @@ public struct IslandView: View {
                     if let error = state.errors.last {
                         Text(error)
                             .appFont(size: 11, weight: .regular)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(NoticeSeverity.error.tint)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     } else if let secondary = line.secondary {
@@ -164,7 +164,7 @@ public struct IslandView: View {
                 if let error = state.errors.last {
                     Text(error)
                         .appFont(size: 11, weight: .regular)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(NoticeSeverity.error.tint)
                         .lineLimit(2)
                 }
             }
@@ -204,7 +204,7 @@ private struct IslandStatus: View {
             } else if state.isRecording, state.isPaused {
                 Label("Duraklatıldı", systemImage: "pause.circle.fill")
                     .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NoticeSeverity.attention.tint)
             } else if state.isRecording, let startedAt = state.startedAt {
                 HStack(spacing: 7) {
                     // Durağan nokta ve sabit hale: kayıt boyunca saniyede 30 kez yeniden çizim pil tüketiyordu.

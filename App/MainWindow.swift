@@ -175,8 +175,15 @@ struct MainWindowView: View {
                         TopBar(model: model, router: router, onShowPanel: onShowPanel)
                         // Ana penceredeki eylemlerin hataları (not düzenleme, tarif, ses silme…) burada görünür; önceden
                         // yalnızca canlı panelde çıkıyordu.
-                        if !model.errorMessages.isEmpty {
-                            ErrorBanner(messages: model.errorMessages) { model.dismissErrors() }
+                        // Aynı ekranda başka yerde görünen (başlat düğmesinin yanındaki neden, kurulum eksikleri) ya da
+                        // çözülmüş (ör. giriş yapıldı) hatalar şeritte tekrarlanmaz.
+                        let visibleErrors: [String] = visibleErrorMessages(
+                            errors: model.errorMessages,
+                            shownElsewhere: model.setupProblems + [startBlockNotice(model: model)?.reason].compactMap { $0 },
+                            resolved: resolvedErrorMessages()
+                        )
+                        if !visibleErrors.isEmpty {
+                            ErrorBanner(messages: visibleErrors) { model.dismissErrors() }
                         }
                         // Önceki açılışta çöktüyse bir kez sorulur (rapor yalnızca bu Mac'te; gönderen kullanıcı).
                         if let report = crashReports.reportToAnnounce {
@@ -536,15 +543,14 @@ private struct QuitWarning: View {
 
     var body: some View {
         let isBusy: Bool = model.isBusy
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.m) {
-            Label(
-                model.phase == .idle
-                    ? "Toplantı işleniyor. Şimdi çıkarsan not hazırlanmaz; açılınca \"Tekrar işle\" gerekir."
-                    : "Kayıt sürüyor. Şimdi çıkarsan toplantı yarıda kalır.",
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .appFont(size: 13, weight: .semibold)
-            .foregroundStyle(.orange)
+        NoticeCard(
+            severity: .attention,
+            title: Text(model.phase == .idle
+                ? "Toplantı işleniyor. Şimdi çıkarsan not hazırlanmaz; açılınca \"Tekrar işle\" gerekir."
+                : "Kayıt sürüyor. Şimdi çıkarsan toplantı yarıda kalır."),
+            detail: nil,
+            onDismiss: nil
+        ) {
             HStack(spacing: DesignTokens.Spacing.s) {
                 if model.phase == .recording {
                     Button("Kaydı bitir", systemImage: "stop.fill") {
@@ -560,10 +566,6 @@ private struct QuitWarning: View {
                 Button("Vazgeç") { router.quitWarning = false }
             }
         }
-        .padding(DesignTokens.Spacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.orange.opacity(0.30)))
         .onChange(of: isBusy) { (_: Bool, busy: Bool) in
             if !busy {
                 router.quitWarning = false
@@ -590,13 +592,12 @@ private struct HomePage: View {
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     heading
-                    RecordBar(model: model, onStartRecording: onStartRecording, onShowPanel: onShowPanel)
+                    RecordBar(model: model, startBlock: startBlockNotice(model: model), onStartRecording: onStartRecording, onShowPanel: onShowPanel) { (action: StartBlockAction) -> Void in
+                        resolveStartBlock(action: action, router: router)
+                    }
                 }
                 .padding(.top, 24)
                 Shortcuts(model: model, router: router, onShowPanel: onShowPanel)
-                if !model.setupProblems.isEmpty {
-                    problems
-                }
                 UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
                     // Brifing yeni bir konu: önceki sohbet bağlam olmasın.
                     model.clearArchiveConversation()
@@ -615,7 +616,6 @@ private struct HomePage: View {
             .frame(maxWidth: .infinity)
             .animation(.smooth(duration: 0.3), value: router.quitWarning)
             .animation(.smooth(duration: 0.3), value: model.phase)
-            .animation(.smooth(duration: 0.3), value: model.setupProblems)
         }
     }
 
@@ -654,23 +654,6 @@ private struct HomePage: View {
         }
     }
 
-    private var problems: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Kayıttan önce tamamlanmalı", systemImage: "exclamationmark.triangle.fill")
-                .appFont(size: 13, weight: .semibold)
-                .foregroundStyle(.orange)
-            ForEach(model.setupProblems, id: \.self) { (problem: String) in
-                Text(problem).foregroundStyle(Theme.muted)
-            }
-            Button("Ayarları aç") { router.section = .settings }
-                .buttonStyle(.pill)
-                .controlSize(.small)
-        }
-        .padding(DesignTokens.Spacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.orange.opacity(0.28)))
-    }
 }
 
 /// Kayıt kartında konuşma modelinin durumu: indiriliyorsa ilerleme, hazırlanamadıysa neden ve "Yeniden dene".
@@ -691,8 +674,7 @@ private struct LocalModelNoticeView: View {
                 Text(verbatim: localModelNoticeText(progress: progress) + " " + preparingHint)
                     .foregroundStyle(Theme.muted)
             case .failed(let message):
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                Text(verbatim: message).foregroundStyle(Theme.muted)
+                NoticeText(message, severity: .error)
                 Button("Yeniden dene", action: onRetry)
                     .buttonStyle(.pill)
                     .controlSize(.small)
@@ -717,8 +699,11 @@ private struct LocalModelNoticeView: View {
 /// "Paneli göster" ve "Bitir".
 private struct RecordBar: View {
     @Bindable var model: AppModel
+    /// Kayıt başlatılamıyorsa nedeni: düğme kapanır, neden ve çözüm düğmenin yanında tek satır.
+    let startBlock: StartBlockNotice?
     let onStartRecording: @MainActor () -> Void
     let onShowPanel: @MainActor () -> Void
+    let onResolve: @MainActor (StartBlockAction) -> Void
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -741,8 +726,10 @@ private struct RecordBar: View {
                 Label("Dinlemeye başla", systemImage: "record.circle")
             }
             .buttonStyle(.bannerPrimary)
-            .disabled(!model.isReadyToRecord || model.isStarting)
-            if let notice = model.localModelNotice {
+            .disabled(!model.isReadyToRecord || model.isStarting || startBlock != nil)
+            if let startBlock {
+                StartBlockView(notice: startBlock, onResolve: onResolve)
+            } else if let notice = model.localModelNotice {
                 LocalModelNoticeView(notice: notice) { Task { await model.retryLocalModel() } }
             }
             options
@@ -796,7 +783,9 @@ private struct RecordBar: View {
             orb(size: 34)
             switch model.phase {
             case .idle:
-                if let notice = model.localModelNotice {
+                if let startBlock {
+                    StartBlockView(notice: startBlock, onResolve: onResolve)
+                } else if let notice = model.localModelNotice {
                     LocalModelNoticeView(notice: notice) { Task { await model.retryLocalModel() } }
                 } else {
                     Text("Toplantını dinlemeye başla")
@@ -806,7 +795,7 @@ private struct RecordBar: View {
                 Spacer(minLength: 6)
                 Button("Başlat", systemImage: "record.circle", action: onStartRecording)
                     .buttonStyle(.pillPrimary)
-                    .disabled(!model.isReadyToRecord || model.isStarting)
+                    .disabled(!model.isReadyToRecord || model.isStarting || startBlock != nil)
                     .fixedSize()
             case .recording:
                 Text(model.isPaused ? "Kayıt duraklatıldı" : "Kayıt sürüyor — konuşmalar canlı panelde")
@@ -1097,7 +1086,7 @@ private struct UpcomingMeetings: View {
             + "–" + meeting.end.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(time).appFont(size: 12, weight: .medium).monospacedDigit().foregroundStyle(isSoon ? Color.orange : Theme.muted)
+                Text(time).appFont(size: 12, weight: .medium).monospacedDigit().foregroundStyle(isSoon ? NoticeSeverity.attention.tint : Theme.muted)
                 Text(meeting.title).appFont(size: 14, weight: .medium).lineLimit(1)
                 if !meeting.attendees.isEmpty {
                     Text(meeting.attendees.prefix(4).joined(separator: ", ") + (meeting.attendees.count > 4 ? " +\(meeting.attendees.count - 4)" : ""))
@@ -1220,7 +1209,7 @@ private struct MeetingCover: View {
                 .padding(.top, 10)
             Text(coverSubtitle(mine: mine))
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(record.status == .failed ? Color.red : Theme.muted)
+                .foregroundStyle(record.status == .failed ? NoticeSeverity.error.tint : Theme.muted)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1506,40 +1495,23 @@ private struct SidebarFolders: View {
     }
 }
 
-/// Ana penceredeki hata şeridi: son hatalar, kapatma düğmesi. Metin seçilebilir (destek için kopyalanabilsin).
+/// Ana penceredeki hata şeridi (ortak uyarı şeridi): en yeni hata başlıkta, öncekiler (en çok iki) ikinci satırda;
+/// kapatılabilir. Metin seçilebilir (destek için kopyalanabilsin).
 private struct ErrorBanner: View {
     let messages: [String]
     let onDismiss: @MainActor () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(Array(messages.suffix(3).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                    Text(item.element)
-                        .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(Theme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer(minLength: 8)
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .appFont(size: 11, weight: .semibold)
-                    .foregroundStyle(Theme.muted)
-            }
-            .buttonStyle(.hoverPlain)
-            .accessibilityLabel(Text("Hataları kapat"))
+        let earlier: [String] = Array(messages.dropLast())
+        NoticeBar(
+            severity: .error,
+            title: Text(verbatim: messages.last ?? ""),
+            detail: earlier.isEmpty ? nil : Text(verbatim: earlier.joined(separator: "\n")),
+            onDismiss: onDismiss
+        ) {
+            EmptyView()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.10))
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-        .transition(.move(edge: .top).combined(with: .opacity))
+        .textSelection(.enabled)
     }
 }
 

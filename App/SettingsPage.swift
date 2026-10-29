@@ -228,7 +228,7 @@ private struct GeneralSettings: View {
                     Text("Yeniden başlatınca uygulanır.").foregroundStyle(Theme.ink)
                 }
                 if let relaunchError {
-                    Text(relaunchError).foregroundStyle(.red)
+                    NoticeText(relaunchError, severity: .error)
                 }
             } control: {
                 HStack(spacing: 8) {
@@ -328,7 +328,7 @@ private struct GeneralSettings: View {
             SettingsRow(title: Text("Takvimi kullan")) {
                 Text("Yaklaşan toplantılar Ana sayfada görünür; kayıt o anki toplantıya bağlanır: başlığı ve katılımcı adları (tanıma ve konuşmacı adı ipucu) kayda geçer. Takvim yalnızca bu Mac'te okunur.")
                 if let error = model.calendarError {
-                    Text(error).foregroundStyle(.red)
+                    NoticeText(error, severity: .error)
                 }
             } control: {
                 Toggle("Takvimi kullan", isOn: Binding<Bool>(
@@ -347,7 +347,7 @@ private struct GeneralSettings: View {
                 SettingsRow(title: Text("Toplantıdan 1 dk önce hatırlat")) {
                     Text("Bildirimdeki \"Dinlemeye başla\" ile kayıt hemen başlar.")
                     if let problem = model.notificationProblem {
-                        Text(problem).foregroundStyle(.orange)
+                        NoticeText(problem, severity: .attention)
                     }
                 } control: {
                     Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
@@ -439,7 +439,7 @@ private struct GeneralSettings: View {
             SettingsRow(title: Text("Konuşmacıları sesinden tanı")) {
                 Text("Açıkken 8 sn'den fazla konuşan herkesin ses izi (sesi tanıyan sayılar; biyometrik veridir) o toplantıyla saklanır; ad verdiğin kişininki bu Mac'te hatırlanır ve sonraki toplantılarda adı kendiliğinden gelir. Toplantı silinince ondan öğrenilen izler, sesi silinince toplantıdaki izler de silinir. Başkalarının ses izini saklamadan önce onaylarını al.")
                 if let error = model.voiceRegistryError {
-                    Text(error).foregroundStyle(.red)
+                    NoticeText(error, severity: .error)
                 }
             } control: {
                 Toggle("Konuşmacıları sesinden tanı", isOn: $voiceRecognition).settingsToggle()
@@ -510,7 +510,7 @@ private struct CloudSyncRow: View {
             case .working:
                 Text("Toplantılar taşınıyor…").foregroundStyle(Theme.ink)
             case .failed(let message):
-                Text(message).foregroundStyle(.red)
+                NoticeText(message, severity: .error)
             case .idle:
                 if model.cloudDownloadingCount > 0 {
                     Text("\(model.cloudDownloadingCount) toplantı iCloud'dan iniyor…").foregroundStyle(Theme.ink)
@@ -905,7 +905,7 @@ private struct LLMSettings: View {
                 case .succeeded(let reply):
                     Label("Çalışıyor: \(reply)", systemImage: "checkmark.circle.fill").foregroundStyle(.tint).lineLimit(1)
                 case .failed(let message):
-                    Text(message).foregroundStyle(.red)
+                    NoticeText(message, severity: .error)
                 }
             } control: {
                 Button("Bağlantıyı dene") {
@@ -1027,7 +1027,7 @@ private struct KeySettings: View {
                 case .working:
                     Text("Kopyalanıyor…").foregroundStyle(Theme.ink)
                 case .failed(let message):
-                    Text(message).foregroundStyle(.red)
+                    NoticeText(message, severity: .error)
                 case .idle:
                     if !model.sharedKeyAccounts.isEmpty {
                         Text("iPhone'da kullanılıyor: \(model.sharedKeyAccounts.map(secretAccountTitle).joined(separator: ", "))").foregroundStyle(Theme.ink)
@@ -1281,7 +1281,7 @@ private struct MCPClientCard: View {
                     if !isInstalled {
                         Text("Bu Mac'te yüklü değil").foregroundStyle(Theme.muted)
                     } else if let errorMessage {
-                        Text(errorMessage).foregroundStyle(.red)
+                        NoticeText(errorMessage, severity: .error)
                     } else if isConnected {
                         Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(Color.green)
@@ -1502,9 +1502,8 @@ private struct WebhookSettings: View {
                     .appFont(size: 14, weight: .semibold)
                     .foregroundStyle(Theme.ink)
                 if destination.needsReconnect {
-                    Label("Oturumun süresi doldu; yeniden bağlan", systemImage: "exclamationmark.triangle.fill")
+                    NoticeText("Oturumun süresi doldu; yeniden bağlan", severity: .attention)
                         .appFont(size: 12, weight: .regular)
-                        .foregroundStyle(.orange)
                 } else {
                     Text(verbatim: destinationDetail(destination: destination))
                         .appFont(size: 12, weight: .regular)
@@ -1623,9 +1622,8 @@ private struct WebhookSettings: View {
                 .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
                 .transition(.opacity)
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 13, weight: .regular)
-                .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
                 .transition(.opacity)
@@ -2124,7 +2122,7 @@ private struct ShortcutSettings: View {
             ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
                 SettingsRow(title: Text(action.title)) {
                     if let error = shortcuts.errors[action] {
-                        Text(error).foregroundStyle(.red)
+                        NoticeText(error, severity: .error)
                     }
                 } control: {
                     ShortcutRecorder(binding: shortcuts.currentBinding(action: action)) { (binding: KeyBinding) -> Void in
@@ -2377,7 +2375,7 @@ struct LocalLLMSetup: View {
             case .found(let names):
                 Text("\(names.count) model bulundu. Bulut modelleri (\"cloud\") internet ister ve metni Ollama'ya gönderir.")
             case .missing(let message):
-                Text("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b").foregroundStyle(.orange)
+                NoticeText("Ollama bulunamadı (\(message)). ollama.com'dan kur, sonra Terminal'de: ollama pull gpt-oss:20b", severity: .attention)
             case .applied(let name):
                 Label("Kullanılıyor: \(name). Bağlantıyı denemek için LLM sekmesi.", systemImage: "checkmark.circle.fill").foregroundStyle(.tint)
             }

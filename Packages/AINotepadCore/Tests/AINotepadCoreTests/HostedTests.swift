@@ -152,7 +152,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(unknown.code == nil && unknown.rawCode == "yeni_kod")
         let proxy: HostedAPIError = parseHostedAPIError(status: 502, data: Data("<html>Bad gateway</html>".utf8), path: "/v1/me")
         #expect(proxy.code == nil && proxy.rawCode == "http_502" && proxy.serverMessage.contains("Bad gateway"))
-        #expect(hostedErrorMessage(error: proxy).contains("502"))
+        // Kullanıcı metninde teknik ayrıntı (HTTP kodu) yok; ne yapılacağı yazar. Kod loglarda ve Tanılama'da kalır.
+        #expect(!hostedErrorMessage(error: proxy).contains("502") && hostedErrorMessage(error: proxy).contains("yeniden dene"))
     }
 
     // Hız sınırı ve geçici sunucu hataları yeniden denenir; harcama tavanı (503) ve kotalar denenmez.

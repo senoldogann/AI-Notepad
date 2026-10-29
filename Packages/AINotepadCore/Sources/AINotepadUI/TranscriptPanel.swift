@@ -570,20 +570,20 @@ public struct TranscriptPanel: View {
             }
     }
 
+    /// Kayıt panelindeki hatalar: ortak uyarı dili (küçük renkli simge, mürekkep metin, yumuşak zemin, ince çizgi).
     private var errorBand: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
             ForEach(Array(state.errors.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                let message: String = item.element
-                Text(message)
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.red)
+                NoticeText(item.element, severity: .error)
+                    .appFont(size: 11.5, weight: .regular)
                     .textSelection(.enabled)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DesignTokens.Spacing.l)
         .padding(.vertical, DesignTokens.Spacing.s)
-        .background(Color.red.opacity(0.12))
+        .background(Theme.soft)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }
 
@@ -635,7 +635,7 @@ struct StatusLabel: View {
         } else if state.isRecording, state.isPaused {
             Label("Duraklatıldı", systemImage: "pause.circle.fill")
                 .appFont(size: 12, weight: .medium)
-                .foregroundStyle(.orange)
+                .foregroundStyle(NoticeSeverity.attention.tint)
         } else if state.isRecording, let startedAt = state.startedAt {
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 7, height: 7)
@@ -725,7 +725,7 @@ struct BlockView: View {
                 ForEach(block.segments.filter { (segment: LiveSegment) -> Bool in segment.failureMessage != nil }) { (segment: LiveSegment) in
                     Text("Yazıya dökülemedi: \(segment.failureMessage ?? "")")
                         .appFont(size: 11, weight: .regular)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(NoticeSeverity.error.tint)
                 }
                 if !failedTranslations.isEmpty, displayMode.needsLiveTranslation {
                     Button {
@@ -735,7 +735,7 @@ struct BlockView: View {
                             .appFont(size: 11, weight: .medium)
                     }
                     .buttonStyle(.hoverPlain)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NoticeSeverity.attention.tint)
                 }
             }
         }
@@ -878,7 +878,7 @@ struct AssistantCardView: View {
                 Text(text)
             }
         case .failed(let message):
-            Text(message).foregroundStyle(.red)
+            NoticeText(message, severity: .error)
         }
     }
 }

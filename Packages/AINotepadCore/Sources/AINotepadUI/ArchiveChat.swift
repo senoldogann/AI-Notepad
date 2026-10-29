@@ -170,9 +170,8 @@ public struct ExchangeView: View {
             }
             switch exchange.phase {
             case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle")
+                NoticeText(message, severity: .error)
                     .appFont(size: 13, weight: .regular)
-                    .foregroundStyle(.red)
                     .textSelection(.enabled)
             case .stopped:
                 Label("Durduruldu", systemImage: "stop.circle")

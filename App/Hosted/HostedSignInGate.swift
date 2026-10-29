@@ -66,9 +66,8 @@ struct HostedSignInGate: View {
                 .fixedSize(horizontal: false, vertical: true)
             switch account.state {
             case .unavailable(let message):
-                Text(verbatim: message)
+                NoticeText(message as String, severity: .error)
                     .appFont(size: 13, weight: .regular)
-                    .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             case .loading, .signedOut, .signedIn, .signedInStatusUnknown:
                 VStack(alignment: .leading, spacing: 10) {

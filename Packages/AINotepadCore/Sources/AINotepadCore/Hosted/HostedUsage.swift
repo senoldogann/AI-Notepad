@@ -110,3 +110,34 @@ public func isShortenedHostedMeeting(started: HostedStartedMeeting) -> Bool {
 public func hostedMinutesLeft(deadline: Date, now: Date) -> Int {
     max(0, Int((deadline.timeIntervalSince(now) / 60).rounded(.up)))
 }
+
+/// Kaydın başlayamama nedeni (hak durumundan; Ana sayfadaki başlat düğmesi kapanır ve yanında yazar).
+public enum HostedStartBlock: Sendable, Equatable {
+    /// Ücretsiz deneme bitti (toplantılar ya da süre).
+    case trialEnded
+    /// Bu ayın adil kullanım saatleri doldu.
+    case monthlyCapReached
+}
+
+/// Hak durumuna göre kayıt başlayabilir mi; başlayamıyorsa neden. Ek süredeki ve iptal edilip dönemi süren abonelik
+/// kayıt yapabilir (sınır dolmadıkça). Saf fonksiyondur.
+public func hostedStartBlock(entitlements: HostedEntitlements) -> HostedStartBlock? {
+    switch hostedPlanStatus(entitlements: entitlements) {
+    case .trial(let left, _):
+        return left == 0 ? .trialEnded : nil
+    case .subscribed, .ending, .grace:
+        let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
+        return hostedUsageLevel(fraction: fraction) == .full ? .monthlyCapReached : nil
+    }
+}
+
+/// Hak durumunun eskimiş sayıldığı süre (saniye): uygulama öne gelince bundan eskiyse yeniden okunur.
+public let hostedStaleRefreshIntervalSec: Double = 600
+
+/// Hak durumu yeniden okunmalı mı: hiç okunmadıysa ya da son okuma `intervalSec`'ten eskiyse. Saf fonksiyondur.
+public func isHostedRefreshDue(lastRefresh: Date?, now: Date, intervalSec: Double) -> Bool {
+    guard let lastRefresh else {
+        return true
+    }
+    return now.timeIntervalSince(lastRefresh) >= intervalSec
+}

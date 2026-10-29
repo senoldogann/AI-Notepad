@@ -131,7 +131,7 @@ public func isRetryableHostedError(error: HostedAPIError) -> Bool {
 /// Sunucu hatasının kullanıcıya gösterilen, ne yapılacağını söyleyen metni. Saf fonksiyondur.
 public func hostedErrorMessage(error: HostedAPIError) -> String {
     guard let code = error.code else {
-        return String(localized: "Sunucu beklenmeyen bir yanıt verdi (HTTP \(error.status)). Biraz sonra yeniden dene.")
+        return String(localized: "Sunucu isteği şu an tamamlayamadı. Biraz sonra yeniden dene.")
     }
     switch code {
     case .trialExhausted:
@@ -193,7 +193,7 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
     case .internalError:
         return String(localized: "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
     case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid:
-        return String(localized: "Sunucu isteği anlamadı (\(error.rawCode)); uygulamayı güncelleyip yeniden dene.")
+        return String(localized: "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.")
     }
 }
 
@@ -204,18 +204,18 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Giriş yapılmamış. Ayarlar › Hesap'tan Apple ya da Google ile giriş yap.")
     case .sessionEnded:
         String(localized: "Oturumun kapandı (çıkış yapılmış ya da güvenlik nedeniyle tüm oturumlar kapatılmış). Yeniden giriş yap.")
-    case .insecureBaseURL(let url):
-        String(localized: "Sunucu adresi güvenli değil (https olmalı): \(url)")
-    case .invalidBaseURL(let value):
-        String(localized: "Sunucu adresi geçersiz: \(value)")
-    case .keychainServiceNotConfigured(let key):
-        String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik (\(key)); uygulamayı yeniden kur.")
+    case .insecureBaseURL:
+        String(localized: "Uygulamanın sunucu ayarı güvenli değil; uygulamayı güncelle ya da yeniden kur.")
+    case .invalidBaseURL:
+        String(localized: "Uygulamanın sunucu ayarı eksik ya da bozuk; uygulamayı yeniden kur.")
+    case .keychainServiceNotConfigured:
+        String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.")
     case .noActiveMeeting:
         String(localized: "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.")
     case .network:
         String(localized: "Sunucuya ulaşılamadı; internet bağlantını kontrol et.")
     case .malformedResponse(_, let status, _):
-        String(localized: "Sunucudan beklenmeyen yanıt geldi (HTTP \(status)). Uygulamayı güncelleyip yeniden dene.")
+        String(localized: "Sunucudan beklenmeyen bir yanıt geldi. Uygulamayı güncelleyip yeniden dene.")
     }
 }
 

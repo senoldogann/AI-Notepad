@@ -23,9 +23,9 @@ import Testing
     }
 
     @Test func llmMessagesCoverTruncationAndProvider() {
-        #expect(userFacingMessage(error: LLMError.truncated(model: "claude-opus-5-5")).contains("effort"))
-        #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "claude-haiku-5-5", requestID: "req_1")).contains("Anthropic anahtarı geçersiz"))
-        #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "gpt-5", requestID: nil)).contains("LLM anahtarı geçersiz"))
+        #expect(userFacingMessage(error: LLMError.truncated(model: "claude-opus-5-5")).contains("kısaltıp"))
+        #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "claude-haiku-5-5", requestID: "req_1")).contains("Anthropic anahtarı kabul edilmedi"))
+        #expect(userFacingMessage(error: LLMError.http(status: 401, body: "x", model: "gpt-5", requestID: nil)).contains("LLM anahtarı kabul edilmedi"))
     }
 
     // `retry-after` saniye olarak uyulur (en fazla 30 sn); yoksa üstel bekleme.

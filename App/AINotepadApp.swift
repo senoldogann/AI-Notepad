@@ -354,11 +354,6 @@ struct AINotepadApp: App {
                 mainWindow
                 #endif
             }
-            #if HOSTED_EDITION
-            // Giriş ya da çıkışta (kurulumda, Ayarlar'da ya da oturum sunucuda kapanınca) kurulum eksikleri (menüdeki
-            // "giriş yapılmamış") yenilenir.
-            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
-            #endif
         }
         .defaultSize(width: 1180, height: 780)
         // Açılışta her zaman görünür: son oturumda pencere kapatılmışsa durum geri yükleme onu kapalı açıyordu
@@ -383,7 +378,7 @@ struct AINotepadApp: App {
                     Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
                 }
                 .keyboardShortcut("n", modifiers: .command)
-                .disabled(model.phase == .idle && (!model.isReadyToRecord || isSignInRequired()))
+                .disabled(model.phase == .idle && (!model.isReadyToRecord || isSignInRequired() || startBlockNotice(model: model) != nil))
             }
             // Bölümler arası geçiş (⌘1–5), Mac uygulamalarının alışılmış kısayolları.
             CommandMenu("Git") {
@@ -422,6 +417,19 @@ struct AINotepadApp: App {
                         shortcuts.registerAll()
                     }
                 }
+                #if HOSTED_EDITION
+                // Kurulum eksikleri hesabın her durum değişiminde (giriş, çıkış, hesap silme, hak durumu yenilemesi)
+                // yeniden hesaplanır: açılışta bir kez hesaplanıp eskiyen "giriş yapılmamış" uyarısı kalmaz. Menü
+                // çubuğu simgesi hep açık olduğundan ana pencere kapalıyken de çalışır.
+                .onChange(of: HostedAccount.shared.state) { (_: HostedAccountState, _: HostedAccountState) in
+                    Task { await model.refreshSetupProblems() }
+                }
+                #endif
+                // Uygulama öne gelince kurulum eksikleri yenilenir (Anahtar Zinciri ya da Sistem Ayarları'nda yapılan
+                // değişiklikler eskimesin).
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { (_: Notification) in
+                    Task { await model.refreshSetupProblems() }
+                }
         }
     }
 
@@ -456,6 +464,12 @@ func toggleRecordingFlow(model: AppModel, panel: LivePanelController, island: Is
     // Giriş kapısı: kayıt başlamaz, ana pencere (giriş ekranı) açılır. Menü, kısayol, bildirim, takvimle otomatik
     // kayıt ve ⌘N hep bu yoldan geçer.
     guard !isSignInRequired() else {
+        NotificationCenter.default.post(name: .openMainWindow, object: nil)
+        return
+    }
+    // Kayıt başlatılamıyorsa (deneme bitti, aylık sınır, eksik ayar) hata üretilmez: ana pencere açılır, neden başlat
+    // düğmesinin yanında yazar.
+    guard startBlockNotice(model: model) == nil else {
         NotificationCenter.default.post(name: .openMainWindow, object: nil)
         return
     }
@@ -538,7 +552,7 @@ private struct MenuContent: View {
             Button("Kaydı başlat", systemImage: "record.circle") {
                 Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
             }
-            .disabled(!model.isReadyToRecord || model.isStarting)
+            .disabled(!model.isReadyToRecord || model.isStarting || startBlockNotice(model: model) != nil)
             .menuShortcut(binding: shortcuts.currentBinding(action: .record))
         }
 
@@ -549,7 +563,7 @@ private struct MenuContent: View {
 
         // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar ve kısayol hataları.
         ForEach(Array((model.setupProblems + [model.shortcutError, model.localDiarizationWarning].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-            Text(item.element).foregroundStyle(.red)
+            Label(item.element, systemImage: "exclamationmark.circle")
         }
 
         Divider()
@@ -608,7 +622,7 @@ private struct MenuContent: View {
 
         if model.liveEngine == .appleSpeech, case .failed(let message) = model.modelStatus {
             Divider()
-            Text(message).foregroundStyle(.red)
+            Label(message, systemImage: "exclamationmark.triangle")
             Button("Konuşma modelini yeniden hazırla", systemImage: "arrow.clockwise") {
                 Task { await model.prepareSpeechModel() }
             }
@@ -628,7 +642,7 @@ private struct MenuContent: View {
                 }
             case .failed(let message):
                 Divider()
-                Text(message).foregroundStyle(.red)
+                Label(message, systemImage: "exclamationmark.triangle")
                 Button("Modeli yeniden yükle", systemImage: "arrow.clockwise") {
                     Task { await model.loadModel() }
                 }

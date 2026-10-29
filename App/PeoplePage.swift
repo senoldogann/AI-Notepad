@@ -50,9 +50,8 @@ struct PeoplePage: View {
                     .padding(.top, 12)
                     .padding(.bottom, 6)
                     if let error = model.peopleBookError {
-                        Label(error, systemImage: "exclamationmark.triangle")
+                        NoticeText(error, severity: .error)
                             .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(.red)
                             .padding(.horizontal, 14)
                     }
                     ScrollView {

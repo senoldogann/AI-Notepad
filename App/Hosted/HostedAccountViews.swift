@@ -50,9 +50,8 @@ struct HostedAccountError: View {
 
     var body: some View {
         if let message = account.errorMessage {
-            Text(verbatim: message)
+            NoticeText(message as String, severity: .error)
                 .appFont(size: 13, weight: .regular)
-                .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -71,7 +70,7 @@ struct HostedAccountSettings: View {
                 ProgressView().controlSize(.small).padding(.vertical, 16)
             case .unavailable(let message):
                 SettingsRow(title: Text("Hesap kullanılamıyor")) {
-                    Text(verbatim: message).foregroundStyle(.red)
+                    NoticeText(message as String, severity: .error)
                 } control: {
                     EmptyView()
                 }
@@ -83,7 +82,7 @@ struct HostedAccountSettings: View {
             case .signedInStatusUnknown(let message):
                 SettingsRow(title: Text("Plan")) {
                     Text("Giriş yapıldı; hesap durumu şu an okunamıyor. Bağlantı gelince kendiliğinden yenilenir.")
-                    Text(verbatim: message).foregroundStyle(.orange)
+                    NoticeText(message as String, severity: .attention)
                 } control: {
                     Button("Yeniden dene") { Task { await account.refresh() } }
                         .disabled(account.isWorking)
@@ -109,8 +108,7 @@ struct HostedAccountSettings: View {
             case .ending(let endsAt):
                 Text("Abonelik iptal edildi; \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):
-                Text("Ödeme alınamadı; erişimin \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.")
-                    .foregroundStyle(.orange)
+                NoticeText("Ödeme alınamadı; erişimin \(endsAt.formatted(date: .abbreviated, time: .omitted)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
             }
         } control: {
             HStack(spacing: 8) {
@@ -125,7 +123,7 @@ struct HostedAccountSettings: View {
         SettingsRow(title: Text("Hesabı sil")) {
             Text("Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.")
             if confirmingDelete {
-                Text("Emin misin? Bu işlem geri alınamaz.").foregroundStyle(.red)
+                NoticeText("Emin misin? Bu işlem geri alınamaz.", severity: .error)
             }
         } control: {
             HStack(spacing: 8) {
@@ -171,9 +169,8 @@ struct HostedSignInStep: View {
             case .loading:
                 ProgressView().controlSize(.small)
             case .unavailable(let message):
-                Text(verbatim: message)
+                NoticeText(message as String, severity: .error)
                     .appFont(size: 13, weight: .regular)
-                    .foregroundStyle(.red)
             case .signedOut:
                 HostedSignInPanel(account: account)
             case .signedIn(let entitlements):

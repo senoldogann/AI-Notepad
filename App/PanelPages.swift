@@ -371,30 +371,13 @@ private struct ConsentBanner: View {
     @State private var copied: Bool = false
 
     var body: some View {
-        HStack(spacing: DesignTokens.Spacing.s) {
-            Image(systemName: "person.wave.2")
-                .foregroundStyle(Theme.muted)
-                .accessibilityHidden(true)
-            Text("Kayıt yapıyorsun: katılımcılara haber ver.")
-                .appFont(size: 12, weight: .medium)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: DesignTokens.Spacing.s)
+        NoticeBar(severity: .info, title: Text("Kayıt yapıyorsun: katılımcılara haber ver."), detail: nil, onDismiss: onDismiss) {
             Button(copied ? "Kopyalandı" : "Bildirimi kopyala", systemImage: copied ? "checkmark" : "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(consentNoticeText, forType: .string)
                 copied = true
             }
-            .controlSize(.small)
             .hoverHint("Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır", alignment: .trailing, edge: .bottom)
-            Button("Kapat", systemImage: "xmark", action: onDismiss)
-                .labelStyle(.iconOnly)
-                .buttonStyle(.hoverPlain)
-                .foregroundStyle(Theme.muted)
         }
-        .padding(.horizontal, DesignTokens.Spacing.m)
-        .padding(.vertical, 8)
-        .background(Theme.soft)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }

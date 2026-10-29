@@ -35,7 +35,7 @@ public func userFacingMessage(error: any Error) -> String {
     case OllamaError.unreachable:
         return String(localized: "Ollama'ya ulaşılamadı. Ollama uygulamasının açık olduğunu ve adresin doğru olduğunu kontrol et.")
     case OllamaError.http(_, let status, _):
-        return String(localized: "Ollama isteği reddetti (HTTP \(status)). Adresi ve Ollama sürümünü kontrol et.")
+        return String(localized: "Ollama isteği reddetti. Adresi ve Ollama sürümünü kontrol edip yeniden dene.")
     case OllamaError.malformed:
         return String(localized: "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.")
     case NoteHistoryError.versionNotFound:
@@ -47,7 +47,7 @@ public func userFacingMessage(error: any Error) -> String {
     case WebhookError.invalidURL:
         return String(localized: "Webhook adresi geçersiz: https:// ile başlayan tam adresi yapıştır.")
     case WebhookError.http(let host, let status, _):
-        return String(localized: "\(host) webhook'u reddetti (HTTP \(status)). Adresin doğru ve etkin olduğunu kontrol et.")
+        return String(localized: "\(host) webhook'u kabul etmedi. Adresin doğru ve etkin olduğunu kontrol et.")
     case WebhookError.network(let host, _):
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
     case let error as ChannelAuthError:
@@ -108,11 +108,11 @@ private func channelMessage(error: ChannelAuthError) -> String {
     case .stateMismatch(let service):
         String(localized: "\(service.displayName) girişi başka bir denemeden döndü; yeniden dene.")
     case .http(let service, let status, _):
-        String(localized: "\(service.displayName) isteği reddetti (HTTP \(status)). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
+        String(localized: "\(service.displayName) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .api(.slack, "not_in_channel"), .api(.slack, "channel_not_found"):
         String(localized: "Slack kanalına yazılamadı: kanalın üyesi değilsin ya da kanal silinmiş. Ayarlar › Bağlantılar'dan başka bir kanal seç.")
     case .api(let service, let code):
-        String(localized: "\(service.displayName) isteği reddetti (\(code)).")
+        String(localized: "\(service.displayName) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .network(let service, _):
         String(localized: "\(service.displayName) adresine ulaşılamadı; internet bağlantını kontrol et.")
     case .invalidResponse(let service, _):
@@ -129,7 +129,7 @@ private func mcpRemoteMessage(error: MCPRemoteError) -> String {
     case .noAuthorizationMetadata(let server), .noDynamicRegistration(let server):
         String(localized: "\(server) tek tıkla girişi desteklemiyor.")
     case .http(let server, let status, _):
-        String(localized: "\(server) isteği reddetti (HTTP \(status)). Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
+        String(localized: "\(server) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .network(let server, _):
         String(localized: "\(server) adresine ulaşılamadı; internet bağlantını kontrol et.")
     case .invalidResponse(let server, _), .rpc(let server, _, _):
@@ -185,14 +185,14 @@ private func keychainMessage(error: KeychainError) -> String {
 private func llmMessage(error: LLMError) -> String {
     switch error {
     case .http(let status, _, let model, _) where status == 401 || status == 403:
-        String(localized: "\(providerName(model: model)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et.")
+        String(localized: "\(providerName(model: model)) anahtarı kabul edilmedi. Ayarlar'dan anahtarı kontrol et.")
     case .http(let status, _, let model, _):
-        String(localized: "\(providerName(model: model)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene.")
+        String(localized: "\(providerName(model: model)) şu an yanıt veremedi. Biraz sonra yeniden dene.")
     case .truncated(let model):
         // Düşünme de çıktı sınırından harcar: aynı ayarla tekrar denemek aynı sonucu verir.
-        String(localized: "\(model) yanıtı çıktı sınırına ulaştığı için yarıda kesildi. Ayarlar › LLM'de effort'u düşürüp tekrar dene.")
+        String(localized: "Yanıt uzunluk sınırına takılıp yarıda kesildi. İsteği kısaltıp ya da daha az toplantı seçip yeniden dene.")
     case .streamFailed(let errorType, _, let model):
-        String(localized: "\(providerName(model: model)) yanıtı yarıda hata verdi (\(errorType)). Biraz sonra tekrar dene.")
+        String(localized: "\(providerName(model: model)) yanıtı yarıda kesildi. Biraz sonra yeniden dene.")
     case .refusal:
         String(localized: "Model bu isteği yanıtlamadı (güvenlik denetimi).")
     case .malformed, .empty, .invalidSchema:
@@ -209,9 +209,9 @@ private func cloudMessage(error: CloudSTTError) -> String {
     case .http(let service, let status, let body) where status == 401 && isQuotaExceeded(body: body):
         String(localized: "\(serviceDisplayName(service: service)) kotası doldu. Hesabından kota ekle ya da Ayarlar'dan Mac'te motorunu seç.")
     case .http(let service, let status, _) where status == 401 || status == 403:
-        String(localized: "\(serviceDisplayName(service: service)) anahtarı geçersiz (HTTP \(status)). Ayarlar'dan kontrol et.")
+        String(localized: "\(serviceDisplayName(service: service)) anahtarı kabul edilmedi. Ayarlar'dan anahtarı kontrol et.")
     case .http(let service, let status, _):
-        String(localized: "\(serviceDisplayName(service: service)) isteği başarısız (HTTP \(status)). Biraz sonra tekrar dene.")
+        String(localized: "\(serviceDisplayName(service: service)) şu an yanıt veremedi. Biraz sonra yeniden dene.")
     case .malformedMessage(let service, _):
         String(localized: "\(serviceDisplayName(service: service)) beklenmeyen bir yanıt verdi.")
     case .connectionFailed(let service, _):

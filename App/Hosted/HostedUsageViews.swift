@@ -247,19 +247,7 @@ struct HostedUsageBanner: View {
     let onOpenAccount: @MainActor () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: symbol)
-                .foregroundStyle(isUrgent ? meterFull : Theme.muted)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(Theme.ink)
-                Text(verbatim: subtitle)
-                    .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
+        NoticeBar(severity: isUrgent ? .error : .attention, title: Text(title), detail: Text(verbatim: subtitle), onDismiss: { account.dismissNotice() }) {
             switch notice {
             case .trialOneLeft, .trialEnded:
                 Button("Abone ol") {
@@ -275,25 +263,11 @@ struct HostedUsageBanner: View {
                 }
                 .buttonStyle(.pill)
             }
-            Button("Kapat") { account.dismissNotice() }
-                .buttonStyle(.hoverPlain)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Theme.soft)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     private var isUrgent: Bool {
         notice == .monthlyFull || notice == .trialEnded
-    }
-
-    private var symbol: String {
-        switch notice {
-        case .monthlyWarning, .monthlyFull: "gauge.with.dots.needle.67percent"
-        case .trialOneLeft, .trialEnded: "gift"
-        }
     }
 
     private var title: LocalizedStringKey {
@@ -329,20 +303,14 @@ struct HostedMeetingLimitStrip: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { (context: TimelineViewDefaultContext) in
-            HStack(spacing: DesignTokens.Spacing.s) {
-                Image(systemName: "hourglass")
-                    .foregroundStyle(meterWarn)
-                    .accessibilityHidden(true)
-                Text("Aylık sınırına göre bu toplantıya \(hostedMinutesLeft(deadline: deadline, now: context.date)) dakika kaldı; kayıt \(deadline.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))) itibarıyla biter.")
-                    .appFont(size: 12, weight: .medium)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+            NoticeBar(
+                severity: .attention,
+                title: Text("Aylık sınırına göre bu toplantıya \(hostedMinutesLeft(deadline: deadline, now: context.date)) dakika kaldı; kayıt \(deadline.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))) itibarıyla biter."),
+                detail: nil,
+                onDismiss: nil
+            ) {
+                EmptyView()
             }
-            .padding(.horizontal, DesignTokens.Spacing.m)
-            .padding(.vertical, 8)
-            .background(Theme.soft)
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
         }
     }
 }

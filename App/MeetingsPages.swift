@@ -83,9 +83,8 @@ struct MeetingsListPage: View {
                 .padding(.bottom, DesignTokens.Spacing.s)
             }
             if let error = model.importError {
-                Label(error, systemImage: "exclamationmark.triangle")
+                NoticeText(error, severity: .error)
                     .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(.red)
                     .padding(.horizontal, DesignTokens.Spacing.m)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -124,9 +123,8 @@ struct MeetingsListPage: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if !model.meetingLoadFailures.isEmpty {
-                Text("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))")
+                NoticeText("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))", severity: .error)
                     .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.red)
                     .padding(DesignTokens.Spacing.m)
             }
         }
@@ -184,12 +182,12 @@ struct MeetingsListPage: View {
         let selectable: Set<String> = Set(visible.map(\.id).filter { !model.isLocked(meetingID: $0) })
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             ForEach(deleteErrors, id: \.self) { (error: String) in
-                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
+                NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             if isConfirmingDelete {
                 Text("\(checked.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
                     .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 HStack(spacing: DesignTokens.Spacing.s) {
                     Button("Sil", role: .destructive) { deleteChecked() }
                     Button("Vazgeç") { isConfirmingDelete = false }
@@ -295,7 +293,7 @@ private struct SendStatusLine: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").appFont(size: 12, weight: .regular).foregroundStyle(.orange)
+            NoticeText(message, severity: .attention).appFont(size: 12, weight: .regular)
         }
     }
 }
@@ -357,7 +355,7 @@ struct MeetingRow: View {
         if let status = statusText(record: record, isProcessing: isProcessing) {
             var part: AttributedString = AttributedString(" · " + status)
             if record.status == .failed {
-                part.foregroundColor = Color.red
+                part.foregroundColor = NoticeSeverity.error.tint
             }
             line += part
         }
@@ -561,9 +559,8 @@ struct MeetingDetailPage: View {
             .appFont(size: 12, weight: .regular)
         }
         if let message = record.failureMessage {
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
         SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
@@ -1059,13 +1056,12 @@ struct MeetingDetailPage: View {
                 .appFont(size: 11, weight: .regular)
                 .foregroundStyle(.tint)
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 11, weight: .regular)
-                .foregroundStyle(.red)
         case .confirmDeleteAudio:
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Ses kalıcı olarak silinsin mi? Metin ve not kalır; geri alınamaz.", systemImage: "speaker.slash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sesi sil", role: .destructive) {
                     player.stop()
                     model.deleteAudio(meetingID: record.id)
@@ -1078,7 +1074,7 @@ struct MeetingDetailPage: View {
         case .confirmDelete:
             HStack(spacing: DesignTokens.Spacing.s) {
                 Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sil", role: .destructive) {
                     player.stop()
                     if let error = model.deleteMeeting(meetingID: record.id) {
@@ -2007,7 +2003,7 @@ struct ReminderButton: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: reminded ? "bell.badge.fill" : "bell")
-                            .foregroundStyle(reminded ? Color.orange : Theme.muted)
+                            .foregroundStyle(reminded ? NoticeSeverity.attention.tint : Theme.muted)
                     }
                 }
                 .frame(width: 22, height: 22)
@@ -2017,9 +2013,8 @@ struct ReminderButton: View {
             .disabled(reminded || isAdding || model.isLocked(meetingID: record.id))
             .hoverHint(reminded ? "Anımsatıcılar'da" : "Anımsatıcılar'a ekle", alignment: .trailing, edge: .bottom)
             if let error {
-                Text(error)
+                NoticeText(error, severity: .error)
                     .appFont(size: 11, weight: .regular)
-                    .foregroundStyle(.red)
                     .frame(maxWidth: 220, alignment: .trailing)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2314,9 +2309,8 @@ private struct SpeakerReviewCard: View {
             }
             .appFont(size: 12, weight: .regular)
         case .failed(let message):
-            Text(message)
+            NoticeText(message, severity: .error)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.red)
                 .textSelection(.enabled)
         case .ready(let review, let applied):
             ForEach(review.names) { (suggestion: SpeakerNameSuggestion) in
@@ -2478,7 +2472,7 @@ private struct TranscriptSection: View {
         let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
         LazyVStack(alignment: .leading, spacing: 2) {
             if let error = player.errorMessage {
-                Text(error).appFont(size: 11, weight: .regular).foregroundStyle(.red)
+                NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             ForEach(Array(paragraphs.enumerated()), id: \.element.id) { (item: (offset: Int, element: TranscriptParagraph)) in
                 let paragraph: TranscriptParagraph = item.element
