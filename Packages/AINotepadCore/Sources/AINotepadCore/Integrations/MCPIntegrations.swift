@@ -38,7 +38,7 @@ func mcpCallbackCode(url: URL, expectedState: String, server: String) throws -> 
         throw MCPRemoteError.denied(server: server, reason: value("error_description") ?? error)
     }
     guard value("state") == expectedState else {
-        throw MCPRemoteError.denied(server: server, reason: "dönüş başka bir girişe ait")
+        throw MCPRemoteError.foreignCallback(server: server)
     }
     guard let code = value("code"), !code.isEmpty else {
         throw MCPRemoteError.invalidResponse(server: server, reason: "dönüş adresinde kod yok")

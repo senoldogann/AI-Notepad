@@ -219,6 +219,18 @@ public func hostedEntitlementsOnThisMac(entitlements: HostedEntitlements, trialR
     return shown
 }
 
+/// Bu Mac'teki deneme reddinin geçerli kaldığı süre (saniye): sonra Başlat sunucuya yeniden sorar (sunucuda düzeltilmiş
+/// ya da reddin yanlış çıktığı hesap kalıcı olarak kilitlenmesin).
+public let hostedTrialRefusalMaxAgeSec: Double = 24 * 60 * 60
+
+/// Deneme reddi hâlâ geçerli mi: kaydedildiyse ve `maxAgeSec`'ten yeniyse. Saf fonksiyondur.
+public func isHostedTrialRefusalActive(refusedAt: Date?, now: Date, maxAgeSec: Double) -> Bool {
+    guard let refusedAt else {
+        return false
+    }
+    return now.timeIntervalSince(refusedAt) < maxAgeSec
+}
+
 /// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.
 public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStatus {
     if let subscription = entitlements.subscription {

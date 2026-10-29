@@ -217,7 +217,7 @@ private struct PanelSurface: ViewModifier {
 struct ActiveHoverHint: Equatable {
     let id: UUID
     let scope: UUID
-    let text: LocalizedStringKey
+    let text: Text
     let anchor: CGRect
     let alignment: HorizontalAlignment
     let edge: VerticalEdge
@@ -257,7 +257,7 @@ extension EnvironmentValues {
 /// kenarından taşmaz. Katman varken sistem ipucu (`help`) verilmez (iki ipucu üst üste çıkardı); metin erişilebilirlik
 /// ipucu olarak kalır. Katmanı olmayan pencerede yalnız sistem ipucu kullanılır.
 private struct HoverHint: ViewModifier {
-    let text: LocalizedStringKey
+    let text: Text
     let alignment: HorizontalAlignment
     let edge: VerticalEdge
     @State private var id: UUID = UUID()
@@ -274,7 +274,7 @@ private struct HoverHint: ViewModifier {
                 content.help(text)
             } else {
                 // Simgeli düğmelerin görünür adı yok: ipucu metni ekran okuyucunun okuduğu ad olur.
-                content.accessibilityLabel(Text(text))
+                content.accessibilityLabel(text)
             }
         }
             .onHover { (hovering: Bool) -> Void in
@@ -343,14 +343,14 @@ private struct HoverHintLayer: ViewModifier {
                             bubble: bubbleSize, bounds: proxy.size, alignment: hint.alignment, edge: hint.edge
                         )
                         // Metin önce tek satır ölçülür; en fazla 300 pt genişlikte kırılır ve kutu yüksekliği satırlara uyar.
-                        Text(hint.text)
+                        hint.text
                             .appFont(size: 11, weight: .medium)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
                             .frame(width: min(ceil(textWidth) + 1, 300), alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                             .background {
-                                Text(hint.text)
+                                hint.text
                                     .appFont(size: 11, weight: .medium)
                                     .fixedSize()
                                     .hidden()
@@ -409,7 +409,13 @@ public extension View {
     /// Fare üstüne gelince görünen açıklama; `alignment` ipucunun düğmenin hangi kenarına, `edge` altına mı üstüne mi
     /// çizileceği (panel kenarındaki düğmelerde taşmasın diye).
     func hoverHint(_ text: LocalizedStringKey, alignment: HorizontalAlignment, edge: VerticalEdge) -> some View {
-        modifier(HoverHint(text: text, alignment: alignment, edge: edge))
+        modifier(HoverHint(text: Text(text), alignment: alignment, edge: edge))
+    }
+
+    /// Çalışma anında oluşan metnin (ad listesi, hata metni) ipucu: olduğu gibi gösterilir, çevrilmez ve Markdown
+    /// sayılmaz (adlardaki `*` ya da `[x](y)` biçim ya da bağlantı olmasın).
+    func hoverHint(verbatim text: String, alignment: HorizontalAlignment, edge: VerticalEdge) -> some View {
+        modifier(HoverHint(text: Text(verbatim: text), alignment: alignment, edge: edge))
     }
 
     /// Pencerenin kök görünümüne: içindeki ipuçları bu katmanda, her şeyin üstünde çizilir.

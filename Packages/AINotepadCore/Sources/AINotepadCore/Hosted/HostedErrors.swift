@@ -142,7 +142,7 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
     }
     switch code {
     case .trialExhausted:
-        return String(localized: "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.")
+        return String(localized: "Ücretsiz denemen bitti. Devam etmek için abone ol.")
     case .trialNotStarted:
         return String(localized: "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.")
     case .trialIPLimit:

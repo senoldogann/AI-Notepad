@@ -1702,7 +1702,7 @@ private struct WebhookSettings: View {
     private var appleNotesCard: some View {
         ConnectionCard(
             tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
-            detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
+            detail: notesStatus.map { Text(verbatim: $0) } ?? Text("\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
         ) {
             Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
                 .settingsToggle()
@@ -1724,7 +1724,7 @@ private struct WebhookSettings: View {
     private var folderCard: some View {
         ConnectionCard(
             tile: BrandTile(mark: .symbol("folder.fill"), palette: .ocean, seed: "klasor", size: 38), title: Text("Klasör (Obsidian, iCloud)"),
-            detail: Text(folderStatus.map { LocalizedStringKey($0) } ?? (markdownFolder.isEmpty ? "Markdown dosyası olarak" : LocalizedStringKey((markdownFolder as NSString).abbreviatingWithTildeInPath))),
+            detail: folderStatus.map { Text(verbatim: $0) } ?? (markdownFolder.isEmpty ? Text("Markdown dosyası olarak") : Text(verbatim: (markdownFolder as NSString).abbreviatingWithTildeInPath)),
             badge: nil
         ) {
             if markdownFolder.isEmpty {
@@ -2058,7 +2058,7 @@ private struct TrackerTargetPicker: View {
             } else if let errorMessage {
                 Button("Yeniden dene", systemImage: "arrow.clockwise") { Task { await load() } }
                     .controlSize(.small)
-                    .hoverHint(LocalizedStringKey(errorMessage), alignment: .trailing, edge: .bottom)
+                    .hoverHint(verbatim: errorMessage, alignment: .trailing, edge: .bottom)
             } else {
                 ProgressView().controlSize(.small)
             }

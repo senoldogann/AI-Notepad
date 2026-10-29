@@ -363,6 +363,17 @@
         }
       }
     },
+    "%@ girişinin dönüşü başka bir denemeye ait; Ayarlar › Bağlantılar'dan yeniden bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ sign-in returned from a different attempt; connect again from Settings › Connections."
+          }
+        }
+      }
+    },
     "%@ hesabında yazabileceğin bir kanal bulunamadı. Önce bir kanala katıl, sonra yeniden bağlan.": {
       "localizations": {
         "en": {
@@ -522,6 +533,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ doesn't support one-click sign-in."
+          }
+        }
+      }
+    },
+    "%@ uygulamasında bağlantıyı yeniden başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start connecting again in %@."
           }
         }
       }
@@ -700,6 +722,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@%@%@"
+          }
+        }
+      }
+    },
+    "%@'e dönebilirsin; bu sekmeyi kapatabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can go back to %@ and close this tab."
           }
         }
       }
@@ -2536,6 +2569,28 @@
         }
       }
     },
+    "Bağlantı tamamlandı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "Bağlantı tamamlanmadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected"
+          }
+        }
+      }
+    },
     "Bağlantılar": {
       "localizations": {
         "en": {
@@ -3163,6 +3218,17 @@
         }
       }
     },
+    "Bu adres yalnızca %@ girişinin dönüşü içindir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This address is only for returning from %@ sign-in."
+          }
+        }
+      }
+    },
     "Bu adıma dön": {
       "localizations": {
         "en": {
@@ -3402,6 +3468,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This device doesn't support Apple Intelligence, so on-device notes can't be written. Choose a provider with your own key in Settings (e.g. Anthropic)."
+          }
+        }
+      }
+    },
+    "Bu dönüş bu girişe ait değil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This return doesn't belong to this sign-in"
           }
         }
       }
@@ -9914,6 +9991,17 @@
         }
       }
     },
+    "Sayfa yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page not found"
+          }
+        }
+      }
+    },
     "Sağlayıcı": {
       "localizations": {
         "en": {
@@ -11200,6 +11288,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Known voices"
+          }
+        }
+      }
+    },
+    "Tarayıcıdaki giriş süresinde tamamlanmadı; Ayarlar › Bağlantılar'dan yeniden bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in in the browser wasn't completed in time; connect again from Settings › Connections."
           }
         }
       }
@@ -14035,13 +14134,13 @@
         }
       }
     },
-    "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.": {
+    "Ücretsiz denemen bitti. Devam etmek için abone ol.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your free trial has ended (3 meetings or 7 days). Subscribe to continue."
+            "value": "Your free trial has ended. Subscribe to continue."
           }
         }
       }
@@ -14414,6 +14513,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allowed"
+          }
+        }
+      }
+    },
+    "İzin verilmedi; %@'e dönüp yeniden deneyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access wasn't granted; go back to %@ to try again."
           }
         }
       }

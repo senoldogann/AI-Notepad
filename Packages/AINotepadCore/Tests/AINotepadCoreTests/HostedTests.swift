@@ -165,7 +165,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: status, serverMessage: "", path: "/v1/meetings/start"))
         }
         #expect(message(.trialExhausted, 402).contains("abone ol"))
-        #expect(message(.trialExhausted, 402).contains("7 gün"))
+        // Deneme koşulları sunucu ayarından gelir; hata metnine sabit yazılmaz.
+        #expect(!message(.trialExhausted, 402).contains("7 gün"))
         #expect(message(.trialNotStarted, 403).contains("önce bir toplantı"))
         #expect(message(.trialIPLimit, 429).contains("Yarın"))
         #expect(message(.trialDeviceUsed, 403).contains("abone ol"))

@@ -91,8 +91,8 @@ private final class HostedWebSignInPresenter: NSObject, ASWebAuthenticationPrese
     }
 }
 
-/// Sunucunun bu hesabın denemesini bu Mac'te reddettiğinin kaydı (hesap başına; abone olunca etkisizdir). Saf
-/// fonksiyondur.
+/// Sunucunun bu hesabın denemesini bu Mac'te reddettiği anın kaydı (hesap başına; abone olunca etkisizdir, bir gün
+/// sonra sunucuya yeniden sorulur: bkz. `hostedTrialRefusalMaxAgeSec`). Saf fonksiyondur.
 private func hostedTrialRefusedKey(userId: String) -> String {
     "hosted.trialRefusedOnThisMac.\(userId)"
 }
@@ -288,7 +288,11 @@ final class HostedAccount {
             guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
                 return
             }
-            isTrialRefusedOnThisMac = UserDefaults.standard.bool(forKey: hostedTrialRefusedKey(userId: received.userId))
+            isTrialRefusedOnThisMac = isHostedTrialRefusalActive(
+                refusedAt: UserDefaults.standard.object(forKey: hostedTrialRefusedKey(userId: received.userId)) as? Date,
+                now: Date(),
+                maxAgeSec: hostedTrialRefusalMaxAgeSec
+            )
             let entitlements: HostedEntitlements = hostedEntitlementsOnThisMac(entitlements: received, trialRefusedOnThisMac: isTrialRefusedOnThisMac)
             state = .signedIn(entitlements)
             lastRefreshAt = Date()
@@ -404,8 +408,39 @@ final class HostedAccount {
         guard awaitingBillingReturn || isHostedRefreshDue(lastRefresh: lastRefreshAt, now: Date(), intervalSec: hostedStaleRefreshIntervalSec) else {
             return
         }
+        let returnedFromBilling: Bool = awaitingBillingReturn
         awaitingBillingReturn = false
         await refresh()
+        if returnedFromBilling {
+            await pollForSubscriptionAfterCheckout()
+        }
+    }
+
+    /// Ödeme sayfasından dönünce Stripe bildirimi (webhook) birkaç saniye gecikebilir: abonelik görünene dek 5 sn arayla
+    /// en çok 2 dk hak durumu yenilenir (Başlat düğmesi uygulamaya yeniden geçmeyi beklemeden açılsın). Abonelik zaten
+    /// görünüyorsa (ör. portaldan dönüş) hemen biter.
+    private func pollForSubscriptionAfterCheckout() async {
+        for _ in 0..<24 {
+            guard case .signedIn(let entitlements) = state else {
+                return
+            }
+            switch hostedPlanStatus(entitlements: entitlements) {
+            case .subscribed, .ending, .grace:
+                return
+            case .trial, .expired:
+                break
+            }
+            do {
+                try await Task.sleep(for: .seconds(5))
+            } catch is CancellationError {
+                return
+            } catch {
+                accountLogger.error("Ödeme dönüşü beklemesi bozuldu, hata: \(String(describing: error), privacy: .private)")
+                return
+            }
+            await refresh()
+        }
+        accountLogger.warning("Ödeme sayfasından dönüldü ama 2 dakikada abonelik görünmedi")
     }
 
     /// Ağ geri geldi: hak durumu bilinmiyorsa yeniden okunur, kapatılamamış sunucu oturumu kapatılır ve bekleyen
@@ -634,7 +669,7 @@ final class HostedAccount {
             return try await requestServerMeeting(client: client, clientRef: clientRef, deferred: deferred)
         } catch let error as HostedAPIError where error.code == .trialDeviceUsed {
             if let userID = try await client.signedInUserID() {
-                UserDefaults.standard.set(true, forKey: hostedTrialRefusedKey(userId: userID))
+                UserDefaults.standard.set(Date(), forKey: hostedTrialRefusedKey(userId: userID))
                 accountLogger.info("Deneme bu Mac'te reddedildi (Mac denemesini başka hesapla kullandı); hesap için hatırlandı")
                 Task { await refresh() }
             }
@@ -645,7 +680,20 @@ final class HostedAccount {
     /// Toplantı oturumu isteği; sunucu DeviceCheck isterse jetonla bir kez yinelenir.
     private func requestServerMeeting(client: HostedClient, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
-        let deviceCheckToken: String? = isKnownTrial ? try await HostedDeviceCheck.token() : nil
+        // Jeton yalnızca bilinen denemede ve üretilebilirse gönderilir: Apple'a ulaşılamazsa ya da Mac desteklemiyorsa jetonsuz
+        // denenir (denemenin 2. ve 3. toplantısı jeton istemez); sunucu isterse aşağıda jetonla yinelenir ve o zaman hata
+        // kullanıcıya gösterilir.
+        let deviceCheckToken: String?
+        if isKnownTrial {
+            do {
+                deviceCheckToken = try await HostedDeviceCheck.token()
+            } catch {
+                accountLogger.warning("DeviceCheck jetonu üretilemedi, jetonsuz deneniyor, hata: \(String(describing: error), privacy: .private)")
+                deviceCheckToken = nil
+            }
+        } else {
+            deviceCheckToken = nil
+        }
         do {
             return try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef, deferred: deferred)
         } catch let error as HostedAPIError where error.code == .deviceCheckRequired && deviceCheckToken == nil {

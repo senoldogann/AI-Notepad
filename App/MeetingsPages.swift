@@ -647,7 +647,7 @@ struct MeetingDetailPage: View {
                         }
                     }
                     .padding(.trailing, 4)
-                    .hoverHint(LocalizedStringKey(speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", ")), alignment: .leading, edge: .bottom)
+                    .hoverHint(verbatim: speakers.prefix(6).map { speakerName(key: $0.key, speakerNames: record.speakerNames) }.joined(separator: ", "), alignment: .leading, edge: .bottom)
                 }
                 ForEach(heroChips(), id: \.self) { (chip: String) in
                     Text(chip)

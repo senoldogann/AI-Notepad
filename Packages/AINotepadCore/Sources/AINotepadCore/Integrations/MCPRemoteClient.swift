@@ -66,8 +66,12 @@ public enum MCPRemoteError: Error, Equatable {
     case toolMissing(server: String, tool: String)
     /// Oturum bitti ya da geri alındı: yeniden bağlanmak gerekir.
     case expired(server: String)
-    /// Kullanıcı tarayıcıda izin vermedi ya da dönüş başka bir girişe ait.
+    /// Kullanıcı tarayıcıda izin vermedi (`reason` sağlayıcının hata açıklamasıdır).
     case denied(server: String, reason: String)
+    /// Tarayıcıdaki giriş süresinde tamamlanmadı.
+    case signInTimedOut
+    /// Dönüş bu girişe ait değil (`state` farklı): başka bir denemeden ya da sekmeden geldi.
+    case foreignCallback(server: String)
     /// Yetkilendirme sunucusu jeton geri alma adresi (RFC 7009 `revocation_endpoint`) bildirmiyor.
     case noRevocationEndpoint(server: String)
 }

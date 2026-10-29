@@ -142,6 +142,10 @@ private func mcpRemoteMessage(error: MCPRemoteError) -> String {
         String(localized: "\(server) oturumunun süresi doldu. Ayarlar › Bağlantılar'dan yeniden bağlan.")
     case .denied(let server, let reason):
         String(localized: "\(server) girişi tamamlanmadı: \(reason)")
+    case .signInTimedOut:
+        String(localized: "Tarayıcıdaki giriş süresinde tamamlanmadı; Ayarlar › Bağlantılar'dan yeniden bağlan.")
+    case .foreignCallback(let server):
+        String(localized: "\(server) girişinin dönüşü başka bir denemeye ait; Ayarlar › Bağlantılar'dan yeniden bağlan.")
     case .noRevocationEndpoint(let server):
         String(localized: "\(server) erişimin uygulamadan geri alınmasını desteklemiyor.")
     }
