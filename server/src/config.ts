@@ -147,6 +147,8 @@ export interface StripeWebhookConfig {
   readonly environment: "development" | "production";
   /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
   readonly stripeMode: StripeMode;
+  /** Aylık abonelik fiyatı: webhook yalnızca bu fiyatlı (ya da `metadata.user_id` taşıyan) aboneliklere dokunur. */
+  readonly stripePriceId: string;
   readonly secrets: {
     readonly stripe: string;
     readonly stripeWebhook: string;
@@ -300,7 +302,7 @@ const envSchema = z.object({
 });
 
 /** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası). */
-const stripeWebhookSchema = envSchema.pick({ ENVIRONMENT: true, STRIPE_SECRET_KEY: true, STRIPE_WEBHOOK_SECRET: true });
+const stripeWebhookSchema = envSchema.pick({ ENVIRONMENT: true, STRIPE_SECRET_KEY: true, STRIPE_WEBHOOK_SECRET: true, STRIPE_PRICE_ID: true });
 
 /** Anahtarın modu. Saf fonksiyondur. */
 function stripeModeOf(key: string): StripeMode {
@@ -316,6 +318,7 @@ export function parseStripeWebhookConfig(env: Env): StripeWebhookConfig {
   return {
     environment: parsed.data.ENVIRONMENT,
     stripeMode: stripeModeOf(parsed.data.STRIPE_SECRET_KEY),
+    stripePriceId: parsed.data.STRIPE_PRICE_ID,
     secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET },
   };
 }

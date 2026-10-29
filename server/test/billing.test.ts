@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { randomToken } from "../src/crypto";
 import { type Harness, type Session, defaultHarness, envWith, expectError, grantSubscription, req, signIn } from "./helpers";
-import { type FakeStripe, type FakeSubscription, fakeSubscription, stubStripeApi } from "./stripeFake";
+import { type FakeStripe, type FakeSubscription, fakeSubscription, fakeSubscriptionWithPrice, stubStripeApi } from "./stripeFake";
 
 const siteOrigin: string = "http://localhost:8788";
 const dayMs: number = 86_400_000;
@@ -353,6 +353,42 @@ describe("Stripe webhook", () => {
     expect(orphanRows?.count).toBe(0);
   });
 
+  it("başka ürünün aboneliğine dokunulmaz: tanınmayan müşteride iptal, tanınan müşteride kopya iadesi ve itirazda iptal yok", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+
+    // Tanınmayan müşterinin başka fiyatlı, metadata'sız aboneliği: yalnızca loglanır (200), iptal edilmez.
+    const foreign: FakeSubscription = fakeSubscriptionWithPrice(id("sub_foreign"), id("cus_other"), "active", 1, 2, "price_baska_urun");
+    expect(await (await send.change(id("evt_foreign"), "customer.subscription.created", 1, foreign)).json()).toEqual({ received: true, duplicate: false });
+    expect(stripe.canceled).toEqual([]);
+    // `metadata.user_id` taşıyan abonelik (fiyatı değişmiş olsa da) bizimdir: tanınmayan müşteride iptal edilir.
+    const ownOldPrice: FakeSubscription = { ...fakeSubscriptionWithPrice(id("sub_old_price"), id("cus_gone"), "active", 1, 2, "price_eski"), metadata: { user_id: "silinmis" } };
+    expect((await send.change(id("evt_old_price"), "customer.subscription.created", 1, ownOldPrice)).status).toBe(200);
+    expect(stripe.canceled).toEqual([id("sub_old_price")]);
+
+    // Tanınan müşterinin başka ürün aboneliği kopya sayılmaz; itirazda yalnızca bizim aboneliğimiz iptal edilir.
+    const { session, customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    stripe.subscriptions.set(id("sub_side"), fakeSubscriptionWithPrice(id("sub_side"), customer, "active", now - 500, now + 30 * 86_400, "price_baska_urun"));
+    await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub"), customer, "active", now, now + 30 * 86_400));
+    expect(stripe.canceled).toEqual([id("sub_old_price")]);
+    expect(stripe.refundForms).toHaveLength(0);
+    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub"), status: "active" });
+    stripe.charges.set(id("ch"), customer);
+    const dispute: string = eventOf(id("evt_dis"), "charge.dispute.created", now + 1, {
+      id: id("dp"),
+      object: "dispute",
+      charge: id("ch"),
+      amount: 599,
+      currency: "usd",
+      reason: "fraudulent",
+    });
+    expect((await postWebhook(harness, dispute, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.canceled).toEqual([id("sub_old_price"), id("sub")]);
+  });
+
   it("customer.deleted müşteri eşlemesini ve abonelik satırını siler", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
@@ -379,9 +415,9 @@ describe("Stripe webhook", () => {
     // Ocakta eski abonelik (iptal edilmiş), martta yeni abonelik.
     stripe.subscriptions.set(id("sub_old"), fakeSubscription(id("sub_old"), customer, "canceled", now - 90 * 86_400, now - 60 * 86_400));
     await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub_new"), customer, "active", now, now + 30 * 86_400));
-    stripe.invoices.set(id("in_old"), { subscription: id("sub_old"), paid: true });
+    stripe.invoices.set(id("in_old"), { subscription: id("sub_old"), paid: true, created: now - 90 * 86_400 });
     stripe.invoicePayments.set(id("in_old"), [id("pi_old")]);
-    stripe.invoices.set(id("in_new"), { subscription: id("sub_new"), paid: true });
+    stripe.invoices.set(id("in_new"), { subscription: id("sub_new"), paid: true, created: now });
     stripe.invoicePayments.set(id("in_new"), [id("pi_new")]);
     const refundEvent = (eventId: string, chargeId: string, intent: string | null, refunded: boolean, created: number): string =>
       eventOf(eventId, "charge.refunded", created, {
@@ -600,7 +636,7 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     const now: number = Math.floor(harness.clock.nowMs / 1000);
     const periodEnd: number = now + 30 * 86_400;
     await send.change(id("evt_1"), "customer.subscription.created", now - 400, fakeSubscription(id("sub_A"), customer, "active", now - 400, periodEnd));
-    stripe.invoices.set(id("in_B"), { subscription: id("sub_B"), paid: true });
+    stripe.invoices.set(id("in_B"), { subscription: id("sub_B"), paid: true, created: now - 300 });
     stripe.invoicePayments.set(id("in_B"), [id("pi_B")]);
     const duplicate: FakeSubscription = fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd);
 
@@ -621,18 +657,19 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub_A"), status: "active" });
 
     // İptalden sonra geç ödenen kopya faturası `invoice.paid` ile iade edilir; diğer faturalar dokunulmaz.
-    stripe.invoices.set(id("in_B2"), { subscription: id("sub_B"), paid: true });
+    stripe.invoices.set(id("in_B2"), { subscription: id("sub_B"), paid: true, created: now - 100 });
     stripe.invoicePayments.set(id("in_B2"), [id("pi_B2")]);
     const latePaid = (eventId: string, invoice: string, subscription: string): string =>
       eventOf(eventId, "invoice.paid", now - 100, {
         id: invoice,
         object: "invoice",
         status: "paid",
+        created: now - 100,
         parent: { type: "subscription_details", subscription_details: { subscription, metadata: null } },
       });
     expect((await postWebhook(harness, latePaid(id("evt_late"), id("in_B2"), id("sub_B")), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
     expect(stripe.operations.at(-1)).toBe(`refund:${id("pi_B2")}`);
-    stripe.invoices.set(id("in_A2"), { subscription: id("sub_A"), paid: true });
+    stripe.invoices.set(id("in_A2"), { subscription: id("sub_A"), paid: true, created: now - 100 });
     stripe.invoicePayments.set(id("in_A2"), [id("pi_A2")]);
     expect((await postWebhook(harness, latePaid(id("evt_keep"), id("in_A2"), id("sub_A")), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
     expect(stripe.operations.at(-1)).toBe(`refund:${id("pi_B2")}`);
@@ -650,6 +687,71 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     expect((await postWebhook(harness, duplicateRefund, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
     expect(stripe.canceled).toEqual([id("sub_B")]);
     expect((await plan(harness, session)).plan).toBe("subscription");
+  });
+});
+
+describe("Stripe webhook: kopya iadesinin sınırları", () => {
+  it("iade yapıldı ama iptal başarısız: 24 saat sonra yeniden gönderilen olay zaten iade edilmiş ödemeyi atlar, iptali tamamlar", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+    const { customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    const periodEnd: number = now + 30 * 86_400;
+    await send.change(id("evt_1"), "customer.subscription.created", now - 400, fakeSubscription(id("sub_A"), customer, "active", now - 400, periodEnd));
+    stripe.invoices.set(id("in_B"), { subscription: id("sub_B"), paid: true, created: now - 300 });
+    stripe.invoicePayments.set(id("in_B"), [id("pi_B")]);
+    const duplicate: FakeSubscription = fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd);
+
+    stripe.failCancels = true;
+    expect((await send.change(id("evt_2"), "customer.subscription.created", now - 300, duplicate)).status).toBe(502);
+    expect(stripe.operations).toEqual([`refund:${id("pi_B")}`]);
+
+    // Stripe idempotency anahtarını 24 saat saklar; sonra aynı ödemenin iadesi `charge_already_refunded` ile reddedilir.
+    stripe.failCancels = false;
+    harness.clock.nowMs += 25 * 3_600_000;
+    expect((await send.replay(id("evt_2"), "customer.subscription.created", now - 300, duplicate)).status).toBe(200);
+    expect(stripe.operations).toEqual([`refund:${id("pi_B")}`, `cancel:${id("sub_B")}`]);
+  });
+
+  it("kopya daha eski abonelikse yalnızca yenisinden sonra kesilen faturası iade edilir; eski meşru ayları ve geç ödenen eski faturası iade edilmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const send: Sender = sender(harness, stripe);
+    const id = uniqueIds();
+    const { customer } = await customerSession(harness);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    // A: aylardır ödenen abonelik; son ödemesi başarısız (past_due).
+    const subA: FakeSubscription = fakeSubscription(id("sub_A"), customer, "past_due", now - 90 * 86_400, now + 86_400);
+    await send.change(id("evt_a"), "customer.subscription.updated", now - 1_000, subA);
+    for (const [invoice, intent, created] of [
+      [id("in_A1"), id("pi_A1"), now - 90 * 86_400],
+      [id("in_A2"), id("pi_A2"), now - 60 * 86_400],
+      [id("in_A3"), id("pi_A3"), now - 30 * 86_400],
+      // B açıldıktan sonra A'nın yeniden denenen ödemesi de alındı: aynı dönem iki kez ücretlendi.
+      [id("in_A4"), id("pi_A4"), now - 100],
+    ] as const) {
+      stripe.invoices.set(invoice, { subscription: id("sub_A"), paid: true, created });
+      stripe.invoicePayments.set(invoice, [intent]);
+    }
+
+    // B: yeni, ödenmiş abonelik A'nın yerini alır; A kopyadır.
+    await send.change(id("evt_b"), "customer.subscription.created", now - 200, fakeSubscription(id("sub_B"), customer, "active", now - 200, now + 30 * 86_400));
+    expect(stripe.operations).toEqual([`refund:${id("pi_A4")}`, `cancel:${id("sub_A")}`]);
+
+    // A'nın B'den önceki döneme ait faturası iptalden sonra geç ödenirse iade edilmez.
+    stripe.invoices.set(id("in_A5"), { subscription: id("sub_A"), paid: true, created: now - 20 * 86_400 });
+    stripe.invoicePayments.set(id("in_A5"), [id("pi_A5")]);
+    const latePaid: string = eventOf(id("evt_late"), "invoice.paid", now - 50, {
+      id: id("in_A5"),
+      object: "invoice",
+      status: "paid",
+      created: now - 20 * 86_400,
+      parent: { type: "subscription_details", subscription_details: { subscription: id("sub_A"), metadata: null } },
+    });
+    expect((await postWebhook(harness, latePaid, env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.operations).toEqual([`refund:${id("pi_A4")}`, `cancel:${id("sub_A")}`]);
   });
 });
 
