@@ -1,6 +1,7 @@
 ---
-// Üst çubuk: logo, menü, tema düğmesi ve indirme sayfası düğmesi. Dar ekranda menü <details> ile açılır (betik yok).
-// Tema düğmesini public/theme.js bağlar; betik yoksa düğme gizlidir (tema sistemi izler).
+// Üst çubuk: logo, menü, tema düğmesi ve indirme sayfası düğmesi. Dar ekranda menü <details> ile açılır.
+// Tema düğmesini public/theme.js bağlar; betik yoksa düğme gizlidir (tema sistemi izler). Sekmede oturum varsa
+// "Giriş yap" bağlantıları "Hesap"a döner (src/client/header.ts).
 import Icon from "./Icon.astro";
 import Logo from "./Logo.astro";
 import { productName } from "../config";
@@ -12,16 +13,16 @@ interface Props {
 }
 const { page } = Astro.props;
 const text: CommonCopy = copy.common;
-const links: readonly { readonly href: string; readonly label: string }[] = [
-  { href: `${routes.home}#features`, label: text.nav.features },
-  { href: routes.pricing, label: text.nav.pricing },
-  { href: routes.download, label: text.nav.download },
-  { href: routes.signIn, label: text.nav.signIn },
+const links: readonly { readonly href: string; readonly label: string; readonly sessionLink: boolean }[] = [
+  { href: `${routes.home}#features`, label: text.nav.features, sessionLink: false },
+  { href: routes.pricing, label: text.nav.pricing, sessionLink: false },
+  { href: routes.download, label: text.nav.download, sessionLink: false },
+  { href: routes.signIn, label: text.nav.signIn, sessionLink: true },
 ];
 const currentPath: string = routes[page];
 ---
 
-<header class="site-header">
+<header id="site-header" class="site-header" data-account-href={routes.account} data-account-label={text.nav.account}>
   <div class="page site-header__inner">
     <a class="brand" href={routes.home} aria-label={text.homeLabel}>
       <Logo size={28} />
@@ -33,7 +34,12 @@ const currentPath: string = routes[page];
         {
           links.map((link) => (
             <li>
-              <a class="nav__link" href={link.href} aria-current={link.href === currentPath ? "page" : undefined}>
+              <a
+                class="nav__link"
+                href={link.href}
+                aria-current={link.href === currentPath ? "page" : undefined}
+                data-session-link={link.sessionLink ? "" : undefined}
+              >
                 {link.label}
               </a>
             </li>
@@ -62,7 +68,9 @@ const currentPath: string = routes[page];
           {
             links.map((link) => (
               <li>
-                <a href={link.href}>{link.label}</a>
+                <a href={link.href} data-session-link={link.sessionLink ? "" : undefined}>
+                  {link.label}
+                </a>
               </li>
             ))
           }
@@ -71,6 +79,10 @@ const currentPath: string = routes[page];
     </div>
   </div>
 </header>
+
+<script>
+  import "../client/header";
+</script>
 
 <style>
   .site-header {
