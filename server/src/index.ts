@@ -1,5 +1,6 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
+import { warnIfAccessCheckDisabled } from "./auth/access";
 import { appleTokenIssuer } from "./auth/apple";
 import { googleTokenIssuer } from "./auth/google";
 import { refreshPersistedIssuerKeys } from "./auth/identityToken";
@@ -38,6 +39,7 @@ export default {
     const now: Date = new Date(controller.scheduledTime);
     const config: Config = parseConfig(env);
     warnIfStripeTestMode(config, "scheduled");
+    warnIfAccessCheckDisabled(config.access);
     // Adımlar birbirinden bağımsız: biri başarısız olsa da diğerleri çalışır; her hata `alert` yazılır, sonunda hepsi
     // birlikte fırlatılır (Cron çalışması başarısız görünsün).
     const steps: ReadonlyArray<{ name: string; run: () => Promise<unknown> }> = [

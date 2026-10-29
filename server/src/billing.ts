@@ -1,7 +1,8 @@
 import Stripe from "stripe";
 import { type Config, type StripeWebhookConfig, isStripeTestModeInProduction } from "./config";
+import { cancellationStatements } from "./cancellations";
 import { type SubscriptionState, isTerminalSubscription, subscriptionState } from "./entitlements";
-import { ApiError } from "./errors";
+import { ApiError, ProviderApiError } from "./errors";
 import { errorName, log } from "./log";
 import type { Platform } from "./platform";
 import { withRetries } from "./retry";
@@ -41,7 +42,7 @@ async function callStripe<T>(platform: Platform, operation: string, userId: stri
     const status: number | null = error instanceof Stripe.errors.StripeError ? (error.statusCode ?? null) : null;
     const requestId: string | null = error instanceof Stripe.errors.StripeError ? (error.requestId ?? null) : null;
     log("error", "stripe_failed", { operation, userId, status, requestId, error: errorName(error) });
-    throw new ApiError("upstream_unavailable", "Ödeme servisine ulaşılamadı; biraz sonra yeniden dene.");
+    throw new ProviderApiError("stripe", "upstream_unavailable", "Ödeme servisine ulaşılamadı; biraz sonra yeniden dene.");
   }
 }
 
@@ -323,7 +324,7 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
     }),
   );
   if (session.url === null) {
-    throw new ApiError("upstream_unavailable", "Ödeme sayfası oluşturulamadı.");
+    throw new ProviderApiError("stripe", "upstream_unavailable", "Ödeme sayfası oluşturulamadı.");
   }
   return session.url;
 }
@@ -447,6 +448,8 @@ type EventStatements = D1PreparedStatement[];
  *   iptal edilir ve alarm yazılır. İade ya da iptal başarısız olursa Stripe olayı yeniden gönderir, kopya yine bulunur;
  *   zaten iade edilmiş ödeme atlanır, kalan iş yeniden denenir. İptalden sonra geç ödenen faturası `invoice.paid` ile
  *   aynı kurala göre iade edilir (`invoicePaidDuplicateRefund`).
+ * - İptal nedeni (`cancellation_details`): olaydaki geçerli aboneliğin nedeni `subscription_cancellations`'a yazılır,
+ *   iptali geri alınırsa silinir (`cancellationStatements`).
  * - `past_due_since`: durum `past_due` olduğunda yazılır, `past_due` sürdükçe korunur, başka duruma geçince silinir;
  *   ek süre bundan hesaplanır (`entitlements.subscriptionAccess`).
  * Yazım `last_event_created` ile sıralanır: eşzamanlı iki webhook'tan daha eski olayınki daha yeniyi ezmez.
@@ -519,6 +522,9 @@ async function subscriptionEventStatements(
          WHERE excluded.last_event_created >= subscriptions.last_event_created`,
       )
       .bind(owner.user_id, customer, current.id, state.status, state.currentPeriodEnd, state.cancelAt, event.created, nowMs),
+    // İptal nedeni yalnızca geçerli abonelik için yazılır: bizim iptal ettiğimiz kopya aboneliklerin nedeni
+    // (`cancellation_requested`) kullanıcının iptali değildir.
+    ...(subscription.id === current.id ? cancellationStatements(db, event, subscription, owner.user_id, nowMs) : []),
   ];
 }
 

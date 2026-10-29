@@ -1,7 +1,7 @@
 import { type JSONWebKeySet, type ProtectedHeaderParameters, createLocalJWKSet, decodeProtectedHeader, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 import { constantTimeEqualText, sha256Hex } from "../crypto";
-import { ApiError, UpstreamError } from "../errors";
+import { ApiError, ProviderApiError, UpstreamError } from "../errors";
 import { errorName, log } from "../log";
 import type { CachedJwks, Platform } from "../platform";
 import { fetchUpstream, isRetryableUpstreamError } from "../upstream";
@@ -55,7 +55,7 @@ async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer, attemp
   const response: Response = await fetchUpstream(platform, issuer.jwksService, issuer.jwksUrl, (): RequestInit => ({ method: "GET" }), attempts, timeoutMs);
   const parsed = jwksSchema.safeParse(await response.json());
   if (!parsed.success) {
-    throw new ApiError("upstream_unavailable", `${issuer.displayName} anahtarları okunamadı.`);
+    throw new ProviderApiError(issuer.jwksService, "upstream_unavailable", `${issuer.displayName} anahtarları okunamadı.`);
   }
   return jwksFromParsed(parsed.data);
 }

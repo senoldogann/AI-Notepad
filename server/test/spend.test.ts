@@ -96,7 +96,7 @@ describe("günlük harcama tavanı", () => {
 });
 
 describe("günlük deneme harcaması tavanı", () => {
-  it("deneme harcaması ayrı sayılır; tavanda yeni deneme ve denemedeki hesap çağrısı 503, aboneler ve süren deneme toplantısı sürer", async () => {
+  it("deneme harcaması ayrı sayılır; tavanda deneme harcaması açan her yol 503 (yeni, açık ve yeniden işlenen deneme toplantısı, hesap çağrısı), aboneler sürer", async () => {
     const harness: Harness = await defaultHarness();
     // Üstteki test bugünün genel tavanını doldurdu: iki gün sonrası temizdir.
     harness.clock.nowMs += 2 * 86_400_000;
@@ -120,13 +120,50 @@ describe("günlük deneme harcaması tavanı", () => {
     // Deneme tavanı (10 $) doldu; genel tavan (25 $) dolmadı.
     await env.DB.prepare("UPDATE daily_spend SET trial_micro_usd = ? WHERE day = ?").bind(10_000_000, day).run();
     const alerts = vi.spyOn(console, "error");
+    const alertCount = (): number =>
+      alerts.mock.calls.filter((call: unknown[]): boolean => String(call[0]).includes('"event":"daily_trial_spend_ceiling_reached"')).length;
     const refused = await expectError(await startMeeting(harness, await signIn(harness)), 503, "trial_capacity_reached");
     expect(refused.error.message).toContain("abone ol");
-    expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"daily_trial_spend_ceiling_reached"'))).toBe(true);
-    alerts.mockRestore();
+    expect(alertCount()).toBe(1);
     await expectError(await llmCall(harness, trial, null), 503, "trial_capacity_reached");
-    // Süren deneme toplantısı kendi bütçesiyle sürer; aboneler yalnızca genel tavana tabidir.
-    expect((await llmCall(harness, trial, trialMeeting.meetingId)).status).toBe(200);
+    // Açık deneme toplantısı da tavandan sonra yeni deneme harcaması açamaz (yapay zekâ ve yazıya dökme).
+    await expectError(await llmCall(harness, trial, trialMeeting.meetingId), 503, "trial_capacity_reached");
+    const audio: Uint8Array = new Uint8Array(1000);
+    await expectError(
+      await harness.call(
+        req("POST", "/v1/transcribe", {
+          token: trial.accessToken,
+          headers: { "x-meeting-id": trialMeeting.meetingId, "content-type": "audio/wav", "content-length": String(audio.byteLength) },
+          body: audio,
+        }),
+      ),
+      503,
+      "trial_capacity_reached",
+    );
+    // Bitmiş deneme toplantısını yeniden işlemek de deneme harcaması açar: hak harcanmadan 503.
+    await env.DB.prepare("UPDATE meeting_sessions SET ended_at = ?, end_reason = 'ended' WHERE id = ?")
+      .bind(harness.clock.nowMs - 2 * 3_600_000, trialMeeting.meetingId)
+      .run();
+    await expectError(
+      await harness.call(req("POST", `/v1/meetings/${trialMeeting.meetingId}/reprocess`, { token: trial.accessToken })),
+      503,
+      "trial_capacity_reached",
+    );
+    const reprocessed = await env.DB.prepare("SELECT reprocess_count FROM meeting_sessions WHERE id = ?").bind(trialMeeting.meetingId).first<{ reprocess_count: number }>();
+    expect(reprocessed?.reprocess_count).toBe(0);
+    // Alarm günde bir kez yazılır; retler "Sorunlar" sayacında ve toplantının son hatasında görünür.
+    expect(alertCount()).toBe(1);
+    alerts.mockRestore();
+    await harness.drain();
+    const counted = await env.DB.prepare("SELECT count FROM ops_events WHERE day = ? AND kind = 'refusal' AND detail = 'trial_capacity_reached'")
+      .bind(day)
+      .first<{ count: number }>();
+    expect(counted?.count).toBe(5);
+    const failure = await env.DB.prepare("SELECT failure_count, last_failure_code FROM meeting_sessions WHERE id = ?")
+      .bind(trialMeeting.meetingId)
+      .first<{ failure_count: number; last_failure_code: string }>();
+    expect(failure).toEqual({ failure_count: 3, last_failure_code: "trial_capacity_reached" });
+    // Aboneler yalnızca genel tavana tabidir.
     expect((await startMeeting(harness, subscriber)).status).toBe(201);
     expect((await llmCall(harness, subscriber, null)).status).toBe(200);
   });
