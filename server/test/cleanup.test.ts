@@ -68,6 +68,7 @@ describe("süresi dolmuş satırların temizliği", () => {
 
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
     expect(report).toEqual({
+      usage_reservations: 0,
       used_nonces: 1,
       device_challenges: 2,
       refresh_tokens: 2,

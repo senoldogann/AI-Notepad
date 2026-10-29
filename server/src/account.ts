@@ -46,6 +46,7 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
     db.prepare("DELETE FROM refresh_tokens WHERE family_id IN (SELECT id FROM refresh_families WHERE user_id = ?)").bind(userId),
     db.prepare("DELETE FROM refresh_families WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM device_challenges WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM usage_reservations WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM meeting_sessions WHERE user_id = ?").bind(userId),
     db
       .prepare("UPDATE meeting_sessions SET device_id = NULL WHERE device_id IN (SELECT id FROM devices WHERE attested_by_user_id = ?)")

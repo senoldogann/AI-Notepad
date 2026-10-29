@@ -317,7 +317,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
     const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
     await requireSpendHeadroom(db, config, now);
-    const params = parseTranscribeParams(new URL(request.url), config.transcribe.maxKeyterms);
+    const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);
     return proxyTranscription(db, context, config, meeting, request, params);
   }
 

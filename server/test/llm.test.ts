@@ -215,6 +215,52 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
     expect(failures).toBe(3);
   });
 
+  it("istemci yanıtı beklemeden koparsa çağrı arka planda (waitUntil) biter; kullanım ve harcama yine yazılır", async () => {
+    const context: Context = await setup();
+    let release: () => void = (): void => undefined;
+    const gate: Promise<void> = new Promise<void>((resolve: () => void): void => {
+      release = resolve;
+    });
+    let started: boolean = false;
+    context.harness.stub(anthropicUrl, async (): Promise<Response> => {
+      started = true;
+      await gate;
+      return Response.json(message(100, 20));
+    });
+    const day: string = new Date(context.harness.clock.nowMs).toISOString().slice(0, 10);
+    const spendBefore = await env.DB.prepare("SELECT trial_micro_usd FROM daily_spend WHERE day = ?").bind(day).first<{ trial_micro_usd: number }>();
+    // Yanıt hiç beklenmez (istemci koptu); yalnızca waitUntil'e bırakılan işler beklenir.
+    const abandoned: Promise<Response> = llm(context, basic, null);
+    for (let attempt: number = 0; attempt < 50 && !started; attempt += 1) {
+      await new Promise<void>((resolve: () => void): void => {
+        setTimeout(resolve, 10);
+      });
+    }
+    expect(started).toBe(true);
+    release();
+    await context.harness.drain();
+    expect(await meetingTokens(context.meeting.meetingId)).toBe(120);
+    const open = await env.DB.prepare("SELECT COUNT(*) AS count FROM usage_reservations WHERE meeting_id = ?").bind(context.meeting.meetingId).first<{ count: number }>();
+    expect(open?.count).toBe(0);
+    const spendAfter = await env.DB.prepare("SELECT trial_micro_usd FROM daily_spend WHERE day = ?").bind(day).first<{ trial_micro_usd: number }>();
+    // 100 girdi × 0,10 $/M + 20 çıktı × 0,50 $/M = 20 mikro dolar.
+    expect((spendAfter?.trial_micro_usd ?? 0) - (spendBefore?.trial_micro_usd ?? 0)).toBe(20);
+    expect((await abandoned).status).toBe(200);
+  });
+
+  it("üst servis hatasında tahmini girdi maliyeti harcamaya sayılır, kullanıcıya yazılmaz", async () => {
+    const context: Context = await setup();
+    context.harness.stub(anthropicUrl, async (): Promise<Response> => Response.json({ type: "error", error: { type: "api_error", message: "x" } }, { status: 500 }));
+    const day: string = new Date(context.harness.clock.nowMs).toISOString().slice(0, 10);
+    const spend = async (): Promise<number> =>
+      (await env.DB.prepare("SELECT micro_usd FROM daily_spend WHERE day = ?").bind(day).first<{ micro_usd: number }>())?.micro_usd ?? 0;
+    const before: number = await spend();
+    const tokensBefore: number = await meetingTokens(context.meeting.meetingId);
+    await expectError(await llm(context, basic, null), 502, "upstream_unavailable");
+    expect(await spend()).toBeGreaterThan(before);
+    expect(await meetingTokens(context.meeting.meetingId)).toBe(tokensBefore);
+  });
+
   it("bütçe max_tokens'ı kısar, bitince istek reddedilir", async () => {
     const context: Context = await setup();
     let maxTokens: number = 0;
@@ -341,7 +387,11 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     expect((await startMeeting(harness, session)).status).toBe(201);
     harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
     await expectError(await accountLLM(harness, session, basic, envWith({ DAILY_TOKEN_CAP: "500" })), 429, "daily_cap_reached");
-    await expectError(await accountLLM(harness, session, basic, envWith({ MONTHLY_TOKEN_CAP: "500" })), 403, "monthly_cap_reached");
+    await expectError(
+      await accountLLM(harness, session, basic, envWith({ MONTHLY_TOKEN_CAP: "500", MONTHLY_ACCOUNT_TOKEN_CAP: "500" })),
+      403,
+      "monthly_cap_reached",
+    );
     await expectError(await accountLLM(harness, session, basic, envWith({ DAILY_SPEND_CEILING_USD: "0.000001" })), 503, "spend_ceiling_reached");
     expect(await userTokens(session.userId)).toEqual({ monthly: 0, daily: 0 });
   });
@@ -352,10 +402,12 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     expect((await startMeeting(harness, session)).status).toBe(201);
     harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(120, 30)));
     expect((await accountLLM(harness, session, basic, null)).status).toBe(200);
-    const row = await env.DB.prepare("SELECT trial_account_tokens_used AS used, trial_account_tokens_reserved AS reserved FROM daily_usage WHERE user_id = ?")
+    const row = await env.DB.prepare(
+      "SELECT trial_account_tokens_used AS used, (SELECT COUNT(*) FROM usage_reservations WHERE user_id = ?1) AS open FROM daily_usage WHERE user_id = ?1",
+    )
       .bind(session.userId)
-      .first<{ used: number; reserved: number }>();
-    expect(row).toEqual({ used: 150, reserved: 0 });
+      .first<{ used: number; open: number }>();
+    expect(row).toEqual({ used: 150, open: 0 });
     // Kalan deneme sınırı (850) istenen max_tokens (1000) ve girdiye yetmez: istek gitmez.
     const tight: Env = envWith({ TRIAL_ACCOUNT_DAILY_TOKENS: "1000" });
     const before: number = harness.outbound.length;
@@ -379,6 +431,31 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     expect((await accountLLM(harness, session, basic, tiny)).status).toBe(200);
     const row = await env.DB.prepare("SELECT trial_account_tokens_used AS used FROM daily_usage WHERE user_id = ?").bind(session.userId).first<{ used: number }>();
     expect(row?.used).toBe(0);
+  });
+
+  it("abonenin toplantı dışı çağrıları ayrı aylık sınıra (MONTHLY_ACCOUNT_TOKEN_CAP) sayılır; toplantı çağrıları etkilenmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 86_400_000);
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(120, 30)));
+    expect((await accountLLM(harness, session, basic, null)).status).toBe(200);
+    const row = await env.DB.prepare("SELECT account_tokens FROM monthly_usage WHERE user_id = ?").bind(session.userId).first<{ account_tokens: number }>();
+    expect(row?.account_tokens).toBe(150);
+
+    // Kalan hesap sınırı (1150 − 150 = 1000) girdi + en az çıktıya yetmez: istek gitmez.
+    const tight: Env = envWith({ MONTHLY_ACCOUNT_TOKEN_CAP: "1150" });
+    const before: number = harness.outbound.length;
+    const refused = await expectError(await accountLLM(harness, session, { ...basic, max_tokens: 2000 }, tight), 403, "monthly_cap_reached");
+    expect(refused.error.message).toContain("toplantı dışı");
+    expect(harness.outbound.length).toBe(before);
+    // Toplantıya bağlı çağrı hesap sınırına sayılmaz.
+    const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    const meetingCall: Response = await harness.call(
+      req("POST", "/v1/llm/messages", { token: session.accessToken, headers: { "x-meeting-id": meeting.meetingId }, json: basic, env: tight }),
+    );
+    expect(meetingCall.status).toBe(200);
+    const after = await env.DB.prepare("SELECT account_tokens FROM monthly_usage WHERE user_id = ?").bind(session.userId).first<{ account_tokens: number }>();
+    expect(after?.account_tokens).toBe(150);
   });
 
   it("toplantıya bağlı çağrı değişmeden toplantı bütçesinden düşer", async () => {

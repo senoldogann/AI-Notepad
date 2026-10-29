@@ -1,4 +1,5 @@
 import { log } from "./log";
+import { expiredReservationStatements } from "./reservations";
 import { dayKey } from "./usage";
 
 /** SQL bağ değeri. */
@@ -93,6 +94,13 @@ async function deleteInBatches(db: D1Database, target: CleanupTarget, limits: Cl
  */
 export async function cleanupExpiredRows(db: D1Database, now: Date, limits: CleanupLimits): Promise<CleanupReport> {
   const report: Record<string, number> = {};
+  // Süresi dolmuş ayırmalar: tahmini maliyet harcamaya yazılır, satırlar silinir (aynı toplu işlem).
+  const expired: D1Result[] = await db.batch(expiredReservationStatements(db, now));
+  const expiredCount: number = expired[1]?.meta.changes ?? 0;
+  if (expiredCount > 0) {
+    log("warn", "usage_reservations_expired", { count: expiredCount });
+  }
+  report["usage_reservations"] = expiredCount;
   for (const target of cleanupTargets(now)) {
     report[target.table] = await deleteInBatches(db, target, limits);
   }

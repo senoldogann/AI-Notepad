@@ -35,6 +35,7 @@ export interface Env {
   readonly TRIAL_MEETING_TOKEN_BUDGET: string;
   readonly SUBSCRIBER_MEETING_TOKEN_BUDGET: string;
   readonly MONTHLY_TOKEN_CAP: string;
+  readonly MONTHLY_ACCOUNT_TOKEN_CAP: string;
   readonly DAILY_TOKEN_CAP: string;
   readonly MAX_MEETING_STARTS_PER_DAY: string;
   readonly LLM_MAX_TOKENS: string;

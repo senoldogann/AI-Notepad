@@ -69,6 +69,8 @@ export interface Config {
   readonly subscriberMeetingTokenBudget: number;
   /** Kullanıcı başına aylık token sınırı (tüm toplantılar). */
   readonly monthlyTokenCap: number;
+  /** Abonenin toplantıya bağlı olmayan (hesap) çağrılarının aylık token sınırı; `monthlyTokenCap`'in parçasıdır. */
+  readonly monthlyAccountTokenCap: number;
   /** Kullanıcı başına günlük token sınırı. */
   readonly dailyTokenCap: number;
   /** Kullanıcı başına günde en çok toplantı başlatma. */
@@ -207,6 +209,7 @@ const envSchema = z.object({
   TRIAL_MEETING_TOKEN_BUDGET: positiveInt,
   SUBSCRIBER_MEETING_TOKEN_BUDGET: positiveInt,
   MONTHLY_TOKEN_CAP: positiveInt,
+  MONTHLY_ACCOUNT_TOKEN_CAP: positiveInt,
   DAILY_TOKEN_CAP: positiveInt,
   MAX_MEETING_STARTS_PER_DAY: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
@@ -247,6 +250,9 @@ export function parseConfig(env: Env): Config {
   }
   if (value.LLM_ACCOUNT_MAX_TOKENS > value.LLM_MAX_TOKENS) {
     throw new ConfigError(["LLM_ACCOUNT_MAX_TOKENS"]);
+  }
+  if (value.MONTHLY_ACCOUNT_TOKEN_CAP > value.MONTHLY_TOKEN_CAP) {
+    throw new ConfigError(["MONTHLY_ACCOUNT_TOKEN_CAP"]);
   }
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
@@ -290,6 +296,7 @@ export function parseConfig(env: Env): Config {
     trialMeetingTokenBudget: value.TRIAL_MEETING_TOKEN_BUDGET,
     subscriberMeetingTokenBudget: value.SUBSCRIBER_MEETING_TOKEN_BUDGET,
     monthlyTokenCap: value.MONTHLY_TOKEN_CAP,
+    monthlyAccountTokenCap: value.MONTHLY_ACCOUNT_TOKEN_CAP,
     dailyTokenCap: value.DAILY_TOKEN_CAP,
     maxMeetingStartsPerDay: value.MAX_MEETING_STARTS_PER_DAY,
     llm: {

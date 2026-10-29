@@ -1,28 +1,39 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { continueAfterDisconnect } from "../background";
 import type { Config } from "../config";
 import { ApiError, isRetryableStatus } from "../errors";
 import { jsonResponse } from "../http";
-import { errorName, log } from "../log";
+import { type LogFields, errorName, log } from "../log";
 import type { MeetingRow } from "../meetings";
 import type { AccountLLMAccess } from "../entitlements";
 import type { RequestContext } from "../platform";
-import { withRetries } from "../retry";
+import { type RetryOptions, withRetries } from "../retry";
 import {
-  type ReservationStep,
-  type TokenHeadroom,
-  meetingTokenStep,
-  reserveAll,
-  settleMeetingTokenStatement,
-  settleTrialAccountTokenStatement,
-  settleUserTokenStatements,
-  tokenHeadroom,
-  trialAccountCapError,
-  trialAccountHeadroom,
-  trialAccountTokenStep,
-  userTokenSteps,
+  type ReservationCheck,
+  type ReservationLimit,
+  type TokenUsage,
+  type UsageReservation,
+  dailyTokenLimit,
+  llmReservation,
+  meetingTokenLimit,
+  monthlyTokenLimit,
+  remainingOf,
+  reserveUsage,
+  settleLLMStatements,
+  subscriberAccountTokenLimit,
+  tightestLimit,
+  trialAccountTokenLimit,
 } from "../reservations";
-import { addSpendStatement, addTrialSpendStatement, llmCostMicroUsd } from "../usage";
+import { llmCostMicroUsd } from "../usage";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
+
+/** Akışsız çağrının zaman aşımı: yanıt başlığı ancak üretim bitince gelir, bu yüzden toplam süredir. */
+const messageTimeoutMs: number = 120_000;
+/** Akışlı çağrının ilk bayt (yanıt başlığı) zaman aşımı; akışın toplam süresi sınırlanmaz. */
+const streamFirstByteTimeoutMs: number = 30_000;
+
+/** Üst servis çağrısının sonucu: değer ya da istemciye dönecek hata (kesinleştirme her iki durumda yapılmıştır). */
+type CallOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ApiError };
 
 /**
  * Çağrının bağlı olduğu bütçe: açık bir toplantı (kayıt sırasında ve ek sürede; toplantı bütçesi de düşer) ya da
@@ -38,6 +49,25 @@ function isTrialAccountCall(scope: LLMScope): boolean {
   return scope.kind === "account" && scope.access === "trial";
 }
 
+/** Abonenin toplantısız çağrısı mı (ayrıca aylık `MONTHLY_ACCOUNT_TOKEN_CAP`). Saf fonksiyondur. */
+function isSubscriberAccountCall(scope: LLMScope): boolean {
+  return scope.kind === "account" && scope.access === "subscription";
+}
+
+/**
+ * Çağrının sınırları: toplantı bütçesi (toplantıda) ya da denemenin günlük / abonenin aylık hesap çağrısı sınırı, sonra
+ * kullanıcının aylık ve günlük token sınırı.
+ */
+function llmLimits(config: Config, scope: LLMScope, now: Date): ReservationLimit[] {
+  const scoped: ReservationLimit =
+    scope.kind === "meeting"
+      ? meetingTokenLimit(scope.meeting.id, now)
+      : scope.access === "trial"
+        ? trialAccountTokenLimit(config, scope.userId, now)
+        : subscriberAccountTokenLimit(config, scope.userId, now);
+  return [scoped, monthlyTokenLimit(config, scope.userId, now), dailyTokenLimit(config, scope.userId, now)];
+}
+
 /** Çağrının harcaması deneme tavanına da sayılır mı: deneme toplantısı ya da denemedeki hesap çağrısı. Saf fonksiyondur. */
 function isTrialSpend(scope: LLMScope): boolean {
   return scope.kind === "meeting" ? scope.meeting.kind === "trial" : scope.access === "trial";
@@ -48,15 +78,12 @@ function scopeMeetingId(scope: LLMScope): string | null {
   return scope.kind === "meeting" ? scope.meeting.id : null;
 }
 
-/** Gerçekleşen token kullanımı. */
-interface TokenUsage {
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-}
-
-/** Anthropic istemcisi (dış sistem bağlantısı): yeniden denemeyi SDK değil `withRetries` yapar (uyarı loglanır). */
+/**
+ * Anthropic istemcisi (dış sistem bağlantısı): yeniden denemeyi SDK değil `withRetries` yapar (uyarı loglanır). Zaman
+ * aşımı çağrı başına verilir (`messageTimeoutMs`, `streamFirstByteTimeoutMs`); SDK onu yanıt başlığı gelene dek uygular.
+ */
 function anthropicClient(context: RequestContext, config: Config): Anthropic {
-  return new Anthropic({ apiKey: config.secrets.anthropic, fetch: context.platform.fetch, maxRetries: 0, timeout: 120_000 });
+  return new Anthropic({ apiKey: config.secrets.anthropic, fetch: context.platform.fetch, maxRetries: 0, timeout: messageTimeoutMs });
 }
 
 /** Bağlantı hatası ve geçici durumlar (408, 409, 429, 5xx, 529) yeniden denenir. Saf fonksiyondur. */
@@ -88,29 +115,72 @@ function totalInputTokens(usage: { input_tokens: number | null; cache_creation_i
   return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 
-/**
- * Ayrılan tokenı (toplantı varsa toplantı, aylık, günlük) gerçek kullanımla değiştirir ve günlük harcamaya ekler
- * (denemedeyse deneme harcamasına da).
- */
-async function chargeUsage(db: D1Database, scope: LLMScope, reserved: number, usage: TokenUsage, now: Date): Promise<void> {
-  const actual: number = usage.inputTokens + usage.outputTokens;
-  const meetingStatements: D1PreparedStatement[] = scope.kind === "meeting" ? [settleMeetingTokenStatement(db, scope.meeting.id, reserved, actual)] : [];
-  const trialStatements: D1PreparedStatement[] = isTrialAccountCall(scope) ? [settleTrialAccountTokenStatement(db, scope.userId, reserved, actual, now)] : [];
-  await db.batch([
-    ...meetingStatements,
-    ...trialStatements,
-    ...settleUserTokenStatements(db, scope.userId, reserved, usage.inputTokens, usage.outputTokens, now),
-    (isTrialSpend(scope) ? addTrialSpendStatement : addSpendStatement)(db, now, llmCostMicroUsd(usage.inputTokens, usage.outputTokens)),
-  ]);
+/** Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da). */
+async function chargeUsage(db: D1Database, scope: LLMScope, reservation: UsageReservation, usage: TokenUsage, now: Date): Promise<void> {
+  await db.batch(settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now));
   log("info", "llm_usage", { userId: scope.userId, meetingId: scopeMeetingId(scope), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }
 
 /**
+ * İstek gönderildikten sonra başarısız olan çağrı: kullanıcının sayaçlarına bir şey yazılmaz, ayırma kapanır; Anthropic
+ * girdiyi işlemiş olabileceği için tahmini girdi maliyeti günlük harcamaya sayılır.
+ */
+async function chargeFailure(db: D1Database, reservation: UsageReservation, estimatedInput: number, now: Date): Promise<void> {
+  await db.batch(settleLLMStatements(db, reservation, { inputTokens: 0, outputTokens: 0 }, llmCostMicroUsd(estimatedInput, 0), now));
+}
+
+/** Akışsız çağrı ve kesinleştirmesi (başarıda gerçek kullanım, hatada `chargeFailure`). */
+async function callMessage(
+  db: D1Database,
+  client: Anthropic,
+  retry: RetryOptions,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  scope: LLMScope,
+  reservation: UsageReservation,
+  estimatedInput: number,
+  now: Date,
+): Promise<CallOutcome<Anthropic.Message>> {
+  let message: Anthropic.Message;
+  try {
+    message = await withRetries(retry, (): Promise<Anthropic.Message> => client.messages.create(params, { timeout: messageTimeoutMs }));
+  } catch (error: unknown) {
+    await chargeFailure(db, reservation, estimatedInput, now);
+    return { ok: false, error: mapAnthropicError(error, scope.userId, scopeMeetingId(scope)) };
+  }
+  await chargeUsage(db, scope, reservation, { inputTokens: totalInputTokens(message.usage), outputTokens: message.usage.output_tokens }, now);
+  return { ok: true, value: message };
+}
+
+/** Anthropic akışı. */
+type MessageStream = AsyncIterable<Anthropic.RawMessageStreamEvent> & { controller: AbortController };
+
+/** Akışı açar (ilk bayt zaman aşımıyla); açılamazsa `chargeFailure` ile kesinleştirir. */
+async function openStream(
+  db: D1Database,
+  client: Anthropic,
+  retry: RetryOptions,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  scope: LLMScope,
+  reservation: UsageReservation,
+  estimatedInput: number,
+  now: Date,
+): Promise<CallOutcome<MessageStream>> {
+  try {
+    const stream: MessageStream = await withRetries(retry, () => client.messages.create({ ...params, stream: true }, { timeout: streamFirstByteTimeoutMs }));
+    return { ok: true, value: stream };
+  } catch (error: unknown) {
+    await chargeFailure(db, reservation, estimatedInput, now);
+    return { ok: false, error: mapAnthropicError(error, scope.userId, scopeMeetingId(scope)) };
+  }
+}
+
+/**
  * Haiku vekili. Girdi tahmini sınırı aşarsa 413. `max_tokens` çağrı başı sınırla (toplantıda `LLM_MAX_TOKENS`, hesap
- * çağrısında daha küçük `LLM_ACCOUNT_MAX_TOKENS`) ve toplantı bütçesi (varsa), kullanıcının aylık ve günlük token
- * sınırından en dar olanına göre kısılır; `tahmin + max_tokens` hepsinden tek koşullu ifadelerle önceden ayrılır
- * (eşzamanlı çağrılar ve yeniden başlatılan toplantılar sınırları aşamaz). Yanıt bitince gerçek kullanım yazılır;
- * akış kesilirse ayrılan miktar harcanmış sayılır.
+ * çağrısında daha küçük `LLM_ACCOUNT_MAX_TOKENS`) ve en dar kalan sınıra (`llmLimits`) göre kısılır; `tahmin +
+ * max_tokens` tek koşullu ifadeyle süreli bir ayırma satırı olarak ayrılır (eşzamanlı çağrılar ve yeniden başlatılan
+ * toplantılar sınırları aşamaz). Üst çağrı ve kesinleştirme `continueAfterDisconnect` ile istemci koparsa da tamamlanır:
+ * yanıt bitince gerçek kullanım yazılır; üst çağrı başarısızsa tahmini girdi maliyeti harcamaya sayılır; akış kesilirse
+ * ayrılan miktar harcanmış sayılır. Worker kesinleştiremeden durursa ayırmanın süresi dolar (bkz. `reservations.ts`).
  */
 export async function proxyLLM(db: D1Database, context: RequestContext, config: Config, scope: LLMScope, request: LLMRequest): Promise<Response> {
   const estimatedInput: number = estimateInputTokens(request);
@@ -118,59 +188,62 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     throw new ApiError("payload_too_large", `Girdi çok uzun (tahmini ${estimatedInput} token, en çok ${config.llm.maxInputTokens}).`);
   }
   const now: Date = context.platform.now();
-  const headroom: TokenHeadroom = await tokenHeadroom(db, config, scope.userId, now);
-  const meetingLimits: ReadonlyArray<readonly [number, ApiError]> =
-    scope.kind === "meeting"
-      ? [[scope.meeting.token_budget - scope.meeting.tokens_used, new ApiError("meeting_budget_exhausted", "Bu toplantının yapay zekâ bütçesi doldu.")]]
-      : [];
-  const trialLimits: ReadonlyArray<readonly [number, ApiError]> = isTrialAccountCall(scope)
-    ? [[await trialAccountHeadroom(db, config, scope.userId, now), trialAccountCapError()]]
-    : [];
-  const limits: ReadonlyArray<readonly [number, ApiError]> = [
-    ...meetingLimits,
-    ...trialLimits,
-    [headroom.monthly, new ApiError("monthly_cap_reached", "Bu ayki yapay zekâ kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")],
-    [headroom.daily, new ApiError("daily_cap_reached", "Bugünkü yapay zekâ kullanım sınırına ulaştın; yarın yeniden dene.")],
-  ];
-  const [remaining, exhausted]: readonly [number, ApiError] = limits.reduce(
-    (tightest: readonly [number, ApiError], limit: readonly [number, ApiError]): readonly [number, ApiError] => (limit[0] < tightest[0] ? limit : tightest),
-  );
+  const limits: ReservationLimit[] = llmLimits(config, scope, now);
+  const tightest: { readonly remaining: number; readonly error: ApiError } = tightestLimit(limits, await remainingOf(db, limits));
   const callMax: number = scope.kind === "meeting" ? config.llm.maxTokens : config.llm.accountMaxTokens;
-  const maxTokens: number = clampMaxTokens(request.max_tokens, callMax, remaining, estimatedInput, exhausted);
-  const reserved: number = estimatedInput + maxTokens;
-  const meetingSteps: ReservationStep[] = scope.kind === "meeting" ? [meetingTokenStep(db, scope.meeting.id, reserved)] : [];
-  const trialSteps: ReservationStep[] = isTrialAccountCall(scope) ? [trialAccountTokenStep(db, config, scope.userId, reserved, now)] : [];
-  await reserveAll(db, [...meetingSteps, ...trialSteps, ...userTokenSteps(db, config, scope.userId, reserved, now)]);
+  const maxTokens: number = clampMaxTokens(request.max_tokens, callMax, tightest.remaining, estimatedInput, tightest.error);
+  const reservedTokens: number = estimatedInput + maxTokens;
+  const reservation: UsageReservation = llmReservation(
+    {
+      userId: scope.userId,
+      meetingId: scopeMeetingId(scope),
+      tokens: reservedTokens,
+      trialAccountCall: isTrialAccountCall(scope),
+      subscriberAccountCall: isSubscriberAccountCall(scope),
+      estimatedMicroUsd: llmCostMicroUsd(estimatedInput, maxTokens),
+      trialSpend: isTrialSpend(scope),
+    },
+    now,
+  );
+  await reserveUsage(
+    db,
+    reservation,
+    limits.map((limit: ReservationLimit): ReservationCheck => ({ limit, amount: reservedTokens })),
+  );
   const client: Anthropic = anthropicClient(context, config);
   const params: Anthropic.MessageCreateParamsNonStreaming = upstreamParams(request, maxTokens);
-  const retry = {
+  const retry: RetryOptions = {
     service: "anthropic",
     attempts: 3,
     baseDelayMs: context.platform.retryBaseDelayMs,
     isRetryable: isRetryableAnthropicError,
   };
+  const logFields: LogFields = { userId: scope.userId, meetingId: scopeMeetingId(scope), reservationId: reservation.id };
 
   if (request.stream !== true) {
-    let message: Anthropic.Message;
-    try {
-      message = await withRetries(retry, (): Promise<Anthropic.Message> => client.messages.create(params));
-    } catch (error: unknown) {
-      await chargeUsage(db, scope, reserved, { inputTokens: 0, outputTokens: 0 }, now);
-      throw mapAnthropicError(error, scope.userId, scopeMeetingId(scope));
+    const outcome: CallOutcome<Anthropic.Message> = await continueAfterDisconnect(
+      context,
+      callMessage(db, client, retry, params, scope, reservation, estimatedInput, now),
+      "llm_settle_failed",
+      logFields,
+    );
+    if (!outcome.ok) {
+      throw outcome.error;
     }
-    await chargeUsage(db, scope, reserved, { inputTokens: totalInputTokens(message.usage), outputTokens: message.usage.output_tokens }, now);
-    return jsonResponse(200, message);
+    return jsonResponse(200, outcome.value);
   }
 
-  let stream: AsyncIterable<Anthropic.RawMessageStreamEvent> & { controller: AbortController };
-  try {
-    stream = await withRetries(retry, () => client.messages.create({ ...params, stream: true }));
-  } catch (error: unknown) {
-    await chargeUsage(db, scope, reserved, { inputTokens: 0, outputTokens: 0 }, now);
-    throw mapAnthropicError(error, scope.userId, scopeMeetingId(scope));
+  const opened: CallOutcome<MessageStream> = await continueAfterDisconnect(
+    context,
+    openStream(db, client, retry, params, scope, reservation, estimatedInput, now),
+    "llm_settle_failed",
+    logFields,
+  );
+  if (!opened.ok) {
+    throw opened.error;
   }
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  context.waitUntil(pumpStream(db, stream, writable, scope, reserved, estimatedInput, maxTokens, now));
+  context.waitUntil(pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, now));
   return new Response(readable, {
     status: 200,
     headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store" },
@@ -189,10 +262,10 @@ export function sseEvent(type: string, data: object): string {
  */
 async function pumpStream(
   db: D1Database,
-  stream: AsyncIterable<Anthropic.RawMessageStreamEvent> & { controller: AbortController },
+  stream: MessageStream,
   writable: WritableStream<Uint8Array>,
   scope: LLMScope,
-  reserved: number,
+  reservation: UsageReservation,
   estimatedInput: number,
   maxTokens: number,
   now: Date,
@@ -245,7 +318,7 @@ async function pumpStream(
         ? { inputTokens: inputTokens ?? estimatedInput, outputTokens }
         : { inputTokens: inputTokens ?? estimatedInput, outputTokens: maxTokens };
     try {
-      await chargeUsage(db, scope, reserved, usage, now);
+      await chargeUsage(db, scope, reservation, usage, now);
     } finally {
       if (!clientGone) {
         await writer.close();
