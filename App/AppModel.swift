@@ -503,6 +503,13 @@ final class AppModel {
 
     /// Seçili motor ve LLM için eksik anahtar/ayarları bulur (değer okunmaz, izin penceresi açılmaz).
     func refreshSetupProblems() async {
+        #if DEBUG
+        // Tanıtım modu sunucuya ve Anahtar Zinciri'ne bakmaz: kurulum eksiksiz görünür (bkz. App/DemoData.swift).
+        if isDemoMode {
+            setupProblems = []
+            return
+        }
+        #endif
         #if HOSTED_EDITION
         // Abonelik sürümünde anahtar yok: eksik yalnızca giriş (ya da sunucu adresi).
         setupProblems = await hostedSetupProblems()

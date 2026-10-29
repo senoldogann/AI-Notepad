@@ -1,6 +1,8 @@
 ---
-// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, özellikler, üç adım, fiyat, SSS.
+// Ana sayfa: kahraman alanı (film kapak üstünde dönen ürün gösterimi), son toplantılar, uygulamanın gerçek ekranları,
+// özellikler, üç adım, fiyat, SSS.
 import Base from "../layouts/Base.astro";
+import AppShot from "../components/AppShot.astro";
 import BrandLogo from "../components/BrandLogo.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
@@ -16,6 +18,10 @@ import type { IconName } from "../lib/icons";
 import { cyclic } from "../lib/list";
 import { routes } from "../routes";
 import { siteConfig } from "../site";
+import askShot from "../assets/screenshots/ask.webp";
+import homeShot from "../assets/screenshots/home.webp";
+import liveShot from "../assets/screenshots/live.webp";
+import noteShot from "../assets/screenshots/note.webp";
 
 const text: HomeCopy = copy.home;
 const common: CommonCopy = copy.common;
@@ -67,6 +73,57 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         }
       </div>
     </section>
+  </section>
+
+  <section class="section page showcase" aria-labelledby="showcase-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.showcase.eyebrow}</p>
+      <h2 class="title-xl" id="showcase-title">{text.showcase.title}</h2>
+      <p class="lead">{text.showcase.lead}</p>
+    </div>
+
+    <div class="showcase__grid">
+      <AppShot
+        image={noteShot}
+        shot={text.showcase.note}
+        palette="violet"
+        layout="clouds-right"
+        variant="window"
+        widths={[720, 1200, 1680, 2160]}
+        sizes="(max-width: 640px) 160vw, min(1040px, 86vw)"
+        class="showcase__note reveal"
+      />
+      <AppShot
+        image={askShot}
+        shot={text.showcase.ask}
+        palette="coral"
+        layout="clouds-left"
+        variant="window"
+        widths={[640, 960, 1360]}
+        sizes="(max-width: 640px) 130vw, (max-width: 960px) 86vw, 680px"
+        class="showcase__ask reveal"
+      />
+      <AppShot
+        image={liveShot}
+        shot={text.showcase.live}
+        palette="ocean"
+        layout="clouds-right"
+        variant="panel"
+        widths={[360, 560, 840]}
+        sizes="(max-width: 640px) 76vw, (max-width: 960px) 72vw, 320px"
+        class="showcase__live reveal"
+      />
+      <AppShot
+        image={homeShot}
+        shot={text.showcase.home}
+        palette="mint"
+        layout="streaks"
+        variant="window"
+        widths={[720, 1200, 1680, 2160]}
+        sizes="(max-width: 640px) 120vw, min(1040px, 86vw)"
+        class="showcase__home reveal"
+      />
+    </div>
   </section>
 
   <section class="section page" id="features" aria-labelledby="features-title">
@@ -268,6 +325,47 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: clamp(14px, 2vw, 24px);
+  }
+
+  /* Gerçek ekranlar: üstte geniş not, ortada Sor ve canlı panel yan yana (aynı yükseklik), altta ana sayfa. */
+  .showcase {
+    padding-bottom: 0;
+  }
+
+  .showcase__grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: clamp(28px, 3.4vw, 44px) clamp(16px, 2.2vw, 28px);
+  }
+
+  .showcase__grid > :global(*) {
+    grid-column: 1 / -1;
+  }
+
+  /* Sor penceresi kartın içinde eşit boşlukla süzülür; satırın yüksekliğini o belirler. */
+  .showcase__grid > :global(.showcase__ask) {
+    grid-column: span 8;
+    --shot-ratio: 3 / 2;
+  }
+
+  /* Panel Sor kartının yüksekliğine uyar ve alttan kesilir. */
+  .showcase__grid > :global(.showcase__live) {
+    grid-column: span 4;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .showcase__grid > :global(.showcase__live .shot__cover) {
+    aspect-ratio: auto;
+    height: 100%;
+  }
+
+  /* Geniş pencereler alt kenarda kesilir. */
+  .showcase__grid > :global(.showcase__note) {
+    --shot-ratio: 16 / 9;
+  }
+
+  .showcase__grid > :global(.showcase__home) {
+    --shot-ratio: 16 / 8.5;
   }
 
   /* Özellikler: üstte iki geniş, altta dört kart; başlıklar kapakların altında, başlığın önünde simge. */
@@ -539,6 +637,16 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   }
 
   @media (max-width: 960px) {
+    .showcase__grid > :global(.showcase__ask),
+    .showcase__grid > :global(.showcase__live) {
+      grid-column: 1 / -1;
+    }
+
+    .showcase__grid > :global(.showcase__live .shot__cover) {
+      aspect-ratio: 5 / 4;
+      height: auto;
+    }
+
     .feature,
     .feature--wide {
       grid-column: span 6;
@@ -551,6 +659,30 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   }
 
   @media (max-width: 640px) {
+    /* Dar ekranda pencere büyütülür ve kaydırılır: tüm pencere yerine okunur bir parçası (not, cevap, karşılama)
+       görünür. */
+    .showcase__grid > :global(.showcase__note) {
+      --shot-ratio: 1 / 1;
+      --shot-zoom: 175%;
+      --shot-shift: -77%;
+    }
+
+    .showcase__grid > :global(.showcase__ask) {
+      --shot-ratio: 5 / 4;
+      --shot-zoom: 140%;
+      --shot-shift: -37%;
+    }
+
+    .showcase__grid > :global(.showcase__home) {
+      --shot-ratio: 6 / 5;
+      --shot-zoom: 130%;
+      --shot-shift: -28%;
+    }
+
+    .showcase__grid > :global(.showcase__live .shot__cover) {
+      aspect-ratio: 4 / 5;
+    }
+
     .library__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

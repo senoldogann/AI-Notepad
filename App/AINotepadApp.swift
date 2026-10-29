@@ -42,6 +42,16 @@ enum AppEntry {
             probeICloud()
             return
         }
+        // "--tanitim <sahne>": sahte verilerle ekran görüntüsü modu; veri geçici eve yazılır, değilse açılmaz.
+        if isDemoMode {
+            do {
+                _ = try demoScene(arguments: CommandLine.arguments)
+                try seedDemoData(now: Date())
+            } catch {
+                FileHandle.standardError.write(Data("\(appName) tanıtım: \(error)\n".utf8))
+                fatalError(String(describing: error))
+            }
+        }
         #endif
         guard CommandLine.arguments.contains("--mcp") else {
             AINotepadApp.main()
@@ -248,6 +258,16 @@ struct AINotepadApp: App {
                 } else if let page {
                     panel.show(page: page)
                 }
+                #if DEBUG
+                // Tanıtım modunun sahnesi (sahne açılışta doğrulandı; burada hata beklenmez).
+                if isDemoMode {
+                    do {
+                        showDemoScene(scene: try demoScene(arguments: CommandLine.arguments), model: model, router: router, panel: panel, now: Date())
+                    } catch {
+                        fatalError(String(describing: error))
+                    }
+                }
+                #endif
             }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
@@ -257,6 +277,12 @@ struct AINotepadApp: App {
         }
         // WhisperKit modeli yalnızca o motor seçiliyse yüklenir; ilk açılışta anahtar yoksa cihaz içi mod seçilir.
         Task {
+            #if DEBUG
+            // Tanıtım modu sunucuya bağlanmaz ve konuşma modelini yüklemez (bkz. App/DemoData.swift).
+            if isDemoMode {
+                return
+            }
+            #endif
             #if HOSTED_EDITION
             // Abonelik: hesap ve hak durumu açılışta okunur; kurulum eksikleri (giriş) güncellenir.
             await HostedAccount.shared.refresh()

@@ -480,9 +480,15 @@ func primaryMeetingLanguage() -> MeetingLanguage {
 /// Bu uygulamanın Anahtar Zinciri servis adı: geliştirici sürümünde `AINotepad` (iPhone ile paylaşılan), abonelik
 /// sürümünde kendi servisi (kanal ve görev aracı bağlantıları geliştirici sürümünün öğelerine yazılmasın).
 let appKeychainService: String = {
+    #if DEBUG
+    // Tanıtım modu sahibin Anahtar Zinciri öğelerini okumaz (bkz. App/DemoData.swift).
+    if isDemoMode {
+        return demoKeychainService
+    }
+    #endif
     #if HOSTED_EDITION
-    hostedKeychainService
+    return hostedKeychainService
     #else
-    keychainService
+    return keychainService
     #endif
 }()
