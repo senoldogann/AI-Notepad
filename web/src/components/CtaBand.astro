@@ -1,0 +1,67 @@
+---
+// Sayfa sonundaki indirme çağrısı (karşılaştırma, blog, MCP sayfaları): film kapak üstünde başlık, kısa metin ve indirme
+// sayfasına düğme. Doğrudan DMG bağlantısı kullanılmaz: indirme kaynağı (`?src=`) sunucunun izin listesindedir.
+import Film from "./Film.astro";
+import Icon from "./Icon.astro";
+import { copy } from "../copy";
+import type { FilmLayout, FilmPalette } from "../lib/film";
+import { routes } from "../routes";
+
+interface Props {
+  readonly id: string;
+  readonly title: string;
+  readonly text: string;
+  readonly palette: FilmPalette;
+  readonly layout: FilmLayout;
+}
+const { id, title, text, palette, layout } = Astro.props;
+---
+
+<section class="page cta-band reveal" aria-labelledby={id}>
+  <Film palette={palette} layout={layout} class="cta-band__cover">
+    <div class="cta-band__content">
+      <h2 class="title-l" id={id}>{title}</h2>
+      <p class="cta-band__text">{text}</p>
+      <a class="button cta-band__button" href={routes.download}>
+        <Icon name="apple" size={16} class="button__apple" />
+        {copy.common.downloadCta}
+      </a>
+    </div>
+  </Film>
+</section>
+
+<style>
+  .cta-band {
+    margin-top: clamp(56px, 8vw, 96px);
+  }
+
+  .cta-band :global(.cta-band__cover) {
+    padding: clamp(36px, 6vw, 72px) clamp(24px, 6vw, 72px);
+  }
+
+  .cta-band__content {
+    display: grid;
+    justify-items: center;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .cta-band__content h2 {
+    max-width: 22ch;
+  }
+
+  .cta-band__text {
+    max-width: 36rem;
+    color: #2b2b2b;
+  }
+
+  /* Kapak her temada açık: düğme hep koyu. */
+  .cta-band__button {
+    background: #0a0a0a;
+    color: #fafafa;
+  }
+
+  .cta-band__button:hover {
+    background: #262626;
+  }
+</style>

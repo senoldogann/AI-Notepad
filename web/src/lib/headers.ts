@@ -8,7 +8,7 @@
 // sayfasında, Turnstile yalnızca iletişim sayfasında çalışabilir. Google ile giriş Google'a yönlendirir; betik yüklenmez.
 // Cloudflare Web Analytics işaretçisi her sayfada olduğundan iki katmanın da tüm politikalarında açıktır.
 import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
-import { type PageKey, privatePages, routes } from "../routes";
+import { blogPostPattern, type PageKey, privatePages, routes } from "../routes";
 
 /** Sayfaların yüklediği dış hizmetler. */
 export type ExternalService = "appleSignIn" | "turnstile";
@@ -51,6 +51,11 @@ export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>>
   home: [],
   pricing: [],
   download: [],
+  compare: [],
+  vsGranola: [],
+  vsOtter: [],
+  blog: [],
+  mcp: [],
   signIn: ["appleSignIn"],
   account: [],
   contact: ["turnstile"],
@@ -76,6 +81,8 @@ export function contentSecurityPolicy(config: SiteConfig, services: readonly Ext
     directive("script-src", ["'self'", webAnalyticsScriptOrigin], services, (sources: ServiceSources): readonly string[] => sources.script),
     directive("style-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.style),
     "img-src 'self'",
+    // Ana sayfadaki tanıtım videosu (public/video) yalnızca siteden yüklenir.
+    "media-src 'self'",
     "font-src 'self'",
     directive("connect-src", ["'self'", originOf(config.apiBase), webAnalyticsConnectOrigin], services, (sources: ServiceSources): readonly string[] => sources.connect),
     directive("frame-src", [], services, (sources: ServiceSources): readonly string[] => sources.frame),
@@ -129,12 +136,20 @@ export function pagesHeaders(config: SiteConfig): string {
       ...(privatePages.includes(page) ? ["  Cache-Control: no-store"] : []),
       "",
     ]),
+    // Blog yazıları (`/blog/<kısa ad>`) sayfa kimliği taşımaz; hepsi dış hizmetsiz dar politikayı alır.
+    blogPostPattern,
+    `  Content-Security-Policy: ${contentSecurityPolicy(config, [])}`,
+    "",
     // Adı içerik özeti taşıyan derleme çıktıları değişmez.
     "/_astro/*",
     "  Cache-Control: public, max-age=31536000, immutable",
     "",
     // Yazı tipinin adında özet yok: güncellenirse ayda bir tazelenir.
     "/fonts/*",
+    "  Cache-Control: public, max-age=2592000",
+    "",
+    // Tanıtım videosu ve kapak görseli: adlarında özet yok, ayda bir tazelenir.
+    "/video/*",
     "  Cache-Control: public, max-age=2592000",
     "",
   ];

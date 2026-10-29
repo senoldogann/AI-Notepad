@@ -1,0 +1,76 @@
+---
+// Claude'da toplantılar üstüne örnek bir soru ve yanıt (MCP): ana sayfanın entegrasyon kartında ve MCP sayfasında. Cam
+// yüzey film kapak üstünde durur; yazı her temada koyu. Metinler copy.ts `home.integrations.mcpDemo`.
+import BrandTile from "./BrandTile.astro";
+import Icon from "./Icon.astro";
+import { copy, type HomeCopy } from "../copy";
+
+const demo: HomeCopy["integrations"]["mcpDemo"] = copy.home.integrations.mcpDemo;
+---
+
+<div class="glass mcp-chat">
+  <div class="mcp-chat__label"><BrandTile brand="claude" size="small" />{demo.label}</div>
+  <p class="mcp-chat__question">{demo.question}</p>
+  <p class="mcp-chat__tool"><Icon name="search" size={13} class="" />{demo.tool}</p>
+  <p class="mcp-chat__answer">{demo.answerLead}</p>
+  <ul class="mcp-chat__list">{demo.answer.map((item: string) => <li>{item}</li>)}</ul>
+  <p class="mcp-chat__source">{demo.source}</p>
+</div>
+
+<style>
+  .mcp-chat {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 400px);
+    padding: 18px 20px;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .mcp-chat p,
+  .mcp-chat ul {
+    margin: 0;
+  }
+
+  .mcp-chat__label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__question {
+    justify-self: end;
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 14px 14px 4px 14px;
+    background: #f1ece6;
+    font-weight: 500;
+  }
+
+  .mcp-chat__tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: start;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgb(10 10 10 / 0.1);
+    font-size: 0.75rem;
+    color: #5a4a40;
+  }
+
+  .mcp-chat__list {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .mcp-chat__source {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #5a4a40;
+  }
+</style>
