@@ -116,6 +116,8 @@ export interface HomeCopy {
   readonly title: string;
   readonly lead: string;
   readonly secondaryCta: string;
+  /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
+  readonly assurances: readonly string[];
   readonly demo: DemoCopy;
   readonly library: {
     readonly label: string;
@@ -131,6 +133,8 @@ export interface HomeCopy {
     readonly ask: ShowcaseShot;
     readonly home: ShowcaseShot;
   };
+  /** Doğrulanabilir ürün gerçekleri şeridi (uydurma kullanıcı sayısı yok). */
+  readonly facts: readonly { readonly value: string; readonly label: string }[];
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
   readonly featuresLead: string;
@@ -141,6 +145,14 @@ export interface HomeCopy {
     readonly ask: TitledText & { readonly question: string; readonly source: string };
     readonly integrations: TitledText;
     readonly privacy: TitledText & { readonly badge: string };
+  };
+  /** Gizlilik ve güven ızgarası. */
+  readonly trust: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly lead: string;
+    readonly items: readonly TitledText[];
+    readonly link: string;
   };
   readonly stepsTitle: string;
   readonly steps: readonly TitledText[];
@@ -400,6 +412,13 @@ export const copy: Copy = {
     title: tagline,
     lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
     secondaryCta: "See pricing",
+    assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
+    facts: [
+      { value: "No bot", label: "Nothing joins your call. Gistsmith listens on your Mac." },
+      { value: "Live", label: "Transcript and translation appear while people talk." },
+      { value: "30+", label: "Languages for your meetings, notes and translations." },
+      { value: "Tasks first", label: "Every note opens with who does what, by when." },
+    ],
     demo: {
       label: `${productName} recording a meeting and writing the note`,
       listening: "Listening",
@@ -493,6 +512,20 @@ export const copy: Copy = {
         text: "Audio is processed only to be transcribed and is not stored on our servers. Your notes and recordings stay on your Mac. No bot joins the call.",
         badge: "Not stored on our servers",
       },
+    },
+    trust: {
+      eyebrow: "Privacy",
+      title: "Your meetings stay yours.",
+      lead: "Built for conversations you'd rather keep private, by a small company in Finland.",
+      items: [
+        { title: "No bot in your call", text: "Gistsmith listens on your Mac. Nobody sees an extra participant, and you don't have to ask anyone to let it in." },
+        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers never keep a copy." },
+        { title: "Audio isn't kept by us", text: "Audio is sent only to be transcribed. Our servers don't store it, and your recordings stay on your Mac." },
+        { title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
+        { title: "EU company, GDPR", text: "Gistsmith is run from Finland under EU data protection law. Our account database is hosted in the EU." },
+        { title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
+      ],
+      link: "Read the privacy policy",
     },
     stepsTitle: "In three steps",
     steps: [

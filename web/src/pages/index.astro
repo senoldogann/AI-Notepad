@@ -32,6 +32,8 @@ const covers: readonly { readonly palette: FilmPalette; readonly layout: FilmLay
   { palette: "mint", layout: "streaks" },
   { palette: "violet", layout: "clouds-right" },
 ];
+/** Gizlilik ızgarasının simgeleri (metinlerle aynı sırada). */
+const trustIcons: readonly IconName[] = ["users", "laptop", "waveform", "sparkle", "globe", "check-circle"];
 /** Özellik kartlarının başlık simgeleri. */
 const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
   live: "translate",
@@ -56,7 +58,17 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         </a>
         <a class="button button--secondary" href={routes.pricing}>{text.secondaryCta}</a>
       </div>
-      <p class="hero__offer small"><strong>{common.offer}</strong><span class="muted">{common.requirementsShort}</span></p>
+      <ul class="hero__assurances small">
+        {
+          text.assurances.map((item: string) => (
+            <li>
+              <Icon name="check" size={15} class="hero__check" />
+              {item}
+            </li>
+          ))
+        }
+        <li class="muted">{common.requirementsShort}</li>
+      </ul>
     </div>
 
     <Film palette="sunset" layout="clouds-left" class="hero__cover">
@@ -73,6 +85,19 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
         }
       </div>
     </section>
+  </section>
+
+  <section class="page facts reveal" aria-label={text.featuresEyebrow}>
+    <dl class="facts__grid">
+      {
+        text.facts.map((fact) => (
+          <div class="facts__item">
+            <dt class="facts__value">{fact.value}</dt>
+            <dd class="facts__label muted">{fact.label}</dd>
+          </div>
+        ))
+      }
+    </dl>
   </section>
 
   <section class="section page showcase" aria-labelledby="showcase-title">
@@ -213,6 +238,26 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     </div>
   </section>
 
+  <section class="section page" aria-labelledby="trust-title">
+    <div class="section-head reveal">
+      <p class="eyebrow">{text.trust.eyebrow}</p>
+      <h2 class="title-xl" id="trust-title">{text.trust.title}</h2>
+      <p class="lead">{text.trust.lead}</p>
+    </div>
+    <ul class="trust">
+      {
+        text.trust.items.map((item, index: number) => (
+          <li class="trust__item reveal">
+            <span class="icon-chip icon-chip--small"><Icon name={trustIcons[index] ?? "lock"} size={18} class="" /></span>
+            <h3 class="trust__title">{item.title}</h3>
+            <p class="muted">{item.text}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <a class="text-link trust__link reveal" href={routes.privacy}>{text.trust.link} <Icon name="arrow-right" size={16} class="" /></a>
+  </section>
+
   <section class="section section--tinted" aria-labelledby="steps-title">
     <div class="page">
       <h2 class="title-l reveal" id="steps-title">{text.stepsTitle}</h2>
@@ -290,14 +335,112 @@ const featureIcons: Readonly<Record<keyof HomeCopy["features"], IconName>> = {
     margin-top: 6px;
   }
 
-  .hero__offer {
+  /* Düğmelerin altındaki güvenceler: küçük onay işaretli, tek satırda akan liste. */
+  .hero__assurances {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 14px;
+    gap: 6px 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .hero__offer strong {
+  .hero__assurances li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+
+  .hero__assurances :global(.hero__check) {
+    color: var(--accent);
+  }
+
+  /* Ürün gerçekleri: dört sütun, büyük değer ve kısa açıklama; ince ayraçlarla sakin bir şerit. */
+  .facts {
+    margin-top: clamp(40px, 6vw, 72px);
+  }
+
+  .facts__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .facts__item {
+    display: grid;
+    gap: 6px;
+    padding: 24px 24px 26px;
+  }
+
+  .facts__item + .facts__item {
+    border-left: 1px solid var(--line);
+  }
+
+  .facts__value {
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
     font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .facts__label {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  /* Gizlilik ızgarası: üç sütun, kartsız sakin hücreler. */
+  .trust {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 36px 40px;
+    margin: clamp(32px, 4vw, 48px) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .trust__item {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .trust__title {
+    margin: 4px 0 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .trust__item p {
+    margin: 0;
+  }
+
+  .trust__link {
+    display: inline-flex;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 860px) {
+    .facts__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .facts__item:nth-child(3) {
+      border-left: 0;
+    }
+
+    .facts__item:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
+    }
+
+    .trust {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+    }
   }
 
   /* Gösterim kapağı: gradyan durgun; doygunluk filtresi kaldırılır ki animasyonlu içerik her karede filtrelenmesin. */
