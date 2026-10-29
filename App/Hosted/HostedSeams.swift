@@ -106,9 +106,24 @@ func hostedPreloadsLocalModel(account: HostedAccount) -> Bool {
 }
 
 /// Kayıt sırasındaki ve kaydın hemen ardındaki yapay zekâ çağrıları: son açılan toplantının bütçesinden düşer.
+@MainActor
 func hostedMeetingLLMProvider() throws -> LLMProvider {
+    // Çevrimdışı kayıtta toplantı oturumu yok: canlı çağrılar yapılmaz (önceki toplantının bütçesine yazılmaz).
+    guard !HostedAccount.shared.isOfflineRecording else {
+        throw HostedClientError.offlineRecording
+    }
     let client: HostedClient = try HostedServices.requireClient()
     return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .meeting))
+}
+
+/// Kaydı biten toplantının notu: kaydın kendi sunucu oturumunun bütçesinden (bkz. `HostedMeetingLink`); kaydın oturumu
+/// yoksa hesap çağrısı (kullanıcının toplantı dışı payından), başka bir toplantının bütçesi asla kullanılmaz.
+func hostedRecordedMeetingLLMProvider(recordID: String) throws -> LLMProvider {
+    let client: HostedClient = try HostedServices.requireClient()
+    guard let serverMeetingID = hostedServerMeetingID(recordID: recordID, links: try loadHostedMeetingLinks()) else {
+        return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .account))
+    }
+    return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .recordedMeeting(serverMeetingID: serverMeetingID)))
 }
 
 /// Her zaman kullanılabilen yapay zekâ çağrıları (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı):
@@ -118,19 +133,44 @@ func hostedAccountLLMProvider() throws -> LLMProvider {
     return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .account))
 }
 
-/// Son geçiş: kayıt sunucunun `/v1/transcribe` ucuyla (ElevenLabs Scribe) yazıya dökülür; toplantı oturumu yoksa
-/// (ör. ek süre geçtikten sonra "Tekrar işle") atlanır, nedeni toplantıda görünür.
-func hostedFinalPassPlan(keyterms: [String]) async -> FinalPassPlan {
+/// Son geçiş: kayıt sunucunun `/v1/transcribe` ucuyla (ElevenLabs Scribe) yazıya dökülür; ses yalnızca kaydın kendi
+/// sunucu oturumuna yazılır (bkz. `HostedMeetingLink`), başka bir toplantının bütçesinden düşmez. Kaydın oturumu
+/// yoksa (içe aktarılan dosya, eski kayıt) son geçiş atlanır ve nedeni toplantıda görünür; oturumun ses hakkı kapandıysa
+/// sunucu reddeder ve nedeni yine toplantıda görünür.
+func hostedFinalPassPlan(keyterms: [String], recordID: String) async -> FinalPassPlan {
     let client: HostedClient
+    let links: [HostedMeetingLink]
     do {
         client = try HostedServices.requireClient()
+        links = try loadHostedMeetingLinks()
     } catch {
         return .skip(reason: userFacingMessage(error: error))
     }
-    guard let meetingID = await client.currentMeetingID() else {
-        return .skip(reason: userFacingMessage(error: HostedClientError.noActiveMeeting))
+    guard let meetingID = hostedServerMeetingID(recordID: recordID, links: links) else {
+        return .skip(reason: String(localized: "Bu toplantı sunucuda bir kayıt oturumuna bağlı değil; konuşmacılar canlı metinden kalır."))
     }
     return .run(HostedFinalTranscriber(client: client, meetingID: meetingID, keyterms: keyterms))
+}
+
+/// Kayıt–sunucu oturumu bağlarının UserDefaults anahtarı.
+private let hostedMeetingLinksKey: String = "hosted.meetingLinks"
+
+/// Saklanan bağlar (yoksa boş); bozuk kayıt `StorageError`.
+func loadHostedMeetingLinks() throws -> [HostedMeetingLink] {
+    guard let data = UserDefaults.standard.data(forKey: hostedMeetingLinksKey) else {
+        return []
+    }
+    do {
+        return try JSONDecoder().decode([HostedMeetingLink].self, from: data)
+    } catch {
+        throw StorageError.writeFailed(path: hostedMeetingLinksKey, reason: "bağlar okunamadı: \(error.localizedDescription)")
+    }
+}
+
+/// Kaydı sunucu oturumuna bağlar (en yeni `hostedMeetingLinkCapacity` bağ tutulur).
+func saveHostedMeetingLink(link: HostedMeetingLink) throws {
+    let links: [HostedMeetingLink] = appendingHostedMeetingLink(links: try loadHostedMeetingLinks(), link: link, capacity: hostedMeetingLinkCapacity)
+    UserDefaults.standard.set(try JSONEncoder().encode(links), forKey: hostedMeetingLinksKey)
 }
 
 /// Kurulum eksikleri (menüde ve Ana sayfada): sunucu adresi geçersizse ya da giriş yapılmamışsa.
@@ -156,6 +196,15 @@ func hostedReportDestination() async throws -> ReportDestination {
 /// başlayabilirse nil (bkz. `hostedStartBlock`).
 @MainActor
 func hostedStartBlockNotice() -> StartBlockNotice? {
+    // Hak durumu okunamıyorsa (çevrimdışı) kayıt, son bilinen hak durumu son 7 günde izin verdiyse çevrimdışı başlar;
+    // vermediyse neden burada yazar (başlatıp hata göstermek yerine).
+    if case .signedInStatusUnknown = HostedAccount.shared.state {
+        let permit: HostedOfflinePermit? = loadHostedOfflinePermit()
+        guard hostedOfflineRecordingMinutes(permit: permit, userId: permit?.userId, now: Date(), maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil else {
+            return nil
+        }
+        return StartBlockNotice(reason: userFacingMessage(error: HostedClientError.offlineNotAllowed), action: .retry)
+    }
     guard case .signedIn(let entitlements) = HostedAccount.shared.state, let block = hostedStartBlock(entitlements: entitlements) else {
         return nil
     }

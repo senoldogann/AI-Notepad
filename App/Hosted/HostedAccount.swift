@@ -131,6 +131,13 @@ final class HostedAccount {
     /// Bu Mac'te kayıtlı oturum var mı: açılışta Anahtar Zinciri'nden (ağsız) okunur, her yenilemede ve çıkışta
     /// güncellenir; okunamadıysa nil. Giriş kapısı buna bakar (bkz. `requiresSignIn`).
     private(set) var hasSession: Bool?
+    /// Kayıt sunucuya ulaşılamadan (çevrimdışı) sürüyor: canlı metin Mac'te, toplantı sonra işlenecek.
+    private(set) var isOfflineRecording: Bool = false
+    /// Bekleyen (çevrimdışı) kayıtların işlenmesini tetikler: ağ gelince, hak durumu okununca ve uygulama öne gelince
+    /// artar (uygulama izler; bkz. `AppModel.runOfflineQueue`).
+    private(set) var queueTrigger: Int = 0
+    /// Ödeme ya da müşteri portalı tarayıcıda açıldı: uygulama öne gelince hak durumu beklemeden yeniden okunur.
+    @ObservationIgnored private var awaitingBillingReturn: Bool = false
     @ObservationIgnored private var isRefreshing: Bool = false
     /// Son başarılı hak durumu okuması (uygulama öne gelince eskimişse yenilenir).
     @ObservationIgnored private var lastRefreshAt: Date?
@@ -155,6 +162,7 @@ final class HostedAccount {
             MainActor.assumeIsolated {
                 self?.currentMeeting = nil
                 self?.hasSession = false
+                clearHostedOfflinePermit()
                 self?.state = .signedOut
                 self?.errorMessage = userFacingMessage(error: HostedClientError.sessionEnded)
             }
@@ -166,7 +174,9 @@ final class HostedAccount {
                 }
                 Task {
                     await self.retryUnknownStatus()
-                    await self.refreshIfStale()
+                    await self.refreshOnActivation()
+                    await self.closeOrphanedMeeting()
+                    self.queueTrigger += 1
                 }
             }
         })
@@ -175,10 +185,14 @@ final class HostedAccount {
                 return
             }
             Task { @MainActor in
-                await self?.retryUnknownStatus()
+                await self?.networkBecameAvailable()
             }
         }
         pathMonitor.start(queue: DispatchQueue(label: "com.senoldogan.AINotepad.hosted.path"))
+        // Uygulama kapanırken açık kalan sunucu oturumu kapatılmaya çalışılır (en çok 3 sn); olmazsa sonraki açılışta.
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
+            endOpenMeetingBeforeQuit()
+        })
     }
 
     /// Giriş kapısı kapalı mı: bu Mac'te oturum yoksa (ya da okunamadıysa) ana arayüz, kayıt, kısayollar ve menü
@@ -240,6 +254,8 @@ final class HostedAccount {
             let entitlements: HostedEntitlements = try await client.entitlements()
             state = .signedIn(entitlements)
             lastRefreshAt = Date()
+            saveHostedOfflinePermit(permit: hostedOfflinePermit(entitlements: entitlements, now: Date()))
+            queueTrigger += 1
             if let refreshErrorMessage, errorMessage == refreshErrorMessage {
                 errorMessage = nil
             }
@@ -247,6 +263,7 @@ final class HostedAccount {
             updateNotice(entitlements: entitlements, now: Date())
         } catch HostedClientError.notSignedIn, HostedClientError.sessionEnded {
             self.hasSession = false
+            clearHostedOfflinePermit()
             state = .signedOut
         } catch {
             accountLogger.error("Hak durumu okunamadı, hata: \(String(describing: error), privacy: .private)")
@@ -285,16 +302,28 @@ final class HostedAccount {
         visibleNotice = nil
     }
 
-    /// Hak durumu bilinmiyorsa (çevrimdışı açılış) yeniden okur; ağ geri gelince ve uygulama öne gelince çağrılır.
-    /// Hak durumu uzun süredir okunmadıysa (uygulama öne gelince) yeniler: kullanım göstergeleri ve bildirimler
-    /// eskimesin.
-    private func refreshIfStale() async {
-        guard case .signedIn = state, !isRefreshing, isHostedRefreshDue(lastRefresh: lastRefreshAt, now: Date(), intervalSec: hostedStaleRefreshIntervalSec) else {
+    /// Uygulama öne gelince hak durumunu yeniler: ödeme ya da portal sayfasından dönüldüyse hemen, değilse son okuma
+    /// `hostedStaleRefreshIntervalSec`'ten eskiyse (kullanım göstergeleri, bildirimler ve başlat engeli eskimesin).
+    private func refreshOnActivation() async {
+        guard case .signedIn = state, !isRefreshing else {
             return
         }
+        guard awaitingBillingReturn || isHostedRefreshDue(lastRefresh: lastRefreshAt, now: Date(), intervalSec: hostedStaleRefreshIntervalSec) else {
+            return
+        }
+        awaitingBillingReturn = false
         await refresh()
     }
 
+    /// Ağ geri geldi: hak durumu bilinmiyorsa yeniden okunur, kapatılamamış sunucu oturumu kapatılır ve bekleyen
+    /// (çevrimdışı) kayıtlar işlenmeye başlar.
+    private func networkBecameAvailable() async {
+        await retryUnknownStatus()
+        await closeOrphanedMeeting()
+        queueTrigger += 1
+    }
+
+    /// Hak durumu bilinmiyorsa (çevrimdışı açılış) yeniden okur; ağ geri gelince ve uygulama öne gelince çağrılır.
     private func retryUnknownStatus() async {
         guard case .signedInStatusUnknown = state, !isRefreshing else {
             return
@@ -417,6 +446,7 @@ final class HostedAccount {
             errorMessage = userFacingMessage(error: error)
         }
         currentMeeting = nil
+        clearHostedOfflinePermit()
         await refresh()
     }
 
@@ -426,12 +456,15 @@ final class HostedAccount {
             try await client.deleteAccount()
         }
         currentMeeting = nil
+        clearHostedOfflinePermit()
+        clearHostedOpenMeetingID()
     }
 
     // MARK: Ödeme
 
     /// Stripe Checkout'u tarayıcıda açar; bitmemiş abonelik varsa Müşteri Portalı açılır.
     func subscribe() async {
+        awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
             do {
                 NSWorkspace.shared.open(try await client.checkoutURL())
@@ -443,6 +476,7 @@ final class HostedAccount {
 
     /// Stripe Müşteri Portalı (kart, fatura, iptal).
     func manageSubscription() async {
+        awaitingBillingReturn = true
         await perform { (client: HostedClient) async throws -> Void in
             NSWorkspace.shared.open(try await client.portalURL())
         }
@@ -450,32 +484,62 @@ final class HostedAccount {
 
     // MARK: Toplantı
 
-    /// Kayıt başında toplantı oturumu açar (deneme hakkı ya da abonelik buradan düşer); reddedilirse hata fırlatılır
-    /// ve kayıt başlamaz. App Attest destekleniyorsa onay eklenir. Apple DeviceCheck jetonu yalnızca hesabın deneme
-    /// olduğu biliniyorsa gönderilir; hak durumu bilinmiyorsa jetonsuz denenir ve sunucu `device_check_required`
-    /// derse bir kez jetonla yinelenir (aboneler DeviceCheck'e hiç takılmaz). Jeton üretilemezse kayıt başlamaz.
-    func startMeeting() async throws -> HostedStartedMeeting {
+    /// Kayıt başında kaydın sunucu oturumunu açar (deneme hakkı ya da abonelik süresi buradan düşer; `recordID` aynı
+    /// kayıt için yinelenen başlatmanın aynı oturumu döndürmesini sağlar). Oturum açık kalırken kimliği saklanır (uygulama
+    /// çökse de sonra kapatılır) ve kayıt oturuma bağlanır (son geçiş ve not o oturumla). Sunucuya ulaşılamazsa
+    /// (bkz. `isOfflineStartError`) ve son bilinen hak durumu son 7 günde kayda izin verdiyse kayıt çevrimdışı sürer;
+    /// yoksa ya da sunucu reddederse hata fırlar ve kayıt başlamaz.
+    func startMeeting(recordID: String) async throws -> HostedMeetingStart {
         let client: HostedClient = try HostedServices.requireClient()
+        // Ödeme sonrası eski "deneme" durumu DeviceCheck istemesin: deneme görünen hesapta durum önce tazelenir.
+        if isKnownTrial {
+            await refresh()
+        }
+        do {
+            let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID)
+            currentMeeting = started
+            isOfflineRecording = false
+            saveHostedOpenMeetingID(meetingID: started.meetingId)
+            try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: started.meetingId, createdAt: Date()))
+            accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
+            Task { await refresh() }
+            return .online(started)
+        } catch where isOfflineStartError(error: error) {
+            let userID: String? = try await client.signedInUserID()
+            guard let minutes = hostedOfflineRecordingMinutes(permit: loadHostedOfflinePermit(), userId: userID, now: Date(), maxAgeSec: hostedOfflinePermitMaxAgeSec) else {
+                accountLogger.warning("Sunucuya ulaşılamadı; son hak durumu eski ya da izin vermiyor, kayıt başlatılmadı")
+                throw HostedClientError.offlineNotAllowed
+            }
+            // Canlı istekler önceki toplantının bütçesine yazılmasın.
+            await client.clearCurrentMeeting()
+            currentMeeting = nil
+            isOfflineRecording = true
+            accountLogger.info("Sunucuya ulaşılamadı, kayıt çevrimdışı başlıyor, en çok dakika: \(minutes, privacy: .public)")
+            return .offline(maxMinutes: minutes)
+        }
+    }
+
+    /// Sunucuda oturum açar. App Attest destekleniyorsa onay eklenir. Apple DeviceCheck jetonu yalnızca hesabın deneme
+    /// olduğu biliniyorsa gönderilir; sunucu `device_check_required` derse bir kez jetonla yinelenir (aboneler
+    /// DeviceCheck'e hiç takılmaz). Jeton üretilemezse hata fırlar.
+    private func openServerMeeting(client: HostedClient, clientRef: String) async throws -> HostedStartedMeeting {
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
         let deviceCheckToken: String? = isKnownTrial ? try await HostedDeviceCheck.token() : nil
-        let started: HostedStartedMeeting
         do {
-            started = try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken)
+            return try await client.startMeeting(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef)
         } catch let error as HostedAPIError where error.code == .deviceCheckRequired && deviceCheckToken == nil {
             accountLogger.info("Sunucu DeviceCheck istedi, jetonla bir kez yeniden deneniyor")
             // App Attest meydan okuması tek kullanımlık: yeniden denemede yeni onay.
             let retryDevice: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
-            started = try await client.startMeeting(device: retryDevice, deviceCheckToken: try await HostedDeviceCheck.token())
+            return try await client.startMeeting(device: retryDevice, deviceCheckToken: try await HostedDeviceCheck.token(), clientRef: clientRef)
         }
-        currentMeeting = started
-        accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
-        Task { await refresh() }
-        return started
     }
 
     /// Kayıt bitince toplantı oturumunu kapatır; not ve son geçiş sunucunun ek süresinde aynı toplantıyla sürer.
-    /// Kapatma başarısız olsa da hak durumu yenilenir (göstergeler güncel kalsın).
+    /// Kapatılamazsa oturum kimliği saklı kalır, ağ gelince ya da sonraki açılışta yeniden denenir (aylık süre boşuna
+    /// akmasın). Her durumda hak durumu yenilenir (göstergeler güncel kalsın).
     func endMeeting() async throws {
+        isOfflineRecording = false
         guard let meeting = currentMeeting else {
             return
         }
@@ -483,7 +547,69 @@ final class HostedAccount {
         let client: HostedClient = try HostedServices.requireClient()
         let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meeting.meetingId)
         currentMeeting = nil
+        clearHostedOpenMeetingID()
         accountLogger.info("Toplantı oturumu kapandı, dakika: \(ended.minutes ?? 0, privacy: .public)")
+    }
+
+    /// Kapatılamamış sunucu oturumunu (uygulama çöktü, kapatma isteği başarısız oldu) kapatır; o oturumla kayıt
+    /// sürüyorsa dokunmaz. Sunucu oturumu zaten kapalı ya da bilinmiyorsa kayıt silinir; ağ hatasında sonra yeniden
+    /// denenir.
+    func closeOrphanedMeeting() async {
+        guard let meetingID = loadHostedOpenMeetingID(), currentMeeting?.meetingId != meetingID else {
+            return
+        }
+        do {
+            let ended: HostedEndedMeeting = try await HostedServices.requireClient().endMeeting(meetingID: meetingID)
+            clearHostedOpenMeetingID()
+            accountLogger.info("Açık kalan toplantı oturumu kapatıldı, dakika: \(ended.minutes ?? 0, privacy: .public)")
+        } catch let error as HostedAPIError where !isRetryableHostedError(error: error) {
+            clearHostedOpenMeetingID()
+            accountLogger.warning("Açık kalan toplantı oturumu sunucuda yok ya da kapalı, kod: \(error.rawCode, privacy: .public)")
+        } catch {
+            accountLogger.warning("Açık kalan toplantı oturumu kapatılamadı, sonra yeniden denenecek, hata: \(String(describing: error), privacy: .private)")
+        }
+    }
+
+    /// Bekleyen (çevrimdışı) kaydın sunucu oturumunu hazırlar. Kayıt daha önce bir oturuma bağlandıysa o kullanılır;
+    /// yoksa oturum açılır (sunucu hakları denetler; `clientRef` yinelenen denemenin ikinci oturum açmasını önler), kayda
+    /// bağlanır ve hemen kapatılır: toplantı süresi sayılmaz, aylık kullanıma sesin gerçek süresi yazılır (son geçiş);
+    /// not ve son geçiş sunucunun ek süresinde (30 dk) bu oturumla üretilir.
+    func prepareQueuedMeeting(recordID: String) async -> HostedQueuedMeetingPreparation {
+        if case .signedIn(let entitlements) = state, hostedStartBlock(entitlements: entitlements) != nil, hostedServerMeetingIDOrNil(recordID: recordID) == nil {
+            return .blocked(reason: queuedBlockReason(entitlements: entitlements))
+        }
+        do {
+            let client: HostedClient = try HostedServices.requireClient()
+            let serverMeetingID: String
+            if let linked = hostedServerMeetingIDOrNil(recordID: recordID) {
+                serverMeetingID = linked
+            } else {
+                let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID)
+                serverMeetingID = started.meetingId
+                try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: serverMeetingID, createdAt: Date()))
+            }
+            _ = try await client.endMeeting(meetingID: serverMeetingID)
+            accountLogger.info("Çevrimdışı kaydın sunucu oturumu hazır")
+            Task { await refresh() }
+            return .ready(serverMeetingID: serverMeetingID)
+        } catch where isOfflineStartError(error: error) {
+            return .waitingForNetwork
+        } catch {
+            accountLogger.warning("Çevrimdışı kayıt sunucuda işlenemiyor, hata: \(String(describing: error), privacy: .private)")
+            return .blocked(reason: userFacingMessage(error: error))
+        }
+    }
+
+    /// Bekleyen kaydın şimdilik işlenememe nedeni (hak durumundan).
+    private func queuedBlockReason(entitlements: HostedEntitlements) -> String {
+        switch hostedStartBlock(entitlements: entitlements) {
+        case .trialEnded:
+            String(localized: "Ücretsiz denemen bittiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; abone olunca kendiliğinden işlenir.")
+        case .monthlyCapReached:
+            String(localized: "Bu ayki kullanım sınırın dolduğu için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; sınır sıfırlanınca kendiliğinden işlenir.")
+        case .none:
+            String(localized: "Bu kayıt şimdilik işlenemedi; kendiliğinden yeniden denenecek.")
+        }
     }
 
     /// İşlemi çalıştırır, sonra durumu yeniler; hata kullanıcıya gösterilir.
@@ -499,4 +625,98 @@ final class HostedAccount {
         }
         await refresh()
     }
+}
+
+/// Kayıt başında sunucu oturumunun sonucu.
+enum HostedMeetingStart {
+    /// Sunucu oturumu açıldı.
+    case online(HostedStartedMeeting)
+    /// Sunucuya ulaşılamadı; kayıt çevrimdışı, en çok bu kadar dakika (son bilinen hak durumundan).
+    case offline(maxMinutes: Int)
+}
+
+/// Açık sunucu oturumunun UserDefaults anahtarı (uygulama çökse de sonra kapatılır).
+private let hostedOpenMeetingKey: String = "hosted.openMeetingID"
+/// Çevrimdışı kayıt izninin UserDefaults anahtarı.
+private let hostedOfflinePermitKey: String = "hosted.offlinePermit"
+
+/// Açık sunucu oturumunu saklar.
+private func saveHostedOpenMeetingID(meetingID: String) {
+    UserDefaults.standard.set(meetingID, forKey: hostedOpenMeetingKey)
+}
+
+/// Saklanan açık sunucu oturumu; yoksa nil.
+private func loadHostedOpenMeetingID() -> String? {
+    UserDefaults.standard.string(forKey: hostedOpenMeetingKey)
+}
+
+private func clearHostedOpenMeetingID() {
+    UserDefaults.standard.removeObject(forKey: hostedOpenMeetingKey)
+}
+
+/// Kaydın sunucu oturumu; bağ yoksa ya da bağlar okunamazsa nil (okunamazsa hata loglanır).
+private func hostedServerMeetingIDOrNil(recordID: String) -> String? {
+    do {
+        return hostedServerMeetingID(recordID: recordID, links: try loadHostedMeetingLinks())
+    } catch {
+        accountLogger.error("Kayıt–oturum bağları okunamadı, hata: \(String(describing: error), privacy: .private)")
+        return nil
+    }
+}
+
+/// Çevrimdışı kayıt iznini saklar (nil: izin yok, saklı olan silinir).
+private func saveHostedOfflinePermit(permit: HostedOfflinePermit?) {
+    guard let permit else {
+        clearHostedOfflinePermit()
+        return
+    }
+    do {
+        UserDefaults.standard.set(try JSONEncoder().encode(permit), forKey: hostedOfflinePermitKey)
+    } catch {
+        accountLogger.error("Çevrimdışı kayıt izni saklanamadı, hata: \(String(describing: error), privacy: .private)")
+    }
+}
+
+/// Saklanan çevrimdışı kayıt izni; yoksa ya da bozuksa nil (bozuksa hata loglanır, izin yok sayılır).
+func loadHostedOfflinePermit() -> HostedOfflinePermit? {
+    guard let data = UserDefaults.standard.data(forKey: hostedOfflinePermitKey) else {
+        return nil
+    }
+    do {
+        return try JSONDecoder().decode(HostedOfflinePermit.self, from: data)
+    } catch {
+        accountLogger.error("Çevrimdışı kayıt izni okunamadı, hata: \(String(describing: error), privacy: .private)")
+        return nil
+    }
+}
+
+private func clearHostedOfflinePermit() {
+    UserDefaults.standard.removeObject(forKey: hostedOfflinePermitKey)
+}
+
+/// Uygulama kapanırken açık sunucu oturumunu kapatmayı dener (en çok 3 sn bekler; olmazsa sonraki açılışta kapatılır).
+@MainActor
+private func endOpenMeetingBeforeQuit() {
+    guard let meetingID = loadHostedOpenMeetingID() else {
+        return
+    }
+    let client: HostedClient
+    switch HostedServices.client {
+    case .success(let value):
+        client = value
+    case .failure(let error):
+        accountLogger.error("Kapanışta sunucu bağlantısı yok, hata: \(String(describing: error), privacy: .private)")
+        return
+    }
+    let done: DispatchSemaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        do {
+            _ = try await client.endMeeting(meetingID: meetingID)
+            clearHostedOpenMeetingID()
+        } catch {
+            accountLogger.warning("Kapanışta toplantı oturumu kapatılamadı, sonraki açılışta denenecek, hata: \(String(describing: error), privacy: .private)")
+        }
+        done.signal()
+    }
+    _ = done.wait(timeout: .now() + 3)
 }

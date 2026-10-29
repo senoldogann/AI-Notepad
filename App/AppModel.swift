@@ -875,10 +875,17 @@ final class AppModel {
         let meetingDeadline: Date
         do {
             let requestedAt: Date = Date()
-            let started: HostedStartedMeeting = try await HostedAccount.shared.startMeeting()
-            meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
-            // Aylık sınıra az kaldıysa toplantı olağandan kısadır: kalan dakika kayıt panelinde görünür.
-            shortMeetingDeadline = isShortenedHostedMeeting(started: started) ? meetingDeadline : nil
+            switch try await HostedAccount.shared.startMeeting(recordID: directory.lastPathComponent) {
+            case .online(let started):
+                meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
+                // Aylık sınıra az kaldıysa toplantı olağandan kısadır: kalan dakika kayıt panelinde görünür.
+                shortMeetingDeadline = isShortenedHostedMeeting(started: started) ? meetingDeadline : nil
+            case .offline(let maxMinutes):
+                // Sunucuya ulaşılamadı: kayıt sürer (canlı metin Mac'te), süre son bilinen hak durumuyla sınırlı; toplantı
+                // bağlantı gelince işlenir (bkz. `runOfflineQueue`).
+                meetingDeadline = requestedAt.addingTimeInterval(Double(maxMinutes) * 60)
+                shortMeetingDeadline = nil
+            }
         } catch {
             Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -1205,6 +1212,7 @@ final class AppModel {
         recordingLimitTask?.cancel()
         recordingLimitTask = nil
         shortMeetingDeadline = nil
+        let recordedOffline: Bool = HostedAccount.shared.isOfflineRecording
         // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
         do {
             try await HostedAccount.shared.endMeeting()
@@ -1220,9 +1228,19 @@ final class AppModel {
         let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
         session = nil
         activeMeetingID = nil
-        // Kaydın hemen ardından not, toplantının sağlayıcısıyla (abonelikte toplantı bütçesi).
+        #if HOSTED_EDITION
+        if recordedOffline {
+            // Çevrimdışı kayıt: ses ve canlı metin bu Mac'te; son geçiş ve not bağlantı gelince (kayıt silinmez).
+            saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "Çevrimdışı kaydedildi; bağlantı gelince konuşmacılar ve not hazırlanır.")), directory: finished.directory)
+            reloadMeetings()
+            lastFinishedMeetingID = record.id
+            return
+        }
+        #endif
+        // Kaydın hemen ardından not, toplantının sağlayıcısıyla (abonelikte o kaydın sunucu oturumunun bütçesi).
+        let recordID: String = record.id
         process(record: record, directory: finished.directory) { [weak self] () async -> LLMProvider? in
-            await self?.optionalProvider(resolve: resolveLiveLLMProvider)
+            await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
         }
         lastFinishedMeetingID = record.id
     }
@@ -1404,7 +1422,7 @@ final class AppModel {
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
         #if HOSTED_EDITION
         // Abonelik: kaydın motoru ne olursa olsun son geçiş sunucuda (konuşmacılar ayrılır).
-        return await hostedFinalPassPlan(keyterms: recognitionKeyterms)
+        return await hostedFinalPassPlan(keyterms: recognitionKeyterms, recordID: record.id)
         #else
         switch record.engine ?? .cloud {
         case .local where liveEngine == .appleSpeech:
@@ -1454,6 +1472,13 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
+        #if HOSTED_EDITION
+        // Bekleyen (çevrimdışı) kayıt önce sunucu oturumunu almalı: kuyruktan işlenir.
+        if record.status == .queued {
+            Task { await runOfflineQueue() }
+            return
+        }
+        #endif
         // Son geçiş konuşmacıları yeniden numaralar; eski öneriler başka kişileri gösterirdi.
         closeSpeakerReview(meetingID: meetingID)
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
@@ -1462,6 +1487,42 @@ final class AppModel {
             }
         }
     }
+
+    #if HOSTED_EDITION
+    /// Bekleyen (çevrimdışı kaydedilmiş) ilk toplantıyı işler: kayıt ya da işleme yokken sunucu oturumu hazırlanır
+    /// (bkz. `HostedAccount.prepareQueuedMeeting`), sonra son geçiş ve not o oturumla üretilir. Sunucuya hâlâ
+    /// ulaşılamıyorsa bekler; sunucu şimdilik işlemiyorsa (deneme bitti, sınır) kayıt bekleyen kalır ve nedeni toplantıda
+    /// görünür. Ağ gelince, hak durumu okununca, uygulama öne gelince ve her işleme bitince tetiklenir; birer birer işler.
+    func runOfflineQueue() async {
+        guard !isBusy, !isStarting, let record = nextQueuedMeeting(records: meetings) else {
+            return
+        }
+        let recordID: String = record.id
+        switch await HostedAccount.shared.prepareQueuedMeeting(recordID: recordID) {
+        case .waitingForNetwork:
+            return
+        case .blocked(let reason):
+            guard record.notice != reason, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
+                return
+            }
+            withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+                saveRecord(record: current.with(notice: reason), directory: directory)
+            }
+            reloadMeetings()
+        case .ready:
+            // Hazırlık sürerken kayıt başlamış ya da toplantı silinmiş olabilir.
+            guard !isBusy, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
+                return
+            }
+            Self.logger.info("Çevrimdışı kayıt işleniyor, toplantı: \(recordID, privacy: .public)")
+            withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+                process(record: current.with(notice: nil), directory: directory) { [weak self] () async -> LLMProvider? in
+                    await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
+                }
+            }
+        }
+    }
+    #endif
 
     /// Yalnızca notu yeniden üretir (ad verdikten sonra notta da adlar görünsün); ses gerekmez.
     func regenerateNote(meetingID: String) {

@@ -166,17 +166,28 @@ struct PreparedLLMCall: Sendable {
 /// İsteği seçili sağlayıcıya gönderir: 408/429/5xx/ağ hatası 3 deneme (`retry-after`'a uyarak, uyarı logu);
 /// diğer her sonuç kesindir. Cihaz içi model kendi kurallarıyla çalışır (bkz. `sendOnDevice`).
 public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> String {
-    let call: PreparedLLMCall
     switch provider {
     case .anthropic(let config):
-        call = try prepareClaudeCall(config: config, request: request)
+        return try await sendPreparedLLM(call: try prepareClaudeCall(config: config, request: request))
     case .openAICompatible(let config):
-        call = try prepareOpenAICall(config: config, request: request)
+        return try await sendPreparedLLM(call: try prepareOpenAICall(config: config, request: request))
     case .onDevice(let config):
         return try await sendOnDevice(config: config, request: request)
     case .hosted(let config):
-        call = try await prepareHostedCall(config: config, request: request)
+        do {
+            return try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
+        } catch LLMError.hosted(let error) where error.status == 401 {
+            // Erişim jetonu süresinden önce reddedildi (ör. sunucu anahtarı döndü): bir kez yenilenip yeniden denenir.
+            llmLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
+            try await config.credentials.refreshAccessToken()
+            return try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
+        }
     }
+}
+
+/// Hazırlanmış çağrıyı gönderir: 408/429/5xx/ağ hatası 3 deneme (`retry-after`'a uyarak, uyarı logu); diğer her
+/// sonuç kesindir.
+private func sendPreparedLLM(call: PreparedLLMCall) async throws -> String {
     var lastError: any Error = LLMError.empty
     for attempt in 1...llmAttempts {
         var retryAfter: String?
@@ -206,6 +217,14 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
     throw lastError
 }
 
+/// Sağlayıcı abonelik sunucusu mu. Saf fonksiyondur.
+private func isHostedProvider(provider: LLMProvider) -> Bool {
+    if case .hosted = provider {
+        return true
+    }
+    return false
+}
+
 /// Yapılandırılmış yanıt ister ve ayrıştırır. Model şemaya uyan ama boş ya da bozuk içerik döndürebilir (ör. Haiku
 /// `max` effort'ta uzun toplantıda arada bir yalnızca başlıklı not) ya da arada bir döngüye girip çıktı sınırına
 /// dayanabilir (ör. Haiku `low` effort'ta ~2 bin token'lık konuşmacı incelemesi seyrek olarak 64 bin sınırında
@@ -219,6 +238,10 @@ public func requestStructured<Value: Sendable>(
             return try parse(try await sendLLM(provider: provider, request: request))
         } catch let error as LLMError {
             switch error {
+            case .truncated where isHostedProvider(provider: provider):
+                // Abonelik sunucusu çıktıyı kendi sınırında keser: aynı isteği yinelemek aynı sonucu verir ve kotadan
+                // düşer.
+                throw error
             case .malformed, .empty, .truncated:
                 lastError = error
                 llmLogger.warning("Yapılandırılmış yanıt kullanılamadı, deneme: \(attempt, privacy: .public), hata: \(String(describing: error), privacy: .private)")

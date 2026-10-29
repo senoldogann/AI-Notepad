@@ -32,9 +32,9 @@ public struct HostedFinalTranscriber: FinalTranscriber {
         var results: [ChunkTranscription] = []
         for chunk in chunks {
             let durationSec: Double = Double(chunk.span.sampleCount) / Double(hostedTranscribeSampleRate)
-            let data: Data = try await client.transcribe(
-                meetingID: meetingID, wavFile: chunk.url, languageCode: elevenLabsLanguageCode(languageMode: languageMode),
-                keyterms: terms, timeoutSec: finalPassTimeoutSec(durationSec: durationSec)
+            let data: Data = try await transcribeChunk(
+                url: chunk.url, languageCode: elevenLabsLanguageCode(languageMode: languageMode), keyterms: terms,
+                timeoutSec: hostedTranscribeTimeoutSec(durationSec: durationSec)
             )
             results.append(ChunkTranscription(offsetSec: chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate), result: try parseElevenLabsResponse(data: data)))
             finalLogger.info("Son geçiş parçası yazıya döküldü, parça: \(results.count, privacy: .public)/\(chunks.count, privacy: .public), saniye: \(durationSec, privacy: .public)")
@@ -45,6 +45,24 @@ public struct HostedFinalTranscriber: FinalTranscriber {
             language: merged.languageCode.flatMap { meetingLanguage(elevenLabsCode: $0) },
             notice: nil
         )
+    }
+}
+
+extension HostedFinalTranscriber {
+    /// Parçayı gönderir. Sunucu aynı toplantının önceki yüklemesini hâlâ işliyorsa (`transcription_in_progress`, ör.
+    /// bağlantı kopup istek yinelendiyse) beklenir ve en çok `hostedTranscribeBusyAttempts` kez yeniden denenir; her
+    /// bekleme uyarı loglanır, sonra son hata fırlar.
+    private func transcribeChunk(url: URL, languageCode: String?, keyterms: [String], timeoutSec: Double) async throws -> Data {
+        var attempt: Int = 1
+        while true {
+            do {
+                return try await client.transcribe(meetingID: meetingID, wavFile: url, languageCode: languageCode, keyterms: keyterms, timeoutSec: timeoutSec)
+            } catch let error as HostedAPIError where error.code == .transcriptionInProgress && attempt < hostedTranscribeBusyAttempts {
+                finalLogger.warning("Toplantının önceki yüklemesi sürüyor, bekleniyor, deneme: \(attempt, privacy: .public)")
+                try await Task.sleep(for: .seconds(hostedTranscribeBusyDelaySec))
+                attempt += 1
+            }
+        }
     }
 }
 

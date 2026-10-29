@@ -418,6 +418,16 @@ struct AINotepadApp: App {
                     }
                 }
                 #if HOSTED_EDITION
+                // Bekleyen (çevrimdışı) kayıtlar: ağ gelince, hak durumu okununca, uygulama öne gelince ve kayıt/işleme
+                // bitince işlenir (birer birer).
+                .onChange(of: HostedAccount.shared.queueTrigger) { (_: Int, _: Int) in
+                    Task { await model.runOfflineQueue() }
+                }
+                .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
+                    if !isBusy {
+                        Task { await model.runOfflineQueue() }
+                    }
+                }
                 // Kurulum eksikleri hesabın her durum değişiminde (giriş, çıkış, hesap silme, hak durumu yenilemesi)
                 // yeniden hesaplanır: açılışta bir kez hesaplanıp eskiyen "giriş yapılmamış" uyarısı kalmaz. Menü
                 // çubuğu simgesi hep açık olduğundan ana pencere kapalıyken de çalışır.

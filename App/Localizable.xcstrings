@@ -2863,6 +2863,17 @@
         }
       }
     },
+    "Bu ayki kullanım sınırın dolduğu için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; sınır sıfırlanınca kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording couldn't be processed because this month's limit is used up. The recording and live transcript stay on this Mac; it's processed automatically when the limit resets."
+          }
+        }
+      }
+    },
     "Bu ayki kullanım sınırına ulaştın": {
       "extractionState": "manual",
       "localizations": {
@@ -3063,6 +3074,17 @@
         }
       }
     },
+    "Bu kayıt şimdilik işlenemedi; kendiliğinden yeniden denenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording couldn't be processed yet; it will be retried automatically."
+          }
+        }
+      }
+    },
     "Bu kişi bundan sonra sesinden tanınmaz": {
       "localizations": {
         "en": {
@@ -3162,6 +3184,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting may have been deleted."
+          }
+        }
+      }
+    },
+    "Bu toplantı sunucuda bir kayıt oturumuna bağlı değil; konuşmacılar canlı metinden kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting isn't linked to a recording session on the server; speakers stay as in the live transcript."
           }
         }
       }
@@ -3532,6 +3565,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live transcript"
+          }
+        }
+      }
+    },
+    "Canlı metin bu Mac'te yazılıyor; konuşmacılar ve not bağlantı gelince hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The live transcript is written on this Mac; speakers and the note are prepared when you're back online."
           }
         }
       }
@@ -6560,6 +6604,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not recording"
+          }
+        }
+      }
+    },
+    "Kayıt çevrimdışı sürüyor: canlı çeviri kapalı; not ve konuşmacılar bağlantı gelince hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording offline: live translation is off; the note and speakers are prepared when you're back online."
           }
         }
       }
@@ -10048,6 +10103,17 @@
         }
       }
     },
+    "Sunucuya ulaşılamıyor ve hesap durumun son 7 günde doğrulanmadı. Kayıt için internete bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server can't be reached and your account hasn't been checked in the last 7 days. Connect to the internet to record."
+          }
+        }
+      }
+    },
     "Suomi": {
       "localizations": {
         "en": {
@@ -12736,6 +12802,28 @@
         }
       }
     },
+    "Çevrimdışı kaydedildi; bağlantı gelince konuşmacılar ve not hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded offline; speakers and the note are prepared when you're back online."
+          }
+        }
+      }
+    },
+    "Çevrimdışı kaydediliyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording offline"
+          }
+        }
+      }
+    },
     "Çince": {
       "localizations": {
         "en": {
@@ -13220,6 +13308,17 @@
         }
       }
     },
+    "Ücretsiz denemen bittiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; abone olunca kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording couldn't be processed because your free trial has ended. The recording and live transcript stay on this Mac; it's processed automatically once you subscribe."
+          }
+        }
+      }
+    },
     "Ücretsiz denemende 1 toplantı kaldı": {
       "extractionState": "manual",
       "localizations": {
@@ -13647,6 +13746,28 @@
         }
       }
     },
+    "İşlenmeyi bekliyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting to be processed"
+          }
+        }
+      }
+    },
+    "İşlenmeyi bekliyor (çevrimdışı kaydedildi)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting to be processed (recorded offline)"
+          }
+        }
+      }
+    },
     "Şablonla yeniden yaz": {
       "localizations": {
         "en": {
@@ -13683,6 +13804,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now"
+          }
+        }
+      }
+    },
+    "Şimdi dene": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try now"
           }
         }
       }

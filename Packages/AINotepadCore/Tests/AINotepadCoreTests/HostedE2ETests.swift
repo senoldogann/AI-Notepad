@@ -230,7 +230,7 @@ private func silentWav() -> Data {
         #expect(before.trialEndsAt == nil)
         #expect(before.monthlyHoursCap > 0)
 
-        let started: HostedStartedMeeting = try await client.startMeeting(device: nil, deviceCheckToken: nil)
+        let started: HostedStartedMeeting = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased())
         #expect(started.kind == "trial")
         #expect(started.trialMeetingsLeft == before.trialMeetingsTotal - 1)
         #expect(await client.currentMeetingID() == started.meetingId)
@@ -345,7 +345,7 @@ private func silentWav() -> Data {
         let exhausted: HostedEntitlements = try await client.entitlements()
         #expect(hostedPlanStatus(entitlements: exhausted) == .trial(left: 0, total: exhausted.trialMeetingsTotal))
         #expect(exhausted.trialEndsAt != nil)
-        let exhaustedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil) }
+        let exhaustedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
         #expect(exhaustedStart?.code == .trialExhausted)
         #expect(exhaustedStart?.status == 402)
         let exhaustedAsk: HostedAPIError? = await hostedError { _ = try await sendLLM(provider: account, request: smallRequest()) }
@@ -373,7 +373,7 @@ private func silentWav() -> Data {
         try executeLocalD1(sql: "INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES ('\(user.userID)', '\(utcMonthKey())', \(capSeconds));")
         let capped: HostedEntitlements = try await client.entitlements()
         #expect(capped.monthlyHoursUsed >= capped.monthlyHoursCap)
-        let cappedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil) }
+        let cappedStart: HostedAPIError? = await hostedError { _ = try await client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
         #expect(cappedStart?.code == .monthlyCapReached)
         if let cappedStart {
             #expect(userFacingMessage(error: cappedStart) != genericHostedMessage(status: 403))
@@ -410,7 +410,7 @@ private func silentWav() -> Data {
         let day: String = utcDayKey()
 
         try executeLocalD1(sql: "INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES ('\(day)', 0, \(bump)) ON CONFLICT(day) DO UPDATE SET trial_micro_usd = trial_micro_usd + \(bump);")
-        let trialStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil) }
+        let trialStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
         let trialAsk: HostedAPIError? = await hostedError {
             _ = try await sendLLM(provider: accountLLMProvider(baseURL: baseURL, client: user.client), request: smallRequest())
         }
@@ -423,7 +423,7 @@ private func silentWav() -> Data {
         }
 
         try executeLocalD1(sql: "INSERT INTO daily_spend (day, micro_usd) VALUES ('\(day)', \(bump)) ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + \(bump);")
-        let ceilingStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil) }
+        let ceilingStart: HostedAPIError? = await hostedError { _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased()) }
         try executeLocalD1(sql: "UPDATE daily_spend SET micro_usd = micro_usd - \(bump) WHERE day = '\(day)';")
         #expect(ceilingStart?.code == .spendCeilingReached)
         #expect(ceilingStart?.status == 503)
@@ -440,7 +440,7 @@ private func silentWav() -> Data {
         let baseURL: URL = try localServerBase()
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         try markTrialStarted(userID: user.userID, usedMeetings: 1, startedAtMs: nowMs())
-        let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil)
+        let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased())
         let wav: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString).wav", directoryHint: .notDirectory)
         try silentWav().write(to: wav)
         defer { try? FileManager.default.removeItem(at: wav) }
@@ -456,13 +456,10 @@ private func silentWav() -> Data {
         try executeLocalD1(sql: "DELETE FROM usage_reservations WHERE meeting_id = '\(started.meetingId)';")
         #expect(inProgress?.status == 409)
         #expect(inProgress?.rawCode == "transcription_in_progress")
-        // Bilinen hata: `HostedErrorCode` bu kodu tanımıyor; kullanıcı "Sunucu beklenmeyen bir yanıt verdi (HTTP 409)"
-        // görür ve istek yeniden denenmez (süren yükleme bitince denenebilirdi).
-        withKnownIssue("transcription_in_progress istemcide eşlenmemiş (HostedErrors.swift)") {
-            #expect(inProgress?.code != nil)
-            if let inProgress {
-                #expect(userFacingMessage(error: inProgress) != genericHostedMessage(status: 409))
-            }
+        // İstemci kodu tanır: son geçiş bekleyip yeniden dener (HostedFinalTranscriber), kullanıcı genel hata görmez.
+        #expect(inProgress?.code == .transcriptionInProgress)
+        if let inProgress {
+            #expect(userFacingMessage(error: inProgress) != genericHostedMessage(status: 409))
         }
 
         try executeLocalD1(sql: "UPDATE meeting_sessions SET transcription_closed = 1 WHERE id = '\(started.meetingId)';")
@@ -475,6 +472,29 @@ private func silentWav() -> Data {
 
     // Çıkış ve hesap silme: ikisinde de yerel oturum silinir; eski yenileme jetonu artık geçmez (istemci "oturum
     // kapandı" der ve kayıtlı oturumu siler).
+    // Çevrimdışı kaydedilmiş toplantı bağlantı gelince açılır: aynı kayıt kimliğiyle (`clientRef`) yinelenen başlatma
+    // (yanıt kaybolduysa, uygulama yeniden açıldıysa) aynı oturumu döndürür, deneme bir kez düşer; oturum hemen
+    // kapatılsa da ses hakkı en çok sürece açıktır ve not için ek süre başlar.
+    @Test func deferredMeetingStartIsIdempotentAgainstLocalServer() async throws {
+        let baseURL: URL = try localServerBase()
+        let user: SignedInUser = try await signedInUser(baseURL: baseURL)
+        let before: HostedEntitlements = try await user.client.entitlements()
+        let recordID: String = "kayit-\(UUID().uuidString.lowercased())"
+        let first: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID)
+        _ = try await user.client.endMeeting(meetingID: first.meetingId)
+        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: recordID)
+        #expect(repeated.meetingId == first.meetingId)
+        #expect(repeated.maxDurationMinutes == first.maxDurationMinutes)
+        let after: HostedEntitlements = try await user.client.entitlements()
+        #expect(after.trialMeetingsLeft == before.trialMeetingsLeft - 1)
+        // Kapatma tekrarı zararsız; kapalı oturum yapay zekâ çağrısı için ek sürede açık.
+        let ended: HostedEndedMeeting = try await user.client.endMeeting(meetingID: first.meetingId)
+        #expect(ended.meetingId == first.meetingId)
+        let other: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "kayit-\(UUID().uuidString.lowercased())")
+        #expect(other.meetingId != first.meetingId)
+        _ = try await user.client.endMeeting(meetingID: other.meetingId)
+    }
+
     @Test func signOutAndDeleteAccountAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
 
@@ -514,9 +534,7 @@ private func silentWav() -> Data {
         let clientCodes: Set<String> = Set(HostedErrorCode.allCases.map(\.rawValue))
         #expect(clientCodes.subtracting(serverCodes).isEmpty, "İstemcide olup sunucuda olmayan: \(clientCodes.subtracting(serverCodes).sorted())")
         let missing: [String] = serverCodes.subtracting(clientCodes).sorted()
-        withKnownIssue("transcription_in_progress istemcide eşlenmemiş (HostedErrors.swift)") {
-            #expect(missing.isEmpty, "Sunucuda olup istemcide olmayan: \(missing)")
-        }
+        #expect(missing.isEmpty, "Sunucuda olup istemcide olmayan: \(missing)")
     }
 }
 

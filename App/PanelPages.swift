@@ -52,6 +52,17 @@ struct PanelHost: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 #if HOSTED_EDITION
+                // Sunucuya ulaşılamadan süren kayıt: canlı metin Mac'te, işleme bağlantı gelince.
+                if model.isRecording, HostedAccount.shared.isOfflineRecording {
+                    NoticeBar(
+                        severity: .info,
+                        title: Text("Çevrimdışı kaydediliyor"),
+                        detail: Text("Canlı metin bu Mac'te yazılıyor; konuşmacılar ve not bağlantı gelince hazırlanır."),
+                        onDismiss: nil
+                    ) {
+                        EmptyView()
+                    }
+                }
                 // Aylık sınıra az kaldığı için kısaltılmış toplantı: kalan dakika.
                 if model.isRecording, let deadline = model.shortMeetingDeadline {
                     HostedMeetingLimitStrip(deadline: deadline)

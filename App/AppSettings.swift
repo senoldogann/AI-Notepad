@@ -355,12 +355,22 @@ func resolveLLMProvider() async throws -> LLMProvider {
     #endif
 }
 
-/// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) ve kaydın hemen ardından not için
-/// sağlayıcı. Kendi anahtarlı sürümde `resolveLLMProvider` ile aynıdır; abonelik sürümünde son açılan toplantının
+/// Kaydı biten toplantının notu için sağlayıcı: abonelikte o kaydın sunucu oturumunun bütçesi (bu arada yeni bir kayıt
+/// başlasa da onun bütçesine yazılmaz; oturumu olmayan kayıtta hesap çağrısı), kendi anahtarlı sürümde
+/// `resolveLLMProvider`.
+func resolveRecordedMeetingLLMProvider(recordID: String) async throws -> LLMProvider {
+    #if HOSTED_EDITION
+    return try hostedRecordedMeetingLLMProvider(recordID: recordID)
+    #else
+    return try await resolveLLMProvider()
+    #endif
+}
+
+/// Kayıt sırasındaki istekler (canlı çeviri, "Ne kaçırdım?", toplantı sorusu) için sağlayıcı. Kendi anahtarlı sürümde `resolveLLMProvider` ile aynıdır; abonelik sürümünde son açılan toplantının
 /// bütçesinden düşer.
 func resolveLiveLLMProvider() async throws -> LLMProvider {
     #if HOSTED_EDITION
-    return try hostedMeetingLLMProvider()
+    return try await hostedMeetingLLMProvider()
     #else
     return try await resolveLLMProvider()
     #endif

@@ -76,6 +76,10 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case invalidBaseURL(value: String)
     /// Info.plist'te Anahtar Zinciri servis adı yok (derleme yapılandırması hatası).
     case keychainServiceNotConfigured(key: String)
+    /// Sunucuya ulaşılamıyor ve son bilinen hak durumu çevrimdışı kayda izin vermiyor (7 günden eski ya da izin yok).
+    case offlineNotAllowed
+    /// Kayıt çevrimdışı sürüyor: toplantıya bağlı yapay zekâ çağrıları (canlı çeviri…) yapılamaz.
+    case offlineRecording
     /// Yapay zekâ çağrısı için açık toplantı oturumu yok.
     case noActiveMeeting
     /// Sunucuya ulaşılamadı.
@@ -210,6 +214,10 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Uygulamanın sunucu ayarı eksik ya da bozuk; uygulamayı yeniden kur.")
     case .keychainServiceNotConfigured:
         String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.")
+    case .offlineNotAllowed:
+        String(localized: "Sunucuya ulaşılamıyor ve hesap durumun son 7 günde doğrulanmadı. Kayıt için internete bağlan.")
+    case .offlineRecording:
+        String(localized: "Kayıt çevrimdışı sürüyor: canlı çeviri kapalı; not ve konuşmacılar bağlantı gelince hazırlanır.")
     case .noActiveMeeting:
         String(localized: "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.")
     case .network:
@@ -240,7 +248,7 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
         return isClosedHostedAccess(error: hosted)
     case let client as HostedClientError:
         switch client {
-        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured:
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured, .offlineNotAllowed, .offlineRecording:
             return true
         case .network, .malformedResponse:
             return false

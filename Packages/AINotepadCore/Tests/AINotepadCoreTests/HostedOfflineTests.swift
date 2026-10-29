@@ -1,0 +1,79 @@
+import AINotepadCore
+import Foundation
+import Testing
+
+/// Sunucu biçimindeki hak durumu.
+private func entitlements(plan: String, access: String, trialLeft: Int, used: Double) throws -> HostedEntitlements {
+    let subscription: String = access == "none" ? "null" : #"{"status":"active","currentPeriodEnd":"2026-12-01T00:00:00.000Z","access":"\#(access)","graceEndsAt":null}"#
+    let json: String = #"""
+    {"userId":"u1","plan":"\#(plan)","trialMeetingsTotal":3,"trialMeetingsLeft":\#(trialLeft),"accountTrialMeetingsLeft":\#(trialLeft),
+     "deviceTrialMeetingsLeft":null,"monthlyHoursUsed":\#(used),"monthlyHoursCap":10,"subscription":\#(subscription)}
+    """#
+    let decoder: JSONDecoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .custom { (decoder: any Decoder) throws -> Date in
+        try Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(try decoder.singleValueContainer().decode(String.self))
+    }
+    return try decoder.decode(HostedEntitlements.self, from: Data(json.utf8))
+}
+
+/// Toplantı kaydı (yalnızca kuyruk sıralaması için gereken alanlarla).
+private func record(id: String, startedAt: Double, status: MeetingStatus) -> MeetingRecord {
+    MeetingRecord(
+        id: id, title: id, startedAt: Date(timeIntervalSince1970: startedAt), endedAt: nil, language: nil, status: status, failureMessage: nil,
+        liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false,
+        engine: .local, notice: nil, meNeedsFinalPass: nil
+    )
+}
+
+@Suite struct HostedOfflineTests {
+    // Çevrimdışı izin: kayıt başlatılabilen hak durumundan; abonede süre kalan aylık dakikayla sınırlı.
+    @Test func permitFollowsEntitlements() throws {
+        let now: Date = Date(timeIntervalSince1970: 1_000_000)
+        let trial: HostedOfflinePermit = try #require(hostedOfflinePermit(entitlements: try entitlements(plan: "trial", access: "none", trialLeft: 2, used: 0), now: now))
+        #expect(trial == HostedOfflinePermit(userId: "u1", checkedAt: now, maxMinutes: hostedUsualTrialMeetingMinutes))
+        let nearCap: HostedOfflinePermit = try #require(hostedOfflinePermit(entitlements: try entitlements(plan: "subscription", access: "active", trialLeft: 0, used: 9.5), now: now))
+        #expect(nearCap.maxMinutes == 30)
+        #expect(hostedOfflinePermit(entitlements: try entitlements(plan: "trial", access: "none", trialLeft: 0, used: 0), now: now) == nil)
+        #expect(hostedOfflinePermit(entitlements: try entitlements(plan: "subscription", access: "active", trialLeft: 0, used: 10), now: now) == nil)
+    }
+
+    // İzin aynı hesabın ve en çok 7 günlük olmalı.
+    @Test func permitExpiresAndIsPerAccount() {
+        let checked: Date = Date(timeIntervalSince1970: 1_000_000)
+        let permit: HostedOfflinePermit = HostedOfflinePermit(userId: "u1", checkedAt: checked, maxMinutes: 90)
+        #expect(hostedOfflineRecordingMinutes(permit: permit, userId: "u1", now: checked.addingTimeInterval(6 * 86_400), maxAgeSec: hostedOfflinePermitMaxAgeSec) == 90)
+        #expect(hostedOfflineRecordingMinutes(permit: permit, userId: "u1", now: checked.addingTimeInterval(8 * 86_400), maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil)
+        #expect(hostedOfflineRecordingMinutes(permit: permit, userId: "u2", now: checked, maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil)
+        #expect(hostedOfflineRecordingMinutes(permit: nil, userId: "u1", now: checked, maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil)
+        #expect(hostedOfflineRecordingMinutes(permit: permit, userId: "u1", now: checked.addingTimeInterval(-60), maxAgeSec: hostedOfflinePermitMaxAgeSec) == nil)
+    }
+
+    // Yalnızca ulaşılamama çevrimdışı kayda düşer; sunucunun bilinçli retleri (deneme bitti, sınır) düşmez.
+    @Test func onlyUnreachabilityAllowsOfflineStart() {
+        #expect(isOfflineStartError(error: HostedClientError.network(path: "/v1/meetings/start", reason: "-1009")))
+        #expect(isOfflineStartError(error: HostedAPIError(code: nil, rawCode: "http_502", status: 502, serverMessage: "", path: "/")))
+        #expect(isOfflineStartError(error: HostedAPIError(code: .internalError, rawCode: "internal_error", status: 500, serverMessage: "", path: "/")))
+        #expect(!isOfflineStartError(error: HostedAPIError(code: .trialExhausted, rawCode: "trial_exhausted", status: 402, serverMessage: "", path: "/")))
+        #expect(!isOfflineStartError(error: HostedAPIError(code: .monthlyCapReached, rawCode: "monthly_cap_reached", status: 403, serverMessage: "", path: "/")))
+        #expect(!isOfflineStartError(error: HostedClientError.notSignedIn))
+    }
+
+    // Kuyruk en eskiden işlenir; bağ kayıt başına tektir ve en yeniler tutulur; son geçiş zaman aşımı sunucu
+    // penceresinden uzundur.
+    @Test func queueOrderLinksAndTimeout() {
+        let records: [MeetingRecord] = [
+            record(id: "b", startedAt: 200, status: .queued), record(id: "a", startedAt: 100, status: .done), record(id: "c", startedAt: 150, status: .queued),
+        ]
+        #expect(nextQueuedMeeting(records: records)?.id == "c")
+        #expect(nextQueuedMeeting(records: [record(id: "x", startedAt: 1, status: .done)]) == nil)
+        var links: [HostedMeetingLink] = []
+        for index in 0..<5 {
+            links = appendingHostedMeetingLink(links: links, link: HostedMeetingLink(recordID: "r\(index % 3)", serverMeetingID: "s\(index)", createdAt: Date(timeIntervalSince1970: Double(index))), capacity: 2)
+        }
+        #expect(links.map(\.recordID) == ["r0", "r1"])
+        #expect(hostedServerMeetingID(recordID: "r1", links: links) == "s4")
+        #expect(hostedServerMeetingID(recordID: "r2", links: links) == nil)
+        #expect(hostedTranscribeTimeoutSec(durationSec: 60) >= hostedTranscribeMinimumTimeoutSec)
+        #expect(hostedTranscribeTimeoutSec(durationSec: 60) > 15 * 60)
+    }
+}

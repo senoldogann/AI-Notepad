@@ -379,6 +379,7 @@ private func statusText(record: MeetingRecord, isProcessing: Bool) -> String? {
     case .done: return nil
     case .failed: return String(localized: "Hata")
     case .interrupted: return String(localized: "Yarıda kaldı")
+    case .queued: return String(localized: "İşlenmeyi bekliyor")
     }
 }
 
@@ -565,10 +566,23 @@ struct MeetingDetailPage: View {
         }
         SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
         SendStatusLine(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
-        if let notice = record.notice {
-            Label(notice, systemImage: "info.circle")
+        if record.status == .queued {
+            // Çevrimdışı kaydedildi: ses ve canlı metin bu Mac'te; bağlantı gelince işlenir (ya da neden yazar).
+            NoticeCard(
+                severity: .info,
+                title: Text("İşlenmeyi bekliyor (çevrimdışı kaydedildi)"),
+                detail: record.notice.map { Text(verbatim: $0) },
+                onDismiss: nil
+            ) {
+                #if HOSTED_EDITION
+                Button("Şimdi dene") { Task { await model.runOfflineQueue() } }
+                    .buttonStyle(.pill)
+                    .disabled(model.isBusy)
+                #endif
+            }
+        } else if let notice = record.notice {
+            NoticeText(notice, severity: .info)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(.secondary)
         }
     }
 

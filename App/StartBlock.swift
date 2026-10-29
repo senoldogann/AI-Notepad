@@ -10,6 +10,8 @@ enum StartBlockAction: Equatable {
     case openAccount
     /// Abone ol (deneme bitti).
     case subscribe
+    /// Yeniden dene (sunucuya ulaşılamıyor).
+    case retry
 }
 
 /// Kayıt neden başlatılamıyor ve ne yapılmalı: Ana sayfadaki başlat düğmesi kapanır, neden düğmenin yanında tek satır
@@ -43,6 +45,12 @@ func resolveStartBlock(action: StartBlockAction, router: MainWindowRouter) {
     case .subscribe:
         #if HOSTED_EDITION
         Task { await HostedAccount.shared.subscribe() }
+        #else
+        router.section = .settings
+        #endif
+    case .retry:
+        #if HOSTED_EDITION
+        Task { await HostedAccount.shared.refresh() }
         #else
         router.section = .settings
         #endif
@@ -85,6 +93,7 @@ struct StartBlockView: View {
         case .openSettings: "Ayarları aç"
         case .openAccount: "Kullanımı gör"
         case .subscribe: "Abone ol"
+        case .retry: "Yeniden dene"
         }
     }
 }

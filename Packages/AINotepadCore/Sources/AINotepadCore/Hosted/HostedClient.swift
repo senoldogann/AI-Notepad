@@ -20,10 +20,13 @@ private struct RefreshBody: Encodable {
     let refreshToken: String
 }
 
-/// Toplantı başlatma: App Attest onayı ve Apple DeviceCheck jetonu (base64); nil alanlar gövdeye yazılmaz.
+/// Toplantı başlatma: App Attest onayı, Apple DeviceCheck jetonu (base64) ve istemcinin kayıt kimliği (`clientRef`:
+/// aynı kayıt için yinelenen başlatma sunucuda aynı oturumu döndürür, deneme hakkı ya da süre iki kez düşmez); nil
+/// alanlar gövdeye yazılmaz.
 private struct MeetingStartBody: Encodable {
     let device: HostedDeviceAssertion?
     let deviceCheckToken: String?
+    let clientRef: String
 }
 
 private struct DeviceChallengeBody: Encodable {
@@ -141,11 +144,12 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// Toplantı oturumu açar; reddedilirse (`trial_exhausted`, `trial_device_used`, `monthly_cap_reached`…)
     /// `HostedAPIError`. `deviceCheckToken` (Apple DeviceCheck, base64) denemesi henüz bir Mac'e bağlanmamış hesabın
     /// deneme toplantısında gerekir. Açılan toplantı yapay zekâ çağrılarının toplantısı olur.
-    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?) async throws -> HostedStartedMeeting {
+    public func startMeeting(device: HostedDeviceAssertion?, deviceCheckToken: String?, clientRef: String) async throws -> HostedStartedMeeting {
         let path: String = "/v1/meetings/start"
+        let body: Data = try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken, clientRef: clientRef))
         let started: HostedStartedMeeting = try decode(
             HostedStartedMeeting.self,
-            data: try await authorized(path: path, method: "POST", body: try encoded(body: MeetingStartBody(device: device, deviceCheckToken: deviceCheckToken)), isRetryable: isRetryableOneShotRequest),
+            data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableOneShotRequest),
             path: path
         )
         meetingID = started.meetingId
@@ -157,6 +161,17 @@ public actor HostedClient: HostedLLMCredentialSource {
     public func endMeeting(meetingID ended: String) async throws -> HostedEndedMeeting {
         let path: String = "/v1/meetings/\(ended)/end"
         return try decode(HostedEndedMeeting.self, data: try await authorized(path: path, method: "POST", body: nil, isRetryable: isRetryableRepeatableRequest), path: path)
+    }
+
+    /// Yapay zekâ çağrılarının toplantısını bırakır (çevrimdışı kayıt başladı): canlı istekler önceki bir toplantının
+    /// bütçesine yazılmasın.
+    public func clearCurrentMeeting() {
+        meetingID = nil
+    }
+
+    /// Oturumun kullanıcı kimliği (Anahtar Zinciri'nden; ağsız); oturum yoksa nil.
+    public func signedInUserID() throws -> String? {
+        try tokens()?.userId
     }
 
     /// Yapay zekâ çağrılarının toplantısı; yoksa nil.
@@ -232,6 +247,11 @@ public actor HostedClient: HostedLLMCredentialSource {
             return try await URLSession.shared.data(for: request)
         }
         return try decode(HostedDeepgramGrant.self, data: try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt), path: path)
+    }
+
+    /// Erişim jetonunu süresine bakmadan yeniler (yapay zekâ çağrısı 401 aldıysa; tek uçuşlu).
+    public func refreshAccessToken() async throws {
+        _ = try await refreshedTokens()
     }
 
     /// Toplantıya bağlı yapay zekâ çağrısının jetonu ve toplantısı.
