@@ -1,5 +1,6 @@
 // Sitenin yapılandırılmış verisi (schema.org JSON-LD): ana sayfada uygulama (`SoftwareApplication`), onu sunan işletme
-// (`Organization`) ve sık sorulan sorular (`FAQPage`); fiyat sayfasında onun soruları. Değerler sitenin tek kaynaklarından
+// (`Organization`) ve sık sorulan sorular (`FAQPage`); fiyat sayfasında onun soruları; blog yazılarında `BlogPosting`
+// (ön bilgisinden: src/content/blog). Değerler sitenin tek kaynaklarından
 // gelir: ürün adı (config.ts), fiyat, gereksinimler ve sorular (copy.ts),
 // işletme (legal/operator.ts). `<script type="application/ld+json">` veri bloğudur, çalıştırılmaz; CSP onu engellemez.
 import { productName, type SiteConfig } from "../config";
@@ -186,10 +187,72 @@ export function homeStructuredData(
   };
 }
 
+/** Yazar. */
+interface PersonNode {
+  readonly "@type": "Person";
+  readonly name: string;
+}
+
+/** Blog yazısı; yayıncı işletme düğümüne (ana sayfadaki `Organization`) `@id` ile bağlanır. */
+interface BlogPostingNode {
+  readonly "@type": "BlogPosting";
+  readonly "@id": string;
+  readonly headline: string;
+  readonly description: string;
+  readonly url: string;
+  readonly mainEntityOfPage: string;
+  readonly image: string;
+  readonly datePublished: string;
+  readonly dateModified: string;
+  readonly inLanguage: "en";
+  readonly author: PersonNode;
+  readonly publisher: { readonly "@type": "Organization"; readonly "@id": string; readonly name: string; readonly url: string };
+}
+
+/** Blog yazısı sayfasının JSON-LD belgesi. */
+export interface BlogPostingDocument {
+  readonly "@context": "https://schema.org";
+  readonly "@graph": readonly [BlogPostingNode];
+}
+
+/** Blog yazısının JSON-LD'ye giren bilgileri. */
+export interface BlogPostingInput {
+  readonly url: string;
+  readonly title: string;
+  readonly description: string;
+  readonly author: string;
+  /** YYYY-AA-GG. */
+  readonly published: string;
+}
+
+/** Blog yazısının JSON-LD belgesi (`BlogPosting`). Saf fonksiyondur. */
+export function blogPostingStructuredData(config: SiteConfig, operator: Operator, post: BlogPostingInput): BlogPostingDocument {
+  const origin: string = config.siteOrigin;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BlogPosting",
+        "@id": `${post.url}#post`,
+        headline: post.title,
+        description: post.description,
+        url: post.url,
+        mainEntityOfPage: post.url,
+        image: `${origin}/og.png`,
+        datePublished: post.published,
+        dateModified: post.published,
+        inLanguage: "en",
+        author: { "@type": "Person", name: post.author },
+        publisher: { "@type": "Organization", "@id": `${origin}/#organization`, name: operator.name, url: origin },
+      },
+    ],
+  };
+}
+
 /**
  * JSON-LD belgesini `<script>` içine güvenle yazılacak metne çevirir: `<` kaçırılır, böylece metindeki `</script>`
  * bloğu erken kapatamaz. Saf fonksiyondur.
  */
-export function structuredDataJson(document: StructuredDataDocument | FaqDocument): string {
+export function structuredDataJson(document: StructuredDataDocument | FaqDocument | BlogPostingDocument): string {
   return JSON.stringify(document).replaceAll("<", "\\u003c");
 }

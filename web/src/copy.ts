@@ -53,6 +53,9 @@ export interface CommonCopy {
     readonly contact: string;
     readonly privacy: string;
     readonly terms: string;
+    readonly compare: string;
+    readonly blog: string;
+    readonly mcp: string;
   };
   readonly downloadCta: string;
   readonly headerDownload: string;
@@ -71,6 +74,8 @@ export interface CommonCopy {
   readonly footer: {
     readonly tagline: string;
     readonly product: string;
+    /** Karşılaştırma, blog ve MCP bağlantılarının sütunu. */
+    readonly learn: string;
     readonly account: string;
     readonly company: string;
     readonly fontLicense: string;
@@ -125,6 +130,15 @@ export interface HomeCopy {
   /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
   readonly assurances: readonly string[];
   readonly demo: DemoCopy;
+  /** Kahramanın altındaki tanıtım videosu (public/video; kendiliğinden oynamaz). */
+  readonly launchVideo: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly caption: string;
+    /** Video oynatılamazsa görünen metin ve dosya bağlantısı. */
+    readonly fallback: string;
+    readonly fallbackLink: string;
+  };
   readonly library: {
     readonly label: string;
     readonly meetings: readonly { readonly title: string; readonly meta: string }[];
@@ -173,6 +187,8 @@ export interface HomeCopy {
     readonly notes: TitledText;
     readonly tasks: TitledText;
     readonly ai: TitledText;
+    /** Yapay zekâ kartından MCP sayfasına bağlantı. */
+    readonly mcpLink: string;
     readonly files: TitledText;
     /** Claude'da toplantılar üstüne bir soru örneği (MCP). */
     readonly mcpDemo: {
@@ -195,6 +211,8 @@ export interface HomeCopy {
   readonly pricingTitle: string;
   readonly pricingLead: string;
   readonly pricingCta: string;
+  /** Fiyat bandından karşılaştırma sayfasına bağlantı. */
+  readonly pricingCompare: string;
   readonly faqTitle: string;
   readonly faq: readonly Faq[];
   readonly finalTitle: string;
@@ -500,6 +518,134 @@ export interface AdminCopy {
   readonly reopen: string;
 }
 
+/** Karşılaştırma tablosunun satırları (konular). */
+export type ComparisonTopic =
+  | "price"
+  | "free"
+  | "capture"
+  | "platforms"
+  | "limits"
+  | "languages"
+  | "notes"
+  | "ask"
+  | "integrations"
+  | "storage"
+  | "plans";
+
+/** Karşılaştırılan ürünler. */
+export type Competitor = "granola" | "otter";
+
+/** "Kim hangisini seçmeli" kutusu: başlık ve maddeler. */
+export interface PickCopy {
+  readonly title: string;
+  readonly points: readonly string[];
+}
+
+/**
+ * Bir rakiple karşılaştırma sayfası. Rakibin değerleri yalnızca kendi fiyat sayfasında doğrulanmış gerçeklerdir; o
+ * konuda doğrulanmış bilgi yoksa değer `null` olur ve tabloda tire görünür (özelliğin olmadığı anlamına gelmez).
+ */
+export interface CompetitorCopy {
+  readonly meta: PageMeta;
+  readonly name: string;
+  readonly title: string;
+  readonly lead: string;
+  /** Karşılaştırma dizinindeki kartın kısa özeti. */
+  readonly summary: string;
+  readonly pricingUrl: string;
+  readonly values: Readonly<Record<ComparisonTopic, string | null>>;
+  /** Rakibin daha güçlü olduğu yerler (adil karşılaştırma). */
+  readonly strengthsTitle: string;
+  readonly strengths: readonly string[];
+  readonly pickCompetitor: PickCopy;
+  readonly pickUs: PickCopy;
+}
+
+/** Karşılaştırma sayfalarının ortak metinleri ve dizin sayfası. */
+export interface CompareCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  /** Dizindeki özet tablonun konuları. */
+  readonly overviewTopics: readonly ComparisonTopic[];
+  readonly overviewTitle: string;
+  readonly topics: Readonly<Record<ComparisonTopic, string>>;
+  /** Bizim değerlerimiz (copy.ts, fiyat sayfası ve sunucu sınırlarıyla aynı). */
+  readonly us: Readonly<Record<ComparisonTopic, string>>;
+  readonly topicColumn: string;
+  readonly tableTitle: string;
+  readonly checked: string;
+  readonly source: string;
+  readonly missingNote: string;
+  /** Tirenin ekran okuyucudaki karşılığı. */
+  readonly notChecked: string;
+  readonly pickTitle: string;
+  readonly readComparison: string;
+  readonly trademarks: string;
+  readonly ctaTitle: string;
+  readonly ctaText: string;
+  readonly competitors: Readonly<Record<Competitor, CompetitorCopy>>;
+}
+
+/** Blog dizini, yazı sayfası ve RSS akışı. */
+export interface BlogCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly feedTitle: string;
+  readonly feedLink: string;
+  readonly byline: string;
+  /** "6 min read" gibi okuma süresinin eki. */
+  readonly minutesRead: string;
+  readonly readPost: string;
+  readonly backToBlog: string;
+  readonly ctaTitle: string;
+  readonly ctaText: string;
+}
+
+/** MCP aracının açıklaması (MCPServer.swift `mcpTools` ile aynı araçlar). */
+export interface McpToolCopy {
+  readonly name: string;
+  readonly text: string;
+  /** Girdileri (yoksa "No input"). */
+  readonly input: string;
+}
+
+/** MCP istemcisinin yapılandırma dosyası (MCPClients.swift `configRelativePath`). */
+export interface McpClientFileCopy {
+  readonly client: string;
+  readonly file: string;
+}
+
+/** MCP sayfası. */
+export interface McpCopy {
+  readonly meta: PageMeta;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly lead: string;
+  readonly toolsTitle: string;
+  readonly toolsLead: string;
+  readonly toolInputLabel: string;
+  readonly tools: readonly McpToolCopy[];
+  readonly setupTitle: string;
+  readonly setupLead: string;
+  readonly oneClick: PickCopy;
+  readonly manual: PickCopy;
+  readonly configLabel: string;
+  readonly configNote: string;
+  readonly filesTitle: string;
+  readonly fileColumns: { readonly client: string; readonly file: string };
+  readonly files: readonly McpClientFileCopy[];
+  readonly filesNote: string;
+  readonly questionsTitle: string;
+  readonly questionsLead: string;
+  readonly questions: readonly string[];
+  readonly privacyTitle: string;
+  readonly privacy: readonly TitledText[];
+}
+
 /** 404 sayfası. */
 export interface NotFoundCopy {
   readonly meta: PageMeta;
@@ -514,6 +660,9 @@ export interface Copy {
   readonly home: HomeCopy;
   readonly pricing: PricingCopy;
   readonly download: DownloadCopy;
+  readonly compare: CompareCopy;
+  readonly blog: BlogCopy;
+  readonly mcp: McpCopy;
   readonly signIn: SignInCopy;
   readonly contact: ContactCopy;
   readonly account: AccountCopy;
@@ -540,6 +689,9 @@ export const copy: Copy = {
       contact: "Contact",
       privacy: "Privacy policy",
       terms: "Terms of service",
+      compare: "Compare",
+      blog: "Blog",
+      mcp: "MCP for AI apps",
     },
     downloadCta: "Download for Mac",
     headerDownload: "Download",
@@ -554,6 +706,7 @@ export const copy: Copy = {
     footer: {
       tagline,
       product: "Product",
+      learn: "Learn",
       account: "Account",
       company: "Company",
       fontLicense: "Inter font licence",
@@ -622,6 +775,14 @@ export const copy: Copy = {
       pause: "Pause the demo",
       play: "Play the demo",
       replay: "Replay the demo",
+    },
+    launchVideo: {
+      eyebrow: "In one minute",
+      title: "See it at work.",
+      caption:
+        "A 66-second tour, with music: the live transcript and translation, your tasks on top of the note, asking across your meetings, and sending notes where your team works.",
+      fallback: "Your browser can't play this video here.",
+      fallbackLink: "Open the video file",
     },
     library: {
       label: "Recent meetings",
@@ -732,6 +893,7 @@ export const copy: Copy = {
         title: "Your AI apps, through MCP",
         text: "Claude, Cursor and VS Code can search and read your meetings. Connect them with one click in Settings; they can only read, never change anything.",
       },
+      mcpLink: "How MCP works",
       files: {
         title: "Your files and calendar",
         text: "Save every note as Markdown to a folder, such as your Obsidian vault or iCloud Drive. Your calendar shows what's next and can start recording when a meeting begins.",
@@ -748,6 +910,7 @@ export const copy: Copy = {
     pricingTitle: "One plan. Simple pricing.",
     pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month, taxes included. Cancel anytime.",
     pricingCta: "Pricing details",
+    pricingCompare: "Compare with Granola and Otter",
     faqTitle: "Questions",
     faq: [
       {
@@ -850,6 +1013,263 @@ export const copy: Copy = {
     ],
     footnote: "Updates arrive automatically inside the app.",
     helpCta: "Questions? Contact us",
+  },
+  // Rakip değerleri yalnızca rakiplerin kendi fiyat sayfalarından (29 Ekim 2026'da denetlendi); bizimkiler bu dosyadaki
+  // fiyat ve SSS metinleriyle ve sunucu sınırlarıyla (server/wrangler.jsonc) aynıdır. Yeni bir değer eklerken kaynağını
+  // denetle; doğrulanmamış rakip bilgisi yazma (değer `null` kalır).
+  compare: {
+    meta: {
+      title: `Compare ${productName} with Granola and Otter`,
+      description: `How ${productName} compares with Granola and Otter.ai on price, free plans, how audio is captured, platforms and limits. Prices checked October 2026.`,
+    },
+    eyebrow: "Compare",
+    title: `${productName} next to Granola and Otter`,
+    lead: "Three meeting note apps that work in different ways. Here are the plain differences in price, how each one hears the meeting and where it runs, so you can pick the one that fits.",
+    overviewTopics: ["price", "free", "capture", "platforms"],
+    overviewTitle: "At a glance",
+    topics: {
+      price: "Price",
+      free: "Free option",
+      capture: "How it hears the meeting",
+      platforms: "Platforms",
+      limits: "Meeting limits",
+      languages: "Languages",
+      notes: "Notes",
+      ask: "Questions across meetings",
+      integrations: "Integrations",
+      storage: "Where notes are kept",
+      plans: "Plans for teams",
+    },
+    us: {
+      price: "$5.99 a month, taxes included",
+      free: "Free trial: 3 meetings or 7 days, whichever comes first; no card needed",
+      capture: "No bot. Listens to your Mac's system audio and microphone",
+      platforms: "Mac with Apple silicon, macOS 26 or later",
+      limits: "Up to 10 meeting hours a month and up to 4 hours per meeting",
+      languages: "30+ languages, with live translation during the meeting",
+      notes: "The note starts with your own tasks, then decisions and a summary; templates for different kinds of meetings",
+      ask: "Ask across all your meetings; answers link to the meetings they came from",
+      integrations: "Slack, Microsoft Teams, Discord, Notion, Apple Notes, an Obsidian folder, webhooks and MCP",
+      storage: "Notes, transcripts and recordings are saved on your Mac",
+      plans: "One personal plan",
+    },
+    topicColumn: "Topic",
+    tableTitle: "Side by side",
+    checked: "Prices checked October 2026.",
+    source: "Source",
+    missingNote: "A dash means the point wasn't part of what we checked on the vendor's pricing page. It doesn't mean the feature is missing.",
+    notChecked: "Not checked",
+    pickTitle: "Who should pick which",
+    readComparison: "Read the comparison",
+    trademarks: `Granola and Otter.ai are trademarks of their owners. ${productName} isn't affiliated with either company. Plans and prices change; check the vendor's site before you buy.`,
+    ctaTitle: `Try ${productName} on your next meeting`,
+    ctaText: "3 meetings or 7 days free, no card needed. Then $5.99 a month, taxes included.",
+    competitors: {
+      granola: {
+        meta: {
+          title: `${productName} vs Granola: meeting notes without a bot`,
+          description: `${productName} and Granola both take meeting notes without a bot. Compare price, free plans, platforms, languages and integrations. Prices checked October 2026.`,
+        },
+        name: "Granola",
+        title: `${productName} vs Granola`,
+        lead: "Both take notes without a bot joining the call. Granola runs on more devices and has team plans; Gistsmith is a Mac app with one price, notes that start with your tasks and live translation.",
+        summary: "Both work without a bot. Granola has a free plan, mobile apps and team plans; Gistsmith is Mac-only, with one personal plan.",
+        pricingUrl: "https://www.granola.ai/pricing",
+        values: {
+          price: "Basic $0; Business $14 per user a month; Enterprise $35 per user a month",
+          free: "Basic plan at $0, with 30 days of meeting history",
+          capture: "No bot. Captures your device's audio",
+          platforms: "Desktop, iOS, Android and Apple Watch",
+          limits: null,
+          languages: "Multi-language support",
+          notes: "Note templates",
+          ask: "AI chat across meetings",
+          integrations: "Slack on all plans; Notion, HubSpot, Zapier, Attio, MCP and an API on Business",
+          storage: null,
+          plans: "Per-user Business and Enterprise plans",
+        },
+        strengthsTitle: "Where Granola is stronger",
+        strengths: [
+          "A free Basic plan, with 30 days of meeting history.",
+          "Apps for iOS, Android and Apple Watch as well as the desktop.",
+          "Per-user Business and Enterprise plans for teams.",
+          "HubSpot, Attio and Zapier integrations and an API on the Business plan.",
+        ],
+        pickCompetitor: {
+          title: "Pick Granola if",
+          points: [
+            "you want a free plan and 30 days of history is enough",
+            "you also take notes on an Android phone, an iPhone or an Apple Watch",
+            "your team wants one shared plan with per-user billing",
+            "your notes need to reach HubSpot or Attio, or you want an API",
+          ],
+        },
+        pickUs: {
+          title: `Pick ${productName} if`,
+          points: [
+            "you work on a Mac and want one price: $5.99 a month, taxes included",
+            "you want every note to open with your own tasks",
+            "your meetings are in another language and you want a live translation as people talk",
+            "you want notes, transcripts and recordings saved on your own Mac",
+          ],
+        },
+      },
+      otter: {
+        meta: {
+          title: `${productName} vs Otter.ai: a Mac notepad without a meeting bot`,
+          description: `Otter joins calls as a bot; ${productName} listens on your Mac. Compare price, free plans, minutes, meeting length and languages. Prices checked October 2026.`,
+        },
+        name: "Otter.ai",
+        title: `${productName} vs Otter.ai`,
+        lead: "Otter joins Zoom, Microsoft Teams and Google Meet as a bot to write notes. Gistsmith listens on your Mac instead, so nothing extra appears in the call. Otter has a free tier and team plans; Gistsmith has one personal plan.",
+        summary: "Otter joins calls as a bot and has a free tier. Gistsmith listens on your Mac, with no bot in the call.",
+        pricingUrl: "https://otter.ai/pricing",
+        values: {
+          price: "Basic free; Pro $16.99 per user a month billed monthly ($8.33 a month billed annually); Business $19.99 per user a month billed annually",
+          free: "Basic plan: 300 transcription minutes a month and 3 file imports in total",
+          capture: "Joins Zoom, Microsoft Teams and Google Meet as a bot to write notes",
+          platforms: "Mobile apps available",
+          limits: "Pro: 1,200 minutes a month, up to 90 minutes per meeting. Business: unlimited meetings, up to 4 hours per meeting",
+          languages: "Automatic transcription in English, Spanish, French, German, Japanese and Chinese",
+          notes: null,
+          ask: null,
+          integrations: null,
+          storage: null,
+          plans: "Per-user Pro and Business plans",
+        },
+        strengthsTitle: "Where Otter is stronger",
+        strengths: [
+          "A free Basic plan with 300 transcription minutes a month.",
+          "Mobile apps.",
+          "Per-user Pro and Business plans for teams.",
+          "Unlimited meetings on the Business plan.",
+        ],
+        pickCompetitor: {
+          title: "Pick Otter if",
+          points: [
+            "you want a free tier and 300 minutes a month covers you",
+            "you'd like a note-taker to join the call as a participant",
+            "you need mobile apps or team plans",
+            "you want unlimited meetings on a business plan",
+          ],
+        },
+        pickUs: {
+          title: `Pick ${productName} if`,
+          points: [
+            "you'd rather no bot joins your calls",
+            "you meet in a language beyond the six on Otter's pricing page, or you want a live translation",
+            "you want every note to open with your own tasks",
+            "you work on a Mac and want one price: $5.99 a month, taxes included",
+          ],
+        },
+      },
+    },
+  },
+  blog: {
+    meta: {
+      title: `Blog — ${productName}`,
+      description: "Practical guides on meeting notes, task lists and recording calls on a Mac, from the team behind Gistsmith.",
+    },
+    eyebrow: "Blog",
+    title: "Notes on better meetings",
+    lead: "Practical guides on meeting notes, follow-ups and recording calls on a Mac. Short, specific and useful whether or not you use our app.",
+    feedTitle: `${productName} blog`,
+    feedLink: "RSS feed",
+    byline: "By",
+    minutesRead: "min read",
+    readPost: "Read the post",
+    backToBlog: "All posts",
+    ctaTitle: `Try ${productName}`,
+    ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month, taxes included.",
+  },
+  mcp: {
+    meta: {
+      title: `MCP server — ${productName}`,
+      description: `${productName} includes a local, read-only MCP server. Let Claude, Cursor, VS Code and other MCP apps list, search and read your meeting notes and tasks.`,
+    },
+    eyebrow: "MCP",
+    title: "Ask your AI apps about your meetings.",
+    lead: `${productName} includes a small MCP server. Claude, Cursor, Visual Studio Code and other MCP apps can use it to list, search and read your meetings and your open tasks. It only reads; it never changes anything.`,
+    toolsTitle: "What it offers",
+    toolsLead: "The server gives your AI app four tools. The app decides when to call them, usually starting with a list or a search and then opening a meeting.",
+    toolInputLabel: "Input",
+    tools: [
+      {
+        name: "list_meetings",
+        text: "Lists your recorded meetings, newest first: ID, date, title, length and whether the note is ready.",
+        input: "limit (optional; 20 if not given)",
+      },
+      {
+        name: "search_meetings",
+        text: "Searches your notes and transcripts by keyword and returns the matching passages, with the meeting and the moment in it.",
+        input: "query (required)",
+      },
+      {
+        name: "get_meeting",
+        text: "Returns a meeting's note as Markdown: summary, decisions, tasks and glossary. Add the transcript when you need the exact words.",
+        input: "id from list_meetings (required); include_transcript (optional)",
+      },
+      {
+        name: "list_my_tasks",
+        text: "Lists the tasks from your meeting notes that are yours and not yet done, with due dates and the meeting each one came from.",
+        input: "No input",
+      },
+    ],
+    setupTitle: "Connect it",
+    setupLead: `Keep ${productName} in your Applications folder and sign in to the app first: the server reads the meetings of the account you're signed in with.`,
+    oneClick: {
+      title: "One click: Claude, Cursor and VS Code",
+      points: [
+        `In ${productName}, open Settings › Connections.`,
+        "Under AI apps, click Connect on the Claude, Cursor or Visual Studio Code card. A card is dimmed if that app isn't in your Applications folder.",
+        `Quit and reopen the AI app. ${productName} now appears among its tools.`,
+      ],
+    },
+    manual: {
+      title: "Any other MCP app",
+      points: [
+        "In Settings › Connections, open “Advanced: skills and manual MCP setup”.",
+        "Under Other MCP clients, click Copy configuration.",
+        "Paste it into your app's MCP settings. In Claude Desktop that's Settings › Developer › Edit Config.",
+      ],
+    },
+    configLabel: "The configuration, for the app in your Applications folder",
+    configNote: `The app copies this with the real location of ${productName} on your Mac. If you keep it somewhere else, use the copy from the app.`,
+    filesTitle: "Where the one-click setup writes",
+    fileColumns: { client: "App", file: "Configuration file" },
+    files: [
+      { client: "Claude", file: "~/Library/Application Support/Claude/claude_desktop_config.json" },
+      { client: "Cursor", file: "~/.cursor/mcp.json" },
+      { client: "Visual Studio Code", file: "~/Library/Application Support/Code/User/mcp.json" },
+    ],
+    filesNote: `Connect adds a single “${productName.toLowerCase()}” entry and leaves everything else in the file as it was. VS Code keeps its servers under “servers” with “type”: “stdio”; Connect writes that form for you. If the file contains comments, which VS Code allows, ${productName} won't overwrite it and tells you why.`,
+    questionsTitle: "Questions to try",
+    questionsLead: "Ask in your own words. A few that work well:",
+    questions: [
+      "What did I promise Nordia last week?",
+      "List my open tasks from this week's meetings, grouped by due date.",
+      "Find the meetings where we discussed the budget and summarise what we decided.",
+    ],
+    privacyTitle: "What it can and can't do",
+    privacy: [
+      { title: "Read only", text: "The tools list, search and read. Nothing can be edited, deleted or sent through them." },
+      {
+        title: "Runs on your Mac",
+        text: `Your AI app starts ${productName} in the background and talks to it through standard input and output. The server doesn't open a network port.`,
+      },
+      {
+        title: "Your AI app's provider sees what it reads",
+        text: "Notes and transcripts your AI app reads go to that app's AI provider, such as Anthropic or OpenAI, under its own terms.",
+      },
+      {
+        title: "Your signed-in account only",
+        text: `If you sign out of ${productName}, the tools stop returning meetings until you sign in again. If you switch accounts, restart the AI app.`,
+      },
+      {
+        title: "Meeting text is data, not instructions",
+        text: "The server tells your AI app that notes and transcripts are what people said, and that it shouldn't follow requests found inside them.",
+      },
+    ],
   },
   signIn: {
     meta: { title: `Sign in — ${productName}`, description: `Sign in to your ${productName} account with Apple or Google.` },

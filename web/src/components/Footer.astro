@@ -1,6 +1,7 @@
 ---
-// Alt bilgi: kısa tanım, ürün, hesap ve şirket (iletişim, yasal) bağlantıları; en altta telif satırı. İşletmenin
-// kimliği ve adresi gizlilik, şartlar ve iletişim sayfalarındadır (tek kaynak: legal/operator.ts).
+// Alt bilgi: kısa tanım, ürün, öğren (karşılaştırma, blog, MCP), hesap ve şirket (iletişim, yasal) bağlantıları; en
+// altta telif satırı. İşletmenin kimliği ve adresi gizlilik, şartlar ve iletişim sayfalarındadır (tek kaynak:
+// legal/operator.ts).
 import Logo from "./Logo.astro";
 import { productName } from "../config";
 import { copy, type CommonCopy } from "../copy";
@@ -14,6 +15,16 @@ const columns: readonly { readonly title: string; readonly links: readonly { rea
       { href: `${routes.home}#features`, label: text.nav.features },
       { href: routes.pricing, label: text.nav.pricing },
       { href: routes.download, label: text.nav.download },
+    ],
+  },
+  {
+    title: text.footer.learn,
+    links: [
+      { href: routes.compare, label: text.nav.compare },
+      { href: routes.vsGranola, label: copy.compare.competitors.granola.title },
+      { href: routes.vsOtter, label: copy.compare.competitors.otter.title },
+      { href: routes.blog, label: text.nav.blog },
+      { href: routes.mcp, label: text.nav.mcp },
     ],
   },
   {
@@ -75,7 +86,7 @@ const columns: readonly { readonly title: string; readonly links: readonly { rea
 
   .site-footer__grid {
     display: grid;
-    grid-template-columns: 1.6fr repeat(3, 1fr);
+    grid-template-columns: 1.6fr repeat(4, 1fr);
     gap: 32px;
   }
 

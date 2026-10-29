@@ -8,6 +8,7 @@ import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
 import HeroDemo from "../components/HeroDemo.astro";
 import Icon from "../components/Icon.astro";
+import McpChat from "../components/McpChat.astro";
 import MeetingCard from "../components/MeetingCard.astro";
 import Waveform from "../components/Waveform.astro";
 import { macDownloadUrl } from "../config";
@@ -57,6 +58,11 @@ const integrationGroups: readonly { readonly key: "notes" | "tasks" | "files"; r
   { key: "tasks", icon: "check-circle", palette: "violet" },
   { key: "files", icon: "disk", palette: "mint" },
 ];
+/** Tanıtım videosu ve kapak görseli (public/video; 1280×720, 66 sn, müzikli). */
+const launchVideo: { readonly src: string; readonly poster: string } = {
+  src: "/video/gistsmith-launch-720p.mp4",
+  poster: "/video/gistsmith-launch-poster.jpg",
+};
 /** Arama motorları için uygulama ve işletme bilgisi (JSON-LD). */
 const structuredData: string = structuredDataJson(homeStructuredData(siteConfig, common, text.meta, operator, text.faq));
 ---
@@ -103,6 +109,24 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
         }
       </div>
     </section>
+  </section>
+
+  {/* Tanıtım videosu: yalnızca kullanıcı oynatınca yüklenir (preload="none"), kendiliğinden oynamaz; kapak görseli ve
+      boyutları önceden verilir, yerleşim kaymaz. */}
+  <section class="page launch" aria-labelledby="launch-title">
+    <div class="launch__head reveal">
+      <p class="eyebrow">{text.launchVideo.eyebrow}</p>
+      <h2 class="title-l" id="launch-title">{text.launchVideo.title}</h2>
+    </div>
+    <figure class="launch__figure">
+      <video class="launch__video" controls preload="none" playsinline poster={launchVideo.poster} width="1280" height="720" aria-describedby="launch-caption">
+        <source src={launchVideo.src} type="video/mp4" />
+        <p>
+          {text.launchVideo.fallback} <a href={launchVideo.src}>{text.launchVideo.fallbackLink}</a>
+        </p>
+      </video>
+      <figcaption class="launch__caption muted" id="launch-caption">{text.launchVideo.caption}</figcaption>
+    </figure>
   </section>
 
   <section class="page facts" aria-label={text.facts.label}>
@@ -325,16 +349,10 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
         <div class="integration__text">
           <h3 class="integration__title"><Film palette="sunset" layout="clouds-left" class="integration__badge"><Icon name="sparkle" size={20} class="" /></Film>{text.integrations.ai.title}</h3>
           <p class="muted">{text.integrations.ai.text}</p>
+          <a class="text-link" href={routes.mcp}>{text.integrations.mcpLink} <Icon name="arrow-right" size={16} class="" /></a>
         </div>
         <Film palette="sunset" layout="clouds-right" class="integration__cover">
-          <div class="glass mcp-chat">
-            <div class="mcp-chat__label"><BrandTile brand="claude" size="small" />{text.integrations.mcpDemo.label}</div>
-            <p class="mcp-chat__question">{text.integrations.mcpDemo.question}</p>
-            <p class="mcp-chat__tool"><Icon name="search" size={13} class="" />{text.integrations.mcpDemo.tool}</p>
-            <p class="mcp-chat__answer">{text.integrations.mcpDemo.answerLead}</p>
-            <ul class="mcp-chat__list">{text.integrations.mcpDemo.answer.map((item: string) => <li>{item}</li>)}</ul>
-            <p class="mcp-chat__source">{text.integrations.mcpDemo.source}</p>
-          </div>
+          <McpChat />
         </Film>
       </article>
 
@@ -380,6 +398,7 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
         <h2 class="title-xl" id="pricing-title">{text.pricingTitle}</h2>
         <p class="lead">{text.pricingLead}</p>
         <a class="text-link" href={routes.pricing}>{text.pricingCta} <Icon name="arrow-right" size={16} class="" /></a>
+        <a class="text-link" href={routes.compare}>{text.pricingCompare} <Icon name="arrow-right" size={16} class="" /></a>
       </div>
       <Film palette="violet" layout="streaks" class="pricing-band__cover">
         <div class="glass price-tag">
@@ -453,6 +472,41 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
 
   .hero__assurances :global(.hero__check) {
     color: var(--accent);
+  }
+
+  /* Tanıtım videosu: tam genişlik, 16:9 yer önceden ayrılır; kapak görseli kendi çerçevesinde. */
+  .launch {
+    display: grid;
+    gap: clamp(20px, 3vw, 28px);
+    margin-top: clamp(56px, 8vw, 104px);
+  }
+
+  .launch__head {
+    display: grid;
+    gap: 12px;
+  }
+
+  .launch__figure {
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .launch__video {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    background: var(--soft);
+    box-shadow: var(--elevation);
+  }
+
+  .launch__caption {
+    max-width: 46rem;
+    font-size: 0.9375rem;
   }
 
   /* Ürün gerçekleri: dört sütun, büyük değer ve kısa açıklama; ince ayraçlarla sakin bir şerit. */
@@ -770,63 +824,6 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
     min-height: 320px;
     padding: clamp(20px, 3vw, 36px);
     border-radius: calc(var(--radius-m) - 6px);
-  }
-
-
-  .mcp-chat {
-    display: grid;
-    gap: 10px;
-    width: min(100%, 400px);
-    padding: 18px 20px;
-    font-size: 0.875rem;
-    line-height: 1.45;
-  }
-
-  .mcp-chat p,
-  .mcp-chat ul {
-    margin: 0;
-  }
-
-  .mcp-chat__label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #5a4a40;
-  }
-
-  .mcp-chat__question {
-    justify-self: end;
-    max-width: 85%;
-    padding: 8px 12px;
-    border-radius: 14px 14px 4px 14px;
-    background: #f1ece6;
-    font-weight: 500;
-  }
-
-  .mcp-chat__tool {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    justify-self: start;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid rgb(10 10 10 / 0.1);
-    font-size: 0.75rem;
-    color: #5a4a40;
-  }
-
-  .mcp-chat__list {
-    display: grid;
-    gap: 4px;
-    padding-left: 18px;
-  }
-
-  .mcp-chat__source {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: #5a4a40;
   }
 
 
