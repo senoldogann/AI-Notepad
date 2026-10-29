@@ -2316,15 +2316,20 @@ extension View {
     }
 }
 
-/// İstemcinin MCP yapılandırması; yol JSON olarak kaçışlanır (tırnak ya da ters bölü içeren yol yapılandırmayı bozmasın).
+/// JSON metin değeri: tırnak ve ters bölü kaçışlanır (tırnak ya da ters bölü içeren yol yapılandırmayı bozmasın).
 /// Saf fonksiyondur.
-func mcpClientConfig(executablePath: String) -> String {
-    let encoded: String = "\"" + executablePath.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
-    return """
+private func jsonStringLiteral(text: String) -> String {
+    "\"" + text.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+}
+
+/// İstemcinin MCP yapılandırması: sunucu adı sürüme özgüdür (bkz. `mcpServerName(appName:)`), tek tıkla bağlamanın
+/// yazdığıyla aynıdır. Saf fonksiyondur.
+func mcpClientConfig(executablePath: String, serverName: String) -> String {
+    """
     {
       "mcpServers": {
-        "ai-notepad": {
-          "command": \(encoded),
+        \(jsonStringLiteral(text: serverName)): {
+          "command": \(jsonStringLiteral(text: executablePath)),
           "args": ["--mcp"]
         }
       }
@@ -2340,7 +2345,9 @@ private struct MCPSettings: View {
 
     var body: some View {
         // Elle kopyalanan yapılandırma da uygulamanın gerçek yolunu gösterir (uygulama paketi her zaman bir çalıştırılabilir içerir).
-        let config: String = mcpClientConfig(executablePath: Bundle.main.executableURL?.path ?? Bundle.main.bundlePath)
+        let config: String = mcpClientConfig(
+            executablePath: Bundle.main.executableURL?.path ?? Bundle.main.bundlePath, serverName: mcpServerName(appName: appName)
+        )
         VStack(alignment: .leading, spacing: 0) {
             SettingsGroupHeader(title: "Diğer MCP istemcileri")
             SettingsRow(title: Text("Elle yapılandırma")) {
