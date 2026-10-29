@@ -218,9 +218,8 @@
         "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
         "ELEVENLABS_BILLING_DAY": "11",
         // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
-        // Kapalı: kurulan Deepgram akışı jetonun süresi dolsa da sürer ve sunucu onu kesemez; akış sunucu üzerinden
-        // sınırlanana dek canlı metin Mac'te (WhisperKit).
-        "DEEPGRAM_POLICY": "off",
+        // Açık (sahibin kararı): kurulan akış jetonun süresi dolsa da sürebilir; harcama DEEPGRAM_BUDGET_USD ile sınırlı.
+        "DEEPGRAM_POLICY": "on",
         "DEEPGRAM_BUDGET_USD": "185",
         "DEEPGRAM_USD_PER_MINUTE": "0.0092",
         "DAILY_SPEND_CEILING_USD": "25",
