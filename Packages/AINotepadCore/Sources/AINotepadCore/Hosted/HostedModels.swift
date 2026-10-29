@@ -73,16 +73,12 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let trialEndsAt: Date?
     public let monthlyHoursUsed: Double
     public let monthlyHoursCap: Double
-    /// Toplantı dışı yapay zekâ payının (Sor, notu yeniden yazma…) bu ay kullanılan ve toplam jetonu; alanı bilmeyen
-    /// sunucuda nil (gösterge gizlenir).
-    public let accountTokensUsed: Int?
-    public let accountTokensCap: Int?
     public let subscription: HostedSubscription?
     /// Yeni toplantının canlı metin motoru (`deepgram` ya da `whisperkit`); bkz. `hostedLiveEngine(entitlements:)`.
     /// Alanı bilmeyen eski sunucuda nil.
     public let liveEngine: String?
     /// Toplantı dışı yapay zekâ hakkı (Sor, not düzenleme…): dönemde sayılan token, sınır, dönem (`month` abonede,
-    /// `day` denemede) ve sıfırlanma anı. Alanları bilmeyen eski sunucuda nil.
+    /// `day` denemede) ve sıfırlanma anı. Alanları bilmeyen eski sunucuda nil (kullanım göstergesi gizlenir).
     public let accountTokensUsed: Int?
     public let accountTokensCap: Int?
     public let accountTokensPeriod: String?

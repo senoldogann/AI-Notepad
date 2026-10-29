@@ -58,7 +58,7 @@ export const googleAuthorizeUrl: string = "https://accounts.google.com/o/oauth2/
 const googleWebClientId: string = "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com";
 
 /** Yayınlanmış en son sürüm (yalnızca sayfada gösterilir). */
-export const latestVersion: string = "0.1.4";
+export const latestVersion: string = "0.1.5";
 
 /** Yayın yapılandırması. */
 const productionConfig: SiteConfig = {

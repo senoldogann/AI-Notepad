@@ -186,6 +186,11 @@ function renderStats(stats: AdminStats): void {
   capacity.max = Math.max(stats.elevenLabs.capHours, 0.01);
   capacity.value = Math.min(stats.elevenLabs.usedHours, capacity.max);
   setKpiWarning("elevenlabs", capacity, stats.elevenLabs.percent >= 80);
+  setKpi("deepgram", `${Math.round(stats.deepgram.percent)}%`, fill(adminText.deepgramSub, { used: formatUsd(stats.deepgram.estimatedUsd), budget: formatUsd(stats.deepgram.budgetUsd) }));
+  const live: HTMLProgressElement = element("kpi-deepgram-meter", HTMLProgressElement);
+  live.max = Math.max(stats.deepgram.budgetUsd, 0.01);
+  live.value = Math.min(stats.deepgram.estimatedUsd, live.max);
+  setKpiWarning("deepgram", live, stats.deepgram.percent >= 80);
 
   renderChart("downloads", countDays(stats.downloads.last30Days, formatCount), formatCount);
   renderChart("users", countDays(stats.users.newLast30Days, formatCount), formatCount);

@@ -67,6 +67,7 @@ export interface AdminClientCopy {
   readonly stripeTest: string;
   readonly stripeLive: string;
   readonly elevenLabsSub: string;
+  readonly deepgramSub: string;
   /** `{ceiling}`. */
   readonly spendSub: string;
   readonly hoursSub: string;
@@ -128,6 +129,7 @@ export const clientCopy: ClientCopy = {
     stripeTest: "Stripe test mode",
     stripeLive: "Stripe live",
     elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",
+    deepgramSub: "{used} of {budget} Deepgram credit (estimate); then live text runs on the Mac",
     spendSub: "of {ceiling} daily ceiling",
     hoursSub: "Recorded across all users",
     tokensSub: "Input and output, all users",

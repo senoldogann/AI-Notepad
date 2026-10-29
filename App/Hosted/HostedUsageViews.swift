@@ -139,7 +139,7 @@ struct HostedUsageCard: View {
                     .foregroundStyle(hostedUsageLevel(fraction: fraction) == .normal ? Theme.muted : (fraction >= 1 ? meterFull : meterWarn))
             }
             HostedUsageMeter(fraction: fraction, height: 10)
-            Text("Adil kullanım sınırı; ay başında sıfırlanır (\(hostedResetDayText(now: Date()))). Canlı metin bu Mac'te yazılır ve sınırdan düşmez.")
+            Text("Adil kullanım sınırı; ay başında sıfırlanır (\(hostedResetDayText(now: Date()))).")
                 .appFont(size: 12, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)

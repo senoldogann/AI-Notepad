@@ -55,6 +55,8 @@ export interface AdminStats {
   readonly stripe: { readonly mode: StripeMode };
   /** ElevenLabs plan döngüsündeki yazıya çevirme saatleri ve planın sınırı. */
   readonly elevenLabs: { readonly usedHours: number; readonly capHours: number; readonly percent: number };
+  /** Deepgram canlı metin bütçesi (ömür boyu, tahmini): harcanan, tavan ve yüzde. */
+  readonly deepgram: { readonly estimatedUsd: number; readonly budgetUsd: number; readonly percent: number };
 }
 
 /** Stripe anahtarının modu. */
@@ -167,6 +169,7 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
   const reports: JsonObject = objectField(body, "reports", response, path);
   const stripe: JsonObject = objectField(body, "stripe", response, path);
   const elevenLabs: JsonObject = objectField(body, "elevenLabs", response, path);
+  const deepgram: JsonObject = objectField(body, "deepgram", response, path);
   const dayCounts = (owner: JsonObject, key: string): DayCount[] =>
     objectArrayField(owner, key, response, path).map((item: JsonObject): DayCount => ({ day: dayField(item, response, path), count: numberField(item, "count", response, path) }));
   return {
@@ -216,6 +219,11 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       usedHours: numberField(elevenLabs, "usedHours", response, path),
       capHours: numberField(elevenLabs, "capHours", response, path),
       percent: numberField(elevenLabs, "percent", response, path),
+    },
+    deepgram: {
+      estimatedUsd: numberField(deepgram, "estimatedUsd", response, path),
+      budgetUsd: numberField(deepgram, "budgetUsd", response, path),
+      percent: numberField(deepgram, "percent", response, path),
     },
   };
 }

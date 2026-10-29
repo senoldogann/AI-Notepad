@@ -1323,13 +1323,13 @@
         }
       }
     },
-    "Adil kullanım sınırı; ay başında sıfırlanır (%@). Canlı metin bu Mac'te yazılır ve sınırdan düşmez.": {
+    "Adil kullanım sınırı; ay başında sıfırlanır (%@).": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fair-use limit; resets at the start of the month (%@). Live transcripts are written on this Mac and don't count toward it."
+            "value": "Fair-use limit; resets at the start of each month (%@)."
           }
         }
       }

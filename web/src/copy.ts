@@ -293,6 +293,7 @@ export interface AdminCopy {
     readonly hours: string;
     readonly tokens: string;
     readonly elevenLabs: string;
+    readonly deepgram: string;
   };
   /** Özet kutusu gruplarının başlıkları. */
   readonly groups: { readonly growth: string; readonly revenue: string; readonly costs: string };
@@ -704,6 +705,7 @@ export const copy: Copy = {
       hours: "Meeting hours this month",
       tokens: "Tokens this month",
       elevenLabs: "Transcription capacity",
+      deepgram: "Live transcript budget",
     },
     groups: { growth: "Growth", revenue: "Revenue", costs: "Costs & capacity" },
     chartsTitle: "Last 30 days",
