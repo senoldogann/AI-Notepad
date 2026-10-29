@@ -18,6 +18,8 @@ func reportDestination() async throws -> ReportDestination {
 
 /// Ayarlar › Genel: geri bildirim satırı; form küçük bir sayfada (sheet) açılır.
 struct FeedbackSettingsRow: View {
+    /// Ayarlar › Tanılama'daki metin (formda "Tanılama bilgisini ekle" işaretliyse mesaja eklenir).
+    let makeDiagnostics: @MainActor () async -> String
     @State private var isOpen: Bool = false
 
     var body: some View {
@@ -27,7 +29,7 @@ struct FeedbackSettingsRow: View {
             Button("Yaz…") { isOpen = true }
         }
         .sheet(isPresented: $isOpen) {
-            FeedbackSheet { isOpen = false }
+            FeedbackSheet(makeDiagnostics: makeDiagnostics) { isOpen = false }
                 .frame(width: 520)
         }
     }
@@ -42,13 +44,17 @@ private enum FeedbackSendState: Equatable {
     case failed(message: String)
 }
 
-/// Geri bildirim formu: mesaj (zorunlu), yanıt e-postası (isteğe bağlı) ve gönderilecek haliyle gösterilen tanılama
-/// bilgisi (sürüm, sistem); gönderim kullanıcının "Gönder"iyle olur.
+/// Geri bildirim formu: mesaj (zorunlu), yanıt e-postası (isteğe bağlı), gönderilecek haliyle gösterilen sürüm ve
+/// sistem bilgisi ve (baştan kapalı) Ayarlar › Tanılama'daki metin; gönderim kullanıcının "Gönder"iyle olur. Tanılama
+/// mesajın sonuna eklenir ve sunucunun mesaj sınırına sığdırılır (bkz. `appendingDiagnostics`).
 private struct FeedbackSheet: View {
+    let makeDiagnostics: @MainActor () async -> String
     let onClose: @MainActor () -> Void
     @State private var message: String = ""
     @State private var email: String = ""
     @State private var includeDiagnostics: Bool = true
+    /// Ayarlar › Tanılama'daki metin de eklensin mi (baştan kapalı).
+    @State private var includeFullDiagnostics: Bool = false
     @State private var state: FeedbackSendState = .editing
     @FocusState private var messageFocused: Bool
     private let diagnostics: ReportDiagnostics = currentReportDiagnostics(bundle: .main, platformName: "macOS")
@@ -111,7 +117,7 @@ private struct FeedbackSheet: View {
                     .padding(.vertical, 8)
                     .background(Theme.soft, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
-            Toggle("Tanılama bilgisi ekle", isOn: $includeDiagnostics)
+            Toggle("Sürüm ve sistem bilgisini ekle", isOn: $includeDiagnostics)
                 .toggleStyle(.checkbox)
                 .appFont(size: 13, weight: .regular)
             if includeDiagnostics {
@@ -123,6 +129,15 @@ private struct FeedbackSheet: View {
                 .foregroundStyle(Theme.muted)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("Tanılama bilgisini ekle", isOn: $includeFullDiagnostics)
+                .toggleStyle(.checkbox)
+                .appFont(size: 13, weight: .regular)
+            if includeFullDiagnostics {
+                Text("Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, sunucuya erişim, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.")
+                    .appFont(size: 12, weight: .regular)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .disabled(isSending)
@@ -173,7 +188,10 @@ private struct FeedbackSheet: View {
         state = .sending
         Task {
             do {
-                try await submitReport(report: report, destination: try await reportDestination())
+                let final: ReportRequest = includeFullDiagnostics
+                    ? try appendingDiagnostics(report: report, diagnosticsText: await makeDiagnostics(), limit: reportMessageLimit)
+                    : report
+                try await submitReport(report: final, destination: try await reportDestination())
                 state = .sent
             } catch {
                 feedbackLogger.error("Geri bildirim gönderilemedi, hata: \(String(describing: error), privacy: .private)")

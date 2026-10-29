@@ -171,6 +171,11 @@ final class AppUpdater {
         updateLogger.info("Sparkle başlatıldı, akış: \(updater.feedURL?.absoluteString ?? "-", privacy: .public), aralık: \(updater.updateCheckInterval, privacy: .public)")
     }
 
+    /// Son güncelleme denetiminin zamanı (Sparkle'ın kaydı); hiç denetlenmediyse ya da güncelleme kapalıysa nil.
+    var lastCheckDate: Date? {
+        controller?.updater.lastUpdateCheckDate
+    }
+
     /// Şeritte ve menüde gösterilecek güncelleme: indirilmiş olan önce.
     var availableUpdate: AvailableAppUpdate? {
         readyUpdate ?? foundUpdate

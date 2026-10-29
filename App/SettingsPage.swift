@@ -20,6 +20,7 @@ private func launchSettingsSection(arguments: [String]) -> SettingsSection {
     case "anahtarlar": return .keys
     case "baglantilar": return .connections
     case "kisayollar": return .shortcuts
+    case "tanilama": return .diagnostics
     #if HOSTED_EDITION
     case "hesap": return .account
     #endif
@@ -38,6 +39,8 @@ private enum SettingsSection: CaseIterable {
     case keys
     case connections
     case shortcuts
+    /// Sürüm, sistem, hesap, sunucuya erişim, izinler, model, güncelleme ve son hatalar (bkz. App/DiagnosticsViews.swift).
+    case diagnostics
 
     /// Sekme çubuğundaki sekmeler: abonelik sürümünde LLM ve Anahtarlar yok (model ve anahtar sunucudadır).
     static var visible: [SettingsSection] {
@@ -59,6 +62,7 @@ private enum SettingsSection: CaseIterable {
         case .keys: "Anahtarlar"
         case .connections: "Bağlantılar"
         case .shortcuts: "Kısayollar"
+        case .diagnostics: "Tanılama"
         }
     }
 }
@@ -109,6 +113,7 @@ struct SettingsPage: View {
                     case .keys: KeySettings(model: model)
                     case .connections: ConnectionSettings(model: model)
                     case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+                    case .diagnostics: DiagnosticsSettings(model: model, updater: updater)
                     }
                 }
                 .id(section)
@@ -457,7 +462,7 @@ private struct GeneralSettings: View {
             #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
-            FeedbackSettingsRow()
+            FeedbackSettingsRow { await diagnosticsReportText(model: model, updater: updater) }
         }
     }
 }
