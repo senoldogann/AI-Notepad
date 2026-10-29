@@ -181,9 +181,10 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
               device with Apple, and we use one of them to record that a Mac has already been used for a free trial. The app
               sends a short-lived token from Apple; we never receive a device identifier, and the bits are stored by Apple,
               not by us. (b) A pseudonymous keyed one-way hash of your sign-in identity (Apple or Google account
-              identifier), stored together with the number of free-trial meetings used, when your trial started and
-              whether a Mac was verified for your trial. We keep it after you delete your account, so deleting and
-              re-creating an account does not give a new free trial.
+              identifier), stored together with the number of free-trial meetings used, when your trial started,
+              whether a Mac was verified for your trial and the current calendar month's usage totals (recorded time and
+              AI token counts, no content). We keep it after you delete your account, so deleting and re-creating an
+              account does not give a new free trial or reset that month's usage limits.
             </td>
             <td>Preventing the same person or Mac from getting the free trial again (fraud prevention)</td>
             <td>(f) legitimate interest in preventing fraud and abuse</td>
@@ -403,8 +404,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <li>Account, sign-in identities and device registrations: while your account exists; deleted immediately when you delete it.</li>
       <li>Meeting session records and monthly usage: up to 13 months, then deleted automatically; deleted immediately when you delete your account.</li>
       <li>
-        The pseudonymous free-trial record (a keyed hash of your sign-in identity, the number of free-trial meetings used
-        and when the trial started): for up to 24 months after you delete your account, then deleted automatically.
+        The pseudonymous free-trial record (a keyed hash of your sign-in identity, the number of free-trial meetings used,
+        when the trial started and that month's usage totals): for up to 24 months after you delete your account, then
+        deleted automatically; the usage totals only matter until the end of that month.
       </li>
       <li>The DeviceCheck bit for your Mac is stored by Apple, not by us; it holds no personal details, only that the Mac has already given a free trial.</li>
       <li>Sign-in tokens: up to 60 days; deleted within a day after they expire or you sign out.</li>
@@ -429,9 +431,10 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
     </p>
     <p>
       What remains: a pseudonymous record of your free-trial use (a keyed one-way hash of your sign-in identity, the
-      number of free-trial meetings used, when the trial started and whether a Mac was verified), kept for up to 24 months
-      to prevent free-trial abuse — if you sign in again with the same Apple or Google account, your new account continues
-      the trial where the old one left off; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for
+      number of free-trial meetings used, when the trial started, whether a Mac was verified and that month's usage
+      totals), kept for up to 24 months to prevent abuse — if you sign in again with the same Apple or Google account, your
+      new account continues the trial where the old one left off and, within the same month, starts from the old
+      account's usage; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for
       your network (a hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by
       Stripe and Link; messages and reports until their 180 days run out (ask us if you want them deleted sooner); and
       technical logs and backups until they expire. Notes and recordings on your Mac stay where they are; you delete them

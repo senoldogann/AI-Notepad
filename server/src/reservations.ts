@@ -194,11 +194,11 @@ export function meetingAudioIdleLimit(meetingId: string, now: Date): Reservation
   };
 }
 
-/** Kullanıcının aylık süre sınırından kalan ses (deneme toplantılarında da). */
+/** Kullanıcının aylık süre sınırından kalan ses (deneme toplantılarında da; silinmiş hesaptan devralınan süre dahil). */
 export function monthlyAudioLimit(config: Config, userId: string, now: Date): ReservationLimit {
   const month: string = monthKey(now);
   return {
-    remainingSql: `? - COALESCE((SELECT audio_seconds FROM monthly_usage WHERE user_id = ? AND month = ?), 0) - ${activeSum("audio_seconds", "user_id = ? AND month = ? AND kind = 'audio'")}`,
+    remainingSql: `? - COALESCE((SELECT audio_seconds + carried_seconds FROM monthly_usage WHERE user_id = ? AND month = ?), 0) - ${activeSum("audio_seconds", "user_id = ? AND month = ? AND kind = 'audio'")}`,
     binds: [config.monthlyCapSeconds, userId, month, userId, month, now.getTime()],
     error: new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırı bu kaydı işlemeye yetmiyor; sınır ay başında sıfırlanır."),
   };
