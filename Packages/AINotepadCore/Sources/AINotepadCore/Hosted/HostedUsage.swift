@@ -147,10 +147,32 @@ public enum HostedImportError: Error, Sendable, Equatable {
     case longerThanMeetingAllowance(durationMinutes: Int, maxMinutes: Int)
 }
 
-/// İçe aktarılacak dosyayı son okunan hak durumuyla karşılaştırır: toplantının ses hakkını (`meetingMaxMinutes`) aşıyorsa
-/// `HostedImportError`. Alanı bilmeyen eski sunucuda denetlenmez (sunucu son geçişte yine reddeder). Saf fonksiyondur.
+/// Sunucunun parça örtüşmesi için toplantının ses hakkına eklediği pay (saniye): her 2900 saniyelik adım için 60 sn
+/// (sunucudaki `chunkOverlapAllowance` ile aynı). Saf fonksiyondur.
+public func hostedServerOverlapAllowanceSec(seconds: Double) -> Double {
+    (seconds / 2900).rounded(.towardZero) * 60
+}
+
+/// Kaydın sunucuya gidecek toplam sesi (saniye): parçalar bir dakika örtüştüğü için süreden uzundur (bkz.
+/// `wavChunkSpans`). Saf fonksiyondur.
+public func hostedUploadedAudioSec(durationSec: Double) -> Double {
+    let spans: [WavChunkSpan] = wavChunkSpans(
+        totalSamples: Int((durationSec * Double(hostedTranscribeSampleRate)).rounded(.up)),
+        maxSamples: maxSamplesPerWavChunk(maxBytes: hostedTranscribeMaxBytes),
+        overlapSamples: Int(hostedChunkOverlapSec * Double(hostedTranscribeSampleRate))
+    )
+    return Double(spans.reduce(0) { $0 + $1.sampleCount }) / Double(hostedTranscribeSampleRate)
+}
+
+/// İçe aktarılacak dosyayı son okunan hak durumuyla karşılaştırır: sunucuya gidecek sesi (parça örtüşmesi dahil)
+/// toplantının ses hakkını (`meetingMaxMinutes` + sunucunun örtüşme payı) aşıyorsa `HostedImportError`. Alanı bilmeyen
+/// eski sunucuda denetlenmez (sunucu son geçişte yine reddeder). Saf fonksiyondur.
 public func requireHostedImportFits(durationSec: Double, entitlements: HostedEntitlements) throws {
-    guard let maxMinutes = entitlements.meetingMaxMinutes, durationSec > Double(maxMinutes) * 60 else {
+    guard let maxMinutes = entitlements.meetingMaxMinutes else {
+        return
+    }
+    let allowance: Double = Double(maxMinutes) * 60 + hostedServerOverlapAllowanceSec(seconds: Double(maxMinutes) * 60)
+    guard hostedUploadedAudioSec(durationSec: durationSec) > allowance else {
         return
     }
     throw HostedImportError.longerThanMeetingAllowance(durationMinutes: Int((durationSec / 60).rounded(.up)), maxMinutes: maxMinutes)

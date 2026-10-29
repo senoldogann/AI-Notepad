@@ -381,6 +381,13 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             HostedEntitlements.self, from: Data(json.replacingOccurrences(of: #""meetingMaxMinutes":90,"#, with: "").utf8)
         )
         try requireHostedImportFits(durationSec: 10 * 3600, entitlements: old)
+        // Örtüşme hesaba katılır: 90 dk'lık dosya 2 parça (+60 sn) gönderir; sunucunun payı da 60 sn.
+        #expect(hostedUploadedAudioSec(durationSec: 90 * 60) == 90 * 60 + hostedChunkOverlapSec)
+        #expect(hostedServerOverlapAllowanceSec(seconds: 90 * 60) == 60)
+        #expect(hostedUploadedAudioSec(durationSec: 30 * 60) == 30 * 60)
+        // 4 saatlik toplantı: 5 parça, 4 sınır; sunucunun payı 4 dakika.
+        #expect(hostedUploadedAudioSec(durationSec: 240 * 60) == 240 * 60 + 4 * hostedChunkOverlapSec)
+        #expect(hostedServerOverlapAllowanceSec(seconds: 240 * 60) == 240)
     }
 
     // Son geçiş yapılamadığında uyarı hangi metnin kaldığını doğru söyler: yeniden işlemede önceki son geçiş korunur.

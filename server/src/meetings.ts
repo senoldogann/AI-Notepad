@@ -16,8 +16,7 @@ import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
-import { chunkOverlapAllowance } from "./reservations";
-import { type MonthlyUsage, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
+import { type MonthlyUsage, chunkOverlapAllowance, dayKey, monthlyUsage, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 
 /** Yeni toplantı oturumu. */
 export interface StartedMeeting {

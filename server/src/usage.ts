@@ -50,6 +50,33 @@ export function transcriptionCostMicroUsd(seconds: number, usdPerHour: number): 
   return Math.ceil((seconds / 3600) * usdPerHour * 1_000_000);
 }
 
+/**
+ * Uzun kaydın parçaları (`TRANSCRIBE_MAX_BYTES`, ~49 dk) birer dakika örtüşür (istemci `hostedChunkOverlapSec`):
+ * ortak bölgeler ikinci kez yazıya döküldüğü için toplantının ses hakkına her parça sınırı için bir dakika pay eklenir.
+ * Sınır sayısı toplantının en uzun süresinin parça adımına (`chunkStepSeconds`, gerçek adımdan biraz kısa: yukarı
+ * yuvarlar) bölümüdür; 49 dakikadan kısa toplantıda pay yoktur.
+ */
+export const chunkOverlapSeconds: number = 60;
+export const chunkStepSeconds: number = 2900;
+
+/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye; SQL ifadesi). */
+export function chunkOverlapAllowanceSql(seconds: string): string {
+  return `CAST((${seconds}) / ${chunkStepSeconds} AS INTEGER) * ${chunkOverlapSeconds}`;
+}
+
+/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye). Saf fonksiyondur. */
+export function chunkOverlapAllowance(seconds: number): number {
+  return Math.trunc(seconds / chunkStepSeconds) * chunkOverlapSeconds;
+}
+
+/**
+ * Sesin örtüşmesiz süresi (SQL ifadesi): parça sınırlarında ikinci kez yazılan saniyeler düşülür; aylık süreye bu
+ * sayılır (örtüşme kullanıcının süresinden yemez).
+ */
+export function overlapFreeSecondsSql(seconds: string): string {
+  return `(${seconds} - ${chunkOverlapAllowanceSql(seconds)})`;
+}
+
 /** Aylık süre SQL'inin girdileri: her biri SQL ifadesidir (parametre ya da sütun). */
 export interface MonthlyUsageRefs {
   readonly user: string;
@@ -60,7 +87,7 @@ export interface MonthlyUsageRefs {
 
 /**
  * Kullanıcının bu ay sınıra sayılan süresi (saniye; SQL ifadesi): devralınan süre + bu ay başlayan her toplantının
- * süresi ile sesinin (kesinleşmiş + süren ayırma) büyüğü + önceki aylarda başlamış toplantıların bu ay yazılan sesi ve
+ * süresi ile örtüşmesiz sesinin (kesinleşmiş + süren ayırma; `overlapFreeSecondsSql`) büyüğü + önceki aylarda başlamış toplantıların bu ay yazılan sesi ve
  * süren ayırmaları. Toplantı başına büyüğü alınır: uzun canlı toplantılar ile uzun içe aktarmalar birbirini örtmez
  * (toplamların büyüğü değil).
  */
@@ -71,7 +98,7 @@ export function monthlyUsedSecondsSql(refs: MonthlyUsageRefs): string {
     COALESCE((SELECT carried_seconds FROM monthly_usage WHERE user_id = ${user} AND month = ${month}), 0)
     + COALESCE((SELECT SUM(MAX(
         MAX(0, MIN(COALESCE(s.ended_at, ${now}), s.max_ends_at, ${now}) - s.started_at) / 1000.0,
-        s.audio_seconds + COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > ${now}), 0)
+        ${overlapFreeSecondsSql(`s.audio_seconds + COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > ${now}), 0)`)}
       )) FROM meeting_sessions s WHERE s.${thisMonth}), 0)
     + MAX(0, COALESCE((SELECT audio_seconds FROM monthly_usage WHERE user_id = ${user} AND month = ${month}), 0)
       - COALESCE((SELECT SUM(audio_seconds) FROM meeting_sessions WHERE ${thisMonth}), 0))

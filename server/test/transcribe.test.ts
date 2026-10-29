@@ -311,6 +311,31 @@ describe("konuşma tanıma vekili", () => {
     expect(me.monthlyHoursUsed).toBe(0.4);
   });
 
+  it("parça örtüşmesi aylık süreye sayılmaz: aylık sınıra tam sığan uzun kaydın son parçası reddedilmez", async () => {
+    const context: Context = await setup(true);
+    const { harness, session } = context;
+    // Ayda 3000 sn kaldı (önceki aydan kalma toplantıların sesi gibi sayılır).
+    await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)")
+      .bind(session.userId, new Date(harness.clock.nowMs).toISOString().slice(0, 7), 10 * 3600 - 3000)
+      .run();
+    expect((await harness.call(req("POST", `/v1/meetings/${context.meeting.meetingId}/end`, { token: session.accessToken }))).status).toBe(200);
+    const imported: StartedMeetingBody = await (
+      await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef: "ice-aktarim-ortusme", deferred: true } }))
+    ).json<StartedMeetingBody>();
+    let seconds: number = 2968;
+    harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      await request.formData();
+      return Response.json({ ...transcription, audio_duration_secs: seconds });
+    });
+    const target: Context = { harness, session, meeting: imported };
+    expect((await upload(target, "", wavFile(8000, 1, 8, 8000 * 2968), "audio/wav")).status).toBe(200);
+    // İkinci parça öncekinin son dakikasıyla başlar: 60 sn örtüşme + 32 sn yeni ses.
+    seconds = 92;
+    expect((await upload(target, "", wavFile(8000, 1, 8, 8000 * 92), "audio/wav")).status).toBe(200);
+    const me = await (await harness.call(req("GET", "/v1/me", { token: session.accessToken }))).json<{ monthlyHoursUsed: number }>();
+    expect(me.monthlyHoursUsed).toBe(10);
+  });
+
   it("toplantının en uzun süresinden uzun ses reddedilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);

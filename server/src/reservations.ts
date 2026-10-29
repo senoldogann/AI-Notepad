@@ -1,7 +1,7 @@
 import type { Config } from "./config";
 import { randomId } from "./crypto";
 import { ApiError } from "./errors";
-import { dayKey, monthKey, monthStartMs, monthlyUsedSecondsSql } from "./usage";
+import { chunkOverlapAllowanceSql, chunkOverlapSeconds, chunkStepSeconds, dayKey, monthKey, monthStartMs, monthlyUsedSecondsSql, overlapFreeSecondsSql } from "./usage";
 
 /**
  * Önceden ayırma (`usage_reservations`): üst servise giden her çağrı (LLM ya da ses) için tek satır. Satır, çağrının
@@ -174,25 +174,6 @@ export function subscriberAccountTokenLimit(config: Config, userId: string, now:
 }
 
 /**
- * Uzun kaydın parçaları (`TRANSCRIBE_MAX_BYTES`, ~49 dk) birer dakika örtüşür (istemci `hostedChunkOverlapSec`):
- * ortak bölgeler ikinci kez yazıya döküldüğü için toplantının ses hakkına her parça sınırı için bir dakika pay eklenir.
- * Sınır sayısı toplantının en uzun süresinin parça adımına (`chunkStepSeconds`, gerçek adımdan biraz kısa: yukarı
- * yuvarlar) bölümüdür; 49 dakikadan kısa toplantıda pay yoktur.
- */
-export const chunkOverlapSeconds: number = 60;
-export const chunkStepSeconds: number = 2900;
-
-/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye; SQL ifadesi). */
-export function chunkOverlapAllowanceSql(seconds: string): string {
-  return `CAST((${seconds}) / ${chunkStepSeconds} AS INTEGER) * ${chunkOverlapSeconds}`;
-}
-
-/** Sesin parça sınırlarında ikinci kez yazılan payı (saniye). Saf fonksiyondur. */
-export function chunkOverlapAllowance(seconds: number): number {
-  return Math.trunc(seconds / chunkStepSeconds) * chunkOverlapSeconds;
-}
-
-/**
  * Toplantının ses süresinden kalan (en uzun süresi + parça örtüşme payı − yazılmış ses; yeniden işlemede en çok
  * `reprocess_audio_cap`; ses hakkı kapandıysa 0). Toplantıda aynı anda tek ses isteği olabildiği için
  * (`meetingAudioIdleLimit`) süren ayırma düşülmez.
@@ -217,16 +198,18 @@ export function meetingAudioIdleLimit(meetingId: string, now: Date): Reservation
 
 /**
  * Kullanıcının aylık süre sınırından bu toplantıya yazılabilecek ses (deneme toplantılarında da; silinmiş hesaptan
- * devralınan süre dahil): sınır − sayılan süre (`monthlyUsedSecondsSql`) + toplantının sesinin henüz süresine
- * ulaşmamış kısmı (toplantının süresi zaten sayıldı; sesi süresini aşana dek ek sayılmaz).
+ * devralınan süre dahil): sınır − sayılan süre (`monthlyUsedSecondsSql`) + toplantının sesinin (örtüşmesiz) henüz
+ * süresine ulaşmamış kısmı (toplantının süresi zaten sayıldı) + toplantıya en az bir tam parça yazıldıysa bir parça
+ * örtüşmesi (sonraki parça öncekinin son dakikasıyla başlar; o dakika aylık süreye sayılmaz).
  */
 export function monthlyAudioLimit(config: Config, userId: string, meetingId: string, now: Date): ReservationLimit {
   const used: string = monthlyUsedSecondsSql({ user: "p.user_id", month: "p.month", now: "p.now", monthStart: "p.month_start" });
-  const headroom: string = `COALESCE((SELECT MAX(0, MAX(0, MIN(COALESCE(s.ended_at, p.now), s.max_ends_at, p.now) - s.started_at) / 1000.0 - s.audio_seconds
-      - COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > p.now), 0))
+  const written: string = `(s.audio_seconds + COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > p.now), 0))`;
+  const headroom: string = `COALESCE((SELECT MAX(0, MAX(0, MIN(COALESCE(s.ended_at, p.now), s.max_ends_at, p.now) - s.started_at) / 1000.0 - ${overlapFreeSecondsSql(written)})
     FROM meeting_sessions s WHERE s.id = p.meeting_id AND s.started_at >= p.month_start), 0)`;
+  const overlap: string = `COALESCE((SELECT CASE WHEN s.audio_seconds >= ${chunkStepSeconds} THEN ${chunkOverlapSeconds} ELSE 0 END FROM meeting_sessions s WHERE s.id = p.meeting_id), 0)`;
   return {
-    remainingSql: `(SELECT p.cap - ${used} + ${headroom}
+    remainingSql: `(SELECT p.cap - ${used} + ${headroom} + ${overlap}
       FROM (SELECT ? AS cap, ? AS user_id, ? AS month, ? AS now, ? AS month_start, ? AS meeting_id) p)`,
     binds: [config.monthlyCapSeconds, userId, monthKey(now), now.getTime(), monthStartMs(now), meetingId],
     error: new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırı bu kaydı işlemeye yetmiyor; sınır ay başında sıfırlanır."),
