@@ -1,5 +1,6 @@
-// Hesap sayfası: `/v1/me` (plan, kalan deneme ve bitiş tarihi, abonede aylık saat, abonelik ve ek süre), Abone ol (Checkout), Aboneliği yönet
-// (Portal), çıkış ve onaylı hesap silme (`DELETE /v1/me`). Oturum yoksa giriş sayfasına geçilir.
+// Hesap sayfası: `/v1/me` (plan durumu etiketi, kalan deneme ve bitiş tarihi, abonede aylık saat, abonelik ve ek süre),
+// Abone ol (Checkout), Aboneliği yönet (Portal), çıkış ve onaylı hesap silme (`DELETE /v1/me`). Oturum yoksa giriş
+// sayfasına geçilir.
 import { ApiRequestError, type Entitlements, type RawResponse, type SubscriptionInfo, parseEntitlements, parseRedirectUrl } from "./api";
 import { type ClientCopy, clientCopy, fill } from "./copy";
 import { dataValue, element, errorText, hideNotice, showNotice } from "./dom";
@@ -19,18 +20,33 @@ const deletedRedirectMs: number = 3000;
 /** Etiket görünümü. */
 type PillTone = "ok" | "warn" | "plain";
 
-/** Hesap kartlarında gösterilecek değerler. */
+/** Başlıktaki plan durumu etiketi. */
+interface Pill {
+  readonly text: string;
+  readonly tone: PillTone;
+}
+
+/** Sürmekte olan denemenin göstergesi: kalan ve toplam toplantı. */
+interface TrialMeter {
+  readonly left: number;
+  readonly total: number;
+}
+
+/** Hesap sayfasında gösterilecek değerler. */
 interface AccountView {
   readonly plan: string;
-  readonly planPill: { readonly text: string; readonly tone: PillTone };
-  readonly trial: string;
-  /** Aylık saat kartı yalnızca abonede görünür (sınır aboneliğindir; denemede kafa karıştırır). */
+  readonly planPill: Pill;
+  /** Deneme satırı; abonede gösterilmez (null). */
+  readonly trial: string | null;
+  /** Deneme sürüyorsa kalan toplantı göstergesi; yoksa null. */
+  readonly trialMeter: TrialMeter | null;
+  /** Abonelik satırı; hiç abonelik yoksa gösterilmez (null). */
+  readonly subscription: string | null;
+  /** Aylık saat satırı yalnızca abonede görünür (sınır aboneliğindir; denemede kafa karıştırır). */
   readonly showHours: boolean;
   readonly hours: string;
   readonly hoursUsed: number;
   readonly hoursCap: number;
-  readonly subscription: string;
-  readonly subscriptionPill: { readonly text: string; readonly tone: PillTone } | null;
   readonly canSubscribe: boolean;
   readonly canManage: boolean;
 }
@@ -45,78 +61,110 @@ function formatHours(hours: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
-/** Deneme kartının metni: abonede sayılmaz; başlamadıysa toplantı ve gün; bittiyse "bitti"; sürüyorsa kalan ve bitiş. Saf fonksiyondur. */
-function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
-  if (me.plan === "subscription") {
-    return text.trialNotUsed;
-  }
+/** Deneme durumu: başlamadı, sürüyor ya da bitti (toplantılar harcandı veya süre doldu). Saf fonksiyondur. */
+function trialPhase(me: Entitlements, now: Date): "notStarted" | "running" | "ended" {
   if (me.trialEndsAt === null) {
+    return "notStarted";
+  }
+  return me.trialMeetingsLeft === 0 || new Date(me.trialEndsAt).getTime() <= now.getTime() ? "ended" : "running";
+}
+
+/** Deneme satırının metni: başlamadıysa toplantı ve gün; bittiyse "bitti"; sürüyorsa kalan ve bitiş. Saf fonksiyondur. */
+function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
+  const phase: "notStarted" | "running" | "ended" = trialPhase(me, now);
+  if (phase === "notStarted" || me.trialEndsAt === null) {
     return fill(text.trialNotStarted, { total: String(me.trialMeetingsTotal), days: String(me.trialDays) });
   }
-  if (me.trialMeetingsLeft === 0 || new Date(me.trialEndsAt).getTime() <= now.getTime()) {
+  if (phase === "ended") {
     return text.trialEnded;
   }
   return fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal), date: formatDate(me.trialEndsAt, locale) });
 }
 
+/** Abonelik satırının metni; hiç abonelik yoksa null. Saf fonksiyondur. */
+function subscriptionText(subscription: SubscriptionInfo | null, text: ClientCopy, locale: string): string | null {
+  if (subscription === null) {
+    return null;
+  }
+  if (subscription.access === "active" && subscription.cancelAt !== null) {
+    return fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
+  }
+  if (subscription.access === "active") {
+    return fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, locale) });
+  }
+  if (subscription.access === "grace") {
+    return fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, locale) });
+  }
+  return text.subscriptionEnded;
+}
+
+/** Başlıktaki plan etiketi: abonede yenileme durumu, denemede deneme durumu. Saf fonksiyondur. */
+function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
+  const subscription: SubscriptionInfo | null = me.subscription;
+  if (me.plan === "subscription" && subscription !== null && subscription.access === "grace") {
+    return { text: text.pillGrace, tone: "warn" };
+  }
+  if (me.plan === "subscription" && subscription !== null && subscription.cancelAt !== null) {
+    return { text: text.pillCanceling, tone: "warn" };
+  }
+  if (me.plan === "subscription") {
+    return { text: text.pillActive, tone: "ok" };
+  }
+  return trialPhase(me, now) === "ended" ? { text: text.pillEnded, tone: "plain" } : { text: text.pillTrial, tone: "plain" };
+}
+
 /** Sunucu yanıtından gösterilecek değerleri üretir. Saf fonksiyondur. */
 export function accountView(me: Entitlements, text: ClientCopy, locale: string, now: Date): AccountView {
-  const subscription: SubscriptionInfo | null = me.subscription;
   const subscribed: boolean = me.plan === "subscription";
-  let subscriptionText: string = text.subscriptionNone;
-  let subscriptionPill: AccountView["subscriptionPill"] = null;
-  if (subscription !== null && subscription.access === "active" && subscription.cancelAt !== null) {
-    subscriptionText = fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
-    subscriptionPill = { text: text.pillCanceling, tone: "warn" };
-  } else if (subscription !== null && subscription.access === "active") {
-    subscriptionText = fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, locale) });
-    subscriptionPill = { text: text.pillActive, tone: "ok" };
-  } else if (subscription !== null && subscription.access === "grace") {
-    subscriptionText = fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, locale) });
-    subscriptionPill = { text: text.pillGrace, tone: "warn" };
-  } else if (subscription !== null) {
-    subscriptionText = text.subscriptionEnded;
-    subscriptionPill = { text: text.pillEnded, tone: "plain" };
-  }
   return {
     plan: subscribed ? text.plan.subscription : text.plan.trial,
-    planPill: subscribed ? { text: text.pillActive, tone: "ok" } : { text: text.pillTrial, tone: "plain" },
-    trial: trialText(me, text, locale, now),
+    planPill: planPill(me, text, now),
+    trial: subscribed ? null : trialText(me, text, locale, now),
+    trialMeter: !subscribed && trialPhase(me, now) === "running" ? { left: me.trialMeetingsLeft, total: me.trialMeetingsTotal } : null,
+    subscription: subscriptionText(me.subscription, text, locale),
     showHours: subscribed,
     hours: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
     hoursUsed: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
     hoursCap: me.monthlyHoursCap,
-    subscription: subscriptionText,
-    subscriptionPill,
     canSubscribe: !subscribed,
-    canManage: subscription !== null,
+    canManage: me.subscription !== null,
   };
 }
 
 /** Etiketi günceller. */
-function renderPill(pill: HTMLElement, value: { readonly text: string; readonly tone: PillTone } | null): void {
-  pill.classList.toggle("hidden", value === null);
-  pill.classList.toggle("pill--ok", value?.tone === "ok");
-  pill.classList.toggle("pill--warn", value?.tone === "warn");
-  pill.textContent = value?.text ?? "";
+function renderPill(pill: HTMLElement, value: Pill): void {
+  pill.classList.remove("hidden");
+  pill.classList.toggle("pill--ok", value.tone === "ok");
+  pill.classList.toggle("pill--warn", value.tone === "warn");
+  pill.textContent = value.text;
+}
+
+/** Satırı metinle gösterir; metin yoksa gizler. */
+function renderRow(row: HTMLElement, value: HTMLElement, content: string | null): void {
+  row.classList.toggle("hidden", content === null);
+  value.textContent = content ?? "";
 }
 
 /** Değerleri sayfaya yazar. */
 function render(view: AccountView): void {
   element("plan-value", HTMLElement).textContent = view.plan;
   renderPill(element("plan-pill", HTMLElement), view.planPill);
-  element("trial-value", HTMLElement).textContent = view.trial;
+  renderRow(element("trial-row", HTMLElement), element("trial-value", HTMLElement), view.trial);
+  const trialMeter: HTMLProgressElement = element("trial-meter", HTMLProgressElement);
+  trialMeter.classList.toggle("hidden", view.trialMeter === null);
+  trialMeter.max = view.trialMeter?.total ?? 1;
+  trialMeter.value = view.trialMeter?.left ?? 0;
+  renderRow(element("subscription-row", HTMLElement), element("subscription-value", HTMLElement), view.subscription);
   element("hours-card", HTMLElement).classList.toggle("hidden", !view.showHours);
   element("hours-value", HTMLElement).textContent = view.hours;
   const meter: HTMLProgressElement = element("hours-meter", HTMLProgressElement);
   meter.max = view.hoursCap;
   meter.value = view.hoursUsed;
   meter.textContent = view.hours;
-  element("subscription-value", HTMLElement).textContent = view.subscription;
-  renderPill(element("subscription-pill", HTMLElement), view.subscriptionPill);
   element("subscribe-button", HTMLButtonElement).classList.toggle("hidden", !view.canSubscribe);
   element("manage-button", HTMLButtonElement).classList.toggle("hidden", !view.canManage);
   element("subscribe-note", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
+  element("manage-note", HTMLElement).classList.toggle("hidden", view.canSubscribe || !view.canManage);
 }
 
 /** `GET /v1/me`. */
@@ -220,6 +268,7 @@ function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): v
     element("account-content", HTMLElement).classList.add("hidden");
     // Oturum yok: çıkış düğmesi de gizlenir.
     element("signout-button", HTMLButtonElement).classList.add("hidden");
+    element("plan-pill", HTMLElement).classList.add("hidden");
     const deleted: HTMLElement = element("account-deleted", HTMLElement);
     deleted.classList.remove("hidden");
     deleted.focus();

@@ -2,7 +2,10 @@
 // görüntülerini alır; yatay taşmayı, konsol hatalarını ve CSP ihlallerini raporlar. Ayrıca ana sayfa gösteriminin
 // birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
 // Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
-// karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir.
+// karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir. Hesap sayfası her
+// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor) çekilir. Sayfa sonundaki
+// çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
+// denetlenir.
 // Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu>
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,12 +25,19 @@ interface Finding {
   readonly problem: string;
 }
 
-/** Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). */
+/** Hesap sayfasının örnek plan durumları (`/v1/me` yanıtı bunlardan seçilir). */
+type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace";
+
+/**
+ * Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). `account` hesap
+ * sayfasının hangi durumla çekileceğidir (diğer sayfalarda null).
+ */
 interface Target {
   readonly name: string;
   readonly path: string;
   readonly ready: string;
   readonly signedIn: boolean;
+  readonly account: AccountState | null;
 }
 
 const variants: readonly Variant[] = [
@@ -39,17 +49,22 @@ const variants: readonly Variant[] = [
 ];
 
 const targets: readonly Target[] = [
-  { name: "home", path: "/", ready: "main", signedIn: false },
-  { name: "pricing", path: "/pricing", ready: "main", signedIn: false },
-  { name: "download", path: "/download", ready: "main", signedIn: false },
-  { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false },
-  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "#google-button iframe", signedIn: false },
-  { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false },
-  { name: "privacy", path: "/privacy", ready: "main", signedIn: false },
-  { name: "terms", path: "/terms", ready: "main", signedIn: false },
-  { name: "notfound", path: "/no-such-page", ready: "main", signedIn: false },
-  { name: "account", path: "/account?payment=done", ready: "#account-content:not(.hidden)", signedIn: true },
-  { name: "admin", path: "/admin", ready: "#admin-content:not(.hidden)", signedIn: true },
+  { name: "home", path: "/", ready: "main", signedIn: false, account: null },
+  { name: "pricing", path: "/pricing", ready: "main", signedIn: false, account: null },
+  { name: "download", path: "/download", ready: "main", signedIn: false, account: null },
+  { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false, account: null },
+  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "#google-button iframe", signedIn: false, account: null },
+  { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false, account: null },
+  { name: "privacy", path: "/privacy", ready: "main", signedIn: false, account: null },
+  { name: "terms", path: "/terms", ready: "main", signedIn: false, account: null },
+  { name: "notfound", path: "/no-such-page", ready: "main", signedIn: false, account: null },
+  { name: "account", path: "/account?payment=done", ready: "#account-content:not(.hidden)", signedIn: true, account: "active" },
+  { name: "account-trial-new", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-new" },
+  { name: "account-trial-running", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-running" },
+  { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
+  { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
+  { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
+  { name: "admin", path: "/admin", ready: "#admin-content:not(.hidden)", signedIn: true, account: null },
 ];
 
 /** Yerel derlemenin API adresi (istekler buraya gider ve örnek verilerle karşılanır). */
@@ -60,20 +75,34 @@ function last30Days(now: Date): string[] {
   return Array.from({ length: 30 }, (_: unknown, index: number): string => new Date(now.getTime() - (29 - index) * 86_400_000).toISOString().slice(0, 10));
 }
 
+/** Hesap durumuna göre örnek `/v1/me` yanıtı. Saf fonksiyondur. */
+function meFixture(state: AccountState, now: Date): object {
+  const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
+  const base = { userId: "usr_example", trialMeetingsTotal: 3, trialDays: 7, monthlyHoursCap: 10 };
+  const subscription = (access: "active" | "grace", cancelAt: string | null): object => ({
+    status: access === "grace" ? "past_due" : "active",
+    currentPeriodEnd: at(20),
+    cancelAt,
+    access,
+    graceEndsAt: access === "grace" ? at(5) : null,
+  });
+  const states: Readonly<Record<AccountState, object>> = {
+    "trial-new": { ...base, plan: "trial", trialMeetingsLeft: 3, trialEndsAt: null, monthlyHoursUsed: 0, subscription: null },
+    "trial-running": { ...base, plan: "trial", trialMeetingsLeft: 2, trialEndsAt: at(5), monthlyHoursUsed: 0.8, subscription: null },
+    "trial-ended": { ...base, plan: "trial", trialMeetingsLeft: 0, trialEndsAt: at(-1), monthlyHoursUsed: 2.1, subscription: null },
+    active: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 3.4, subscription: subscription("active", null) },
+    canceling: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 7.6, subscription: subscription("active", at(20)) },
+    grace: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 1.2, subscription: subscription("grace", null) },
+  };
+  return states[state];
+}
+
 /** Örnek yanıtlar: yol (sorgusuz) → gövde. */
 function fixtures(now: Date): Readonly<Record<string, object>> {
   const days: string[] = last30Days(now);
   const wave = (index: number, scale: number): number => Math.max(0, Math.round((Math.sin(index / 3) + 1.3) * scale + (index % 4)));
   return {
-    "/v1/me": {
-      userId: "usr_example",
-      plan: "subscription",
-      trialMeetingsTotal: 3,
-      trialMeetingsLeft: 0,
-      monthlyHoursUsed: 3.4,
-      monthlyHoursCap: 10,
-      subscription: { status: "active", currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000).toISOString(), cancelAt: null, access: "active", graceEndsAt: null },
-    },
+    "/v1/me": meFixture("active", now),
     "/v1/admin/stats": {
       generatedAt: now.toISOString(),
       downloads: { total: 1284, last30Days: days.map((day: string, index: number) => ({ day, count: wave(index, 9) })) },
@@ -161,6 +190,19 @@ async function routeApi(context: BrowserContext, findings: Finding[]): Promise<v
   });
 }
 
+/** Bu sayfada `/v1/me` isteğini verilen hesap durumunun örnek yanıtıyla karşılar (bağlamın yönlendirmesinden önce gelir). */
+async function routeMe(page: Page, state: AccountState): Promise<void> {
+  const body: object = meFixture(state, new Date());
+  await page.route(`${apiBase}/v1/me`, async (route: Route): Promise<void> => {
+    const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: cors });
+      return;
+    }
+    await route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+  });
+}
+
 /** Yatay taşmayı denetler: belge genişliği ve ekran dışına taşan öğeler. */
 async function checkOverflow(page: Page, shot: string, findings: Finding[]): Promise<void> {
   const overflow: { readonly scrollWidth: number; readonly viewport: number; readonly offenders: string[] } = await page.evaluate(() => {
@@ -214,7 +256,7 @@ async function newContext(browser: Browser, variant: Variant, reducedMotion: "re
 /** Örnek oturumu sekmeye yazar (hesap ve yönetim sayfaları oturum ister). */
 async function signIn(page: Page): Promise<void> {
   await page.addInitScript((): void => {
-    sessionStorage.setItem("ainotepad.session", JSON.stringify({ accessToken: "example-access", refreshToken: "example-refresh", accessExpiresAt: Date.now() + 3_600_000 }));
+    sessionStorage.setItem("gistsmith.session", JSON.stringify({ accessToken: "example-access", refreshToken: "example-refresh", accessExpiresAt: Date.now() + 3_600_000 }));
   });
 }
 
@@ -229,6 +271,9 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
       collectErrors(page, (): string => shot, findings);
       if (target.signedIn) {
         await signIn(page);
+      }
+      if (target.account !== null) {
+        await routeMe(page, target.account);
       }
       await page.goto(`${base}${target.path}`, { waitUntil: "load" });
       await page.waitForSelector(target.ready, { timeout: 20_000 });
@@ -295,6 +340,76 @@ async function captureDemo(browser: Browser, base: string, outDir: string, findi
   }
 }
 
+/**
+ * Gösterimin sonu: duraklat düğmesi "oynat"a döner; animasyonlar üçüncü turun sonuna sarılınca gösterim bitmiş notta
+ * durmalı ve düğme "baştan oynat" olmalı; basınca yeniden oynamalı. Bitmiş hâlin görüntüsü kaydedilir.
+ */
+async function checkDemoEnd(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+  const variant: Variant = { name: "1440-light", width: 1440, colorScheme: "light" };
+  const context: BrowserContext = await newContext(browser, variant, "no-preference");
+  const page: Page = await context.newPage();
+  collectErrors(page, (): string => "demo-end", findings);
+  await page.goto(`${base}/`, { waitUntil: "load" });
+  const toggle = page.locator("#hero-demo-toggle");
+  await toggle.waitFor({ state: "visible" });
+  await toggle.click();
+  const pausedLabel: string | null = await toggle.getAttribute("aria-label");
+  await toggle.click();
+  await page.evaluate((): void => {
+    for (const animation of document.getAnimations()) {
+      const timing = animation.effect?.getComputedTiming();
+      if (timing !== undefined && timing.duration === 18_000 && typeof timing.endTime === "number") {
+        animation.currentTime = timing.endTime - 50;
+      }
+    }
+  });
+  await page.waitForTimeout(500);
+  const state: { readonly finished: boolean; readonly label: string | null } = await page.evaluate(() => ({
+    finished: document.getElementById("hero-demo")?.hasAttribute("data-finished") ?? false,
+    label: document.getElementById("hero-demo-toggle")?.getAttribute("aria-label") ?? null,
+  }));
+  if (pausedLabel !== "Play the demo" || !state.finished || state.label !== "Replay the demo") {
+    findings.push({ shot: "demo-end", problem: `duraklatma ya da bitiş beklenen gibi değil: ${JSON.stringify({ pausedLabel, ...state })}` });
+  }
+  await page.locator(".demo-frame").screenshot({ path: join(outDir, "demo-finished-1440-light.png") });
+  await toggle.click();
+  const replaying: boolean = await page.evaluate((): boolean => document.getElementById("hero-demo")?.hasAttribute("data-finished") === false);
+  if (!replaying) {
+    findings.push({ shot: "demo-end", problem: "baştan oynat çalışmadı" });
+  }
+  await context.close();
+}
+
+/** Sayfa sonundaki çekme: en alta inilir, tekerlek olayları sürerken görünüm çekilir; üst çubuk yerinde kalmalı. */
+async function capturePullReveal(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+  for (const variant of variants.slice(0, 4)) {
+    const context: BrowserContext = await newContext(browser, variant, "no-preference");
+    const page: Page = await context.newPage();
+    const shot: string = `pull-${variant.name}`;
+    collectErrors(page, (): string => shot, findings);
+    await page.goto(`${base}/pricing`, { waitUntil: "load" });
+    await page.evaluate((): void => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+    await page.waitForTimeout(200);
+    await page.evaluate((): void => {
+      const send = (): void => {
+        document.body.dispatchEvent(new WheelEvent("wheel", { deltaY: 40, deltaMode: 0, bubbles: true }));
+      };
+      send();
+      window.setInterval(send, 40);
+    });
+    await page.waitForTimeout(900);
+    const probe: { readonly headerTop: number; readonly armed: boolean } = await page.evaluate(() => ({
+      headerTop: document.getElementById("site-header")?.getBoundingClientRect().top ?? -1,
+      armed: document.documentElement.classList.contains("pull-armed"),
+    }));
+    if (Math.abs(probe.headerTop) > 1 || !probe.armed) {
+      findings.push({ shot, problem: `çekmede üst çubuk kaydı ya da esneme kapanmadı: ${JSON.stringify(probe)}` });
+    }
+    await page.screenshot({ path: join(outDir, `${shot}.png`) });
+    await context.close();
+  }
+}
+
 /** Tema düğmesi: tıklanınca tema değişir, seçim yeniden yüklemede kalır. */
 async function checkThemeToggle(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
   const variant: Variant = { name: "1440-light", width: 1440, colorScheme: "light" };
@@ -326,6 +441,8 @@ async function main(): Promise<void> {
   try {
     await capturePages(browser, base, outDir, findings);
     await captureDemo(browser, base, outDir, findings);
+    await checkDemoEnd(browser, base, outDir, findings);
+    await capturePullReveal(browser, base, outDir, findings);
     await checkThemeToggle(browser, base, outDir, findings);
   } finally {
     await browser.close();

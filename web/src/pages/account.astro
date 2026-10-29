@@ -1,25 +1,37 @@
 ---
-// Hesap sayfası: plan, deneme, aylık kullanım, abonelik; Abone ol, Aboneliği yönet, çıkış ve hesap silme.
-// Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
+// Hesap sayfası: başlıkta plan durumu (etiket), plan kartı (plan, deneme ya da abonelik satırı, abonede aylık kullanım,
+// Abone ol / Aboneliği yönet ve fiyat, yenileme notu), uygulamayı indirme kartı, yardım bağlantıları, çıkış ve ayrı
+// duran hesap silme alanı (onay penceresiyle). Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
-import { type AccountCopy, copy } from "../copy";
+import { macDownloadUrl } from "../config";
+import { type AccountCopy, type CommonCopy, copy } from "../copy";
 import { routes } from "../routes";
+import { siteConfig } from "../site";
 
 const text: AccountCopy = copy.account;
+const common: CommonCopy = copy.common;
+const helpLinks: readonly { readonly href: string; readonly label: string }[] = [
+  { href: routes.contact, label: text.helpContact },
+  { href: routes.privacy, label: common.nav.privacy },
+  { href: routes.terms, label: common.nav.terms },
+];
 ---
 
 <Base page="account" meta={text.meta} indexed={false}>
   <section class="page account" id="account" data-sign-in-path={routes.signIn} data-home-path={routes.home}>
-    <Film palette="coral" layout="streaks" class="account__cover">
-      <Waveform seed={text.title} width={240} height={52} class="account__wave" />
-    </Film>
-    <div class="account__head">
-      <h1 class="title-l">{text.title}</h1>
-      <button id="signout-button" class="button button--secondary button--small" type="button">{text.signOut}</button>
-    </div>
+    <header class="account__head">
+      <div class="account__title">
+        <p class="eyebrow">{common.nav.account}</p>
+        <h1 class="title-xl">{text.title}</h1>
+      </div>
+      <div class="account__head-actions">
+        <span id="plan-pill" class="pill hidden"></span>
+        <button id="signout-button" class="button button--secondary button--small" type="button">{text.signOut}</button>
+      </div>
+    </header>
 
     <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
     <p id="payment-done" class="notice notice--ok hidden" role="status">{text.paymentDone}</p>
@@ -27,36 +39,81 @@ const text: AccountCopy = copy.account;
     <p id="account-loading" class="muted" role="status">{text.loading}</p>
 
     <div id="account-content" class="account__content hidden">
-      <div class="stats">
-        <div class="card stat">
-          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="user" size={17} class="" /></span>{text.planLabel}</p>
-          <p class="stat__value"><span id="plan-value"></span> <span id="plan-pill" class="pill"></span></p>
-        </div>
-        <div class="card stat">
-          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="gift" size={17} class="" /></span>{text.trialLabel}</p>
-          <p id="trial-value" class="stat__value tabular"></p>
-        </div>
-        <div id="hours-card" class="card stat hidden">
-          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="clock" size={17} class="" /></span><span id="hours-label">{text.hoursLabel}</span></p>
-          <p id="hours-value" class="stat__value tabular"></p>
-          <progress id="hours-meter" class="meter" aria-labelledby="hours-label" max="10" value="0"></progress>
-          <p class="small muted">{text.hoursNote}</p>
-        </div>
-        <div class="card stat">
-          <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="card" size={17} class="" /></span>{text.renewalLabel}</p>
-          <p class="stat__value stat__value--text"><span id="subscription-pill" class="pill hidden"></span> <span id="subscription-value"></span></p>
-        </div>
-      </div>
+      <div class="account__grid">
+        <article class="plan-card" aria-labelledby="plan-title">
+          <Film palette="coral" layout="streaks" class="plan-card__cover">
+            <Waveform seed={text.title} width={200} height={44} class="plan-card__wave" />
+          </Film>
+          <div class="plan-card__body">
+            <p class="plan-card__label">{text.planLabel}</p>
+            <h2 class="plan-card__name" id="plan-title"><span id="plan-value"></span></h2>
 
-      <div class="actions">
-        <button id="subscribe-button" class="button button--primary hidden" type="button">{text.subscribe}</button>
-        <button id="manage-button" class="button button--secondary hidden" type="button">{text.manage}</button>
-        <p id="subscribe-note" class="small muted hidden">{text.subscribeNote}</p>
+            <dl class="plan-card__rows">
+              <div id="trial-row" class="plan-row hidden">
+                <dt class="plan-row__label"><Icon name="gift" size={16} class="" />{text.trialLabel}</dt>
+                <dd class="plan-row__value">
+                  <span id="trial-value" class="tabular"></span>
+                  <progress id="trial-meter" class="meter hidden" aria-label={text.trialLabel} max="3" value="0"></progress>
+                </dd>
+              </div>
+              <div id="subscription-row" class="plan-row hidden">
+                <dt class="plan-row__label"><Icon name="card" size={16} class="" />{text.renewalLabel}</dt>
+                <dd class="plan-row__value"><span id="subscription-value"></span></dd>
+              </div>
+              <div id="hours-card" class="plan-row hidden">
+                <dt class="plan-row__label" id="hours-label"><Icon name="clock" size={16} class="" />{text.hoursLabel}</dt>
+                <dd class="plan-row__value">
+                  <span id="hours-value" class="tabular"></span>
+                  <progress id="hours-meter" class="meter" aria-labelledby="hours-label" max="10" value="0"></progress>
+                  <span class="small muted">{text.hoursNote}</span>
+                </dd>
+              </div>
+            </dl>
+
+            <div class="plan-card__actions">
+              <button id="subscribe-button" class="button button--primary hidden" type="button">{text.subscribe}</button>
+              <button id="manage-button" class="button button--secondary hidden" type="button">{text.manage}</button>
+            </div>
+            <p id="subscribe-note" class="small muted hidden">{text.subscribeNote}</p>
+            <p id="manage-note" class="small muted hidden">{text.manageNote}</p>
+          </div>
+        </article>
+
+        <div class="account__side">
+          <article class="card side-card" aria-labelledby="app-title">
+            <span class="icon-chip"><Icon name="laptop" size={20} class="" /></span>
+            <h2 class="title-m" id="app-title">{text.appTitle}</h2>
+            <p class="muted">{text.appText}</p>
+            <p class="small muted">{common.requirementsShort}</p>
+            <a class="button button--primary button--small" href={macDownloadUrl(siteConfig)}>
+              <Icon name="apple" size={15} class="button__apple" />
+              {common.downloadCta}
+            </a>
+          </article>
+
+          <nav class="card side-card" aria-labelledby="help-title">
+            <h2 class="title-m" id="help-title">{text.helpTitle}</h2>
+            <ul class="help-links">
+              {
+                helpLinks.map((link) => (
+                  <li>
+                    <a class="help-links__link" href={link.href}>
+                      {link.label}
+                      <Icon name="arrow-right" size={16} class="" />
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </nav>
+        </div>
       </div>
 
       <section class="danger" aria-labelledby="danger-title">
-        <h2 class="title-m" id="danger-title">{text.dangerTitle}</h2>
-        <p class="muted">{text.dangerText}</p>
+        <div class="danger__text">
+          <h2 class="title-m" id="danger-title">{text.dangerTitle}</h2>
+          <p class="muted">{text.dangerText}</p>
+        </div>
         <button id="delete-button" class="button button--danger" type="button">{text.deleteButton}</button>
       </section>
     </div>
@@ -94,85 +151,199 @@ const text: AccountCopy = copy.account;
   .account {
     display: grid;
     gap: 20px;
-    padding-top: clamp(28px, 5vw, 56px);
-    max-width: 960px;
-  }
-
-  .account :global(.account__cover) {
-    display: grid;
-    place-items: center;
-    height: clamp(120px, 16vw, 180px);
+    padding-top: clamp(40px, 6vw, 72px);
+    max-width: 1040px;
   }
 
   .account__head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: 16px;
-    margin-top: 12px;
+    gap: 16px 24px;
+    margin-bottom: 8px;
+  }
+
+  .account__title {
+    display: grid;
+    gap: 14px;
+  }
+
+  .account__head-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 
   .account__content {
     display: grid;
-    gap: 28px;
+    gap: 20px;
   }
 
-  .stats {
+  .account__grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
   }
 
-  .stat {
+  /* ---------- Plan kartı ---------- */
+
+  .plan-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    background: var(--card);
+    overflow: hidden;
+  }
+
+  .plan-card :global(.plan-card__cover) {
     display: grid;
-    align-content: start;
-    gap: 8px;
+    place-items: center;
+    height: clamp(96px, 12vw, 128px);
+    border-radius: 0;
   }
 
-  .stat__label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 6px;
+  .plan-card__body {
+    display: grid;
+    gap: 6px;
+    padding: clamp(22px, 3.4vw, 36px);
+  }
+
+  .plan-card__label {
     font-size: 0.8125rem;
     font-weight: 600;
+    letter-spacing: 0.02em;
     color: var(--muted);
   }
 
-  .stat__value {
-    font-size: 1.375rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.3;
+  .plan-card__name {
+    font-size: clamp(1.625rem, 3vw, 2.125rem);
+    letter-spacing: -0.035em;
+    line-height: 1.15;
   }
 
-  .stat__value--text {
-    font-size: 1rem;
+  .plan-card__rows {
+    display: grid;
+    margin: 18px 0 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .plan-row {
+    display: grid;
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: 6px 20px;
+    padding-block: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .plan-row__label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
     font-weight: 500;
-    letter-spacing: 0;
+    color: var(--muted);
   }
 
-  .stat__value .pill {
-    vertical-align: middle;
-    letter-spacing: 0;
+  .plan-row__value {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    font-weight: 500;
   }
 
-  .actions {
+  .plan-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .plan-card__actions:has(> .hidden + .hidden) {
+    display: none;
+  }
+
+  .plan-card__body > .small {
+    max-width: 34rem;
+    margin-top: 6px;
+  }
+
+  /* ---------- Yan kartlar ---------- */
+
+  .account__side {
+    display: grid;
+    gap: 20px;
+  }
+
+  .side-card {
+    display: grid;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  .side-card .icon-chip {
+    margin-bottom: 4px;
+  }
+
+  .side-card .button {
+    margin-top: 6px;
+  }
+
+  .help-links {
+    display: grid;
+    width: 100%;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .help-links li + li {
+    border-top: 1px solid var(--line);
+  }
+
+  .help-links__link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 12px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .help-links__link :global(.icon) {
+    color: var(--muted);
+    transition: transform 160ms ease;
+  }
+
+  .help-links__link:hover :global(.icon) {
+    transform: translateX(3px);
+  }
+
+  /* ---------- Hesap silme ---------- */
+
+  .danger {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px 16px;
+    justify-content: space-between;
+    gap: 16px 32px;
+    margin-top: 28px;
+    padding: clamp(20px, 3vw, 28px);
+    border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--danger) 4%, var(--card));
   }
 
-  .danger {
+  .danger__text {
     display: grid;
-    gap: 10px;
-    justify-items: start;
-    margin-top: 24px;
-    padding-top: 28px;
-    border-top: 1px solid var(--line);
+    gap: 8px;
+    flex: 1 1 28rem;
     max-width: 44rem;
+  }
+
+  .danger__text p {
+    font-size: 0.9375rem;
   }
 
   .deleted {
@@ -208,8 +379,14 @@ const text: AccountCopy = copy.account;
     gap: 10px;
   }
 
-  @media (max-width: 640px) {
-    .stats {
+  @media (max-width: 860px) {
+    .account__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .plan-row {
       grid-template-columns: minmax(0, 1fr);
     }
 
