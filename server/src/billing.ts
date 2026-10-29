@@ -7,6 +7,7 @@ import {
   isStripeTestModeInProduction,
 } from "./config";
 import { cancellationStatements } from "./cancellations";
+import { complimentaryAccessError } from "./complimentary";
 import { type SubscriptionState, isTerminalSubscription, subscriptionState } from "./entitlements";
 import { ApiError, ProviderApiError } from "./errors";
 import { errorName, log } from "./log";
@@ -141,6 +142,7 @@ export function stateOf(subscription: Stripe.Subscription): SubscriptionState {
     currentPeriodEnd: subscriptionPeriodEndMs(subscription),
     cancelAt: subscriptionCancelAtMs(subscription),
     pastDueSince: null,
+    complimentary: false,
   };
 }
 
@@ -397,7 +399,8 @@ async function ensureReferralCoupon(stripe: Stripe, platform: Platform, spec: Re
  * Stripe Managed Payments açıktır: yasal satıcı Stripe/Link'tir; vergiyi o hesaplar, toplar ve öder, adı ve fatura
  * adresini kendisi ister. Bu yüzden `automatic_tax`, `customer_update` ve `tax_id_collection` gönderilmez (Managed
  * Payments reddeder). Bitmemiş bir abonelik varsa (ek süresi geçmiş `past_due` dahil) `subscription_exists`: aynı
- * kullanıcıda iki abonelik aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar. Denetim önce yerel satıra,
+ * kullanıcıda iki abonelik aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar. Süren ücretsiz erişimde
+ * (`complimentary.ts`) `complimentary_subscription`: Stripe çağrılmaz. Denetim önce yerel satıra,
  * sonra Stripe'taki listeye bakar (webhook'u henüz gelmemiş abonelik de yakalanır). Yeni oturumdan önce müşterinin açık
  * Checkout oturumları sona erdirilir (iki sekmede iki ödeme olmasın; yine de olursa fazlası webhook'ta iptal ve iade
  * edilir). Davet kodu verildiyse `requireReferral` ile doğrulanır, planın davet kuponu oturuma eklenir, kod aboneliğin
@@ -412,7 +415,7 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
   warnIfStripeTestMode(config, "checkout");
   const current: SubscriptionState | null = await subscriptionState(db, userId);
   if (current !== null && !isTerminalSubscription(current, platform.now())) {
-    throw subscriptionExists;
+    throw current.complimentary ? complimentaryAccessError() : subscriptionExists;
   }
   // Kod Stripe'a gitmeden doğrulanır: reddedilen kod müşteri ya da oturum açtırmaz.
   const referral: AcceptedReferral | null =
@@ -456,8 +459,15 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
   return session.url;
 }
 
-/** Stripe Müşteri Portalı oturumu; müşteri yoksa `subscription_required`. */
+/**
+ * Stripe Müşteri Portalı oturumu. Süren ücretsiz erişimde (`complimentary.ts`) yönetilecek bir şey yoktur:
+ * `complimentary_subscription`, Stripe çağrılmaz. Müşteri yoksa `subscription_required`.
+ */
 export async function createPortal(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
+  const current: SubscriptionState | null = await subscriptionState(db, userId);
+  if (current !== null && current.complimentary && !isTerminalSubscription(current, platform.now())) {
+    throw complimentaryAccessError();
+  }
   const customer: string | null = await storedCustomerId(db, userId);
   if (customer === null) {
     throw new ApiError("subscription_required", "Henüz bir aboneliğin yok.");
@@ -473,8 +483,9 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
  * Hesap silinirken Stripe tarafını kapatır: önce müşterinin açık Checkout oturumları sona erdirilir (silinen hesaba
  * yeni abonelik açılamasın), sonra bitmemiş tüm abonelikler hemen iptal edilir. Stripe müşterisi yoksa Stripe
  * çağrılmaz. Liste Stripe'tan alınır (yalnızca geçerli satır değil): webhook'u henüz gelmemiş ya da geçerli olmayan
- * abonelik de iptal edilir. Zaten iptal edilmiş abonelik atlanır; tekrar çağrı güvenlidir. İptal edilen abonelik
- * sayısını döndürür.
+ * abonelik de iptal edilir. Zaten iptal edilmiş abonelik atlanır; tekrar çağrı güvenlidir. Ücretsiz erişimin
+ * (`complimentary.ts`) Stripe karşılığı ve müşteri eşlemesi yoktur: Stripe'a gitmez. İptal edilen abonelik sayısını
+ * döndürür.
  */
 export async function closeStripeForDeletion(db: D1Database, platform: Platform, config: Config, userId: string): Promise<number> {
   const customer: string | null = await storedCustomerId(db, userId);
@@ -580,6 +591,9 @@ type EventStatements = D1PreparedStatement[];
  * - `past_due_since`: durum `past_due` olduğunda yazılır, `past_due` sürdükçe korunur, başka duruma geçince silinir;
  *   ek süre bundan hesaplanır (`entitlements.subscriptionAccess`).
  * - `plan`: geçerli aboneliğin fiyatından (`planOfSubscription`); Portal'da plan değişirse sonraki olay günceller.
+ * - Süren ücretsiz erişim (`complimentary.ts`) ezilmez: olay Stripe çağrılmadan işlenmiş sayılır ve alarm yazılır
+ *   (ücretsiz erişimi olan hesabın Stripe'ta yaşayan aboneliği elle incelenmeli). Süresi geçmiş ücretsiz erişimin
+ *   yerini Stripe aboneliği alır. Koşul yazımın kendisinde de vardır (arada verilen ücretsiz erişim ezilmez).
  * Yazım `last_event_created` ile sıralanır: eşzamanlı iki webhook'tan daha eski olayınki daha yeniyi ezmez.
  */
 async function subscriptionEventStatements(
@@ -607,6 +621,11 @@ async function subscriptionEventStatements(
     } else {
       log("info", "stripe_event_unknown_customer_terminal", { eventId: event.id, type: event.type });
     }
+    return [];
+  }
+  const stored: SubscriptionState | null = await subscriptionState(db, owner.user_id);
+  if (stored !== null && stored.complimentary && !isTerminalSubscription(stored, platform.now())) {
+    log("alert", "stripe_event_complimentary_kept", { eventId: event.id, type: event.type, userId: owner.user_id, subscriptionId: subscription.id, status: subscription.status });
     return [];
   }
   const ours: Stripe.Subscription[] = (await customerSubscriptions(stripe, platform, customer, owner.user_id)).filter(
@@ -638,7 +657,7 @@ async function subscriptionEventStatements(
         `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at,
            past_due_since, last_event_created, updated_at, plan)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?4 = 'past_due' THEN ?8 END, ?7, ?8, ?9)
-         ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id, plan = excluded.plan,
+         ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id, plan = excluded.plan, complimentary = 0,
            past_due_since = CASE
              WHEN excluded.status <> 'past_due' THEN NULL
              WHEN subscriptions.status = 'past_due' AND subscriptions.stripe_subscription_id = excluded.stripe_subscription_id
@@ -647,7 +666,8 @@ async function subscriptionEventStatements(
            stripe_subscription_id = excluded.stripe_subscription_id, status = excluded.status,
            current_period_end = excluded.current_period_end, cancel_at = excluded.cancel_at,
            last_event_created = excluded.last_event_created, updated_at = excluded.updated_at
-         WHERE excluded.last_event_created >= subscriptions.last_event_created`,
+         WHERE excluded.last_event_created >= subscriptions.last_event_created
+           AND (subscriptions.complimentary = 0 OR subscriptions.current_period_end <= ?8)`,
       )
       .bind(owner.user_id, customer, current.id, state.status, state.currentPeriodEnd, state.cancelAt, event.created, nowMs, planOfSubscription(current, prices)),
     // İptal nedeni yalnızca geçerli abonelik için yazılır: bizim iptal ettiğimiz kopya aboneliklerin nedeni

@@ -51,6 +51,8 @@ export interface AdminStats {
     readonly monthly: number;
     readonly yearly: number;
     readonly mrrUsd: number;
+    /** Süren ücretsiz erişim (`complimentary.ts`); yukarıdaki sayılara ve gelire girmez. */
+    readonly complimentary: number;
   };
   readonly referrals: ReferralStats;
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
@@ -79,8 +81,8 @@ export interface AdminStats {
 
 /**
  * Denemeden aboneliğe dönüşüm. `trialStarted`: denemeye başlamış hesaplar (`users.trial_started_at` dolu);
- * `converted`: bunlardan abonelik satırı olanlar (ödemesi tamamlanmamış `incomplete`/`incomplete_expired` sayılmaz;
- * sonradan iptal edilen de dönüşmüş sayılır). `…Last30Days` alanları denemesi son 30 günde başlayan kohorttur.
+ * `converted`: bunlardan abonelik satırı olanlar (ödemesi tamamlanmamış `incomplete`/`incomplete_expired` ve ücretsiz
+ * erişim sayılmaz; sonradan iptal edilen de dönüşmüş sayılır). `…Last30Days` alanları denemesi son 30 günde başlayan kohorttur.
  * `subscribedWithoutTrial`: denemeye hiç başlamadan abone olanlar. Silinen hesaplar sayılmaz.
  */
 export interface ConversionStats {
@@ -201,6 +203,9 @@ const activeAccessSql: string = `s.status IN ('active', 'trialing') AND (CASE WH
   THEN s.current_period_end + ${subscriptionRenewalGraceMs} ELSE s.current_period_end END) > ?1`;
 const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 > ?1";
 
+/** Stripe'tan faturalanan (ücretsiz erişim olmayan) abonelik satırı için SQL koşulu (`subscriptions s`). */
+const billedSubscriptionSql: string = "s.complimentary = 0";
+
 interface SubscriptionCounts {
   readonly active: number;
   readonly grace: number;
@@ -208,6 +213,7 @@ interface SubscriptionCounts {
   readonly canceled: number;
   readonly monthly: number;
   readonly yearly: number;
+  readonly complimentary: number;
 }
 
 interface DayValueRow {
@@ -255,8 +261,11 @@ interface MonthlyUsageRow {
   readonly near_cap: number;
 }
 
-/** Ödemesi tamamlanmış (abone olmuş) sayılan abonelik satırı için SQL koşulu (`subscriptions s`). */
-export const paidSubscriptionSql: string = "s.status NOT IN ('incomplete', 'incomplete_expired')";
+/**
+ * Ödemesi tamamlanmış (abone olmuş) sayılan abonelik satırı için SQL koşulu (`subscriptions s`); ücretsiz erişim
+ * (`complimentary.ts`) ödeme değildir, sayılmaz.
+ */
+export const paidSubscriptionSql: string = `s.status NOT IN ('incomplete', 'incomplete_expired') AND ${billedSubscriptionSql}`;
 
 /** Ms zamanını ISO 8601'e çevirir (null korunur). Saf fonksiyondur. */
 export function isoOrNull(ms: number | null): string | null {
@@ -302,7 +311,8 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  *   deneme süresi (`TRIAL_DAYS`) dolmuş olan da `exhaustedTrialUsers`'a sayılır.
  * - `subscriptions.active`: erişimi `active` (ödenmiş dönem); `grace`: `past_due` ek sürede; `ending`: `active` olup
  *   iptal edilmiş (`cancel_at` dolu, dönem sonunda biter); `canceledTotal`: durumu `canceled` olan satırlar (hesabı
- *   silinenler sayılmaz).
+ *   silinenler sayılmaz). Ücretsiz erişim (`complimentary.ts`) bunlara, plan sayılarına, MRR'a, dönüşüme ve kayba
+ *   girmez; süren ücretsiz erişim ayrıca `complimentary`'de sayılır.
  * - `monthly`, `yearly`: yenilenecek ödenmiş abonelikler (`active` ve iptal edilmemiş) plan başına.
  * - `mrrUsd` = `monthly` × `PRICE_USD_MONTHLY` + `yearly` × `PRICE_USD_YEARLY` / 12 (`monthlyRecurringRevenueUsd`).
  *   Ödemesi başarısız (`grace`), iptal edilmiş ve planı tanınmayan abonelikler sayılmaz; vergi, davet indirimleri ve
@@ -370,12 +380,13 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .first<{ active: number; exhausted: number }>(),
     db
       .prepare(
-        `SELECT COALESCE(SUM(CASE WHEN ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS active,
-           COALESCE(SUM(CASE WHEN ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
-           COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
-           COALESCE(SUM(CASE WHEN s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
-           COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' THEN 1 ELSE 0 END), 0) AS monthly,
-           COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly
+        `SELECT COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS active,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' THEN 1 ELSE 0 END), 0) AS monthly,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly,
+           COALESCE(SUM(CASE WHEN s.complimentary = 1 AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS complimentary
          FROM subscriptions s`,
       )
       .bind(nowMs, config.pastDueGraceMs)
@@ -419,7 +430,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
            COALESCE(SUM(CASE WHEN status = 'past_due' THEN 1 ELSE 0 END), 0) AS past_due,
            COALESCE(SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END), 0) AS unpaid,
            (SELECT COUNT(*) FROM duplicate_subscriptions) AS duplicates
-         FROM subscriptions`,
+         FROM subscriptions s WHERE ${billedSubscriptionSql}`,
       )
       .bind(firstDayMs)
       .first<ChurnRow>(),
@@ -469,7 +480,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
   const subscriptionByDay: number[] = valuesByDay(days, kindDayMap(meetingRows.results, "subscription"));
   const providers: Map<string, number> = keyMap(providerRows.results);
   const openReports: Map<string, number> = keyMap(reportRows.results);
-  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0 };
+  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0, complimentary: 0 };
   const billingEvents: Map<string, number> = keyMap(billingRows.results);
   const monthly: MonthlyUsageRow = monthlyUsageRow ?? { audio_seconds: 0, tokens: 0, account_tokens: 0, near_cap: 0 };
 
@@ -493,6 +504,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       monthly: subscriptions.monthly,
       yearly: subscriptions.yearly,
       mrrUsd: monthlyRecurringRevenueUsd(subscriptions.monthly, subscriptions.yearly, config.priceUsdMonthly, config.priceUsdYearly),
+      complimentary: subscriptions.complimentary,
     },
     referrals: referralRow ?? { joined: 0, pending: 0, granted: 0, voided: 0 },
     meetings: {

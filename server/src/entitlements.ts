@@ -12,6 +12,8 @@ export interface SubscriptionState {
   readonly cancelAt: number | null;
   /** Aboneliğin `past_due` durumuna geçtiği an (ms; webhook'un işlediği an); `past_due` değilse null. */
   readonly pastDueSince: number | null;
+  /** Yöneticinin verdiği ücretsiz erişim mi (Stripe'ta karşılığı yok; bkz. `complimentary.ts`). */
+  readonly complimentary: boolean;
 }
 
 /** Kullanıcının planı: deneme ya da abonelik. */
@@ -144,9 +146,12 @@ export function subscriptionAccess(subscription: SubscriptionState | null, now: 
  * Abonelik bitmiş mi: `canceled`, `incomplete_expired` ya da dönemi geçmiş `unpaid`. Bitmemiş abonelik (`active`,
  * `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`) ek süresi geçmiş olsa da Stripe'ta yaşar: yeni Checkout
  * açılmaz (Portal'dan yönetilir) ve başka bir aboneliğin olayı onu ezmez (bkz. `handleStripeWebhook`; SQL koşulu bu
- * fonksiyonla aynıdır). Saf fonksiyondur.
+ * fonksiyonla aynıdır). Ücretsiz erişim Stripe'ta yaşamaz: dönem sonu geçince bitmiştir. Saf fonksiyondur.
  */
 export function isTerminalSubscription(subscription: SubscriptionState, now: Date): boolean {
+  if (subscription.complimentary) {
+    return subscription.currentPeriodEnd <= now.getTime();
+  }
   if (subscription.status === "canceled" || subscription.status === "incomplete_expired") {
     return true;
   }
@@ -158,15 +163,30 @@ export function hasSubscriptionAccess(subscription: SubscriptionState | null, no
   return subscriptionAccess(subscription, now, pastDueGraceMs) !== "none";
 }
 
+/** `subscriptions` satırının durum sütunları. */
+interface SubscriptionStateRow {
+  readonly status: string;
+  readonly current_period_end: number;
+  readonly cancel_at: number | null;
+  readonly past_due_since: number | null;
+  readonly complimentary: number;
+}
+
 /** Kullanıcının abonelik durumu (yoksa null). */
 export async function subscriptionState(db: D1Database, userId: string): Promise<SubscriptionState | null> {
-  const row: { status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null } | null = await db
-    .prepare("SELECT status, current_period_end, cancel_at, past_due_since FROM subscriptions WHERE user_id = ?")
+  const row: SubscriptionStateRow | null = await db
+    .prepare("SELECT status, current_period_end, cancel_at, past_due_since, complimentary FROM subscriptions WHERE user_id = ?")
     .bind(userId)
-    .first<{ status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null }>();
+    .first<SubscriptionStateRow>();
   return row === null
     ? null
-    : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at, pastDueSince: row.past_due_since };
+    : {
+        status: row.status,
+        currentPeriodEnd: row.current_period_end,
+        cancelAt: row.cancel_at,
+        pastDueSince: row.past_due_since,
+        complimentary: row.complimentary === 1,
+      };
 }
 
 /** Hesabın deneme durumu. */

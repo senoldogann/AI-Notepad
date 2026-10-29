@@ -20,6 +20,8 @@ export interface ClientCopy {
     readonly storageUnavailable: string;
     readonly upstream: string;
     readonly messageTooLong: string;
+    /** Ücretsiz erişimi olan hesapta Portal ya da Checkout (`complimentary_subscription`). */
+    readonly complimentary: string;
     /** Bilinmeyen hata; `{code}` sunucunun hata koduyla değişir. */
     readonly generic: string;
   };
@@ -74,7 +76,7 @@ export interface AdminClientCopy {
   readonly usersSub: string;
   /** `{count}`. */
   readonly trialsSub: string;
-  /** `{monthly}`, `{yearly}`, `{grace}`, `{ending}`, `{canceled}`. */
+  /** `{monthly}`, `{yearly}`, `{grace}`, `{ending}`, `{canceled}`, `{free}` (ücretsiz erişim; sayıya ve gelire girmez). */
   readonly subscribersSub: string;
   /** Davet programı: `{joined}`, `{pending}`, `{granted}`, `{voided}`. */
   readonly referralsSub: string;
@@ -120,6 +122,11 @@ export interface AdminClientCopy {
   /** Abonelik planı (aylık, yıllık); bilinmeyen fiyatta gösterilmez. */
   readonly billingPlans: { readonly monthly: string; readonly yearly: string };
   readonly providers: { readonly apple: string; readonly google: string };
+  /**
+   * Ücretsiz tam erişim: plan rozeti, ayrıntıdaki abonelik metni (`{date}` bitiş tarihi ya da süresiz) ve ayrıntıdaki
+   * verme ve kaldırma düğmeleri.
+   */
+  readonly freeAccess: { readonly pill: string; readonly until: string; readonly noEnd: string; readonly grant: string; readonly remove: string };
   /** Abonelik durumu rozetleri (Stripe durumu ve erişim). */
   readonly subscriptionPills: { readonly active: string; readonly ending: string; readonly grace: string; readonly ended: string };
   /** Deneme hücresi: `{used}`, `{left}`. */
@@ -216,6 +223,7 @@ export const clientCopy: ClientCopy = {
     storageUnavailable: "Your browser blocked the storage this sign-in needs. Allow site data for this page and try again.",
     upstream: "A connected service isn't responding right now. Try again shortly.",
     messageTooLong: "Your message is too long. Please shorten it to 5,000 characters.",
+    complimentary: "This account has free access; there is nothing to manage.",
     generic: "Something went wrong (code: {code}). Try again.",
   },
   inviteErrors: {
@@ -253,7 +261,7 @@ export const clientCopy: ClientCopy = {
     downloadsSub: "{count} in the last 30 days",
     usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
     trialsSub: "{count} used up",
-    subscribersSub: "{monthly} monthly · {yearly} yearly · {grace} in grace · {ending} ending · {canceled} cancelled in total",
+    subscribersSub: "{monthly} monthly · {yearly} yearly · {grace} in grace · {ending} ending · {canceled} cancelled in total · {free} with free access, not counted",
     referralsSub: "Invites: {joined} joined · {pending} waiting · {granted} rewarded · {voided} voided",
     mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, taxes included",
     stripeTest: "Stripe test mode",
@@ -281,6 +289,13 @@ export const clientCopy: ClientCopy = {
     plans: { subscription: "Subscribed", trial: "Trial", free: "No plan" },
     billingPlans: { monthly: "Monthly", yearly: "Yearly" },
     providers: { apple: "Apple", google: "Google" },
+    freeAccess: {
+      pill: "Free access",
+      until: "Free access until {date}, not billed",
+      noEnd: "Free access with no end date, not billed",
+      grant: "Grant free access",
+      remove: "Remove free access",
+    },
     subscriptionPills: { active: "Active", ending: "Ending", grace: "Payment due", ended: "Ended" },
     trialCell: "{used} used · {left} left",
     trialNotStarted: "Not started",

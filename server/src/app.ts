@@ -22,6 +22,7 @@ import { findOrCreateUser } from "./auth/users";
 import { trialIdentityHash } from "./trialLedger";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
 import { type CheckoutRequest, createCheckout, createPortal, handleStripeWebhook } from "./billing";
+import { complimentaryRequestSchema, complimentaryUntilMs, grantComplimentaryAccess, revokeComplimentaryAccess } from "./complimentary";
 import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
@@ -493,6 +494,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
 const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
 const adminUserPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})$/;
+const adminComplimentaryPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})\/complimentary$/;
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
@@ -516,6 +518,18 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
   const userMatch: RegExpExecArray | null = adminUserPath.exec(path);
   if (userMatch !== null && userMatch[1] !== undefined && method === "GET") {
     return jsonResponse(200, await adminUserDetail(db, config, userMatch[1], now));
+  }
+  // Ücretsiz tam erişim: `{grant: true, until?}` verir (ya da süresini değiştirir), `{grant: false}` kaldırır; yanıt
+  // kullanıcının güncel ayrıntısıdır.
+  const complimentaryMatch: RegExpExecArray | null = adminComplimentaryPath.exec(path);
+  if (complimentaryMatch !== null && complimentaryMatch[1] !== undefined && method === "POST") {
+    const body = await readJsonBody(request, complimentaryRequestSchema, smallBodyBytes);
+    if (body.grant) {
+      await grantComplimentaryAccess(db, complimentaryMatch[1], complimentaryUntilMs(body.until ?? null, now), user.userId, now);
+    } else {
+      await revokeComplimentaryAccess(db, complimentaryMatch[1], user.userId);
+    }
+    return jsonResponse(200, await adminUserDetail(db, config, complimentaryMatch[1], now));
   }
   if (path === "/v1/admin/reports" && method === "GET") {
     return jsonResponse(200, await listReports(db, parseReportFilter(new URL(request.url))));
