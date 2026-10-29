@@ -9,10 +9,12 @@ const accessTokenAudience: string = "ainotepad-app";
 /** Erişim jetonu ömrü: 15 dakika. */
 export const accessTokenTtlSeconds: number = 15 * 60;
 /**
- * Hemen önceki yenileme jetonunun yeniden sunulabildiği süre: yanıtı kaybolan yenileme (ağ kopması) aynı jetonla
- * yeniden denenebilsin; bu süre içinde aile düşürülmez, yeni çift verilir.
+ * Yanıtı kaybolan yenilemenin aynı jetonla yeniden denenebildiği süre (jetonun kullanıldığı andan): istemcinin isteği
+ * zaman aşımına uğrar ya da bağlantı koparsa sunucu jetonu döndürmüş olabilir; istemci eski jetonu tutar ve yeniden
+ * sunar. Bu süre içinde, yerine geçen jeton hiç kullanılmadıysa aile düşürülmez (bkz. `rotateRefreshToken`).
+ * İstemcinin istek zaman aşımından (30 sn) ve yeniden denemelerinden çok uzundur.
  */
-export const refreshReuseGraceMs: number = 30_000;
+export const refreshRetryWindowMs: number = 10 * 60_000;
 
 /** Doğrulanmış istek sahibi. */
 export interface AuthedUser {
@@ -151,23 +153,23 @@ async function sessionFor(config: Config, row: RefreshRow, refreshToken: string,
 
 /**
  * Yenileme jetonunu tek seferlik kullanır ve aynı ailede yenisini verir; kullanılan jetonun yerine geçen jeton
- * (`replaced_by`) yazılır. Ailede yalnızca hemen önceki kullanılmış jeton kalır (yeniden kullanım algılaması ve
- * `refreshReuseGraceMs` için), daha eskileri silinir: tablo oturum başına büyümez.
+ * (`replaced_by`) yazılır. Jetonu "kullanılmış" yapma, yenisini ekleme ve eski jetonları silme tek D1 toplu işlemidir
+ * (`claimAndRotate`): istek yarıda kalırsa ya hepsi olur ya hiçbiri; jeton kullanılmış sayılıp yerine geçen jeton
+ * eklenmemiş kalamaz. Ailede yalnızca son iki kullanılmış jeton (şimdi kullanılan ve ondan önceki) kalır, daha eskileri
+ * silinir: tablo oturum başına büyümez, yeniden kullanım algılaması bir kuşak geriye bakar.
  *
- * Kullanılmış bir jeton yeniden gelirse:
- * - `refreshReuseGraceMs` içinde, yerine geçen jeton henüz kullanılmamışsa (yanıt kaybolmuş, istemci yeniden deniyor)
- *   yerine geçen jeton silinir ve yeni çift verilir; aile düşürülmez;
- * - değilse (çalınmış olabilir) tüm aile düşürülür, `refresh_token_reuse` alarmı yazılır ve `invalid_token` döner.
+ * Kullanılmış bir jeton yeniden gelirse kural:
+ * - yerine geçen jeton hiç kullanılmadıysa ve jeton `refreshRetryWindowMs` içinde kullanıldıysa yanıt kaybolmuştur
+ *   (istemci zaman aşımı ya da kopan bağlantıdan sonra aynı jetonu yeniden sunuyor): kullanılmamış eski halef silinir,
+ *   yeni çift verilir; aile düşürülmez;
+ * - yerine geçen jeton kullanıldıysa (jeton iki ayrı elde) ya da süre geçtiyse jeton çalınmış olabilir: tüm aile
+ *   düşürülür, `refresh_token_reuse` alarmı yazılır ve `invalid_token` döner.
  */
 export async function rotateRefreshToken(db: D1Database, config: Config, refreshToken: string, now: Date): Promise<SessionTokens> {
   const tokenHash: string = await sha256Hex(refreshToken);
   const nextToken: string = randomToken(32);
   const nextHash: string = await sha256Hex(nextToken);
-  // Tek ifade: eşzamanlı iki yenilemeden yalnızca biri jetonu "kullanılmış" yapabilir.
-  const claimed: { family_id: string } | null = await db
-    .prepare("UPDATE refresh_tokens SET used_at = ?, replaced_by = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING family_id")
-    .bind(now.getTime(), nextHash, tokenHash, now.getTime())
-    .first<{ family_id: string }>();
+  const claimed: boolean = await claimAndRotate(db, config, tokenHash, nextHash, now);
   const row: RefreshRow | null = await db
     .prepare(
       `SELECT t.family_id, t.used_at, t.expires_at, t.replaced_by, f.user_id, f.revoked_at
@@ -178,47 +180,76 @@ export async function rotateRefreshToken(db: D1Database, config: Config, refresh
   if (row === null) {
     throw new ApiError("invalid_token", "Yenileme jetonu geçersiz.");
   }
-  if (claimed === null) {
-    if (row.used_at === null) {
-      throw new ApiError("invalid_token", "Yenileme jetonunun süresi dolmuş.");
-    }
-    if (row.revoked_at === null && (await replaceWithinGrace(db, config, row, tokenHash, nextHash, now))) {
-      log("warn", "refresh_token_retried", { familyId: row.family_id, userId: row.user_id });
-      return sessionFor(config, row, nextToken, now);
-    }
-    await revokeFamily(db, row.family_id, "refresh_reuse", now);
-    log("alert", "refresh_token_reuse", { familyId: row.family_id, userId: row.user_id });
-    throw new ApiError("invalid_token", "Yenileme jetonu yeniden kullanıldı; tüm oturumlar kapatıldı.");
+  if (claimed) {
+    return sessionFor(config, row, nextToken, now);
   }
   if (row.revoked_at !== null) {
     throw new ApiError("invalid_token", "Oturum kapatılmış; yeniden giriş yap.");
   }
-  await db.batch([
-    insertRefreshToken(db, config, row.family_id, nextHash, now),
-    db
-      .prepare("DELETE FROM refresh_tokens WHERE family_id = ? AND used_at IS NOT NULL AND token_hash <> ?")
-      .bind(row.family_id, tokenHash),
-  ]);
-  return sessionFor(config, row, nextToken, now);
+  if (row.used_at === null) {
+    throw new ApiError("invalid_token", "Yenileme jetonunun süresi dolmuş.");
+  }
+  if (await replaceUnusedSuccessor(db, config, row, tokenHash, nextHash, now)) {
+    log("warn", "refresh_token_retried", { familyId: row.family_id, userId: row.user_id });
+    return sessionFor(config, row, nextToken, now);
+  }
+  await revokeFamily(db, row.family_id, "refresh_reuse", now);
+  log("alert", "refresh_token_reuse", { familyId: row.family_id, userId: row.user_id });
+  throw new ApiError("invalid_token", "Yenileme jetonu yeniden kullanıldı; tüm oturumlar kapatıldı.");
 }
 
 /**
- * Hemen önceki jetonun süre içinde yeniden sunulması: jeton `refreshReuseGraceMs` içinde kullanılmış ve yerine geçen
- * jeton hâlâ kullanılmamışsa, tek toplu işlemde yerine geçen jeton silinir, yenisi eklenir ve `replaced_by` yenisini
- * gösterir. Koşul ilk ifadededir; sonraki ifadeler yalnızca o başarılıysa etkilidir (eşzamanlı iki yeniden deneme
- * ikisi birden geçemez). Uygulandıysa true.
+ * Tek toplu işlemde (D1 işlemi): jeton kullanılmamış, süresi dolmamış ve ailesi düşürülmemişse "kullanılmış" yapılır ve
+ * `replaced_by` yeni jetonu gösterir; yeni jeton eklenir; ailenin kullanılmış jetonlarından bu jeton ve ondan önceki
+ * (yerine bu jetonun geçtiği) dışındakiler silinir. Sonraki ifadeler yalnızca ilki uygulandıysa etkilidir (yeni jetonun
+ * özeti rastgeledir: `replaced_by = yeni` yalnızca bu istekte doğrudur); eşzamanlı iki yenilemeden yalnızca biri jetonu
+ * alabilir. Alındıysa true.
  */
-async function replaceWithinGrace(db: D1Database, config: Config, row: RefreshRow, tokenHash: string, nextHash: string, now: Date): Promise<boolean> {
-  if (row.replaced_by === null || row.used_at === null || now.getTime() - row.used_at > refreshReuseGraceMs) {
+async function claimAndRotate(db: D1Database, config: Config, tokenHash: string, nextHash: string, now: Date): Promise<boolean> {
+  const nowMs: number = now.getTime();
+  const results: D1Result[] = await db.batch([
+    db
+      .prepare(
+        `UPDATE refresh_tokens SET used_at = ?1, replaced_by = ?2
+         WHERE token_hash = ?3 AND used_at IS NULL AND expires_at > ?1
+           AND family_id IN (SELECT id FROM refresh_families WHERE revoked_at IS NULL)`,
+      )
+      .bind(nowMs, nextHash, tokenHash),
+    db
+      .prepare(
+        `INSERT INTO refresh_tokens (token_hash, family_id, created_at, expires_at)
+         SELECT ?1, family_id, ?2, ?3 FROM refresh_tokens WHERE token_hash = ?4 AND replaced_by = ?1`,
+      )
+      .bind(nextHash, nowMs, nowMs + config.refreshTokenMs, tokenHash),
+    db
+      .prepare(
+        `DELETE FROM refresh_tokens
+         WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = ?1 AND replaced_by = ?2)
+           AND used_at IS NOT NULL AND token_hash <> ?1 AND COALESCE(replaced_by, '') <> ?1`,
+      )
+      .bind(tokenHash, nextHash),
+  ]);
+  return results[0]?.meta.changes === 1;
+}
+
+/**
+ * Yanıtı kaybolan yenilemenin yeniden denenmesi: jeton `refreshRetryWindowMs` içinde kullanılmış ve yerine geçen jeton
+ * hiç kullanılmamışsa, tek toplu işlemde kullanılmamış eski halef silinir, yenisi eklenir ve `replaced_by` yenisini
+ * gösterir. Koşul ilk ifadededir; sonraki ifadeler yalnızca o başarılıysa etkilidir (eşzamanlı iki yeniden deneme
+ * ikisi birden geçemez). Uygulandıysa true; halef kullanıldıysa ya da süre geçtiyse false (yeniden kullanım).
+ */
+async function replaceUnusedSuccessor(db: D1Database, config: Config, row: RefreshRow, tokenHash: string, nextHash: string, now: Date): Promise<boolean> {
+  if (row.replaced_by === null || row.used_at === null || now.getTime() - row.used_at > refreshRetryWindowMs) {
     return false;
   }
   const previousSuccessor: string = row.replaced_by;
   const applied: string = "(SELECT replaced_by FROM refresh_tokens WHERE token_hash = ?) = ?";
+  // Halef satırı hiç yoksa da kullanılmamış sayılır (eski sürümde jeton kullanılmış yazılıp halef eklenmeden kalmış olabilir).
   const results: D1Result[] = await db.batch([
     db
       .prepare(
         `UPDATE refresh_tokens SET replaced_by = ? WHERE token_hash = ? AND replaced_by = ?
-         AND EXISTS (SELECT 1 FROM refresh_tokens WHERE token_hash = ? AND used_at IS NULL)`,
+         AND NOT EXISTS (SELECT 1 FROM refresh_tokens WHERE token_hash = ? AND used_at IS NOT NULL)`,
       )
       .bind(nextHash, tokenHash, previousSuccessor, previousSuccessor),
     db.prepare(`DELETE FROM refresh_tokens WHERE token_hash = ? AND used_at IS NULL AND ${applied}`).bind(previousSuccessor, tokenHash, nextHash),

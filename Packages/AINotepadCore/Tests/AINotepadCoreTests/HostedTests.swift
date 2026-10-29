@@ -324,7 +324,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         }
     }
 
-    // Yenileme ve toplantı başlatma zaman aşımında yinelenmez (jeton ikinci kez gönderilirse tüm oturumlar düşer).
+    // Toplantı başlatma ve nonce ile giriş zaman aşımında yinelenmez; yenileme tekrarı zararsız isteklerdendir (sunucu
+    // yanıtı kaybolan yenilemenin jetonunu 10 dakika yeniden kabul eder).
     @Test func oneShotRequestsRetryOnlyWhenNotSent() {
         #expect(isRetryableOneShotRequest(failure: .network(.cannotConnectToHost)))
         #expect(!isRetryableOneShotRequest(failure: .network(.timedOut)))

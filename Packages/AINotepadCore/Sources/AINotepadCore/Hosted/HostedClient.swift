@@ -322,7 +322,8 @@ public actor HostedClient: HostedLLMCredentialSource {
         )
         let result: HostedRefreshResult
         do {
-            let response: (data: Data, status: Int) = try await send(path: path, isRetryable: isRetryableOneShotRequest, request: request)
+            // Zaman aşımı ve kopan bağlantıda aynı jetonla hemen yeniden denenir (bkz. `isRetryableRepeatableRequest`).
+            let response: (data: Data, status: Int) = try await send(path: path, isRetryable: isRetryableRepeatableRequest, request: request)
             result = try hostedRefreshResult(status: response.status, data: response.data, receivedAt: Date())
         } catch let error as HostedAPIError {
             result = hostedRefreshFailure(error: error)
