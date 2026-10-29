@@ -1016,6 +1016,17 @@
         }
       }
     },
+    "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly subscription."
+          }
+        }
+      }
+    },
     "3 toplantı ücretsiz": {
       "extractionState": "manual",
       "localizations": {
@@ -12100,17 +12111,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next"
-          }
-        }
-      }
-    },
-    "İlk 3 toplantı ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your first 3 meetings are free, no keys needed. After that, a monthly subscription."
           }
         }
       }

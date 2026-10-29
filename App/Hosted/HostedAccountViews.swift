@@ -20,7 +20,7 @@ struct HostedSignInPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("İlk 3 toplantı ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.")
+            Text("3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
