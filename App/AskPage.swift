@@ -42,6 +42,9 @@ struct AskPage: View {
                     VStack(alignment: .leading, spacing: 34) {
                         if model.archiveExchanges.isEmpty {
                             AskIntro(meetings: model.meetings) { (example: String) -> Void in
+                                guard unavailableReason == nil else {
+                                    return
+                                }
                                 model.askArchive(question: example, meetingIDs: [], recipeTitle: nil)
                             }
                         }
@@ -92,6 +95,12 @@ struct AskPage: View {
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+                if let unavailableReason {
+                    Label(unavailableReason, systemImage: "info.circle")
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 composer
             }
             .animation(.smooth(duration: 0.2), value: isMentioning || isPickingRecipe)
@@ -117,6 +126,16 @@ struct AskPage: View {
     }
 
     private let bottomID: String = "ask-bottom"
+
+    /// Sor şu an kullanılamıyorsa nedeni (sunucu çağrılmadan): abonelikte denemesi henüz başlamamış hesap toplantı dışı
+    /// yapay zekâyı kullanamaz (sunucu `trial_not_started` derdi).
+    private var unavailableReason: String? {
+        #if HOSTED_EDITION
+        hostedAskUnavailableReason(account: .shared)
+        #else
+        nil
+        #endif
+    }
 
     /// Sağ üst köşede "Yeni sohbet" düğmesi var mı.
     private var hasCornerButtons: Bool {
@@ -175,7 +194,7 @@ struct AskPage: View {
                             .background(isEmpty ? Theme.muted.opacity(0.5) : Theme.primary, in: Circle())
                     }
                     .buttonStyle(.hoverCapsule)
-                    .disabled(isEmpty)
+                    .disabled(isEmpty || unavailableReason != nil)
                     .accessibilityLabel("Sor")
                 }
             }
@@ -198,7 +217,7 @@ struct AskPage: View {
 
     private func send() {
         // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
-        guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe,
+        guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe, unavailableReason == nil,
               !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }

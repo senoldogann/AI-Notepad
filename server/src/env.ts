@@ -6,6 +6,7 @@ export interface Env {
   readonly START_USER_LIMITER: RateLimit;
   readonly PROXY_USER_LIMITER: RateLimit;
   readonly REPORT_IP_LIMITER: RateLimit;
+  readonly DEEPGRAM_USER_LIMITER: RateLimit;
 
   readonly ENVIRONMENT: string;
   readonly SITE_ORIGIN: string;
@@ -48,6 +49,9 @@ export interface Env {
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
   readonly ELEVENLABS_MONTHLY_AUDIO_HOURS: string;
   readonly ELEVENLABS_BILLING_DAY: string;
+  readonly DEEPGRAM_POLICY: string;
+  readonly DEEPGRAM_BUDGET_USD: string;
+  readonly DEEPGRAM_USD_PER_MINUTE: string;
   readonly DAILY_SPEND_CEILING_USD: string;
   readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
@@ -63,4 +67,6 @@ export interface Env {
   readonly TURNSTILE_SECRET_KEY: string;
   /** Yalnızca `DEVICECHECK_POLICY=required` iken gerekir (Apple DeviceCheck .p8 anahtarı, PEM). */
   readonly DEVICECHECK_PRIVATE_KEY?: string;
+  /** Yalnızca `DEEPGRAM_POLICY=on` iken gerekir (Deepgram API anahtarı; jeton vermek için, Member ya da üstü yetki). */
+  readonly DEEPGRAM_API_KEY?: string;
 }

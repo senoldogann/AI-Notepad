@@ -221,6 +221,19 @@ public actor HostedClient: HostedLLMCredentialSource {
         return try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt)
     }
 
+    /// Açık toplantı için tek bağlantılık kısa ömürlü Deepgram jetonu (`POST /v1/live/deepgram-token`). Sunucu
+    /// reddederse (`deepgram_unavailable`, `deepgram_grant_limit`, `meeting_not_active`) `HostedAPIError`. Jeton
+    /// loglanmaz ve saklanmaz.
+    public func deepgramGrant(meetingID: String) async throws -> HostedDeepgramGrant {
+        let path: String = "/v1/live/deepgram-token"
+        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { [baseURL] (accessToken: String) async throws -> (Data, URLResponse) in
+            var request: URLRequest = try hostedJSONRequest(baseURL: baseURL, path: path, method: "POST", body: nil, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec)
+            request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
+            return try await URLSession.shared.data(for: request)
+        }
+        return try decode(HostedDeepgramGrant.self, data: try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt), path: path)
+    }
+
     /// Toplantıya bağlı yapay zekâ çağrısının jetonu ve toplantısı.
     public func meetingLLMCredentials() async throws -> HostedLLMCredentials {
         guard let meetingID else {

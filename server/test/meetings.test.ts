@@ -83,7 +83,35 @@ describe("haklar ve toplantı oturumları", () => {
       trialEndsAt: null,
       monthlyHoursUsed: 0,
       monthlyHoursCap: 10,
+      liveEngine: "whisperkit",
+      accountTokensUsed: 0,
+      accountTokensCap: 300_000,
+      accountTokensPeriod: "day",
+      accountTokensResetsAt: "2026-10-16T00:00:00.000Z",
+      monthlyResetsAt: "2026-11-01T00:00:00.000Z",
       subscription: null,
+    });
+  });
+
+  it("abone toplantı dışı yapay zekâ hakkının aylık kullanımını, sınırını ve sıfırlanma anını görür", async () => {
+    const harness: Harness = await defaultHarness();
+    stubHaiku(harness);
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
+    const response: Response = await harness.call(
+      req("POST", "/v1/llm/messages", { token: session.accessToken, json: { effort: "low", max_tokens: 100, messages: [{ role: "user", content: "x" }] } }),
+    );
+    expect(response.status).toBe(200);
+    await response.text();
+    await harness.drain();
+    // Sahte Haiku yanıtı 10 girdi + 5 çıktı token kullanır.
+    expect(await me(harness, session)).toMatchObject({
+      plan: "subscription",
+      accountTokensUsed: 15,
+      accountTokensCap: 1_500_000,
+      accountTokensPeriod: "month",
+      accountTokensResetsAt: "2026-11-01T00:00:00.000Z",
+      monthlyResetsAt: "2026-11-01T00:00:00.000Z",
     });
   });
 

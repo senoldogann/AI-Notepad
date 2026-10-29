@@ -10,6 +10,7 @@ import {
   trialMeetingsLeft,
   userTrialState,
 } from "./entitlements";
+import { settleDeepgramMeetings } from "./deepgram";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
@@ -348,7 +349,10 @@ function trialRefusal(config: Config, userId: string, deviceId: string | null, t
   return new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
 }
 
-/** Toplantıyı bitirir; zaten bittiyse kayıtlı sonucu döndürür. Başkasının toplantısı `not_found`. */
+/**
+ * Toplantıyı bitirir; zaten bittiyse kayıtlı sonucu döndürür. Başkasının toplantısı `not_found`. Biten toplantıların
+ * (bu ve yeni toplantı başlayınca kapananlar) Deepgram tahmini gerçek süreye indirilir.
+ */
 export async function endMeeting(db: D1Database, userId: string, meetingId: string, now: Date): Promise<MeetingRow> {
   await db
     .prepare(
@@ -363,6 +367,7 @@ export async function endMeeting(db: D1Database, userId: string, meetingId: stri
   if (row === null) {
     throw new ApiError("not_found", "Toplantı oturumu bulunamadı.");
   }
+  await settleDeepgramMeetings(db, now);
   log("info", "meeting_ended", { userId, meetingId, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
   return row;
 }

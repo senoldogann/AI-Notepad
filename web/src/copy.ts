@@ -462,7 +462,7 @@ export const copy: Copy = {
     features: {
       live: {
         title: "Live transcript and translation",
-        text: "Every sentence is on screen within seconds. If the meeting is in another language, a translation into yours runs alongside. The live transcript is produced on your Mac.",
+        text: "Every sentence is on screen within seconds. If the meeting is in another language, a translation into yours runs alongside.",
         original: "Betayı on dördünde açmalıyız.",
         translation: "We should open the beta on the fourteenth.",
       },
@@ -515,7 +515,7 @@ export const copy: Copy = {
       {
         question: "Where does my audio go?",
         answer:
-          "The live transcript is produced on your Mac. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or text; they only count the duration. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
+          "While you record, the audio streams from your Mac to Deepgram for the live transcript; Deepgram is asked not to keep it or use it for training. If that isn't available, the live transcript is produced on your Mac instead. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or text; they only count the duration. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
       },
       {
         question: "Where are my notes stored?",
@@ -601,8 +601,8 @@ export const copy: Copy = {
     requirements: [
       { icon: "laptop", title: "macOS 26", text: "or later" },
       { icon: "chip", title: "Apple silicon", text: "M1 or later" },
-      { icon: "globe", title: "Internet", text: "for notes, translation and speaker separation" },
-      { icon: "disk", title: "~1 GB free space", text: "for the on-device speech model" },
+      { icon: "globe", title: "Internet", text: "for the live transcript, notes, translation and speaker separation" },
+      { icon: "disk", title: "~1 GB free space", text: "for the on-device speech model, used when the live transcript runs offline" },
     ],
     installTitle: "Installing on your Mac",
     installSteps: [

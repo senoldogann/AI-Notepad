@@ -78,6 +78,50 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let accountTokensUsed: Int?
     public let accountTokensCap: Int?
     public let subscription: HostedSubscription?
+    /// Yeni toplantının canlı metin motoru (`deepgram` ya da `whisperkit`); bkz. `hostedLiveEngine(entitlements:)`.
+    /// Alanı bilmeyen eski sunucuda nil.
+    public let liveEngine: String?
+    /// Toplantı dışı yapay zekâ hakkı (Sor, not düzenleme…): dönemde sayılan token, sınır, dönem (`month` abonede,
+    /// `day` denemede) ve sıfırlanma anı. Alanları bilmeyen eski sunucuda nil.
+    public let accountTokensUsed: Int?
+    public let accountTokensCap: Int?
+    public let accountTokensPeriod: String?
+    public let accountTokensResetsAt: Date?
+    /// Aylık sınırların sıfırlandığı an (sonraki UTC ayının başı); eski sunucuda nil.
+    public let monthlyResetsAt: Date?
+}
+
+/// Abonelik sürümünde canlı metni üreten motor.
+public enum HostedLiveEngine: String, Sendable, Equatable {
+    /// Bulut (Deepgram); jeton her bağlantıda sunucudan alınır.
+    case deepgram
+    /// Mac'te (WhisperKit).
+    case whisperKit = "whisperkit"
+}
+
+/// Sunucunun yeni toplantı için önerdiği canlı motor. Alanı bilmeyen eski sunucu Deepgram jetonu da vermez, tanınmayan
+/// değer de Deepgram'ı açmaz: ikisinde de Mac'te (WhisperKit). Saf fonksiyondur.
+public func hostedLiveEngine(entitlements: HostedEntitlements) -> HostedLiveEngine {
+    entitlements.liveEngine.flatMap { HostedLiveEngine(rawValue: $0) } ?? .whisperKit
+}
+
+/// `POST /v1/live/deepgram-token` yanıtı: tek bağlantılık kısa ömürlü Deepgram jetonu. Jeton saklanmaz ve loglanmaz.
+public struct HostedDeepgramGrant: Decodable, Sendable {
+    /// Deepgram JWT'si (`Authorization: Bearer`); yalnızca bağlantı kurulurken geçerli olmalı.
+    public let accessToken: String
+    /// Jetonun kalan ömrü (saniye).
+    public let expiresIn: Double
+    /// Akış modeli (ör. `nova-3`).
+    public let model: String
+    /// Bu toplantıda kalan jeton.
+    public let grantsLeft: Int
+}
+
+/// Abonelik sürümünün akış seçenekleri: model sunucunun jetonundan; model geliştirme programından her zaman çıkılır
+/// (`mip_opt_out=true`: Deepgram ses ve metni yalnızca işlerken tutar, eğitimde kullanmaz; gizlilik metni bunu söyler).
+/// Saf fonksiyondur.
+public func hostedDeepgramListenOptions(grant: HostedDeepgramGrant) -> DeepgramListenOptions {
+    DeepgramListenOptions(model: grant.model, optOutOfModelImprovement: true)
 }
 
 /// `POST /v1/meetings/start` yanıtı.

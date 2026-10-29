@@ -9,9 +9,24 @@ import os
 
 /// Konuşma tanıma modelinin (WhisperKit) yüklenme durumu.
 enum ModelStatus: Equatable {
+    /// Abonelik: model henüz gerekmedi (canlı metin bulutta); gerekince (Mac'e geçişte) indirilir.
+    case notLoaded
     case loading
     case ready
     case failed(String)
+}
+
+/// Kayıt kartındaki konuşma modeli durumu (bkz. `AppModel.localModelNotice`).
+enum LocalModelNotice: Equatable {
+    /// İndiriliyor (0…1) ya da yükleniyor (nil).
+    case preparing(progress: Double?)
+    case failed(message: String)
+}
+
+/// Model hazırlanırken gösterilen metin: indirme yüzdesi ya da "hazırlanıyor". Saf fonksiyondur.
+func localModelNoticeText(progress: Double?) -> String {
+    progress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") }
+        ?? String(localized: "Konuşma modeli hazırlanıyor…")
 }
 
 /// Toplantı sayfasındaki "Konuşmacıları gözden geçir" kartı.
@@ -60,7 +75,16 @@ private struct RecordingSession {
 final class AppModel {
     private static let logger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "AppModel")
 
+    #if HOSTED_EDITION
+    var modelStatus: ModelStatus = .notLoaded
+    /// Abonelik: canlı metnin motoru ve nedeni (son kaydın başında seçilen, Mac'e geçişte güncellenen); bu açılışta
+    /// kayıt yapılmadıysa nil (tanılama sunucunun önerisini gösterir).
+    var hostedLiveStatus: HostedLiveStatus?
+    #else
     var modelStatus: ModelStatus = .loading
+    #endif
+    /// Süren model yüklemesi: aynı anda gelen istekler (açılış, Mac'e geçiş) tek yüklemeyi bekler.
+    @ObservationIgnored private var modelLoad: Task<Void, Never>?
     var liveEngine: LiveEngine
     var isRecording: Bool = false
     /// İzin pencereleri açıkken ikinci bir başlatmayı engeller.
@@ -204,6 +228,8 @@ final class AppModel {
     @ObservationIgnored private var speechEngine: AppleSpeechEngine?
     /// Cihaz içi konuşma modelinin indirme ilerlemesi (0…1); indirme yoksa nil.
     var speechModelProgress: Double?
+    /// WhisperKit modelinin (~630 MB) indirme ilerlemesi (0…1); indirme yoksa (ya da model diskte) nil.
+    var whisperModelProgress: Double?
     @ObservationIgnored private let microphone: MicrophoneCapture = MicrophoneCapture()
     @ObservationIgnored private let systemAudio: SystemAudioCapture = SystemAudioCapture()
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
@@ -228,7 +254,12 @@ final class AppModel {
 
     /// Kayıt başlatılabilir mi: önceki kayıt bitmiş olmalı; Deepgram'da her zaman, yerel motorlarda model hazırsa.
     var isReadyToRecord: Bool {
+        #if HOSTED_EDITION
+        // Abonelik: canlı motor kayıt başında seçilir; Mac modeli gerekirse kayıt sürerken hazırlanır.
+        !isFinishing
+        #else
         !isFinishing && (liveEngine == .deepgram || modelStatus == .ready)
+        #endif
     }
 
     /// Ada ve panelin gösterdiği durum; girdiler değişmedikçe önbellekten (ada ve panel aynı değişiklikte iki kez okur).
@@ -259,12 +290,47 @@ final class AppModel {
     /// hata varken dolu.
     private var statusText: String {
         switch (liveEngine, modelStatus) {
-        case (.deepgram, _), (.whisperKit, .ready): ""
-        case (.whisperKit, .loading): String(localized: "Model hazırlanıyor…")
+        case (.deepgram, _), (.whisperKit, .ready), (_, .notLoaded): ""
+        case (.whisperKit, .loading): localModelNoticeText(progress: whisperModelProgress)
         case (.whisperKit, .failed(let message)): message
-        case (.appleSpeech, .loading): speechModelProgress.map { String(localized: "Konuşma modeli indiriliyor… \($0.formatted(.percent.precision(.fractionLength(0))))") } ?? String(localized: "Konuşma modeli hazırlanıyor…")
+        case (.appleSpeech, .loading): localModelNoticeText(progress: speechModelProgress)
         case (.appleSpeech, .ready): String(localized: "Hazır · Cihaz içi")
         case (.appleSpeech, .failed(let message)): message
+        }
+    }
+
+    /// Kayıt kartında gösterilen konuşma modeli durumu: model hazırlanıyor (ilerlemeyle) ya da hazırlanamadı. Model
+    /// gerekmiyorsa ya da hazırsa nil. Geliştirici sürümünde model hazır olmadan kayıt başlamaz (kart nedenini söyler);
+    /// abonelikte model yalnızca gerekince yüklenir ve kayıt beklemez (canlı metin model hazır olunca başlar).
+    var localModelNotice: LocalModelNotice? {
+        let progress: Double?
+        switch liveEngine {
+        case .deepgram:
+            return nil
+        case .whisperKit:
+            progress = whisperModelProgress
+        case .appleSpeech:
+            progress = speechModelProgress
+        }
+        switch modelStatus {
+        case .notLoaded, .ready:
+            return nil
+        case .loading:
+            return .preparing(progress: progress)
+        case .failed(let message):
+            return .failed(message: message)
+        }
+    }
+
+    /// Hazırlanamayan konuşma modelini yeniden dener (kayıt kartındaki düğme).
+    func retryLocalModel() async {
+        switch liveEngine {
+        case .deepgram:
+            return
+        case .whisperKit:
+            await loadModel()
+        case .appleSpeech:
+            await prepareSpeechModel()
         }
     }
 
@@ -611,15 +677,55 @@ final class AppModel {
         }
     }
 
-    /// Modeli (ilk seferde indirerek) yükler.
+    /// Modeli (ilk seferde indirerek) yükler; yükleme sürüyorsa onu bekler.
     func loadModel() async {
+        if let modelLoad {
+            await modelLoad.value
+            return
+        }
+        let task: Task<Void, Never> = Task { await self.performModelLoad() }
+        modelLoad = task
+        await task.value
+        modelLoad = nil
+    }
+
+    #if HOSTED_EDITION
+    /// Abonelik: Mac'teki motor (hibrit oturum Mac'e geçerken ya da Mac'te başlarken çağırır); yüklü değilse model
+    /// indirilip yüklenir (ilerleme menüde ve panelde görünür). Yüklenemezse `TranscriptionError.modelLoadFailed`.
+    func requireLocalEngine() async throws -> WhisperKitEngine {
+        if let engine {
+            return engine
+        }
+        await loadModel()
+        if let engine {
+            return engine
+        }
+        let reason: String
+        if case .failed(let message) = modelStatus {
+            reason = message
+        } else {
+            reason = "model yüklenmedi"
+        }
+        throw TranscriptionError.modelLoadFailed(model: liveWhisperModel, reason: reason)
+    }
+    #endif
+
+    private func performModelLoad() async {
         modelStatus = .loading
+        whisperModelProgress = nil
         do {
             let modelsDirectory: URL = try AppPaths.modelsDirectory()
-            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory)
+            engine = try await WhisperKitEngine.load(modelName: liveWhisperModel, modelsDirectory: modelsDirectory) { [weak self] (fraction: Double) -> Void in
+                Task { @MainActor in
+                    // İndirme bitince (ya da model zaten indiyse) yükleme sürer: yüzde yerine "hazırlanıyor".
+                    self?.whisperModelProgress = fraction < 1 ? fraction : nil
+                }
+            }
+            whisperModelProgress = nil
             modelStatus = .ready
         } catch {
             Self.logger.error("Model yüklenemedi, hata: \(String(describing: error), privacy: .private)")
+            whisperModelProgress = nil
             modelStatus = .failed(userFacingMessage(error: error))
             return
         }
@@ -676,7 +782,9 @@ final class AppModel {
             translationDisabled = true
         }
 
+        #if !HOSTED_EDITION
         // Bulut anahtarları yakalama başlamadan önce okunur: eksikse hiçbir şey başlatılmaz; eksiklerin hepsi bildirilir.
+        // (Abonelik sürümünde anahtar yoktur; canlı motor toplantı oturumu açıldıktan sonra seçilir.)
         let cloudKeys: (deepgram: String, elevenLabs: String)?
         switch engineAtStart {
         case .deepgram:
@@ -692,6 +800,7 @@ final class AppModel {
         case .whisperKit, .appleSpeech:
             cloudKeys = nil
         }
+        #endif
 
         // Takvimde şu anki toplantı: başlık ve katılımcı adları kayda geçer, adlar tanımaya yardım eder.
         linkedMeeting = pendingAutoMeeting ?? (UserDefaults.standard.bool(forKey: SettingsKey.calendarEnabled)
@@ -796,6 +905,41 @@ final class AppModel {
         let meteredMe: AsyncStream<[Float]> = meteredStream(audio: meAudio, onLevel: onLevel)
         let meteredOthers: AsyncStream<[Float]> = meteredStream(audio: othersAudio, onLevel: onLevel)
         let handle: LiveSessionHandle
+        #if HOSTED_EDITION
+        // Abonelik: sunucu izin veriyorsa canlı metin Deepgram'la, değilse (ya da akış durursa) Mac'te; kayıt kesintisiz.
+        // Deepgram akışı dil algılamaz: cihaz içi tanımadaki kural (sabit dil ya da ana toplantı dili).
+        let liveLanguage: MeetingLanguage = appleSpeechLanguage(mode: languageMode, primary: primaryMeetingLanguage())
+        let choice: HostedLiveChoice = await hostedLiveChoice(
+            language: liveLanguage, keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30)
+        )
+        hostedLiveStatus = choice.status
+        Self.logger.info("Canlı motor seçildi, motor: \(choice.status.engine.rawValue, privacy: .public)")
+        handle = runHybridLiveSession(
+            config: HybridLiveSessionConfig(
+                recordingDirectory: directory,
+                speakers: startedSpeakers,
+                local: LiveSessionConfig(
+                    languageMode: languageMode,
+                    segmenter: .live,
+                    recordingDirectory: directory,
+                    partialIntervalSec: 1.5,
+                    minPartialSpeechSec: 1.0,
+                    languageLockAfterSec: 30,
+                    candidateLanguages: automaticCandidates(primary: primaryMeetingLanguage())
+                ),
+                maxPendingAudioSec: 600
+            ),
+            start: choice.start,
+            localEngine: { [weak self] () async throws -> any TranscriptionEngine in
+                guard let self else {
+                    throw CancellationError()
+                }
+                return try await self.requireLocalEngine()
+            },
+            meAudio: meteredMe,
+            othersAudio: meteredOthers
+        )
+        #else
         if let cloudKeys {
             handle = runCloudLiveSession(
                 config: CloudSessionConfig(
@@ -856,6 +1000,7 @@ final class AppModel {
             systemAudio.stop()
             return
         }
+        #endif
         isRecording = true
         #if HOSTED_EDITION
         watchRecordingLimit(deadline: meetingDeadline)
@@ -1011,6 +1156,14 @@ final class AppModel {
             // tüm kayıt yeniden yazıya dökülmez. "Diğerleri" son geçişten zaten geçer.
             meStreamFailed = meStreamFailed || (speaker == .me && untranscribedSec >= incompleteTailFinalPassSec)
             Self.logger.warning("Canlı metnin sonu eksik, konuşmacı: \(speaker.rawValue, privacy: .public), süre: \(untranscribedSec, privacy: .public)")
+        case .liveEngineFellBack(let message):
+            // Bulut canlı metni durdu, Mac'e geçildi: geçişte kesinleşmemiş "Sen" metni toplantı sonunda kayıttan
+            // yazıya dökülür ("Diğerleri" son geçişten zaten geçer). Ses kaydı kesilmedi.
+            meStreamFailed = meStreamFailed || startedSpeakers.contains(.me)
+            #if HOSTED_EDITION
+            hostedLiveStatus = HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Bulut canlı metni kayıt sırasında durdu: \(message)"))
+            #endif
+            errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bulut canlı metni durdu; canlı metin bu Mac'te sürüyor, kayıt kesilmedi. (\(message))"))
         case .diarizationFailed(let message):
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Konuşmacı ayırma başarısız: \(message)"))
         }

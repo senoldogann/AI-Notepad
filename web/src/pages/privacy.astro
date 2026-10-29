@@ -1,11 +1,14 @@
 ---
 // Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
-// transcribe.ts, llm/, auth/, billing.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması (App/Hosted: canlı metin
-// Mac'te, iCloud eşitlemesi yok, güncellemeler GitHub'dan) ve bu sitenin tarayıcı depolaması (public/theme.js,
+// transcribe.ts, deepgram.ts, llm/, auth/, billing.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması
+// (App/Hosted: canlı metin Deepgram'la, kapasite dolunca ya da bağlantı yoksa Mac'te; iCloud eşitlemesi yok, güncellemeler
+// GitHub'dan) ve bu sitenin tarayıcı depolaması (public/theme.js,
 // src/client/session.ts). Sağlayıcıların saklama ve eğitim kuralları resmî belgelerinden alınmıştır (2026-10-29):
 // ElevenLabs (elevenlabs.io/dpa, docs "Zero Retention Mode" ve "Data residency", terms-of-use-eu §4), Anthropic
 // (anthropic.com/legal/commercial-terms ve /legal/data-processing-addendum, privacy.claude.com saklama makalesi,
-// platform.claude.com "Data residency"), Link (link.com/terms "Sold Through Link Terms", link.com/privacy).
+// platform.claude.com "Data residency"), Link (link.com/terms "Sold Through Link Terms", link.com/privacy), Deepgram
+// (developers.deepgram.com "Your Data at Deepgram" ve "Model Improvement Partnership Program": `mip_opt_out=true` ile ses
+// ve metin yalnızca istek işlenirken tutulur, model geliştirmede kullanılmaz; kullanım kayıtları içerik içermez, 90 gün).
 import LegalSection from "../components/LegalSection.astro";
 import Legal from "../layouts/Legal.astro";
 import { cardStatementDescriptor, productName } from "../config";
@@ -60,10 +63,11 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
     <ul>
       <li>Your notes, transcripts and recordings are stored on your Mac. Our servers do not keep a copy.</li>
       <li>
-        Meeting audio and text pass through our server only to be transcribed and summarised by our AI providers,
-        ElevenLabs and Anthropic; our server does not store them. The providers may keep request data for a time under
-        their own retention rules (see section 7). We keep only usage numbers (how long, how many tokens) to apply the plan
-        limits.
+        Meeting audio and text go only to our AI providers to be transcribed and summarised: Deepgram for the live
+        transcript (directly from your Mac), ElevenLabs for the final transcript and Anthropic for notes (both through our
+        server, which does not store them). Deepgram keeps nothing after transcribing; the others may keep request data for
+        a time under their own retention rules (see section 7). We keep only usage numbers (how long, how many tokens) to
+        apply the plan limits.
       </li>
       <li>
         We set no cookies of our own and use no analytics or advertising trackers on this website; Apple and Google
@@ -80,8 +84,12 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
   <LegalSection sections={sections} id="meetings">
     <ul>
       <li>
-        <strong>Live transcript.</strong> While you record, the live transcript is produced on your Mac by an on-device
-        speech model. The audio does not leave your Mac for this.
+        <strong>Live transcript.</strong> While you record, the app streams the meeting audio directly from your Mac to
+        Deepgram, which returns the live transcript. Our server only issues a short-lived access key for each connection
+        and records how long the live transcript may run; it never receives this audio. The app asks Deepgram not to keep
+        the audio or transcript and not to use them to improve its models. When the capacity we set aside for this is used
+        up, when Deepgram can't be reached, or when you're offline, the live transcript is produced on your Mac by an
+        on-device speech model instead, and that audio does not leave your Mac.
       </li>
       <li>
         <strong>Final transcript and speaker separation.</strong> When a meeting ends, the app sends the recording
@@ -312,6 +320,17 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
             </td>
           </tr>
           <tr>
+            <td>Deepgram, Inc.</td>
+            <td>Processor (sub-processor for meeting content): producing the live transcript while you record</td>
+            <td>Meeting audio streamed from your Mac, the resulting live transcript, and the participant names and terms you add</td>
+            <td>
+              USA. Standard Contractual Clauses under Deepgram's data processing agreement. The app opts every connection out
+              of Deepgram's Model Improvement Program, so Deepgram keeps the audio and transcript only for as long as it takes
+              to process the request and does not use them to train its models. Deepgram keeps request metadata and usage
+              logs (no audio, text or transcripts); they are available to us for 90 days.
+            </td>
+          </tr>
+          <tr>
             <td>Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)</td>
             <td>Processor (sub-processor for meeting content): writing notes, translations and answers with the Claude model</td>
             <td>The relevant parts of meeting transcripts and notes, your questions, and the participant names and terms you add</td>
@@ -377,8 +396,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
   <LegalSection sections={sections} id="retention">
     <ul>
       <li>
-        Meeting content: not stored on our servers. At our AI providers: Anthropic deletes it within 30 days (up to 2 years
-        if flagged under its usage policy); ElevenLabs keeps it under its own retention rules (see section 7).
+        Meeting content: not stored on our servers. At our AI providers: Deepgram keeps the live audio and transcript only
+        while processing them; Anthropic deletes it within 30 days (up to 2 years if flagged under its usage policy);
+        ElevenLabs keeps it under its own retention rules (see section 7).
       </li>
       <li>Account, sign-in identities and device registrations: while your account exists; deleted immediately when you delete it.</li>
       <li>Meeting session records and monthly usage: up to 13 months, then deleted automatically; deleted immediately when you delete your account.</li>

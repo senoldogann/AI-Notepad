@@ -35,6 +35,8 @@ export type ErrorCode =
   | "upstream_unavailable"
   | "spend_ceiling_reached"
   | "trial_capacity_reached"
+  | "deepgram_unavailable"
+  | "deepgram_grant_limit"
   | "webhook_invalid"
   | "internal_error";
 
@@ -74,6 +76,8 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   upstream_unavailable: 502,
   spend_ceiling_reached: 503,
   trial_capacity_reached: 503,
+  deepgram_unavailable: 503,
+  deepgram_grant_limit: 429,
   webhook_invalid: 400,
   internal_error: 500,
 };
@@ -94,22 +98,7 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Yönetici olmayan kullanıcının yönetici API'si isteği (`403 forbidden`). Hata gövdesi çağıranın kendi kimliklerini
- * (`<sağlayıcı>:<sub>`, virgülle ayrılmış) `identity` alanında taşır: sahip kendi kimliğini `ADMIN_IDENTITIES`
- * listesine kopyalayabilsin diye. Yalnızca kimliği doğrulanmış çağırana kendi kimliği döner.
- */
-export class ForbiddenIdentityError extends ApiError {
-  override readonly name: string = "ForbiddenIdentityError";
-  readonly identity: string;
-
-  constructor(message: string, identity: string) {
-    super("forbidden", message);
-    this.identity = identity;
-  }
-}
-
-/** Üst servis (Anthropic, ElevenLabs, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
+/** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
   readonly service: string;

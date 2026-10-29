@@ -47,6 +47,54 @@ public func runLiveSession(
 ) -> LiveSessionHandle {
     let (events, eventSink): (AsyncStream<LiveSessionEvent>, AsyncStream<LiveSessionEvent>.Continuation) =
         AsyncStream.makeStream(of: LiveSessionEvent.self)
+    let recordedMe: AsyncStream<[Float]> = recordedStream(speaker: .me, audio: meAudio, directory: config.recordingDirectory, events: eventSink)
+    let recordedOthers: AsyncStream<[Float]> = recordedStream(speaker: .others, audio: othersAudio, directory: config.recordingDirectory, events: eventSink)
+    return runTranscriptionPipeline(config: config, engine: engine, meAudio: recordedMe, othersAudio: recordedOthers, events: events, eventSink: eventSink)
+}
+
+/// Konuşmacının sesini `<konuşmacı>.caf` dosyasına yazar ve her parçayı olduğu gibi aktarır. Dosya açılamaz ya da
+/// yazılamazsa bir kez `.recordingFailed` yayınlanır, aktarım kayıtsız sürer; giriş bitince dosya kapanır,
+/// `.captureEnded` yayınlanır ve çıkış akışı biter.
+func recordedStream(speaker: Speaker, audio: AsyncStream<[Float]>, directory: URL, events: AsyncStream<LiveSessionEvent>.Continuation) -> AsyncStream<[Float]> {
+    let (output, sink): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
+    Task {
+        var recorder: CafRecorder?
+        do {
+            recorder = try CafRecorder(fileURL: directory.appending(path: "\(speaker.rawValue).caf"))
+        } catch {
+            events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
+        }
+        for await chunk in audio {
+            if let activeRecorder = recorder {
+                do {
+                    try activeRecorder.append(samples: chunk)
+                } catch {
+                    // Kayıt bozuldu: bir kez bildir, yazıya dökmeye kayıtsız devam et.
+                    events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
+                    activeRecorder.close()
+                    recorder = nil
+                }
+            }
+            sink.yield(chunk)
+        }
+        recorder?.close()
+        // Olay, çıkış bitmeden yayınlanır: çıkışı tüketen oturum bitince olay akışını kapatır.
+        events.yield(.captureEnded(speaker: speaker))
+        sink.finish()
+    }
+    return output
+}
+
+/// Kaydedilmiş (ya da kaydedilmesi gerekmeyen) iki ses akışını bölümler ve yazıya döker; olaylar `eventSink`'e gider,
+/// iki akış bitip kalan işler yapılınca `eventSink` biter. Kayıt yapmaz (`config.recordingDirectory` kullanılmaz).
+func runTranscriptionPipeline(
+    config: LiveSessionConfig,
+    engine: any TranscriptionEngine,
+    meAudio: AsyncStream<[Float]>,
+    othersAudio: AsyncStream<[Float]>,
+    events: AsyncStream<LiveSessionEvent>,
+    eventSink: AsyncStream<LiveSessionEvent>.Continuation
+) -> LiveSessionHandle {
     let (jobs, jobSink): (AsyncStream<TranscriptionJob>, AsyncStream<TranscriptionJob>.Continuation) =
         AsyncStream.makeStream(of: TranscriptionJob.self)
     let tracker: OpenSegmentTracker = OpenSegmentTracker()
@@ -61,10 +109,10 @@ public func runLiveSession(
         }
         await withTaskGroup(of: Void.self) { (group: inout TaskGroup<Void>) -> Void in
             group.addTask {
-                await runCapture(speaker: .me, audio: meAudio, config: config, tracker: tracker, jobs: jobSink, events: eventSink)
+                await runCapture(speaker: .me, audio: meAudio, config: config, tracker: tracker, jobs: jobSink)
             }
             group.addTask {
-                await runCapture(speaker: .others, audio: othersAudio, config: config, tracker: tracker, jobs: jobSink, events: eventSink)
+                await runCapture(speaker: .others, audio: othersAudio, config: config, tracker: tracker, jobs: jobSink)
             }
         }
         ticker.cancel()
@@ -143,35 +191,16 @@ actor OpenSegmentTracker {
     }
 }
 
-/// Bir konuşmacının ses akışını kaydeder ve bölümleyip kesin işleri kuyruğa koyar.
+/// Bir konuşmacının ses akışını bölümleyip kesin işleri kuyruğa koyar (kayıt `recordedStream`'dedir).
 private func runCapture(
     speaker: Speaker,
     audio: AsyncStream<[Float]>,
     config: LiveSessionConfig,
     tracker: OpenSegmentTracker,
-    jobs: AsyncStream<TranscriptionJob>.Continuation,
-    events: AsyncStream<LiveSessionEvent>.Continuation
+    jobs: AsyncStream<TranscriptionJob>.Continuation
 ) async {
-    let fileURL: URL = config.recordingDirectory.appending(path: "\(speaker.rawValue).caf")
-    var recorder: CafRecorder?
-    do {
-        recorder = try CafRecorder(fileURL: fileURL)
-    } catch {
-        events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
-    }
-
     var state: SegmenterState = .initial
     for await chunk in audio {
-        if let activeRecorder = recorder {
-            do {
-                try activeRecorder.append(samples: chunk)
-            } catch {
-                // Kayıt bozuldu: bir kez bildir, yazıya dökmeye kayıtsız devam et.
-                events.yield(.recordingFailed(speaker: speaker, message: userFacingMessage(error: error)))
-                activeRecorder.close()
-                recorder = nil
-            }
-        }
         let output: SegmenterOutput = segmentAudio(state: state, newSamples: chunk, config: config.segmenter)
         state = output.state
         await tracker.update(speaker: speaker, open: state.open)
@@ -181,8 +210,6 @@ private func runCapture(
     let flushed: SegmenterOutput = flushSegmenter(state: state, config: config.segmenter)
     await tracker.update(speaker: speaker, open: nil)
     await enqueueFinals(speaker: speaker, segments: flushed.closed, config: config, tracker: tracker, jobs: jobs)
-    recorder?.close()
-    events.yield(.captureEnded(speaker: speaker))
 }
 
 private func enqueueFinals(
