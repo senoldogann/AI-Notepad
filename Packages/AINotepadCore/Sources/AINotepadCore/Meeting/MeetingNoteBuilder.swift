@@ -102,7 +102,7 @@ public func meetingNoteRequest(
     )
 }
 
-/// Toplantı notunun JSON şeması (Türkçe alan adları); paylaşım sürümü akışsız `sharedNoteSchema`'yı kullanır.
+/// Toplantı notunun JSON şeması (Türkçe alan adları); notun başka dildeki sürümü de aynı şemayı kullanır.
 let meetingNoteSchema: String = """
 {"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
 "kararlar":{"type":"array","items":{"type":"string"}},\
@@ -113,17 +113,6 @@ let meetingNoteSchema: String = """
 "akis":{"type":"array","items":{"type":"object","properties":{"zaman":{"type":"string"},"baslik":{"type":"string"},"ozet":{"type":"string"}},\
 "required":["zaman","baslik","ozet"],"additionalProperties":false}}},\
 "required":["baslik","ozet","kararlar","gorevler","sozluk","akis"],"additionalProperties":false}
-"""
-
-/// Paylaşım sürümünün şeması: not şemasının konu akışsız hali (akış çevrilmez).
-let sharedNoteSchema: String = """
-{"type":"object","properties":{"baslik":{"type":"string"},"ozet":{"type":"string"},\
-"kararlar":{"type":"array","items":{"type":"string"}},\
-"gorevler":{"type":"array","items":{"type":"object","properties":{"sahip":{"type":"string"},"aciklama":{"type":"string"},\
-"tarih":{"type":"string"},"benimMi":{"type":"boolean"}},"required":["sahip","aciklama","tarih","benimMi"],"additionalProperties":false}},\
-"sozluk":{"type":"array","items":{"type":"object","properties":{"terim":{"type":"string"},"anlam":{"type":"string"}},\
-"required":["terim","anlam"],"additionalProperties":false}}},\
-"required":["baslik","ozet","kararlar","gorevler","sozluk"],"additionalProperties":false}
 """
 
 /// Not yanıtını ayrıştırır; boş tarih "yok" demektir. Özeti boş not `LLMError.empty`dir.
@@ -199,7 +188,7 @@ private struct RawMeetingNote: Decodable {
     let kararlar: [String]
     let gorevler: [RawTask]
     let sozluk: [RawGlossary]
-    /// Paylaşım sürümünde yok.
+    /// Şemayı uygulamayan sunucular (ör. Ollama) atlayabilir.
     let akis: [RawOutline]?
 }
 

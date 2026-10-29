@@ -482,11 +482,15 @@ struct MeetingDetailPage: View {
                         if let note = record.note {
                             if let language = noteLanguage {
                                 // Dil değişince durum (hata, deneme) sıfırlansın.
-                                SharedNoteSection(model: model, record: record, note: note, language: language)
-                                    .id(language)
+                                SharedNoteSection(
+                                    model: model, record: record, note: note, language: language, paragraphs: paragraphs, canPlay: !playableAudio.isEmpty,
+                                    onPlay: { (startSec: Double) -> Void in play(from: startSec) },
+                                    onClip: { (paragraph: TranscriptParagraph) -> Void in exportClip(paragraph: paragraph) }
+                                )
+                                .id(language)
                             } else {
                                 SummaryTab(
-                                    model: model, note: note, record: record, paragraphs: paragraphs, canPlay: !playableAudio.isEmpty,
+                                    model: model, note: note, sourceNote: note, record: record, paragraphs: paragraphs, canPlay: !playableAudio.isEmpty,
                                     onPlay: { (startSec: Double) -> Void in play(from: startSec) },
                                     onClip: { (paragraph: TranscriptParagraph) -> Void in exportClip(paragraph: paragraph) }
                                 )
@@ -1347,7 +1351,10 @@ struct MeetingDetailPage: View {
 /// sözlük; geniş pencerede sağda "Bir bakışta" ve konuşma payları, darda (panel) konuşma payları en altta.
 private struct SummaryTab: View {
     let model: AppModel
+    /// Gösterilen not: asıl not ya da başka dildeki sürümü (`SharedNoteSection`).
     let note: MeetingNote
+    /// Asıl not: görevlerin tamamlanma ve anımsatıcı durumu onun görevlerine bağlıdır (çeviride görev metni değişir).
+    let sourceNote: MeetingNote
     let record: MeetingRecord
     let paragraphs: [TranscriptParagraph]
     /// Ses var: konu akışındaki zamana tıklayınca oradan çalar.
@@ -1382,8 +1389,12 @@ private struct SummaryTab: View {
     }
 
     private var main: some View {
-        let mine: [NoteTask] = note.tasks.filter(\.isMine)
-        let others: [NoteTask] = note.tasks.filter { !$0.isMine }
+        // Gösterilen görev asıl görevle sırayla eşleşir (`parseSharedNote` sayıyı ve sahipliği korur).
+        let pairs: [TaskPair] = zip(note.tasks, sourceNote.tasks).map { (pair: (NoteTask, NoteTask)) -> TaskPair in
+            TaskPair(shown: pair.0, source: pair.1)
+        }
+        let mine: [TaskPair] = pairs.filter(\.source.isMine)
+        let others: [TaskPair] = pairs.filter { !$0.source.isMine }
         let myNotes: String = record.myNotes ?? ""
         let isLocked: Bool = model.isLocked(meetingID: record.id)
         return VStack(alignment: .leading, spacing: 30) {
@@ -1394,8 +1405,8 @@ private struct SummaryTab: View {
                         .tracking(DesignTokens.labelTracking)
                         .foregroundStyle(Theme.muted)
                     // Görev kimliğiyle: liste değişince (ör. tamamlanınca) satır durumu (Anımsatıcılar hatası) başka göreve geçmesin.
-                    ForEach(Array(mine.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
-                        TaskCard(model: model, record: record, task: item.element)
+                    ForEach(mine, id: \.source.trackingKey) { (pair: TaskPair) in
+                        TaskCard(model: model, record: record, task: pair.source, shown: pair.shown)
                     }
                 }
                 .padding(14)
@@ -1497,8 +1508,8 @@ private struct SummaryTab: View {
             if !others.isEmpty {
                 section(title: "DİĞER GÖREVLER", symbol: "checklist") {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(others.enumerated()), id: \.element.trackingKey) { (item: (offset: Int, element: NoteTask)) in
-                            TaskCard(model: model, record: record, task: item.element)
+                        ForEach(others, id: \.source.trackingKey) { (pair: TaskPair) in
+                            TaskCard(model: model, record: record, task: pair.source, shown: pair.shown)
                         }
                     }
                 }
@@ -1878,21 +1889,35 @@ private struct GlossarySection: View {
     }
 }
 
-/// Notun paylaşım dilindeki sürümü: yoksa hazırlanır (ilerleme, hata ve yeniden dene); varsa özet, kararlar ve
-/// sahipli görevler; üstte kopyala ve paylaş.
+/// Notun başka dildeki sürümü: yoksa (ya da eski, eksik bölümlü sürümse) hazırlanır (ilerleme, hata ve yeniden dene);
+/// varsa asıl notla aynı düzende (`SummaryTab`) gösterilir. Kopyalama, paylaşma ve dışa aktarma kapaktaki eylemlerdedir
+/// (seçili dilde çıkar).
 private struct SharedNoteSection: View {
     let model: AppModel
     let record: MeetingRecord
     let note: MeetingNote
     let language: ShareLanguage
+    let paragraphs: [TranscriptParagraph]
+    let canPlay: Bool
+    let onPlay: @MainActor (Double) -> Void
+    let onClip: @MainActor (TranscriptParagraph) -> Void
     @State private var error: String?
     @State private var attempt: Int = 0
-    @Environment(\.panelAppearance) private var appearance: PanelAppearance
+
+    /// Gösterilecek çeviri: saklı ve asıl notun tüm bölümlerini taşıyorsa.
+    private var shared: MeetingNote? {
+        record.sharedNotes?[language.rawValue].flatMap { (shared: MeetingNote) -> MeetingNote? in
+            isSharedNoteComplete(shared: shared, original: note) ? shared : nil
+        }
+    }
 
     var body: some View {
         Group {
-            if let shared = record.sharedNotes?[language.rawValue] {
-                content(shared: shared)
+            if let shared {
+                SummaryTab(
+                    model: model, note: shared, sourceNote: note, record: record, paragraphs: paragraphs, canPlay: canPlay,
+                    onPlay: onPlay, onClip: onClip
+                )
             } else if let error {
                 VStack(alignment: .leading, spacing: 8) {
                     EmptyStateCard(symbol: "exclamationmark.triangle", title: "Çeviri yapılamadı", message: "\(error)")
@@ -1912,74 +1937,12 @@ private struct SharedNoteSection: View {
             }
         }
         // Not yeniden yazılınca ya da kilit kalkınca yeniden denenir (aksi halde bekleme göstergesi takılı kalırdı).
-        .task(id: "\(language.rawValue)-\(attempt)-\(record.sharedNotes?[language.rawValue] == nil)-\(note.summary.hashValue)-\(model.isLocked(meetingID: record.id))") {
+        .task(id: "\(language.rawValue)-\(attempt)-\(shared == nil)-\(note.summary.hashValue)-\(model.isLocked(meetingID: record.id))") {
             // Toplantı işlenirken çevrilmez: sonuç zaten saklanamaz (istek boşa gider); kilit kalkınca görev yeniden çalışır.
-            guard record.sharedNotes?[language.rawValue] == nil, error == nil, !model.isLocked(meetingID: record.id) else {
+            guard shared == nil, error == nil, !model.isLocked(meetingID: record.id) else {
                 return
             }
             error = await model.generateSharedNote(meetingID: record.id, language: language)
-        }
-    }
-
-    private func content(shared: MeetingNote) -> some View {
-        let text: String = shareText(record: record, note: shared, language: language)
-        let locale: Locale = Locale(identifier: language.rawValue)
-        let headings: (summary: String, decisions: String, tasks: String) = (
-            summary: language.headings.summary.uppercased(with: locale),
-            decisions: language.headings.decisions.uppercased(with: locale),
-            tasks: language.headings.tasks.uppercased(with: locale)
-        )
-        return VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 8) {
-                Text(shared.title)
-                    .appFont(size: 20, weight: .medium)
-                    .textSelection(.enabled)
-                Spacer(minLength: 8)
-                Button("Kopyala", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                }
-                ShareLink(item: text, subject: Text(shared.title)) {
-                    Label("Paylaş", systemImage: "square.and.arrow.up")
-                }
-            }
-            sharedSection(title: headings.summary) {
-                Text(shared.summary)
-                    .font(appearance.readingFont(size: appearance.textSize + 2, weight: .regular))
-                    .lineSpacing(appearance.lineSpacing + 2)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !shared.decisions.isEmpty {
-                sharedSection(title: headings.decisions) {
-                    ForEach(Array(shared.decisions.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
-                        Text("\(item.offset + 1). \(item.element)").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            if !shared.tasks.isEmpty {
-                sharedSection(title: headings.tasks) {
-                    ForEach(Array(shared.tasks.enumerated()), id: \.offset) { (item: (offset: Int, element: NoteTask)) in
-                        let owner: Text = Text(item.element.owner).fontWeight(.semibold)
-                        let due: Text = Text(item.element.dueDate.map { " (\($0))" } ?? "").foregroundStyle(Theme.muted)
-                        Text("\(owner) — \(item.element.description)\(due)").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-        .font(appearance.bodyFont)
-        .padding(20)
-        .frame(maxWidth: 760, alignment: .leading)
-        .cardSurface(cornerRadius: 16)
-    }
-
-    private func sharedSection(title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: title)
-                .appFont(size: 11, weight: .semibold)
-                .tracking(DesignTokens.labelTracking)
-                .foregroundStyle(Theme.muted)
-            content()
         }
     }
 }
@@ -2036,29 +1999,38 @@ private func decisionNumber(index: Int) -> String {
 
 /// Görev kartı: sahibinin harf rozeti, iş, altında sahibinin adı ve varsa tarih çipi. Ad işin önünde ("Alex — …")
 /// yinelenmez: rozet yanında okunmayı zorlaştırıyordu.
+/// Özet sekmesinde bir görev: ekranda yazılan (çeviri olabilir) ve durumu taşıyan asıl görev.
+private struct TaskPair {
+    let shown: NoteTask
+    let source: NoteTask
+}
+
 private struct TaskCard: View {
     let model: AppModel
     let record: MeetingRecord
+    /// Asıl nottaki görev: tamamlanma ve anımsatıcı buna bağlıdır.
     let task: NoteTask
+    /// Ekranda yazılan görev: asıl görev ya da başka dildeki karşılığı.
+    let shown: NoteTask
 
     var body: some View {
         let isDone: Bool = isTaskDone(record: record, task: task)
         HStack(alignment: .top, spacing: 12) {
             TaskCheckbox(isDone: isDone) { model.toggleTask(meetingID: record.id, task: task) }
                 .disabled(model.isLocked(meetingID: record.id))
-            SpeakerAvatar(text: ownerInitial(owner: task.owner), color: ownerColor(task: task, speakerNames: record.speakerNames), size: 26)
-                .accessibilityLabel(Text(verbatim: task.owner))
+            SpeakerAvatar(text: ownerInitial(owner: shown.owner), color: ownerColor(task: task, speakerNames: record.speakerNames), size: 26)
+                .accessibilityLabel(Text(verbatim: shown.owner))
             VStack(alignment: .leading, spacing: 6) {
-                Text(task.description)
+                Text(shown.description)
                     .strikethrough(isDone, color: Theme.muted)
                     .foregroundStyle(isDone ? Theme.muted : Theme.ink)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
-                    Text(verbatim: task.owner)
+                    Text(verbatim: shown.owner)
                         .appFont(size: 12, weight: .medium)
                         .foregroundStyle(Theme.muted)
-                    if let due = task.dueDate {
+                    if let due = shown.dueDate {
                         Label(due, systemImage: "calendar")
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(Theme.muted)
