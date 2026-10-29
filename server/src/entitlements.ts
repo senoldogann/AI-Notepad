@@ -94,15 +94,32 @@ export function graceEndsAtMs(subscription: SubscriptionState, pastDueGraceMs: n
 }
 
 /**
- * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek; `past_due` ödemenin başarısız olduğu andan
- * (`pastDueSince`; Stripe yenilemede dönem sonunu hemen ilerlettiği için dönem sonundan değil) `pastDueGraceMs` boyunca
- * (Stripe ödemeyi yeniden denerken) erişimi korur. Saf fonksiyondur.
+ * Yenilenecek `active`/`trialing` aboneliğin dönem sonundan sonra erişimi koruduğu süre: Stripe yenileme faturasını dönem
+ * sonunda keser ve ödemeyi alır; yeni dönem sonunu taşıyan webhook birkaç dakika ile saatler arasında gecikebilir. Bu
+ * sürede abone denemeye düşmez (`/v1/me` planı, toplantı başlatma deneme yoluna ve DeviceCheck'e girmez).
+ */
+export const subscriptionRenewalGraceMs: number = 48 * 3_600_000;
+
+/**
+ * `active`/`trialing` aboneliğin erişiminin bittiği an (ms): yenilenecekse (`cancelAt` yok ya da dönem sonundan sonra)
+ * dönem sonu + `subscriptionRenewalGraceMs`, dönem sonunda bitecekse dönem sonu. Saf fonksiyondur.
+ */
+export function paidAccessEndsAtMs(subscription: SubscriptionState): number {
+  const renews: boolean = subscription.cancelAt === null || subscription.cancelAt > subscription.currentPeriodEnd;
+  return renews ? subscription.currentPeriodEnd + subscriptionRenewalGraceMs : subscription.currentPeriodEnd;
+}
+
+/**
+ * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek, yenilenecekse yenileme webhook'u gecikebileceği için
+ * `subscriptionRenewalGraceMs` daha (`paidAccessEndsAtMs`); `past_due` ödemenin başarısız olduğu andan (`pastDueSince`;
+ * Stripe yenilemede dönem sonunu hemen ilerlettiği için dönem sonundan değil) `pastDueGraceMs` boyunca (Stripe ödemeyi
+ * yeniden denerken) erişimi korur. Saf fonksiyondur.
  */
 export function subscriptionAccess(subscription: SubscriptionState | null, now: Date, pastDueGraceMs: number): SubscriptionAccess {
   if (subscription === null) {
     return "none";
   }
-  if (["active", "trialing"].includes(subscription.status) && subscription.currentPeriodEnd > now.getTime()) {
+  if (["active", "trialing"].includes(subscription.status) && paidAccessEndsAtMs(subscription) > now.getTime()) {
     return "active";
   }
   const graceEnd: number | null = graceEndsAtMs(subscription, pastDueGraceMs);

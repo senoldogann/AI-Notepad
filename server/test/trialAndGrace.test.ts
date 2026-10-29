@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { cleanupExpiredRows } from "../src/cleanup";
+import { subscriptionRenewalGraceMs } from "../src/entitlements";
 import { type Harness, type Session, type StartedMeetingBody, defaultHarness, expectError, grantSubscription, refreshed, req, signIn } from "./helpers";
 
 interface MeBody {
@@ -128,5 +129,35 @@ describe("past_due ek süresi", () => {
     const session: Session = await signIn(harness);
     await grantSubscription(session.userId, "active", harness.clock.nowMs + 10 * 86_400_000);
     expect((await me(harness, session)).subscription).toMatchObject({ access: "active", graceEndsAt: null });
+  });
+
+  it("yenilenecek abonelik dönem sonunda yenileme webhook'u gelene dek (48 saat) erişimi korur; deneme yoluna ve DeviceCheck'e düşmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const periodEnd: number = harness.clock.nowMs + 60_000;
+    await grantSubscription(session.userId, "active", periodEnd);
+
+    // Dönem bitti, yenileme olayı henüz gelmedi.
+    harness.clock.nowMs = periodEnd + 3 * 3_600_000;
+    const renewing: Session = await refreshed(harness, session);
+    expect(await me(harness, renewing)).toMatchObject({ plan: "subscription", subscription: { status: "active", access: "active" } });
+    const meeting: StartedMeetingBody = await (await startFrom(harness, renewing, "198.51.100.7")).json<StartedMeetingBody>();
+    expect(meeting.kind).toBe("subscription");
+
+    // Yenileme hiç gelmezse ek süreden sonra erişim biter.
+    harness.clock.nowMs = periodEnd + subscriptionRenewalGraceMs + 1;
+    const lapsed: Session = await refreshed(harness, renewing);
+    expect(await me(harness, lapsed)).toMatchObject({ plan: "trial", subscription: { access: "none" } });
+  });
+
+  it("dönem sonunda bitecek (iptal edilmiş) abonelik yenileme ek süresi almaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const periodEnd: number = harness.clock.nowMs + 60_000;
+    await grantSubscription(session.userId, "active", periodEnd);
+    await env.DB.prepare("UPDATE subscriptions SET cancel_at = ? WHERE user_id = ?").bind(periodEnd, session.userId).run();
+    harness.clock.nowMs = periodEnd + 1;
+    const later: Session = await refreshed(harness, session);
+    expect(await me(harness, later)).toMatchObject({ plan: "trial", subscription: { access: "none" } });
   });
 });

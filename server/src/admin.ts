@@ -1,6 +1,7 @@
 import type { Config, StripeMode } from "./config";
 import { type DeepgramUsage, deepgramUsage } from "./deepgram";
 import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
+import { subscriptionRenewalGraceMs } from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
@@ -169,9 +170,11 @@ function roundCents(value: number): number {
 
 /**
  * Abonelik erişimi olan satır (`subscriptions s`) için SQL koşulu; `entitlements.subscriptionAccess` ile aynıdır:
- * `active`/`trialing` dönem sonuna dek, `past_due` `past_due_since` + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
+ * `active`/`trialing` dönem sonuna dek (yenilenecekse + `subscriptionRenewalGraceMs`, bkz. `paidAccessEndsAtMs`),
+ * `past_due` `past_due_since` + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
  */
-const activeAccessSql: string = "s.status IN ('active', 'trialing') AND s.current_period_end > ?1";
+const activeAccessSql: string = `s.status IN ('active', 'trialing') AND (CASE WHEN s.cancel_at IS NULL OR s.cancel_at > s.current_period_end
+  THEN s.current_period_end + ${subscriptionRenewalGraceMs} ELSE s.current_period_end END) > ?1`;
 const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 > ?1";
 
 interface SubscriptionCounts {
