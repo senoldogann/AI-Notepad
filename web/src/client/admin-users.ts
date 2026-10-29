@@ -15,6 +15,8 @@ import {
   type UserSummary,
   fetchUser,
   fetchUsers,
+  grantComplimentaryAccess,
+  revokeComplimentaryAccess,
   userProviderOf,
   userSegmentOf,
 } from "./admin-api";
@@ -75,11 +77,20 @@ function subscriptionBadge(subscription: UserSubscription | null): HTMLElement |
   return ended;
 }
 
+/** Hesabın yöneticinin verdiği ücretsiz erişimi var mı (süresi geçmiş olsa da satırı duruyor). Saf fonksiyondur. */
+function hasComplimentaryRow(user: UserSummary): boolean {
+  return user.subscription !== null && user.subscription.complimentary;
+}
+
 /**
- * Planın rozeti: abonede aylık ya da yıllık da yazılır (fiyat tanınmıyorsa yalnızca "abone"). Saf fonksiyondur (yeni öğe
+ * Planın rozeti: abonede aylık ya da yıllık da yazılır (fiyat tanınmıyorsa yalnızca "abone"); süren ücretsiz erişimde
+ * "ücretsiz erişim" (aylık plan yalnızca uygulamaya uyumluluk içindir, faturalanmaz). Saf fonksiyondur (yeni öğe
  * üretir).
  */
 function planBadge(user: UserSummary): HTMLSpanElement {
+  if (user.plan === "subscription" && hasComplimentaryRow(user)) {
+    return pill(adminText.freeAccess.pill, "ok");
+  }
   const billing: BillingPlan | null = user.plan === "subscription" && user.subscription !== null ? user.subscription.plan : null;
   const label: string = billing === null ? adminText.plans[user.plan] : `${adminText.plans[user.plan]} · ${adminText.billingPlans[billing]}`;
   return pill(label, user.plan === "subscription" ? "ok" : "");
@@ -249,9 +260,24 @@ function subscriptionText(subscription: UserSubscription | null): string {
   if (subscription === null) {
     return adminText.none;
   }
+  if (subscription.complimentary) {
+    return subscription.cancelAt === null ? adminText.freeAccess.noEnd : fill(adminText.freeAccess.until, { date: formatDate(subscription.cancelAt) });
+  }
   const end: number = subscription.graceEndsAt ?? subscription.cancelAt ?? subscription.currentPeriodEnd;
   const plan: string = subscription.plan === null ? "" : `${adminText.billingPlans[subscription.plan]} · `;
   return `${plan}${subscription.status} · ${formatDate(end)}`;
+}
+
+/**
+ * Ücretsiz erişim düğmesi: ücretsiz erişim satırı varsa "kaldır", Stripe aboneliğiyle erişimi olan hesapta gizli
+ * (sunucu üzerine vermez), diğerlerinde "ver". Sonraki işlem `data-next`'tedir.
+ */
+function renderComplimentaryButton(user: UserSummary): void {
+  const button: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
+  const complimentary: boolean = hasComplimentaryRow(user);
+  button.classList.toggle("hidden", !complimentary && user.plan === "subscription");
+  button.dataset["next"] = complimentary ? "remove" : "grant";
+  button.textContent = complimentary ? adminText.freeAccess.remove : adminText.freeAccess.grant;
 }
 
 /** Kullanıcı ayrıntısını çizer. */
@@ -262,6 +288,7 @@ function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
   element("user-pills", HTMLElement).replaceChildren(
     ...[planBadge(user), subscriptionBadge(user.subscription)].filter((badge: HTMLElement | string): badge is HTMLElement => typeof badge !== "string"),
   );
+  renderComplimentaryButton(user);
   const fields: Readonly<Record<string, string>> = {
     provider: providerText(user),
     created: formatTime(user.createdAt),
@@ -339,6 +366,24 @@ export function createUsersView(onFailure: (error: unknown) => void, onOpenRepor
   }
   element("users-more", HTMLButtonElement).addEventListener("click", (): void => {
     loadList(true).catch(onFailure);
+  });
+  const complimentaryButton: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
+  complimentaryButton.addEventListener("click", (): void => {
+    const id: string | null = state.openId;
+    const next: string | undefined = complimentaryButton.dataset["next"];
+    if (id === null || (next !== "grant" && next !== "remove")) {
+      return;
+    }
+    complimentaryButton.disabled = true;
+    (next === "grant" ? grantComplimentaryAccess(id) : revokeComplimentaryAccess(id))
+      .then(async (detail: UserDetail): Promise<void> => {
+        renderDetail(detail, onOpenReport);
+        await loadList(false);
+      })
+      .catch(onFailure)
+      .finally((): void => {
+        complimentaryButton.disabled = false;
+      });
   });
   element("user-back", HTMLButtonElement).addEventListener("click", (): void => {
     state.openId = null;

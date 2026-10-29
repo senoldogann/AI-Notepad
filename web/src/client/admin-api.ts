@@ -49,7 +49,7 @@ export interface AdminStats {
   readonly trials: { readonly activeTrialUsers: number; readonly exhaustedTrialUsers: number };
   /**
    * Abonelikler: `monthly` ve `yearly` yenilenecek ödenmiş aboneliklerin plana göre sayısı; `mrrUsd` aylık × aylık fiyat
-   * + yıllık × yıllık fiyat / 12.
+   * + yıllık × yıllık fiyat / 12. `complimentary`: süren ücretsiz erişim (diğer sayılara ve gelire girmez).
    */
   readonly subscriptions: {
     readonly active: number;
@@ -59,6 +59,7 @@ export interface AdminStats {
     readonly monthly: number;
     readonly yearly: number;
     readonly mrrUsd: number;
+    readonly complimentary: number;
   };
   /** Davet programı: katılan, 30 günlük bekleme süresindeki, ödülü verilen ve iptal edilen davetler. */
   readonly referrals: { readonly joined: number; readonly pending: number; readonly granted: number; readonly voided: number };
@@ -122,6 +123,8 @@ export interface UserSubscription {
   /** Aylık ya da yıllık; fiyat tanınmıyorsa null. */
   readonly plan: BillingPlan | null;
   readonly access: UserAccess;
+  /** Yöneticinin verdiği ücretsiz erişim (Stripe'ta karşılığı yok; plan her zaman aylık görünür). */
+  readonly complimentary: boolean;
   readonly currentPeriodEnd: number;
   readonly cancelAt: number | null;
   readonly pastDueSince: number | null;
@@ -457,6 +460,7 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       monthly: numberField(subscriptions, "monthly", response, path),
       yearly: numberField(subscriptions, "yearly", response, path),
       mrrUsd: numberField(subscriptions, "mrrUsd", response, path),
+      complimentary: numberField(subscriptions, "complimentary", response, path),
     },
     referrals: {
       joined: numberField(referrals, "joined", response, path),
@@ -623,6 +627,7 @@ function parseUserSummary(item: JsonObject, response: RawResponse, path: string)
             status: stringField(subscription, "status", response, path),
             plan: nullableLiteralField(subscription, "plan", billingPlans, response, path),
             access: literalField(subscription, "access", accesses, response, path),
+            complimentary: booleanField(subscription, "complimentary", response, path),
             currentPeriodEnd: timestampField(subscription, "currentPeriodEnd", response, path),
             cancelAt: nullableTimestampField(subscription, "cancelAt", response, path),
             pastDueSince: nullableTimestampField(subscription, "pastDueSince", response, path),
@@ -925,6 +930,18 @@ export async function fetchUsers(filter: UserFilter, cursor: string | null): Pro
 export async function fetchUser(id: string): Promise<UserDetail> {
   const path: string = `/v1/admin/users/${encodeURIComponent(id)}`;
   return parseUserDetail(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Kullanıcıya süresiz ücretsiz tam erişim verir; güncel ayrıntıyı döndürür. */
+export async function grantComplimentaryAccess(id: string): Promise<UserDetail> {
+  const path: string = `/v1/admin/users/${encodeURIComponent(id)}/complimentary`;
+  return parseUserDetail(await authorizedSend({ method: "POST", path, body: { grant: true }, attempts: 1 }), path);
+}
+
+/** Kullanıcının ücretsiz erişimini kaldırır; güncel ayrıntıyı döndürür. */
+export async function revokeComplimentaryAccess(id: string): Promise<UserDetail> {
+  const path: string = `/v1/admin/users/${encodeURIComponent(id)}/complimentary`;
+  return parseUserDetail(await authorizedSend({ method: "POST", path, body: { grant: false }, attempts: 1 }), path);
 }
 
 /** Kullanıcıyı anlama görünümü (sorunlar, huni, indirme kaynakları, iptal nedenleri). */

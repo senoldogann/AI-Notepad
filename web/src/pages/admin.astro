@@ -497,6 +497,8 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <button id="user-back" class="button button--secondary button--small" type="button">{text.users.back}</button>
                 <h2 id="user-title" class="title-m user-detail__title"></h2>
                 <div id="user-pills" class="pill-row"></div>
+                {/* Ücretsiz erişim: metni ve görünürlüğü betik hesaba göre yazar (admin-users.ts). */}
+                <button id="user-complimentary" class="button button--secondary button--small user-detail__action hidden" type="button"></button>
               </div>
 
               <div class="user-detail__grid">
@@ -1468,6 +1470,11 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     font-size: 1.0625rem;
     letter-spacing: 0;
     overflow-wrap: anywhere;
+  }
+
+  /* Hesaba yönelik işlem (ücretsiz erişim) başlık satırının sağında. */
+  .user-detail__action {
+    margin-left: auto;
   }
 
   .user-detail__grid {

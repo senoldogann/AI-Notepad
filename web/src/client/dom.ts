@@ -38,6 +38,9 @@ export function errorText(error: unknown, text: ClientCopy): string {
     if (error.code === "upstream_unavailable" || error.code === "upstream_rejected") {
       return text.errors.upstream;
     }
+    if (error.code === "complimentary_subscription") {
+      return text.errors.complimentary;
+    }
     return fill(text.errors.generic, { code: error.code });
   }
   return fill(text.errors.generic, { code: error instanceof Error ? error.name : "unknown" });
