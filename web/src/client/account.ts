@@ -279,6 +279,13 @@ function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): v
   });
 }
 
+/** Oturumsuz ödeme dönüşü: yükleniyor ve hesap düğmeleri gizlenir, "ödeme alındı" kartı görünür. */
+function showPaidSignedOut(): void {
+  element("account-loading", HTMLElement).classList.add("hidden");
+  element("signout-button", HTMLButtonElement).classList.add("hidden");
+  element("payment-done-signed-out", HTMLElement).classList.remove("hidden");
+}
+
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
   const root: HTMLElement = element("account", HTMLElement);
@@ -286,13 +293,19 @@ async function main(): Promise<void> {
   const notice: HTMLElement = element("account-error", HTMLElement);
   const homePath: string = dataValue(root, "homePath");
   const text: ClientCopy = clientCopy;
-  if (!hasSession()) {
-    window.location.replace(signInPath);
-    return;
-  }
   const params: URLSearchParams = new URLSearchParams(window.location.search);
   // Stripe Checkout dönüşü: `/account?payment=done`. Sorgu hemen silinir; yenilemede bildirim yeniden görünmez.
   const paymentDone: boolean = params.get("payment") === "done";
+  if (!hasSession()) {
+    if (paymentDone) {
+      // Ödeme uygulamadan açıldı (bu sekmede oturum yok): giriş sayfası yerine "ödeme alındı, uygulamaya dön".
+      showPaidSignedOut();
+      history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+    window.location.replace(signInPath);
+    return;
+  }
   if (paymentDone) {
     showPaymentNotice();
     history.replaceState(null, "", window.location.pathname);

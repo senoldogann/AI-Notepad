@@ -35,6 +35,11 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
 
     <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
     <p id="payment-done" class="notice notice--ok hidden" role="status">{text.paymentDone}</p>
+    <div id="payment-done-signed-out" class="card paid hidden" role="status">
+      <h2 class="title-m">{text.paymentDoneSignedOut.title}</h2>
+      <p class="muted">{text.paymentDoneSignedOut.text}</p>
+      <a class="text-link" href={routes.signIn}>{text.paymentDoneSignedOut.signIn}</a>
+    </div>
     <p id="account-error" class="notice notice--error hidden" role="alert"></p>
     <p id="account-loading" class="muted" role="status">{text.loading}</p>
 
@@ -409,7 +414,8 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
     }
   }
 
-  .deleted {
+  .deleted,
+  .paid {
     display: grid;
     gap: 14px;
     justify-items: start;

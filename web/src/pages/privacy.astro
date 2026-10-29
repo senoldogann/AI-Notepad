@@ -147,9 +147,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           </tr>
           <tr>
             <td>
-              <strong>Account.</strong> With Sign in with Apple: the user identifier Apple gives us and, if you share it, your
-              email address (which may be an Apple private relay address). With Sign in with Google: your Google account
-              identifier and email address.
+              <strong>Account.</strong> The account identifier Apple or Google gives us when you sign in. Their sign-in
+              token may also contain your email address; we don't store it.
             </td>
             <td>Creating your account and signing you in</td>
             <td>(b) contract</td>
@@ -161,8 +160,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           </tr>
           <tr>
             <td>
-              <strong>Device attestation.</strong> Apple App Attest key identifier, public key and attestation receipt, app
-              version
+              <strong>Device attestation.</strong> Where your Mac supports it: Apple App Attest key identifier, public key and
+              attestation receipt, app version
             </td>
             <td>Checking that requests come from our genuine app; preventing misuse of the free trial</td>
             <td>(f) legitimate interest in preventing abuse</td>
@@ -203,7 +202,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Subscription.</strong> Stripe customer and subscription identifiers, subscription status, period
-              end and billing country. Card and payment details are entered at Stripe and never reach us.
+              end. Card and payment details are entered at Stripe and never reach us.
             </td>
             <td>Managing your subscription and access</td>
             <td>(b) contract; (c) legal obligation for accounting records</td>
@@ -272,6 +271,11 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <li>
         <strong>Sign-in session</strong> (<code>sessionStorage</code>, key <code>gistsmith.session</code>): your session
         tokens after you sign in, kept only in that browser tab and removed when you close the tab or sign out.
+      </li>
+      <li>
+        <strong>App sign-in check</strong> (<code>sessionStorage</code>, key <code>gistsmith.appSignIn</code>): a random
+        check value while you sign in to the Mac app from the browser, so the answer can only go back to that app; removed
+        when sign-in finishes or the tab closes.
       </li>
     </ul>
     <p>
@@ -389,7 +393,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       your payment, billing and tax details as independent controllers under the{" "}
       <a href={stripePrivacyUrl}>Stripe privacy policy</a> and <a href={linkPrivacyUrl}>Link's privacy policy</a>, and the
       purchase itself is governed by <a href={linkTermsUrl}>Link's terms</a>. From them we receive only your Stripe customer
-      ID, your subscription status and period, and your billing country — never your card details. We do not sell personal
+      ID and your subscription status and period — never your card details. We do not sell personal
       data or share it for advertising.
     </p>
   </LegalSection>
@@ -464,7 +468,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
   <LegalSection sections={sections} id="security">
     <p>
       All connections are encrypted with TLS. Sign-in tokens are stored on our server only as one-way hashes and IP
-      addresses only as keyed hashes. Requests from the app are verified with Apple App Attest. Our provider keys exist only
+      addresses only as keyed hashes. Free trials are checked with Apple DeviceCheck, and requests from the app with Apple
+      App Attest where the Mac supports it. Our provider keys exist only
       as encrypted secrets on our server, and access to the service's systems is limited to the operator.
     </p>
   </LegalSection>

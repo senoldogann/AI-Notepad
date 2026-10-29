@@ -282,6 +282,8 @@ export interface AccountCopy {
   readonly title: string;
   readonly loading: string;
   readonly paymentDone: string;
+  /** Ödeme uygulamadan açıldıysa tarayıcıda oturum yoktur: giriş sayfası yerine bu not görünür. */
+  readonly paymentDoneSignedOut: { readonly title: string; readonly text: string; readonly signIn: string };
   readonly planLabel: string;
   readonly trialLabel: string;
   readonly hoursLabel: string;
@@ -760,6 +762,11 @@ export const copy: Copy = {
     title: "Your account",
     loading: "Loading your account…",
     paymentDone: "Payment received, thank you. Your subscription will show up here within a few seconds.",
+    paymentDoneSignedOut: {
+      title: "Payment received, thank you",
+      text: `Go back to the ${productName} app: your subscription shows up there within a few seconds. You can close this tab.`,
+      signIn: "Sign in to see your account here",
+    },
     planLabel: "Plan",
     trialLabel: "Free trial",
     hoursLabel: "Usage this month",
@@ -768,7 +775,7 @@ export const copy: Copy = {
     subscribe: "Subscribe",
     subscribeNote: "$5.99 a month, taxes included. Renews automatically every month until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
-    manageNote: "Update your card, see receipts or cancel anytime at Link. Renews automatically every month until you cancel.",
+    manageNote: "Update your card, see receipts or cancel anytime. Renews automatically every month until you cancel.",
     signOut: "Sign out",
     appTitle: "Get the app",
     appText: `${productName} runs on your Mac. Sign in there with the same Apple or Google account.`,
