@@ -23,6 +23,8 @@ export type IconName =
   | "message"
   | "moon"
   | "note"
+  | "pause"
+  | "play"
   | "plug"
   | "refresh"
   | "rewind"
@@ -83,6 +85,8 @@ export const icons: Readonly<Record<IconName, IconShape>> = {
   message: { style: "stroke", body: '<path d="M20.25 11.6c0 4.2-3.7 7.4-8.25 7.4-1.15 0-2.25-.2-3.25-.57L4.5 19.75l1.2-3.5c-1.2-1.3-1.95-2.9-1.95-4.65 0-4.1 3.7-7.35 8.25-7.35s8.25 3.25 8.25 7.35Z"/>' },
   moon: { style: "stroke", body: '<path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z"/>' },
   note: { style: "stroke", body: '<path d="M14.25 3.75H7.5a2.25 2.25 0 0 0-2.25 2.25v12a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25V8.25Z"/><path d="M14.25 3.75v4.5h4.5M8.75 12.5h6.5M8.75 16h4"/>' },
+  pause: { style: "stroke", body: '<path d="M9 6.5v11M15 6.5v11"/>' },
+  play: { style: "stroke", body: '<path d="M8.25 5.9v12.2a.75.75 0 0 0 1.13.65l9.9-6.1a.75.75 0 0 0 0-1.3l-9.9-6.1a.75.75 0 0 0-1.13.65Z"/>' },
   plug: { style: "stroke", body: '<path d="M9 3.75V7.5M15 3.75V7.5M6.75 7.5h10.5V11a5.25 5.25 0 0 1-10.5 0Z"/><path d="M12 16.25v4"/>' },
   refresh: { style: "stroke", body: '<path d="M19.5 12a7.5 7.5 0 0 1-13.1 5M4.5 12a7.5 7.5 0 0 1 13.1-5"/><path d="M17.75 3.5V7.2h-3.7M6.25 20.5v-3.7h3.7"/>' },
   rewind: { style: "stroke", body: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9M12 8.25V12l2.5 1.75"/>' },
