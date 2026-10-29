@@ -14,6 +14,7 @@ export type PageKey =
   | "mcp"
   | "signIn"
   | "account"
+  | "invite"
   | "contact"
   | "admin"
   | "privacy"
@@ -32,6 +33,7 @@ export const routes: Readonly<Record<PageKey, string>> = {
   mcp: "/mcp",
   signIn: "/sign-in",
   account: "/account",
+  invite: "/invite",
   contact: "/contact",
   admin: "/admin",
   privacy: "/privacy",
@@ -40,7 +42,7 @@ export const routes: Readonly<Record<PageKey, string>> = {
 };
 
 /** Arama motorlarına açık sayfalar (hesap, yönetim ve 404 kişiye özel ya da içeriksizdir). */
-export const indexedPages: readonly PageKey[] = ["home", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "contact", "privacy", "terms"];
+export const indexedPages: readonly PageKey[] = ["home", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
 
 /** Önbelleğe alınmayan kişiye özel sayfalar. */
 export const privatePages: readonly PageKey[] = ["account", "admin"];

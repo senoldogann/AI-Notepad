@@ -284,7 +284,7 @@ export function wavFile(sampleRate: number, channels: number, bits: number, data
 }
 
 /**
- * Abonelik satırı ekler (webhook testleri dışında kısayol). `past_due` durumunda `past_due_since` dönem sonu kabul
+ * Aylık abonelik satırı ekler (webhook testleri dışında kısayol). `past_due` durumunda `past_due_since` dönem sonu kabul
  * edilir (ödeme dönem sonunda başarısız oldu).
  */
 export async function grantSubscription(userId: string, status: string, periodEndMs: number): Promise<void> {
@@ -292,8 +292,8 @@ export async function grantSubscription(userId: string, status: string, periodEn
   await env.DB.batch([
     env.DB.prepare("INSERT INTO stripe_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, 0)").bind(userId, customer),
     env.DB.prepare(
-      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, past_due_since, last_event_created, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, 0)`,
+      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, past_due_since, last_event_created, updated_at, plan)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'monthly')`,
     ).bind(userId, customer, `sub_${randomToken(8)}`, status, periodEndMs, status === "past_due" ? periodEndMs : null),
   ]);
 }

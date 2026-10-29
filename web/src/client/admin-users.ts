@@ -33,6 +33,7 @@ import {
 } from "./admin-format";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
+import type { BillingPlan } from "../lib/plans";
 
 const adminText: AdminClientCopy = clientCopy.admin;
 
@@ -74,9 +75,14 @@ function subscriptionBadge(subscription: UserSubscription | null): HTMLElement |
   return ended;
 }
 
-/** Planın rozeti. */
+/**
+ * Planın rozeti: abonede aylık ya da yıllık da yazılır (fiyat tanınmıyorsa yalnızca "abone"). Saf fonksiyondur (yeni öğe
+ * üretir).
+ */
 function planBadge(user: UserSummary): HTMLSpanElement {
-  return pill(adminText.plans[user.plan], user.plan === "subscription" ? "ok" : "");
+  const billing: BillingPlan | null = user.plan === "subscription" && user.subscription !== null ? user.subscription.plan : null;
+  const label: string = billing === null ? adminText.plans[user.plan] : `${adminText.plans[user.plan]} · ${adminText.billingPlans[billing]}`;
+  return pill(label, user.plan === "subscription" ? "ok" : "");
 }
 
 /** Deneme hücresinin metni. Saf fonksiyondur. */
@@ -244,7 +250,8 @@ function subscriptionText(subscription: UserSubscription | null): string {
     return adminText.none;
   }
   const end: number = subscription.graceEndsAt ?? subscription.cancelAt ?? subscription.currentPeriodEnd;
-  return `${subscription.status} · ${formatDate(end)}`;
+  const plan: string = subscription.plan === null ? "" : `${adminText.billingPlans[subscription.plan]} · `;
+  return `${plan}${subscription.status} · ${formatDate(end)}`;
 }
 
 /** Kullanıcı ayrıntısını çizer. */

@@ -279,7 +279,7 @@ struct MainWindowView: View {
             }
         )) {
             if let moment = HostedAccount.shared.upsell {
-                HostedUpsellSheet(account: .shared, moment: moment)
+                HostedUpsellSheet(account: .shared, moment: moment, trialValue: hostedTrialValue(meetings: model.meetings))
             }
         }
         #endif

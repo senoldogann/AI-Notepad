@@ -71,7 +71,7 @@ struct HostedSignInPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.")
+            Text("3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık ya da yıllık abonelikle.")
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -147,13 +147,21 @@ struct HostedAccountSettings: View {
                     .padding(.top, 12)
             }
         }
-        .task { await account.refresh() }
+        .task {
+            await account.refresh()
+            await account.loadReferral()
+        }
     }
 
     @ViewBuilder
     private func signedIn(entitlements: HostedEntitlements) -> some View {
         let status: HostedPlanStatus = hostedPlanStatus(entitlements: entitlements)
         SettingsRow(title: Text("Plan")) {
+            // Erişimi olan aboneliğin planı (aylık ya da yıllık); bitmiş abonelikte gösterilmez.
+            if let subscription = entitlements.subscription, subscription.access != .none, let plan = subscription.billingPlan {
+                Text(verbatim: hostedPlanLineText(plan: plan))
+                    .foregroundStyle(Theme.ink)
+            }
             switch status {
             case .trial:
                 // Kalan toplantılar, bitiş ve "Abone ol" aşağıdaki kullanım kartında.
@@ -176,6 +184,12 @@ struct HostedAccountSettings: View {
             }
         }
         HostedUsageCard(account: account, entitlements: entitlements)
+        switch status {
+        case .subscribed, .ending, .grace:
+            HostedReferralRow(account: account)
+        case .trial, .expired:
+            EmptyView()
+        }
         HostedSignOutRow(account: account, isMeetingInFlight: isMeetingInFlight)
         SettingsRow(title: Text("Hesabı sil")) {
             Text("Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.")

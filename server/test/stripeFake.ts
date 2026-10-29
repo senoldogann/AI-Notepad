@@ -31,6 +31,27 @@ export interface FakeInvoice {
   readonly created: number;
 }
 
+/** Sahte Stripe'ın kuponu (sunucunun okuduğu alanlar). */
+export interface FakeCoupon {
+  readonly id: string;
+  readonly object: "coupon";
+  readonly valid: boolean;
+  readonly duration: string;
+  readonly percent_off: number | null;
+  readonly amount_off: number | null;
+  readonly currency: string | null;
+}
+
+/** Sahte müşteri bakiyesi hareketi. */
+export interface FakeBalanceTransaction {
+  readonly id: string;
+  readonly object: "customer_balance_transaction";
+  readonly customer: string;
+  readonly amount: number;
+  readonly currency: string;
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
 /** Sahte ödemenin tutarı (sent). */
 export const fakeChargeAmount: number = 599;
 
@@ -65,6 +86,17 @@ export interface FakeStripe {
   failRefunds: boolean;
   /** Doluysa iptal isteği 500 döner (geçici Stripe hatası). */
   failCancels: boolean;
+  /** Kupon kimliği → kupon; oluşturma formları. */
+  readonly coupons: Map<string, FakeCoupon>;
+  readonly couponForms: URLSearchParams[];
+  /** Müşteri bakiyesi hareketleri (oluşturma sırasıyla). */
+  readonly balanceTransactions: FakeBalanceTransaction[];
+  /** Idempotency anahtarı → hareket kimliği (Stripe 24 saat tutar; testler `clear()` ile süreyi doldurur). */
+  readonly balanceKeys: Map<string, string>;
+  /** İtiraz edilmiş ödeme niyetleri (`charge.disputed`). */
+  readonly disputedIntents: Set<string>;
+  /** Doluysa bakiye hareketi yazılır ama yanıtı 500 döner (yanıt yolda kayboldu). */
+  loseBalanceResponses: boolean;
 }
 
 /** Form gövdesi. */
@@ -102,6 +134,12 @@ export function stubStripeApi(harness: Harness): FakeStripe {
     operations: [],
     failRefunds: false,
     failCancels: false,
+    coupons: new Map(),
+    couponForms: [],
+    balanceTransactions: [],
+    balanceKeys: new Map(),
+    disputedIntents: new Set(),
+    loseBalanceResponses: false,
   };
   harness.stub("https://api.stripe.com/v1/", async (request: Request): Promise<Response> => {
     const url: URL = new URL(request.url);
@@ -182,6 +220,7 @@ export function stubStripeApi(harness: Harness): FakeStripe {
           paid: true,
           amount: fakeChargeAmount,
           amount_refunded: fake.refundedIntents.has(intent) ? fakeChargeAmount : 0,
+          disputed: fake.disputedIntents.has(intent),
         },
       ]);
     }
@@ -237,6 +276,71 @@ export function stubStripeApi(harness: Harness): FakeStripe {
       }
       return Response.json(current);
     }
+    const couponPath: RegExpExecArray | null = /^\/v1\/coupons\/([^/]+)$/.exec(path);
+    if (method === "GET" && couponPath !== null) {
+      const coupon: FakeCoupon | undefined = fake.coupons.get(couponPath[1] ?? "");
+      return coupon === undefined
+        ? Response.json({ error: { type: "invalid_request_error", code: "resource_missing", message: "No such coupon" } }, { status: 404 })
+        : Response.json(coupon);
+    }
+    if (method === "POST" && path === "/v1/coupons") {
+      const form: URLSearchParams = await formOf(request);
+      fake.couponForms.push(form);
+      const percent: string | null = form.get("percent_off");
+      const amount: string | null = form.get("amount_off");
+      const coupon: FakeCoupon = {
+        id: form.get("id") ?? "",
+        object: "coupon",
+        valid: true,
+        duration: form.get("duration") ?? "",
+        percent_off: percent === null ? null : Number(percent),
+        amount_off: amount === null ? null : Number(amount),
+        currency: form.get("currency"),
+      };
+      fake.coupons.set(coupon.id, coupon);
+      return Response.json(coupon);
+    }
+    const balancePath: RegExpExecArray | null = /^\/v1\/customers\/([^/]+)\/balance_transactions$/.exec(path);
+    if (balancePath !== null) {
+      const customer: string = balancePath[1] ?? "";
+      if (method === "GET") {
+        return list(
+          `/v1/customers/${customer}/balance_transactions`,
+          fake.balanceTransactions.filter((transaction: FakeBalanceTransaction): boolean => transaction.customer === customer),
+        );
+      }
+      // Idempotency: aynı anahtar (24 saat içinde) aynı hareketi döndürür.
+      const key: string = request.headers.get("idempotency-key") ?? randomToken(6);
+      const seen: string | undefined = fake.balanceKeys.get(key);
+      const replayed: FakeBalanceTransaction | undefined = fake.balanceTransactions.find((transaction: FakeBalanceTransaction): boolean => transaction.id === seen);
+      if (replayed !== undefined) {
+        return fake.loseBalanceResponses
+          ? Response.json({ error: { type: "api_error", message: "temporary" } }, { status: 500 })
+          : Response.json(replayed);
+      }
+      const form: URLSearchParams = await formOf(request);
+      const metadata: Record<string, string> = {};
+      for (const [key, value] of form.entries()) {
+        const match: RegExpExecArray | null = /^metadata\[(.+)\]$/.exec(key);
+        if (match !== null && match[1] !== undefined) {
+          metadata[match[1]] = value;
+        }
+      }
+      const transaction: FakeBalanceTransaction = {
+        id: `cbtxn_${randomToken(6)}`,
+        object: "customer_balance_transaction",
+        customer,
+        amount: Number(form.get("amount")),
+        currency: form.get("currency") ?? "",
+        metadata,
+      };
+      fake.balanceTransactions.push(transaction);
+      fake.balanceKeys.set(key, transaction.id);
+      if (fake.loseBalanceResponses) {
+        return Response.json({ error: { type: "api_error", message: "temporary" } }, { status: 500 });
+      }
+      return Response.json(transaction);
+    }
     const chargePath: RegExpExecArray | null = /^\/v1\/charges\/([^/]+)$/.exec(path);
     if (method === "GET" && chargePath !== null) {
       const id: string = chargePath[1] ?? "";
@@ -245,6 +349,11 @@ export function stubStripeApi(harness: Harness): FakeStripe {
     throw new Error(`Sahte Stripe bu çağrıyı tanımıyor: ${method} ${path}`);
   });
   return fake;
+}
+
+/** Bu hizmetin yıllık aboneliği (yapılandırılmış yıllık fiyat); `created` ve dönem sonu saniyedir. */
+export function fakeYearlySubscription(id: string, customer: string, status: string, created: number, periodEnd: number): FakeSubscription {
+  return fakeSubscriptionWithPrice(id, customer, status, created, periodEnd, env.STRIPE_YEARLY_PRICE_ID);
 }
 
 /** Bu hizmetin aboneliği (yapılandırılmış aylık fiyat); `created` ve dönem sonu saniyedir. */

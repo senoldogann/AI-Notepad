@@ -43,7 +43,8 @@ interface StatsBody {
   readonly downloads: { total: number; last30Days: Array<{ day: string; count: number }> };
   readonly users: { total: number; newLast30Days: Array<{ day: string; count: number }>; byProvider: { apple: number; google: number } };
   readonly trials: { activeTrialUsers: number; exhaustedTrialUsers: number };
-  readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; mrrUsd: number };
+  readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; monthly: number; yearly: number; mrrUsd: number };
+  readonly referrals: { joined: number; pending: number; granted: number; voided: number };
   readonly meetings: { last30Days: Array<{ day: string; trial: number; subscription: number }>; hoursThisMonth: number };
   readonly spend: { todayUsd: number; ceilingUsd: number; trialTodayUsd: number; trialCeilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
   readonly tokens: { thisMonth: number };
@@ -198,6 +199,8 @@ describe("yönetici API'si", () => {
 
     // Abonelikler: yönetici etkin, biri iptal edilmiş (dönem sonunda biter), biri ek sürede, biri bitmiş.
     await grantSubscription(admin.userId, "active", nowMs + 20 * dayMs);
+    // Yönetici yıllık planda: MRR'ye ayda 49 / 12 katar.
+    await env.DB.prepare("UPDATE subscriptions SET plan = 'yearly' WHERE user_id = ?").bind(admin.userId).run();
     await grantSubscription(ending, "active", nowMs + 10 * dayMs);
     await env.DB.prepare("UPDATE subscriptions SET cancel_at = ? WHERE user_id = ?").bind(nowMs + 10 * dayMs, ending).run();
     await grantSubscription(grace, "past_due", nowMs - dayMs);
@@ -277,7 +280,9 @@ describe("yönetici API'si", () => {
       { day: days[29], count: 3 },
     ]);
     expect(stats.trials).toEqual({ activeTrialUsers: 1, exhaustedTrialUsers: 1 });
-    expect(stats.subscriptions).toEqual({ active: 2, grace: 1, ending: 1, canceledTotal: 1, mrrUsd: 5.99 });
+    // Yenilenecek: yalnızca yöneticinin yıllık aboneliği (aylık olan iptal edilmiş) → 49 / 12 = 4,08 $.
+    expect(stats.subscriptions).toEqual({ active: 2, grace: 1, ending: 1, canceledTotal: 1, monthly: 0, yearly: 1, mrrUsd: 4.08 });
+    expect(stats.referrals).toEqual({ joined: 0, pending: 0, granted: 0, voided: 0 });
     expect(stats.meetings.last30Days.slice(28)).toEqual([
       { day: days[28], trial: 3, subscription: 0 },
       { day: days[29], trial: 1, subscription: 1 },
@@ -505,6 +510,7 @@ describe("yönetici API'si", () => {
         cancelAt: null,
         pastDueSince: null,
         graceEndsAt: null,
+        plan: "monthly",
         updatedAt: iso(0),
       },
       trial: { used: 0, left: 3, startedAt: null, endsAt: null },

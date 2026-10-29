@@ -47,8 +47,12 @@ export interface AdminStats {
     readonly grace: number;
     readonly ending: number;
     readonly canceledTotal: number;
+    /** Yenilenecek ödenmiş abonelikler plan başına (`active` − `ending`; planı tanınmayanlar ikisine de girmez). */
+    readonly monthly: number;
+    readonly yearly: number;
     readonly mrrUsd: number;
   };
+  readonly referrals: ReferralStats;
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
   readonly spend: {
     readonly todayUsd: number;
@@ -97,6 +101,26 @@ export interface ChurnStats {
   readonly pastDue: number;
   readonly unpaid: number;
   readonly duplicateSubscriptions: number;
+}
+
+/**
+ * Davet programı (`referral_redemptions`; silinen hesapların anonim satırları dahil): `joined` kodla abone olan (ilk
+ * faturası ödenmiş), `pending` ödülü bekleyen (`joined`, `qualified`), `granted` verilen ödül, `voided` verilmeyen
+ * (iade, itiraz, kendi kendini davet, davet eden silindi ya da yıllık sınır).
+ */
+export interface ReferralStats {
+  readonly joined: number;
+  readonly pending: number;
+  readonly granted: number;
+  readonly voided: number;
+}
+
+/**
+ * Aylık yinelenen gelir tahmini (USD): aylık abonelik × aylık fiyat + yıllık abonelik × yıllık fiyat / 12; yüzde bir
+ * hassasiyet. Saf fonksiyondur.
+ */
+export function monthlyRecurringRevenueUsd(monthly: number, yearly: number, priceUsdMonthly: number, priceUsdYearly: number): number {
+  return roundCents(monthly * priceUsdMonthly + (yearly * priceUsdYearly) / 12);
 }
 
 /** Son 30 günde işlenen Stripe olaylarından ödeme sorunları (olaylar 90 gün tutulur). */
@@ -182,6 +206,8 @@ interface SubscriptionCounts {
   readonly grace: number;
   readonly ending: number;
   readonly canceled: number;
+  readonly monthly: number;
+  readonly yearly: number;
 }
 
 interface DayValueRow {
@@ -277,8 +303,11 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  * - `subscriptions.active`: erişimi `active` (ödenmiş dönem); `grace`: `past_due` ek sürede; `ending`: `active` olup
  *   iptal edilmiş (`cancel_at` dolu, dönem sonunda biter); `canceledTotal`: durumu `canceled` olan satırlar (hesabı
  *   silinenler sayılmaz).
- * - `mrrUsd` = (`active` − `ending`) × `PRICE_USD_MONTHLY`: yenilenecek ödenmiş abonelikler. Ödemesi başarısız
- *   (`grace`) ve iptal edilmiş olanlar sayılmaz; vergi ve Stripe ücreti düşülmez.
+ * - `monthly`, `yearly`: yenilenecek ödenmiş abonelikler (`active` ve iptal edilmemiş) plan başına.
+ * - `mrrUsd` = `monthly` × `PRICE_USD_MONTHLY` + `yearly` × `PRICE_USD_YEARLY` / 12 (`monthlyRecurringRevenueUsd`).
+ *   Ödemesi başarısız (`grace`), iptal edilmiş ve planı tanınmayan abonelikler sayılmaz; vergi, davet indirimleri ve
+ *   Stripe ücreti düşülmez.
+ * - `referrals`: davet programı sayaçları (`ReferralStats`).
  * - `meetings.hoursThisMonth`: bu ay (UTC) başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye dek).
  * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `trialTodayUsd` bugünkü harcamanın deneme kısmı (ayrı
  *   tavanı `trialCeilingUsd`); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
@@ -312,6 +341,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     monthlyUsageRow,
     refusalRows,
     refusalTodayRows,
+    referralRow,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -343,7 +373,9 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
         `SELECT COALESCE(SUM(CASE WHEN ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS active,
            COALESCE(SUM(CASE WHEN ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
            COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
-           COALESCE(SUM(CASE WHEN s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled
+           COALESCE(SUM(CASE WHEN s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
+           COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' THEN 1 ELSE 0 END), 0) AS monthly,
+           COALESCE(SUM(CASE WHEN ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly
          FROM subscriptions s`,
       )
       .bind(nowMs, config.pastDueGraceMs)
@@ -419,6 +451,15 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .first<MonthlyUsageRow>(),
     db.prepare("SELECT reason AS key, SUM(count) AS count FROM trial_refusals WHERE day >= ? GROUP BY reason").bind(firstDay).all<KeyCountRow>(),
     db.prepare("SELECT reason AS key, count FROM trial_refusals WHERE day = ?").bind(dayKey(now)).all<KeyCountRow>(),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN joined_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS joined,
+           COALESCE(SUM(CASE WHEN status IN ('joined', 'qualified') THEN 1 ELSE 0 END), 0) AS pending,
+           COALESCE(SUM(CASE WHEN status = 'granted' THEN 1 ELSE 0 END), 0) AS granted,
+           COALESCE(SUM(CASE WHEN status IN ('void', 'capped') THEN 1 ELSE 0 END), 0) AS voided
+         FROM referral_redemptions`,
+      )
+      .first<ReferralStats>(),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -428,7 +469,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
   const subscriptionByDay: number[] = valuesByDay(days, kindDayMap(meetingRows.results, "subscription"));
   const providers: Map<string, number> = keyMap(providerRows.results);
   const openReports: Map<string, number> = keyMap(reportRows.results);
-  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0 };
+  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0 };
   const billingEvents: Map<string, number> = keyMap(billingRows.results);
   const monthly: MonthlyUsageRow = monthlyUsageRow ?? { audio_seconds: 0, tokens: 0, account_tokens: 0, near_cap: 0 };
 
@@ -449,8 +490,11 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       grace: subscriptions.grace,
       ending: subscriptions.ending,
       canceledTotal: subscriptions.canceled,
-      mrrUsd: roundCents((subscriptions.active - subscriptions.ending) * config.priceUsdMonthly),
+      monthly: subscriptions.monthly,
+      yearly: subscriptions.yearly,
+      mrrUsd: monthlyRecurringRevenueUsd(subscriptions.monthly, subscriptions.yearly, config.priceUsdMonthly, config.priceUsdYearly),
     },
+    referrals: referralRow ?? { joined: 0, pending: 0, granted: 0, voided: 0 },
     meetings: {
       last30Days: days.map(
         (day: string, index: number): DayMeetings => ({ day, trial: trialByDay[index] ?? 0, subscription: subscriptionByDay[index] ?? 0 }),

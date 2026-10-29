@@ -525,6 +525,7 @@ describe("Stripe webhook", () => {
       id: id("ch"),
       object: "charge",
       customer,
+      payment_intent: null,
       amount_refunded: 100,
       currency: "usd",
       refunded: false,
@@ -710,6 +711,7 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
       eventOf(eventId, "invoice.paid", now - 100, {
         id: invoice,
         object: "invoice",
+        customer,
         status: "paid",
         created: now - 100,
         parent: { type: "subscription_details", subscription_details: { subscription, metadata: null } },
@@ -793,6 +795,7 @@ describe("Stripe webhook: kopya iadesinin sınırları", () => {
     const latePaid: string = eventOf(id("evt_late"), "invoice.paid", now - 50, {
       id: id("in_A5"),
       object: "invoice",
+      customer,
       status: "paid",
       created: now - 20 * 86_400,
       parent: { type: "subscription_details", subscription_details: { subscription: id("sub_A"), metadata: null } },

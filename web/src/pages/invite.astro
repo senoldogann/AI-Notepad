@@ -1,0 +1,226 @@
+---
+// Davet sayfası ("bir ay ver, bir ay kazan"): nasıl çalıştığı (üç adım), kurallar (yıllık en çok 12 ödül, kişi başına bir
+// ödül, iade ve itirazda ödül yok, nakit değeri yok, program değişebilir), indirme ve fiyat bağlantıları. Davet
+// bağlantısıyla (`/invite?code=…`) gelinirse kod kutusu görünür ve kod bu tarayıcıda saklanır (src/client/invite.ts);
+// hesap sayfası abone olurken onu doldurur. Kurallar sunucunun davet kurallarıyla aynı tutulur.
+import Base from "../layouts/Base.astro";
+import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
+import Waveform from "../components/Waveform.astro";
+import { copy, type CommonCopy, type IconText, type InviteCopy } from "../copy";
+import { routes } from "../routes";
+
+const text: InviteCopy = copy.invite;
+const common: CommonCopy = copy.common;
+---
+
+<Base page="invite" meta={text.meta} indexed={true}>
+  <section class="page invite-hero" id="invite-page" data-account-path={routes.account}>
+    <div class="invite-hero__text">
+      <p class="eyebrow">{text.eyebrow}</p>
+      <h1 class="title-xl">{text.title}</h1>
+      <p class="lead">{text.lead}</p>
+      <div class="invite-hero__actions">
+        <a class="button button--primary" href={routes.download}>
+          <Icon name="apple" size={16} class="button__apple" />
+          {common.downloadCta}
+        </a>
+        <a class="button button--secondary" href={routes.pricing}>{common.nav.pricing}</a>
+      </div>
+    </div>
+    <Film palette="rose" layout="clouds-right" class="invite-hero__cover">
+      <div id="invite-code-box" class="glass code-box hidden">
+        <p class="code-box__label">{text.codeLabel}</p>
+        <p id="invite-code" class="code-box__code tabular"></p>
+        <p class="code-box__note">{text.codeNote}</p>
+        <a id="invite-subscribe" class="button button--primary button--small" href={routes.account}>{text.subscribeWithCode}</a>
+      </div>
+      <Waveform seed={text.title} width={200} height={48} class="invite-hero__wave" />
+    </Film>
+  </section>
+
+  <section class="section page" aria-labelledby="steps-title">
+    <h2 class="title-l reveal" id="steps-title">{text.stepsTitle}</h2>
+    <ol class="steps">
+      {
+        text.steps.map((step: IconText, index: number) => (
+          <li class="card step reveal">
+            <span class="icon-chip">
+              <Icon name={step.icon} size={20} class="" />
+            </span>
+            <span class="step__number tabular" aria-hidden="true">{index + 1}</span>
+            <h3 class="title-m">{step.title}</h3>
+            <p class="muted">{step.text}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
+  <section class="section page rules-layout" aria-labelledby="rules-title">
+    <div class="rules reveal">
+      <h2 class="title-l" id="rules-title">{text.rulesTitle}</h2>
+      <ul class="rules__list">
+        {
+          text.rules.map((rule: string) => (
+            <li>
+              <Icon name="check" size={16} class="rules__icon" />
+              <span>{rule}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="small muted">
+        {text.termsNote} <a class="text-link" href={`${routes.terms}#invites`}>{text.termsLink}</a>.
+      </p>
+    </div>
+    <aside class="card own-code reveal" aria-labelledby="own-code-title">
+      <span class="icon-chip"><Icon name="gift" size={20} class="" /></span>
+      <h2 class="title-m" id="own-code-title">{text.ownCodeTitle}</h2>
+      <p class="muted">{text.ownCodeText}</p>
+      <a class="text-link" href={routes.account}>{text.ownCodeLink} <Icon name="arrow-right" size={16} class="" /></a>
+    </aside>
+  </section>
+</Base>
+
+<script>
+  import "../client/invite";
+</script>
+
+<style>
+  .invite-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    gap: clamp(24px, 5vw, 64px);
+    align-items: center;
+    padding-block: clamp(48px, 8vw, 96px) clamp(16px, 3vw, 32px);
+  }
+
+  .invite-hero__text {
+    display: grid;
+    gap: 18px;
+  }
+
+  .invite-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 6px;
+  }
+
+  .invite-hero :global(.invite-hero__cover) {
+    display: grid;
+    place-items: center;
+    gap: 20px;
+    min-height: clamp(240px, 28vw, 320px);
+    padding: clamp(24px, 4vw, 40px);
+  }
+
+  .code-box {
+    display: grid;
+    justify-items: start;
+    gap: 8px;
+    width: min(100%, 22rem);
+    padding: 20px 22px;
+  }
+
+  .code-box__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .code-box__code {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    line-height: 1.1;
+  }
+
+  .code-box__note {
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .code-box .button {
+    margin-top: 6px;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin: clamp(28px, 4vw, 44px) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    position: relative;
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  .step .icon-chip {
+    margin-bottom: 6px;
+  }
+
+  .step__number {
+    position: absolute;
+    top: 20px;
+    right: 22px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  /* Adımların hemen ardından: iki bölüm boşluğu üst üste binmesin. */
+  .rules-layout {
+    padding-top: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: clamp(24px, 5vw, 64px);
+    align-items: start;
+  }
+
+  .rules {
+    display: grid;
+    gap: 18px;
+  }
+
+  .rules__list {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rules__list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    line-height: 1.5;
+  }
+
+  .rules__list :global(.rules__icon) {
+    flex: none;
+    margin-top: 4px;
+    color: var(--ok);
+  }
+
+  .own-code {
+    display: grid;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  @media (max-width: 860px) {
+    .invite-hero,
+    .rules-layout,
+    .steps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

@@ -60,6 +60,8 @@ interface Captures {
   readonly providerNavigations: string[];
   readonly identityRequests: Array<{ readonly path: string; readonly body: IdentityBody }>;
   readonly checkoutRequests: string[];
+  /** Checkout isteklerinin gövdeleri (seçilen plan ve davet kodu). */
+  readonly checkoutBodies: string[];
   /** `/v1/auth/{apple,google}` isteğine verilecek oturum (gerçek yenilemeyle alınır). */
   nextIdentitySession: SessionBody | null;
 }
@@ -228,6 +230,7 @@ async function answerApi(route: Route, request: Request, url: URL, siteOrigin: s
   }
   if (url.pathname === "/v1/billing/checkout") {
     captures.checkoutRequests.push(request.headers()["authorization"] ?? "");
+    captures.checkoutBodies.push(request.postData() ?? "");
     await route.fulfill({ status: 200, headers: cors, body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/e2e" }) });
     return;
   }
@@ -635,9 +638,12 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
   await page.locator("#subscribe-button:visible").click();
   await page.waitForURL("https://checkout.stripe.com/**", { timeout: 10_000 }).catch((): void => undefined);
   check(
-    "Abone ol düğmesi kimlikli Checkout isteği atar ve Checkout adresine geçer",
-    captures.checkoutRequests.length === checkoutBefore + 1 && captures.checkoutRequests.at(-1)?.startsWith("Bearer ") === true && page.url().startsWith("https://checkout.stripe.com/"),
-    page.url(),
+    "Abone ol düğmesi kimlikli Checkout isteği (önceden seçili yıllık planla) atar ve Checkout adresine geçer",
+    captures.checkoutRequests.length === checkoutBefore + 1 &&
+      captures.checkoutRequests.at(-1)?.startsWith("Bearer ") === true &&
+      captures.checkoutBodies.at(-1) === JSON.stringify({ plan: "yearly" }) &&
+      page.url().startsWith("https://checkout.stripe.com/"),
+    JSON.stringify({ url: page.url(), body: captures.checkoutBodies.at(-1) }),
   );
 
   // Webhook'un yazdığı etkin abonelik: `?payment=done` bildirimi, Yönet düğmesi, saat kartı.
@@ -741,7 +747,7 @@ async function main(): Promise<void> {
   if (health.status !== 200) {
     throw new Error(`Yerel sunucu hazır değil: ${apiBase}/v1/health durum ${health.status}`);
   }
-  const captures: Captures = { providerNavigations: [], identityRequests: [], checkoutRequests: [], nextIdentitySession: null };
+  const captures: Captures = { providerNavigations: [], identityRequests: [], checkoutRequests: [], checkoutBodies: [], nextIdentitySession: null };
   const browser: Browser = await chromium.launch({ executablePath: chromePath, headless: true });
   try {
     const context: BrowserContext = await newContext(browser, siteOrigin, apiBase, captures);

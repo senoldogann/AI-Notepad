@@ -168,7 +168,18 @@ function renderGrowthAndRevenue(stats: AdminStats): void {
   setKpi(
     "subscribers",
     formatCount(stats.subscriptions.active),
-    fill(adminText.subscribersSub, { grace: formatCount(stats.subscriptions.grace), ending: formatCount(stats.subscriptions.ending), canceled: formatCount(stats.subscriptions.canceledTotal) }),
+    `${fill(adminText.subscribersSub, {
+      monthly: formatCount(stats.subscriptions.monthly),
+      yearly: formatCount(stats.subscriptions.yearly),
+      grace: formatCount(stats.subscriptions.grace),
+      ending: formatCount(stats.subscriptions.ending),
+      canceled: formatCount(stats.subscriptions.canceledTotal),
+    })}. ${fillCounts(adminText.referralsSub, {
+      joined: stats.referrals.joined,
+      pending: stats.referrals.pending,
+      granted: stats.referrals.granted,
+      voided: stats.referrals.voided,
+    })}`,
   );
   setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), `${adminText.mrrSub} · ${stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest}`);
 

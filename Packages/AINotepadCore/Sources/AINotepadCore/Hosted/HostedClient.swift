@@ -200,10 +200,25 @@ public actor HostedClient: HostedLLMCredentialSource {
         meetingID
     }
 
-    /// Stripe Checkout adresi; bitmemiş abonelik varsa `subscription_exists`.
-    public func checkoutURL() async throws -> URL {
+    /// Seçilen planın Stripe Checkout adresi; `referralCode` doğrulanmış davet kodudur (yoksa nil). Bitmemiş abonelik
+    /// varsa `subscription_exists`; davet kodu geçersizse `referral_*`.
+    public func checkoutURL(plan: HostedBillingPlan, referralCode: String?) async throws -> URL {
         let path: String = "/v1/billing/checkout"
-        return try decode(HostedURLResponse.self, data: try await authorized(path: path, method: "POST", body: nil, isRetryable: isRetryableRepeatableRequest), path: path).url
+        let body: Data = try encoded(body: HostedCheckoutBody(plan: plan, referralCode: referralCode))
+        return try decode(HostedURLResponse.self, data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableRepeatableRequest), path: path).url
+    }
+
+    /// `GET /v1/referral`: abonenin davet kodu ve davet sayıları.
+    public func referral() async throws -> HostedReferral {
+        let path: String = "/v1/referral"
+        return try decode(HostedReferral.self, data: try await authorized(path: path, method: "GET", body: nil, isRetryable: isRetryableRepeatableRequest), path: path)
+    }
+
+    /// Davet kodunu ödemeden önce sunucuya doğrulatır; geçerliyse sadeleşmiş kodu döndürür, değilse `referral_*`.
+    public func validateReferral(code: String) async throws -> HostedReferralValidation {
+        let path: String = "/v1/referral/validate"
+        let body: Data = try encoded(body: HostedReferralValidateBody(code: code))
+        return try decode(HostedReferralValidation.self, data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableRepeatableRequest), path: path)
     }
 
     /// Stripe Müşteri Portalı adresi.

@@ -58,6 +58,7 @@ export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>>
   mcp: [],
   signIn: ["appleSignIn"],
   account: [],
+  invite: [],
   contact: ["turnstile"],
   admin: [],
   privacy: [],

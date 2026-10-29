@@ -23,7 +23,21 @@ export interface ClientCopy {
     /** Bilinmeyen hata; `{code}` sunucunun hata koduyla değişir. */
     readonly generic: string;
   };
-  readonly plan: { readonly trial: string; readonly subscription: string };
+  /** Davet kodu doğrulamasının ve Checkout'un davet hataları (sunucu kodlarıyla). */
+  readonly inviteErrors: {
+    readonly format: string;
+    readonly referral_invalid: string;
+    readonly referral_self: string;
+    readonly referral_not_eligible: string;
+    readonly referral_unavailable: string;
+  };
+  /** Davet kodu durum satırı: denetleniyor, plan başına uygulanan indirim. */
+  readonly inviteChecking: string;
+  readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
+  /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
+  readonly referralStats: string;
+  /** `plan`: abonelik planı bilinmiyorsa (eski fiyat) `subscription`. */
+  readonly plan: { readonly trial: string; readonly subscription: string; readonly monthly: string; readonly yearly: string };
   /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
   /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
@@ -60,8 +74,10 @@ export interface AdminClientCopy {
   readonly usersSub: string;
   /** `{count}`. */
   readonly trialsSub: string;
-  /** `{grace}`, `{ending}`, `{canceled}`. */
+  /** `{monthly}`, `{yearly}`, `{grace}`, `{ending}`, `{canceled}`. */
   readonly subscribersSub: string;
+  /** Davet programı: `{joined}`, `{pending}`, `{granted}`, `{voided}`. */
+  readonly referralsSub: string;
   readonly mrrSub: string;
   /** MRR alt satırına eklenir: Stripe'ın modu. */
   readonly stripeTest: string;
@@ -101,6 +117,8 @@ export interface AdminClientCopy {
   /** Değer yok. */
   readonly none: string;
   readonly plans: { readonly subscription: string; readonly trial: string; readonly free: string };
+  /** Abonelik planı (aylık, yıllık); bilinmeyen fiyatta gösterilmez. */
+  readonly billingPlans: { readonly monthly: string; readonly yearly: string };
   readonly providers: { readonly apple: string; readonly google: string };
   /** Abonelik durumu rozetleri (Stripe durumu ve erişim). */
   readonly subscriptionPills: { readonly active: string; readonly ending: string; readonly grace: string; readonly ended: string };
@@ -200,7 +218,20 @@ export const clientCopy: ClientCopy = {
     messageTooLong: "Your message is too long. Please shorten it to 5,000 characters.",
     generic: "Something went wrong (code: {code}). Try again.",
   },
-  plan: { trial: "Free trial", subscription: `${productName} monthly` },
+  inviteErrors: {
+    format: "That doesn't look like an invite code. Check it and try again.",
+    referral_invalid: "We couldn't find that invite code. Check it and try again.",
+    referral_self: "That's your own invite code; share it with a friend instead.",
+    referral_not_eligible: "Invite codes are for new subscribers, so this account can't use one. You can still subscribe without it.",
+    referral_unavailable: "Invite codes can't be used right now. You can still subscribe without one.",
+  },
+  inviteChecking: "Checking the code…",
+  inviteApplied: {
+    monthly: "Invite applied: your first month is free.",
+    yearly: "Invite applied: $5.99 off your first year.",
+  },
+  referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
+  plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly` },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",
   trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
   trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
@@ -222,8 +253,9 @@ export const clientCopy: ClientCopy = {
     downloadsSub: "{count} in the last 30 days",
     usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
     trialsSub: "{count} used up",
-    subscribersSub: "{grace} in grace · {ending} ending · {canceled} cancelled in total",
-    mrrSub: "From renewing subscriptions, taxes included",
+    subscribersSub: "{monthly} monthly · {yearly} yearly · {grace} in grace · {ending} ending · {canceled} cancelled in total",
+    referralsSub: "Invites: {joined} joined · {pending} waiting · {granted} rewarded · {voided} voided",
+    mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, taxes included",
     stripeTest: "Stripe test mode",
     stripeLive: "Stripe live",
     elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",
@@ -247,6 +279,7 @@ export const clientCopy: ClientCopy = {
     refusalsSub: "Mac already used {device} · same network {ip} · used up {exhausted} · expired {expired} · {today} today",
     none: "—",
     plans: { subscription: "Subscribed", trial: "Trial", free: "No plan" },
+    billingPlans: { monthly: "Monthly", yearly: "Yearly" },
     providers: { apple: "Apple", google: "Google" },
     subscriptionPills: { active: "Active", ending: "Ending", grace: "Payment due", ended: "Ended" },
     trialCell: "{used} used · {left} left",

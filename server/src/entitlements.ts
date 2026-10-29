@@ -1,4 +1,4 @@
-import type { Config } from "./config";
+import type { Config, SubscriptionPlan } from "./config";
 import { type LiveEngine, liveEngine } from "./deepgram";
 import { ApiError } from "./errors";
 import { type ReservationLimit, remainingOf, subscriberAccountTokenLimit, trialAccountTokenLimit } from "./reservations";
@@ -85,7 +85,18 @@ export interface Entitlements {
     readonly access: SubscriptionAccess;
     /** `past_due` ek süresinin bittiği an; ek süre yoksa null. */
     readonly graceEndsAt: string | null;
+    /** Plan (aylık ya da yıllık); fiyatı tanınmayan eski abonelikte null. Haklar plana bakmaz. */
+    readonly plan: SubscriptionPlan | null;
   } | null;
+}
+
+/** Kullanıcının abonelik satırındaki plan; satır yoksa ya da plan tanınmıyorsa null. */
+export async function subscriptionPlan(db: D1Database, userId: string): Promise<SubscriptionPlan | null> {
+  const row: { plan: SubscriptionPlan | null } | null = await db
+    .prepare("SELECT plan FROM subscriptions WHERE user_id = ?")
+    .bind(userId)
+    .first<{ plan: SubscriptionPlan | null }>();
+  return row?.plan ?? null;
 }
 
 /** `past_due` ek süresinin bittiği an (ms): `past_due`'ya geçiş + `pastDueGraceMs`; `past_due` değilse null. Saf fonksiyondur. */
@@ -284,14 +295,21 @@ export function hoursRoundedUp(seconds: number): number {
  * gösterim içindir, hak toplantı başlatırken imzalı onayla yeniden denetlenir.
  */
 export async function entitlements(db: D1Database, config: Config, userId: string, deviceId: string | null, now: Date): Promise<Entitlements> {
-  const [subscription, trial, deviceUsed, usage, engine]: [SubscriptionState | null, TrialState, number | null, MonthlyUsage, LiveEngine] =
-    await Promise.all([
-      subscriptionState(db, userId),
-      userTrialState(db, userId),
-      deviceId === null ? Promise.resolve(null) : deviceTrialMeetingsUsed(db, deviceId),
-      monthlyUsage(db, userId, now),
-      liveEngine(db, config),
-    ]);
+  const [subscription, plan, trial, deviceUsed, usage, engine]: [
+    SubscriptionState | null,
+    SubscriptionPlan | null,
+    TrialState,
+    number | null,
+    MonthlyUsage,
+    LiveEngine,
+  ] = await Promise.all([
+    subscriptionState(db, userId),
+    subscriptionPlan(db, userId),
+    userTrialState(db, userId),
+    deviceId === null ? Promise.resolve(null) : deviceTrialMeetingsUsed(db, deviceId),
+    monthlyUsage(db, userId, now),
+    liveEngine(db, config),
+  ]);
   const access: SubscriptionAccess = subscriptionAccess(subscription, now, config.pastDueGraceMs);
   const allowance: AccountTokenAllowance = await accountTokenAllowance(db, config, userId, access !== "none", now);
   const accountLeft: number = trialMeetingsLeft(trial, config, now);
@@ -325,6 +343,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
             cancelAt: subscription.cancelAt === null ? null : new Date(subscription.cancelAt).toISOString(),
             access,
             graceEndsAt: access === "grace" ? new Date(graceEndsAtMs(subscription, config.pastDueGraceMs) ?? 0).toISOString() : null,
+            plan,
           },
   };
 }

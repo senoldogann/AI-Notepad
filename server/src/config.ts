@@ -10,6 +10,18 @@ export type AttestEnvironment = "development" | "production";
 /** Stripe anahtarının modu: canlı ya da test. */
 export type StripeMode = "live" | "test";
 
+/** Abonelik planı: aylık ya da yıllık (aynı ürünün iki fiyatı; haklar plana bakmaz). */
+export type SubscriptionPlan = "monthly" | "yearly";
+
+/** Davet programı anahtarı (`REFERRAL_POLICY`): `off` ise yeni kod verilmez ve kod kabul edilmez. */
+export type ReferralPolicy = "on" | "off";
+
+/** Bizim abonelik fiyatlarımız (Stripe fiyat kimlikleri). */
+export interface StripePrices {
+  readonly monthly: string;
+  readonly yearly: string;
+}
+
 /** Stripe gizli ya da kısıtlı anahtarının öneki ve modu. */
 const stripeKeyPattern: RegExp = /^(?:sk|rk)_(live|test)_/;
 
@@ -65,8 +77,15 @@ export interface Config {
   readonly dmgUrl: string;
   /** DMG ile aynı GitHub sürümündeki Sparkle appcast'i; `GET /v1/download/mac/version` sürümü buradan okur. */
   readonly appcastUrl: string;
-  /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
+  /**
+   * Aylık abonelik fiyatı (USD; Stripe fiyatıyla elle aynı tutulur): yönetici MRR tahmini, davet indirimi (yıllıkta tek
+   * seferlik indirim tutarı) ve davet ödülü (davet edenin müşteri bakiyesi alacağı) bundan hesaplanır.
+   */
   readonly priceUsdMonthly: number;
+  /** Yıllık abonelik fiyatı (USD); yalnızca yönetici MRR tahmini için (ayda 1/12'si sayılır). */
+  readonly priceUsdYearly: number;
+  /** Davet programı açık mı (`REFERRAL_POLICY`). */
+  readonly referralPolicy: ReferralPolicy;
   /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
   readonly reportBytesPerDay: number;
   readonly attest: {
@@ -124,7 +143,8 @@ export interface Config {
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
-  readonly stripePriceId: string;
+  /** Aylık (`STRIPE_PRICE_ID`) ve yıllık (`STRIPE_YEARLY_PRICE_ID`) fiyat. */
+  readonly stripePrices: StripePrices;
   /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
   readonly stripeMode: StripeMode;
   readonly secrets: {
@@ -147,8 +167,8 @@ export interface StripeWebhookConfig {
   readonly environment: "development" | "production";
   /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
   readonly stripeMode: StripeMode;
-  /** Aylık abonelik fiyatı: webhook yalnızca bu fiyatlı (ya da `metadata.user_id` taşıyan) aboneliklere dokunur. */
-  readonly stripePriceId: string;
+  /** Abonelik fiyatları: webhook yalnızca bu fiyatlı (ya da `metadata.user_id` taşıyan) aboneliklere dokunur. */
+  readonly stripePrices: StripePrices;
   readonly secrets: {
     readonly stripe: string;
     readonly stripeWebhook: string;
@@ -188,6 +208,7 @@ export interface PlaceholderCandidates {
   readonly DMG_URL: string;
   readonly APPCAST_URL: string;
   readonly STRIPE_PRICE_ID: string;
+  readonly STRIPE_YEARLY_PRICE_ID: string;
 }
 
 /** Örnek (RFC 2606) ya da yerel alan adı mı. Saf fonksiyondur. */
@@ -218,6 +239,7 @@ export function placeholderSettings(settings: PlaceholderCandidates): string[] {
     ["DMG_URL", isPlaceholderUrl(settings.DMG_URL)],
     ["APPCAST_URL", isPlaceholderUrl(settings.APPCAST_URL)],
     ["STRIPE_PRICE_ID", containsPlaceholder(settings.STRIPE_PRICE_ID)],
+    ["STRIPE_YEARLY_PRICE_ID", containsPlaceholder(settings.STRIPE_YEARLY_PRICE_ID)],
   ];
   return checks.filter(([, placeholder]: readonly [string, boolean]): boolean => placeholder).map(([name]: readonly [string, boolean]): string => name);
 }
@@ -249,6 +271,8 @@ const envSchema = z.object({
   DMG_URL: z.url({ protocol: /^https$/ }),
   APPCAST_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
+  PRICE_USD_YEARLY: positiveNumber,
+  REFERRAL_POLICY: z.enum(["on", "off"]),
   REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
@@ -292,6 +316,7 @@ const envSchema = z.object({
   DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
+  STRIPE_YEARLY_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
   TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
@@ -302,7 +327,21 @@ const envSchema = z.object({
 });
 
 /** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası). */
-const stripeWebhookSchema = envSchema.pick({ ENVIRONMENT: true, STRIPE_SECRET_KEY: true, STRIPE_WEBHOOK_SECRET: true, STRIPE_PRICE_ID: true });
+const stripeWebhookSchema = envSchema.pick({
+  ENVIRONMENT: true,
+  STRIPE_SECRET_KEY: true,
+  STRIPE_WEBHOOK_SECRET: true,
+  STRIPE_PRICE_ID: true,
+  STRIPE_YEARLY_PRICE_ID: true,
+});
+
+/** İki fiyat kimliği; aynıysa `ConfigError` (aylık ve yıllık ayırt edilemez, plan ve MRR yanlış olur). Saf fonksiyondur. */
+function stripePricesOf(monthly: string, yearly: string): StripePrices {
+  if (monthly === yearly) {
+    throw new ConfigError(["STRIPE_YEARLY_PRICE_ID"]);
+  }
+  return { monthly, yearly };
+}
 
 /** Anahtarın modu. Saf fonksiyondur. */
 function stripeModeOf(key: string): StripeMode {
@@ -318,7 +357,7 @@ export function parseStripeWebhookConfig(env: Env): StripeWebhookConfig {
   return {
     environment: parsed.data.ENVIRONMENT,
     stripeMode: stripeModeOf(parsed.data.STRIPE_SECRET_KEY),
-    stripePriceId: parsed.data.STRIPE_PRICE_ID,
+    stripePrices: stripePricesOf(parsed.data.STRIPE_PRICE_ID, parsed.data.STRIPE_YEARLY_PRICE_ID),
     secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET },
   };
 }
@@ -373,6 +412,8 @@ export function parseConfig(env: Env): Config {
     dmgUrl: value.DMG_URL,
     appcastUrl: value.APPCAST_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
+    priceUsdYearly: value.PRICE_USD_YEARLY,
+    referralPolicy: value.REFERRAL_POLICY,
     reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,
@@ -414,7 +455,7 @@ export function parseConfig(env: Env): Config {
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
-    stripePriceId: value.STRIPE_PRICE_ID,
+    stripePrices: stripePricesOf(value.STRIPE_PRICE_ID, value.STRIPE_YEARLY_PRICE_ID),
     stripeMode: stripeModeOf(value.STRIPE_SECRET_KEY),
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,

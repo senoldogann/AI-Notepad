@@ -12,6 +12,7 @@ import { dailyElevenLabsCapacityCheck } from "./elevenLabsCapacity";
 import type { Env } from "./env";
 import { errorName, log } from "./log";
 import type { Platform } from "./platform";
+import { grantDueReferralRewards } from "./referralRewards";
 
 /** Üretim platformu: gerçek fetch, saat, Apple App Attestation kökü ve Worker örneği ömrünce JWKS önbelleği. */
 const platform: Platform = {
@@ -33,7 +34,8 @@ export default {
   },
   /**
    * Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm), bitirilmeden kalan toplantıların Deepgram
-   * tahmininin indirilmesi, süresi dolmuş satırların temizliği ve Apple/Google anahtarlarının tazelenmesi.
+   * tahmininin indirilmesi, süresi dolmuş satırların temizliği, günü gelmiş davet ödülleri ve Apple/Google anahtarlarının
+   * tazelenmesi.
    */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const now: Date = new Date(controller.scheduledTime);
@@ -46,6 +48,8 @@ export default {
       { name: "elevenlabs_capacity", run: () => dailyElevenLabsCapacityCheck(env.DB, config, now) },
       { name: "deepgram_settle", run: () => settleDeepgramMeetings(env.DB, now) },
       { name: "cleanup", run: () => cleanupExpiredRows(env.DB, now, scheduledCleanupLimits) },
+      // Bekleme süresi dolmuş davet ödülleri (davet edenin Stripe müşteri bakiyesi; bkz. `referralRewards.ts`).
+      { name: "referral_rewards", run: () => grantDueReferralRewards(env.DB, platform, config, now) },
       // Apple ve Google anahtarları önceden alınır: girişler sağlayıcıyı beklemesin (bkz. `persistedIssuerKeys`).
       { name: "apple_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, appleTokenIssuer(config)) },
       { name: "google_jwks", run: () => refreshPersistedIssuerKeys(env.DB, platform, googleTokenIssuer(config)) },
