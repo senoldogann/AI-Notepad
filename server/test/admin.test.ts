@@ -46,6 +46,7 @@ interface StatsBody {
   readonly spend: { todayUsd: number; ceilingUsd: number; trialTodayUsd: number; trialCeilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
   readonly tokens: { thisMonth: number };
   readonly reports: { openFeedback: number; openCrash: number; openContact: number };
+  readonly stripe: { mode: string };
 }
 
 interface ListBody {
@@ -145,6 +146,7 @@ describe("yönetici API'si", () => {
     expect(stats.spend.last30Days[24]).toEqual({ day: days[24], usd: 0.5 });
     expect(stats.tokens).toEqual({ thisMonth: 1500 });
     expect(stats.reports).toEqual({ openFeedback: 2, openCrash: 1, openContact: 0 });
+    expect(stats.stripe).toEqual({ mode: "test" });
   });
 
   it("yönetici olmayan 403 alır; gövdede kendi kimliği vardır; liste boşsa kimse yönetici değildir", async () => {

@@ -8,6 +8,8 @@ export interface SubscriptionState {
   readonly currentPeriodEnd: number;
   /** İptal edilmiş aboneliğin biteceği an (ms); yenilenecekse null. */
   readonly cancelAt: number | null;
+  /** Aboneliğin `past_due` durumuna geçtiği an (ms; webhook'un işlediği an); `past_due` değilse null. */
+  readonly pastDueSince: number | null;
 }
 
 /** Kullanıcının planı: deneme ya da abonelik. */
@@ -47,9 +49,15 @@ export interface Entitlements {
   } | null;
 }
 
+/** `past_due` ek süresinin bittiği an (ms): `past_due`'ya geçiş + `pastDueGraceMs`; `past_due` değilse null. Saf fonksiyondur. */
+export function graceEndsAtMs(subscription: SubscriptionState, pastDueGraceMs: number): number | null {
+  return subscription.status === "past_due" && subscription.pastDueSince !== null ? subscription.pastDueSince + pastDueGraceMs : null;
+}
+
 /**
- * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek; `past_due` dönem sonundan sonra `pastDueGraceMs`
- * boyunca (Stripe ödemeyi yeniden denerken) erişimi korur. Saf fonksiyondur.
+ * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek; `past_due` ödemenin başarısız olduğu andan
+ * (`pastDueSince`; Stripe yenilemede dönem sonunu hemen ilerlettiği için dönem sonundan değil) `pastDueGraceMs` boyunca
+ * (Stripe ödemeyi yeniden denerken) erişimi korur. Saf fonksiyondur.
  */
 export function subscriptionAccess(subscription: SubscriptionState | null, now: Date, pastDueGraceMs: number): SubscriptionAccess {
   if (subscription === null) {
@@ -58,7 +66,8 @@ export function subscriptionAccess(subscription: SubscriptionState | null, now: 
   if (["active", "trialing"].includes(subscription.status) && subscription.currentPeriodEnd > now.getTime()) {
     return "active";
   }
-  if (subscription.status === "past_due" && subscription.currentPeriodEnd + pastDueGraceMs > now.getTime()) {
+  const graceEnd: number | null = graceEndsAtMs(subscription, pastDueGraceMs);
+  if (graceEnd !== null && graceEnd > now.getTime()) {
     return "grace";
   }
   return "none";
@@ -84,11 +93,13 @@ export function hasSubscriptionAccess(subscription: SubscriptionState | null, no
 
 /** Kullanıcının abonelik durumu (yoksa null). */
 export async function subscriptionState(db: D1Database, userId: string): Promise<SubscriptionState | null> {
-  const row: { status: string; current_period_end: number; cancel_at: number | null } | null = await db
-    .prepare("SELECT status, current_period_end, cancel_at FROM subscriptions WHERE user_id = ?")
+  const row: { status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null } | null = await db
+    .prepare("SELECT status, current_period_end, cancel_at, past_due_since FROM subscriptions WHERE user_id = ?")
     .bind(userId)
-    .first<{ status: string; current_period_end: number; cancel_at: number | null }>();
-  return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at };
+    .first<{ status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null }>();
+  return row === null
+    ? null
+    : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at, pastDueSince: row.past_due_since };
 }
 
 /** Hesabın deneme durumu. */
@@ -225,7 +236,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
             currentPeriodEnd: new Date(subscription.currentPeriodEnd).toISOString(),
             cancelAt: subscription.cancelAt === null ? null : new Date(subscription.cancelAt).toISOString(),
             access,
-            graceEndsAt: access === "grace" ? new Date(subscription.currentPeriodEnd + config.pastDueGraceMs).toISOString() : null,
+            graceEndsAt: access === "grace" ? new Date(graceEndsAtMs(subscription, config.pastDueGraceMs) ?? 0).toISOString() : null,
           },
   };
 }

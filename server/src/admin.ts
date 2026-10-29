@@ -1,4 +1,4 @@
-import type { Config } from "./config";
+import type { Config, StripeMode } from "./config";
 import { ForbiddenIdentityError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
@@ -56,6 +56,8 @@ export interface AdminStats {
   };
   readonly tokens: { readonly thisMonth: number };
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
+  /** Stripe anahtarının modu: canlıya geçişte `live` olmalı. */
+  readonly stripe: { readonly mode: StripeMode };
 }
 
 /**
@@ -94,10 +96,10 @@ function roundCents(value: number): number {
 
 /**
  * Abonelik erişimi olan satır (`subscriptions s`) için SQL koşulu; `entitlements.subscriptionAccess` ile aynıdır:
- * `active`/`trialing` dönem sonuna dek, `past_due` dönem sonu + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
+ * `active`/`trialing` dönem sonuna dek, `past_due` `past_due_since` + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
  */
 const activeAccessSql: string = "s.status IN ('active', 'trialing') AND s.current_period_end > ?1";
-const graceAccessSql: string = "s.status = 'past_due' AND s.current_period_end + ?2 > ?1";
+const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 > ?1";
 
 interface SubscriptionCounts {
   readonly active: number;
@@ -278,5 +280,6 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       openCrash: openReports.get("crash") ?? 0,
       openContact: openReports.get("contact") ?? 0,
     },
+    stripe: { mode: config.stripeMode },
   };
 }

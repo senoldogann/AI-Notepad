@@ -75,7 +75,9 @@ deneme sayısı ile Mac doğrulama anını ekler (aşağıda "Deneme kötüye ku
 (`users.trial_started_at`, defterde de) ekler; var olan hesaplar ilk deneme toplantısından, var olan defter satırları
 silinme anından doldurulur. `0011` raporların bayt boyunu (`reports.size_bytes`, tür başına günlük bütçe) ekler.
 `0012` süreli ayırma satırlarını (`usage_reservations`, aşağıda "Ayırma ve kesinleştirme") ve abonenin toplantı dışı
-token sayacını (`monthly_usage.account_tokens`) ekler; eski `*_reserved` sayaç sütunları artık kullanılmaz.
+token sayacını (`monthly_usage.account_tokens`) ekler; eski `*_reserved` sayaç sütunları artık kullanılmaz. `0013`
+yenileme jetonunun yerine geçen jetonu (`refresh_tokens.replaced_by`) ekler. `0014` aboneliğin `past_due`'ya geçtiği anı
+(`subscriptions.past_due_since`; var olan `past_due` satırları son webhook yazımından) ekler.
 
 ## Ayırma ve kesinleştirme
 
@@ -141,7 +143,10 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 5. `npm run migrate:production`
 6. `npm run deploy`
 7. Stripe panelinde webhook uç noktası: `https://api.gistsmith.com/v1/billing/webhook`, olaylar
-   `customer.subscription.created|updated|deleted|paused|resumed`; imza sırrını `STRIPE_WEBHOOK_SECRET` yap.
+   `customer.subscription.created|updated|deleted|paused|resumed`, `customer.deleted`, `charge.refunded`,
+   `charge.dispute.created`; imza sırrını `STRIPE_WEBHOOK_SECRET` yap. Canlıya geçerken anahtar (`sk_live_`/`rk_live_`)
+   ve canlı moddaki webhook birlikte değişmeli: olayın modu anahtarınkiyle uyuşmazsa webhook `500` ve
+   `stripe_mode_mismatch` alarmı verir; anahtarın modu `GET /v1/admin/stats` → `stripe.mode`'dadır.
    Stripe Tax'i ve Müşteri Portalı'nı panelden aç.
 8. `curl https://api.gistsmith.com/v1/health` → `{"status":"ok"}`
 9. Önerilen: Cloudflare panelinde `api.gistsmith.com` için bir WAF hız sınırı kuralı. Workers Free planının hesap
@@ -164,8 +169,8 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 | `POST /v1/meetings/{id}/end` | Bearer | |
 | `POST /v1/llm/messages` | Bearer, isteğe bağlı `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE. `x-meeting-id` varsa (kayıt sırasındaki çeviri, "Ne kaçırdım?", soru) toplantı açık ya da ek sürede olmalı, toplantı bütçesinden düşer, çağrı başı `LLM_MAX_TOKENS`. Yoksa hesap çağrısıdır (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı): erişimi olan abonelik ya da ilk toplantıyla başlamış (DeviceCheck `required` iken Mac'e bağlanmış), bitmemiş deneme gerekir (deneme hiç başlamadıysa `403 trial_not_started`, bittiyse `402 subscription_required`), çağrı başı daha küçük `LLM_ACCOUNT_MAX_TOKENS`; aboneliği olmayan kullanıcıda bu çağrılar ayrıca günlük `TRIAL_ACCOUNT_DAILY_TOKENS` (300 K; türetme `wrangler.jsonc`'ta) ile sınırlıdır (`429 daily_cap_reached`), abonede aylık `MONTHLY_ACCOUNT_TOKEN_CAP` (1,5 M) ile (`403 monthly_cap_reached`). Her iki durumda kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı ve harcama tavanı. Akışsız çağrı 120 sn, akışın ilk baytı 30 sn zaman aşımlıdır |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham PCM WAV (`Content-Type: audio/wav`, `Content-Length`; başka tür `415`); `?language_code=&diarize=`; anahtar terimler `x-keyterms` başlığında: UTF-8 JSON dizgi dizisinin dolgusuz base64url'i (en çok `TRANSCRIBE_MAX_KEYTERMS`; terim <50 karakter, ≤5 kelime, `<>{}[]\` yok; değerler loglanmaz). Yayımlanmış 0.1.4 uygulaması için tekrar eden `?keyterms=` de kabul edilir (ikisi birlikte `400`). Süre WAV başlığından kesin hesaplanıp önceden ayrılır; toplantının sesi en çok toplantının süresi kadar; toplantıda aynı anda tek istek (`409 transcription_in_progress`). ElevenLabs isteği 15 dk zaman aşımlıdır. Uzun toplantıda WAV parçalar halinde sırayla gönderilir |
-| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
-| `POST /v1/billing/webhook` | Stripe imzası | kullanıcı başına tek geçerli abonelik: başka bir aboneliğin olayı onu yalnızca geçerli olan bitmişse ya da gelen `active`/`trialing` iken geçerli olan öyle değilse değiştirir |
+| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da; yerel satırda ya da Stripe'taki listede) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
+| `POST /v1/billing/webhook` | Stripe imzası | olayın anlık görüntüsüne değil Stripe'taki güncel duruma güvenilir: müşterinin abonelikleri listelenir, kullanıcı başına tek geçerli abonelik yazılır (yaşayanlardan erişimi en yüksek, eşitse en eski). Yaşayan ikinci abonelik alarmla iptal edilir; tanınmayan müşterinin yaşayan aboneliği iptal edilir. `past_due` ek süresi (`PAST_DUE_GRACE_DAYS`) `past_due`'ya geçişten sayılır. `customer.deleted` eşlemeyi siler; `charge.refunded` alarm; `charge.dispute.created` alarm ve aboneliği hemen iptal. Hesap silinirken müşterinin açık Checkout oturumları da sona erdirilir |
 | `POST /v1/reports` | `feedback` ve `crash` için Bearer; `contact` için isteğe bağlı | `{kind, message?, email?, appVersion?, os?, payload?, turnstileToken?}` → `202 {}`. `contact` (site): `message` (≤5000), `email` (≤254) ve `turnstileToken` zorunlu, Turnstile doğrulanır. `feedback`: `message` zorunlu. `crash`: `payload` zorunlu (JSON nesnesi, ≤64 KB, aşarsa `413`; MetricKit ise listede kısa imza). `appVersion` ≤40, `os` ≤80. Türe ait olmayan alan reddedilir (ör. `feedback` + `payload`, `crash` + `turnstileToken`). Jeton varsa geçerli olmalı (`401`), rapor hesaba bağlanır; `feedback`/`crash` jetonsuz `401 unauthorized`. Gövde ayrıştırmadan önce en çok 160 KB (`413`); IP başına 5/dk, hesap başına günde 20, tür başına günde `REPORT_BYTES_PER_DAY` bayt (`429 daily_cap_reached`) |
 | `GET /v1/download/mac` | — | `302` → `DMG_URL`; UTC gün sayacını artırır (IP, tarayıcı ya da tanımlayıcı saklanmaz). Sayaç yazılamazsa yine yönlendirir (`download_count_failed` uyarısı) |
 | `GET /v1/admin/stats` | Bearer + yönetici | indirme, kullanıcı, deneme, abonelik (MRR = (`active` − `ending`) × `PRICE_USD_MONTHLY`), toplantı, harcama, token ve açık rapor özetleri; 30 günlük seriler (UTC, eskiden yeniye, boş gün 0). Tanımlar `src/admin.ts` → `adminStats` |

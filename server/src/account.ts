@@ -1,4 +1,4 @@
-import { cancelAllSubscriptions } from "./billing";
+import { closeStripeForDeletion } from "./billing";
 import type { Config } from "./config";
 import { log } from "./log";
 import type { Platform } from "./platform";
@@ -61,13 +61,14 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
 }
 
 /**
- * Hesabı siler (GDPR silme hakkı). Önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (yeniden denemeyle);
+ * Hesabı siler (GDPR silme hakkı). Önce Stripe'taki açık Checkout oturumları sona erdirilir ve bitmemiş abonelikler
+ * hemen iptal edilir (yeniden denemeyle; `closeStripeForDeletion`);
  * Stripe başarısız olursa hiçbir satır silinmez ve istemci yeniden dener. Sonra hesabın tüm satırları tek işlemde
  * silinir; kimliklerin deneme defteri aynı işlemde önce yazılır. Tekrar çağrı güvenlidir: iptal edilmiş abonelik atlanır, olmayan satır silinmez. Stripe'taki müşteri ve
  * faturalar vergi kayıtları için Stripe'ta kalır; sunucuda onları bu hesaba bağlayan satır kalmaz.
  */
 export async function deleteAccount(db: D1Database, platform: Platform, config: Config, userId: string, now: Date): Promise<void> {
-  const canceledSubscriptions: number = await cancelAllSubscriptions(db, platform, config, userId);
+  const canceledSubscriptions: number = await closeStripeForDeletion(db, platform, config, userId);
   const identities: D1Result<StoredIdentity> = await db
     .prepare("SELECT provider, subject FROM auth_identities WHERE user_id = ?")
     .bind(userId)

@@ -11,33 +11,8 @@ import {
   req,
   signIn,
 } from "./helpers";
+import { type FakeStripe, fakeSubscription, stubStripeApi } from "./stripeFake";
 
-/** Stripe abonelik uçlarının sahtesi: listeyi döndürür, iptalleri toplar. */
-interface StripeSubscriptionCalls {
-  readonly lists: URL[];
-  readonly canceled: string[];
-}
-
-function stubStripeSubscriptions(harness: Harness, subscriptions: ReadonlyArray<{ id: string; status: string }>): StripeSubscriptionCalls {
-  const calls: StripeSubscriptionCalls = { lists: [], canceled: [] };
-  harness.stub("https://api.stripe.com/v1/subscriptions", async (request: Request): Promise<Response> => {
-    const url: URL = new URL(request.url);
-    if (request.method === "GET") {
-      calls.lists.push(url);
-      return Response.json({
-        object: "list",
-        url: "/v1/subscriptions",
-        has_more: false,
-        data: subscriptions.map((subscription) => ({ ...subscription, object: "subscription" })),
-      });
-    }
-    expect(request.method).toBe("DELETE");
-    const id: string = url.pathname.split("/").at(-1) ?? "";
-    calls.canceled.push(id);
-    return Response.json({ id, object: "subscription", status: "canceled" });
-  });
-  return calls;
-}
 
 function deleteMe(harness: Harness, session: Session): Promise<Response> {
   return harness.call(req("DELETE", "/v1/me", { token: session.accessToken }));
@@ -107,10 +82,12 @@ describe("DELETE /v1/me (hesap silme)", () => {
     const stored = await env.DB.prepare("SELECT stripe_subscription_id, stripe_customer_id FROM subscriptions WHERE user_id = ?")
       .bind(userId)
       .first<{ stripe_subscription_id: string; stripe_customer_id: string }>();
-    const stripe: StripeSubscriptionCalls = stubStripeSubscriptions(harness, [
-      { id: stored?.stripe_subscription_id ?? "", status: "active" },
-      { id: "sub_eski_iptal", status: "canceled" },
-    ]);
+    const customer: string = stored?.stripe_customer_id ?? "";
+    const stripe: FakeStripe = stubStripeApi(harness);
+    stripe.subscriptions.set(stored?.stripe_subscription_id ?? "", fakeSubscription(stored?.stripe_subscription_id ?? "", customer, "active", 1, 2));
+    stripe.subscriptions.set("sub_eski_iptal", fakeSubscription("sub_eski_iptal", customer, "canceled", 1, 2));
+    // Silinen hesaba yeni abonelik açılamasın: açık Checkout oturumu sona erdirilir.
+    stripe.openSessions.set("cs_acik", customer);
 
     const families = await env.DB.prepare("SELECT id FROM refresh_families WHERE user_id = ?").bind(userId).all<{ id: string }>();
     const familyId: string = families.results[0]?.id ?? "";
@@ -121,9 +98,10 @@ describe("DELETE /v1/me (hesap silme)", () => {
     const tokens = await env.DB.prepare("SELECT COUNT(*) AS count FROM refresh_tokens WHERE family_id = ?").bind(familyId).first<{ count: number }>();
     expect(tokens?.count).toBe(0);
 
-    expect(stripe.lists[0]?.searchParams.get("customer")).toBe(stored?.stripe_customer_id);
-    expect(stripe.lists[0]?.searchParams.get("status")).toBe("all");
+    expect(stripe.subscriptionLists[0]?.searchParams.get("customer")).toBe(customer);
+    expect(stripe.subscriptionLists[0]?.searchParams.get("status")).toBe("all");
     expect(stripe.canceled).toEqual([stored?.stripe_subscription_id]);
+    expect(stripe.expiredSessions).toEqual(["cs_acik"]);
     expect(Object.values(await userRowCounts(userId)).every((count: number): boolean => count === 0)).toBe(true);
     const remainingReports = await env.DB.prepare("SELECT user_id FROM reports ORDER BY user_id").all<{ user_id: string | null }>();
     expect(remainingReports.results).toEqual([{ user_id: other.userId }]);
@@ -138,7 +116,7 @@ describe("DELETE /v1/me (hesap silme)", () => {
 
     // Yanıtı kaybolan istemci aynı jetonla yeniden dener: 204, Stripe yeniden çağrılmaz.
     expect((await deleteMe(harness, session)).status).toBe(204);
-    expect(stripe.lists).toHaveLength(1);
+    expect(stripe.subscriptionLists).toHaveLength(1);
     expect(stripe.canceled).toHaveLength(1);
   });
 

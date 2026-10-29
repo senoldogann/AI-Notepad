@@ -7,6 +7,12 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
+/** Stripe anahtarının modu: canlı ya da test. */
+export type StripeMode = "live" | "test";
+
+/** Stripe gizli ya da kısıtlı anahtarının öneki ve modu. */
+const stripeKeyPattern: RegExp = /^(?:sk|rk)_(live|test)_/;
+
 /** Apple DeviceCheck API ortamı: geliştirme ya da yayın adresi. */
 export type DeviceCheckEnvironment = "development" | "production";
 
@@ -63,7 +69,7 @@ export interface Config {
   readonly subscriberMaxMeetingMinutes: number;
   readonly monthlyCapSeconds: number;
   readonly meetingGraceMs: number;
-  /** `past_due` aboneliğin dönem sonundan sonra erişimi koruduğu süre. */
+  /** `past_due` aboneliğin `past_due`'ya geçişten sonra erişimi koruduğu süre. */
   readonly pastDueGraceMs: number;
   readonly trialMeetingTokenBudget: number;
   readonly subscriberMeetingTokenBudget: number;
@@ -93,6 +99,8 @@ export interface Config {
   readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
   readonly stripePriceId: string;
+  /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
+  readonly stripeMode: StripeMode;
   readonly secrets: {
     readonly accessToken: string;
     /** Kimlik deneme defteri (`trialIdentityHash`) ve deneme IP özetinin HMAC sırrı. */
@@ -228,7 +236,7 @@ const envSchema = z.object({
   TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
   ELEVENLABS_API_KEY: secret,
-  STRIPE_SECRET_KEY: secret,
+  STRIPE_SECRET_KEY: secret.regex(stripeKeyPattern),
   STRIPE_WEBHOOK_SECRET: secret,
   TURNSTILE_SECRET_KEY: secret,
 });
@@ -315,6 +323,7 @@ export function parseConfig(env: Env): Config {
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
+    stripeMode: stripeKeyPattern.exec(value.STRIPE_SECRET_KEY)?.[1] === "live" ? "live" : "test",
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
       trialHash: value.TRIAL_HASH_SECRET,
