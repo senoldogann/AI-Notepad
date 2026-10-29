@@ -293,8 +293,8 @@ private func silentWav() -> Data {
         #expect(rotated.refreshToken != original.refreshToken)
         #expect(rotated.accessExpiresAt > Date())
 
-        // Yanıtı kaybolmuş yenilemenin tekrarı (30 sn içinde, yerine geçen jeton henüz kullanılmamış): oturum düşmez,
-        // yeni bir çift verilir.
+        // Yanıtı kaybolmuş yenilemenin tekrarı (yerine geçen jeton henüz kullanılmamış, 10 dakikalık süre içinde): oturum
+        // düşmez, yeni bir çift verilir; kullanılmamış eski halef geçersizleşir.
         let retryStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: original.accessToken, refreshToken: original.refreshToken, accessExpiresAt: Date.distantPast, userId: original.userId
         ))
@@ -307,10 +307,18 @@ private func silentWav() -> Data {
         #expect(retried.refreshToken != rotated.refreshToken)
         #expect(ended.count.withLock { $0 } == 0)
 
-        // Tekrar süresi (30 sn) geçtikten sonra aynı eski jeton yeniden gelirse çalınmış sayılır: sunucu tüm oturum
-        // ailesini kapatır, istemci yerel oturumu siler ve bildirir. (Daha eski, silinmiş jetonlar yalnızca geçersizdir;
-        // aileyi kapatmaz.)
-        try await Task.sleep(for: .seconds(31))
+        // Halef kullanıldıktan sonra (yeni çift bir kez daha yenilendi) eski jeton yeniden gelirse çalınmış sayılır: sunucu
+        // tüm oturum ailesini kapatır, istemci yerel oturumu siler ve bildirir. Önce giriş uçlarının IP sınırı (dakikada
+        // 10, diğer denemelerle ortak) sıfırlansın diye beklenir.
+        try await Task.sleep(for: .seconds(61))
+        // Halefi ayrı bir istemci kullanır (istemci jetonları bellekte tutar; depoyu dışarıdan değiştirmek yenilemez).
+        let successorStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
+            accessToken: retried.accessToken, refreshToken: retried.refreshToken, accessExpiresAt: Date.distantPast, userId: retried.userId
+        ))
+        let successorClient: HostedClient = HostedClient(baseURL: baseURL, storage: successorStorage) { () async -> Void in }
+        _ = try await successorClient.entitlements()
+        let newest: HostedTokens = try #require(try successorStorage.load())
+        #expect(newest.refreshToken != retried.refreshToken)
         let replayStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: original.accessToken, refreshToken: original.refreshToken, accessExpiresAt: Date.distantPast, userId: original.userId
         ))
@@ -320,9 +328,9 @@ private func silentWav() -> Data {
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await replayClient.entitlements() }
         #expect(try replayStorage.load() == nil)
         #expect(ended.count.withLock { $0 } == 1)
-        // Aile düştüğü için tekrarda verilen jeton da artık geçmez.
+        // Aile düştüğü için en yeni jeton da artık geçmez.
         let familyClient: HostedClient = HostedClient(baseURL: baseURL, storage: MemoryTokenStorage(tokens: HostedTokens(
-            accessToken: retried.accessToken, refreshToken: retried.refreshToken, accessExpiresAt: Date.distantPast, userId: retried.userId
+            accessToken: newest.accessToken, refreshToken: newest.refreshToken, accessExpiresAt: Date.distantPast, userId: newest.userId
         ))) { () async -> Void in }
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await familyClient.entitlements() }
     }

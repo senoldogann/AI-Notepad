@@ -314,6 +314,19 @@ describe("yenileme jetonu ve çıkış", () => {
     await expectError(await harness.call(req("GET", "/v1/me", { token: third.accessToken })), 401, "invalid_token");
   });
 
+  it("yeniden denemede verilen halef kullanıldıktan sonra ilk jeton süre içinde yeniden gelirse aile düşer", async () => {
+    const harness: Harness = await defaultHarness();
+    const first: Session = await signIn(harness);
+    await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }));
+    harness.clock.nowMs += 60_000;
+    const retried: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 60_000;
+    const newest: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: retried.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 60_000;
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } })), 401, "invalid_token");
+    await expectError(await harness.call(req("GET", "/v1/me", { token: newest.accessToken })), 401, "invalid_token");
+  });
+
   it("kullanılmış yazılıp halefi eklenmemiş jeton (yarıda kalmış dönüş) aileyi düşürmez, yeniden sunulunca yeni çift verir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
