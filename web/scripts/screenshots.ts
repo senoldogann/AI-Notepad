@@ -53,7 +53,7 @@ const targets: readonly Target[] = [
   { name: "pricing", path: "/pricing", ready: "main", signedIn: false, account: null },
   { name: "download", path: "/download", ready: "main", signedIn: false, account: null },
   { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false, account: null },
-  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "#google-button iframe", signedIn: false, account: null },
+  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "main", signedIn: false, account: null },
   { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false, account: null },
   { name: "privacy", path: "/privacy", ready: "main", signedIn: false, account: null },
   { name: "terms", path: "/terms", ready: "main", signedIn: false, account: null },
@@ -113,6 +113,9 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },
       tokens: { thisMonth: 48_210_000 },
       reports: { openFeedback: 3, openCrash: 1, openContact: 2 },
+      stripe: { mode: "test" },
+      // Kapasite eşiğin üstünde: kutunun uyarı görünümü de çekilir.
+      elevenLabs: { usedHours: 41.5, capHours: 50, percent: 83 },
     },
     "/v1/admin/reports": {
       items: [

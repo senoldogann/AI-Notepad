@@ -9,17 +9,47 @@ import { routes } from "../routes";
 
 const text: AdminCopy = copy.admin;
 
-/** Özet kutuları: kimlik (betik `kpi-<id>` doldurur), etiket ve simge. */
-const kpis: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
-  { id: "downloads", label: text.kpis.downloads, icon: "download" },
-  { id: "users", label: text.kpis.users, icon: "users" },
-  { id: "trials", label: text.kpis.trials, icon: "gift" },
-  { id: "subscribers", label: text.kpis.subscribers, icon: "card" },
-  { id: "mrr", label: text.kpis.mrr, icon: "chart" },
-  { id: "spend", label: text.kpis.spend, icon: "wallet" },
-  { id: "hours", label: text.kpis.hours, icon: "clock" },
-  { id: "tokens", label: text.kpis.tokens, icon: "tokens" },
-  { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "waveform" },
+/** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
+interface KpiSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: IconName;
+  readonly meter: boolean;
+}
+
+/** Özet kutusu grubu: başlık ve kutular. */
+interface KpiGroup {
+  readonly id: "growth" | "revenue" | "costs";
+  readonly title: string;
+  readonly kpis: readonly KpiSpec[];
+}
+
+/**
+ * Özet kutuları üç grupta: büyüme, gelir, maliyet ve kapasite. Maliyet grubunun ızgarası yeni kutulara (ör. Deepgram
+ * bütçesi) kendiliğinden yer açar.
+ */
+const groups: readonly KpiGroup[] = [
+  {
+    id: "growth",
+    title: text.groups.growth,
+    kpis: [
+      { id: "downloads", label: text.kpis.downloads, icon: "download", meter: false },
+      { id: "users", label: text.kpis.users, icon: "users", meter: false },
+      { id: "trials", label: text.kpis.trials, icon: "gift", meter: false },
+      { id: "subscribers", label: text.kpis.subscribers, icon: "card", meter: false },
+    ],
+  },
+  { id: "revenue", title: text.groups.revenue, kpis: [{ id: "mrr", label: text.kpis.mrr, icon: "chart", meter: false }] },
+  {
+    id: "costs",
+    title: text.groups.costs,
+    kpis: [
+      { id: "spend", label: text.kpis.spend, icon: "wallet", meter: true },
+      { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "waveform", meter: true },
+      { id: "hours", label: text.kpis.hours, icon: "clock", meter: false },
+      { id: "tokens", label: text.kpis.tokens, icon: "tokens", meter: false },
+    ],
+  },
 ];
 
 /** Grafikler: kimlik (betik `chart-<id>` çizer) ve başlık. */
@@ -68,20 +98,27 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
     </div>
 
     <div id="admin-content" class="admin__content hidden">
-      <div class="kpis">
+      <div class="kpi-groups">
         {
-          kpis.map((kpi) => (
-            <div class="card kpi">
-              <p class="kpi__label">
-                <span class="icon-chip icon-chip--small">
-                  <Icon name={kpi.icon} size={17} class="" />
-                </span>
-                {kpi.label}
-              </p>
-              <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-              {kpi.id === "spend" || kpi.id === "elevenlabs" ? <progress id={`kpi-${kpi.id}-meter`} class="meter" aria-label={kpi.label} max="1" value="0" /> : null}
-              <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small muted" />
-            </div>
+          groups.map((group: KpiGroup) => (
+            <section class:list={["kpi-group", `kpi-group--${group.id}`]} aria-labelledby={`group-${group.id}`}>
+              <h2 class="eyebrow kpi-group__title" id={`group-${group.id}`}>
+                {group.title}
+              </h2>
+              <div class="kpi-group__grid">
+                {group.kpis.map((kpi: KpiSpec) => (
+                  <div class:list={["card", "kpi", { "kpi--meter": kpi.meter }]} id={`kpi-${kpi.id}-card`}>
+                    <p class="kpi__label">
+                      <Icon name={kpi.icon} size={16} class="kpi__icon" />
+                      {kpi.label}
+                    </p>
+                    <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
+                    {kpi.meter ? <progress id={`kpi-${kpi.id}-meter`} class="meter kpi__meter" aria-label={kpi.label} max="1" value="0" /> : null}
+                    <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
+                  </div>
+                ))}
+              </div>
+            </section>
           ))
         }
       </div>
@@ -220,34 +257,121 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
 
   /* ---------- Özet kutuları ---------- */
 
-  .kpis {
+  /* Büyüme tam genişlikte; altında gelir (1 pay) ve maliyet ve kapasite (2 pay, ikişerli) yan yana. */
+  .kpi-groups {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 28px 16px;
+  }
+
+  .kpi-group {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .kpi-group--growth {
+    grid-column: 1 / -1;
+  }
+
+  .kpi-group__grid {
+    display: grid;
+    grid-auto-rows: 1fr;
     gap: 16px;
+  }
+
+  .kpi-group--growth .kpi-group__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .kpi-group--revenue .kpi-group__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* İkişerli; yeni maliyet kutuları (ör. Deepgram bütçesi) ızgaraya kendiliğinden yeni satır olarak eklenir. */
+  .kpi-group--costs .kpi-group__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kpi {
     display: grid;
+    grid-template-rows: auto auto 1fr;
     align-content: start;
-    gap: 8px;
+    gap: 10px;
+    min-height: 148px;
     padding: 20px 22px;
+  }
+
+  .kpi--meter {
+    grid-template-rows: auto auto auto 1fr;
   }
 
   .kpi__label {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
+    gap: 8px;
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--muted);
   }
 
+  .kpi__label :global(.kpi__icon) {
+    flex: none;
+  }
+
   .kpi__value {
-    font-size: 1.75rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: clamp(1.75rem, 2.6vw, 2.125rem);
     font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+  }
+
+  .kpi__meter {
+    height: 6px;
+  }
+
+  .kpi__sub {
+    align-self: end;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  /* Gelir kutusu: üstte ince, durgun film şeridi (bulanıklık ya da hareket yok). */
+  /* Gelir kutusu uzun: değer ve alt satır üstte, altı hafif, durgun bir pastel tonla dolar. */
+  .kpi-group--revenue .kpi {
+    position: relative;
+    overflow: hidden;
+    grid-template-rows: auto auto auto;
+    padding-top: 30px;
+    background: linear-gradient(180deg, var(--card) 40%, color-mix(in srgb, #dac6ee 16%, var(--card)) 100%);
+  }
+
+  .kpi-group--revenue .kpi__sub {
+    align-self: start;
+  }
+
+  .kpi-group--revenue .kpi::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 6px;
+    background: linear-gradient(90deg, #f7c9b2, #f4bcc6 35%, #dac6ee 70%, #bfd4f4);
+  }
+
+  .kpi-group--revenue .kpi__value {
+    font-size: clamp(2.125rem, 3.4vw, 2.75rem);
+  }
+
+  /* Uyarı: ölçer eşiği aştı (harcama tavana, kapasite sınıra yakın). */
+  .kpi--warn {
+    border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+  }
+
+  .kpi--warn .kpi__sub {
+    color: var(--warn);
   }
 
   /* ---------- Grafikler ---------- */
@@ -550,7 +674,11 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
   }
 
   @media (max-width: 1040px) {
-    .kpis {
+    .kpi-groups {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .kpi-group--growth .kpi-group__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -581,8 +709,19 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
   }
 
   @media (max-width: 480px) {
-    .kpis,
     .detail__fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .kpi {
+      min-height: 0;
+    }
+
+    .kpi-group__grid {
+      grid-auto-rows: auto;
+    }
+
+    .kpi-group--costs .kpi-group__grid {
       grid-template-columns: minmax(0, 1fr);
     }
   }

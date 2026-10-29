@@ -145,6 +145,12 @@ function setKpi(id: string, value: string, sub: string): void {
   element(`kpi-${id}-sub`, HTMLElement).textContent = sub;
 }
 
+/** Ölçerli kutunun uyarı görünümünü (ölçer rengi, kenar, alt satır) açar ya da kapatır. */
+function setKpiWarning(id: string, meter: HTMLProgressElement, warn: boolean): void {
+  meter.classList.toggle("meter--warn", warn);
+  element(`kpi-${id}-card`, HTMLElement).classList.toggle("kpi--warn", warn);
+}
+
 /** Özet kutularını ve grafikleri çizer. */
 function renderStats(stats: AdminStats): void {
   element("admin-updated", HTMLElement).textContent = fill(adminText.updated, { time: formatTime(stats.generatedAt) });
@@ -166,7 +172,7 @@ function renderStats(stats: AdminStats): void {
   const meter: HTMLProgressElement = element("kpi-spend-meter", HTMLProgressElement);
   meter.max = Math.max(stats.spend.ceilingUsd, 0.01);
   meter.value = Math.min(stats.spend.todayUsd, meter.max);
-  meter.classList.toggle("meter--warn", stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
+  setKpiWarning("spend", meter, stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
   setKpi("hours", formatCount(stats.meetings.hoursThisMonth), adminText.hoursSub);
   setKpi("tokens", formatCount(stats.tokens.thisMonth), adminText.tokensSub);
   setKpi(
@@ -177,7 +183,7 @@ function renderStats(stats: AdminStats): void {
   const capacity: HTMLProgressElement = element("kpi-elevenlabs-meter", HTMLProgressElement);
   capacity.max = Math.max(stats.elevenLabs.capHours, 0.01);
   capacity.value = Math.min(stats.elevenLabs.usedHours, capacity.max);
-  capacity.classList.toggle("meter--warn", stats.elevenLabs.percent >= 80);
+  setKpiWarning("elevenlabs", capacity, stats.elevenLabs.percent >= 80);
 
   renderChart("downloads", countDays(stats.downloads.last30Days, formatCount), formatCount);
   renderChart("users", countDays(stats.users.newLast30Days, formatCount), formatCount);

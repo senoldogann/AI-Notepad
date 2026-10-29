@@ -294,6 +294,8 @@ export interface AdminCopy {
     readonly tokens: string;
     readonly elevenLabs: string;
   };
+  /** Özet kutusu gruplarının başlıkları. */
+  readonly groups: { readonly growth: string; readonly revenue: string; readonly costs: string };
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -707,6 +709,7 @@ export const copy: Copy = {
       tokens: "Tokens this month",
       elevenLabs: "Transcription capacity",
     },
+    groups: { growth: "Growth", revenue: "Revenue", costs: "Costs & capacity" },
     chartsTitle: "Last 30 days",
     charts: {
       downloads: "Downloads per day",
