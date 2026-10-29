@@ -327,17 +327,7 @@ export async function proxyTranscription(
     throw new ApiError("invalid_body", "Ses dosyası boş.");
   }
   const now: Date = context.platform.now();
-  // Aynı yükleme anahtarıyla tamamlanmış sonuç varsa (önceki yanıt yolda kayboldu) ses yeniden işlenmez ve
-  // faturalanmaz: saklı sonuç döner.
   const uploadKey: string | null = uploadKeyFrom(request.headers.get("x-upload-key"));
-  if (uploadKey !== null) {
-    const cached: object | null = await cachedTranscription(db, meeting.user_id, meeting.id, uploadKey, now);
-    if (cached !== null) {
-      await request.body.cancel();
-      log("info", "transcription_repeated", { userId: meeting.user_id, meetingId: meeting.id });
-      return jsonResponse(200, cached);
-    }
-  }
   if (meeting.transcription_closed !== 0) {
     throw new ApiError("transcription_closed", "Bu toplantının ses işleme hakkı kapandı.");
   }
@@ -400,15 +390,45 @@ async function transcribeAndSettle(
   // Ayırma WAV başlığından kesindir; 1 saniyelik pay yuvarlama içindir.
   const overrun: boolean = seconds > reserved + 1;
   await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now));
-  await alertOnElevenLabsCrossing(db, config, seconds, now);
+  // Kesinleşmeden sonraki denetim yanıtı düşürmez (ses faturalandı; istemci yeniden göndermesin).
+  try {
+    await alertOnElevenLabsCrossing(db, config, seconds, now);
+  } catch (error: unknown) {
+    log("alert", "elevenlabs_capacity_check_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
+  }
   if (overrun) {
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
   }
   log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
   if (uploadKey !== null) {
-    await storeTranscription(db, meeting.user_id, meeting.id, uploadKey, result.transcription, now);
+    // Ses kesinleşti ve faturalandı: saklama hatası yanıtı düşürmez (düşürseydi istemci yeniden gönderir, ses yeniden
+    // faturalanırdı); alarm yazılır, sonuç döner.
+    try {
+      await storeTranscription(db, meeting.user_id, meeting.id, uploadKey, result.transcription, now);
+    } catch (error: unknown) {
+      log("alert", "transcription_cache_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
+    }
   }
   return { ok: true, value: result.transcription };
+}
+
+/**
+ * Aynı yükleme anahtarıyla tamamlanmış (ödenmiş) sonuç: varsa ses okunmadan ve faturalanmadan döner. Toplantının ek
+ * süresi, harcama tavanı ve ses hakkı denetimlerinden önce çağrılır: ödenmiş sonuç her zaman geri alınabilir (yanıtı
+ * yolda kaybolan istemci pencere kapandıktan sonra da sonucunu alır). Anahtar yoksa ya da sonuç yoksa null.
+ */
+export async function cachedTranscriptionResponse(db: D1Database, request: Request, userId: string, meetingId: string, now: Date): Promise<Response | null> {
+  const uploadKey: string | null = uploadKeyFrom(request.headers.get("x-upload-key"));
+  if (uploadKey === null) {
+    return null;
+  }
+  const cached: object | null = await cachedTranscription(db, userId, meetingId, uploadKey, now);
+  if (cached === null) {
+    return null;
+  }
+  await request.body?.cancel();
+  log("info", "transcription_repeated", { userId, meetingId });
+  return jsonResponse(200, cached);
 }
 
 /**

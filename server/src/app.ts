@@ -45,7 +45,7 @@ import {
 } from "./reports";
 import { requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
-import { parseTranscribeParams, proxyTranscription } from "./transcribe";
+import { cachedTranscriptionResponse, parseTranscribeParams, proxyTranscription } from "./transcribe";
 
 /** Küçük JSON gövdeleri için üst sınır. */
 const smallBodyBytes: number = 16 * 1024;
@@ -319,6 +319,11 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/transcribe" && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
+    // Ödenmiş sonuç pencere ve harcama denetimlerinden önce döner (bkz. `cachedTranscriptionResponse`).
+    const repeated: Response | null = await cachedTranscriptionResponse(db, request, user.userId, meetingIdHeader(request), now);
+    if (repeated !== null) {
+      return repeated;
+    }
     const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
     await requireSpendHeadroom(db, config, now);
     const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);

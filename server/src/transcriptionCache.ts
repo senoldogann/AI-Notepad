@@ -10,6 +10,12 @@ import { log } from "./log";
  * siler, hesap silinince hemen silinir.
  */
 
+/**
+ * Saklanan şifreli sonucun en büyük boyutu (bayt): D1'in değer sınırının (~2 MB) altında. Sonuç gzip'le sıkıştırılıp
+ * şifrelenir; yine de büyükse saklanmaz (uyarı loglanır; yanıt kaybolursa istemci yeniden gönderir).
+ */
+export const transcriptionCacheMaxBytes: number = 1_900_000;
+
 /** Saklı sonucun ömrü: istemcinin en uzun yeniden deneme penceresinden (20 dk bekleme) uzundur. */
 export const transcriptionCacheTtlMs: number = 2 * 60 * 60_000;
 
@@ -43,7 +49,8 @@ export async function cachedTranscription(db: D1Database, userId: string, meetin
   if (row === null) {
     return null;
   }
-  const plain: ArrayBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(row.iv) }, await encryptionKey(uploadKey), new Uint8Array(row.ciphertext));
+  const compressed: ArrayBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(row.iv) }, await encryptionKey(uploadKey), new Uint8Array(row.ciphertext));
+  const plain: ArrayBuffer = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
   const parsed: unknown = JSON.parse(new TextDecoder().decode(plain));
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("Saklı yazıya dökme sonucu nesne değil.");
@@ -51,10 +58,18 @@ export async function cachedTranscription(db: D1Database, userId: string, meetin
   return parsed;
 }
 
-/** Tamamlanan sonucu şifreli saklar (aynı anahtar ikinci kez yazılmaz). */
+/**
+ * Tamamlanan sonucu sıkıştırıp şifreli saklar (aynı anahtar ikinci kez yazılmaz). `transcriptionCacheMaxBytes`'ı aşarsa
+ * saklanmaz ve uyarı loglanır. Hata fırlatabilir: çağıran yanıtı düşürmemelidir (bkz. `transcribeAndSettle`).
+ */
 export async function storeTranscription(db: D1Database, userId: string, meetingId: string, uploadKey: string, result: unknown, now: Date): Promise<void> {
   const iv: Uint8Array = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext: ArrayBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(uploadKey), utf8(JSON.stringify(result)));
+  const compressed: ArrayBuffer = await new Response(new Blob([utf8(JSON.stringify(result))]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+  const ciphertext: ArrayBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(uploadKey), compressed);
+  if (ciphertext.byteLength > transcriptionCacheMaxBytes) {
+    log("warn", "transcription_cache_skipped", { meetingId, bytes: ciphertext.byteLength });
+    return;
+  }
   await db
     .prepare(
       `INSERT OR IGNORE INTO transcription_results (key_hash, user_id, meeting_id, ciphertext, iv, created_at, expires_at)

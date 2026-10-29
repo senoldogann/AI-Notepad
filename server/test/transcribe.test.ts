@@ -147,6 +147,56 @@ describe("konuşma tanıma vekili", () => {
     expect(calls).toBe(2);
   });
 
+  it("ödenmiş sonuç pencere ve harcama tavanından önce döner; saklama hatası yanıtı düşürmez; büyük sonuç saklanmaz", async () => {
+    const context: Context = await setup(true);
+    let calls: number = 0;
+    let words: object[] = transcription.words;
+    context.harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      calls += 1;
+      await request.formData();
+      return Response.json({ ...transcription, words, audio_duration_secs: 2 });
+    });
+    const audio: Uint8Array = wavFile(16_000, 1, 16, 64_000);
+    const key: string = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+    expect((await uploadWith(context, "", audio, "audio/wav", { "x-upload-key": key })).status).toBe(200);
+    // Toplantı bitti, ek süresi (30 dk) geçti ve günlük harcama tavanı doldu: ödenmiş sonuç (2 saat saklanır) yine döner.
+    expect((await context.harness.call(req("POST", `/v1/meetings/${context.meeting.meetingId}/end`, { token: context.session.accessToken }))).status).toBe(200);
+    context.harness.clock.nowMs += 45 * 60_000;
+    await env.DB.prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET micro_usd = excluded.micro_usd")
+      .bind(new Date(context.harness.clock.nowMs).toISOString().slice(0, 10), 1_000_000_000_000)
+      .run();
+    const fresh: Session = await (await context.harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: context.session.refreshToken } }))).json<Session>();
+    const late: Context = { ...context, session: fresh };
+    expect((await uploadWith(late, "", audio, "audio/wav", { "x-upload-key": key })).status).toBe(200);
+    expect(calls).toBe(1);
+    await env.DB.prepare("DELETE FROM daily_spend").run();
+
+    // Saklama başarısız: ses faturalandı, yanıt yine 200 ve alarm yazılır.
+    const second: Context = await setup(true);
+    second.harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      await request.formData();
+      return Response.json({ ...transcription, words, audio_duration_secs: 2 });
+    });
+    const encrypt = vi.spyOn(crypto.subtle, "encrypt").mockRejectedValueOnce(new Error("şifreleme başarısız"));
+    const alerts = vi.spyOn(console, "error");
+    const failed: Response = await uploadWith(second, "", audio, "audio/wav", { "x-upload-key": base64UrlEncode(crypto.getRandomValues(new Uint8Array(32))) });
+    encrypt.mockRestore();
+    expect(failed.status).toBe(200);
+    expect(alerts.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"transcription_cache_failed"'))).toBe(true);
+    alerts.mockRestore();
+
+    // Sıkıştırılsa da 1,9 MB'ı aşan sonuç saklanmaz (uyarı); yanıt döner.
+    words = Array.from({ length: 2_000 }, (_: unknown, index: number): object => ({
+      text: base64UrlEncode(crypto.getRandomValues(new Uint8Array(1_500))), type: "word", start: index, end: index + 0.5, speaker_id: "speaker_0", logprob: 0,
+    }));
+    const warnings = vi.spyOn(console, "warn");
+    const bigKey: string = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const big: Response = await uploadWith(second, "", audio, "audio/wav", { "x-upload-key": bigKey });
+    expect(big.status).toBe(200);
+    expect(warnings.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"transcription_cache_skipped"'))).toBe(true);
+    warnings.mockRestore();
+  });
+
   it("anahtar terimler x-keyterms başlığından (base64url JSON) iletilir; değerler loglanmaz", async () => {
     const context: Context = await setup(true);
     const fields: Array<[string, string]> = stubFormFields(context);
