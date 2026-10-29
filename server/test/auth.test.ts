@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
+import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
-import { appleIssuer } from "../src/auth/apple";
+import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
 import { googleJwksUrl } from "../src/auth/google";
+import { jwksCacheTtlMs } from "../src/auth/identityToken";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import {
   type AppleTokenFields,
@@ -63,6 +65,9 @@ describe("Apple ile giriş", () => {
     const me: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
     expect(me.status).toBe(200);
     expect((await me.json<{ userId: string }>()).userId).toBe(session.userId);
+    // Jetondaki doğrulanmış e-posta saklanmaz.
+    const identity = await env.DB.prepare("SELECT provider, email FROM auth_identities WHERE user_id = ?").bind(session.userId).first<{ provider: string; email: string | null }>();
+    expect(identity).toEqual({ provider: "apple", email: null });
   });
 
   it("yanlış aud, yanlış iss, süresi dolmuş jeton ve yanlış nonce reddedilir", async () => {
@@ -96,6 +101,38 @@ describe("Apple ile giriş", () => {
     await expectError(response, 502, "upstream_unavailable");
     expect(calls).toBe(3);
     expect(harness.outbound.length - original).toBe(3);
+  });
+
+  it("Apple anahtarları önbellekte tutulur; bilinmeyen kid (anahtar dönüşü) ve süresi dolan önbellek yeniden alınır", async () => {
+    const harness: Harness = await defaultHarness();
+    const jwksCalls = (): number => harness.outbound.filter((request: Request): boolean => request.url === appleJwksUrl).length;
+    await signIn(harness);
+    await signIn(harness);
+    expect(jwksCalls()).toBe(1);
+
+    // Apple yeni bir anahtara geçti: jetonun kid'i önbellekte yok.
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const rotated: JWK = { ...(await exportJWK(publicKey)), kid: "test-apple-key-2", alg: "RS256", use: "sig" };
+    const original: JWK[] = harness.platform.jwksCache.get(appleJwksUrl)?.keys.keys ?? [];
+    harness.stub(appleJwksUrl, async (): Promise<Response> => Response.json({ keys: [...original, rotated] }));
+    const nonce: string = randomToken(24);
+    const issuedAt: number = Math.floor(harness.clock.nowMs / 1000);
+    const identityToken: string = await new SignJWT({ nonce: await sha256Hex(nonce) })
+      .setProtectedHeader({ alg: "RS256", kid: "test-apple-key-2" })
+      .setIssuer(appleIssuer)
+      .setAudience(clientId)
+      .setSubject(`apple-${randomId()}`)
+      .setIssuedAt(issuedAt)
+      .setExpirationTime(issuedAt + 600)
+      .sign(privateKey);
+    expect((await harness.call(req("POST", "/v1/auth/apple", { json: { identityToken, nonce } }))).status).toBe(200);
+    expect(jwksCalls()).toBe(2);
+    await signIn(harness);
+    expect(jwksCalls()).toBe(2);
+
+    harness.clock.nowMs += jwksCacheTtlMs;
+    await signIn(harness);
+    expect(jwksCalls()).toBe(3);
   });
 
   it("giriş uçları IP başına hız sınırlıdır", async () => {
@@ -237,11 +274,45 @@ describe("yenileme jetonu ve çıkış", () => {
     expect(second.refreshToken).not.toBe(first.refreshToken);
     expect((await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).status).toBe(200);
 
-    // Çalınmış eski jeton: yeniden kullanım tespit edilir.
+    // Çalınmış eski jeton (30 saniyelik yeniden deneme süresinden sonra): yeniden kullanım tespit edilir.
+    harness.clock.nowMs += 31_000;
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } })), 401, "invalid_token");
     // Meşru yeni jeton ve erişim jetonu da artık geçersiz.
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } })), 401, "invalid_token");
     await expectError(await harness.call(req("GET", "/v1/me", { token: second.accessToken })), 401, "invalid_token");
+  });
+
+  it("yanıtı kaybolan yenileme 30 saniye içinde aynı jetonla yeniden denenebilir; kaybolan jeton geçersizleşir, aile düşmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const first: Session = await signIn(harness);
+    const lost: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 10_000;
+    const retried: Response = await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }));
+    expect(retried.status).toBe(200);
+    const second: Session = await retried.json<Session>();
+    expect(second.refreshToken).not.toBe(lost.refreshToken);
+    expect((await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).status).toBe(200);
+    // Kaybolan jeton artık yok (aile düşürülmez); yeni jeton dönmeye devam eder.
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: lost.refreshToken } })), 401, "invalid_token");
+    const third: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } }))).json<Session>();
+    expect((await harness.call(req("GET", "/v1/me", { token: third.accessToken }))).status).toBe(200);
+    // Süre geçtikten sonra hemen önceki jeton yeniden kullanımdır: aile düşer.
+    harness.clock.nowMs += 31_000;
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } })), 401, "invalid_token");
+    await expectError(await harness.call(req("GET", "/v1/me", { token: third.accessToken })), 401, "invalid_token");
+  });
+
+  it("dönüşte ailede yalnızca hemen önceki kullanılmış jeton kalır", async () => {
+    const harness: Harness = await defaultHarness();
+    let session: Session = await signIn(harness);
+    for (let index: number = 0; index < 5; index += 1) {
+      session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }))).json<Session>();
+    }
+    const family = await env.DB.prepare("SELECT id FROM refresh_families WHERE user_id = ?").bind(session.userId).first<{ id: string }>();
+    const rows = await env.DB.prepare("SELECT used_at IS NOT NULL AS used FROM refresh_tokens WHERE family_id = ? ORDER BY used")
+      .bind(family?.id ?? "")
+      .all<{ used: number }>();
+    expect(rows.results).toEqual([{ used: 0 }, { used: 1 }]);
   });
 
   it("süresi dolmuş erişim jetonu reddedilir, yenileme yeni jeton verir", async () => {

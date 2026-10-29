@@ -7,6 +7,12 @@ export type AttestPolicy = "required" | "optional";
 /** App Attest ortamı (`aaguid`): geliştirme ya da yayın. */
 export type AttestEnvironment = "development" | "production";
 
+/** Stripe anahtarının modu: canlı ya da test. */
+export type StripeMode = "live" | "test";
+
+/** Stripe gizli ya da kısıtlı anahtarının öneki ve modu. */
+const stripeKeyPattern: RegExp = /^(?:sk|rk)_(live|test)_/;
+
 /** Apple DeviceCheck API ortamı: geliştirme ya da yayın adresi. */
 export type DeviceCheckEnvironment = "development" | "production";
 
@@ -41,8 +47,8 @@ export interface Config {
   readonly dmgUrl: string;
   /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
   readonly priceUsdMonthly: number;
-  /** Tüm kullanıcılar için günde en çok kabul edilen rapor (geri bildirim, çökme, iletişim). */
-  readonly reportsPerDay: number;
+  /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
+  readonly reportBytesPerDay: number;
   readonly attest: {
     readonly policy: AttestPolicy;
     readonly environment: AttestEnvironment;
@@ -63,12 +69,14 @@ export interface Config {
   readonly subscriberMaxMeetingMinutes: number;
   readonly monthlyCapSeconds: number;
   readonly meetingGraceMs: number;
-  /** `past_due` aboneliğin dönem sonundan sonra erişimi koruduğu süre. */
+  /** `past_due` aboneliğin `past_due`'ya geçişten sonra erişimi koruduğu süre. */
   readonly pastDueGraceMs: number;
   readonly trialMeetingTokenBudget: number;
   readonly subscriberMeetingTokenBudget: number;
   /** Kullanıcı başına aylık token sınırı (tüm toplantılar). */
   readonly monthlyTokenCap: number;
+  /** Abonenin toplantıya bağlı olmayan (hesap) çağrılarının aylık token sınırı; `monthlyTokenCap`'in parçasıdır. */
+  readonly monthlyAccountTokenCap: number;
   /** Kullanıcı başına günlük token sınırı. */
   readonly dailyTokenCap: number;
   /** Kullanıcı başına günde en çok toplantı başlatma. */
@@ -86,13 +94,22 @@ export interface Config {
     readonly usdPerHour: number;
     readonly keytermsUsdPerHour: number;
   };
+  /** ElevenLabs aylık kredi planı: dönemde işlenebilen ses saati ve dönemin yenilendiği gün (1–28, UTC). */
+  readonly elevenLabs: {
+    readonly monthlyAudioHours: number;
+    readonly billingDay: number;
+  };
   readonly dailySpendCeilingMicroUsd: number;
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
   readonly refreshTokenMs: number;
   readonly stripePriceId: string;
+  /** Stripe anahtarının modu (`sk_live_`/`rk_live_` → `live`, `sk_test_`/`rk_test_` → `test`). */
+  readonly stripeMode: StripeMode;
   readonly secrets: {
     readonly accessToken: string;
+    /** Kimlik deneme defteri (`trialIdentityHash`) ve deneme IP özetinin HMAC sırrı. */
+    readonly trialHash: string;
     readonly anthropic: string;
     readonly elevenLabs: string;
     readonly stripe: string;
@@ -183,7 +200,7 @@ const envSchema = z.object({
   ADMIN_IDENTITIES: adminIdentityList,
   DMG_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
-  REPORTS_PER_DAY: positiveInt,
+  REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
   APP_ATTEST_APP_IDS: csv,
@@ -205,6 +222,7 @@ const envSchema = z.object({
   TRIAL_MEETING_TOKEN_BUDGET: positiveInt,
   SUBSCRIBER_MEETING_TOKEN_BUDGET: positiveInt,
   MONTHLY_TOKEN_CAP: positiveInt,
+  MONTHLY_ACCOUNT_TOKEN_CAP: positiveInt,
   DAILY_TOKEN_CAP: positiveInt,
   MAX_MEETING_STARTS_PER_DAY: positiveInt,
   LLM_MAX_TOKENS: positiveInt,
@@ -215,14 +233,17 @@ const envSchema = z.object({
   TRANSCRIBE_MAX_KEYTERMS: positiveInt.max(1000),
   SCRIBE_USD_PER_HOUR: positiveNumber,
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
+  ELEVENLABS_MONTHLY_AUDIO_HOURS: positiveNumber,
+  ELEVENLABS_BILLING_DAY: positiveInt.max(28),
   DAILY_SPEND_CEILING_USD: positiveNumber,
   DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
+  TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
   ELEVENLABS_API_KEY: secret,
-  STRIPE_SECRET_KEY: secret,
+  STRIPE_SECRET_KEY: secret.regex(stripeKeyPattern),
   STRIPE_WEBHOOK_SECRET: secret,
   TURNSTILE_SECRET_KEY: secret,
 });
@@ -245,6 +266,9 @@ export function parseConfig(env: Env): Config {
   if (value.LLM_ACCOUNT_MAX_TOKENS > value.LLM_MAX_TOKENS) {
     throw new ConfigError(["LLM_ACCOUNT_MAX_TOKENS"]);
   }
+  if (value.MONTHLY_ACCOUNT_TOKEN_CAP > value.MONTHLY_TOKEN_CAP) {
+    throw new ConfigError(["MONTHLY_ACCOUNT_TOKEN_CAP"]);
+  }
   if (value.ENVIRONMENT === "production" && value.APP_ATTEST_ENVIRONMENT !== "production") {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
   }
@@ -266,7 +290,7 @@ export function parseConfig(env: Env): Config {
     adminIdentities: value.ADMIN_IDENTITIES,
     dmgUrl: value.DMG_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
-    reportsPerDay: value.REPORTS_PER_DAY,
+    reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,
       environment: value.APP_ATTEST_ENVIRONMENT,
@@ -287,6 +311,7 @@ export function parseConfig(env: Env): Config {
     trialMeetingTokenBudget: value.TRIAL_MEETING_TOKEN_BUDGET,
     subscriberMeetingTokenBudget: value.SUBSCRIBER_MEETING_TOKEN_BUDGET,
     monthlyTokenCap: value.MONTHLY_TOKEN_CAP,
+    monthlyAccountTokenCap: value.MONTHLY_ACCOUNT_TOKEN_CAP,
     dailyTokenCap: value.DAILY_TOKEN_CAP,
     maxMeetingStartsPerDay: value.MAX_MEETING_STARTS_PER_DAY,
     llm: {
@@ -301,12 +326,15 @@ export function parseConfig(env: Env): Config {
       usdPerHour: value.SCRIBE_USD_PER_HOUR,
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
+    elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
     stripePriceId: value.STRIPE_PRICE_ID,
+    stripeMode: stripeKeyPattern.exec(value.STRIPE_SECRET_KEY)?.[1] === "live" ? "live" : "test",
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
+      trialHash: value.TRIAL_HASH_SECRET,
       anthropic: value.ANTHROPIC_API_KEY,
       elevenLabs: value.ELEVENLABS_API_KEY,
       stripe: value.STRIPE_SECRET_KEY,

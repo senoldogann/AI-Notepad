@@ -1,4 +1,4 @@
-import { cancelAllSubscriptions } from "./billing";
+import { closeStripeForDeletion } from "./billing";
 import type { Config } from "./config";
 import { log } from "./log";
 import type { Platform } from "./platform";
@@ -26,8 +26,8 @@ interface StoredIdentity {
  *   kaldırılır (cihaz başına deneme sayacı App Attest anahtarı başınadır ve yeni anahtar her zaman üretilebilir; bu,
  *   o sınırı mevcut durumdan daha fazla zayıflatmaz).
  * Hesaba bağlı raporlar (geri bildirim, çökme) bağı kaldırılarak değil, silinerek gider: serbest metin, e-posta ve
- * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu,
- * anonim geri bildirim) hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
+ * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu)
+ * hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
  * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
@@ -46,6 +46,7 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
     db.prepare("DELETE FROM refresh_tokens WHERE family_id IN (SELECT id FROM refresh_families WHERE user_id = ?)").bind(userId),
     db.prepare("DELETE FROM refresh_families WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM device_challenges WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM usage_reservations WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM meeting_sessions WHERE user_id = ?").bind(userId),
     db
       .prepare("UPDATE meeting_sessions SET device_id = NULL WHERE device_id IN (SELECT id FROM devices WHERE attested_by_user_id = ?)")
@@ -60,19 +61,20 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
 }
 
 /**
- * Hesabı siler (GDPR silme hakkı). Önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (yeniden denemeyle);
+ * Hesabı siler (GDPR silme hakkı). Önce Stripe'taki açık Checkout oturumları sona erdirilir ve bitmemiş abonelikler
+ * hemen iptal edilir (yeniden denemeyle; `closeStripeForDeletion`);
  * Stripe başarısız olursa hiçbir satır silinmez ve istemci yeniden dener. Sonra hesabın tüm satırları tek işlemde
  * silinir; kimliklerin deneme defteri aynı işlemde önce yazılır. Tekrar çağrı güvenlidir: iptal edilmiş abonelik atlanır, olmayan satır silinmez. Stripe'taki müşteri ve
  * faturalar vergi kayıtları için Stripe'ta kalır; sunucuda onları bu hesaba bağlayan satır kalmaz.
  */
 export async function deleteAccount(db: D1Database, platform: Platform, config: Config, userId: string, now: Date): Promise<void> {
-  const canceledSubscriptions: number = await cancelAllSubscriptions(db, platform, config, userId);
+  const canceledSubscriptions: number = await closeStripeForDeletion(db, platform, config, userId);
   const identities: D1Result<StoredIdentity> = await db
     .prepare("SELECT provider, subject FROM auth_identities WHERE user_id = ?")
     .bind(userId)
     .all<StoredIdentity>();
   const identityHashes: string[] = await Promise.all(
-    identities.results.map((identity: StoredIdentity): Promise<string> => trialIdentityHash(config.secrets.accessToken, identity.provider, identity.subject)),
+    identities.results.map((identity: StoredIdentity): Promise<string> => trialIdentityHash(config.secrets.trialHash, identity.provider, identity.subject)),
   );
   await db.batch(accountDeletionStatements(db, userId, identityHashes, now));
   log("info", "account_deleted", { userId, canceledSubscriptions });

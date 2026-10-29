@@ -14,7 +14,7 @@ export interface Env {
   readonly ADMIN_IDENTITIES: string;
   readonly DMG_URL: string;
   readonly PRICE_USD_MONTHLY: string;
-  readonly REPORTS_PER_DAY: string;
+  readonly REPORT_BYTES_PER_DAY: string;
   readonly APP_ATTEST_POLICY: string;
   readonly APP_ATTEST_ENVIRONMENT: string;
   readonly APP_ATTEST_APP_IDS: string;
@@ -35,6 +35,7 @@ export interface Env {
   readonly TRIAL_MEETING_TOKEN_BUDGET: string;
   readonly SUBSCRIBER_MEETING_TOKEN_BUDGET: string;
   readonly MONTHLY_TOKEN_CAP: string;
+  readonly MONTHLY_ACCOUNT_TOKEN_CAP: string;
   readonly DAILY_TOKEN_CAP: string;
   readonly MAX_MEETING_STARTS_PER_DAY: string;
   readonly LLM_MAX_TOKENS: string;
@@ -45,12 +46,16 @@ export interface Env {
   readonly TRANSCRIBE_MAX_KEYTERMS: string;
   readonly SCRIBE_USD_PER_HOUR: string;
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
+  readonly ELEVENLABS_MONTHLY_AUDIO_HOURS: string;
+  readonly ELEVENLABS_BILLING_DAY: string;
   readonly DAILY_SPEND_CEILING_USD: string;
   readonly DAILY_TRIAL_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
   readonly STRIPE_PRICE_ID: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
+  /** Kimlik deneme defteri ve deneme IP özetlerinin HMAC sırrı (erişim jetonu sırrından ayrı). */
+  readonly TRIAL_HASH_SECRET: string;
   readonly ANTHROPIC_API_KEY: string;
   readonly ELEVENLABS_API_KEY: string;
   readonly STRIPE_SECRET_KEY: string;

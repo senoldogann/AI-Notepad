@@ -1,9 +1,14 @@
-import { type JSONWebKeySet, createLocalJWKSet, errors as joseErrors, jwtVerify } from "jose";
+import { type JSONWebKeySet, type ProtectedHeaderParameters, createLocalJWKSet, decodeProtectedHeader, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 import { constantTimeEqualText, sha256Hex } from "../crypto";
 import { ApiError } from "../errors";
-import type { Platform } from "../platform";
+import type { CachedJwks, Platform } from "../platform";
 import { fetchUpstream } from "../upstream";
+
+/** JWKS isteğinin deneme başına zaman aşımı. */
+const jwksTimeoutMs: number = 10_000;
+/** Önbellekteki anahtarların ömrü; jetonun `kid`'i önbellekte yoksa daha erken yeniden alınır (anahtar dönüşü). */
+export const jwksCacheTtlMs: number = 6 * 3_600_000;
 
 /** Kimlik jetonu veren sağlayıcı (OpenID Connect): JWKS adresi, kabul edilen `iss` ve `aud` değerleri. */
 export interface IdentityTokenIssuer {
@@ -16,11 +21,9 @@ export interface IdentityTokenIssuer {
   readonly audiences: readonly string[];
 }
 
-/** Doğrulanmış kimlik jetonunun kullanılan alanları. */
+/** Doğrulanmış kimlik jetonunun kullanılan alanı: kalıcı kullanıcı kimliği (`sub`). */
 export interface VerifiedIdentityToken {
   readonly subject: string;
-  readonly email: string | null;
-  readonly emailVerified: boolean;
 }
 
 const jwkSchema = z.object({
@@ -37,13 +40,11 @@ const claimsSchema = z.object({
   sub: z.string().min(1),
   exp: z.number(),
   nonce: z.string().min(1),
-  email: z.string().optional(),
-  email_verified: z.union([z.boolean(), z.literal("true"), z.literal("false")]).optional(),
 });
 
 /** Sağlayıcının açık anahtarlarını (JWKS) alır; geçici hatalar yeniden denenir. */
 async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer): Promise<JSONWebKeySet> {
-  const response: Response = await fetchUpstream(platform, issuer.jwksService, issuer.jwksUrl, (): RequestInit => ({ method: "GET" }), 3);
+  const response: Response = await fetchUpstream(platform, issuer.jwksService, issuer.jwksUrl, (): RequestInit => ({ method: "GET" }), 3, jwksTimeoutMs);
   const parsed = jwksSchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new ApiError("upstream_unavailable", `${issuer.displayName} anahtarları okunamadı.`);
@@ -60,6 +61,35 @@ async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer): Promi
   };
 }
 
+/** Jetonun başlığındaki `kid`; başlık çözülemezse `invalid_token`. */
+function tokenKeyId(identityToken: string, issuer: IdentityTokenIssuer): string | null {
+  let header: ProtectedHeaderParameters;
+  try {
+    header = decodeProtectedHeader(identityToken);
+  } catch (error: unknown) {
+    if (error instanceof TypeError || error instanceof joseErrors.JOSEError) {
+      throw new ApiError("invalid_token", `${issuer.displayName} kimlik jetonu geçersiz.`);
+    }
+    throw error;
+  }
+  return typeof header.kid === "string" ? header.kid : null;
+}
+
+/**
+ * Sağlayıcının anahtarları: önbellekte taze (`jwksCacheTtlMs`) ve jetonun `kid`'ini içeren kayıt varsa o; yoksa
+ * (ilk istek, süresi dolmuş ya da bilinmeyen `kid`: anahtar dönüşü) yeniden alınır ve önbelleğe yazılır.
+ */
+async function issuerKeys(platform: Platform, issuer: IdentityTokenIssuer, keyId: string | null): Promise<JSONWebKeySet> {
+  const nowMs: number = platform.now().getTime();
+  const cached: CachedJwks | undefined = platform.jwksCache.get(issuer.jwksUrl);
+  if (cached !== undefined && nowMs - cached.fetchedAt < jwksCacheTtlMs && cached.keys.keys.some((key): boolean => key.kid === keyId)) {
+    return cached.keys;
+  }
+  const keys: JSONWebKeySet = await fetchJwks(platform, issuer);
+  platform.jwksCache.set(issuer.jwksUrl, { keys, fetchedAt: nowMs });
+  return keys;
+}
+
 /**
  * Kimlik jetonunu doğrular: sağlayıcının JWKS imzası (yalnızca RS256), `iss`, `aud` (izinli istemci kimlikleri), süre
  * (`exp`; `sub`, `iat`, `nonce` zorunlu) ve nonce. İstemci ham nonce'u gönderir; sağlayıcıya SHA-256 onaltılık özeti
@@ -73,7 +103,7 @@ export async function verifyIdentityToken(
   identityToken: string,
   rawNonce: string,
 ): Promise<VerifiedIdentityToken> {
-  const jwks: JSONWebKeySet = await fetchJwks(platform, issuer);
+  const jwks: JSONWebKeySet = await issuerKeys(platform, issuer, tokenKeyId(identityToken, issuer));
   let payload: Readonly<Record<string, unknown>>;
   try {
     const verified = await jwtVerify(identityToken, createLocalJWKSet(jwks), {
@@ -106,9 +136,5 @@ export async function verifyIdentityToken(
   if (inserted.meta.changes !== 1) {
     throw new ApiError("invalid_token", `Bu ${issuer.displayName} kimlik jetonu zaten kullanıldı.`);
   }
-  return {
-    subject: claims.data.sub,
-    email: claims.data.email ?? null,
-    emailVerified: claims.data.email_verified === true || claims.data.email_verified === "true",
-  };
+  return { subject: claims.data.sub };
 }

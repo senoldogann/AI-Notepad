@@ -44,6 +44,7 @@ export function transcriptionCostMicroUsd(seconds: number, usdPerHour: number): 
 export interface MonthlyUsage {
   /** Bu ay başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye kadar). */
   readonly meetingSeconds: number;
+  /** Kesinleşmiş ses süresi + süresi dolmamış ses ayırmaları. */
   readonly audioSeconds: number;
   /** Sınıra sayılan süre: toplantı ve ses süresinden büyüğü (aynı toplantının sesi iki kez sayılmaz). */
   readonly usedSeconds: number;
@@ -61,8 +62,12 @@ export async function monthlyUsage(db: D1Database, userId: string, now: Date): P
       .bind(nowMs, nowMs, userId, monthStartMs(now))
       .first<{ seconds: number | null }>(),
     db
-      .prepare("SELECT audio_seconds + audio_reserved AS audio_seconds FROM monthly_usage WHERE user_id = ? AND month = ?")
-      .bind(userId, monthKey(now))
+      .prepare(
+        `SELECT COALESCE((SELECT audio_seconds FROM monthly_usage WHERE user_id = ?1 AND month = ?2), 0)
+           + (SELECT COALESCE(SUM(audio_seconds), 0) FROM usage_reservations WHERE user_id = ?1 AND month = ?2 AND kind = 'audio' AND expires_at > ?3)
+           AS audio_seconds`,
+      )
+      .bind(userId, monthKey(now), nowMs)
       .first<{ audio_seconds: number }>(),
   ]);
   const meetingSeconds: number = Math.ceil(meetingRow?.seconds ?? 0);

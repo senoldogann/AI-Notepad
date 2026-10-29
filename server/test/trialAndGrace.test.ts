@@ -42,6 +42,23 @@ describe("IP başına günlük yeni deneme sınırı", () => {
   });
 });
 
+describe("IPv6 istemcileri /64 önekiyle sayılır", () => {
+  it("aynı /64 ağındaki farklı adresler aynı IP sınırına sayılır; başka /64 ve IPv4 eşlemeli adres ayrıdır", async () => {
+    const harness: Harness = await defaultHarness();
+    for (const ip of ["2001:db8:aa:1::1", "2001:db8:aa:1:ffff::2", "2001:0db8:00aa:0001:1234:5678:9abc:def0"]) {
+      expect((await startFrom(harness, await signIn(harness), ip)).status).toBe(201);
+    }
+    await expectError(await startFrom(harness, await signIn(harness), "2001:db8:aa:1::abcd"), 429, "trial_ip_limit");
+    expect((await startFrom(harness, await signIn(harness), "2001:db8:aa:2::1")).status).toBe(201);
+
+    // IPv4 eşlemeli IPv6 adresi IPv4 adresiyle aynı anahtardır.
+    for (let index: number = 0; index < 3; index += 1) {
+      expect((await startFrom(harness, await signIn(harness), "192.0.2.77")).status).toBe(201);
+    }
+    await expectError(await startFrom(harness, await signIn(harness), "::ffff:192.0.2.77"), 429, "trial_ip_limit");
+  });
+});
+
 describe("eski deneme kayıtları temizlendikten sonra", () => {
   it("denemeye başlamış hesap IP sınırına takılmaz ve yeniden sayılmaz", async () => {
     const harness: Harness = await defaultHarness();

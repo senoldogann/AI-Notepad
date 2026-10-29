@@ -25,6 +25,7 @@ import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
 import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBodyBytes, readJsonBody } from "./http";
+import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
 import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
@@ -210,24 +211,26 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     return jsonResponse(200, { received: true, duplicate: result.duplicate });
   }
 
-  await enforceLimit(env.API_IP_LIMITER, `ip:${context.clientIp}`);
+  // Hız sınırı ve IP özeti IPv6'da /64 önekine göredir (`clientIpKey`); Turnstile gerçek IP'yi alır.
+  const ipKey: string = clientIpKey(context.clientIp);
+  await enforceLimit(env.API_IP_LIMITER, `ip:${ipKey}`);
 
   if (path.startsWith("/v1/auth/") && method === "POST") {
-    await enforceLimit(env.AUTH_IP_LIMITER, `ip:${context.clientIp}`);
+    await enforceLimit(env.AUTH_IP_LIMITER, `ip:${ipKey}`);
     if (path === "/v1/auth/apple") {
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
-      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "apple", identity.subject);
-      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, identity.email, now);
+      const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "apple", identity.subject);
+      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, now);
       log("info", "login", { provider: "apple", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
     if (path === "/v1/auth/google") {
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyGoogleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
-      // E-posta saklanmaz; Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
-      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "google", identity.subject);
-      const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, null, now);
+      // Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
+      const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "google", identity.subject);
+      const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, now);
       log("info", "login", { provider: "google", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
@@ -279,7 +282,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     }
     const deviceId: string | null =
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
-    const clientIpHash: string = await hmacSha256Hex(config.secrets.accessToken, `trial-ip:${context.clientIp}`);
+    const clientIpHash: string = await hmacSha256Hex(config.secrets.trialHash, `trial-ip:${ipKey}`);
     const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null };
     return jsonResponse(201, await startMeeting(db, context.platform, config, user.userId, startRequest, now));
   }
@@ -314,7 +317,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
     const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
     await requireSpendHeadroom(db, config, now);
-    const params = parseTranscribeParams(new URL(request.url), config.transcribe.maxKeyterms);
+    const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);
     return proxyTranscription(db, context, config, meeting, request, params);
   }
 
@@ -330,13 +333,16 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   }
 
   if (path === "/v1/reports" && method === "POST") {
-    await enforceLimit(env.REPORT_IP_LIMITER, `ip:${context.clientIp}`);
-    // Jeton isteğe bağlıdır; gönderildiyse geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
+    await enforceLimit(env.REPORT_IP_LIMITER, `ip:${ipKey}`);
+    // Geri bildirim ve çökme raporu hesap ister (jetonsuz 401); sitedeki iletişim formunda jeton isteğe bağlıdır,
+    // Turnstile zorunludur. Gönderilen jeton geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
     const token: string | null = optionalBearerToken(request);
     const user: AuthedUser | null = token === null ? null : await authenticate(db, config, token, now);
     const body: ReportInput = await readJsonBody(request, reportSchema, reportBodyMaxBytes);
     if (body.kind === "contact") {
       await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
+    } else if (user === null) {
+      throw new ApiError("unauthorized", "Geri bildirim ve çökme raporu için giriş yapmış olmalısın.");
     }
     await createReport(db, config, body, user === null ? null : user.userId, now);
     return jsonResponse(202, {});

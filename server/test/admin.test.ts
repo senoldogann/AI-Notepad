@@ -46,6 +46,8 @@ interface StatsBody {
   readonly spend: { todayUsd: number; ceilingUsd: number; trialTodayUsd: number; trialCeilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
   readonly tokens: { thisMonth: number };
   readonly reports: { openFeedback: number; openCrash: number; openContact: number };
+  readonly stripe: { mode: string };
+  readonly elevenLabs: { cycleStart: string; usedHours: number; capHours: number; percent: number };
 }
 
 interface ListBody {
@@ -99,7 +101,11 @@ describe("yönetici API'si", () => {
     const month: string = dayOf(nowMs, 0).slice(0, 7);
     await env.DB.batch([
       env.DB.prepare("INSERT INTO downloads (day, count) VALUES (?, 3), (?, 1), (?, 10)").bind(dayOf(nowMs, 0), dayOf(nowMs, -2), dayOf(nowMs, -40)),
-      env.DB.prepare("INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES (?, 1250000, 400000), (?, 500000, 0)").bind(dayOf(nowMs, 0), dayOf(nowMs, -5)),
+      // ElevenLabs dönemi ayın 11'inde başlar: 5 gün önceki (10 Ekim) ses önceki döneme aittir.
+      env.DB.prepare("INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, audio_seconds) VALUES (?, 1250000, 400000, 39600), (?, 500000, 0, 180000)").bind(
+        dayOf(nowMs, 0),
+        dayOf(nowMs, -5),
+      ),
       env.DB.prepare("INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens) VALUES (?, ?, 1000, 500), (?, '2026-09', 999, 0)").bind(
         admin.userId,
         month,
@@ -145,6 +151,8 @@ describe("yönetici API'si", () => {
     expect(stats.spend.last30Days[24]).toEqual({ day: days[24], usd: 0.5 });
     expect(stats.tokens).toEqual({ thisMonth: 1500 });
     expect(stats.reports).toEqual({ openFeedback: 2, openCrash: 1, openContact: 0 });
+    expect(stats.stripe).toEqual({ mode: "test" });
+    expect(stats.elevenLabs).toEqual({ cycleStart: "2026-10-11", usedHours: 11, capHours: 110, percent: 10 });
   });
 
   it("yönetici olmayan 403 alır; gövdede kendi kimliği vardır; liste boşsa kimse yönetici değildir", async () => {

@@ -19,6 +19,7 @@ export type ErrorCode =
   | "subscription_required"
   | "subscription_exists"
   | "trial_exhausted"
+  | "trial_not_started"
   | "trial_ip_limit"
   | "trial_device_used"
   | "device_check_required"
@@ -26,6 +27,7 @@ export type ErrorCode =
   | "monthly_cap_reached"
   | "daily_cap_reached"
   | "transcription_closed"
+  | "transcription_in_progress"
   | "meeting_not_active"
   | "meeting_budget_exhausted"
   | "audio_too_long"
@@ -56,6 +58,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   subscription_required: 402,
   subscription_exists: 409,
   trial_exhausted: 402,
+  trial_not_started: 403,
   trial_ip_limit: 429,
   trial_device_used: 403,
   device_check_required: 400,
@@ -63,6 +66,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   monthly_cap_reached: 403,
   daily_cap_reached: 429,
   transcription_closed: 403,
+  transcription_in_progress: 409,
   meeting_not_active: 403,
   meeting_budget_exhausted: 429,
   audio_too_long: 413,

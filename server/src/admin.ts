@@ -1,4 +1,5 @@
-import type { Config } from "./config";
+import type { Config, StripeMode } from "./config";
+import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
 import { ForbiddenIdentityError } from "./errors";
 import { log } from "./log";
 import { utcDayStartMs } from "./reports";
@@ -56,6 +57,10 @@ export interface AdminStats {
   };
   readonly tokens: { readonly thisMonth: number };
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
+  /** Stripe anahtarının modu: canlıya geçişte `live` olmalı. */
+  readonly stripe: { readonly mode: StripeMode };
+  /** ElevenLabs bu faturalama dönemindeki ses saati / plan saati (kredi bitince konuşma tanıma durur). */
+  readonly elevenLabs: ElevenLabsUsage;
 }
 
 /**
@@ -94,10 +99,10 @@ function roundCents(value: number): number {
 
 /**
  * Abonelik erişimi olan satır (`subscriptions s`) için SQL koşulu; `entitlements.subscriptionAccess` ile aynıdır:
- * `active`/`trialing` dönem sonuna dek, `past_due` dönem sonu + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
+ * `active`/`trialing` dönem sonuna dek, `past_due` `past_due_since` + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
  */
 const activeAccessSql: string = "s.status IN ('active', 'trialing') AND s.current_period_end > ?1";
-const graceAccessSql: string = "s.status = 'past_due' AND s.current_period_end + ?2 > ?1";
+const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 > ?1";
 
 interface SubscriptionCounts {
   readonly active: number;
@@ -172,6 +177,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     trialSpendRow,
     tokenRow,
     reportRows,
+    elevenLabs,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -229,6 +235,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .bind(monthKey(now))
       .first<{ value: number }>(),
     db.prepare("SELECT kind AS key, COUNT(*) AS count FROM reports WHERE status = 'open' GROUP BY kind").all<KeyCountRow>(),
+    elevenLabsUsage(db, config, now),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -278,5 +285,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       openCrash: openReports.get("crash") ?? 0,
       openContact: openReports.get("contact") ?? 0,
     },
+    stripe: { mode: config.stripeMode },
+    elevenLabs,
   };
 }

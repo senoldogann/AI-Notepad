@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 import { turnstileVerifyUrl } from "../src/auth/turnstile";
-import { crashPayloadMaxChars, reportBodyMaxBytes } from "../src/reports";
+import { crashPayloadMaxBytes, reportBodyMaxBytes, reportsPerUserPerDay } from "../src/reports";
 import { type Harness, type Session, blockingLimiter, defaultHarness, envWith, expectError, req, signIn } from "./helpers";
 
 const siteOrigin: string = "http://localhost:8788";
@@ -61,15 +61,21 @@ function stubTurnstile(harness: Harness, success: boolean): string[] {
 }
 
 describe("POST /v1/reports", () => {
-  it("anonim geri bildirim 202 {} döner ve hesapsız saklanır; jetonla gelen hesaba bağlanır", async () => {
+  it("geri bildirim ve çökme raporu hesap ister; jetonla gelen 202 {} döner ve hesaba bağlanır", async () => {
     const harness: Harness = await defaultHarness();
-    const anonymous: Response = await postReport(harness, { kind: "feedback", message: "  Harika uygulama  ", appVersion: "1.2.0", os: "macOS 26.1" }, null);
-    expect(anonymous.status).toBe(202);
-    expect(await anonymous.json()).toEqual({});
+    const before: number = await reportCount();
+    await expectError(await postReport(harness, { kind: "feedback", message: "anonim" }, null), 401, "unauthorized");
+    await expectError(await postReport(harness, { kind: "crash", payload: metricKitCrash }, null), 401, "unauthorized");
+    expect(await reportCount()).toBe(before);
+
+    const session: Session = await signIn(harness);
+    const accepted: Response = await postReport(harness, { kind: "feedback", message: "  Harika uygulama  ", appVersion: "1.2.0", os: "macOS 26.1" }, session.accessToken);
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toEqual({});
     expect(await lastReport()).toEqual({
       kind: "feedback",
       status: "open",
-      user_id: null,
+      user_id: session.userId,
       email: null,
       app_version: "1.2.0",
       os: "macOS 26.1",
@@ -78,7 +84,6 @@ describe("POST /v1/reports", () => {
       summary: "Harika uygulama",
     });
 
-    const session: Session = await signIn(harness);
     const long: string = "ş".repeat(300);
     expect((await postReport(harness, { kind: "feedback", message: long, email: "kisi@ornek.test" }, session.accessToken)).status).toBe(202);
     const stored: StoredReport | null = await lastReport();
@@ -101,18 +106,19 @@ describe("POST /v1/reports", () => {
 
   it("çökme raporu: MetricKit imzası özete çıkar; JSON nesnesi olmayan yük ve yüksüz çökme reddedilir", async () => {
     const harness: Harness = await defaultHarness();
-    expect((await postReport(harness, { kind: "crash", payload: metricKitCrash, appVersion: "1.2.0" }, null)).status).toBe(202);
+    const token: string = (await signIn(harness)).accessToken;
+    expect((await postReport(harness, { kind: "crash", payload: metricKitCrash, appVersion: "1.2.0" }, token)).status).toBe(202);
     const stored: StoredReport | null = await lastReport();
     expect(stored?.summary).toBe("EXC_BAD_ACCESS · SIGSEGV");
     expect(stored?.payload).toBe(metricKitCrash);
 
-    expect((await postReport(harness, { kind: "crash", payload: JSON.stringify({ kendi: "biçimimiz" }) }, null)).status).toBe(202);
+    expect((await postReport(harness, { kind: "crash", payload: JSON.stringify({ kendi: "biçimimiz" }) }, token)).status).toBe(202);
     expect((await lastReport())?.summary).toBe("crash report");
-    expect((await postReport(harness, { kind: "crash", payload: "{}", message: "Kayıt bitince çöktü" }, null)).status).toBe(202);
+    expect((await postReport(harness, { kind: "crash", payload: "{}", message: "Kayıt bitince çöktü" }, token)).status).toBe(202);
     expect((await lastReport())?.summary).toBe("Kayıt bitince çöktü");
 
-    await expectError(await postReport(harness, { kind: "crash", payload: "[1, 2]" }, null), 400, "invalid_body");
-    await expectError(await postReport(harness, { kind: "crash", payload: "{bozuk" }, null), 400, "invalid_body");
+    await expectError(await postReport(harness, { kind: "crash", payload: "[1, 2]" }, token), 400, "invalid_body");
+    await expectError(await postReport(harness, { kind: "crash", payload: "{bozuk" }, token), 400, "invalid_body");
     await expectError(await postReport(harness, { kind: "crash", message: "yük yok" }, null), 400, "invalid_body");
   });
 
@@ -150,41 +156,61 @@ describe("POST /v1/reports", () => {
     expect(preflight.status).toBe(204);
   });
 
-  it("gövde boyutu ayrıştırmadan önce sınırlanır (413); 512 K karakteri aşan yük reddedilir", async () => {
+  it("gövde boyutu ayrıştırmadan önce sınırlanır (413); 64 KB'ı aşan çökme yükü reddedilir", async () => {
     const harness: Harness = await defaultHarness();
+    const token: string = (await signIn(harness)).accessToken;
     const huge: string = JSON.stringify({ kind: "crash", payload: "x".repeat(reportBodyMaxBytes) });
     await expectError(
-      await harness.call(req("POST", "/v1/reports", { body: huge, headers: { "content-type": "application/json" } })),
+      await harness.call(req("POST", "/v1/reports", { body: huge, token, headers: { "content-type": "application/json" } })),
       413,
       "payload_too_large",
     );
-    const tooLong: string = JSON.stringify({ a: "x".repeat(crashPayloadMaxChars) });
-    await expectError(await postReport(harness, { kind: "crash", payload: tooLong }, null), 400, "invalid_body");
-    const largest: string = JSON.stringify({ a: "x".repeat(crashPayloadMaxChars - 10) });
-    expect((await postReport(harness, { kind: "crash", payload: largest }, null)).status).toBe(202);
+    // Sınır UTF-8 baytıdır: 64 K karakterden az ama 64 KB'tan büyük yük de reddedilir.
+    const multiByte: string = JSON.stringify({ a: "ş".repeat(crashPayloadMaxBytes / 2) });
+    await expectError(await postReport(harness, { kind: "crash", payload: multiByte }, token), 413, "payload_too_large");
+    const tooLong: string = JSON.stringify({ a: "x".repeat(crashPayloadMaxBytes) });
+    await expectError(await postReport(harness, { kind: "crash", payload: tooLong }, token), 400, "invalid_body");
+    const largest: string = JSON.stringify({ a: "x".repeat(crashPayloadMaxBytes - 10) });
+    expect((await postReport(harness, { kind: "crash", payload: largest }, token)).status).toBe(202);
   });
 
-  it("IP hız sınırı ve tüm kullanıcılar için günlük sınır 429 döner; sınır ertesi gün sıfırlanır", async () => {
+  it("IP hız sınırı ve tür başına günlük bayt bütçesi 429 döner; bir tür diğerini aç bırakmaz; sınır ertesi gün sıfırlanır", async () => {
     const harness: Harness = await defaultHarness();
     await expectError(
       await harness.call(req("POST", "/v1/reports", { json: { kind: "feedback", message: "x" }, env: envWith({ REPORT_IP_LIMITER: blockingLimiter }) })),
       429,
       "rate_limited",
     );
-    // Günlük sınır bugünkü (UTC) tüm raporları sayar.
+    // Bütçe bugünkü (UTC) türün raporlarının baytını sayar (mesaj + özet: 10 karakterlik ileti = 20 bayt).
     harness.clock.nowMs += 10 * 86_400_000;
-    const capped = envWith({ REPORTS_PER_DAY: "2" });
+    const capped = envWith({ REPORT_BYTES_PER_DAY: "40" });
+    const send = async (json: object, token: string): Promise<Response> => harness.call(req("POST", "/v1/reports", { json, token, env: capped }));
+    const tokens: string[] = [(await signIn(harness)).accessToken, (await signIn(harness)).accessToken];
     const warnings = vi.spyOn(console, "warn");
-    for (let index: number = 0; index < 2; index += 1) {
-      expect((await harness.call(req("POST", "/v1/reports", { json: { kind: "feedback", message: `ileti ${index}` }, env: capped }))).status).toBe(202);
-    }
-    await expectError(await harness.call(req("POST", "/v1/reports", { json: { kind: "feedback", message: "gizli-ileti" }, env: capped })), 429, "daily_cap_reached");
+    expect((await send({ kind: "feedback", message: "ileti-0000" }, tokens[0] ?? "")).status).toBe(202);
+    expect((await send({ kind: "feedback", message: "ileti-1111" }, tokens[1] ?? "")).status).toBe(202);
+    await expectError(await send({ kind: "feedback", message: "gizli-ileti" }, tokens[0] ?? ""), 429, "daily_cap_reached");
     const lines: string[] = warnings.mock.calls.map((call: unknown[]): string => String(call[0]));
     warnings.mockRestore();
     expect(lines.some((line: string): boolean => line.includes('"event":"reports_daily_cap_reached"'))).toBe(true);
     expect(lines.some((line: string): boolean => line.includes("gizli-ileti"))).toBe(false);
+    // Geri bildirim bütçesi dolsa da çökme raporu kendi bütçesinden kabul edilir.
+    expect((await send({ kind: "crash", payload: "{}" }, tokens[0] ?? "")).status).toBe(202);
     harness.clock.nowMs += 86_400_000;
-    expect((await harness.call(req("POST", "/v1/reports", { json: { kind: "feedback", message: "yarın" }, env: capped }))).status).toBe(202);
+    const tomorrow: string = (await signIn(harness)).accessToken;
+    expect((await send({ kind: "feedback", message: "yarın" }, tomorrow)).status).toBe(202);
+  });
+
+  it(`bir hesap günde en çok ${reportsPerUserPerDay} rapor gönderebilir; başka hesap etkilenmez`, async () => {
+    const harness: Harness = await defaultHarness();
+    harness.clock.nowMs += 20 * 86_400_000;
+    const busy: Session = await signIn(harness);
+    for (let index: number = 0; index < reportsPerUserPerDay; index += 1) {
+      expect((await postReport(harness, { kind: "feedback", message: `ileti ${index}` }, busy.accessToken)).status).toBe(202);
+    }
+    const refused = await expectError(await postReport(harness, { kind: "crash", payload: "{}" }, busy.accessToken), 429, "daily_cap_reached");
+    expect(refused.error.message).toContain(String(reportsPerUserPerDay));
+    expect((await postReport(harness, { kind: "feedback", message: "başka" }, (await signIn(harness)).accessToken)).status).toBe(202);
   });
 
   it("loglar mesaj, e-posta ya da yük içermez", async () => {
@@ -194,7 +220,7 @@ describe("POST /v1/reports", () => {
       lines.push(args.map((arg: unknown): string => String(arg)).join(" "));
     });
     try {
-      await postReport(harness, { kind: "crash", payload: metricKitCrash, message: "GİZLİ-NOT", email: "gizli@ornek.test" }, null);
+      await postReport(harness, { kind: "crash", payload: metricKitCrash, message: "GİZLİ-NOT", email: "gizli@ornek.test" }, (await signIn(harness)).accessToken);
     } finally {
       spy.mockRestore();
     }

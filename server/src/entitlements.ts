@@ -8,6 +8,8 @@ export interface SubscriptionState {
   readonly currentPeriodEnd: number;
   /** İptal edilmiş aboneliğin biteceği an (ms); yenilenecekse null. */
   readonly cancelAt: number | null;
+  /** Aboneliğin `past_due` durumuna geçtiği an (ms; webhook'un işlediği an); `past_due` değilse null. */
+  readonly pastDueSince: number | null;
 }
 
 /** Kullanıcının planı: deneme ya da abonelik. */
@@ -47,9 +49,15 @@ export interface Entitlements {
   } | null;
 }
 
+/** `past_due` ek süresinin bittiği an (ms): `past_due`'ya geçiş + `pastDueGraceMs`; `past_due` değilse null. Saf fonksiyondur. */
+export function graceEndsAtMs(subscription: SubscriptionState, pastDueGraceMs: number): number | null {
+  return subscription.status === "past_due" && subscription.pastDueSince !== null ? subscription.pastDueSince + pastDueGraceMs : null;
+}
+
 /**
- * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek; `past_due` dönem sonundan sonra `pastDueGraceMs`
- * boyunca (Stripe ödemeyi yeniden denerken) erişimi korur. Saf fonksiyondur.
+ * Aboneliğin erişim durumu. `active`/`trialing` dönem sonuna dek; `past_due` ödemenin başarısız olduğu andan
+ * (`pastDueSince`; Stripe yenilemede dönem sonunu hemen ilerlettiği için dönem sonundan değil) `pastDueGraceMs` boyunca
+ * (Stripe ödemeyi yeniden denerken) erişimi korur. Saf fonksiyondur.
  */
 export function subscriptionAccess(subscription: SubscriptionState | null, now: Date, pastDueGraceMs: number): SubscriptionAccess {
   if (subscription === null) {
@@ -58,7 +66,8 @@ export function subscriptionAccess(subscription: SubscriptionState | null, now: 
   if (["active", "trialing"].includes(subscription.status) && subscription.currentPeriodEnd > now.getTime()) {
     return "active";
   }
-  if (subscription.status === "past_due" && subscription.currentPeriodEnd + pastDueGraceMs > now.getTime()) {
+  const graceEnd: number | null = graceEndsAtMs(subscription, pastDueGraceMs);
+  if (graceEnd !== null && graceEnd > now.getTime()) {
     return "grace";
   }
   return "none";
@@ -84,11 +93,13 @@ export function hasSubscriptionAccess(subscription: SubscriptionState | null, no
 
 /** Kullanıcının abonelik durumu (yoksa null). */
 export async function subscriptionState(db: D1Database, userId: string): Promise<SubscriptionState | null> {
-  const row: { status: string; current_period_end: number; cancel_at: number | null } | null = await db
-    .prepare("SELECT status, current_period_end, cancel_at FROM subscriptions WHERE user_id = ?")
+  const row: { status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null } | null = await db
+    .prepare("SELECT status, current_period_end, cancel_at, past_due_since FROM subscriptions WHERE user_id = ?")
     .bind(userId)
-    .first<{ status: string; current_period_end: number; cancel_at: number | null }>();
-  return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at };
+    .first<{ status: string; current_period_end: number; cancel_at: number | null; past_due_since: number | null }>();
+  return row === null
+    ? null
+    : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at, pastDueSince: row.past_due_since };
 }
 
 /** Hesabın deneme durumu. */
@@ -97,22 +108,26 @@ export interface TrialState {
   readonly used: number;
   /** İlk deneme toplantısının başladığı an (ms; devralınmış olabilir); deneme başlamadıysa null. */
   readonly startedAt: number | null;
+  /** Hesabın denemesinin bir Mac'e (DeviceCheck) bağlandığı an (ms); bağlanmadıysa null. */
+  readonly deviceVerifiedAt: number | null;
 }
 
 /**
  * Kullanıcının deneme durumu: harcanan deneme toplantısı (deneme toplantıları + `users.carried_trial_meetings`, bkz.
- * `trialLedger.ts`) ve denemenin başladığı an (`users.trial_started_at`).
+ * `trialLedger.ts`), denemenin başladığı an (`users.trial_started_at`) ve Mac doğrulaması
+ * (`users.trial_device_verified_at`).
  */
 export async function userTrialState(db: D1Database, userId: string): Promise<TrialState> {
-  const row: { used: number; started_at: number | null } | null = await db
+  const row: { used: number; started_at: number | null; device_verified_at: number | null } | null = await db
     .prepare(
       `SELECT (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ?1 AND kind = 'trial')
          + COALESCE((SELECT carried_trial_meetings FROM users WHERE id = ?1), 0) AS used,
-         (SELECT trial_started_at FROM users WHERE id = ?1) AS started_at`,
+         (SELECT trial_started_at FROM users WHERE id = ?1) AS started_at,
+         (SELECT trial_device_verified_at FROM users WHERE id = ?1) AS device_verified_at`,
     )
     .bind(userId)
-    .first<{ used: number; started_at: number | null }>();
-  return { used: row?.used ?? 0, startedAt: row?.started_at ?? null };
+    .first<{ used: number; started_at: number | null; device_verified_at: number | null }>();
+  return { used: row?.used ?? 0, startedAt: row?.started_at ?? null, deviceVerifiedAt: row?.device_verified_at ?? null };
 }
 
 /** Deneme süresinin bittiği an (ms); deneme başlamadıysa null. Saf fonksiyondur. */
@@ -147,11 +162,22 @@ export async function deviceTrialMeetingsUsed(db: D1Database, deviceId: string):
 export type AccountLLMAccess = "subscription" | "trial";
 
 /**
+ * Deneme ilk toplantıyla başladı mı: `users.trial_started_at` dolu ve DeviceCheck politikası `required` ise deneme bir
+ * Mac'e bağlanmış (`users.trial_device_verified_at`). Deneme toplantısı DeviceCheck'i, IP başına yeni deneme sınırını ve
+ * deneme süresini başlatır; toplantı dışı deneme çağrısı bunları atlayamasın diye yalnızca başlamış denemede açılır.
+ * Saf fonksiyondur.
+ */
+export function isTrialStarted(trial: TrialState, config: Config): boolean {
+  return trial.startedAt !== null && (config.deviceCheck.policy === "off" || trial.deviceVerifiedAt !== null);
+}
+
+/**
  * Toplantıya bağlı olmayan yapay zekâ çağrısı (Sor, notu yeniden yazma, düzenleme, görev aracı) hakkı: erişimi olan
- * abonelik (`active` ya da `grace`) ya da hesabın kullanılmamış ve süresi dolmamış deneme toplantısı. Deneme bitmiş
+ * abonelik (`active` ya da `grace`) ya da ilk toplantıyla başlamış (`isTrialStarted`), toplantıları harcanmamış ve
+ * süresi dolmamış deneme. Deneme hiç başlamadıysa `trial_not_started` (önce bir toplantı başlatılmalı); bittiyse
  * (toplantılar harcanmış ya da süre dolmuş) ve abonelik yoksa `subscription_required`. Hak toplantı bütçesiyle değil,
  * kullanıcının günlük ve aylık token sınırıyla ve küçük çağrı başı `max_tokens` ile sınırlanır; denemede ayrıca
- * `TRIAL_ACCOUNT_DAILY_TOKENS`.
+ * `TRIAL_ACCOUNT_DAILY_TOKENS`, abonelikte ayrıca `MONTHLY_ACCOUNT_TOKEN_CAP`.
  */
 export async function requireAccountLLMAccess(db: D1Database, config: Config, userId: string, now: Date): Promise<AccountLLMAccess> {
   const [subscription, trial]: [SubscriptionState | null, TrialState] = await Promise.all([
@@ -160,6 +186,9 @@ export async function requireAccountLLMAccess(db: D1Database, config: Config, us
   ]);
   if (hasSubscriptionAccess(subscription, now, config.pastDueGraceMs)) {
     return "subscription";
+  }
+  if (!isTrialStarted(trial, config)) {
+    throw new ApiError("trial_not_started", "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.");
   }
   if (trialMeetingsLeft(trial, config, now) > 0) {
     return "trial";
@@ -207,7 +236,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
             currentPeriodEnd: new Date(subscription.currentPeriodEnd).toISOString(),
             cancelAt: subscription.cancelAt === null ? null : new Date(subscription.cancelAt).toISOString(),
             access,
-            graceEndsAt: access === "grace" ? new Date(subscription.currentPeriodEnd + config.pastDueGraceMs).toISOString() : null,
+            graceEndsAt: access === "grace" ? new Date(graceEndsAtMs(subscription, config.pastDueGraceMs) ?? 0).toISOString() : null,
           },
   };
 }

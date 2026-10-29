@@ -37,7 +37,6 @@ export interface MeetingRow {
   readonly token_budget: number;
   readonly tokens_used: number;
   readonly audio_seconds: number;
-  readonly audio_reserved: number;
   /** 1: gerçek ses süresi ayrılanı aştı, toplantının ses hakkı kapandı. */
   readonly transcription_closed: number;
   /** `ended`: kullanıcı bitirdi (not için ek süre); `superseded`: yeni toplantı başlayınca kapandı (ek süre yok). */

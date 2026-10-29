@@ -20,7 +20,7 @@
     }
   ],
   // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
-  // çökme, iletişim) IP başına dakikada 5; ayrıca tüm kullanıcılar için günlük `REPORTS_PER_DAY`.
+  // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
@@ -42,8 +42,10 @@
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
     // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
     "PRICE_USD_MONTHLY": "5.99",
-    // Tüm kullanıcılar için günde en çok kabul edilen rapor; aşılınca `429 daily_cap_reached`.
-    "REPORTS_PER_DAY": "500",
+    // Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günde en çok saklanan bayt; aşılınca
+    // `429 daily_cap_reached`. 2 MB ≈ 30 en büyük (64 KB) çökme raporu ya da ~400 uzun geri bildirim. Üst sınır:
+    // 3 tür × 2 MB × 180 günlük saklama ≈ 1,1 GB.
+    "REPORT_BYTES_PER_DAY": "2000000",
     "APP_ATTEST_POLICY": "optional",
     "APP_ATTEST_ENVIRONMENT": "development",
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
@@ -92,6 +94,10 @@
     // - Aylık: 10 saat × 0,52 M = 5,2 M, %25 pay → 6,5 M (en çok ~0,9 $/ay).
     // - Günlük: en uzun tek toplantının bütçesi (2,6 M) sığsın, kısa ek kullanım kalsın → 3,0 M.
     "MONTHLY_TOKEN_CAP": "6500000",
+    // Abonenin toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev aracı) için aylık ayrı sınır
+    // (MONTHLY_TOKEN_CAP'in parçası; toplantı bütçeleri değişmez). Türetme: notu yeniden yazmak ~100 K, Sor ~10–30 K →
+    // 1,5 M ≈ ayda ~15 not yenileme ya da ~50–100 soru; en çok ~0,2 $/ay. Aşılınca `403 monthly_cap_reached`.
+    "MONTHLY_ACCOUNT_TOKEN_CAP": "1500000",
     "DAILY_TOKEN_CAP": "3000000",
     "MAX_MEETING_STARTS_PER_DAY": "20",
     "LLM_MAX_TOKENS": "8192",
@@ -103,6 +109,12 @@
     "TRANSCRIBE_MAX_KEYTERMS": "100",
     "SCRIBE_USD_PER_HOUR": "0.22",
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+    // ElevenLabs Creator planı: ayda 121 000 kredi, ölçülen ~1080 kredi/ses saati → ~110 saat; dönem ayın 11'inde
+    // yenilenir. Kredi bitince her konuşma tanıma isteği başarısız olur (sağlayıcı uyarmaz): kullanım %80 ve %95'i aşınca
+    // `elevenlabs_capacity_threshold` alarmı, eşiğin üstündeyken günlük `elevenlabs_capacity_high` alarmı; durum
+    // `GET /v1/admin/stats` → `elevenLabs`. Gün 1–28 olmalı.
+    "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+    "ELEVENLABS_BILLING_DAY": "11",
     "DAILY_SPEND_CEILING_USD": "25",
     // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
     // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
@@ -146,7 +158,8 @@
         "ADMIN_IDENTITIES": "google:101383806107899312129",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
         "PRICE_USD_MONTHLY": "5.99",
-        "REPORTS_PER_DAY": "500",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "REPORT_BYTES_PER_DAY": "2000000",
         "APP_ATTEST_POLICY": "optional",
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",
@@ -172,6 +185,8 @@
         "TRIAL_MEETING_TOKEN_BUDGET": "1000000",
         "SUBSCRIBER_MEETING_TOKEN_BUDGET": "2600000",
         "MONTHLY_TOKEN_CAP": "6500000",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "MONTHLY_ACCOUNT_TOKEN_CAP": "1500000",
         "DAILY_TOKEN_CAP": "3000000",
         "MAX_MEETING_STARTS_PER_DAY": "20",
         "LLM_MAX_TOKENS": "8192",
@@ -183,6 +198,9 @@
         "TRANSCRIBE_MAX_KEYTERMS": "100",
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+        "ELEVENLABS_BILLING_DAY": "11",
         "DAILY_SPEND_CEILING_USD": "25",
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "DAILY_TRIAL_SPEND_CEILING_USD": "10",

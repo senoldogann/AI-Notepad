@@ -14,8 +14,11 @@ import { isRetryableUpstreamError } from "./upstream";
  * Anlamlar: `bit0` = "bu Mac bir hesaba ücretsiz deneme verdi"; `bit1` kullanılmaz (güncellerken okunan değer korunur).
  */
 
-/** Yeniden deneme dahil en çok deneme (5xx, 429, ağ hatası). */
+/** Yeniden deneme dahil en çok deneme (5xx, 429, ağ hatası, zaman aşımı). */
 const deviceCheckAttempts: number = 3;
+
+/** Deneme başına zaman aşımı. */
+const deviceCheckTimeoutMs: number = 10_000;
 
 /** DeviceCheck API kökleri. */
 const deviceCheckBaseUrls: Readonly<Record<DeviceCheckEnvironment, string>> = {
@@ -100,6 +103,7 @@ async function postDeviceCheck(
         method: "POST",
         headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(deviceCheckTimeoutMs),
       });
       const body: string = await response.text();
       if (response.ok) {
