@@ -11,12 +11,12 @@
         }
       }
     },
-    "\"AI-Notepad\" klasörüne, hesap gerekmez": {
+    "\"%@\" klasörüne, hesap gerekmez": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Into an \"AI-Notepad\" folder, no account needed"
+            "value": "Into a \"%@\" folder, no account needed"
           }
         }
       }
@@ -146,12 +146,23 @@
         }
       }
     },
-    "%@ bağlantısı bu cihazdan kaldırıldı ama %@ tarafında kapatılamadı (%@). AI-Notepad'in erişimini %@ ayarlarından kaldır.": {
+    "%@ bağlantı denemesi": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The %@ connection was removed from this device, but it couldn't be closed on the %@ side (%@). Remove AI-Notepad's access in your %@ settings."
+            "value": "%@ connection test"
+          }
+        }
+      }
+    },
+    "%@ bağlantısı bu cihazdan kaldırıldı ama %@ tarafında kapatılamadı (%@). %@'in erişimini %@ ayarlarından kaldır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ connection was removed from this device, but it couldn't be closed on the %@ side (%@). Remove %@'s access in your %@ settings."
           }
         }
       }
@@ -182,6 +193,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ no longer offers the expected tool (%@); update the app."
+          }
+        }
+      }
+    },
+    "%@ beklenmedik şekilde kapandı — raporu gönder?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ quit unexpectedly — send the report?"
           }
         }
       }
@@ -542,12 +563,13 @@
         }
       }
     },
-    "%@ yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Uygulamanın ayarından AI-Notepad sunucusunu elle ekle (komut: AINotepad --mcp).": {
+    "%@ yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Toplantı sunucusunu o uygulamanın ayarından elle ekle (komut: bu uygulama, --mcp argümanıyla).": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ contains comments; it wasn't overwritten so they aren't lost. Add the AI-Notepad server by hand in the app's settings (command: AINotepad --mcp)."
+            "value": "%@ contains comments; it wasn't overwritten so they aren't lost. Add the meetings server by hand in that app's settings (command: this app, with the --mcp argument)."
           }
         }
       }
@@ -1025,80 +1047,6 @@
         }
       }
     },
-    "AI-Notepad bağlantı denemesi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI-Notepad connection test"
-          }
-        }
-      }
-    },
-    "AI-Notepad beklenmedik şekilde kapandı — raporu gönder?": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI-Notepad quit unexpectedly — send the report?"
-          }
-        }
-      }
-    },
-    "AI-Notepad geçici bir konumdan çalışıyor. Uygulamayı Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI-Notepad is running from a temporary location. Move it to the Applications folder, reopen it, then connect again."
-          }
-        }
-      }
-    },
-    "AI-Notepad sunucusu beklenmeyen bir yanıt verdi (HTTP %lld). Biraz sonra yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The AI-Notepad server returned an unexpected response (HTTP %lld). Try again a bit later."
-          }
-        }
-      }
-    },
-    "AI-Notepad sunucusuna ulaşılamadı; internet bağlantını kontrol et.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't reach the AI-Notepad server; check your internet connection."
-          }
-        }
-      }
-    },
-    "AI-Notepad sunucusunda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "An unexpected error occurred on the AI-Notepad server; try again a bit later."
-          }
-        }
-      }
-    },
-    "AI-Notepad sunucusundan beklenmeyen yanıt geldi (HTTP %lld). Uygulamayı güncelleyip yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unexpected response from the AI-Notepad server (HTTP %lld). Update the app and try again."
-          }
-        }
-      }
-    },
     "AI-Notepad'i açar ve yüz yüze toplantıyı kaydetmeye başlar.": {
       "localizations": {
         "en": {
@@ -1496,13 +1444,13 @@
         }
       }
     },
-    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma AI-Notepad sunucusundan. İlk 3 toplantı ücretsiz.": {
+    "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma %@ sunucusundan. İlk 3 toplantı ücretsiz.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No keys needed: notes, translation and speaker separation come from the AI-Notepad server. Your first 3 meetings are free."
+            "value": "No keys needed: notes, translation and speaker separation come from the %@ server. Your first 3 meetings are free."
           }
         }
       }
@@ -1597,12 +1545,12 @@
         }
       }
     },
-    "Anımsatıcılar'a erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Anımsatıcılar'dan AI-Notepad'e izin ver.": {
+    "Anımsatıcılar'a erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Anımsatıcılar'dan %@'e izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No access to Reminders: allow AI-Notepad in System Settings › Privacy & Security › Reminders."
+            "value": "No access to Reminders: allow %@ in System Settings › Privacy & Security › Reminders."
           }
         }
       }
@@ -1717,12 +1665,12 @@
         }
       }
     },
-    "Apple Notlar'a yazılamadı: %@. Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da AI-Notepad için Notlar'a izin ver.": {
+    "Apple Notlar'a yazılamadı: %@. Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da %@ için Notlar'a izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't write to Apple Notes: %@. Allow Notes for AI-Notepad in System Settings › Privacy & Security › Automation."
+            "value": "Couldn't write to Apple Notes: %@. Allow Notes for %@ in System Settings › Privacy & Security › Automation."
           }
         }
       }
@@ -2264,12 +2212,12 @@
         }
       }
     },
-    "Bildirim izni yok: Sistem Ayarları › Bildirimler › AI-Notepad'den izin ver.": {
+    "Bildirim izni yok: Sistem Ayarları › Bildirimler › %@ bölümünden izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No permission for notifications: allow AI-Notepad in System Settings › Notifications."
+            "value": "No permission for notifications: allow %@ in System Settings › Notifications."
           }
         }
       }
@@ -2856,13 +2804,13 @@
         }
       }
     },
-    "Bu sürüm cihaz doğrulaması istiyor; AI-Notepad'i güncelle.": {
+    "Bu sürüm cihaz doğrulaması istiyor; uygulamayı güncelle.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This version requires device verification; update AI-Notepad."
+            "value": "This version requires device verification; update the app."
           }
         }
       }
@@ -7195,13 +7143,13 @@
         }
       }
     },
-    "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver.": {
+    "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'da bu uygulamaya izin ver.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No microphone permission. Allow AI-Notepad in System Settings › Privacy & Security › Microphone."
+            "value": "No microphone permission. Allow this app in System Settings › Privacy & Security › Microphone."
           }
         }
       }
@@ -7673,12 +7621,12 @@
         }
       }
     },
-    "Notlar'daki \"AI-Notepad\" klasörüne yazıldı.": {
+    "Notlar'daki \"%@\" klasörüne yazıldı.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Written to the \"AI-Notepad\" folder in Notes."
+            "value": "Written to the \"%@\" folder in Notes."
           }
         }
       }
@@ -8828,13 +8776,13 @@
         }
       }
     },
-    "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver.": {
+    "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'nda bu uygulamaya izin ver.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No system audio recording permission. Allow AI-Notepad in System Settings › Privacy & Security › Screen & System Audio Recording."
+            "value": "No system audio recording permission. Allow this app in System Settings › Privacy & Security › Screen & System Audio Recording."
           }
         }
       }
@@ -9105,13 +9053,24 @@
         }
       }
     },
-    "Sunucu isteği anlamadı (%@); AI-Notepad'i güncelleyip yeniden dene.": {
+    "Sunucu beklenmeyen bir yanıt verdi (HTTP %lld). Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server didn't understand the request (%@); update AI-Notepad and try again."
+            "value": "The server returned an unexpected response (HTTP %lld). Try again a bit later."
+          }
+        }
+      }
+    },
+    "Sunucu isteği anlamadı (%@); uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server didn't understand the request (%@); update the app and try again."
           }
         }
       }
@@ -9122,6 +9081,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pick the server and channel in Discord"
+          }
+        }
+      }
+    },
+    "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An unexpected error occurred on the server; try again a bit later."
+          }
+        }
+      }
+    },
+    "Sunucudan beklenmeyen yanıt geldi (HTTP %lld). Uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected response from the server (HTTP %lld). Update the app and try again."
+          }
+        }
+      }
+    },
+    "Sunucuya ulaşılamadı; internet bağlantını kontrol et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't reach the server; check your internet connection."
           }
         }
       }
@@ -9328,12 +9320,12 @@
         }
       }
     },
-    "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için AI-Notepad'i aç.": {
+    "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için %@'i aç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your calendar call started but recording couldn't turn on. Open AI-Notepad to see why."
+            "value": "Your calendar call started but recording couldn't turn on. Open %@ to see why."
           }
         }
       }
@@ -9368,12 +9360,12 @@
         }
       }
     },
-    "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e izin ver.": {
+    "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den %@'e izin ver.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No access to Calendar: allow AI-Notepad in System Settings › Privacy & Security › Calendars."
+            "value": "No access to Calendar: allow %@ in System Settings › Privacy & Security › Calendars."
           }
         }
       }
@@ -10463,6 +10455,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "App"
+          }
+        }
+      }
+    },
+    "Uygulama geçici bir konumdan çalışıyor. Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app is running from a temporary location. Move it to the Applications folder, reopen it, then connect again."
           }
         }
       }

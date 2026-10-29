@@ -435,7 +435,8 @@ public func replacedGrantRevocationFailureMessage(service: String, error: any Er
 }
 
 /// Bağlantı bu cihazdan kaldırıldı ama servis tarafında kapatılamadı: kullanıcı erişimi servisin kendi ayarlarından
-/// kaldırmalı. `service`: arayüzdeki adı (ör. "Notion"). Saf fonksiyondur.
-public func remoteRevocationFailureMessage(service: String, error: any Error) -> String {
-    String(localized: "\(service) bağlantısı bu cihazdan kaldırıldı ama \(service) tarafında kapatılamadı (\(userFacingMessage(error: error))). AI-Notepad'in erişimini \(service) ayarlarından kaldır.")
+/// kaldırmalı. `service`: arayüzdeki adı (ör. "Notion"); `appName`: uygulamanın görünen adı (servisin izin listesinde
+/// bu adla görünür). Saf fonksiyondur.
+public func remoteRevocationFailureMessage(service: String, appName: String, error: any Error) -> String {
+    String(localized: "\(service) bağlantısı bu cihazdan kaldırıldı ama \(service) tarafında kapatılamadı (\(userFacingMessage(error: error))). \(appName)'in erişimini \(service) ayarlarından kaldır.")
 }

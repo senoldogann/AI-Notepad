@@ -37,7 +37,7 @@ struct CrashReportBanner: View {
             Image(systemName: "exclamationmark.bubble")
                 .foregroundStyle(Theme.muted)
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI-Notepad beklenmedik şekilde kapandı — raporu gönder?")
+                Text("\(appName) beklenmedik şekilde kapandı — raporu gönder?")
                     .appFont(size: 12, weight: .medium)
                     .foregroundStyle(Theme.ink)
                 Text("Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider.")

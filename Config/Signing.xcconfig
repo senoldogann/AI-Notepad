@@ -1,11 +1,24 @@
 // İmzalama ayarları. Takım kimliği repoya girmeyen Local.xcconfig dosyasından gelir.
 CODE_SIGN_STYLE = Automatic
 
-// Sparkle güncelleme imzasının açık anahtarı (EdDSA, base64; Info.plist'te SUPublicEDKey olur). Sürümü yayınlayan kişi
-// bir kez Sparkle'ın `generate_keys --account ainotepad` aracını çalıştırır (gizli anahtar giriş Anahtar Zinciri'nde
-// "ainotepad" hesabına kaydedilir; başka projelerin varsayılan "ed25519" anahtarından ayrı), aracın yazdığı açık
-// anahtarı buraya yazar ve repoya işler. Gizli anahtar asla repoya girmez. Boşken uygulama güncelleme
-// denetlemez, güncelleme menüsü ve ayarı gizlenir (bkz. App/AppUpdater.swift); scripts/release.sh de durur.
+// Sparkle güncelleme imzalarının açık anahtarları (EdDSA, base64; Info.plist'te SUPublicEDKey olur). Her Mac sürümünün
+// kendi anahtarı ve Anahtar Zinciri hesabı var (başka projelerin varsayılan "ed25519" anahtarından da ayrı). Sürümü
+// yayınlayan kişi bir kez Sparkle'ın `generate_keys --account <hesap>` aracını çalıştırır (gizli anahtar giriş Anahtar
+// Zinciri'nde o hesaba kaydedilir), aracın yazdığı açık anahtarı buraya yazar ve repoya işler. Gizli anahtar asla
+// repoya girmez. Boşken uygulama güncelleme denetlemez, güncelleme menüsü ve ayarı gizlenir (bkz. App/AppUpdater.swift);
+// yayın betikleri de durur.
+// Geliştirici sürümü (AI-Notepad; hesap "ainotepad", scripts/release.sh).
 SPARKLE_PUBLIC_KEY = 1poBcMcYVS0OoSUFqPYqyRUu6YNb2OuqyvdfJVyYnGg=
+// Abonelik sürümü (Gistsmith; hesap "gistsmith", scripts/release-gistsmith.sh).
+SPARKLE_PUBLIC_KEY_GISTSMITH = 5X4WlDxuyl5iW4kSabxEyoQh4jVMaBLZqcaqlHXYhwc=
+
+// DMG'lerin ve Sparkle akışının (appcast.xml) yayınlandığı GitHub deposu (sahip/ad), sürüm başına bir değer. Uygulamanın
+// SUFeedURL'si `https://github.com/<depo>/releases/latest/download/appcast.xml` olur (bkz. project.yml); yayın betikleri
+// sürümü aynı depoya açar. Depo değişirse eski sürümler eski akışı okumaya devam eder: yeni depoya geçmeden önce eski
+// depoya, yeni akışa yönlendiren son bir sürüm yayınlanmalı.
+// Geliştirici sürümü: bu deponun kendi sürümleri.
+RELEASES_REPO_AINOTEPAD = senoldogann/AI-Notepad
+// Abonelik sürümü: yalnızca sürümleri taşıyan herkese açık depo.
+RELEASES_REPO_GISTSMITH = senoldogann/gistsmith-releases
 
 #include? "Local.xcconfig"

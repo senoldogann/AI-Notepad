@@ -1190,7 +1190,7 @@ final class AppModel {
             return
         }
         sleepActivities[meetingID] = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated, .idleSystemSleepDisabled], reason: "AI-Notepad toplantı kaydediyor ya da işliyor"
+            options: [.userInitiated, .idleSystemSleepDisabled], reason: "\(appName) toplantı kaydediyor ya da işliyor"
         )
     }
 
@@ -2105,7 +2105,7 @@ final class AppModel {
                 try await revokeDestination(destination: removed)
             } catch {
                 Self.logger.warning("Hedef servis tarafında kapatılamadı, hedef: \(destinationName(destination: removed), privacy: .public), hata: \(String(describing: error), privacy: .private)")
-                errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: destinationName(destination: removed), error: error))
+                errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: destinationName(destination: removed), appName: appName, error: error))
             }
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -2208,12 +2208,12 @@ final class AppModel {
             return userFacingMessage(error: DestinationError.notFound(id: destinationID))
         }
         let sample: MeetingRecord = MeetingRecord(
-            id: "deneme", title: "AI-Notepad", startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
+            id: "deneme", title: appName, startedAt: Date(), endedAt: Date(), language: nil, status: .done, failureMessage: nil,
             liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:], note: nil, audioDeleted: false, engine: .cloud,
             notice: nil, meNeedsFinalPass: nil
         )
         let note: MeetingNote = MeetingNote(
-            title: String(localized: "AI-Notepad bağlantı denemesi"),
+            title: String(localized: "\(appName) bağlantı denemesi"),
             summary: String(localized: "Bu bir deneme mesajıdır: toplantı notların buraya böyle gelecek."),
             decisions: [], tasks: [], glossary: []
         )
@@ -2336,7 +2336,7 @@ final class AppModel {
     /// Notion'a tek tıkla bağlanır (tarayıcıda izin) ve hedef olarak ekler; hesabın kimliği hemen okunur (bkz.
     /// `resolveMissingNotionIdentities`).
     func connectNotion() async throws {
-        let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
+        let connection: MCPConnection = try await signInToMCP(service: .notion, appName: appName) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
         try await addDestination(target: .notion(NotionTarget(connection: connection, pageTitle: String(localized: "Özel sayfalar"), identity: nil)))
@@ -2348,7 +2348,7 @@ final class AppModel {
     /// için hesabın kimliği yeniden okunur. Yeni bağlantı kaydedildikten sonra yerini aldığı eski izin geri alınır (bkz.
     /// `revokeReplacedGrant`).
     func reconnectNotion(destinationID: String) async throws {
-        let connection: MCPConnection = try await signInToMCP(service: .notion) { (url: URL) async -> Void in
+        let connection: MCPConnection = try await signInToMCP(service: .notion, appName: appName) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
         let previous: NoteDestination = try await replaceDestinationTarget(
@@ -2407,7 +2407,7 @@ final class AppModel {
     /// sonra yerini aldığı eski izin geri alınır (bkz. `revokeReplacedGrant`) ve hesabın kimliği okunur (bkz.
     /// `resolveTrackerIdentity`).
     func connectTracker(service: MCPService) async throws {
-        let connection: MCPConnection = try await signInToMCP(service: service) { (url: URL) async -> Void in
+        let connection: MCPConnection = try await signInToMCP(service: service, appName: appName) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
         let connected: TrackerConnectResult = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
@@ -2463,7 +2463,7 @@ final class AppModel {
             try await revokeMCPConnection(connection: tracker.connection)
         } catch {
             Self.logger.warning("Görev aracının izni geri alınamadı, servis: \(tracker.service.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
-            errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: tracker.service.displayName, error: error))
+            errorMessages = appendUnique(messages: errorMessages, message: remoteRevocationFailureMessage(service: tracker.service.displayName, appName: appName, error: error))
         }
     }
 
@@ -2563,17 +2563,17 @@ final class AppModel {
 
     // MARK: Apple Notlar ve klasör
 
-    /// Notu Apple Notlar'da "AI-Notepad" klasörüne yazar (ilk seferde macOS izin sorar); hata varsa kullanıcı metni döner.
+    /// Notu Apple Notlar'da uygulamanın adını taşıyan klasöre ("AI-Notepad" ya da "Gistsmith") yazar (ilk seferde macOS izin sorar); hata varsa kullanıcı metni döner.
     func sendToAppleNotes(meetingID: String) async -> String? {
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
             return nil
         }
-        let source: String = appleNotesScript(html: notesHTML(record: record, note: note))
+        let source: String = appleNotesScript(html: notesHTML(record: record, note: note), folder: appName)
         // NSAppleScript yalnızca ana iş parçacığında güvenli.
         let failure: String? = runAppleScript(source: source)
         if let failure {
             Self.logger.error("Not Apple Notlar'a yazılamadı, toplantı: \(meetingID, privacy: .public), hata: \(failure, privacy: .public)")
-            return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da AI-Notepad için Notlar'a izin ver.")
+            return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da \(appName) için Notlar'a izin ver.")
         }
         Self.logger.info("Not Apple Notlar'a yazıldı, toplantı: \(meetingID, privacy: .public)")
         return nil

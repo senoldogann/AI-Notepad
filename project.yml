@@ -48,10 +48,10 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.senoldogan.AINotepad.oauth
             CFBundleURLSchemes: [com.senoldogan.ainotepad]
-        # Sparkle: güncelleme akışı en son GitHub sürümündeki appcast.xml; imza anahtarı Config/Signing.xcconfig'te.
-        # Anahtar boşsa güncelleme kapalıdır (bkz. App/AppUpdater.swift). Otomatik denetim baştan açık: Sparkle ikinci
-        # açılışta izin sormaz (açılır pencere yok).
-        SUFeedURL: "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml"
+        # Sparkle: güncelleme akışı yayın deposunun (RELEASES_REPO_AINOTEPAD) en son GitHub sürümündeki appcast.xml;
+        # depo ve imza anahtarı Config/Signing.xcconfig'te. Anahtar boşsa güncelleme kapalıdır (bkz. App/AppUpdater.swift).
+        # Otomatik denetim baştan açık: Sparkle ikinci açılışta izin sormaz (açılır pencere yok).
+        SUFeedURL: "https://github.com/$(RELEASES_REPO_AINOTEPAD)/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
         SUEnableAutomaticChecks: true
         # Geri bildirim ve çökme raporlarının gittiği sunucu (`POST /v1/reports`, hesapsız); Debug ve Release aynı.
@@ -80,11 +80,15 @@ targets:
   # Abonelik sürümü: anahtarsız; yapay zekâ ve son geçiş bizim sunucumuz (server/) üzerinden, canlı metin WhisperKit.
   # Geliştirici sürümüyle aynı kaynaklar + App/Hosted; farklar yalnızca `HOSTED_EDITION` bayrağıyla birkaç noktada.
   # Ayrı paket kimliği, Anahtar Zinciri servisi ve adres şeması: iki uygulama aynı Mac'te yan yana durur.
+  # Ürün adı Gistsmith (Gistsmith.app, görünen ad, izin metinleri); iç kimlikler (paket kimliği, adres şeması, Anahtar
+  # Zinciri servisi, veri klasörü, hedef adı) AINotepad olarak kalır. Arayüzdeki ad görünen addan okunur (App/AppName.swift).
   AINotepadHosted:
     type: application
     platform: macOS
     sources:
-      - App
+      # İzin metinleri ve görünen ad bu sürümün kendi kataloğunda (App/Hosted/InfoPlist.xcstrings, "Gistsmith").
+      - path: App
+        excludes: ["InfoPlist.xcstrings"]
       - path: NOTICE
         buildPhase: resources
     dependencies:
@@ -92,8 +96,6 @@ targets:
         product: AINotepadCore
       - package: AINotepadCore
         product: AINotepadUI
-      # Güncelleyici bağlanır ama abonelik sürümünün akışı ve imza anahtarı henüz yok: Info.plist'te SUPublicEDKey
-      # olmadığı için kapalıdır (bkz. App/AppUpdater.swift). Geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı.
       - package: Sparkle
     info:
       path: App/Hosted/Info.plist
@@ -103,10 +105,16 @@ targets:
         ATSApplicationFontsPath: "."
         # Kendi veri klasörü: geliştirici sürümünün ~/Library/Application Support/AINotepad'ine hiç dokunulmaz.
         AINotepadDataFolderName: "AINotepad Hosted"
-        NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
-        NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
-        NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
-        NSCalendarsFullAccessUsageDescription: "AI-Notepad yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
+        NSAudioCaptureUsageDescription: "Gistsmith toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
+        NSRemindersFullAccessUsageDescription: "Gistsmith toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
+        NSAppleEventsUsageDescription: "Gistsmith toplantı notunu istediğinde Apple Notlar'a yazar."
+        NSCalendarsFullAccessUsageDescription: "Gistsmith yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
+        # Sparkle: kendi akışı (yalnızca sürümleri taşıyan RELEASES_REPO_GISTSMITH deposu) ve kendi imza anahtarı
+        # (SPARKLE_PUBLIC_KEY_GISTSMITH, hesap "gistsmith"); ikisi de Config/Signing.xcconfig'te. Geliştirici akışı bu
+        # uygulamaya geliştirici DMG'sini kurardı, bu yüzden paylaşılmaz. Yayın: scripts/release-gistsmith.sh.
+        SUFeedURL: "https://github.com/$(RELEASES_REPO_GISTSMITH)/releases/latest/download/appcast.xml"
+        SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY_GISTSMITH)"
+        SUEnableAutomaticChecks: true
         # Sitedeki Google girişi uygulamayı açar:
         # com.senoldogan.ainotepad.hosted://auth/google#idToken=… (bkz. App/Hosted/HostedAccount.swift).
         CFBundleURLTypes:
@@ -121,7 +129,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.senoldogan.AINotepad.hosted
-        PRODUCT_NAME: AINotepadHosted
+        # Gistsmith.app; Swift modülü hedef adıyla kalır (PRODUCT_NAME'den türemesin).
+        PRODUCT_NAME: Gistsmith
+        PRODUCT_MODULE_NAME: AINotepadHosted
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) HOSTED_EDITION"
@@ -132,8 +142,8 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         # Geliştirici sürümünün yetkileri + Apple ile giriş; iCloud yok (eşitleme bu sürümde kapalı).
         CODE_SIGN_ENTITLEMENTS: App/Hosted/AINotepadHosted.entitlements
-        INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
+        INFOPLIST_KEY_CFBundleDisplayName: Gistsmith
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Gistsmith toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
         MARKETING_VERSION: "0.1.3"
         CURRENT_PROJECT_VERSION: "4"
       configs:
@@ -165,6 +175,8 @@ targets:
         buildPhase: resources
       # Takvim bağlantısı (EventKit) Mac'le aynı.
       - path: App/EventKitConnector.swift
+      # Görünen ad (metinlerdeki ürün adı) Mac'le aynı yoldan okunur; iPhone'da "AI-Notepad".
+      - path: App/AppName.swift
     dependencies:
       - package: AINotepadCore
         product: AINotepadCore

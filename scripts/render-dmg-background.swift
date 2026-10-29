@@ -3,9 +3,10 @@
 // bırakan bir ok. Simge yuvalarının yerleri `scripts/make-dmg.sh`teki Finder konumlarıyla aynıdır (değişirse ikisi
 // birlikte değişir).
 // Kullanım: swift scripts/render-dmg-background.swift <ürün-adı> <çıktı-klasörü>
-// Çıktı: background.png (660×420) ve background@2x.png (1320×840). Config/DMG/ altındaki dosyalar bu betikle
-// üretilmiştir (ürün adı değişirse yalnızca yeniden çizilir):
-//   swift scripts/render-dmg-background.swift "AI-Notepad" Config/DMG
+// Çıktı: background.png (660×420) ve background@2x.png (1320×840). Config/DMG/<ürün-adı>/ altındaki dosyalar bu
+// betikle üretilmiştir (ürün adı değişirse yalnızca yeniden çizilir); her sürümün DMG'si kendi klasörünü kullanır:
+//   swift scripts/render-dmg-background.swift "AI-Notepad" Config/DMG/AI-Notepad   # geliştirici sürümü
+//   swift scripts/render-dmg-background.swift "Gistsmith" Config/DMG/Gistsmith     # abonelik sürümü
 import AppKit
 import CoreGraphics
 import CoreText

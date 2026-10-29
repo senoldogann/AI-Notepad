@@ -143,7 +143,8 @@ import Testing
             == .completed(url: URL(string: "http://127.0.0.1:5555/callback?code=c&state=s1")!, granted: true))
         #expect(loopbackDecision(request: "GET /callback?error=access_denied&state=s1 HTTP/1.1\r\n", redirectURI: redirect, expectedState: "s1")
             == .completed(url: URL(string: "http://127.0.0.1:5555/callback?error=access_denied&state=s1")!, granted: false))
-        #expect(loopbackResponse(decision: .foreign).hasPrefix("HTTP/1.1 400"))
+        #expect(loopbackResponse(decision: .foreign, appName: "Gistsmith").hasPrefix("HTTP/1.1 400"))
+        #expect(loopbackResponse(decision: .completed(url: URL(string: redirect)!, granted: true), appName: "Gistsmith").contains("Gistsmith'e dönebilirsin"))
     }
 
     // Keşif denetimi: kaynak bu sunucu, issuer bilginin alındığı kimlik ve tüm adresler https olmalı.
