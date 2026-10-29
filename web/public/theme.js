@@ -1,13 +1,13 @@
 // @ts-check
 // Açık/koyu tema. <head> içinde engelleyici, harici bir betik olarak yüklenir (CSP satır içi betiğe izin vermez): ilk
 // boyamadan önce `<html data-theme>` yazılır, sayfa yanlış temada yanıp sönmez. Kullanıcı seçim yapmadıysa sistem
-// tercihi izlenir; düğmeyle yapılan seçim localStorage'da kalır. Tema değişince `ainotepad:themechange` olayı yayılır
+// tercihi izlenir; düğmeyle yapılan seçim localStorage'da kalır. Tema değişince `gistsmith:themechange` olayı yayılır
 // (Turnstile ve Google düğmesi temayı buradan alır). Derlenmez: TypeScript denetimi JSDoc tipleriyle yapılır.
 
 (() => {
   /** Tema adı. @typedef {"light" | "dark"} Theme */
 
-  const storageKey = "ainotepad.theme";
+  const storageKey = "gistsmith.theme";
   const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const root = document.documentElement;
 
@@ -39,7 +39,7 @@
     for (const button of document.querySelectorAll("[data-theme-toggle]")) {
       button.setAttribute("aria-pressed", String(theme === "dark"));
     }
-    document.dispatchEvent(new CustomEvent("ainotepad:themechange", { detail: theme }));
+    document.dispatchEvent(new CustomEvent("gistsmith:themechange", { detail: theme }));
   }
 
   /**

@@ -20,14 +20,12 @@ export interface ClientCopy {
     readonly generic: string;
   };
   readonly plan: { readonly trial: string; readonly subscription: string };
-  /** `{left}` ve `{total}` sayılarla değişir. */
   /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
   /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
   readonly trialNotStarted: string;
   /** Deneme bitti (toplantılar harcandı ya da süre doldu). */
   readonly trialEnded: string;
-  readonly trialNotUsed: string;
   /** `{used}` ve `{cap}` saatlerle değişir. */
   readonly hours: string;
   readonly subscriptionNone: string;
@@ -95,13 +93,12 @@ export const clientCopy: ClientCopy = {
   },
   plan: { trial: "Free trial", subscription: `${productName} monthly` },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",
-  trialNotStarted: "{total} meetings, {days} days from your first meeting",
-  trialEnded: "Trial ended",
-  trialNotUsed: "Not counted while subscribed",
+  trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
+  trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
   hours: "{used} / {cap} hours",
   subscriptionNone: "No subscription",
   subscriptionActive: "Renews on {date}",
-  subscriptionCanceling: "Canceled; you can use it until {date}. It won't renew.",
+  subscriptionCanceling: "Cancelled; you can use it until {date}. It won't renew.",
   subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
   subscriptionEnded: "Your subscription has ended.",
   pillActive: "Active",
@@ -116,8 +113,8 @@ export const clientCopy: ClientCopy = {
     downloadsSub: "{count} in the last 30 days",
     usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
     trialsSub: "{count} used up",
-    subscribersSub: "{grace} in grace · {ending} ending · {canceled} canceled in total",
-    mrrSub: "From active subscriptions, before tax",
+    subscribersSub: "{grace} in grace · {ending} ending · {canceled} cancelled in total",
+    mrrSub: "From renewing subscriptions, taxes included",
     spendSub: "of {ceiling} daily ceiling",
     hoursSub: "Recorded across all users",
     tokensSub: "Input and output, all users",

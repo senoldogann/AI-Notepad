@@ -25,7 +25,7 @@ const canonical: string = pageUrl(page, origin);
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Tema ilk boyamadan önce uygulanır: engelleyici ama harici (CSP satır içi betiğe izin vermez). -->
+    {/* Tema ilk boyamadan önce uygulanır: engelleyici ama harici (CSP satır içi betiğe izin vermez). */}
     <script is:inline src="/theme.js"></script>
     <title>{meta.title}</title>
     <meta name="description" content={meta.description} />
@@ -43,13 +43,13 @@ const canonical: string = pageUrl(page, origin);
     <meta property="og:image" content={`${origin}/og.png`} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content={productName} />
+    <meta property="og:image:alt" content={copy.common.ogImageAlt} />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <a class="skip-link" href="#main">{copy.common.skipLink}</a>
-    <!-- Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. -->
+    {/* Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. */}
     <div id="page-shell" class="page-shell">
       <Header page={page} />
       <main id="main" tabindex="-1">
@@ -60,3 +60,7 @@ const canonical: string = pageUrl(page, origin);
     <PullReveal />
   </body>
 </html>
+
+<script>
+  import "../client/anchor-focus";
+</script>

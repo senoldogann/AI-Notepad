@@ -1,10 +1,14 @@
 ---
 // Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
 // transcribe.ts, llm/, auth/, billing.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması (App/Hosted: canlı metin
-// Mac'te, iCloud eşitlemesi yok) ve bu sitenin tarayıcı depolaması (public/theme.js, src/client/session.ts).
+// Mac'te, iCloud eşitlemesi yok, güncellemeler GitHub'dan) ve bu sitenin tarayıcı depolaması (public/theme.js,
+// src/client/session.ts). Sağlayıcıların saklama ve eğitim kuralları resmî belgelerinden alınmıştır (2026-10-29):
+// ElevenLabs (elevenlabs.io/dpa, docs "Zero Retention Mode" ve "Data residency", terms-of-use-eu §4), Anthropic
+// (anthropic.com/legal/commercial-terms ve /legal/data-processing-addendum, privacy.claude.com saklama makalesi,
+// platform.claude.com "Data residency"), Link (link.com/terms "Sold Through Link Terms", link.com/privacy).
 import LegalSection from "../components/LegalSection.astro";
 import Legal from "../layouts/Legal.astro";
-import { productName } from "../config";
+import { cardStatementDescriptor, productName } from "../config";
 import { copy } from "../copy";
 import type { LegalSectionInfo } from "../lib/legal";
 import { operator } from "../legal/operator";
@@ -15,7 +19,7 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "summary", title: "The short version" },
   { id: "meetings", title: "Your meeting content" },
   { id: "data", title: "Data we process, why, and on what legal basis" },
-  { id: "messages", title: "Contact form, feedback and crash reports" },
+  { id: "messages", title: "Contact form, email, feedback and crash reports" },
   { id: "website", title: "This website, cookies and browser storage" },
   { id: "providers", title: "Service providers and international transfers" },
   { id: "retention", title: "How long we keep data" },
@@ -28,6 +32,10 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "contact", title: "Contact" },
 ];
 const mail: string = `mailto:${operator.email}`;
+/** Ödeme tarafının (Stripe, Link) tüketiciye açık metinleri. */
+const stripePrivacyUrl: string = "https://stripe.com/privacy";
+const linkPrivacyUrl: string = "https://link.com/privacy";
+const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
 ---
 
 <Legal page="privacy" meta={copy.privacyMeta} title={copy.common.nav.privacy} sections={sections}>
@@ -40,8 +48,11 @@ const mail: string = `mailto:${operator.email}`;
   <LegalSection sections={sections} id="controller">
     <p>
       {productName} is operated by <strong>{operator.name}</strong>, {operator.legalForm}, business ID (Y-tunnus) {operator.businessId},{" "}
-      {operator.address} (“we”, “us”). We are the controller for the personal data described in
-      this policy. For any privacy question or request, write to <a href={mail}>{operator.email}</a>.
+      {operator.address} (“we”, “us”). We are the controller for the personal data described in this policy, with one
+      exception: for the personal data of other people in the meetings you record (their voices, what they say, their
+      names), you are the controller and we process that data on your behalf as your processor (see section 3 and the{" "}
+      <a href={`${routes.terms}#dpa`}>data processing terms</a>). For any privacy question or request, write to{" "}
+      <a href={mail}>{operator.email}</a>.
     </p>
   </LegalSection>
 
@@ -49,10 +60,16 @@ const mail: string = `mailto:${operator.email}`;
     <ul>
       <li>Your notes, transcripts and recordings are stored on your Mac. Our servers do not keep a copy.</li>
       <li>
-        Meeting audio and text pass through our server only to be transcribed and summarised by our AI providers; our
-        server does not store them. We keep only usage numbers (how long, how many tokens) to apply the plan limits.
+        Meeting audio and text pass through our server only to be transcribed and summarised by our AI providers,
+        ElevenLabs and Anthropic; our server does not store them. The providers may keep request data for a time under
+        their own retention rules (see section 7). We keep only usage numbers (how long, how many tokens) to apply the plan
+        limits.
       </li>
-      <li>We don't use cookies, analytics or advertising trackers on this website, and we don't sell your data.</li>
+      <li>
+        We set no cookies of our own and use no analytics or advertising trackers on this website; Apple and Google
+        sign-in and Cloudflare Turnstile may use their own on the pages where you use them (see section 6). We don't sell
+        your data.
+      </li>
       <li>
         You can delete your account yourself at any time; the data on our server is deleted immediately, except a
         pseudonymous record of how many free-trial meetings your sign-in identity has used (see section 9).
@@ -73,8 +90,9 @@ const mail: string = `mailto:${operator.email}`;
       </li>
       <li>
         <strong>Notes, live translation, “What did I miss?” and Ask.</strong> The relevant parts of the transcript (and
-        of earlier notes, when you use Ask) are sent through our server to Anthropic's Claude model, and the answer
-        returns to your Mac. Our server does not store or log this text; it records only the number of tokens used.
+        of earlier notes, when you use Ask), together with the participant names and terms you have added, are sent
+        through our server to Anthropic's Claude model, and the answer returns to your Mac. Our server does not store or
+        log this text; it records only the number of tokens used.
       </li>
       <li>
         <strong>Storage.</strong> Notes, transcripts, recordings and the people and terms you add are stored in the app's
@@ -89,9 +107,14 @@ const mail: string = `mailto:${operator.email}`;
       </li>
     </ul>
     <p>
-      Meetings involve other people. You decide whether to record a meeting and what to do with the result, so you are
-      responsible for telling participants that you are recording and, where the law requires it, getting their consent.
-      We process meeting content only to provide the service to you and never for any other purpose.
+      <strong>Whose data, and who decides.</strong> For your own voice, your words and the content you add, we process
+      meeting content to perform our contract with you. Meetings also involve other people. You decide whether to record a
+      meeting and what to do with the result, so for the other participants' personal data you are the controller and we
+      act as your processor under GDPR Article 28: we process it only on your instructions — to transcribe the meeting and
+      write your note — using the sub-processors listed in section 7, and never for any other purpose. You are responsible
+      for telling participants that you are recording and, where the law requires it, getting their consent.
+      Participants who want to use their rights should contact the person who recorded the meeting; if they contact us,
+      we will pass the request on or help that person answer it.
     </p>
   </LegalSection>
 
@@ -102,6 +125,18 @@ const mail: string = `mailto:${operator.email}`;
           <tr><th scope="col">Data</th><th scope="col">Purpose</th><th scope="col">Legal basis (GDPR Art. 6(1))</th></tr>
         </thead>
         <tbody>
+          <tr>
+            <td>
+              <strong>Meeting content.</strong> Meeting audio, transcripts, notes, the questions you ask, and the
+              participant names and terms you add. Passed through our server only while it is processed; not stored on
+              our servers.
+            </td>
+            <td>Transcribing meetings; writing notes, translations and answers</td>
+            <td>
+              (b) contract, for your own data. For other participants' data, you are the controller and we process it as
+              your processor (section 3).
+            </td>
+          </tr>
           <tr>
             <td>
               <strong>Account.</strong> With Sign in with Apple: the user identifier Apple gives us and, if you share it, your
@@ -139,8 +174,8 @@ const mail: string = `mailto:${operator.email}`;
               sends a short-lived token from Apple; we never receive a device identifier, and the bits are stored by Apple,
               not by us. (b) A pseudonymous keyed one-way hash of your sign-in identity (Apple or Google account
               identifier), stored together with the number of free-trial meetings used, when your trial started and
-              whether a Mac was verified for your trial. We keep it after you delete your account, so deleting and re-creating an account does not give a
-              new free trial.
+              whether a Mac was verified for your trial. We keep it after you delete your account, so deleting and
+              re-creating an account does not give a new free trial.
             </td>
             <td>Preventing the same person or Mac from getting the free trial again (fraud prevention)</td>
             <td>(f) legitimate interest in preventing fraud and abuse</td>
@@ -150,7 +185,10 @@ const mail: string = `mailto:${operator.email}`;
               <strong>Network data.</strong> Your IP address, briefly, for rate limiting; and a keyed one-way hash of your IP
               address with the date when a new account starts its first trial meeting
             </td>
-            <td>Preventing abuse and bulk account creation</td>
+            <td>
+              Preventing abuse and bulk account creation (we may refuse new free trials when many accounts start from the
+              same network on the same day)
+            </td>
             <td>(f) legitimate interest in preventing abuse</td>
           </tr>
           <tr>
@@ -176,11 +214,12 @@ const mail: string = `mailto:${operator.email}`;
           </tr>
           <tr>
             <td>
-              <strong>Downloads.</strong> A count of app downloads per day. No IP address or other identifier is stored with
-              it.
+              <strong>Downloads and updates.</strong> The app and its updates are downloaded from GitHub, which processes
+              your IP address and browser or app information to deliver the files (see section 7). We count downloads per
+              day; no IP address or other identifier is stored with the count.
             </td>
-            <td>Understanding how many people download the app</td>
-            <td>Not personal data</td>
+            <td>Delivering the app and its updates; knowing how many people download it</td>
+            <td>(f) legitimate interest in distributing the app</td>
           </tr>
         </tbody>
       </table>
@@ -196,8 +235,11 @@ const mail: string = `mailto:${operator.email}`;
       <li>
         <strong>Contact form.</strong> When you write to us through the <a href={routes.contact}>contact form</a>, we
         store your email address and message so that we can answer you. The form is protected by Cloudflare Turnstile
-        (see section 6). We delete the message and email address 180 days after we receive them. If you email us
-        directly, the message stays in our mailbox for as long as needed to handle your request.
+        (see section 6). We delete the message and email address 180 days after we receive them.
+      </li>
+      <li>
+        <strong>Email.</strong> If you email us directly, or we answer you by email, the messages are kept in our mailbox,
+        hosted by Zoner in Finland, for as long as needed to handle your request and any follow-up.
       </li>
       <li>
         <strong>Feedback and crash reports from the app.</strong> These are sent only when you choose to send them. They
@@ -215,86 +257,146 @@ const mail: string = `mailto:${operator.email}`;
     </p>
     <ul>
       <li>
-        <strong>Theme preference</strong> (<code>localStorage</code>, key <code>ainotepad.theme</code>): saved only if you
+        <strong>Theme preference</strong> (<code>localStorage</code>, key <code>gistsmith.theme</code>): saved only if you
         use the light/dark switch, so the site remembers your choice.
       </li>
       <li>
-        <strong>Sign-in session</strong> (<code>sessionStorage</code>, key <code>ainotepad.session</code>): your session
+        <strong>Sign-in session</strong> (<code>sessionStorage</code>, key <code>gistsmith.session</code>): your session
         tokens after you sign in, kept only in that browser tab and removed when you close the tab or sign out.
       </li>
     </ul>
     <p>
-      These are strictly necessary for features you ask for, so they don't require consent. On the sign-in page, Apple's
-      and Google's sign-in scripts are loaded from Apple and Google; they may use their own cookies and process your IP
-      address and browser information when you sign in, under Apple's and Google's privacy policies. On the contact page,
-      Cloudflare Turnstile checks that the form is used by a person; it processes technical data such as your IP address
-      and browser characteristics. Cloudflare, which hosts the site, processes IP addresses to deliver and protect it.
+      These are strictly necessary for features you ask for, so they don't require consent. Third-party services load
+      only on the pages that need them. On the <a href={routes.signIn}>sign-in page</a>, Apple's and Google's sign-in
+      scripts are loaded from Apple and Google; they may use their own cookies and process your IP address and browser
+      information when you sign in, under Apple's and Google's privacy policies. On the{" "}
+      <a href={routes.contact}>contact page</a>, Cloudflare Turnstile checks that the form is used by a person; it
+      processes technical data such as your IP address and browser characteristics. Cloudflare, which hosts the site,
+      processes IP addresses to deliver and protect it.
     </p>
   </LegalSection>
 
   <LegalSection sections={sections} id="providers">
-    <p>We use the following providers (processors) to run the service. Each processes data only on our instructions:</p>
+    <p>
+      We use the following providers. Processors handle personal data only on our instructions, under a data processing
+      agreement with us; independent controllers decide themselves how they use the data, under their own privacy
+      policies.
+    </p>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th scope="col">Provider</th><th scope="col">What for</th><th scope="col">Data</th><th scope="col">Location and safeguards</th></tr>
+          <tr>
+            <th scope="col">Provider</th><th scope="col">Role and purpose</th><th scope="col">Data</th><th scope="col">Location, safeguards and retention</th>
+          </tr>
         </thead>
         <tbody>
           <tr>
             <td>Cloudflare, Inc.</td>
-            <td>Hosting the website and our server, database, rate limiting, Turnstile, logs</td>
-            <td>Account, usage, message and technical data; meeting content in transit</td>
+            <td>Processor: hosting this website and our server (Workers), database (D1), rate limiting, Turnstile, logs</td>
+            <td>Account, usage, message and technical data; IP addresses; meeting content in transit</td>
             <td>
               Database stored in the EU. Cloudflare's network is global and the company is based in the USA: EU–US Data
               Privacy Framework and Standard Contractual Clauses.
             </td>
           </tr>
           <tr>
-            <td>Anthropic</td>
-            <td>Writing notes, translations and answers with the Claude model</td>
-            <td>The relevant parts of meeting transcripts and notes</td>
+            <td>ElevenLabs (Eleven Labs Inc.)</td>
+            <td>Processor (sub-processor for meeting content): transcribing recordings and separating speakers</td>
+            <td>Meeting audio and the resulting transcript</td>
             <td>
-              USA; Standard Contractual Clauses. Under Anthropic's commercial terms, API data is not used to train models and
-              is kept only for a limited period for safety and abuse monitoring.
+              USA: we use ElevenLabs' standard API, which stores customer data in the USA. EU–US Data Privacy Framework and
+              Standard Contractual Clauses under its data processing addendum. ElevenLabs offers zero-retention processing
+              only to its enterprise customers, so it may keep the audio and transcripts it processes for us under its own
+              retention rules; data it deletes stays in its backups for up to 30 days. Its terms allow it to use customer
+              content to improve its models unless the customer opts out; we have opted out.
             </td>
           </tr>
           <tr>
-            <td>ElevenLabs</td>
-            <td>Transcribing recordings and separating speakers</td>
-            <td>Meeting audio</td>
+            <td>Anthropic (Anthropic Ireland, Limited, and Anthropic, PBC)</td>
+            <td>Processor (sub-processor for meeting content): writing notes, translations and answers with the Claude model</td>
+            <td>The relevant parts of meeting transcripts and notes, your questions, and the participant names and terms you add</td>
             <td>
-              USA and EU; Standard Contractual Clauses. ElevenLabs may keep request data for a limited period as described in
-              its data processing terms.
+              Stored in the USA; the model may run in other countries where Anthropic operates. Standard Contractual
+              Clauses under Anthropic's data processing addendum. Anthropic does not train its models on this data and
+              deletes it within 30 days; if a request is flagged under its usage policy, it may keep it for up to 2 years.
             </td>
+          </tr>
+          <tr>
+            <td>Stripe and Link</td>
+            <td>Independent controllers: checkout, payment, tax, receipts and refunds; Link is the merchant of record</td>
+            <td>Email address, billing address, payment method, purchase and tax details</td>
+            <td>
+              Ireland and the USA, with the safeguards described in the <a href={stripePrivacyUrl}>Stripe privacy policy</a>{" "}
+              and <a href={linkPrivacyUrl}>Link's privacy policy</a>.
+            </td>
+          </tr>
+          <tr>
+            <td>Apple</td>
+            <td>Independent controller: Sign in with Apple; App Attest and DeviceCheck for our request and free-trial checks</td>
+            <td>Sign-in identifier and email address (if you share it); device checks, without a device identifier reaching us</td>
+            <td>Ireland and the USA, under Apple's privacy policy</td>
+          </tr>
+          <tr>
+            <td>Google</td>
+            <td>Independent controller: Sign in with Google</td>
+            <td>Google account identifier and email address</td>
+            <td>Ireland and the USA, under Google's privacy policy</td>
+          </tr>
+          <tr>
+            <td>GitHub, Inc.</td>
+            <td>Hosting the app's downloads and updates</td>
+            <td>IP address and browser or app information when you download the app or it checks for updates</td>
+            <td>USA; EU–US Data Privacy Framework, under GitHub's privacy statement</td>
+          </tr>
+          <tr>
+            <td>Zoner Oy</td>
+            <td>Processor: hosting our email</td>
+            <td>Emails you send us and our replies</td>
+            <td>Finland (EU)</td>
           </tr>
         </tbody>
       </table>
     </div>
     <p>
-      <strong>Payments.</strong> Subscriptions are sold through Link, Stripe's payment service, which is the merchant of
-      record for your purchase. Stripe and Link process your payment, billing and tax details (such as your email address,
-      billing address and payment method) as independent controllers for the transaction, under the{" "}
-      <a href="https://stripe.com/privacy">Stripe privacy policy</a> and Link's privacy policy. From them we receive only
-      your Stripe customer ID, your subscription status and period, and your billing country — never your card details.
+      <strong>International transfers.</strong> When personal data is transferred outside the EU and EEA, we rely on the
+      European Commission's adequacy decision for the EU–US Data Privacy Framework where the recipient is certified under
+      it, and otherwise on the Commission's Standard Contractual Clauses included in the provider's data processing terms.
+      You can ask us for a copy of the relevant safeguards.
     </p>
     <p>
-      Apple (Sign in with Apple, App Attest, DeviceCheck) and Google (Sign in with Google) are also independent controllers for their
-      sign-in services, under their own privacy policies. We do not sell personal data or share it for advertising.
+      <strong>Payments.</strong> Subscriptions are sold through Link, Stripe's payment service, which is the merchant of
+      record for your purchase; your card statement shows <code>{cardStatementDescriptor}</code>. Stripe and Link process
+      your payment, billing and tax details as independent controllers under the{" "}
+      <a href={stripePrivacyUrl}>Stripe privacy policy</a> and <a href={linkPrivacyUrl}>Link's privacy policy</a>, and the
+      purchase itself is governed by <a href={linkTermsUrl}>Link's terms</a>. From them we receive only your Stripe customer
+      ID, your subscription status and period, and your billing country — never your card details. We do not sell personal
+      data or share it for advertising.
     </p>
   </LegalSection>
 
   <LegalSection sections={sections} id="retention">
     <ul>
-      <li>Account, device registrations, meeting session records and monthly usage: while your account exists; deleted immediately when you delete it.</li>
-      <li>The pseudonymous free-trial record (a keyed hash of your sign-in identity, the number of free-trial meetings used and when the trial started): while your account exists and for up to 24 months after you delete it, then deleted automatically.</li>
+      <li>
+        Meeting content: not stored on our servers. At our AI providers: Anthropic deletes it within 30 days (up to 2 years
+        if flagged under its usage policy); ElevenLabs keeps it under its own retention rules (see section 7).
+      </li>
+      <li>Account, sign-in identities and device registrations: while your account exists; deleted immediately when you delete it.</li>
+      <li>Meeting session records and monthly usage: up to 13 months, then deleted automatically; deleted immediately when you delete your account.</li>
+      <li>
+        The pseudonymous free-trial record (a keyed hash of your sign-in identity, the number of free-trial meetings used
+        and when the trial started): for up to 24 months after you delete your account, then deleted automatically.
+      </li>
       <li>The DeviceCheck bit for your Mac is stored by Apple, not by us; it holds no personal details, only that the Mac has already given a free trial.</li>
       <li>Sign-in tokens: up to 60 days; deleted within a day after they expire or you sign out.</li>
       <li>Daily usage totals: 2 days. The hashed IP record for new trials: until the end of that day.</li>
-      <li>Contact messages, feedback and crash reports: 180 days.</li>
+      <li>Contact messages, feedback and crash reports: 180 days. Emails: for as long as needed to handle your request.</li>
       <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
       <li>Technical logs: kept for a short period by Cloudflare, normally no more than a few days.</li>
       <li>Database backups (Cloudflare D1 point-in-time recovery): up to 30 days, after which deleted data is gone from backups too.</li>
-      <li>Our accounting records of subscription income: for as long as Finnish accounting law requires (currently up to 10 years). Receipts and payment records are kept by Stripe and Link under their own policies.</li>
+      <li>
+        Our accounting records of subscription income: for as long as Finnish accounting law requires (currently up to 10
+        years). Receipts and payment records are kept by Stripe and Link under their own policies.
+      </li>
     </ul>
   </LegalSection>
 
@@ -307,11 +409,11 @@ const mail: string = `mailto:${operator.email}`;
     </p>
     <p>
       What remains: a pseudonymous record of your free-trial use (a keyed one-way hash of your sign-in identity, the
-      number of free-trial meetings used, when the trial started and whether a Mac was verified), kept for up to 24 months to prevent free-trial
-      abuse — if you sign in again with the same Apple or Google account, your new account continues the trial where the
-      old one left off; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for your network (a
-      hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by Stripe and
-      Link as the seller; messages and reports until their 180 days run out (ask us if you want them deleted sooner); and
+      number of free-trial meetings used, when the trial started and whether a Mac was verified), kept for up to 24 months
+      to prevent free-trial abuse — if you sign in again with the same Apple or Google account, your new account continues
+      the trial where the old one left off; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for
+      your network (a hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by
+      Stripe and Link; messages and reports until their 180 days run out (ask us if you want them deleted sooner); and
       technical logs and backups until they expire. Notes and recordings on your Mac stay where they are; you delete them
       in the app.
     </p>
@@ -329,9 +431,10 @@ const mail: string = `mailto:${operator.email}`;
     </ul>
     <p>
       Write to <a href={mail}>{operator.email}</a>. We may ask you to confirm that the account is yours, and we reply
-      within one month. You also have the right to lodge a complaint with a supervisory authority — in Finland, the Office
-      of the Data Protection Ombudsman (Tietosuojavaltuutetun toimisto, <a href="https://tietosuoja.fi/en">tietosuoja.fi</a>),
-      or the authority in the EU country where you live or work.
+      within one month. If you took part in a meeting that someone else recorded, contact that person first (see section
+      3). You also have the right to lodge a complaint with a supervisory authority — in Finland, the Office of the Data
+      Protection Ombudsman (Tietosuojavaltuutetun toimisto, <a href="https://tietosuoja.fi/en">tietosuoja.fi</a>), or the
+      authority in the EU country where you live or work.
     </p>
   </LegalSection>
 

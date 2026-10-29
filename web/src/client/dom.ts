@@ -84,9 +84,9 @@ export function currentTheme(): Theme {
   return document.documentElement.dataset["theme"] === "dark" ? "dark" : "light";
 }
 
-/** Tema her değiştiğinde çağrılır (public/theme.js `ainotepad:themechange` olayı). */
+/** Tema her değiştiğinde çağrılır (public/theme.js `gistsmith:themechange` olayı). */
 export function onThemeChange(listener: (theme: Theme) => void): void {
-  document.addEventListener("ainotepad:themechange", (): void => {
+  document.addEventListener("gistsmith:themechange", (): void => {
     listener(currentTheme());
   });
 }
