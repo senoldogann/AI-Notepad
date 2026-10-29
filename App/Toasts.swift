@@ -9,9 +9,20 @@ enum ToastAction: Equatable {
     case revealInFinder(URL)
 }
 
-/// Kısa başarı bildirimi: başlık, isteğe bağlı ikinci satır ve düğme.
+/// Bildirimin türü: simgesi ve rengi.
+enum ToastKind: Equatable {
+    /// İş tamam (kaydedildi, kopyalandı, gönderildi).
+    case success
+    /// Bilgi (ör. ses yeniden yazıya dökülmedi, önceki metin korundu).
+    case info
+    /// Son işlem yapılamadı ama veri yerinde (ör. not yenilenemedi, önceki not gösteriliyor).
+    case warning
+}
+
+/// Kısa bildirim: tür, başlık, isteğe bağlı ikinci satır ve düğme.
 struct AppToast: Equatable, Identifiable {
     let id: UUID
+    let kind: ToastKind
     let title: String
     let detail: String?
     let action: ToastAction?
@@ -20,9 +31,10 @@ struct AppToast: Equatable, Identifiable {
 /// Bildirimin ekranda kaldığı süre (saniye); fare üstündeyken süre işlemez.
 private let toastVisibleSec: Double = 3
 
-/// Ana pencerenin sağ altındaki kısa başarı bildirimleri (kaydedildi, kopyalandı, gönderildi): tek bildirim görünür,
-/// yenisi eskisinin yerini alır; `toastVisibleSec` sonra kendiliğinden kaybolur, fare üstündeyken bekler. Hatalar
-/// bildirim değildir: oldukları yerde kalır.
+/// Ana pencerenin sağ altındaki kısa bildirimler: başarılar (kaydedildi, kopyalandı, gönderildi) ve verisi yerinde
+/// duran son işlemin uyarıları (not yenilenemedi, ses yeniden yazıya dökülmedi). Tek bildirim görünür, yenisi eskisinin
+/// yerini alır; `toastVisibleSec` sonra kendiliğinden kaybolur, fare üstündeyken bekler. Kalıcı hatalar (toplantı
+/// işlenemedi, not yok) bildirim değildir: oldukları yerde kalır.
 @MainActor
 @Observable
 final class ToastCenter {
@@ -34,8 +46,8 @@ final class ToastCenter {
     private init() {}
 
     /// Bildirimi gösterir ve kaybolma süresini başlatır.
-    func show(title: String, detail: String?, action: ToastAction?) {
-        current = AppToast(id: UUID(), title: title, detail: detail, action: action)
+    func show(kind: ToastKind, title: String, detail: String?, action: ToastAction?) {
+        current = AppToast(id: UUID(), kind: kind, title: title, detail: detail, action: action)
         scheduleDismissal()
     }
 
@@ -82,15 +94,16 @@ struct ToastView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: symbol)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.green)
+                .foregroundStyle(tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: toast.title)
                     .appFont(size: 13, weight: .semibold)
                     .foregroundStyle(Theme.ink)
-                    .lineLimit(2)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let detail = toast.detail {
                     Text(verbatim: detail)
                         .appFont(size: 11.5, weight: .regular)
@@ -129,6 +142,22 @@ struct ToastView: View {
         .onHover { (hovering: Bool) -> Void in center.setHovering(hovering: hovering) }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .contain)
+    }
+
+    private var symbol: String {
+        switch toast.kind {
+        case .success: "checkmark.circle.fill"
+        case .info: NoticeSeverity.info.symbol
+        case .warning: NoticeSeverity.attention.symbol
+        }
+    }
+
+    private var tint: Color {
+        switch toast.kind {
+        case .success: Color.green
+        case .info: NoticeSeverity.info.tint
+        case .warning: NoticeSeverity.attention.tint
+        }
     }
 
     private func actionTitle(action: ToastAction) -> LocalizedStringKey {

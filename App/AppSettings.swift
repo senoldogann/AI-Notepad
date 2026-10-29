@@ -362,7 +362,8 @@ func storeKeyBinding(key: String, binding: KeyBinding) throws {
 /// `KeychainError.notFound`; OpenAI uyumlu ayar eksikse `LLMError.notConfigured`.
 func resolveLLMProvider() async throws -> LLMProvider {
     #if HOSTED_EDITION
-    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider (toplantıdan bağımsız).
+    // Abonelik sürümü: sağlayıcı seçimi yok, her istek bizim sunucumuza gider (toplantıdan bağımsız); hakkı yoksa durur.
+    try await requireHostedAIAllowance()
     return try hostedAccountLLMProvider()
     #else
     switch selectedLLMProviderKind() {
@@ -387,7 +388,12 @@ func resolveLLMProvider() async throws -> LLMProvider {
 /// `resolveLLMProvider`.
 func resolveRecordedMeetingLLMProvider(recordID: String) async throws -> LLMProvider {
     #if HOSTED_EDITION
-    return try hostedRecordedMeetingLLMProvider(recordID: recordID)
+    let provider: LLMProvider = try hostedRecordedMeetingLLMProvider(recordID: recordID)
+    // Kaydın sunucu oturumu yoksa çağrı hesaptan gider: hakkı yoksa durur (oturumlu kayıt kendi bütçesini kullanır).
+    if case .hosted(let config) = provider, config.scope == .account {
+        try await requireHostedAIAllowance()
+    }
+    return provider
     #else
     return try await resolveLLMProvider()
     #endif

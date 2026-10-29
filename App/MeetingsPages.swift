@@ -406,6 +406,12 @@ private enum ExportStatus: Equatable {
     case confirmDeleteAudio
 }
 
+/// Toplantının mesajını (hata ya da bilgi) toplantısıyla birlikte izlemek için.
+private struct RecordMessageKey: Equatable {
+    let recordID: String
+    let message: String?
+}
+
 /// Seçili toplantının sayfası: önce sana düşen görevler, sonra özet, kararlar, diğer görevler, sözlük,
 /// konuşmacı adları ve paragraflı transkript (zaman damgasından çalma).
 struct MeetingDetailPage: View {
@@ -447,6 +453,17 @@ struct MeetingDetailPage: View {
                         // Başarılar sağ alttaki kısa bildirimde (3 sn) görünür, satırda kalmaz; hatalar ve onaylar satırda.
                         .onChange(of: export) { (_: ExportStatus, status: ExportStatus) in
                             announceSuccess(status: status)
+                        }
+                        // Yalnızca aynı toplantıda mesaj değişince (başka toplantıya geçince eski mesajı çıkmasın).
+                        .onChange(of: RecordMessageKey(recordID: record.id, message: record.failureMessage)) { (old: RecordMessageKey, new: RecordMessageKey) in
+                            if old.recordID == new.recordID {
+                                announceRecordMessage(message: new.message, kind: .warning)
+                            }
+                        }
+                        .onChange(of: RecordMessageKey(recordID: record.id, message: record.notice)) { (old: RecordMessageKey, new: RecordMessageKey) in
+                            if old.recordID == new.recordID {
+                                announceRecordMessage(message: new.message, kind: .info)
+                            }
                         }
                     statusLines
                     // Sekmeler ve notun dili tek satırda: dil, iş arkadaşlarına göndermek için notun başka dildeki sürümü.
@@ -564,7 +581,10 @@ struct MeetingDetailPage: View {
             }
             .appFont(size: 12, weight: .regular)
         }
-        if let message = record.failureMessage {
+        // Notu duran toplantıda hata ve bilgi son işlemle ilgilidir (not yenilenemedi, ses yeniden yazıya dökülmedi):
+        // sağ altta kısa bildirim olarak çıkar (bkz. `announceRecordMessage`), sayfada kalmaz. Notu olmayan toplantıda
+        // hata kalıcıdır, burada görünür.
+        if record.note == nil, let message = record.failureMessage {
             NoticeText(message, severity: .error)
                 .appFont(size: 12, weight: .regular)
                 .textSelection(.enabled)
@@ -585,10 +605,19 @@ struct MeetingDetailPage: View {
                     .disabled(model.isBusy)
                 #endif
             }
-        } else if let notice = record.notice {
+        } else if record.note == nil, let notice = record.notice {
             NoticeText(notice, severity: .info)
                 .appFont(size: 12, weight: .regular)
         }
+    }
+
+    /// Notu duran toplantıda son işlemin yeni uyarısı ya da bilgisi sağ altta kısa bildirim olarak gösterilir (yalnızca
+    /// değişince; toplantıyı her açışta yeniden çıkmaz).
+    private func announceRecordMessage(message: String?, kind: ToastKind) {
+        guard record.note != nil, let message else {
+            return
+        }
+        ToastCenter.shared.show(kind: kind, title: message, detail: nil, action: nil)
     }
 
     /// Toplantıyı verilen andan iki kayıt birlikte çalar ve transkripte geçer (kelimeler vurgulansın).
@@ -1044,11 +1073,11 @@ struct MeetingDetailPage: View {
     private func announceSuccess(status: ExportStatus) {
         switch status {
         case .saved(let url):
-            ToastCenter.shared.show(title: String(localized: "İndirilenler'e kaydedildi"), detail: url.lastPathComponent, action: .revealInFinder(url))
+            ToastCenter.shared.show(kind: .success, title: String(localized: "İndirilenler'e kaydedildi"), detail: url.lastPathComponent, action: .revealInFinder(url))
         case .copied:
-            ToastCenter.shared.show(title: String(localized: "Markdown panoya kopyalandı"), detail: nil, action: nil)
+            ToastCenter.shared.show(kind: .success, title: String(localized: "Markdown panoya kopyalandı"), detail: nil, action: nil)
         case .done(let message):
-            ToastCenter.shared.show(title: message, detail: nil, action: nil)
+            ToastCenter.shared.show(kind: .success, title: message, detail: nil, action: nil)
         case .none, .failed, .confirmDelete, .confirmDeleteAudio:
             return
         }

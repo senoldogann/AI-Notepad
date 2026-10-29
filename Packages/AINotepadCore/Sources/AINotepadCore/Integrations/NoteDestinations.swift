@@ -406,7 +406,7 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
         }
         try await vault.clearReconnect(id: destination.id)
     case .webhook(let url), .discordSignIn(let url):
-        try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note))
+        try await sendWebhook(url: url, payload: try webhookPayload(kind: webhookKind(url: url), record: record, note: note, appName: vault.clientName))
     case .notion:
         try await vault.withNotion(id: destination.id) {
             (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in

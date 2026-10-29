@@ -28,12 +28,12 @@ private let sampleNote: MeetingNote = MeetingNote(
 
     // Her servise kendi biçimi: Slack tek yıldızlı kalın, Teams Adaptive Card, genel webhook'ta yapılandırılmış toplantı.
     @Test func payloadShapes() throws {
-        let slack: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .slack, record: sampleRecord(), note: sampleNote))
+        let slack: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .slack, record: sampleRecord(), note: sampleNote, appName: "Gistsmith"))
         #expect(slack["text"]?.contains("*Bütçe toplantısı*") == true && slack["text"]?.contains("**") == false)
-        let teams: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .teams, record: sampleRecord(), note: sampleNote)) as? [String: Any])
+        let teams: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .teams, record: sampleRecord(), note: sampleNote, appName: "Gistsmith")) as? [String: Any])
         let card: [String: Any] = try #require(((teams["attachments"] as? [[String: Any]])?.first?["content"]) as? [String: Any])
         #expect(card["type"] as? String == "AdaptiveCard")
-        let generic: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .generic, record: sampleRecord(), note: sampleNote)) as? [String: Any])
+        let generic: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .generic, record: sampleRecord(), note: sampleNote, appName: "Gistsmith")) as? [String: Any])
         let meeting: [String: Any] = try #require(generic["meeting"] as? [String: Any])
         #expect(meeting["durationMinutes"] as? Int == 30 && (meeting["tasks"] as? [[String: Any]])?.first?["isMine"] as? Bool == true)
         // Discord: uzun notta görevler kesilmez (önce gelir), etiketler kimseyi uyarmaz; Slack'te <!channel> kaçışlanır.
@@ -41,12 +41,13 @@ private let sampleNote: MeetingNote = MeetingNote(
             title: "T", summary: "@everyone " + String(repeating: "a", count: 5000), decisions: [],
             tasks: [NoteTask(owner: "Senol", description: "Sunumu hazırlamak", dueDate: nil, isMine: true)], glossary: []
         )
-        let discord: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .discord, record: sampleRecord(), note: long)) as? [String: Any])
+        let discord: [String: Any] = try #require(JSONSerialization.jsonObject(with: webhookPayload(kind: .discord, record: sampleRecord(), note: long, appName: "Gistsmith")) as? [String: Any])
         let content: String = try #require(discord["content"] as? String)
         #expect(content.count <= 2000 && content.contains("Sunumu hazırlamak"))
         #expect((discord["allowed_mentions"] as? [String: [String]])?["parse"] == [])
+        #expect(discord["username"] as? String == "Gistsmith")
         let injected: MeetingNote = MeetingNote(title: "T", summary: "<!channel> A & B", decisions: [], tasks: [], glossary: [])
-        let slackInjected: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .slack, record: sampleRecord(), note: injected))
+        let slackInjected: [String: String] = try JSONDecoder().decode([String: String].self, from: webhookPayload(kind: .slack, record: sampleRecord(), note: injected, appName: "Gistsmith"))
         #expect(slackInjected["text"]?.contains("&lt;!channel&gt; A &amp; B") == true)
     }
 }
@@ -73,7 +74,7 @@ let webhookTestURL: String? = ProcessInfo.processInfo.environment["AINOTEPAD_WEB
 struct WebhookLiveTests {
     @Test func postsToRealEndpoint() async throws {
         let url: URL = try webhookURL(text: try #require(webhookTestURL))
-        try await sendWebhook(url: url, payload: webhookPayload(kind: webhookKind(url: url), record: sampleRecord(), note: sampleNote))
+        try await sendWebhook(url: url, payload: webhookPayload(kind: webhookKind(url: url), record: sampleRecord(), note: sampleNote, appName: "Gistsmith"))
     }
 
     // Reddeden sunucu: hata sunucu adı ve durum koduyla, adres (gizli anahtar) olmadan.
@@ -166,7 +167,7 @@ struct WebhookLiveTests {
         #expect(throws: WebhookError.invalidURL) { try zoomWebhookURL(address: "https://integrations.zoom.us/chat/webhooks/incomingwebhook/abc", token: " ") }
         #expect(throws: WebhookError.invalidURL) { try zoomWebhookURL(address: "https://hooks.slack.com/services/x", token: "t") }
         let note: MeetingNote = MeetingNote(title: "Plan", summary: "Özet", decisions: [], tasks: [], glossary: [])
-        let json: String = String(decoding: try webhookPayload(kind: .zoom, record: sampleRecord(), note: note), as: UTF8.self)
+        let json: String = String(decoding: try webhookPayload(kind: .zoom, record: sampleRecord(), note: note, appName: "Gistsmith"), as: UTF8.self)
         #expect(json.contains(#""head":{"text":"Plan"}"#) && json.contains(#""type":"message""#))
     }
 }

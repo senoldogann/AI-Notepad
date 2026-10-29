@@ -128,6 +128,18 @@ func hostedRecordedMeetingLLMProvider(recordID: String) throws -> LLMProvider {
     return .hosted(HostedLLMConfig(baseURL: client.baseURL, credentials: client, scope: .recordedMeeting(serverMeetingID: serverMeetingID)))
 }
 
+/// Hesap düzeyindeki yapay zekâ çağrısından önce: hakkı yoksa (deneme bitti, bu Mac'te kullanıldı, abonelik sona erdi)
+/// istek sunucuya gitmez, abone olma teklifi açılır (en çok `hostedSubscriptionPromptIntervalSec`'te bir) ve
+/// `subscription_required` fırlar ("deneme ilk toplantıyla başlar" gibi yanıltıcı sunucu yanıtı yerine).
+@MainActor
+func requireHostedAIAllowance() throws {
+    guard HostedAccount.shared.requiresSubscription else {
+        return
+    }
+    HostedAccount.shared.promptSubscriptionIfDue()
+    throw HostedAPIError(code: .subscriptionRequired, rawCode: HostedErrorCode.subscriptionRequired.rawValue, status: 402, serverMessage: "", path: "/v1/llm/messages")
+}
+
 /// Her zaman kullanılabilen yapay zekâ çağrıları (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı):
 /// toplantı kimliği gönderilmez, kullanıcının sınırlarına sayılır.
 func hostedAccountLLMProvider() throws -> LLMProvider {

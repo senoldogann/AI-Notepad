@@ -217,7 +217,7 @@ final class HostedAccount {
         syncAccountData(userID: signedInUserIDCache)
         observers.append(NotificationCenter.default.addObserver(forName: .hostedSubscriptionRequired, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
             MainActor.assumeIsolated {
-                self?.subscriptionRequiredByServer()
+                self?.promptSubscriptionIfDue()
             }
         })
         observers.append(NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
@@ -518,9 +518,9 @@ final class HostedAccount {
         upsell = .subscriptionRequired
     }
 
-    /// Sunucu bir isteği abonelik gerektiği için reddetti (bkz. `hostedSubscriptionRequired`): teklif en çok
+    /// Abonelik gerektiren bir istek durdu ya da sunucu reddetti (bkz. `hostedSubscriptionRequired`): teklif en çok
     /// `hostedSubscriptionPromptIntervalSec`'te bir açılır (arka plandaki işler art arda açmasın); hak durumu yenilenir.
-    private func subscriptionRequiredByServer() {
+    func promptSubscriptionIfDue() {
         if let last = lastSubscriptionPromptAt, Date().timeIntervalSince(last) < hostedSubscriptionPromptIntervalSec {
             return
         }
