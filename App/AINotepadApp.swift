@@ -26,6 +26,13 @@ private func writeAcceptanceResult(line: String) {
 @main
 enum AppEntry {
     static func main() {
+        #if HOSTED_EDITION
+        // Gistsmith'in arayüzü varsayılan olarak İngilizce açılır (macOS'un dili Türkçe olsa da); Ayarlar'dan
+        // değiştirilebilir. Hiçbir metin okunmadan yazılmalı.
+        if let identifier = Bundle.main.bundleIdentifier {
+            applyDefaultInterfaceLanguageOnce(bundleIdentifier: identifier, language: .english)
+        }
+        #endif
         // Görünen ad (bkz. `appName`) metinlerden önce okunur: yoksa uygulama hemen, açık hatayla kapanır.
         _ = appName
         // Veri klasörü adı Info.plist'ten gelir; yoksa uygulama başka bir uygulamanın verisine yazmasın diye açılmaz.

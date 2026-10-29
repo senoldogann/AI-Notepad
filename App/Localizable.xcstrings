@@ -1909,13 +1909,13 @@
         }
       }
     },
-    "Apple ya da Google hesabınla; giriş penceresi uygulamanın içinde açılır.": {
+    "Apple ile devam et": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "With your Apple or Google account; the sign-in window opens inside the app."
+            "value": "Continue with Apple"
           }
         }
       }
@@ -2199,17 +2199,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "When on, a voiceprint (numbers that recognise a voice; this is biometric data) of everyone who speaks for more than 8 s is stored with the meeting; people you name are remembered on this Mac and named automatically in later meetings. Deleting a meeting forgets what was learned from it; deleting its audio removes its prints. Ask others before storing their voiceprints."
-          }
-        }
-      }
-    },
-    "Açılan giriş penceresinde Apple ya da Google hesabını seçersin; pencere kapanınca giriş tamamlanır.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You choose your Apple or Google account in the sign-in window; signing in finishes when the window closes."
           }
         }
       }
@@ -5224,24 +5213,13 @@
         }
       }
     },
-    "Giriş penceresinde Apple ya da Google hesabını seç. Vazgeçersen pencereyi kapatman yeter.": {
+    "Giriş penceresinde devam et. Vazgeçersen pencereyi kapatman yeter.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose your Apple or Google account in the sign-in window. To cancel, just close the window."
-          }
-        }
-      }
-    },
-    "Giriş yap": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign in"
+            "value": "Continue in the sign-in window. To cancel, just close it."
           }
         }
       }
@@ -5340,6 +5318,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Privacy"
+          }
+        }
+      }
+    },
+    "Google ile devam et": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue with Google"
           }
         }
       }
@@ -5643,6 +5632,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update…"
+          }
+        }
+      }
+    },
+    "Güvenli bir giriş penceresi açılır; parolan Apple'da ya da Google'da kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A secure sign-in window opens; your password stays with Apple or Google."
           }
         }
       }

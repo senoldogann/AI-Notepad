@@ -276,10 +276,10 @@ function providerAuthorizeUrl(pending: PendingAppSignIn, redirectUri: string): s
 
 /**
  * Uygulama adına giriş: Apple ve Google düğmeleri sağlayıcıya yönlendirir (uygulamanın giriş penceresinde açılır
- * pencere güvenilir çalışmaz). Yönlendirmeden önce sağlayıcı, rastgele `state` ve nonce özeti `sessionStorage`'a yazılır;
- * yazılamazsa yönlendirilmez.
+ * pencere güvenilir çalışmaz). Sağlayıcı uygulamada seçildiyse (`chosen`) hemen ona yönlendirilir. Yönlendirmeden önce
+ * sağlayıcı, rastgele `state` ve nonce özeti `sessionStorage`'a yazılır; yazılamazsa yönlendirilmez ve düğmeler kalır.
  */
-function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: string, hashedNonce: string): void {
+function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: string, hashedNonce: string, chosen: AppSignInProvider | null): void {
   element("signin-intro", HTMLElement).classList.add("hidden");
   element("signin-app-intro", HTMLElement).classList.remove("hidden");
   const apple: HTMLButtonElement = element("apple-button", HTMLButtonElement);
@@ -302,6 +302,9 @@ function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: stri
   google.addEventListener("click", (): void => go("google"));
   apple.disabled = false;
   google.disabled = false;
+  if (chosen !== null) {
+    go(chosen);
+  }
 }
 
 /** Bekleyen denemeyi okur ve siler (tek kullanımlık); depolama okunamazsa ya da kayıt yoksa null. */
@@ -330,7 +333,8 @@ function finishAppReturn(text: ClientCopy, notice: HTMLElement, result: Exclude<
     console.error("app_return_without_pending", { kind: result.kind });
     return;
   }
-  startAppSignIn(text, notice, redirectUri, pending.hashedNonce);
+  // Sağlayıcıdan dönüldü (vazgeçme ya da hata): kendiliğinden yeniden yönlendirilmez, iki düğme gösterilir.
+  startAppSignIn(text, notice, redirectUri, pending.hashedNonce, null);
   if (result.kind === "error") {
     if (!isCancellation(result.error)) {
       console.warn("app_provider_error", { provider: pending.provider, error: result.error });
@@ -370,7 +374,7 @@ function main(): void {
     return;
   }
   if (mode.kind === "app") {
-    startAppSignIn(text, notice, dataValue(root, "redirectUri"), mode.hashedNonce);
+    startAppSignIn(text, notice, dataValue(root, "redirectUri"), mode.hashedNonce, mode.provider);
     return;
   }
   startSiteSignIn(text, notice, dataValue(root, "accountPath"), dataValue(root, "redirectUri"));

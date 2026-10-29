@@ -138,6 +138,23 @@ func storeInterfaceLanguage(language: InterfaceLanguage) {
     }
 }
 
+/// Varsayılan arayüz dilinin yazıldığını gösteren işaret (bir kez yazılır; kullanıcının sonraki seçimi ezilmez).
+private let defaultInterfaceLanguageAppliedKey: String = "interface.defaultLanguageApplied"
+
+/// Uygulamanın varsayılan arayüz dilini bir kez yazar: bu uygulamada hiç dil seçilmemişse (`AppleLanguages` yoksa)
+/// `language` kaydedilir; kullanıcı sonra "Sistem"i ya da başka bir dili seçerse bir daha dokunulmaz. Metinler
+/// yüklenmeden (`AppEntry.main` başında) çağrılmalı: dil, paket metinleri ilk kez okunurken belirlenir.
+func applyDefaultInterfaceLanguageOnce(bundleIdentifier: String, language: InterfaceLanguage) {
+    guard !UserDefaults.standard.bool(forKey: defaultInterfaceLanguageAppliedKey) else {
+        return
+    }
+    UserDefaults.standard.set(true, forKey: defaultInterfaceLanguageAppliedKey)
+    guard UserDefaults.standard.persistentDomain(forName: bundleIdentifier)?["AppleLanguages"] == nil else {
+        return
+    }
+    storeInterfaceLanguage(language: language)
+}
+
 /// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
 let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
 

@@ -1,9 +1,10 @@
 import Foundation
 
-// Sitede giriş (abonelik sürümü): Apple ve Google arayüzü sitededir. Developer ID ile dağıtılan uygulama Apple ile
-// girişi kendisi yapamaz (Apple bu yetkiyi yalnızca App Store uygulamalarına verir). Uygulama her deneme için rastgele ham
-// nonce üretir, yalnızca bellekte tutar ve `<site>/sign-in?app=1&nonce=<sha256hex(ham)>` sayfasını uygulama içi giriş
-// penceresinde (ASWebAuthenticationSession) açar. Site Apple ya da Google'a yönlendirir (açılır pencere yok), dönüşte
+// Sitede giriş (abonelik sürümü): sağlayıcı (Apple ya da Google) uygulamada seçilir, giriş sitede yapılır. Developer ID
+// ile dağıtılan uygulama Apple ile girişi kendisi yapamaz (Apple bu yetkiyi yalnızca App Store uygulamalarına verir).
+// Uygulama her deneme için rastgele ham nonce üretir, yalnızca bellekte tutar ve
+// `<site>/sign-in?app=1&nonce=<sha256hex(ham)>&provider=<apple|google>` sayfasını uygulama içi giriş penceresinde
+// (ASWebAuthenticationSession) açar. Site seçilen sağlayıcıya yönlendirir (açılır pencere yok), dönüşte
 // `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=<JWT>` adresine gider; giriş penceresi bu adresi
 // yakalar. Uygulama `POST /v1/auth/<sağlayıcı>` ile `{identityToken, nonce: ham}` gönderir. Sunucu jetonun `nonce`
 // iddiasının `sha256hex(ham)` olduğunu denetler.
@@ -64,11 +65,13 @@ public func makeHostedBrowserSignInAttempt(now: Date) throws -> HostedBrowserSig
     HostedBrowserSignInAttempt(rawNonce: try makeHostedNonce(), startedAt: now)
 }
 
-/// Sitedeki giriş sayfası: `<site>/sign-in?app=1&nonce=<sha256hex(ham nonce)>`. Saf fonksiyondur.
-public func hostedBrowserSignInPage(siteBase: URL, nonceHash: String) -> URL {
+/// Sitedeki giriş sayfası: `<site>/sign-in?app=1&nonce=<sha256hex(ham nonce)>&provider=<apple|google>`. Sağlayıcı
+/// uygulamada seçildiği için site ara sayfa göstermeden doğrudan Apple'a ya da Google'a yönlendirir. Saf fonksiyondur.
+public func hostedBrowserSignInPage(siteBase: URL, nonceHash: String, provider: HostedSignInProvider) -> URL {
     siteBase.appending(path: "sign-in").appending(queryItems: [
         URLQueryItem(name: "app", value: "1"),
         URLQueryItem(name: "nonce", value: nonceHash),
+        URLQueryItem(name: "provider", value: provider.rawValue),
     ])
 }
 

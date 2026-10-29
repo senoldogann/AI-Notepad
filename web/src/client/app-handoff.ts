@@ -1,7 +1,8 @@
 // Mac uygulamasından başlatılan Apple ya da Google ile giriş (Developer ID ile dağıtılan uygulama Apple ile girişi
 // kendisi yapamaz: Apple bu yetkiyi yalnızca App Store uygulamalarına verir). Uygulama giriş sayfasını kendi giriş
-// penceresinde (ASWebAuthenticationSession) `/sign-in?app=1&nonce=<64 hex>` ile açar; `nonce` uygulamanın kendi ham
-// nonce'unun SHA-256 özetidir ve sağlayıcıya olduğu gibi verilir. O pencerede açılır pencereler güvenilir çalışmadığı
+// penceresinde (ASWebAuthenticationSession) `/sign-in?app=1&nonce=<64 hex>&provider=<apple|google>` ile açar; `nonce`
+// uygulamanın kendi ham nonce'unun SHA-256 özetidir ve sağlayıcıya olduğu gibi verilir. Sağlayıcı uygulamada
+// seçildiyse sayfa düğme göstermeden ona yönlendirir; `provider` yoksa (0.1.4) iki düğme gösterilir. O pencerede açılır pencereler güvenilir çalışmadığı
 // için sayfa sağlayıcıya yönlendirir (Apple: `response_mode=fragment`, kapsamsız; Google: OAuth 2.0 örtük `id_token`);
 // sağlayıcı `/sign-in#…` adresine döner. Yönlendirme boyunca sağlayıcı, rastgele `state` ve nonce özeti
 // `sessionStorage`'da durur; dönüşte `state` denetlenir. Kimlik jetonu sunucuya gönderilmez:
@@ -14,7 +15,7 @@ export const appUrlScheme: string = "com.senoldogan.ainotepad.hosted";
 /** Giriş isteğinin türü: sitenin kendi girişi, uygulama adına giriş ya da bozuk uygulama isteği. */
 export type SignInMode =
   | { readonly kind: "site" }
-  | { readonly kind: "app"; readonly hashedNonce: string }
+  | { readonly kind: "app"; readonly hashedNonce: string; readonly provider: AppSignInProvider | null }
   | { readonly kind: "invalid-app" };
 
 /** SHA-256 onaltılık özet biçimi (64 küçük ya da büyük harf onaltılık). */
@@ -23,18 +24,28 @@ const hashedNoncePattern: RegExp = /^[0-9a-fA-F]{64}$/;
 /** Rastgele `state` biçimi (32 küçük harf onaltılık). */
 const statePattern: RegExp = /^[0-9a-f]{32}$/;
 
-/** Adresin sorgusundan giriş türünü çıkarır: `app=1` varsa geçerli bir `nonce` da olmalı. Saf fonksiyondur. */
+/** Uygulama adına girişin sağlayıcısı (dönüş adresinin yolu). */
+export type AppSignInProvider = "apple" | "google";
+
+/**
+ * Adresin sorgusundan giriş türünü çıkarır: `app=1` varsa geçerli bir `nonce` da olmalı; `provider` yoksa null,
+ * varsa `apple` ya da `google` olmalı (başka değer bozuk istek sayılır). Saf fonksiyondur.
+ */
 export function signInMode(search: string): SignInMode {
   const params: URLSearchParams = new URLSearchParams(search);
   if (params.get("app") !== "1") {
     return { kind: "site" };
   }
   const nonce: string | null = params.get("nonce");
-  return nonce !== null && hashedNoncePattern.test(nonce) ? { kind: "app", hashedNonce: nonce.toLowerCase() } : { kind: "invalid-app" };
+  const provider: string | null = params.get("provider");
+  if (nonce === null || !hashedNoncePattern.test(nonce)) {
+    return { kind: "invalid-app" };
+  }
+  if (provider === null) {
+    return { kind: "app", hashedNonce: nonce.toLowerCase(), provider: null };
+  }
+  return provider === "apple" || provider === "google" ? { kind: "app", hashedNonce: nonce.toLowerCase(), provider } : { kind: "invalid-app" };
 }
-
-/** Uygulama adına girişin sağlayıcısı (dönüş adresinin yolu). */
-export type AppSignInProvider = "apple" | "google";
 
 /** Kimlik jetonunu uygulamaya ileten adres (jeton `#` parçasında: sunuculara ve geçmişe gitmez). Saf fonksiyondur. */
 export function appSignInUrl(provider: AppSignInProvider, idToken: string): string {

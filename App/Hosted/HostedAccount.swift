@@ -123,6 +123,8 @@ final class HostedAccount {
     private(set) var isWorking: Bool = false
     /// Giriş penceresi açık, dönüşü beklenen deneme (ham nonce yalnızca burada, bellekte; tek kullanımlık).
     private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
+    /// Açık giriş penceresinin sağlayıcısı (düğmede bekleme göstergesi için).
+    private(set) var pendingSignInProvider: HostedSignInProvider?
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
     /// Ana penceredeki kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti). Her biri dönem başına bir
@@ -364,14 +366,14 @@ final class HostedAccount {
 
     // MARK: Giriş ve çıkış
 
-    /// Girişi uygulama içi giriş penceresinde (ASWebAuthenticationSession) yapar: yeni ham nonce üretilir, sitedeki
-    /// giriş sayfası nonce'un SHA-256'sıyla açılır; kullanıcı Apple ya da Google hesabını seçer, site
-    /// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` adresine yönlendirir ve dönüş Launch Services'e
-    /// uğramadan doğrudan bu pencereye gelir (başka bir uygulama ya da eski bir kopya dönüşü alamaz). Dönüş bu denemenin
-    /// nonce'uyla eşleşirse varsa eski oturum kapatılır ve kimlik jetonu ham nonce'la sağlayıcının giriş ucuna gider.
-    /// Kullanıcı pencereyi kapatırsa hata gösterilmez. (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi
-    /// yapamaz; giriş sitede yapılır.)
-    func signIn() async {
+    /// Seçilen sağlayıcıyla (Apple ya da Google) uygulama içi giriş penceresinde (ASWebAuthenticationSession) girer:
+    /// yeni ham nonce üretilir, sitedeki giriş sayfası nonce'un SHA-256'sı ve sağlayıcıyla açılır, site doğrudan
+    /// sağlayıcıya yönlendirir; giriş bitince site `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…`
+    /// adresine yönlendirir ve dönüş Launch Services'e uğramadan doğrudan bu pencereye gelir (başka bir uygulama ya da
+    /// eski bir kopya dönüşü alamaz). Dönüş bu denemenin nonce'uyla eşleşirse varsa eski oturum kapatılır ve kimlik
+    /// jetonu ham nonce'la sağlayıcının giriş ucuna gider. Kullanıcı pencereyi kapatırsa hata gösterilmez. (Developer ID
+    /// ile dağıtılan uygulama Apple ile girişi kendisi yapamaz; giriş sitede yapılır.)
+    func signIn(provider: HostedSignInProvider) async {
         guard pendingBrowserSignIn == nil else {
             return
         }
@@ -380,18 +382,20 @@ final class HostedAccount {
         let page: URL
         do {
             attempt = try makeHostedBrowserSignInAttempt(now: Date())
-            page = hostedBrowserSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
+            page = hostedBrowserSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce), provider: provider)
         } catch {
             accountLogger.error("Giriş başlatılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessage = userFacingMessage(error: error)
             return
         }
         pendingBrowserSignIn = attempt
+        pendingSignInProvider = provider
         defer {
             pendingBrowserSignIn = nil
+            pendingSignInProvider = nil
             webSession = nil
         }
-        accountLogger.info("Giriş penceresi açılıyor")
+        accountLogger.info("Giriş penceresi açılıyor, sağlayıcı: \(provider.rawValue, privacy: .public)")
         let callbackURL: URL
         do {
             switch try await runWebSignIn(page: page) {
@@ -436,7 +440,9 @@ final class HostedAccount {
                     waiting = nil
                 }
             }
-            let session: ASWebAuthenticationSession = ASWebAuthenticationSession(url: page, callback: .customScheme(hostedURLScheme)) { (url: URL?, error: (any Error)?) -> Void in
+            // Tamamlanma bloğu `@Sendable` (ana aktöre bağlı değil): sistem onu arka plandaki XPC kuyruğunda çağırır;
+            // bu sınıfın ana aktör bağlamını devralsaydı Swift'in yalıtım denetimi uygulamayı çökertirdi.
+            let completion: @Sendable (URL?, (any Error)?) -> Void = { (url: URL?, error: (any Error)?) -> Void in
                 if let url {
                     finish(.success(.callback(url)))
                 } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
@@ -445,6 +451,7 @@ final class HostedAccount {
                     finish(.failure(HostedBrowserSignInError.sessionNotStarted(reason: error.map { String(describing: $0) } ?? "dönüş adresi yok")))
                 }
             }
+            let session: ASWebAuthenticationSession = ASWebAuthenticationSession(url: page, callback: .customScheme(hostedURLScheme), completionHandler: completion)
             session.presentationContextProvider = presenter
             // Tarayıcıdaki Apple ve Google oturumları kullanılabilsin (her girişte parola sorulmasın).
             session.prefersEphemeralWebBrowserSession = false

@@ -475,10 +475,10 @@ private func googleTestToken(claims: String) -> String {
         try requireSecureHostedBaseURL(url: try parseHostedBaseURL(value: "https://api.ornek.fi"))
     }
 
-    // Giriş sayfası adresi: site kökü + /sign-in, app=1 ve nonce'un SHA-256'sı.
+    // Giriş sayfası adresi: site kökü + /sign-in, app=1, nonce'un SHA-256'sı ve uygulamada seçilen sağlayıcı.
     @Test func browserSignInPage() throws {
-        let page: URL = hostedBrowserSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"))
-        #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        let page: URL = hostedBrowserSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"), provider: .google)
+        #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad&provider=google")
     }
 
     // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür, sağlayıcı

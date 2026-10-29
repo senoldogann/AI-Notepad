@@ -13,9 +13,59 @@ func hostedMonthlyUsageText(used: Double, cap: Double) -> String {
     return String(localized: "Bu ay \(used.formatted(style)) / \(cap.formatted(style)) saat")
 }
 
-/// Giriş: uygulama içi giriş penceresinde Apple ya da Google hesabı seçilir, pencere kapanınca giriş tamamlanır
-/// (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi yapamaz; giriş sitede). Kurulumda ve Ayarlar › Hesap'ta
-/// aynı.
+/// "Apple ile devam et" (siyah hap, Apple logosu) ve "Google ile devam et" (beyaz hap, renkli "G"): seçilen sağlayıcı
+/// uygulama içi giriş penceresinde doğrudan açılır. Pencere açıkken iki düğme de kapalıdır; açılan sağlayıcının
+/// düğmesinde bekleme göstergesi döner. Giriş kapısında, kurulumda ve Ayarlar › Hesap'ta aynı.
+struct HostedProviderButtons: View {
+    let account: HostedAccount
+    let width: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                Task { await account.signIn(provider: .apple) }
+            } label: {
+                label(provider: .apple, title: Text("Apple ile devam et")) {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 15, weight: .medium))
+                }
+            }
+            .buttonStyle(.pillPrimary)
+            Button {
+                Task { await account.signIn(provider: .google) }
+            } label: {
+                label(provider: .google, title: Text("Google ile devam et")) {
+                    Image("brand-google")
+                        .resizable()
+                        .frame(width: 16, height: 16)
+                }
+            }
+            .buttonStyle(.pill)
+        }
+        .controlSize(.large)
+        .disabled(account.isWorking || account.pendingBrowserSignIn != nil)
+    }
+
+    /// Düğme içeriği: logo (pencere bu sağlayıcıyla açıksa bekleme göstergesi) ve yazı, ortalanmış.
+    private func label(provider: HostedSignInProvider, title: Text, @ViewBuilder logo: () -> some View) -> some View {
+        HStack(spacing: 10) {
+            if account.pendingSignInProvider == provider {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 16, height: 16)
+            } else {
+                logo()
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
+            }
+            title
+        }
+        .frame(width: width)
+    }
+}
+
+/// Giriş: Apple ya da Google düğmesi giriş penceresini açar, pencere kapanınca giriş tamamlanır (Developer ID ile
+/// dağıtılan uygulama Apple ile girişi kendisi yapamaz; giriş sitede). Kurulumda ve Ayarlar › Hesap'ta aynı.
 struct HostedSignInPanel: View {
     let account: HostedAccount
 
@@ -25,22 +75,24 @@ struct HostedSignInPanel: View {
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Button {
-                Task { await account.signIn() }
-            } label: {
-                Text("Giriş yap")
-                    .frame(width: 228)
-            }
-            .buttonStyle(.pill)
-            .disabled(account.isWorking || account.pendingBrowserSignIn != nil)
-            Text(account.pendingBrowserSignIn == nil
-                ? "Açılan giriş penceresinde Apple ya da Google hesabını seçersin; pencere kapanınca giriş tamamlanır."
-                : "Giriş penceresinde Apple ya da Google hesabını seç. Vazgeçersen pencereyi kapatman yeter.")
-                .appFont(size: 12, weight: .regular)
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            HostedProviderButtons(account: account, width: 240)
+            HostedSignInHint(account: account)
             HostedAccountError(account: account)
         }
+    }
+}
+
+/// Düğmelerin altındaki kısa açıklama: pencere açılmadan önce ne olacağı, açıkken nasıl vazgeçileceği.
+struct HostedSignInHint: View {
+    let account: HostedAccount
+
+    var body: some View {
+        Text(account.pendingBrowserSignIn == nil
+            ? "Güvenli bir giriş penceresi açılır; parolan Apple'da ya da Google'da kalır."
+            : "Giriş penceresinde devam et. Vazgeçersen pencereyi kapatman yeter.")
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(Theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
