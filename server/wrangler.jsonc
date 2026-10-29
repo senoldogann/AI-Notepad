@@ -111,9 +111,11 @@
   "env": {
     "production": {
       "name": "ainotepad-server-production",
-      // Özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. Geçiş süresince eski
-      // workers.dev adresi de açık kalır (üstteki `workers_dev: true` kalıtılır).
+      // Yalnızca özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. workers.dev adresi ve
+      // sürüm önizleme adresleri kapalıdır: onlar bölgenin WAF hız sınırı kuralını atlardı.
       "routes": [{ "pattern": "api.gistsmith.com", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false,
       "d1_databases": [
         {
           "binding": "DB",
@@ -131,7 +133,7 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        // Site; API özel alan adı `https://api.gistsmith.com` (Cloudflare panelinde Worker'a bağlanır), workers.dev de açık.
+        // Site; API özel alan adı `https://api.gistsmith.com` (Worker'ın tek adresi; workers.dev kapalı).
         "SITE_ORIGIN": "https://gistsmith.com",
         "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
         // Sitenin Google web istemcisi (bkz. üstteki geliştirme `vars` açıklaması). `placeholder` içeren değerle üretim

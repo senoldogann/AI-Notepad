@@ -2,9 +2,9 @@
 
 Cloudflare Worker + D1. Mac uygulamasının abonelik sürümü kullanıcı anahtarı olmadan çalışır: bu Worker bizim Anthropic
 (yalnızca Claude Haiku 5.5) ve ElevenLabs anahtarlarımızla vekillik yapar, ödemeyi Stripe ile alır. Anahtarlar yalnızca
-Worker gizli değerlerindedir. Üretim adresi `https://api.gistsmith.com` (özel alan adı; geçiş süresince workers.dev
-adresi de açık), site `https://gistsmith.com`. İç adlar (worker, D1, paket kimlikleri) `ainotepad` adını korur. Plan:
-`docs/superpowers/plans/2026-10-28-abonelik-surumu.md`.
+Worker gizli değerlerindedir. Üretim adresi yalnızca `https://api.gistsmith.com` (özel alan adı; workers.dev ve
+önizleme adresleri kapalı, bölgenin WAF kuralı atlanamasın diye), site `https://gistsmith.com`. İç adlar (worker, D1,
+paket kimlikleri) `ainotepad` adını korur. Plan: `docs/superpowers/plans/2026-10-28-abonelik-surumu.md`.
 
 ## Yerel geliştirme
 
@@ -105,7 +105,8 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 2. `npx wrangler d1 create ainotepad-production` → çıkan `database_id`'yi `wrangler.jsonc` → `env.production` içine yaz.
 3. `wrangler.jsonc` → `env.production`:
    - `routes`: `api.gistsmith.com` özel alan adı (gistsmith.com bölgesi aynı Cloudflare hesabında olmalı; dağıtımda
-     DNS kaydı ve sertifika kendiliğinden kurulur). `workers_dev: true` geçiş bitene dek kalır.
+     DNS kaydı ve sertifika kendiliğinden kurulur). `workers_dev` ve `preview_urls` üretimde `false`'tur:
+     Stripe webhook'u ve uygulamalar yalnızca `api.gistsmith.com`'u kullanmalı.
    - `vars`: `SITE_ORIGIN` (`https://gistsmith.com`), `APP_ATTEST_APP_IDS` (`TEAMID.com.senoldogan.AINotepad.hosted`),
      `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_IDS` (Google Cloud Console → sitenin OAuth web istemcisi), `DMG_URL`,
      `PRICE_USD_MONTHLY` (Stripe fiyatıyla aynı), `REPORTS_PER_DAY`. `APPLE_CLIENT_IDS` hazırdır:
