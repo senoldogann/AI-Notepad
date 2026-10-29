@@ -3,7 +3,7 @@
 // her yenilemede döner (eski jeton yeniden kullanılırsa sunucu tüm oturum ailesini düşürür).
 import { type ApiCall, ApiRequestError, type RawResponse, type SessionTokens, parseSession, send } from "./api";
 
-const storageKey: string = "ainotepad.session";
+const storageKey: string = "gistsmith.session";
 /** Erişim jetonu bu kadar süre kala yenilenir. */
 const refreshMarginMs: number = 30_000;
 

@@ -59,6 +59,21 @@ function matches(pattern: string, path: string): boolean {
   return pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : pattern === path;
 }
 
+/**
+ * Adrese uyan kuralların başlıkları. Pages gibi, birden çok kuralda geçen başlığın değerleri virgülle birleştirilir
+ * (CSP'de bu, birlikte uygulanan iki politika demektir). Saf fonksiyondur.
+ */
+export function matchedHeaders(rules: readonly HeaderRule[], path: string): Map<string, string> {
+  const headers: Map<string, string> = new Map<string, string>();
+  for (const rule of rules.filter((candidate: HeaderRule): boolean => matches(candidate.pattern, path))) {
+    for (const [name, value] of rule.headers) {
+      const previous: string | undefined = headers.get(name);
+      headers.set(name, previous === undefined ? value : `${previous}, ${value}`);
+    }
+  }
+  return headers;
+}
+
 /** Dosya var mı. */
 async function isFile(path: string): Promise<boolean> {
   try {
@@ -97,12 +112,10 @@ async function main(): Promise<void> {
         const body: Buffer = await readFile(resolved.file);
         response.statusCode = resolved.status;
         response.setHeader("content-type", contentTypes[extname(resolved.file)] ?? "application/octet-stream");
-        for (const rule of rules.filter((candidate: HeaderRule): boolean => matches(candidate.pattern, pathname))) {
-          for (const [name, value] of rule.headers) {
-            // Yerelde https yok: tarayıcı http'yi https'e yükseltmeye çalışmasın.
-            if (name !== "Strict-Transport-Security") {
-              response.setHeader(name, value.replace("; upgrade-insecure-requests", ""));
-            }
+        for (const [name, value] of matchedHeaders(rules, pathname)) {
+          // Yerelde https yok: tarayıcı http'yi https'e yükseltmeye çalışmasın.
+          if (name !== "Strict-Transport-Security") {
+            response.setHeader(name, value.replaceAll("; upgrade-insecure-requests", ""));
           }
         }
         response.end(body);

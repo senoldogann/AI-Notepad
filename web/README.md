@@ -63,9 +63,9 @@ Tek kaynak `src/config.ts`; gizli değer yoktur.
 İşletmeci bilgileri (ad, Y-tunnus, adres, iletişim e-postası) ve yasal metinlerin tarihi `src/legal/operator.ts`'tedir.
 
 Ad değişince elle güncellenecekler: `public/og.png` (`make-og.ts` ile yeniden üretilir); uygulama simgesi
-(`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. İç kimlikler bilerek eski adı taşır:
-tarayıcı depolama anahtarları (`ainotepad.theme`, `ainotepad.session`), uygulama adres şeması
-(`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
+(`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. Tarayıcı depolama anahtarları
+(`gistsmith.theme`, `gistsmith.session`) ürün adını taşır ve gizlilik politikasında adlarıyla geçer. İç kimlikler bilerek
+eski adı taşır: uygulama adres şeması (`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
 
 **Tema.** `public/theme.js` `<head>`'de engelleyici harici betik olarak yüklenir (CSP satır içi betiğe izin vermez) ve
 ilk boyamadan önce `<html data-theme>` yazar: kullanıcının seçimi (`localStorage`) yoksa sistem tercihi. Renkler
@@ -82,8 +82,11 @@ pencereyle yapılır, Apple yine de adresi denetler).
 
 **CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Google Identity Services için Google'ın belgelediği kaynaklar:
 `script-src https://accounts.google.com/gsi/client`, `frame-src https://accounts.google.com/gsi/`,
-`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Apple ile giriş ve
-Turnstile kaynakları da açıktır; başka dış kaynak yoktur.
+`connect-src https://accounts.google.com/gsi/`, `style-src https://accounts.google.com/gsi/style`. Dış hizmetler yalnızca
+kullanıldıkları sayfada açıktır: Apple ve Google `/sign-in`'de, Turnstile `/contact`'ta. Pages aynı başlığı birden çok
+kurala uyan adreste virgülle birleştirir ve tarayıcı iki politikayı birlikte uygular: `/*` tüm hizmetlere izin veren geniş
+politikayı (sayfası olmayan adresler için), her sayfanın kuralı dar politikayı taşır. `npm run serve` başlıkları aynı
+biçimde birleştirir.
 
 ## Cloudflare Pages
 
