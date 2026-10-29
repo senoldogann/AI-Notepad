@@ -1,5 +1,8 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
+import { appleTokenIssuer } from "./auth/apple";
+import { googleTokenIssuer } from "./auth/google";
+import { refreshPersistedIssuerKeys } from "./auth/identityToken";
 import { warnIfStripeTestMode } from "./billing";
 import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
 import { type Config, parseConfig } from "./config";
@@ -28,7 +31,7 @@ export default {
   },
   /**
    * Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm), bitirilmeden kalan toplantıların Deepgram
-   * tahmininin indirilmesi ve süresi dolmuş satırların temizliği.
+   * tahmininin indirilmesi, süresi dolmuş satırların temizliği ve Apple/Google anahtarlarının tazelenmesi.
    */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const now: Date = new Date(controller.scheduledTime);
@@ -37,5 +40,8 @@ export default {
     await dailyElevenLabsCapacityCheck(env.DB, config, now);
     await settleDeepgramMeetings(env.DB, now);
     await cleanupExpiredRows(env.DB, now, scheduledCleanupLimits);
+    // Apple ve Google anahtarları önceden alınır: girişler sağlayıcıyı beklemesin (bkz. `persistedIssuerKeys`).
+    await refreshPersistedIssuerKeys(env.DB, platform, appleTokenIssuer(config));
+    await refreshPersistedIssuerKeys(env.DB, platform, googleTokenIssuer(config));
   },
 } satisfies ExportedHandler<Env>;

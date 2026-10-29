@@ -11,6 +11,17 @@ export interface GoogleIdentity {
   readonly subject: string;
 }
 
+/** Google kimlik jetonlarını veren sağlayıcı: JWKS adresi, `iss` ve izinli istemci kimlikleri. Saf fonksiyondur. */
+export function googleTokenIssuer(config: Config): IdentityTokenIssuer {
+  return {
+    displayName: "Google",
+    jwksService: "google_jwks",
+    jwksUrl: googleJwksUrl,
+    issuers: googleIssuers,
+    audiences: config.googleClientIds,
+  };
+}
+
 /**
  * Google kimlik jetonunu Apple ile aynı kurallarla doğrular (`verifyIdentityToken`): Google JWKS imzası (RS256), iki
  * `iss` biçiminden biri, `aud` ∈ `GOOGLE_CLIENT_IDS`, süre ve tek kullanımlık nonce (istemci Google'a ham nonce'un
@@ -23,13 +34,7 @@ export async function verifyGoogleIdentityToken(
   identityToken: string,
   rawNonce: string,
 ): Promise<GoogleIdentity> {
-  const issuer: IdentityTokenIssuer = {
-    displayName: "Google",
-    jwksService: "google_jwks",
-    jwksUrl: googleJwksUrl,
-    issuers: googleIssuers,
-    audiences: config.googleClientIds,
-  };
+  const issuer: IdentityTokenIssuer = googleTokenIssuer(config);
   const token: VerifiedIdentityToken = await verifyIdentityToken(db, platform, issuer, identityToken, rawNonce);
   return { subject: token.subject };
 }

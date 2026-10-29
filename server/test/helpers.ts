@@ -42,6 +42,8 @@ export function req(method: string, path: string, fields: Partial<TestRequest>):
 
 /** Yeni düzenek; Apple JWKS uç noktası hazır bağlanır. */
 export async function createHarness(rootPem: string): Promise<Harness> {
+  // Kalıcı anahtar önbelleği (D1) testler arasında paylaşılır; her düzenek kendi sahte Apple/Google anahtarıyla başlar.
+  await env.DB.prepare("DELETE FROM identity_jwks").run();
   const clock: { nowMs: number } = { nowMs: Date.UTC(2026, 9, 15, 12, 0, 0) };
   const outbound: Request[] = [];
   const routes: Array<{ prefix: string; handler: StubHandler }> = [];

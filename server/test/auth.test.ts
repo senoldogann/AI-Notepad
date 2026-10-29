@@ -3,7 +3,7 @@ import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
 import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
 import { googleJwksUrl } from "../src/auth/google";
-import { jwksCacheTtlMs } from "../src/auth/identityToken";
+import { jwksCacheTtlMs, jwksStaleMaxMs } from "../src/auth/identityToken";
 import { refreshRetryWindowMs } from "../src/auth/tokens";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import {
@@ -134,6 +134,35 @@ describe("Apple ile giriş", () => {
     harness.clock.nowMs += jwksCacheTtlMs;
     await signIn(harness);
     expect(jwksCalls()).toBe(3);
+  });
+
+  it("anahtarlar Worker örnekleri arasında D1'de kalır; Apple yanıt vermezse en çok bir hafta eski anahtarla giriş sürer", async () => {
+    const harness: Harness = await defaultHarness();
+    const jwksCalls = (): number => harness.outbound.filter((request: Request): boolean => request.url === appleJwksUrl).length;
+    await signIn(harness);
+    expect(jwksCalls()).toBe(1);
+    // Yeni Worker örneği: bellek boş, anahtarlar D1'den okunur (Apple'a gidilmez).
+    harness.platform.jwksCache.clear();
+    await signIn(harness);
+    expect(jwksCalls()).toBe(1);
+
+    // Önbellek eskidi ve Apple yanıt vermiyor: tek kısa deneme, sonra kayıtlı anahtarlarla giriş.
+    harness.clock.nowMs += jwksCacheTtlMs + 1_000;
+    harness.platform.jwksCache.clear();
+    harness.stub(appleJwksUrl, async (): Promise<Response> => new Response("geçici", { status: 503 }));
+    await signIn(harness);
+    expect(jwksCalls()).toBe(2);
+
+    // Bir haftadan eski kayıt kullanılmaz: Apple'a tam yeniden denemeyle gidilir, yanıt yoksa giriş hata verir.
+    harness.clock.nowMs += jwksStaleMaxMs;
+    harness.platform.jwksCache.clear();
+    const nonce: string = randomToken(24);
+    await expectError(
+      await appleLogin(harness, { audience: clientId, issuer: appleIssuer, nonceClaimFor: nonce, nonce, expiresInSeconds: 600 }),
+      502,
+      "upstream_unavailable",
+    );
+    expect(jwksCalls()).toBe(5);
   });
 
   it("giriş uçları IP başına hız sınırlıdır", async () => {

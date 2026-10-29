@@ -179,7 +179,16 @@ describe("süresi dolmuş satırların temizliği", () => {
   it("zamanlanmış işleyici (Cron Trigger) temizliği çalıştırır", async () => {
     await env.DB.prepare("INSERT INTO used_nonces (nonce_hash, expires_at) VALUES ('cron_old', ?)").bind(nowMs - 1).run();
     const controller: ScheduledController = createScheduledController({ scheduledTime: nowMs, cron: "17 3 * * *" });
+    // Bakım Apple ve Google anahtarlarını da tazeler: dış istek sahte anahtar kümesiyle yanıtlanır.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (): Promise<Response> =>
+      Response.json({ keys: [{ kty: "RSA", kid: "cron-key", n: "AQAB", e: "AQAB" }] }),
+    );
     await worker.scheduled(controller, env);
+    fetchSpy.mockRestore();
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces WHERE nonce_hash = 'cron_old'")).toEqual([]);
+    expect(await ids("SELECT jwks_url AS id FROM identity_jwks ORDER BY jwks_url")).toEqual([
+      "https://appleid.apple.com/auth/keys",
+      "https://www.googleapis.com/oauth2/v3/certs",
+    ]);
   });
 });

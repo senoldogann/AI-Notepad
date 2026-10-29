@@ -1,14 +1,22 @@
 import { type JSONWebKeySet, type ProtectedHeaderParameters, createLocalJWKSet, decodeProtectedHeader, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 import { constantTimeEqualText, sha256Hex } from "../crypto";
-import { ApiError } from "../errors";
+import { ApiError, UpstreamError } from "../errors";
+import { errorName, log } from "../log";
 import type { CachedJwks, Platform } from "../platform";
-import { fetchUpstream } from "../upstream";
+import { fetchUpstream, isRetryableUpstreamError } from "../upstream";
 
 /** JWKS isteğinin deneme başına zaman aşımı. */
 const jwksTimeoutMs: number = 10_000;
 /** Önbellekteki anahtarların ömrü; jetonun `kid`'i önbellekte yoksa daha erken yeniden alınır (anahtar dönüşü). */
 export const jwksCacheTtlMs: number = 6 * 3_600_000;
+/**
+ * Sağlayıcıya ulaşılamazken kayıtlı anahtarların hâlâ kullanılabildiği en uzun yaş: sağlayıcılar anahtarlarını
+ * haftalarca önceden yayınlar ve eskisini bir süre daha geçerli tutar; jetonun `kid`'i kayıtta yoksa kullanılmaz.
+ */
+export const jwksStaleMaxMs: number = 7 * 24 * 3_600_000;
+/** Kayıtlı anahtar varken sağlayıcıya yapılan tazeleme denemesinin zaman aşımı (giriş beklemesin). */
+const jwksRefreshTimeoutMs: number = 4_000;
 
 /** Kimlik jetonu veren sağlayıcı (OpenID Connect): JWKS adresi, kabul edilen `iss` ve `aud` değerleri. */
 export interface IdentityTokenIssuer {
@@ -42,15 +50,20 @@ const claimsSchema = z.object({
   nonce: z.string().min(1),
 });
 
-/** Sağlayıcının açık anahtarlarını (JWKS) alır; geçici hatalar yeniden denenir. */
-async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer): Promise<JSONWebKeySet> {
-  const response: Response = await fetchUpstream(platform, issuer.jwksService, issuer.jwksUrl, (): RequestInit => ({ method: "GET" }), 3, jwksTimeoutMs);
+/** Sağlayıcının açık anahtarlarını (JWKS) alır; geçici hatalar `attempts` kez yeniden denenir. */
+async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer, attempts: number, timeoutMs: number): Promise<JSONWebKeySet> {
+  const response: Response = await fetchUpstream(platform, issuer.jwksService, issuer.jwksUrl, (): RequestInit => ({ method: "GET" }), attempts, timeoutMs);
   const parsed = jwksSchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new ApiError("upstream_unavailable", `${issuer.displayName} anahtarları okunamadı.`);
   }
+  return jwksFromParsed(parsed.data);
+}
+
+/** Doğrulanmış JWKS gövdesinden yalnızca gereken alanlarla anahtar kümesi. Saf fonksiyondur. */
+function jwksFromParsed(data: z.output<typeof jwksSchema>): JSONWebKeySet {
   return {
-    keys: parsed.data.keys.map((key: z.output<typeof jwkSchema>) => ({
+    keys: data.keys.map((key: z.output<typeof jwkSchema>) => ({
       kty: key.kty,
       kid: key.kid,
       n: key.n,
@@ -85,9 +98,91 @@ export async function issuerKeys(platform: Platform, issuer: IdentityTokenIssuer
   if (cached !== undefined && nowMs - cached.fetchedAt < jwksCacheTtlMs && cached.keys.keys.some((key): boolean => key.kid === keyId)) {
     return cached.keys;
   }
-  const keys: JSONWebKeySet = await fetchJwks(platform, issuer);
+  const keys: JSONWebKeySet = await fetchJwks(platform, issuer, 3, jwksTimeoutMs);
   platform.jwksCache.set(issuer.jwksUrl, { keys, fetchedAt: nowMs });
   return keys;
+}
+
+/** Kayıt jetonun `kid`'ini içeriyor ve yaşı `maxAgeMs`'ten küçükse o kayıt; değilse null. Saf fonksiyondur. */
+function usableJwks(cached: CachedJwks | undefined, keyId: string | null, nowMs: number, maxAgeMs: number): CachedJwks | null {
+  if (cached === undefined || nowMs - cached.fetchedAt >= maxAgeMs || !cached.keys.keys.some((key): boolean => key.kid === keyId)) {
+    return null;
+  }
+  return cached;
+}
+
+/** D1'deki kayıtlı anahtarlar; yoksa ya da bozuksa undefined (bozuk kayıt uyarıyla yok sayılır, yeniden alınır). */
+async function storedJwks(db: D1Database, jwksUrl: string): Promise<CachedJwks | undefined> {
+  const row: { keys_json: string; fetched_at: number } | null = await db
+    .prepare("SELECT keys_json, fetched_at FROM identity_jwks WHERE jwks_url = ?")
+    .bind(jwksUrl)
+    .first<{ keys_json: string; fetched_at: number }>();
+  if (row === null) {
+    return undefined;
+  }
+  const parsed = jwksSchema.safeParse(JSON.parse(row.keys_json));
+  if (!parsed.success) {
+    log("warn", "jwks_store_invalid", { jwksUrl });
+    return undefined;
+  }
+  return { keys: jwksFromParsed(parsed.data), fetchedAt: row.fetched_at };
+}
+
+/** Sağlayıcıdan alınan anahtarları D1'e ve belleğe yazar. */
+async function saveJwks(db: D1Database, platform: Platform, jwksUrl: string, keys: JSONWebKeySet, nowMs: number): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO identity_jwks (jwks_url, keys_json, fetched_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT (jwks_url) DO UPDATE SET keys_json = ?2, fetched_at = ?3`,
+    )
+    .bind(jwksUrl, JSON.stringify(keys), nowMs)
+    .run();
+  platform.jwksCache.set(jwksUrl, { keys, fetchedAt: nowMs });
+}
+
+/**
+ * Giriş için sağlayıcının anahtarları: bellekte ya da D1'de taze (`jwksCacheTtlMs`) ve jetonun `kid`'ini içeren kayıt
+ * varsa o (Worker örnekleri kısa ömürlü; D1 tüm örneklerde ortak). Yoksa sağlayıcıdan alınıp kaydedilir. Kayıt
+ * eskimiş ama `jwksStaleMaxMs`'ten genç ve `kid`'i içeriyorsa sağlayıcı yalnızca bir kez, kısa zaman aşımıyla denenir;
+ * yanıt vermezse (zaman aşımı, ağ hatası, 5xx) kayıtlı anahtarlar uyarıyla kullanılır: sağlayıcının yavaşlığı girişi
+ * düşürmez. `kid` hiçbir kayıtta yoksa (anahtar dönüşü) sağlayıcı tam yeniden denemeyle alınır; alınamazsa hata.
+ */
+export async function persistedIssuerKeys(db: D1Database, platform: Platform, issuer: IdentityTokenIssuer, keyId: string | null): Promise<JSONWebKeySet> {
+  const nowMs: number = platform.now().getTime();
+  const inMemory: CachedJwks | null = usableJwks(platform.jwksCache.get(issuer.jwksUrl), keyId, nowMs, jwksCacheTtlMs);
+  if (inMemory !== null) {
+    return inMemory.keys;
+  }
+  const record: CachedJwks | undefined = await storedJwks(db, issuer.jwksUrl);
+  const fresh: CachedJwks | null = usableJwks(record, keyId, nowMs, jwksCacheTtlMs);
+  if (fresh !== null) {
+    platform.jwksCache.set(issuer.jwksUrl, fresh);
+    return fresh.keys;
+  }
+  const stored: CachedJwks | null = usableJwks(record, keyId, nowMs, jwksStaleMaxMs);
+  if (stored === null) {
+    const keys: JSONWebKeySet = await fetchJwks(platform, issuer, 3, jwksTimeoutMs);
+    await saveJwks(db, platform, issuer.jwksUrl, keys, nowMs);
+    return keys;
+  }
+  try {
+    const keys: JSONWebKeySet = await fetchJwks(platform, issuer, 1, jwksRefreshTimeoutMs);
+    await saveJwks(db, platform, issuer.jwksUrl, keys, nowMs);
+    return keys;
+  } catch (error: unknown) {
+    if (!(error instanceof UpstreamError || isRetryableUpstreamError(error))) {
+      throw error;
+    }
+    log("warn", "jwks_stale_used", { service: issuer.jwksService, ageMs: nowMs - stored.fetchedAt, error: errorName(error) });
+    return stored.keys;
+  }
+}
+
+/** Günlük bakım: sağlayıcının anahtarlarını önceden alır ve kaydeder (girişler sağlayıcıyı beklemesin). */
+export async function refreshPersistedIssuerKeys(db: D1Database, platform: Platform, issuer: IdentityTokenIssuer): Promise<void> {
+  const keys: JSONWebKeySet = await fetchJwks(platform, issuer, 3, jwksTimeoutMs);
+  await saveJwks(db, platform, issuer.jwksUrl, keys, platform.now().getTime());
+  log("info", "jwks_refreshed", { service: issuer.jwksService, keys: keys.keys.length });
 }
 
 /**
@@ -103,7 +198,7 @@ export async function verifyIdentityToken(
   identityToken: string,
   rawNonce: string,
 ): Promise<VerifiedIdentityToken> {
-  const jwks: JSONWebKeySet = await issuerKeys(platform, issuer, tokenKeyId(identityToken, issuer));
+  const jwks: JSONWebKeySet = await persistedIssuerKeys(db, platform, issuer, tokenKeyId(identityToken, issuer));
   let payload: Readonly<Record<string, unknown>>;
   try {
     const verified = await jwtVerify(identityToken, createLocalJWKSet(jwks), {
