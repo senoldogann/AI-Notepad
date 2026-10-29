@@ -567,10 +567,10 @@ struct MeetingDetailPage: View {
         SendStatusLine(state: model.webhookStates[record.id], sending: "Kanala gönderiliyor…", sent: "Not kanala gönderildi")
         SendStatusLine(state: model.trackerStates[record.id], sending: "Görevler açılıyor…", sent: "Görevler gönderildi")
         if record.status == .queued {
-            // Çevrimdışı kaydedildi: ses ve canlı metin bu Mac'te; bağlantı gelince işlenir (ya da neden yazar).
+            // Çevrimdışı kaydedildi ya da içe aktarıldı: ses bu Mac'te; sunucuda işlenir (ya da neden yazar).
             NoticeCard(
                 severity: .info,
-                title: Text("İşlenmeyi bekliyor (çevrimdışı kaydedildi)"),
+                title: Text("İşlenmeyi bekliyor"),
                 detail: record.notice.map { Text(verbatim: $0) },
                 onDismiss: nil
             ) {

@@ -1495,7 +1495,7 @@ final class AppModel {
     }
 
     #if HOSTED_EDITION
-    /// Bekleyen (çevrimdışı kaydedilmiş) ilk toplantıyı işler: kayıt ya da işleme yokken sunucu oturumu hazırlanır
+    /// Bekleyen ilk toplantıyı (çevrimdışı kaydedilmiş ya da içe aktarılmış) işler: kayıt ya da işleme yokken sunucu oturumu hazırlanır
     /// (bkz. `HostedAccount.prepareQueuedMeeting`), sonra son geçiş ve not o oturumla üretilir. Sunucuya hâlâ
     /// ulaşılamıyorsa bekler; sunucu şimdilik işlemiyorsa (deneme bitti, sınır) kayıt bekleyen kalır ve nedeni toplantıda
     /// görünür. Ağ gelince, hak durumu okununca, uygulama öne gelince ve her işleme bitince tetiklenir; birer birer işler.
@@ -1827,9 +1827,18 @@ final class AppModel {
                 engine: liveEngine.recordingEngine, template: defaultNoteTemplate()
             )
             Self.logger.info("Dosya içe aktarıldı, toplantı: \(record.id, privacy: .public), süre: \(Int(duration), privacy: .public)")
+            #if HOSTED_EDITION
+            // Abonelik: içe aktarılan dosya da kayıt gibi kendi sunucu oturumuyla işlenir (haklar, deneme ve aylık süre
+            // sunucuda denetlenir; süre sesin gerçek uzunluğundan sayılır). Kuyruğa girer: içe aktarma bitince
+            // `runOfflineQueue` oturumu `clientRef` ile açar, son geçiş ve not o oturumla yapılır; sunucu reddederse
+            // ses silinmez, neden toplantıda yazar.
+            saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "İçe aktarıldı; sunucuda işlenmeyi bekliyor.")), directory: session.url)
+            reloadMeetings()
+            #else
             process(record: record, directory: session.url) { [weak self] () async -> LLMProvider? in
                 await self?.optionalLLMProvider()
             }
+            #endif
         } catch {
             Self.logger.error("Dosya içe aktarılamadı, hata: \(String(describing: error), privacy: .private)")
             importError = String(localized: "\(url.lastPathComponent) içe aktarılamadı: \(mediaImportMessage(error: error))")

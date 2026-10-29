@@ -500,6 +500,28 @@ private func silentWav() -> Data {
         _ = try await user.client.endMeeting(meetingID: other.meetingId)
     }
 
+    // İçe aktarılan dosya kayıt gibi sayılır: kuyruk sunucu oturumunu `clientRef` ile açar, deneme hakkı düşer; deneme
+    // bitince yeni içe aktarma reddedilir (`trial_exhausted`, ses Mac'te kalır), ama yarıda kalmış içe aktarmanın aynı
+    // kimlikle yinelenen açılışı (uygulama kapanıp açıldı) yine aynı oturumu döndürür.
+    @Test func importedFileCountsLikeRecordingAgainstLocalServer() async throws {
+        let baseURL: URL = try localServerBase()
+        let user: SignedInUser = try await signedInUser(baseURL: baseURL)
+        try markTrialStarted(userID: user.userID, usedMeetings: 2, startedAtMs: nowMs())
+        let importID: String = "ice-aktarim-\(UUID().uuidString.lowercased())"
+        let imported: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID)
+        #expect(imported.kind == "trial")
+        #expect(imported.trialMeetingsLeft == 0)
+        _ = try await user.client.endMeeting(meetingID: imported.meetingId)
+        let repeated: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: importID)
+        #expect(repeated.meetingId == imported.meetingId)
+        let refused: HostedAPIError? = await hostedError {
+            _ = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: "ice-aktarim-\(UUID().uuidString.lowercased())")
+        }
+        #expect(refused?.code == .trialExhausted)
+        let after: HostedEntitlements = try await user.client.entitlements()
+        #expect(hostedStartBlock(entitlements: after) == .trialEnded)
+    }
+
     @Test func signOutAndDeleteAccountAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
 

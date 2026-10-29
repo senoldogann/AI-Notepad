@@ -570,7 +570,7 @@ final class HostedAccount {
         }
     }
 
-    /// Bekleyen (çevrimdışı) kaydın sunucu oturumunu hazırlar. Kayıt daha önce bir oturuma bağlandıysa o kullanılır;
+    /// Bekleyen kaydın (çevrimdışı kaydedilmiş ya da içe aktarılmış) sunucu oturumunu hazırlar. Kayıt daha önce bir oturuma bağlandıysa o kullanılır;
     /// yoksa oturum açılır (sunucu hakları denetler; `clientRef` yinelenen denemenin ikinci oturum açmasını önler), kayda
     /// bağlanır ve hemen kapatılır: toplantı süresi sayılmaz, aylık kullanıma sesin gerçek süresi yazılır (son geçiş);
     /// not ve son geçiş sunucunun ek süresinde (30 dk) bu oturumla üretilir.
@@ -604,13 +604,13 @@ final class HostedAccount {
     private func queuedBlockReason(entitlements: HostedEntitlements) -> String {
         switch hostedStartBlock(entitlements: entitlements) {
         case .trialEnded:
-            String(localized: "Ücretsiz denemen bittiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; abone olunca kendiliğinden işlenir.")
+            String(localized: "Ücretsiz denemen bittiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; abone olunca kendiliğinden işlenir.")
         case .monthlyCapReached:
-            String(localized: "Bu ayki kullanım sınırın dolduğu için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; sınır sıfırlanınca kendiliğinden işlenir.")
+            String(localized: "Bu ayki kullanım sınırın dolduğu için bu toplantı işlenemedi. Ses bu Mac'te kalır; sınır sıfırlanınca kendiliğinden işlenir.")
         case .subscriptionEnded:
-            String(localized: "Aboneliğin sona erdiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; yeniden abone olunca kendiliğinden işlenir.")
+            String(localized: "Aboneliğin sona erdiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; yeniden abone olunca kendiliğinden işlenir.")
         case .none:
-            String(localized: "Bu kayıt şimdilik işlenemedi; kendiliğinden yeniden denenecek.")
+            String(localized: "Bu toplantı şimdilik işlenemedi; kendiliğinden yeniden denenecek.")
         }
     }
 

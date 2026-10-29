@@ -1291,13 +1291,13 @@
         }
       }
     },
-    "Aboneliğin sona erdiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; yeniden abone olunca kendiliğinden işlenir.": {
+    "Aboneliğin sona erdiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; yeniden abone olunca kendiliğinden işlenir.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recording couldn't be processed because your subscription has ended. The recording and live transcript stay on this Mac; it's processed automatically once you subscribe again."
+            "value": "This meeting couldn't be processed because your subscription has ended. The audio stays on this Mac; it's processed automatically once you subscribe again."
           }
         }
       }
@@ -2973,13 +2973,13 @@
         }
       }
     },
-    "Bu ayki kullanım sınırın dolduğu için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; sınır sıfırlanınca kendiliğinden işlenir.": {
+    "Bu ayki kullanım sınırın dolduğu için bu toplantı işlenemedi. Ses bu Mac'te kalır; sınır sıfırlanınca kendiliğinden işlenir.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recording couldn't be processed because this month's limit is used up. The recording and live transcript stay on this Mac; it's processed automatically when the limit resets."
+            "value": "This meeting couldn't be processed because this month's limit is used up. The audio stays on this Mac; it's processed automatically when the limit resets."
           }
         }
       }
@@ -3195,17 +3195,6 @@
         }
       }
     },
-    "Bu kayıt şimdilik işlenemedi; kendiliğinden yeniden denenecek.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This recording couldn't be processed yet; it will be retried automatically."
-          }
-        }
-      }
-    },
     "Bu kişi bundan sonra sesinden tanınmaz": {
       "localizations": {
         "en": {
@@ -3316,6 +3305,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting isn't linked to a recording session on the server; speakers stay as in the live transcript."
+          }
+        }
+      }
+    },
+    "Bu toplantı şimdilik işlenemedi; kendiliğinden yeniden denenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed yet; it will be retried automatically."
           }
         }
       }
@@ -13550,13 +13550,13 @@
         }
       }
     },
-    "Ücretsiz denemen bittiği için bu kayıt işlenemedi. Kayıt ve canlı metin bu Mac'te; abone olunca kendiliğinden işlenir.": {
+    "Ücretsiz denemen bittiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; abone olunca kendiliğinden işlenir.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This recording couldn't be processed because your free trial has ended. The recording and live transcript stay on this Mac; it's processed automatically once you subscribe."
+            "value": "This meeting couldn't be processed because your free trial has ended. The audio stays on this Mac; it's processed automatically once you subscribe."
           }
         }
       }
@@ -13939,6 +13939,17 @@
         }
       }
     },
+    "İçe aktarıldı; sunucuda işlenmeyi bekliyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported; waiting to be processed on the server."
+          }
+        }
+      }
+    },
     "İçe aktar…": {
       "localizations": {
         "en": {
@@ -14006,17 +14017,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting to be processed"
-          }
-        }
-      }
-    },
-    "İşlenmeyi bekliyor (çevrimdışı kaydedildi)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Waiting to be processed (recorded offline)"
           }
         }
       }
