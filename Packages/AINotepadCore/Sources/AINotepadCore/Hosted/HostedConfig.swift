@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 import Security
 
-/// Abonelik uygulamasının özel adres şeması: e-posta giriş bağlantısı uygulamayı
-/// `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile açar.
+/// Abonelik uygulamasının özel adres şeması: sitedeki Google girişi uygulamayı
+/// `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile açar (bkz. `hostedGoogleIDToken`).
 public let hostedURLScheme: String = "com.senoldogan.ainotepad.hosted"
 
 /// Abonelik uygulamasının Anahtar Zinciri servis adı (geliştirici sürümünün `keychainService`'inden ayrı).
@@ -34,22 +34,8 @@ public func requireSecureHostedBaseURL(url: URL) throws {
     }
 }
 
-/// E-posta giriş bağlantısından tek kullanımlık jeton: `<şema>://auth/email?token=…`. Şema, yol ya da jeton
-/// beklenen biçimde değilse `invalidSignInLink`. Jeton sunucunun ürettiği base64url metnidir (32 bayt → 43 karakter).
-/// Saf fonksiyondur.
-public func hostedEmailLinkToken(url: URL) throws -> String {
-    guard url.scheme?.lowercased() == hostedURLScheme,
-          let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-          components.host == "auth", components.path == "/email",
-          let token = components.queryItems?.first(where: { $0.name == "token" })?.value,
-          (32...128).contains(token.count),
-          token.allSatisfy({ (character: Character) -> Bool in character.isASCII && (character.isLetter || character.isNumber || character == "-" || character == "_") }) else {
-        throw HostedClientError.invalidSignInLink
-    }
-    return token
-}
-
-/// Apple ile giriş için rastgele ham nonce (32 bayt, onaltılık). Ham değer sunucuya, SHA-256'sı Apple'a verilir.
+/// Apple ve Google ile giriş için rastgele ham nonce (32 bayt, onaltılık, CSPRNG). Ham değer sunucuya, SHA-256'sı
+/// kimlik sağlayıcısına (Apple isteği ya da Google giriş sayfası) verilir.
 public func makeHostedNonce() throws -> String {
     var bytes: [UInt8] = [UInt8](repeating: 0, count: 32)
     let status: OSStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -59,7 +45,7 @@ public func makeHostedNonce() throws -> String {
     return bytes.map { String(format: "%02x", $0) }.joined()
 }
 
-/// Apple'a verilen nonce: ham nonce'un SHA-256'sı, küçük harf onaltılık (sunucu `sha256hex(nonce)` ile karşılaştırır).
+/// Kimlik sağlayıcısına verilen nonce: ham nonce'un SHA-256'sı, küçük harf onaltılık (sunucu `sha256hex(nonce)` ile karşılaştırır).
 /// Saf fonksiyondur.
 public func hostedNonceHash(nonce: String) -> String {
     SHA256.hash(data: Data(nonce.utf8)).map { String(format: "%02x", $0) }.joined()

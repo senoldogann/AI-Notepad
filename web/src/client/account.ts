@@ -1,14 +1,20 @@
 // Hesap sayfası: `/v1/me` (plan, kalan deneme, aylık saat, abonelik ve ek süre), Abone ol (Checkout), Aboneliği yönet
 // (Portal), çıkış ve onaylı hesap silme (`DELETE /v1/me`). Oturum yoksa giriş sayfasına geçilir.
 import { ApiRequestError, type Entitlements, type RawResponse, type SubscriptionInfo, parseEntitlements, parseRedirectUrl } from "./api";
-import { dataValue, element, errorText, hideNotice, pageCopy, pageLang, showNotice } from "./dom";
+import { type ClientCopy, clientCopy, fill } from "./copy";
+import { dataValue, element, errorText, hideNotice, showNotice } from "./dom";
 import { SignedOutError, authorizedSend, clearSession, hasSession, signOut } from "./session";
-import { type ClientCopy, fill } from "../i18n/client-copy";
-import type { Lang } from "../i18n/routes";
+import { siteLocale } from "../config";
 
 /** Ödeme dönüşünde aboneliğin görünmesi için en çok kaç kez, kaç ms arayla yeniden bakılır (webhook gecikmesi). */
 const paymentPollAttempts: number = 6;
 const paymentPollIntervalMs: number = 2000;
+/** Ödeme bildirimi bu kadar görünür kalır, sonra solup kaybolur. */
+const paymentNoticeMs: number = 6000;
+/** Solma süresi (global.css `.notice--fading`). */
+const noticeFadeMs: number = 400;
+/** Hesap silinince ana sayfaya geçmeden önce bekleme. */
+const deletedRedirectMs: number = 3000;
 
 /** Etiket görünümü. */
 type PillTone = "ok" | "warn" | "plain";
@@ -27,30 +33,30 @@ interface AccountView {
   readonly canManage: boolean;
 }
 
-/** Tarihi sayfa dilinde yazar. Saf fonksiyondur. */
-function formatDate(iso: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(lang, { dateStyle: "long" }).format(new Date(iso));
+/** Tarihi sitenin yerel ayarında yazar. Saf fonksiyondur. */
+function formatDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(new Date(iso));
 }
 
-/** Saati sayfa dilinde (en çok bir ondalık) yazar. Saf fonksiyondur. */
-function formatHours(hours: number, lang: Lang): string {
-  return new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(hours);
+/** Saati sitenin yerel ayarında (en çok bir ondalık) yazar. Saf fonksiyondur. */
+function formatHours(hours: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
 /** Sunucu yanıtından gösterilecek değerleri üretir. Saf fonksiyondur. */
-export function accountView(me: Entitlements, text: ClientCopy, lang: Lang): AccountView {
+export function accountView(me: Entitlements, text: ClientCopy, locale: string): AccountView {
   const subscription: SubscriptionInfo | null = me.subscription;
   const subscribed: boolean = me.plan === "subscription";
   let subscriptionText: string = text.subscriptionNone;
   let subscriptionPill: AccountView["subscriptionPill"] = null;
   if (subscription !== null && subscription.access === "active" && subscription.cancelAt !== null) {
-    subscriptionText = fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, lang) });
+    subscriptionText = fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
     subscriptionPill = { text: text.pillCanceling, tone: "warn" };
   } else if (subscription !== null && subscription.access === "active") {
-    subscriptionText = fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, lang) });
+    subscriptionText = fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, locale) });
     subscriptionPill = { text: text.pillActive, tone: "ok" };
   } else if (subscription !== null && subscription.access === "grace") {
-    subscriptionText = fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, lang) });
+    subscriptionText = fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, locale) });
     subscriptionPill = { text: text.pillGrace, tone: "warn" };
   } else if (subscription !== null) {
     subscriptionText = text.subscriptionEnded;
@@ -60,7 +66,7 @@ export function accountView(me: Entitlements, text: ClientCopy, lang: Lang): Acc
     plan: subscribed ? text.plan.subscription : text.plan.trial,
     planPill: subscribed ? { text: text.pillActive, tone: "ok" } : { text: text.pillTrial, tone: "plain" },
     trial: subscribed ? text.trialNotUsed : fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal) }),
-    hours: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, lang), cap: formatHours(me.monthlyHoursCap, lang) }),
+    hours: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
     hoursUsed: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
     hoursCap: me.monthlyHoursCap,
     subscription: subscriptionText,
@@ -157,8 +163,20 @@ function bindAction(button: HTMLButtonElement, notice: HTMLElement, text: Client
   });
 }
 
+/** Ödeme bildirimini gösterir; `paymentNoticeMs` sonra solar ve gizlenir. */
+function showPaymentNotice(): void {
+  const notice: HTMLElement = element("payment-done", HTMLElement);
+  notice.classList.remove("hidden");
+  setTimeout((): void => {
+    notice.classList.add("notice--fading");
+    setTimeout((): void => {
+      notice.classList.add("hidden");
+    }, noticeFadeMs);
+  }, paymentNoticeMs);
+}
+
 /** Silme penceresini bağlar: onay kelimesi yazılınca silme düğmesi açılır. */
-function bindDeletion(text: ClientCopy, signInPath: string): void {
+function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): void {
   const dialog: HTMLDialogElement = element("delete-dialog", HTMLDialogElement);
   const input: HTMLInputElement = element("confirm-input", HTMLInputElement);
   const confirm: HTMLButtonElement = element("confirm-delete", HTMLButtonElement);
@@ -175,7 +193,7 @@ function bindDeletion(text: ClientCopy, signInPath: string): void {
     dialog.close();
   });
   input.addEventListener("input", (): void => {
-    confirm.disabled = input.value.trim().toLocaleUpperCase(pageLang()) !== confirmWord;
+    confirm.disabled = input.value.trim().toUpperCase() !== confirmWord;
   });
   bindAction(confirm, dialogNotice, text, signInPath, async (): Promise<void> => {
     await authorizedSend({ method: "DELETE", path: "/v1/me", body: null, attempts: 1 });
@@ -187,6 +205,10 @@ function bindDeletion(text: ClientCopy, signInPath: string): void {
     const deleted: HTMLElement = element("account-deleted", HTMLElement);
     deleted.classList.remove("hidden");
     deleted.focus();
+    // Kısa bir süre "hesabın silindi" görünür, sonra ana sayfaya geçilir (elle dönüş bağlantısı da durur).
+    setTimeout((): void => {
+      window.location.assign(homePath);
+    }, deletedRedirectMs);
   });
 }
 
@@ -195,16 +217,17 @@ async function main(): Promise<void> {
   const root: HTMLElement = element("account", HTMLElement);
   const signInPath: string = dataValue(root, "signInPath");
   const notice: HTMLElement = element("account-error", HTMLElement);
-  const text: ClientCopy = pageCopy();
-  const lang: Lang = pageLang();
+  const homePath: string = dataValue(root, "homePath");
+  const text: ClientCopy = clientCopy;
   if (!hasSession()) {
     window.location.replace(signInPath);
     return;
   }
   const params: URLSearchParams = new URLSearchParams(window.location.search);
-  const paymentDone: boolean = params.get("odeme") === "tamam";
+  // Stripe Checkout dönüşü: `/account?payment=done`. Sorgu hemen silinir; yenilemede bildirim yeniden görünmez.
+  const paymentDone: boolean = params.get("payment") === "done";
   if (paymentDone) {
-    element("payment-done", HTMLElement).classList.remove("hidden");
+    showPaymentNotice();
     history.replaceState(null, "", window.location.pathname);
   }
 
@@ -214,14 +237,14 @@ async function main(): Promise<void> {
     try {
       await signOut();
     } finally {
-      window.location.assign(dataValue(root, "homePath"));
+      window.location.assign(homePath);
     }
   });
-  bindDeletion(text, signInPath);
+  bindDeletion(text, signInPath, homePath);
 
   try {
     const me: Entitlements = paymentDone ? await fetchMeAfterPayment() : await fetchMe();
-    render(accountView(me, text, lang));
+    render(accountView(me, text, siteLocale));
     element("account-loading", HTMLElement).classList.add("hidden");
     element("account-content", HTMLElement).classList.remove("hidden");
   } catch (error: unknown) {

@@ -25,14 +25,17 @@ public func notesHTML(record: MeetingRecord, note: MeetingNote) -> String {
     return parts.joined(separator: "\n")
 }
 
-/// Apple Notlar'da "AI-Notepad" klasörüne not oluşturan AppleScript (klasör yoksa oluşturur). Gövde AppleScript
-/// dizgesi olarak kaçışlanır. Saf fonksiyondur.
-public func appleNotesScript(html: String) -> String {
-    let quoted: String = "\"" + html.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+/// Apple Notlar'da `folder` klasörüne (uygulamanın görünen adı: "AI-Notepad" ya da "Gistsmith") not oluşturan
+/// AppleScript (klasör yoksa oluşturur). Klasör adı ve gövde AppleScript dizgesi olarak kaçışlanır. Saf fonksiyondur.
+public func appleNotesScript(html: String, folder: String) -> String {
+    let quote: (String) -> String = { (text: String) -> String in
+        "\"" + text.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+    }
+    let folderName: String = quote(folder)
     return """
     tell application "Notes"
-        if not (exists folder "AI-Notepad") then make new folder with properties {name:"AI-Notepad"}
-        make new note at folder "AI-Notepad" with properties {body:\(quoted)}
+        if not (exists folder \(folderName)) then make new folder with properties {name:\(folderName)}
+        make new note at folder \(folderName) with properties {body:\(quote(html))}
     end tell
     """
 }

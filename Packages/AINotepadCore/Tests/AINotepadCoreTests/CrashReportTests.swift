@@ -79,12 +79,6 @@ private let samplePayload: String = """
 }
 """
 
-/// Adresin sorgu değerini çözer.
-private func queryValue(url: URL, name: String) throws -> String {
-    let components: URLComponents = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-    return try #require(components.queryItems?.first { $0.name == name }?.value)
-}
-
 @Suite struct CrashReportTests {
     // Çökme önce, donma sonra; çöken iş parçacığının çerçeveleri tepeden aşağı.
     @Test func summarisesCrashAndHang() throws {
@@ -97,7 +91,6 @@ private func queryValue(url: URL, name: String) throws -> String {
         #expect(crash.topFrames == ["AINotepad + 0x12345", "SwiftUI + 0xff", "dyld + 0x10"])
         #expect(crashCause(diagnostic: crash) == "EXC_BAD_ACCESS · SIGSEGV")
         #expect(crashCause(diagnostic: diagnostics[1]) == "6 sec")
-        #expect(crashIssueTitle(diagnostic: crash) == "Crash: EXC_BAD_ACCESS · SIGSEGV (0.1.2, build 3)")
     }
 
     // CPU/disk teşhisi gibi çökme ve donma içermeyen paket boş özet verir (saklanmaz).
@@ -106,37 +99,19 @@ private func queryValue(url: URL, name: String) throws -> String {
         #expect(try crashDiagnostics(payload: Data(payload.utf8)).isEmpty)
     }
 
-    // Konu adresi başlık, sürüm, sistem ve çerçeveleri taşır; "+" kodlanır (GitHub'da boşluğa dönmez).
-    @Test func issueURLCarriesSummary() throws {
-        let crash: CrashDiagnostic = try crashDiagnostics(payload: Data(samplePayload.utf8))[0]
-        let url: URL = try crashIssueURL(diagnostic: crash, maxLength: crashIssueURLLimit)
-        #expect(url.absoluteString.hasPrefix(crashIssueBaseURL + "?title="))
-        #expect(!url.absoluteString.contains("+"))
-        #expect(try queryValue(url: url, name: "title") == "Crash: EXC_BAD_ACCESS · SIGSEGV (0.1.2, build 3)")
-        let body: String = try queryValue(url: url, name: "body")
-        #expect(body.contains("0.1.2 (build 3)"))
-        #expect(body.contains("macOS 26.0 (25A354)"))
-        #expect(body.contains("0  AINotepad + 0x12345"))
-        #expect(body.contains("2  dyld + 0x10"))
-        #expect(!body.contains("virtualMemoryRegionInfo"))
-    }
-
-    // Uzun yığın adrese sığana dek kısaltılır; tepe çerçeve kalır.
-    @Test func issueURLTruncatesFramesToFit() throws {
-        let frames: [String] = (0..<20).map { "AINotepadCore + 0x\(String($0 * 4096, radix: 16))\(String(repeating: "a", count: 120))" }
-        let diagnostic: CrashDiagnostic = CrashDiagnostic(
-            kind: .crash, appVersion: "0.1.3", appBuild: "4", osVersion: "iPhone OS 26.1 (23B85)", architecture: "arm64e",
-            exceptionType: 6, exceptionCode: 1, signal: 5, terminationReason: "Namespace SIGNAL, Code 5 Trace/BPT trap: 5",
-            hangDuration: nil, topFrames: frames
-        )
-        let full: URL = try crashIssueURL(diagnostic: diagnostic, maxLength: 100_000)
-        let limit: Int = 2000
-        let short: URL = try crashIssueURL(diagnostic: diagnostic, maxLength: limit)
-        #expect(full.absoluteString.count > limit)
-        #expect(short.absoluteString.count <= limit)
-        let body: String = try queryValue(url: short, name: "body")
-        #expect(body.contains("0  AINotepadCore + 0x0"))
-        #expect(!body.contains("19  AINotepadCore"))
+    // Çökme raporu saklanan MetricKit JSON'unu olduğu gibi, çöken sürüm ve sistemle taşır; mesaj ve e-posta yok.
+    @Test func crashReportRequestCarriesPayload() throws {
+        let payload: Data = Data(samplePayload.utf8)
+        let crash: CrashDiagnostic = try crashDiagnostics(payload: payload)[0]
+        let request: ReportRequest = try crashReportRequest(payload: payload, diagnostic: crash)
+        #expect(request == ReportRequest(kind: .crash, message: nil, email: nil, appVersion: "0.1.2 (3)", os: "macOS 26.0 (25A354)", payload: samplePayload))
+        let encoded: [String: String] = try JSONDecoder().decode([String: String].self, from: try JSONEncoder().encode(request))
+        #expect(Set(encoded.keys) == ["kind", "appVersion", "os", "payload"])
+        #expect(encoded["kind"] == "crash")
+        let tooLarge: Data = Data(repeating: 0x20, count: reportPayloadLimitBytes + 1)
+        #expect(throws: ReportError.payloadTooLarge(bytes: reportPayloadLimitBytes + 1, limit: reportPayloadLimitBytes)) {
+            try crashReportRequest(payload: tooLarge, diagnostic: crash)
+        }
     }
 
     // Şerit yalnız görülmemiş, çökme içeren en yeni raporu gösterir.

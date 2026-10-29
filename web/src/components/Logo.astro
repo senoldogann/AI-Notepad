@@ -17,18 +17,13 @@ const { size } = Astro.props;
 </svg>
 
 <style>
+  /* Koyu temada karo zeminden ince bir kenarla ayrılır. */
   .logo-mark__tile {
     fill: #0a0a0a;
-    stroke: transparent;
+    stroke: light-dark(transparent, #3a3a3a);
   }
 
   .logo-mark__bars {
     fill: #fafafa;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .logo-mark__tile {
-      stroke: #3a3a3a;
-    }
   }
 </style>

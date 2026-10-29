@@ -198,7 +198,7 @@ struct MainWindowView: View {
         .overlay {
             // Animasyonsuz kaldırılır: sönmeyi açılış ekranı kendisi yapar (bkz. `LaunchSplash.play`).
             if !router.hasShownSplash {
-                LaunchSplash {
+                LaunchSplash(appName: appName) {
                     var transaction: Transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) { router.hasShownSplash = true }

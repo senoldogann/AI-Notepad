@@ -58,10 +58,11 @@ private let sampleNote: MeetingNote = MeetingNote(
             title: "Bütçe <script>alert(1)</script>", summary: "A & B", decisions: ["Karar"],
             tasks: [NoteTask(owner: "Senol", description: "Sunum", dueDate: "Perşembe", isMine: true)], glossary: []
         )
-        let html: String = meetingHTML(record: sampleRecord(), note: note, language: nil)
+        let html: String = meetingHTML(record: sampleRecord(), note: note, language: nil, appName: "Gistsmith")
         #expect(html.contains("&lt;script&gt;") && !html.contains("<script>"))
+        #expect(html.contains("<footer>Gistsmith</footer>"))
         #expect(html.contains("A &amp; B") && html.contains("Senol") && html.contains("Perşembe"))
-        #expect(meetingHTML(record: sampleRecord(), note: note, language: .german).contains("Entscheidungen"))
+        #expect(meetingHTML(record: sampleRecord(), note: note, language: .german, appName: "AI-Notepad").contains("Entscheidungen"))
     }
 }
 
@@ -90,7 +91,9 @@ struct WebhookLiveTests {
         let note: MeetingNote = MeetingNote(title: "Bütçe \"Q4\" <taslak>", summary: "A & B", decisions: ["Karar"], tasks: [], glossary: [])
         let html: String = notesHTML(record: sampleRecord(), note: note)
         #expect(html.contains("&lt;taslak&gt;") && html.contains("A &amp; B"))
-        #expect(appleNotesScript(html: html).contains("{body:\"<h1>Bütçe \\\"Q4\\\""))
+        let script: String = appleNotesScript(html: html, folder: "Gistsmith")
+        #expect(script.contains("{body:\"<h1>Bütçe \\\"Q4\\\""))
+        #expect(script.contains("make new note at folder \"Gistsmith\""))
         let record: MeetingRecord = sampleRecord().with(note: MeetingNote(title: "Plan: Q4/2026?", summary: "Özet", decisions: [], tasks: [], glossary: []))
         #expect(markdownFileName(record: record).hasSuffix(" Plan  Q4 2026.md"))
         let folder: URL = try temporaryDirectory()

@@ -1,26 +1,34 @@
 ---
-// Bulunamayan sayfa: iki dilde birlikte (Cloudflare Pages tüm bilinmeyen adreslerde bunu 404 durumuyla döndürür).
-import Minimal from "../layouts/Minimal.astro";
-import { copy } from "../i18n/copy";
-import { type Lang, langs, pagePath } from "../i18n/routes";
+// Bulunamayan sayfa (Cloudflare Pages tüm bilinmeyen adreslerde bunu 404 durumuyla döndürür).
+import Base from "../layouts/Base.astro";
+import Icon from "../components/Icon.astro";
+import { copy, type NotFoundCopy } from "../copy";
+import { routes } from "../routes";
+
+const text: NotFoundCopy = copy.notFound;
 ---
 
-<Minimal title={`404 — AI-Notepad`} description={copy.en.notFound.text} indexed={false} alternatesFor={null}>
-  <p class="code tabular" aria-hidden="true">404</p>
-  {
-    langs.map((lang: Lang) => (
-      <section class="not-found" lang={lang}>
-        <h1 class="title-m">{copy[lang].notFound.title}</h1>
-        <p class="muted">{copy[lang].notFound.text}</p>
-        <a class="text-link" href={pagePath("home", lang)}>
-          {copy[lang].notFound.home} <span aria-hidden="true">→</span>
-        </a>
-      </section>
-    ))
-  }
-</Minimal>
+<Base page="notFound" meta={text.meta} indexed={false}>
+  <section class="narrow not-found">
+    <p class="code tabular" aria-hidden="true">404</p>
+    <h1 class="title-l">{text.title}</h1>
+    <p class="muted">{text.text}</p>
+    <a class="button button--primary" href={routes.home}>
+      {text.home}
+      <Icon name="arrow-right" size={16} class="" />
+    </a>
+  </section>
+</Base>
 
 <style>
+  .not-found {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding-block: clamp(64px, 12vw, 140px);
+    text-align: center;
+  }
+
   .code {
     font-size: clamp(4rem, 14vw, 8rem);
     font-weight: 600;
@@ -32,9 +40,7 @@ import { type Lang, langs, pagePath } from "../i18n/routes";
     color: transparent;
   }
 
-  .not-found {
-    display: grid;
-    gap: 6px;
-    justify-items: center;
+  .not-found .button {
+    margin-top: 10px;
   }
 </style>

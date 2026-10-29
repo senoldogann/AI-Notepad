@@ -1,4 +1,5 @@
-// AI-Notepad abonelik sürümü sunucusu (Cloudflare Worker).
+// Gistsmith abonelik sürümü sunucusu (Cloudflare Worker). İç adlar (worker, D1, paket kimlikleri) eski
+// `ainotepad` adını korur.
 // Gizli değerler burada değil, `wrangler secret put` ile girilir (bkz. README.md).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -18,17 +19,31 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir.
+  // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
+  // çökme, iletişim) IP başına dakikada 5; ayrıca tüm kullanıcılar için günlük `REPORTS_PER_DAY`.
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
     { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
-    { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } }
+    { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } },
+    { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } }
   ],
   "vars": {
     "ENVIRONMENT": "development",
     "SITE_ORIGIN": "http://localhost:8788",
     "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
+    // Google OAuth istemci kimlikleri (açık değerler); kimlik jetonunun `aud`'u bunlardan biri olmalı. Mac uygulaması
+    // Google kimlik jetonunu site üzerinden aldığı için tek istemci sitenin web istemcisidir.
+    "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
+    // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğini
+    // öğrenmek için giriş yapıp `GET /v1/admin/stats` çağır: 403 yanıtındaki `error.identity`.
+    "ADMIN_IDENTITIES": "",
+    // `GET /v1/download/mac` buraya yönlendirir (302) ve günlük sayacı artırır.
+    "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
+    // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
+    "PRICE_USD_MONTHLY": "5.99",
+    // Tüm kullanıcılar için günde en çok kabul edilen rapor; aşılınca `429 daily_cap_reached`.
+    "REPORTS_PER_DAY": "500",
     "APP_ATTEST_POLICY": "optional",
     "APP_ATTEST_ENVIRONMENT": "development",
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
@@ -78,14 +93,14 @@
     "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
     "DAILY_SPEND_CEILING_USD": "25",
     "REFRESH_TOKEN_DAYS": "60",
-    "EMAIL_SENDER": "dev",
-    "EMAIL_FROM": "AI-Notepad <giris@example.com>",
-    "EMAIL_LINK_URL": "http://localhost:8788/giris/eposta",
     "STRIPE_PRICE_ID": "price_placeholder"
   },
   "env": {
     "production": {
       "name": "ainotepad-server-production",
+      // Özel alan adı (gistsmith.com bölgesi aynı hesapta): https://api.gistsmith.com. Geçiş süresince eski
+      // workers.dev adresi de açık kalır (üstteki `workers_dev: true` kalıtılır).
+      "routes": [{ "pattern": "api.gistsmith.com", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
@@ -98,12 +113,22 @@
         { "name": "AUTH_IP_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
         { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 300, "period": 60 } },
         { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
-        { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } }
+        { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } },
+        { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } }
       ],
       "vars": {
         "ENVIRONMENT": "production",
-        "SITE_ORIGIN": "https://ainotepad.pages.dev",
+        // Site; API özel alan adı `https://api.gistsmith.com` (Cloudflare panelinde Worker'a bağlanır), workers.dev de açık.
+        "SITE_ORIGIN": "https://gistsmith.com",
         "APPLE_CLIENT_IDS": "com.senoldogan.AINotepad.hosted,com.senoldogan.AINotepad.web",
+        // Sitenin Google web istemcisi (bkz. üstteki geliştirme `vars` açıklaması). `placeholder` içeren değerle üretim
+        // her istekte 500 verir (ConfigPlaceholderError).
+        "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
+        // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
+        "ADMIN_IDENTITIES": "google:101383806107899312129",
+        "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
+        "PRICE_USD_MONTHLY": "5.99",
+        "REPORTS_PER_DAY": "500",
         "APP_ATTEST_POLICY": "optional",
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",
@@ -134,12 +159,7 @@
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
         "DAILY_SPEND_CEILING_USD": "25",
         "REFRESH_TOKEN_DAYS": "60",
-        // Geçici: alan adı ve Resend hesabı yokken e-posta gönderilmez (`email_login_link_dev` logu); giriş yalnızca
-        // Apple ile çalışır. Alan adı alınınca "resend", gönderici o alan adından ve RESEND_API_KEY gizli değeri.
-        "EMAIL_SENDER": "dev",
-        "EMAIL_FROM": "AI-Notepad <giris@ainotepad.pages.dev>",
-        "EMAIL_LINK_URL": "https://ainotepad.pages.dev/giris/eposta",
-        "STRIPE_PRICE_ID": "price_1UVfcuLZMyeEus1FzSQVrqKa"
+        "STRIPE_PRICE_ID": "price_1UVgVdLYGoRn8lDP8H0WX1VF"
       }
     }
   }

@@ -256,7 +256,8 @@ private struct RegistrationResponse: Decodable {
 }
 
 /// Dinamik istemci kaydı (RFC 7591): gizli anahtarsız (PKCE) yerel uygulama olarak kaydolur, istemci kimliği döner.
-public func registerClient(metadata: AuthorizationServerMetadata, redirectURI: String, server: String) async throws -> String {
+/// `clientName`: servisin izin ekranında ve bağlı uygulamalar listesinde görünen ad (uygulamanın görünen adı).
+public func registerClient(metadata: AuthorizationServerMetadata, redirectURI: String, server: String, clientName: String) async throws -> String {
     guard let endpoint = metadata.registrationEndpoint else {
         throw MCPRemoteError.noDynamicRegistration(server: server)
     }
@@ -265,7 +266,7 @@ public func registerClient(metadata: AuthorizationServerMetadata, redirectURI: S
     request.timeoutInterval = 20
     request.setValue("application/json", forHTTPHeaderField: "content-type")
     request.httpBody = try JSONEncoder().encode(RegistrationRequest(
-        clientName: "AI-Notepad", redirectURIs: [redirectURI], grantTypes: ["authorization_code", "refresh_token"],
+        clientName: clientName, redirectURIs: [redirectURI], grantTypes: ["authorization_code", "refresh_token"],
         responseTypes: ["code"], tokenEndpointAuthMethod: "none"
     ))
     let (data, response): (Data, URLResponse)

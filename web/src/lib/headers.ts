@@ -1,24 +1,28 @@
-// Cloudflare Pages `_headers` dosyası: sıkı CSP (yalnızca site, Apple ile giriş, Turnstile ve API kaynakları), HSTS,
-// Referrer-Policy, Permissions-Policy ve önbellek kuralları. Derlemede yapılandırmadan üretilir (astro.config.ts).
-import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
-import { type Lang, langs, pagePath } from "../i18n/routes";
+// Cloudflare Pages `_headers` dosyası: sıkı CSP (yalnızca site, Apple ve Google ile giriş, Turnstile ve API kaynakları),
+// HSTS, Referrer-Policy, Permissions-Policy ve önbellek kuralları. Derlemede yapılandırmadan üretilir (astro.config.ts).
+import { appleAuthScriptUrl, appleIdOrigin, googleGsiBase, googleScriptUrl, type SiteConfig, turnstileOrigin } from "../config";
+import { type PageKey, privatePages, routes } from "../routes";
 
 /** Adresin kaynağı (şema + alan adı + kapı). Saf fonksiyondur. */
 function originOf(url: string): string {
   return new URL(url).origin;
 }
 
-/** İçerik güvenlik politikası. Satır içi betik ve stil yoktur; `'unsafe-inline'` kullanılmaz. Saf fonksiyondur. */
+/**
+ * İçerik güvenlik politikası. Satır içi betik ve stil yoktur; `'unsafe-inline'` kullanılmaz. Google Identity Services
+ * için Google'ın belgelediği kaynaklar eklenir: betik `gsi/client`, stil `gsi/style`, iframe ve istekler `gsi/`. Saf
+ * fonksiyondur.
+ */
 export function contentSecurityPolicy(config: SiteConfig): string {
   const appleCdn: string = originOf(appleAuthScriptUrl);
   const directives: readonly string[] = [
     "default-src 'none'",
-    `script-src 'self' ${appleCdn} ${turnstileOrigin}`,
-    "style-src 'self'",
+    `script-src 'self' ${appleCdn} ${turnstileOrigin} ${googleScriptUrl}`,
+    `style-src 'self' ${googleGsiBase}style`,
     "img-src 'self'",
     "font-src 'self'",
-    `connect-src 'self' ${originOf(config.apiBase)}`,
-    `frame-src ${turnstileOrigin} ${appleIdOrigin}`,
+    `connect-src 'self' ${originOf(config.apiBase)} ${googleGsiBase}`,
+    `frame-src ${turnstileOrigin} ${appleIdOrigin} ${googleGsiBase}`,
     "manifest-src 'self'",
     `form-action 'self' ${appleIdOrigin}`,
     "base-uri 'none'",
@@ -55,7 +59,7 @@ export function pagesHeaders(config: SiteConfig): string {
     `  Permissions-Policy: ${permissionsPolicy}`,
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
-    // Apple ile giriş açılır pencere kullanır: açtığımız pencereyle bağ korunur, başka sayfalar bizi açamaz.
+    // Apple ve Google ile giriş açılır pencere kullanır: açtığımız pencereyle bağ korunur, başka sayfalar bizi açamaz.
     "  Cross-Origin-Opener-Policy: same-origin-allow-popups",
     "  Cross-Origin-Resource-Policy: same-origin",
     "",
@@ -67,8 +71,8 @@ export function pagesHeaders(config: SiteConfig): string {
     "/fonts/*",
     "  Cache-Control: public, max-age=2592000",
     "",
-    // Kişiye özel sayfalar önbelleğe alınmaz.
-    ...langs.flatMap((lang: Lang): string[] => [pagePath("account", lang), pagePath("emailLink", lang)]).flatMap((path: string): string[] => [path, "  Cache-Control: no-store"]),
+    // Kişiye özel sayfalar (hesap, yönetim) önbelleğe alınmaz.
+    ...privatePages.flatMap((page: PageKey): string[] => [routes[page], "  Cache-Control: no-store"]),
     "",
   ];
   return lines.join("\n");

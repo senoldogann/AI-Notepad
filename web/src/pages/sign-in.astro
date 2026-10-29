@@ -1,0 +1,199 @@
+---
+// Giriş sayfası: Apple ile giriş ve Google ile giriş (resmî Google düğmesi). `?app=1&nonce=…` ile Mac uygulaması adına
+// yalnızca Google girişi yapılır ve jeton uygulamaya iletilir. Betik: src/client/sign-in.ts.
+import Base from "../layouts/Base.astro";
+import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
+import Logo from "../components/Logo.astro";
+import Waveform from "../components/Waveform.astro";
+import { copy, type CommonCopy, type SignInCopy } from "../copy";
+import { pageUrl, routes } from "../routes";
+import { siteConfig } from "../site";
+
+const text: SignInCopy = copy.signIn;
+const common: CommonCopy = copy.common;
+---
+
+<Base page="signIn" meta={text.meta} indexed={true}>
+  <section class="page auth" id="signin" data-account-path={routes.account} data-redirect-uri={pageUrl("signIn", siteConfig.siteOrigin)}>
+    <Film palette="violet" layout="clouds-right" class="auth__cover">
+      <div class="glass auth__badge">
+        <Logo size={44} />
+        <p class="auth__tagline">{common.footer.tagline}</p>
+        <Waveform seed={common.footer.tagline} width={150} height={32} class="auth__wave" />
+      </div>
+    </Film>
+
+    <div class="auth__panel">
+      <div id="signin-intro" class="auth__intro">
+        <h1 class="title-l">{text.title}</h1>
+        <p class="muted">{text.lead}</p>
+      </div>
+      <div id="signin-app-intro" class="auth__intro hidden">
+        <h1 class="title-l">{text.appTitle}</h1>
+        <p class="muted">{text.appLead}</p>
+      </div>
+
+      <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
+      <p id="signin-error" class="notice notice--error hidden" role="alert"></p>
+
+      <div id="signin-panel" class="auth__forms">
+        <div id="apple-block" class="auth__apple">
+          <button id="apple-button" class="button button--apple button--block" type="button" disabled>
+            <Icon name="apple" size={17} class="button__apple" />
+            {text.apple}
+          </button>
+        </div>
+        <div id="google-button" class="auth__google"></div>
+      </div>
+
+      <div id="signin-app-return" class="card app-return hidden" tabindex="-1" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <h2 class="title-m">{text.appReturning}</h2>
+        <p class="muted">{text.appReturningHelp}</p>
+        <a id="signin-app-open" class="button button--primary" href={routes.signIn}>{text.appOpen}</a>
+      </div>
+
+      <p class="small muted legal">
+        {text.legalBefore} <a href={routes.terms}>{common.nav.terms}</a>{" "}
+        {text.legalBetween} <a href={routes.privacy}>{common.nav.privacy}</a>.
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import "../client/sign-in";
+</script>
+
+<style>
+  .auth {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 88px);
+    align-items: stretch;
+    padding-top: clamp(32px, 6vw, 72px);
+  }
+
+  .auth :global(.auth__cover) {
+    display: grid;
+    place-items: center;
+    min-height: 480px;
+    padding: 32px;
+  }
+
+  .auth__badge {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding: 28px 32px;
+    text-align: center;
+  }
+
+  .auth__tagline {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    max-width: 16ch;
+  }
+
+  .auth__badge :global(.auth__wave) {
+    color: #4b3a6b;
+    mix-blend-mode: normal;
+    opacity: 0.6;
+  }
+
+  /* Google düğmesi en çok 400 px: Apple düğmesi ve panel aynı genişlikte. */
+  .auth__panel {
+    display: grid;
+    align-content: center;
+    gap: 18px;
+    max-width: 400px;
+    width: 100%;
+    justify-self: center;
+  }
+
+  .auth__intro {
+    display: grid;
+    gap: 12px;
+  }
+
+  .auth__forms {
+    display: grid;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  /* Apple ve Google düğmeleri aynı yükseklikte (Google'ın büyük düğmesi 40 px) ve aynı hap biçiminde. */
+  .button--apple {
+    min-height: 40px;
+    background: light-dark(#000, #fff);
+    color: light-dark(#fff, #000);
+    font-weight: 500;
+  }
+
+  .button--apple:hover {
+    background: light-dark(#1f1f1f, #e8e8e8);
+  }
+
+  /* Google'ın betiği düğmeyi önce satır içi stilli bir yer tutucuyla çizer; CSP o stilleri engellediği için yer
+     tutucu (dev logo ve yazı) gizlenir, iframe gelene kadar düğme boyutunda sakin bir hap görünür. */
+  .auth__google {
+    display: flex;
+    justify-content: center;
+    height: 44px;
+    overflow: hidden;
+    border-radius: 999px;
+    color-scheme: normal;
+  }
+
+  .auth__google:not(:has(iframe)) {
+    background: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.08));
+  }
+
+  .auth__google :global([role="button"]) {
+    display: none;
+  }
+
+  .app-return {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+  }
+
+  .legal a {
+    color: var(--ink);
+  }
+
+  /* Döner gösterge yalnızca hareket azaltılmamışsa döner. */
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2.5px solid var(--line);
+    border-top-color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .spinner {
+      animation: spin 900ms linear infinite;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .auth {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth :global(.auth__cover) {
+      min-height: 200px;
+      order: 2;
+    }
+  }
+</style>

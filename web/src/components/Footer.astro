@@ -1,40 +1,34 @@
 ---
-// Alt bilgi: kısa tanım, ürün, hesap ve yasal bağlantılar, dil değiştirici.
+// Alt bilgi: kısa tanım, ürün, hesap ve şirket (iletişim, yasal) bağlantıları; işletme adı tek kaynaktan.
 import Logo from "./Logo.astro";
-import { repositoryUrl } from "../config";
-import { copy, type CommonCopy } from "../i18n/copy";
-import { type Lang, type PageKey, langMeta, langs, pagePath } from "../i18n/routes";
+import { productName } from "../config";
+import { copy, type CommonCopy } from "../copy";
+import { routes } from "../routes";
 
-interface Props {
-  readonly lang: Lang;
-  readonly page: PageKey;
-}
-const { lang, page } = Astro.props;
-const text: CommonCopy = copy[lang].common;
-const nav = copy[lang].common.nav;
-const columns: { readonly title: string; readonly links: { readonly href: string; readonly label: string; readonly external: boolean }[] }[] = [
+const text: CommonCopy = copy.common;
+const columns: readonly { readonly title: string; readonly links: readonly { readonly href: string; readonly label: string }[] }[] = [
   {
     title: text.footer.product,
     links: [
-      { href: `${pagePath("home", lang)}#features`, label: nav.features, external: false },
-      { href: pagePath("pricing", lang), label: nav.pricing, external: false },
-      { href: pagePath("download", lang), label: nav.download, external: false },
-      { href: repositoryUrl, label: text.footer.sourceCode, external: true },
+      { href: `${routes.home}#features`, label: text.nav.features },
+      { href: routes.pricing, label: text.nav.pricing },
+      { href: routes.download, label: text.nav.download },
     ],
   },
   {
     title: text.footer.account,
     links: [
-      { href: pagePath("signIn", lang), label: nav.signIn, external: false },
-      { href: pagePath("account", lang), label: nav.account, external: false },
+      { href: routes.signIn, label: text.nav.signIn },
+      { href: routes.account, label: text.nav.account },
     ],
   },
   {
-    title: text.footer.legal,
+    title: text.footer.company,
     links: [
-      { href: pagePath("privacy", lang), label: nav.privacy, external: false },
-      { href: pagePath("terms", lang), label: nav.terms, external: false },
-      { href: "/fonts/Inter-OFL.txt", label: text.footer.fontLicense, external: false },
+      { href: routes.contact, label: text.nav.contact },
+      { href: routes.privacy, label: text.nav.privacy },
+      { href: routes.terms, label: text.nav.terms },
+      { href: "/fonts/Inter-OFL.txt", label: text.footer.fontLicense },
     ],
   },
 ];
@@ -43,26 +37,11 @@ const columns: { readonly title: string; readonly links: { readonly href: string
 <footer class="site-footer">
   <div class="page site-footer__grid">
     <div class="site-footer__about">
-      <a class="site-footer__brand" href={pagePath("home", lang)} aria-label={text.homeLabel}>
+      <a class="site-footer__brand" href={routes.home} aria-label={text.homeLabel}>
         <Logo size={28} />
-        <span>AI-Notepad</span>
+        <span>{productName}</span>
       </a>
       <p class="muted">{text.footer.tagline}</p>
-      <ul class="site-footer__langs">
-        {
-          langs.map((option: Lang) => (
-            <li>
-              {option === lang ? (
-                <span aria-current="true">{langMeta[option].name}</span>
-              ) : (
-                <a href={pagePath(page, option)} hreflang={option} lang={option}>
-                  {langMeta[option].name}
-                </a>
-              )}
-            </li>
-          ))
-        }
-      </ul>
     </div>
     {
       columns.map((column) => (
@@ -71,9 +50,7 @@ const columns: { readonly title: string; readonly links: { readonly href: string
           <ul class="site-footer__links">
             {column.links.map((link) => (
               <li>
-                <a href={link.href} rel={link.external ? "noopener" : undefined}>
-                  {link.label}
-                </a>
+                <a href={link.href}>{link.label}</a>
               </li>
             ))}
           </ul>
@@ -124,8 +101,7 @@ const columns: { readonly title: string; readonly links: { readonly href: string
     margin-bottom: 14px;
   }
 
-  .site-footer__links,
-  .site-footer__langs {
+  .site-footer__links {
     display: grid;
     gap: 10px;
     margin: 0;
@@ -133,22 +109,11 @@ const columns: { readonly title: string; readonly links: { readonly href: string
     list-style: none;
   }
 
-  .site-footer__langs {
-    display: flex;
-    gap: 14px;
-    font-size: 0.875rem;
-  }
-
-  .site-footer__langs span {
-    font-weight: 600;
-  }
-
   .site-footer a {
     text-decoration: none;
   }
 
-  .site-footer__links a:hover,
-  .site-footer__langs a:hover {
+  .site-footer__links a:hover {
     text-decoration: underline;
   }
 

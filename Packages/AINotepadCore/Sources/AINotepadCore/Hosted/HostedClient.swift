@@ -10,13 +10,10 @@ private let hostedAttempts: Int = 3
 private let hostedRequestTimeoutSec: Double = 30
 
 // Sunucunun beklediği gövdeler (alan adları sunucununkilerdir).
-private struct AppleSignInBody: Encodable {
+/// Apple ve Google ile giriş: kimlik jetonu ve ham nonce.
+private struct IdentityTokenSignInBody: Encodable {
     let identityToken: String
     let nonce: String
-}
-
-private struct EmailVerifyBody: Encodable {
-    let token: String
 }
 
 private struct RefreshBody: Encodable {
@@ -87,12 +84,12 @@ public actor HostedClient: HostedLLMCredentialSource {
 
     /// Apple ile giriş: kimlik jetonu ve Apple'a SHA-256'sı verilen ham nonce.
     public func signInWithApple(identityToken: String, nonce: String) async throws {
-        try await startSession(path: "/v1/auth/apple", body: try encoded(body: AppleSignInBody(identityToken: identityToken, nonce: nonce)))
+        try await startSession(path: "/v1/auth/apple", body: try encoded(body: IdentityTokenSignInBody(identityToken: identityToken, nonce: nonce)))
     }
 
-    /// E-posta bağlantısıyla giriş: bağlantıdaki tek kullanımlık jeton.
-    public func verifyEmailLink(token: String) async throws {
-        try await startSession(path: "/v1/auth/email/verify", body: try encoded(body: EmailVerifyBody(token: token)))
+    /// Google ile giriş: sitenin döndürdüğü Google kimlik jetonu ve SHA-256'sı giriş sayfasına verilen ham nonce.
+    public func signInWithGoogle(identityToken: String, nonce: String) async throws {
+        try await startSession(path: "/v1/auth/google", body: try encoded(body: IdentityTokenSignInBody(identityToken: identityToken, nonce: nonce)))
     }
 
     /// Çıkış: sunucuda oturum ailesi kapatılır, yerel oturum her durumda silinir; sunucuya ulaşılamadıysa hata
@@ -347,39 +344,10 @@ public actor HostedClient: HostedLLMCredentialSource {
         try await send(path: path, isRetryable: isRetryable) { try await URLSession.shared.data(for: request) }
     }
 
-    /// İsteği gönderir: başarısız deneme `isRetryable` uygunsa geri çekilerek (sunucunun `retry-after`'ına uyarak)
-    /// en çok 3 kez denenir, her başarısızlık uyarı loglanır; son hata fırlatılır. 2xx dışı yanıt `HostedAPIError`,
-    /// ağ hatası `HostedClientError.network` olur.
     private func send(
         path: String, isRetryable: @Sendable (HostedAttemptFailure) -> Bool, operation: @Sendable () async throws -> (Data, URLResponse)
     ) async throws -> (data: Data, status: Int) {
-        var lastError: any Error = HostedClientError.network(path: path, reason: "istek gönderilmedi")
-        for attempt in 1...hostedAttempts {
-            let failure: HostedAttemptFailure
-            var retryAfter: String?
-            do {
-                let (data, response): (Data, URLResponse) = try await operation()
-                guard let http = response as? HTTPURLResponse else {
-                    throw HostedClientError.malformedResponse(path: path, status: 0, body: "HTTP yanıtı değil")
-                }
-                if (200..<300).contains(http.statusCode) {
-                    return (data: data, status: http.statusCode)
-                }
-                let error: HostedAPIError = parseHostedAPIError(status: http.statusCode, data: data, path: path)
-                lastError = error
-                failure = .server(error)
-                retryAfter = http.value(forHTTPHeaderField: "retry-after")
-            } catch let error as URLError {
-                lastError = HostedClientError.network(path: path, reason: "\(error.code.rawValue): \(error.localizedDescription)")
-                failure = .network(error.code)
-            }
-            guard attempt < hostedAttempts, isRetryable(failure) else {
-                throw lastError
-            }
-            hostedLogger.warning("Sunucu isteği başarısız, yeniden denenecek, yol: \(path, privacy: .public), deneme: \(attempt, privacy: .public), hata: \(attemptDescription(failure: failure), privacy: .public)")
-            try await Task.sleep(for: .seconds(retryDelay(retryAfterHeader: retryAfter, attempt: attempt)))
-        }
-        throw lastError
+        try await sendHostedRequest(path: path, isRetryable: isRetryable, operation: operation)
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, data: Data, path: String) throws -> Value {
@@ -394,6 +362,41 @@ public actor HostedClient: HostedLLMCredentialSource {
     private func encoded<Body: Encodable>(body: Body) throws -> Data {
         try JSONEncoder().encode(body)
     }
+}
+
+/// İsteği gönderir: başarısız deneme `isRetryable` uygunsa geri çekilerek (sunucunun `retry-after`'ına uyarak)
+/// en çok 3 kez denenir, her başarısızlık uyarı loglanır; son hata fırlatılır. 2xx dışı yanıt `HostedAPIError`,
+/// ağ hatası `HostedClientError.network` olur.
+func sendHostedRequest(
+    path: String, isRetryable: @Sendable (HostedAttemptFailure) -> Bool, operation: @Sendable () async throws -> (Data, URLResponse)
+) async throws -> (data: Data, status: Int) {
+    var lastError: any Error = HostedClientError.network(path: path, reason: "istek gönderilmedi")
+    for attempt in 1...hostedAttempts {
+        let failure: HostedAttemptFailure
+        var retryAfter: String?
+        do {
+            let (data, response): (Data, URLResponse) = try await operation()
+            guard let http = response as? HTTPURLResponse else {
+                throw HostedClientError.malformedResponse(path: path, status: 0, body: "HTTP yanıtı değil")
+            }
+            if (200..<300).contains(http.statusCode) {
+                return (data: data, status: http.statusCode)
+            }
+            let error: HostedAPIError = parseHostedAPIError(status: http.statusCode, data: data, path: path)
+            lastError = error
+            failure = .server(error)
+            retryAfter = http.value(forHTTPHeaderField: "retry-after")
+        } catch let error as URLError {
+            lastError = HostedClientError.network(path: path, reason: "\(error.code.rawValue): \(error.localizedDescription)")
+            failure = .network(error.code)
+        }
+        guard attempt < hostedAttempts, isRetryable(failure) else {
+            throw lastError
+        }
+        hostedLogger.warning("Sunucu isteği başarısız, yeniden denenecek, yol: \(path, privacy: .public), deneme: \(attempt, privacy: .public), hata: \(attemptDescription(failure: failure), privacy: .public)")
+        try await Task.sleep(for: .seconds(retryDelay(retryAfterHeader: retryAfter, attempt: attempt)))
+    }
+    throw lastError
 }
 
 /// Yeniden deneme logunun hata özeti (kod ve durum; içerik yok). Saf fonksiyondur.

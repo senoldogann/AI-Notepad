@@ -1,5 +1,6 @@
-// Abonelik sunucusunun (server/src/app.ts) sitenin kullandığı uçları: giriş, oturum yenileme, hesap, ödeme ve hesap
-// silme. Yanıtlar elle doğrulanır (bağımlılık yok); beklenmeyen biçim `ApiResponseError` verir.
+// Abonelik sunucusunun (server/src/app.ts) sitenin kullandığı uçları: giriş, oturum yenileme, hesap, ödeme, hesap
+// silme ve iletişim formu. Yanıtlar elle doğrulanır (bağımlılık yok); beklenmeyen biçim `ApiResponseError` verir.
+// Alan okuyucuları yönetim paneli istemcisi (admin-api.ts) de kullanır.
 import { siteConfig } from "../site";
 
 /** Sunucunun döndürdüğü oturum (`sessionBody`). */
@@ -39,12 +40,15 @@ export class ApiRequestError extends Error {
   readonly status: number;
   readonly code: string;
   readonly path: string;
+  /** Yetkisiz yönetim isteğinde (403 `forbidden`) sunucunun bildirdiği giriş kimliği (`google:<sub>`); yoksa null. */
+  readonly identity: string | null;
 
-  constructor(path: string, status: number, code: string, message: string) {
+  constructor(path: string, status: number, code: string, message: string, identity: string | null) {
     super(`${path} isteği başarısız (durum ${status}, kod ${code}): ${message}`);
     this.status = status;
     this.code = code;
     this.path = path;
+    this.identity = identity;
   }
 }
 
@@ -75,9 +79,9 @@ export class ApiResponseError extends Error {
 }
 
 /** JSON değeri (ayrıştırma sonrası; alanlar aşağıdaki okuyucularla doğrulanır). */
-type JsonValue = string | number | boolean | null | JsonValue[] | { readonly [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | JsonValue[] | { readonly [key: string]: JsonValue };
 /** JSON nesnesi. */
-type JsonObject = { readonly [key: string]: JsonValue };
+export type JsonObject = { readonly [key: string]: JsonValue };
 
 /** HTTP yöntemleri. */
 type Method = "GET" | "POST" | "DELETE";
@@ -106,7 +110,7 @@ function isObject(value: JsonValue): value is JsonObject {
 }
 
 /** Nesnedeki metin alanı; yoksa `ApiResponseError`. */
-function stringField(object: JsonObject, key: string, response: RawResponse, path: string): string {
+export function stringField(object: JsonObject, key: string, response: RawResponse, path: string): string {
   const value: JsonValue | undefined = object[key];
   if (typeof value !== "string") {
     throw new ApiResponseError(path, response.status, `"${key}" metin değil`, response.text);
@@ -115,7 +119,7 @@ function stringField(object: JsonObject, key: string, response: RawResponse, pat
 }
 
 /** Nesnedeki sayı alanı; yoksa `ApiResponseError`. */
-function numberField(object: JsonObject, key: string, response: RawResponse, path: string): number {
+export function numberField(object: JsonObject, key: string, response: RawResponse, path: string): number {
   const value: JsonValue | undefined = object[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new ApiResponseError(path, response.status, `"${key}" sayı değil`, response.text);
@@ -123,8 +127,36 @@ function numberField(object: JsonObject, key: string, response: RawResponse, pat
   return value;
 }
 
+/** Nesnedeki metin ya da null alanı; ikisi de değilse (eksikse de) `ApiResponseError`. */
+export function nullableStringField(object: JsonObject, key: string, response: RawResponse, path: string): string | null {
+  return object[key] === null ? null : stringField(object, key, response, path);
+}
+
+/** Nesnedeki iç nesne; değilse `ApiResponseError`. */
+export function objectField(object: JsonObject, key: string, response: RawResponse, path: string): JsonObject {
+  const value: JsonValue | undefined = object[key];
+  if (value === undefined || !isObject(value)) {
+    throw new ApiResponseError(path, response.status, `"${key}" nesne değil`, response.text);
+  }
+  return value;
+}
+
+/** Nesnedeki nesne dizisi; dizi değilse ya da öğelerden biri nesne değilse `ApiResponseError`. */
+export function objectArrayField(object: JsonObject, key: string, response: RawResponse, path: string): JsonObject[] {
+  const value: JsonValue | undefined = object[key];
+  if (!Array.isArray(value)) {
+    throw new ApiResponseError(path, response.status, `"${key}" dizi değil`, response.text);
+  }
+  return value.map((item: JsonValue, index: number): JsonObject => {
+    if (!isObject(item)) {
+      throw new ApiResponseError(path, response.status, `"${key}[${index}]" nesne değil`, response.text);
+    }
+    return item;
+  });
+}
+
 /** Gövdeyi JSON nesnesi olarak ayrıştırır; değilse `ApiResponseError`. */
-function parseObject(response: RawResponse, path: string): JsonObject {
+export function parseObject(response: RawResponse, path: string): JsonObject {
   let parsed: JsonValue;
   try {
     parsed = JSON.parse(response.text) as JsonValue;
@@ -143,14 +175,21 @@ function requestError(response: RawResponse, path: string): ApiRequestError {
     const body: JsonObject = parseObject(response, path);
     const error: JsonValue | undefined = body["error"];
     if (error !== undefined && isObject(error)) {
-      return new ApiRequestError(path, response.status, stringField(error, "code", response, path), stringField(error, "message", response, path));
+      const identity: JsonValue | undefined = error["identity"];
+      return new ApiRequestError(
+        path,
+        response.status,
+        stringField(error, "code", response, path),
+        stringField(error, "message", response, path),
+        typeof identity === "string" ? identity : null,
+      );
     }
   } catch (problem: unknown) {
     if (!(problem instanceof ApiResponseError)) {
       throw problem;
     }
   }
-  return new ApiRequestError(path, response.status, `http_${response.status}`, response.text.slice(0, 300));
+  return new ApiRequestError(path, response.status, `http_${response.status}`, response.text.slice(0, 300), null);
 }
 
 /** Yeniden denenebilir durum (Worker'ın üst servis ya da harcama hatası değil, geçici ağ geçidi hatası). */

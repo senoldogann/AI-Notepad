@@ -5,7 +5,7 @@ import os
 
 private let crashLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "CrashReports")
 
-/// Bildirim şeridinde gösterilip kapatılan (ya da bildirilen) raporların kimlikleri (Mac ve iPhone'da aynı anahtar).
+/// Bildirim şeridinde gösterilip kapatılan (ya da gönderilen) raporların kimlikleri (Mac ve iPhone'da aynı anahtar).
 public let crashReportsSeenKey: String = "crashReports.seen"
 
 /// Teşhis paketini (MetricKit JSON) `CrashReports/<yyyyMMdd-HHmmss>-<rastgele>.json` olarak saklar ve kimliğini
@@ -60,6 +60,14 @@ public func loadCrashReports(directory: URL) throws -> CrashReportLoadResult {
     return CrashReportLoadResult(reports: reports.sorted { $0.receivedAt > $1.receivedAt }, unreadableFiles: unreadable.sorted())
 }
 
+/// Çökme raporunun gönderim durumu.
+public enum CrashReportSendState: Sendable, Equatable {
+    case sending
+    case sent
+    /// Gönderilemedi; kullanıcıya gösterilen neden.
+    case failed(message: String)
+}
+
 /// MetricKit aboneliği: gelen teşhis paketlerini JSON olarak verir (MetricKit onları rastgele bir kuyrukta çağırır).
 /// Dış sisteme (MetricKit) bağlandığı için sınıftır.
 private final class DiagnosticPayloadSubscriber: NSObject, MXMetricManagerSubscriber, Sendable {
@@ -76,7 +84,7 @@ private final class DiagnosticPayloadSubscriber: NSObject, MXMetricManagerSubscr
 
 /// Yerel çökme raporları (Mac ve iPhone ortak): MetricKit'in çökme ve donma teşhislerini (sistem onları genellikle
 /// bir sonraki açılışta verir) Application Support'a JSON olarak saklar; hiçbir şeyi kendiliğinden göndermez. Görülmemiş
-/// çökme varsa arayüz bir şerit gösterir; kullanıcı "GitHub'da bildir" ile önceden doldurulmuş konuyu açar.
+/// çökme varsa arayüz bir şerit gösterir; kullanıcı "Gönder"e basarsa (açık onay) rapor geliştiricinin sunucusuna gider.
 @MainActor
 @Observable
 public final class CrashReportCenter {
@@ -84,7 +92,9 @@ public final class CrashReportCenter {
     public private(set) var reports: [CrashReport] = []
     /// Okuma, yazma ya da silme hatası (Ayarlar'da görünür).
     public private(set) var problem: String?
-    /// Şeritte gösterilip kapatılan ya da bildirilen raporlar.
+    /// Bu oturumda gönderilen, gönderilmekte olan ya da gönderilemeyen raporların durumu (kimliğe göre).
+    public private(set) var sendStates: [String: CrashReportSendState] = [:]
+    /// Şeritte gösterilip kapatılan ya da gönderilen raporlar.
     public private(set) var seenIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: crashReportsSeenKey) ?? [])
     @ObservationIgnored private var subscriber: DiagnosticPayloadSubscriber?
 
@@ -110,7 +120,7 @@ public final class CrashReportCenter {
         MXMetricManager.shared.add(subscriber)
     }
 
-    /// Raporu şeritten kaldırır (Kapat ya da bildirildi); rapor Ayarlar'da kalır.
+    /// Raporu şeritten kaldırır (Kapat ya da gönderildi); rapor Ayarlar'da kalır.
     public func markSeen(id: String) {
         seenIDs.insert(id)
         storeSeen()
@@ -119,7 +129,7 @@ public final class CrashReportCenter {
     /// Raporun dosyasını siler.
     public func delete(id: String) {
         do {
-            let url: URL = try AppPaths.crashReportsDirectory().appending(path: "\(id).json", directoryHint: .notDirectory)
+            let url: URL = try crashReportFile(id: id)
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {
@@ -135,15 +145,34 @@ public final class CrashReportCenter {
         reload()
     }
 
-    /// Raporun GitHub'da önceden doldurulmuş yeni konu adresi; oluşturulamazsa nil ve neden `problem`'de.
-    public func issueURL(report: CrashReport) -> URL? {
-        do {
-            return try crashIssueURL(diagnostic: report.primaryDiagnostic, maxLength: crashIssueURLLimit)
-        } catch {
-            crashLogger.error("Çökme konusu adresi oluşturulamadı, kimlik: \(report.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
-            problem = userFacingMessage(error: error)
-            return nil
+    /// Raporu kullanıcının açık isteğiyle gönderir: saklanan MetricKit JSON'u `kind: crash` olarak `destination`'ın
+    /// verdiği sunucuya gider. Başarıda rapor görüldü sayılır (şeritten kalkar); hata `sendStates`'te görünür.
+    public func send(report: CrashReport, destination: @MainActor () async throws -> ReportDestination) async {
+        guard sendStates[report.id] != .sending else {
+            return
         }
+        sendStates[report.id] = .sending
+        do {
+            let url: URL = try crashReportFile(id: report.id)
+            let payload: Data
+            do {
+                payload = try Data(contentsOf: url)
+            } catch {
+                throw StorageError.readFailed(path: url.path, reason: error.localizedDescription)
+            }
+            let request: ReportRequest = try crashReportRequest(payload: payload, diagnostic: report.primaryDiagnostic)
+            try await submitReport(report: request, destination: try await destination())
+            sendStates[report.id] = .sent
+            markSeen(id: report.id)
+            crashLogger.info("Çökme raporu gönderildi, kimlik: \(report.id, privacy: .public)")
+        } catch {
+            crashLogger.error("Çökme raporu gönderilemedi, kimlik: \(report.id, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            sendStates[report.id] = .failed(message: userFacingMessage(error: error))
+        }
+    }
+
+    private func crashReportFile(id: String) throws -> URL {
+        try AppPaths.crashReportsDirectory().appending(path: "\(id).json", directoryHint: .notDirectory)
     }
 
     private func receive(payloads: [Data], receivedAt: Date) {

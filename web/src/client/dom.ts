@@ -1,12 +1,16 @@
-// Tarayıcı betiklerinin ortak yardımcıları: öğe bulma, sayfa dili, hatayı kullanıcı metnine çevirme.
+// Tarayıcı betiklerinin ortak yardımcıları: öğe bulma, hatayı kullanıcı metnine çevirme, bildirimler, dış betik yükleme
+// ve sayfa teması.
 import { ApiNetworkError, ApiRequestError } from "./api";
-import { type ClientCopy, clientCopy, fill } from "../i18n/client-copy";
-import type { Lang } from "../i18n/routes";
-import { isLang } from "./lang";
+import { type ClientCopy, fill } from "./copy";
 
 /** Sayfada beklenen öğe yok ya da türü farklı: sayfa ile betik uyuşmuyor. */
 export class MissingElementError extends Error {
   override readonly name: string = "MissingElementError";
+}
+
+/** Dış betik yüklenemedi. */
+export class ScriptLoadError extends Error {
+  override readonly name: string = "ScriptLoadError";
 }
 
 /** Kimliği verilen öğeyi beklenen türde döndürür; yoksa `MissingElementError`. */
@@ -18,20 +22,6 @@ export function element<T extends HTMLElement>(id: string, type: new () => T): T
   return found;
 }
 
-/** Sayfanın dili (`<html lang>`); sitenin dili değilse `MissingElementError`. */
-export function pageLang(): Lang {
-  const lang: string = document.documentElement.lang;
-  if (!isLang(lang)) {
-    throw new MissingElementError(`<html lang="${lang}"> sitenin dili değil.`);
-  }
-  return lang;
-}
-
-/** Sayfa dilinin tarayıcı metinleri. */
-export function pageCopy(): ClientCopy {
-  return clientCopy[pageLang()];
-}
-
 /** Hatayı kullanıcıya gösterilecek metne çevirir; ayrıntı konsola yazılır. */
 export function errorText(error: unknown, text: ClientCopy): string {
   console.error("request_failed", { error: error instanceof Error ? error.message : String(error) });
@@ -39,7 +29,7 @@ export function errorText(error: unknown, text: ClientCopy): string {
     return text.errors.network;
   }
   if (error instanceof ApiRequestError) {
-    if (error.code === "rate_limited") {
+    if (error.code === "rate_limited" || error.status === 429) {
       return text.errors.rateLimited;
     }
     if (error.code === "turnstile_failed") {
@@ -72,4 +62,31 @@ export function dataValue(owner: HTMLElement, key: string): string {
     throw new MissingElementError(`#${owner.id} öğesinde data-${key} yok.`);
   }
   return value;
+}
+
+/** Dış betiği yükler (CSP bu kaynaklara izin verir). */
+export function loadScript(src: string): Promise<void> {
+  return new Promise((resolve: () => void, reject: (error: Error) => void): void => {
+    const script: HTMLScriptElement = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.addEventListener("load", (): void => resolve());
+    script.addEventListener("error", (): void => reject(new ScriptLoadError(`${src} yüklenemedi.`)));
+    document.head.append(script);
+  });
+}
+
+/** Sayfa teması. */
+export type Theme = "light" | "dark";
+
+/** Sayfanın şu anki teması (`<html data-theme>`, public/theme.js yazar). */
+export function currentTheme(): Theme {
+  return document.documentElement.dataset["theme"] === "dark" ? "dark" : "light";
+}
+
+/** Tema her değiştiğinde çağrılır (public/theme.js `ainotepad:themechange` olayı). */
+export function onThemeChange(listener: (theme: Theme) => void): void {
+  document.addEventListener("ainotepad:themechange", (): void => {
+    listener(currentTheme());
+  });
 }

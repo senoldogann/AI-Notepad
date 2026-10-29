@@ -885,7 +885,7 @@ struct MeetingDetailPage: View {
                 if let error = await model.sendToAppleNotes(meetingID: record.id) {
                     export = .failed(error)
                 } else {
-                    export = .done(String(localized: "Notlar'daki \"AI-Notepad\" klasörüne yazıldı."))
+                    export = .done(String(localized: "Notlar'daki \"\(appName)\" klasörüne yazıldı."))
                 }
             }
         }
@@ -1172,7 +1172,7 @@ struct MeetingDetailPage: View {
             record.sharedNotes?[language.rawValue].map { (note: $0, language: language) }
         } ?? (note: note, language: nil)
         export = saveExport(fileExtension: "html") { (url: URL) throws -> Void in
-            try Data(meetingHTML(record: record, note: shown.note, language: shown.language).utf8).write(to: url, options: .atomic)
+            try Data(meetingHTML(record: record, note: shown.note, language: shown.language, appName: appName).utf8).write(to: url, options: .atomic)
         }
     }
 

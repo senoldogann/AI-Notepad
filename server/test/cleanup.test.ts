@@ -32,9 +32,9 @@ describe("süresi dolmuş satırların temizliği", () => {
     await env.DB.batch([
       env.DB.prepare("INSERT INTO used_nonces (nonce_hash, expires_at) VALUES ('n_old', ?), ('n_new', ?)").bind(nowMs - 1, later),
       env.DB.prepare(
-        `INSERT INTO email_login_tokens (token_hash, email, created_at, expires_at, used_at) VALUES
-           ('e_expired', 'a@ornek.test', 0, ?, NULL), ('e_used', 'a@ornek.test', 0, ?, ?), ('e_live', 'a@ornek.test', 0, ?, NULL)`,
-      ).bind(nowMs - 1, later, nowMs - 10, later),
+        `INSERT INTO reports (id, kind, status, created_at, summary) VALUES
+           ('r_old', 'feedback', 'open', ?, 'x'), ('r_old_done', 'crash', 'done', ?, 'x'), ('r_recent', 'contact', 'open', ?, 'x')`,
+      ).bind(nowMs - 181 * dayMs, nowMs - 200 * dayMs, nowMs - 179 * dayMs),
       env.DB.prepare(
         `INSERT INTO device_challenges (challenge_hash, user_id, purpose, created_at, expires_at, used_at) VALUES
            ('c_expired', ?1, 'assert', 0, ?2, NULL), ('c_used', ?1, 'assert', 0, ?3, ?4), ('c_live', ?1, 'attest', 0, ?3, NULL)`,
@@ -66,7 +66,6 @@ describe("süresi dolmuş satırların temizliği", () => {
     const report: CleanupReport = await cleanupExpiredRows(env.DB, now, { batchSize: 2, maxBatchesPerTable: 10 });
     expect(report).toEqual({
       used_nonces: 1,
-      email_login_tokens: 2,
       device_challenges: 2,
       refresh_tokens: 2,
       refresh_families: 2,
@@ -75,9 +74,11 @@ describe("süresi dolmuş satırların temizliği", () => {
       deleted_trial_starts: 1,
       daily_spend: 1,
       daily_usage: 1,
+      reports: 2,
     });
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces")).toEqual(["n_new"]);
-    expect(await ids("SELECT token_hash AS id FROM email_login_tokens")).toEqual(["e_live"]);
+    // Raporlar durumundan bağımsız 180 gün tutulur.
+    expect(await ids("SELECT id FROM reports")).toEqual(["r_recent"]);
     expect(await ids("SELECT challenge_hash AS id FROM device_challenges")).toEqual(["c_live"]);
     // Kullanılmış ama süresi dolmamış jeton yeniden kullanım algılaması için kalır.
     expect(await ids("SELECT token_hash AS id FROM refresh_tokens")).toEqual(["t_live", "t_used_live"]);

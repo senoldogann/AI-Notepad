@@ -4,6 +4,7 @@
 // Kullanım: node scripts/make-og.ts <site adresi> <Chrome yolu>
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright-core";
+import { productName } from "../src/config.ts";
 import { type WaveBar, coverWaveHeights, waveBars } from "../src/lib/film.ts";
 
 /** Komut satırı bağımsız değişkeni; yoksa hata. */
@@ -17,7 +18,7 @@ function argument(index: number, name: string): string {
 
 /** Ses dalgası SVG'si. Saf fonksiyondur. */
 function waveSvg(width: number, height: number): string {
-  const bars: WaveBar[] = waveBars(coverWaveHeights("AI-Notepad", 23), width, height, width / 37);
+  const bars: WaveBar[] = waveBars(coverWaveHeights(productName, 23), width, height, width / 37);
   const rects: string = bars
     .map((bar: WaveBar): string => `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}" width="${bar.width.toFixed(2)}" height="${bar.height.toFixed(2)}" rx="${(bar.width / 2).toFixed(2)}" fill="currentColor"/>`)
     .join("");
@@ -48,12 +49,12 @@ async function main(): Promise<void> {
     await page.goto(`${base}/404`, { waitUntil: "load" });
     await page.addStyleTag({ content: css });
     await page.evaluate(
-      ({ wave, mark }: { readonly wave: string; readonly mark: string }): void => {
+      ({ wave, mark, name }: { readonly wave: string; readonly mark: string; readonly name: string }): void => {
         document.body.innerHTML = `<div class="film film--sunset film--clouds-left og"><div class="og__content">
-          <div class="og__brand">${mark}<span class="og__name">AI-Notepad</span></div>
+          <div class="og__brand">${mark}<span class="og__name">${name}</span></div>
           <p class="og__title">Listens to your meetings, writes your notes.</p>${wave}</div></div>`;
       },
-      { wave: waveSvg(260, 56), mark: logo },
+      { wave: waveSvg(260, 56), mark: logo, name: productName },
     );
     await page.evaluate(async (): Promise<void> => {
       await document.fonts.ready;

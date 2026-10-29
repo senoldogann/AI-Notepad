@@ -26,13 +26,15 @@ private func writeAcceptanceResult(line: String) {
 @main
 enum AppEntry {
     static func main() {
+        // Görünen ad (bkz. `appName`) metinlerden önce okunur: yoksa uygulama hemen, açık hatayla kapanır.
+        _ = appName
         // Veri klasörü adı Info.plist'ten gelir; yoksa uygulama başka bir uygulamanın verisine yazmasın diye açılmaz.
         do {
             _ = try AppPaths.dataFolderName(bundle: .main)
         } catch {
             let message: String = userFacingMessage(error: error)
             appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
-            FileHandle.standardError.write(Data("AI-Notepad: \(message)\n".utf8))
+            FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
             fatalError(message)
         }
         #if DEBUG
@@ -47,9 +49,9 @@ enum AppEntry {
         }
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version, noteLanguage: selectedNoteLanguage())
+            runMCPServer(input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()), version: version, noteLanguage: selectedNoteLanguage(), appName: appName)
         } catch {
-            FileHandle.standardError.write(Data("AI-Notepad MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
+            FileHandle.standardError.write(Data("\(appName) MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)
         }
     }
@@ -277,7 +279,7 @@ struct AINotepadApp: App {
 
     var body: some Scene {
         // Açılışta ana pencere; kapatılınca uygulama menü çubuğunda sürer, Dock simgesi ya da menü yeniden açar.
-        Window("AI-Notepad", id: mainWindowID) {
+        Window(appName, id: mainWindowID) {
             MainWindowView(
                 model: model, router: router, shortcuts: shortcuts, player: player, updater: updater, crashReports: crashReports,
                 onStartRecording: { Task { await toggleRecordingFlow(model: model, panel: panel, island: island) } },
@@ -287,7 +289,7 @@ struct AINotepadApp: App {
                 }
             )
             #if HOSTED_EDITION
-            // E-posta giriş bağlantısı (com.senoldogan.ainotepad.hosted://auth/email?token=…) uygulamayı açar.
+            // Google girişinin dönüşü (com.senoldogan.ainotepad.hosted://auth/google#idToken=…) uygulamayı açar.
             .onOpenURL { (url: URL) in
                 Task {
                     await HostedAccount.shared.handle(url: url)

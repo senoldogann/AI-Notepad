@@ -56,16 +56,19 @@ private func noteLanguagePrompts(language: ShareLanguage) throws -> [(name: Stri
         }
     }
 
-    // MCP sunucusunun yönergeleri ve araç açıklamaları notların dilini adıyla anar.
+    // MCP sunucusunun yönergeleri ve araç açıklamaları notların dilini ve uygulamanın adını anar.
     @Test func mcpTextNamesNoteLanguage() throws {
-        let descriptions: String = mcpTools(noteLanguage: .german).map(\.description).joined(separator: "\n")
+        let descriptions: String = mcpTools(noteLanguage: .german, appName: "Gistsmith").map(\.description).joined(separator: "\n")
         #expect(descriptions.contains("German (Deutsch)"))
         #expect(!descriptions.contains("Türkçe") && !descriptions.contains("Turkish"))
         let initialize: String = try #require(handleMCPMessage(
-            line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, loadRecords: { [] }, version: "test", noteLanguage: .german
+            line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, loadRecords: { [] }, version: "test", noteLanguage: .german, appName: "Gistsmith"
         ))
         #expect(initialize.contains("German (Deutsch)"))
         #expect(!initialize.contains("Türkçe"))
+        // Uygulama sürümün kendi adıyla anılır (abonelik sürümü "Gistsmith").
+        #expect(descriptions.contains("Gistsmith") && initialize.contains("Gistsmith"))
+        #expect(!descriptions.contains("AI-Notepad") && !initialize.contains("AI-Notepad"))
     }
 
     // Toplantı not dilindeyse canlı çeviri yapılmaz; dil bilinmiyorsa ya da farklıysa çevrilir. Norveççe Bokmål ve

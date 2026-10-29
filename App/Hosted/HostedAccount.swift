@@ -52,10 +52,9 @@ enum HostedServices {
         try client.get()
     }
 
-    /// E-posta ile giriş sayfası (sitede; Turnstile doğrulaması orada yapılır). `app=1`: site, e-postadaki bağlantıyı bu
-    /// uygulamaya iletir (bkz. web/src/client/app-handoff.ts).
-    static func emailSignInPage() throws -> URL {
-        try hostedURL(bundle: .main, key: "HostedSiteBase").appending(path: "giris").appending(queryItems: [URLQueryItem(name: "app", value: "1")])
+    /// Sitenin adresi (Google ile giriş sayfası orada).
+    static func siteBase() throws -> URL {
+        try hostedURL(bundle: .main, key: "HostedSiteBase")
     }
 }
 
@@ -69,7 +68,7 @@ enum HostedAccountState: Equatable {
     case unavailable(message: String)
 }
 
-/// Abonelik hesabının arayüz bağlantısı: giriş (Apple, e-posta bağlantısı), hak durumu, ödeme sayfaları, hesap silme,
+/// Abonelik hesabının arayüz bağlantısı: giriş (Apple, Google), hak durumu, ödeme sayfaları, hesap silme,
 /// toplantı oturumu ve cihaz doğrulaması. Sunucuya `HostedClient` ile bağlanır (dış sistem bağlantısı olduğu için
 /// sınıftır). Hata metinleri kullanıcıya gösterilir; jeton ve içerik loglanmaz.
 @MainActor
@@ -82,6 +81,8 @@ final class HostedAccount {
     var errorMessage: String?
     /// Bir işlem sürüyor (düğmeler kilitli).
     private(set) var isWorking: Bool = false
+    /// Dönüşü beklenen Google ile giriş denemesi (ham nonce yalnızca burada, bellekte; tek kullanımlık).
+    private(set) var pendingGoogleSignIn: HostedGoogleSignInAttempt?
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
     @ObservationIgnored private var sessionObserver: (any NSObjectProtocol)?
@@ -161,30 +162,42 @@ final class HostedAccount {
         }
     }
 
-    /// Uygulamayı açan bağlantı: e-posta giriş bağlantısıysa jeton doğrulanır ve oturum açılır.
-    func handle(url: URL) async {
-        guard url.scheme?.lowercased() == hostedURLScheme else {
-            accountLogger.warning("Tanınmayan adres şeması, şema: \(url.scheme ?? "-", privacy: .public)")
-            return
-        }
-        let token: String
+    /// Google ile girişi başlatır: yeni ham nonce üretilir (önceki deneme geçersizleşir) ve sitedeki giriş sayfası
+    /// nonce'un SHA-256'sıyla tarayıcıda açılır. Site hesabı seçtirip uygulamayı `auth/google#idToken=…` ile açar.
+    func startGoogleSignIn() {
+        errorMessage = nil
         do {
-            token = try hostedEmailLinkToken(url: url)
+            let attempt: HostedGoogleSignInAttempt = try makeHostedGoogleSignInAttempt(now: Date())
+            let page: URL = hostedGoogleSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
+            pendingGoogleSignIn = attempt
+            guard NSWorkspace.shared.open(page) else {
+                pendingGoogleSignIn = nil
+                accountLogger.error("Google giriş sayfası açılamadı, adres: \(page.host() ?? "-", privacy: .public)")
+                errorMessage = String(localized: "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.")
+                return
+            }
+            accountLogger.info("Google ile giriş başlatıldı")
         } catch {
+            accountLogger.error("Google ile giriş başlatılamadı, hata: \(String(describing: error), privacy: .public)")
+            errorMessage = userFacingMessage(error: error)
+        }
+    }
+
+    /// Uygulamayı açan bağlantı (Google girişinin dönüşü): bekleyen denemeyle eşleşirse kimlik jetonu ve ham nonce
+    /// sunucuya gider. Deneme sonuç ne olursa olsun düşer (ikinci dönüş reddedilir); her ret hesap hatasında görünür.
+    func handle(url: URL) async {
+        let pending: HostedGoogleSignInAttempt? = pendingGoogleSignIn
+        pendingGoogleSignIn = nil
+        let callback: HostedGoogleSignInCallback
+        do {
+            callback = try resolveHostedGoogleCallback(url: url, pending: pending, now: Date(), lifetimeSec: hostedGoogleSignInLifetimeSec)
+        } catch {
+            accountLogger.error("Google girişi dönüşü reddedildi, hata: \(String(describing: error), privacy: .public)")
             errorMessage = userFacingMessage(error: error)
             return
         }
         await perform { (client: HostedClient) async throws -> Void in
-            try await client.verifyEmailLink(token: token)
-        }
-    }
-
-    /// E-posta giriş sayfasını tarayıcıda açar (form ve insan doğrulaması sitededir; bağlantı uygulamayı açar).
-    func openEmailSignIn() {
-        do {
-            NSWorkspace.shared.open(try HostedServices.emailSignInPage())
-        } catch {
-            errorMessage = userFacingMessage(error: error)
+            try await client.signInWithGoogle(identityToken: callback.identityToken, nonce: callback.rawNonce)
         }
     }
 

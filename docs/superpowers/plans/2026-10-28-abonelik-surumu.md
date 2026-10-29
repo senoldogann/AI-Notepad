@@ -41,7 +41,7 @@ Hedef: toplantı saati başına ~0,25 $.
    - Kod açık kaynaktır; güvenlik gizliliğe değil, hesaplara ve kotalara dayanır.
 2. **Kimlik.**
    - Apple ile giriş: kimlik jetonu Apple'ın JWKS'iyle doğrulanır; `aud` ve `iss` denetlenir, nonce kullanılır.
-   - E-posta bağlantısı: tek kullanımlık, 15 dakika geçerli, karma olarak saklanır.
+   - Google ile giriş: Google kimlik jetonu; nonce uygulamanın deneme başına ürettiği ham değerin SHA-256'sıdır.
    - Oturum: kısa ömürlü erişim jetonu (15 dk, imzalı) ve dönen yenileme jetonu (karma olarak saklanır; yeniden kullanılırsa tüm oturumlar düşer).
    - Uygulama jetonları Anahtar Zinciri'nde tutar.
 3. **Cihaz doğrulama.**
@@ -83,8 +83,10 @@ Hedef: toplantı saati başına ~0,25 $.
    - Giriş ekranı ve deneme sayacı ("3 toplantıdan 2'si kaldı").
    - Abonelik düğmesi Stripe Checkout'u tarayıcıda açar.
    - Yapay zekâ sağlayıcısı olarak barındırılan servis kullanılır. Anahtar, model ve motor ayarları gizlidir; canlı metin WhisperKit'tir.
-   - Güncellemeler Sparkle ile, aynı yayın akışından.
-4. **Yayın.** `release.sh` iki DMG üretir (geliştirici ve abonelik sürümü). Site abonelik DMG'sini sunar.
+   - Ürün adı Gistsmith (Gistsmith.app); iç kimlikler (paket kimliği, adres şeması, Anahtar Zinciri, veri klasörü) değişmez.
+   - Güncellemeler Sparkle ile, kendi akışı ve anahtarıyla (hesap "gistsmith").
+4. **Yayın.** `scripts/release.sh` geliştirici DMG'sini, `scripts/release-gistsmith.sh` abonelik DMG'sini üretir; abonelik
+   DMG'si ve appcast'i yalnızca sürümleri taşıyan `senoldogann/gistsmith-releases` deposunda. Site abonelik DMG'sini sunar.
 
 ## Kullanıcının yapacakları
 
@@ -117,10 +119,14 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
     Sor, notu yenileme, tekrar işleme, düzenleme, paylaşım çevirisi ve görev aracı her zaman, toplantısız (abonelik ya da
     kalan deneme; kullanıcının günlük/aylık sınırı, `LLM_ACCOUNT_MAX_TOKENS`).
   - Süre sınırından 5 dk önce panelde ve adada uyarı; sınırda kayıt bitirilip normal işlenir.
-  - E-posta girişinin formu sitededir (Turnstile): uygulama `/giris?app=1` açar, site e-postadaki bağlantıyı
-    `com.senoldogan.ainotepad.hosted://auth/email?token=…` ile uygulamaya iletir.
-  - **Yayından önce:** abonelik sürümünün kendi Sparkle akışı (appcast) ve imza anahtarı gerekir; o zamana dek
-    güncelleme kapalıdır (geliştirici akışı bu uygulamaya geliştirici DMG'sini kurardı).
+  - Giriş Apple ile (uygulamada) ya da Google ile; e-posta girişi kaldırıldı. Google arayüzü sitededir: uygulama
+    `/sign-in?app=1&nonce=<sha256hex(ham)>` açar, site `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile
+    döner, uygulama `POST /v1/auth/google` `{identityToken, nonce: ham}` gönderir (ham nonce bellekte, tek kullanımlık,
+    10 dk).
+  - Geri bildirim ve çökme raporları (iki sürüm ve iPhone) `POST /v1/reports`'a gider; GitHub'a bağlantı yok.
+  - Abonelik sürümünün kendi Sparkle akışı (`senoldogann/gistsmith-releases` sürümlerindeki appcast.xml) ve imza
+    anahtarı (`SPARKLE_PUBLIC_KEY_GISTSMITH`, hesap "gistsmith") var; geliştirici akışı bu uygulamaya geliştirici
+    DMG'sini kurardı, bu yüzden paylaşılmaz. Yayın: `scripts/release-gistsmith.sh`.
 - [x] 3. Web sitesi (PR #80).
 - [ ] 4. Uçtan uca test (Stripe test kartı).
   - [x] Site, üretim sunucusuna karşı (2026-10-29): Apple ile giriş → deneme 3/3 → Checkout (4242) → webhook → abonelik
@@ -135,6 +141,6 @@ Gizli değerler sohbete yazılmaz; güvenli girişle istenir.
     ElevenLabs (yalnızca Speech to Text izinli) üretim anahtarları Worker gizli değerlerinde.
   - Stripe test ortamı başka bir projeyle (HouseStory) paylaşılıyor: Checkout ve Portal'da işletme adı "HouseStory"
     görünür. Canlıda hesabın genel adı görünür; testte ayrı bir Stripe sandbox'ı daha temiz olur.
-  - **Yayından önce:** alan adı (site, Worker, Apple Services ID ve Turnstile alan adları birlikte değişir); e-posta
-    gönderimi (şimdilik `EMAIL_SENDER=dev`, giriş yalnızca Apple ile); Stripe canlı mod (canlı ürün, fiyat, webhook ve
-    anahtar); abonelik sürümünün Sparkle akışı; yasal metinlerdeki işletmeci bilgileri ve hukuki inceleme.
+  - **Yayından önce:** alan adı (site, Worker, Apple Services ID ve Turnstile alan adları birlikte değişir); Stripe
+    canlı mod (canlı ürün, fiyat, webhook ve anahtar); abonelik sürümünün ilk sürümü (`scripts/release-gistsmith.sh`) ve
+    sitenin/sunucunun indirme adresinin Gistsmith.dmg'ye geçmesi; yasal metinlerdeki işletmeci bilgileri ve hukuki inceleme.

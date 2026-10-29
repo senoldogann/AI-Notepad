@@ -5,10 +5,16 @@ export interface Env {
   readonly API_IP_LIMITER: RateLimit;
   readonly START_USER_LIMITER: RateLimit;
   readonly PROXY_USER_LIMITER: RateLimit;
+  readonly REPORT_IP_LIMITER: RateLimit;
 
   readonly ENVIRONMENT: string;
   readonly SITE_ORIGIN: string;
   readonly APPLE_CLIENT_IDS: string;
+  readonly GOOGLE_CLIENT_IDS: string;
+  readonly ADMIN_IDENTITIES: string;
+  readonly DMG_URL: string;
+  readonly PRICE_USD_MONTHLY: string;
+  readonly REPORTS_PER_DAY: string;
   readonly APP_ATTEST_POLICY: string;
   readonly APP_ATTEST_ENVIRONMENT: string;
   readonly APP_ATTEST_APP_IDS: string;
@@ -36,9 +42,6 @@ export interface Env {
   readonly SCRIBE_KEYTERMS_USD_PER_HOUR: string;
   readonly DAILY_SPEND_CEILING_USD: string;
   readonly REFRESH_TOKEN_DAYS: string;
-  readonly EMAIL_SENDER: string;
-  readonly EMAIL_FROM: string;
-  readonly EMAIL_LINK_URL: string;
   readonly STRIPE_PRICE_ID: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
@@ -47,5 +50,4 @@ export interface Env {
   readonly STRIPE_SECRET_KEY: string;
   readonly STRIPE_WEBHOOK_SECRET: string;
   readonly TURNSTILE_SECRET_KEY: string;
-  readonly RESEND_API_KEY: string;
 }

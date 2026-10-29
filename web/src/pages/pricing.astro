@@ -1,0 +1,209 @@
+---
+// Fiyat sayfası: tek plan (aylık 5,99 $), neler dahil, sınırlar, vergiler (Stripe Tax) ve SSS.
+import Base from "../layouts/Base.astro";
+import Faq from "../components/Faq.astro";
+import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
+import Waveform from "../components/Waveform.astro";
+import { copy, type CommonCopy, type IconItem, type IconText, type PricingCopy } from "../copy";
+import { routes } from "../routes";
+
+const text: PricingCopy = copy.pricing;
+const common: CommonCopy = copy.common;
+---
+
+<Base page="pricing" meta={text.meta} indexed={true}>
+  <section class="page intro">
+    <p class="eyebrow">{common.nav.pricing}</p>
+    <h1 class="title-xl">{text.title}</h1>
+    <p class="lead">{text.lead}</p>
+  </section>
+
+  <section class="page" aria-labelledby="plan-title">
+    <article class="plan">
+      <Film palette="rose" layout="clouds-left" class="plan__cover">
+        <Waveform seed={text.planName} width={220} height={56} class="plan__wave" />
+      </Film>
+      <div class="plan__body">
+        <div class="plan__summary">
+          <h2 class="title-m" id="plan-title">{text.planName}</h2>
+          <p class="muted">{text.planTagline}</p>
+          <p class="plan__price"><span class="tabular">{common.price}</span><span class="plan__per">{common.perMonth}</span></p>
+          <p class="plan__tax small muted">{common.taxNote}</p>
+          <div class="plan__actions">
+            <a class="button button--primary button--block" href={routes.download}>{text.startFree}</a>
+            <a class="button button--secondary button--block" href={routes.account}>{text.subscribe}</a>
+          </div>
+        </div>
+        <ul class="included">
+          {
+            text.included.map((item: IconItem) => (
+              <li class="included__item">
+                <span class="icon-chip">
+                  <Icon name={item.icon} size={18} class="" />
+                </span>
+                <span>{item.text}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </article>
+  </section>
+
+  <section class="section page" aria-labelledby="limits-title">
+    <h2 class="title-l reveal" id="limits-title">{text.limitsTitle}</h2>
+    <div class="limits">
+      {
+        text.limits.map((limit: IconText) => (
+          <div class="card limit reveal">
+            <span class="icon-chip">
+              <Icon name={limit.icon} size={20} class="" />
+            </span>
+            <h3 class="title-m">{limit.title}</h3>
+            <p class="muted">{limit.text}</p>
+          </div>
+        ))
+      }
+    </div>
+    <div class="tax reveal">
+      <h2 class="title-m">{text.taxTitle}</h2>
+      <p class="muted">{text.taxText}</p>
+    </div>
+  </section>
+
+  <section class="page faq-section" aria-labelledby="pricing-faq-title">
+    <h2 class="title-l reveal" id="pricing-faq-title">{text.faqTitle}</h2>
+    <Faq items={text.faq} />
+  </section>
+</Base>
+
+<style>
+  .intro {
+    display: grid;
+    gap: 18px;
+    padding-block: clamp(48px, 8vw, 96px) clamp(32px, 5vw, 56px);
+  }
+
+  .plan {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    background: var(--card);
+    overflow: hidden;
+  }
+
+  .plan :global(.plan__cover) {
+    display: grid;
+    place-items: center;
+    height: clamp(140px, 18vw, 200px);
+    border-radius: 0;
+  }
+
+  .plan__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: clamp(24px, 5vw, 64px);
+    padding: clamp(24px, 4vw, 48px);
+  }
+
+  .plan__summary {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+  }
+
+  .plan__price {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: clamp(3rem, 6vw, 4rem);
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  .plan__per {
+    font-size: 1.0625rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+
+  .plan__actions {
+    display: grid;
+    gap: 10px;
+    margin-top: 18px;
+    max-width: 340px;
+  }
+
+  .included {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .included__item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    line-height: 1.45;
+  }
+
+  .limits {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: clamp(28px, 4vw, 44px);
+  }
+
+  .limit {
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  .limit .icon-chip {
+    margin-bottom: 6px;
+  }
+
+  .tax {
+    display: grid;
+    gap: 8px;
+    max-width: 46rem;
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+
+  /* SSS ana sayfadaki gibi: başlık solda, sorular sağda; sayfanın sol kenarıyla hizalı. */
+  .faq-section {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: start;
+  }
+
+  @media (max-width: 960px) {
+    .faq-section {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .limits {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .plan__body,
+    .limits {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .plan__actions {
+      max-width: none;
+    }
+  }
+</style>

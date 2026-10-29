@@ -1,0 +1,138 @@
+---
+// Yasal metin sayfası (gizlilik, şartlar): başlık, güncelleme tarihi, içindekiler (geniş ekranda yanda yapışkan) ve
+// bölümler (src/components/LegalSection.astro). Bölüm başlıkları sayfanın `sections` dizisinden gelir: içindekiler ve
+// başlıklar tek kaynaktan.
+import Base from "./Base.astro";
+import { siteLocale } from "../config";
+import { copy, type PageMeta } from "../copy";
+import { type LegalSectionInfo } from "../lib/legal";
+import { legalUpdated } from "../legal/operator";
+import type { PageKey } from "../routes";
+
+interface Props {
+  readonly page: PageKey;
+  readonly meta: PageMeta;
+  readonly title: string;
+  readonly sections: readonly LegalSectionInfo[];
+}
+const { page, meta, title, sections } = Astro.props;
+const updated: string = new Intl.DateTimeFormat(siteLocale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${legalUpdated}T00:00:00Z`));
+---
+
+<Base page={page} meta={meta} indexed={true}>
+  <div class="page legal">
+    <header class="legal__head">
+      <h1 class="title-xl">{title}</h1>
+      <p class="muted">{copy.common.lastUpdated}: <time datetime={legalUpdated}>{updated}</time></p>
+    </header>
+    <nav class="legal__toc" aria-labelledby="toc-title">
+      <h2 class="legal__toc-title" id="toc-title">{copy.common.contents}</h2>
+      <ol>
+        {
+          sections.map((section: LegalSectionInfo, index: number) => (
+            <li>
+              <a href={`#${section.id}`}>
+                <span class="legal__toc-number tabular">{index + 1}</span>
+                {section.title}
+              </a>
+            </li>
+          ))
+        }
+      </ol>
+    </nav>
+    <article class="prose legal__body">
+      <slot />
+    </article>
+  </div>
+</Base>
+
+<style>
+  .legal {
+    display: grid;
+    grid-template-columns: minmax(200px, 260px) minmax(0, 46rem);
+    grid-template-areas:
+      "head head"
+      "toc body";
+    gap: clamp(28px, 4vw, 48px) clamp(32px, 6vw, 88px);
+    padding-top: clamp(40px, 6vw, 80px);
+  }
+
+  .legal__head {
+    grid-area: head;
+    display: grid;
+    gap: 12px;
+    padding-bottom: clamp(24px, 3vw, 36px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .legal__toc {
+    grid-area: toc;
+    position: sticky;
+    top: 92px;
+    align-self: start;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+  }
+
+  .legal__toc-title {
+    margin-bottom: 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+  }
+
+  .legal__toc ol {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .legal__toc a {
+    display: flex;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    text-decoration: none;
+  }
+
+  .legal__toc a:hover {
+    color: var(--ink);
+    background: var(--soft);
+  }
+
+  .legal__toc-number {
+    flex: none;
+    min-width: 1.4em;
+    color: var(--muted);
+  }
+
+  .legal__body {
+    grid-area: body;
+    min-width: 0;
+  }
+
+  @media (max-width: 900px) {
+    .legal {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "head"
+        "toc"
+        "body";
+    }
+
+    .legal__toc {
+      position: static;
+      max-height: none;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-m);
+      background: var(--card);
+    }
+  }
+</style>

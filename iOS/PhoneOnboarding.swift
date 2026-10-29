@@ -54,7 +54,7 @@ struct PhoneOnboarding: View {
     var body: some View {
         VStack(spacing: 20) {
             OnboardingPanel(
-                palette: page.palette, seed: "iphone-\(page.rawValue)", symbols: page.symbols, title: page.title,
+                appName: appName, palette: page.palette, seed: "iphone-\(page.rawValue)", symbols: page.symbols, title: page.title,
                 subtitle: page.subtitle, stepIndex: page.rawValue, stepCount: PhoneOnboardingPage.allCases.count
             )
             .frame(maxHeight: 400)

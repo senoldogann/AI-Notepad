@@ -448,6 +448,7 @@ private struct GeneralSettings: View {
             #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
+            FeedbackSettingsRow()
         }
     }
 }
@@ -1659,7 +1660,7 @@ private struct WebhookSettings: View {
     private var appleNotesCard: some View {
         ConnectionCard(
             tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
-            detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"AI-Notepad\" klasörüne, hesap gerekmez"), badge: nil
+            detail: Text(notesStatus.map { LocalizedStringKey($0) } ?? "\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
         ) {
             Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
                 .settingsToggle()

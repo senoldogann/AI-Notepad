@@ -1,0 +1,29 @@
+---
+// Entegrasyon logosu (src/lib/brands.ts): tek renk, `currentColor`. Erişilebilir adı `title` ve `aria-label` taşır.
+// Kare işaret `size`×`size` çizilir; yazı biçimli (geniş) işaret görsel ağırlığı denk olsun diye en çok 1,6 kat geniş.
+import { type Brand, type BrandMark, brands } from "../lib/brands";
+
+interface Props {
+  readonly brand: Brand;
+  readonly size: number;
+}
+const { brand, size } = Astro.props;
+const mark: BrandMark = brands[brand];
+const aspect: number = mark.viewBox.width / mark.viewBox.height;
+const width: number = Math.round(Math.min(size * Math.sqrt(aspect), size * 1.6) * 10) / 10;
+const height: number = Math.round((width / aspect) * 10) / 10;
+---
+
+<svg
+  class="brand-logo"
+  width={width}
+  height={height}
+  viewBox={`${mark.viewBox.x} ${mark.viewBox.y} ${mark.viewBox.width} ${mark.viewBox.height}`}
+  fill="currentColor"
+  role="img"
+  aria-label={mark.name}
+  focusable="false"
+>
+  <title>{mark.name}</title>
+  <path d={mark.path} fill-rule={mark.fillRule}></path>
+</svg>

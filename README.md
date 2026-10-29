@@ -94,8 +94,11 @@ swift test --package-path Packages/AINotepadCore                          # fast
 AINOTEPAD_CLOUD_TESTS=1 swift test --package-path Packages/AINotepadCore  # + real Deepgram/ElevenLabs/Claude calls
 ```
 
-Cloud tests read keys from the Keychain service `AINotepad`. Distribution builds are produced with
-`scripts/release.sh` (Developer ID signing, notarization, stapled DMG).
+Cloud tests read keys from the Keychain service `AINotepad`. Distribution builds (Developer ID signing, notarization,
+stapled DMG, Sparkle-signed appcast) are produced with `scripts/release.sh <notes.md>` for AI-Notepad and
+`scripts/release-gistsmith.sh <notes.md>` for the subscription edition, Gistsmith. Each edition has its own Sparkle
+key and releases repository (`SPARKLE_PUBLIC_KEY*`, `RELEASES_REPO_*` in `Config/Signing.xcconfig`); the scripts print
+the `gh release create` command instead of publishing.
 
 Project layout: all logic lives in the Swift package `Packages/AINotepadCore` (with its tests);
 `App/` contains only the SwiftUI/AppKit interface. Design notes are in `docs/superpowers/specs/`.

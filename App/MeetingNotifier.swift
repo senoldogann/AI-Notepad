@@ -79,7 +79,7 @@ final class MeetingNotifier {
     func announceAutoRecordingFailed(title: String) async throws {
         let content: UNMutableNotificationContent = UNMutableNotificationContent()
         content.title = String(localized: "Kayıt başlatılamadı: \(title)")
-        content.body = String(localized: "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için AI-Notepad'i aç.")
+        content.body = String(localized: "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için \(appName)'i aç.")
         do {
             try await center.add(UNNotificationRequest(identifier: MeetingNotificationID.micSuggestion, content: content, trigger: nil))
         } catch {
@@ -155,7 +155,7 @@ private func defaultInputIsRunning() -> Bool {
 func notificationMessage(error: any Error) -> String {
     switch error {
     case NotificationError.denied:
-        String(localized: "Bildirim izni yok: Sistem Ayarları › Bildirimler › AI-Notepad'den izin ver.")
+        String(localized: "Bildirim izni yok: Sistem Ayarları › Bildirimler › \(appName) bölümünden izin ver.")
     case NotificationError.scheduleFailed(let reason):
         String(localized: "Bildirim kurulamadı: \(reason)")
     default:

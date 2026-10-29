@@ -2,7 +2,7 @@ import AINotepadCore
 import Foundation
 
 // Abonelik sürümünün paylaşılan koda bağlandığı noktalar (`#if HOSTED_EDITION` ile çağrılır): LLM sağlayıcısı, son
-// geçiş, kurulum eksikleri ve canlı metin motoru.
+// geçiş, kurulum eksikleri, canlı metin motoru ve rapor hedefi.
 
 /// Abonelik sürümünde canlı metin her zaman Mac'te (WhisperKit, ücretsiz); motor seçimi gizlidir.
 let hostedLiveEngine: LiveEngine = .whisperKit
@@ -45,4 +45,11 @@ func hostedSetupProblems() async -> [String] {
     } catch {
         return [userFacingMessage(error: error)]
     }
+}
+
+/// Geri bildirim ve çökme raporunun hedefi: abonelik sunucusu; giriş yapılmışsa rapor hesaba bağlanır (bearer).
+func hostedReportDestination() async throws -> ReportDestination {
+    let client: HostedClient = try HostedServices.requireClient()
+    let accessToken: String? = try await client.isSignedIn() ? try await client.validAccessToken() : nil
+    return ReportDestination(baseURL: client.baseURL, accessToken: accessToken)
 }

@@ -42,7 +42,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .profile: "Adın ve canlı metin motoru"
         #endif
         #if HOSTED_EDITION
-        case .keys: "Apple ile ya da e-postayla giriş"
+        case .keys: "Apple ya da Google ile giriş"
         #else
         case .keys: "Bulut ve Claude anahtarları"
         #endif
@@ -76,7 +76,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
         #endif
         #if HOSTED_EDITION
-        case .keys: "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma AI-Notepad sunucusundan. İlk 3 toplantı ücretsiz."
+        case .keys: "Anahtar gerekmez: not, çeviri ve konuşmacı ayırma \(appName) sunucusundan. İlk 3 toplantı ücretsiz."
         #else
         case .keys: "macOS Anahtar Zinciri'nde saklanır, hiçbir yere gönderilmez; istersen iCloud ile iPhone'a gider."
         #endif
@@ -113,7 +113,7 @@ struct SetupPage: View {
         GeometryReader { (geometry: GeometryProxy) in
             HStack(spacing: 32) {
                 OnboardingPanel(
-                    palette: step.palette, seed: "kurulum-\(step.rawValue)", symbols: step.symbols, title: step.panelTitle,
+                    appName: appName, palette: step.palette, seed: "kurulum-\(step.rawValue)", symbols: step.symbols, title: step.panelTitle,
                     subtitle: step.panelSubtitle, stepIndex: step.rawValue, stepCount: OnboardingStep.allCases.count
                 )
                 .frame(width: min(440, geometry.size.width * 0.42))

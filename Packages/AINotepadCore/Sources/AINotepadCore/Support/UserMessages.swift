@@ -14,6 +14,8 @@ public func userFacingMessage(error: any Error) -> String {
         return hostedErrorMessage(error: error)
     case let error as HostedClientError:
         return hostedClientMessage(error: error)
+    case let error as HostedGoogleSignInError:
+        return hostedGoogleSignInMessage(error: error)
     case let error as OnDeviceLLMError:
         return onDeviceMessage(error: error)
     case let error as AppleSpeechError:
@@ -77,13 +79,13 @@ public func userFacingMessage(error: any Error) -> String {
     case MCPConfigError.invalidConfig(let path, _):
         return String(localized: "Uygulamanın yapılandırması okunamadı (\((path as NSString).lastPathComponent)); bozuk olabilir. Dosyayı düzeltip yeniden dene; üzerine yazılmadı.")
     case MCPConfigError.hasComments(let path):
-        return String(localized: "\((path as NSString).lastPathComponent) yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Uygulamanın ayarından AI-Notepad sunucusunu elle ekle (komut: AINotepad --mcp).")
+        return String(localized: "\((path as NSString).lastPathComponent) yorum satırları içeriyor; yorumlar kaybolmasın diye üzerine yazılmadı. Toplantı sunucusunu o uygulamanın ayarından elle ekle (komut: bu uygulama, --mcp argümanıyla).")
     case MCPConfigError.translocated:
-        return String(localized: "AI-Notepad geçici bir konumdan çalışıyor. Uygulamayı Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.")
+        return String(localized: "Uygulama geçici bir konumdan çalışıyor. Uygulamalar klasörüne taşıyıp yeniden aç, sonra yeniden bağla.")
     case MCPConfigError.writeFailed(let path, _):
         return String(localized: "Yapılandırma yazılamadı: \((path as NSString).lastPathComponent). Klasör izinlerini kontrol et.")
-    case CrashReportError.issueURLInvalid:
-        return String(localized: "Çökme raporundan GitHub bağlantısı oluşturulamadı; raporu Ayarlar › Genel'den silip yenisini bekle.")
+    case let error as ReportError:
+        return reportErrorMessage(error: error)
     case let urlError as URLError where urlError.code == .appTransportSecurityRequiresSecureConnection:
         return String(localized: "Adres şifresiz (http); güvenlik gereği bağlanılmadı. https adresi kullan.")
     case let urlError as URLError:
@@ -151,11 +153,11 @@ public func isQuotaExceeded(body: String) -> Bool {
 private func audioMessage(error: AudioCaptureError) -> String {
     switch error {
     case .microphonePermissionDenied:
-        String(localized: "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan AI-Notepad'e izin ver.")
+        String(localized: "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'da bu uygulamaya izin ver.")
     case .microphoneStartFailed(let code):
         String(localized: "Mikrofon başlatılamadı (kod \(Int(code))). Giriş cihazını kontrol edip kaydı yeniden başlat.")
     case .systemAudioPermissionDenied:
-        String(localized: "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'ndan AI-Notepad'e izin ver.")
+        String(localized: "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'nda bu uygulamaya izin ver.")
     case .coreAudio(let operation, let status):
         String(localized: "Sistem sesi yakalanamadı (\(operation), kod \(Int(status))). Çıkış cihazını kontrol edip kaydı yeniden başlat.")
     case .alreadyRunning:

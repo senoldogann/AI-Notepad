@@ -62,9 +62,11 @@ async function customerId(db: D1Database, stripe: Stripe, platform: Platform, us
 }
 
 /**
- * Aylık abonelik için Stripe Checkout oturumu (otomatik vergi açık, müşteri yeniden kullanılır); ödeme adresini
- * döndürür. Bitmemiş bir abonelik varsa (ek süresi geçmiş `past_due` dahil) `subscription_exists`: aynı kullanıcıda
- * iki abonelik aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar.
+ * Aylık abonelik için Stripe Checkout oturumu (müşteri yeniden kullanılır); ödeme adresini döndürür. Stripe Managed
+ * Payments açıktır: yasal satıcı Stripe/Link'tir; vergiyi o hesaplar, toplar ve öder, adı ve fatura adresini kendisi
+ * ister. Bu yüzden `automatic_tax`, `customer_update` ve `tax_id_collection` gönderilmez (Managed Payments reddeder).
+ * Bitmemiş bir abonelik varsa (ek süresi geçmiş `past_due` dahil) `subscription_exists`: aynı kullanıcıda iki abonelik
+ * aynı anda ücretlendirilmesin; istemci Müşteri Portalı'nı açar.
  */
 export async function createCheckout(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
   const current: SubscriptionState | null = await subscriptionState(db, userId);
@@ -82,11 +84,10 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
       customer,
       client_reference_id: userId,
       line_items: [{ price: config.stripePriceId, quantity: 1 }],
-      automatic_tax: { enabled: true },
-      customer_update: { address: "auto", name: "auto" },
+      managed_payments: { enabled: true },
       subscription_data: { metadata: { user_id: userId } },
-      success_url: `${config.siteOrigin}/hesap?odeme=tamam`,
-      cancel_url: `${config.siteOrigin}/fiyat`,
+      success_url: `${config.siteOrigin}/account?payment=done`,
+      cancel_url: `${config.siteOrigin}/pricing`,
     }),
   );
   if (session.url === null) {
@@ -106,7 +107,7 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
   }
   const stripe: Stripe = stripeClient(platform, config);
   const session: Stripe.BillingPortal.Session = await callStripe(platform, "billingPortal.sessions.create", userId, () =>
-    stripe.billingPortal.sessions.create({ customer: row.stripe_customer_id, return_url: `${config.siteOrigin}/hesap` }),
+    stripe.billingPortal.sessions.create({ customer: row.stripe_customer_id, return_url: `${config.siteOrigin}/account` }),
   );
   return session.url;
 }

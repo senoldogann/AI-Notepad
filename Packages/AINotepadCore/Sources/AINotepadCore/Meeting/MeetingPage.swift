@@ -12,8 +12,9 @@ func htmlEscaped(_ text: String) -> String {
 
 /// Paylaşılabilir tek dosyalık web sayfası: notun başlığı, tarihi, özeti, kararları, görevleri (sahibi ve tarihiyle),
 /// konu akışı ve sözlüğü (asıl notta). Bağlantı ya da betik içermez; tarayıcıda açılır, e-postaya eklenir, açık ve
-/// koyu temaya uyar. `language` paylaşım dili (başlıklar o dilde); nil ise asıl not (başlıklar arayüz dilinde). Saf fonksiyondur.
-public func meetingHTML(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?) -> String {
+/// koyu temaya uyar. `language` paylaşım dili (başlıklar o dilde); nil ise asıl not (başlıklar arayüz dilinde).
+/// `appName`: sayfanın altındaki ürün adı (uygulamanın görünen adı). Saf fonksiyondur.
+public func meetingHTML(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?, appName: String) -> String {
     let headings: (summary: String, decisions: String, tasks: String) = language.map { (language: ShareLanguage) -> (summary: String, decisions: String, tasks: String) in
         (summary: language.headings.summary, decisions: language.headings.decisions, tasks: language.headings.tasks)
     } ?? (summary: String(localized: "Özet"), decisions: String(localized: "Kararlar"), tasks: String(localized: "Görevler"))
@@ -68,7 +69,7 @@ public func meetingHTML(record: MeetingRecord, note: MeetingNote, language: Shar
     <h1>\(htmlEscaped(note.title))</h1>
     <div class="meta">\(htmlEscaped(date + minutes))</div>
     \(sections.joined(separator: "\n"))
-    <footer>AI-Notepad</footer>
+    <footer>\(htmlEscaped(appName))</footer>
     </main></body></html>
     """
 }

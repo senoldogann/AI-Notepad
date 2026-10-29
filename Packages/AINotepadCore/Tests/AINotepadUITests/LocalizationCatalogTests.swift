@@ -8,9 +8,10 @@ private func repositoryRoot() -> URL {
         .deletingLastPathComponent().deletingLastPathComponent()
 }
 
-/// Denetlenen String Catalog'lar (kaynak dil Türkçe), depo köküne göre yol. iOS'un Info.plist kataloğu varsa o da.
+/// Denetlenen String Catalog'lar (kaynak dil Türkçe), depo köküne göre yol: ortak metinler, iki Mac sürümünün Info.plist
+/// katalogları ve iPhone kısayolları; iOS'un Info.plist kataloğu varsa o da.
 private func catalogPaths() -> [String] {
-    let fixed: [String] = ["App/Localizable.xcstrings", "App/InfoPlist.xcstrings", "iOS/AppShortcuts.xcstrings"]
+    let fixed: [String] = ["App/Localizable.xcstrings", "App/InfoPlist.xcstrings", "App/Hosted/InfoPlist.xcstrings", "iOS/AppShortcuts.xcstrings"]
     let optional: String = "iOS/InfoPlist.xcstrings"
     let hasOptional: Bool = FileManager.default.fileExists(atPath: repositoryRoot().appending(path: optional).path)
     return hasOptional ? fixed + [optional] : fixed

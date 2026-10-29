@@ -1,11 +1,13 @@
-// Uçtan uca görsel deneme: derlenmiş site (scripts/serve.ts) ve yerel abonelik sunucusu (server/, `npm run dev`)
-// çalışırken sayfaların 1440 ve 390 px, açık ve koyu ekran görüntülerini alır; yatay taşmayı, konsol hatalarını ve CSP
-// ihlallerini raporlar. Giriş formu gerçek Turnstile deneme anahtarıyla gönderilir; hesap sayfası verilen tek
-// kullanımlık e-posta jetonuyla (yerel D1'e yazılmış) giriş yapılarak gerçek `/v1/me` verisiyle çekilir.
-// Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu> <giriş jetonu>
+// Görsel deneme: derlenmiş site (scripts/serve.ts) sunulurken tüm sayfaların 1440 ve 390 px açık ve koyu, 360 px açık tam sayfa
+// görüntülerini alır; yatay taşmayı, konsol hatalarını ve CSP ihlallerini raporlar. Ayrıca ana sayfa gösteriminin
+// birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
+// Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
+// karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir.
+// Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu>
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type Browser, type BrowserContext, type ConsoleMessage, type Page, chromium } from "playwright-core";
+import { type Browser, type BrowserContext, type CDPSession, type ConsoleMessage, type Page, type Route, chromium } from "playwright-core";
+import { googleScriptUrl, siteConfigs } from "../src/config.ts";
 
 /** Ekran boyutu ve renk teması. */
 interface Variant {
@@ -20,40 +22,142 @@ interface Finding {
   readonly problem: string;
 }
 
+/** Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). */
+interface Target {
+  readonly name: string;
+  readonly path: string;
+  readonly ready: string;
+  readonly signedIn: boolean;
+}
+
 const variants: readonly Variant[] = [
   { name: "1440-light", width: 1440, colorScheme: "light" },
   { name: "1440-dark", width: 1440, colorScheme: "dark" },
   { name: "390-light", width: 390, colorScheme: "light" },
   { name: "390-dark", width: 390, colorScheme: "dark" },
+  { name: "360-light", width: 360, colorScheme: "light" },
 ];
 
-/** Görüntülenecek sayfalar; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). */
-const pages: readonly { readonly name: string; readonly path: string; readonly ready: string }[] = [
-  { name: "home", path: "/tr", ready: "main" },
-  { name: "home-en", path: "/en", ready: "main" },
-  { name: "pricing", path: "/tr/fiyat", ready: "main" },
-  { name: "download", path: "/tr/indir", ready: "main" },
-  { name: "signin", path: "/tr/giris", ready: "#email-submit:not([disabled])" },
+const targets: readonly Target[] = [
+  { name: "home", path: "/", ready: "main", signedIn: false },
+  { name: "pricing", path: "/pricing", ready: "main", signedIn: false },
+  { name: "download", path: "/download", ready: "main", signedIn: false },
+  { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false },
+  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "#google-button iframe", signedIn: false },
+  { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false },
+  { name: "privacy", path: "/privacy", ready: "main", signedIn: false },
+  { name: "terms", path: "/terms", ready: "main", signedIn: false },
+  { name: "notfound", path: "/no-such-page", ready: "main", signedIn: false },
+  { name: "account", path: "/account?payment=done", ready: "#account-content:not(.hidden)", signedIn: true },
+  { name: "admin", path: "/admin", ready: "#admin-content:not(.hidden)", signedIn: true },
 ];
+
+/** Yerel derlemenin API adresi (istekler buraya gider ve örnek verilerle karşılanır). */
+const apiBase: string = siteConfigs.local.apiBase;
+
+/** Son 30 gün (`YYYY-MM-DD`, UTC). Saf fonksiyondur. */
+function last30Days(now: Date): string[] {
+  return Array.from({ length: 30 }, (_: unknown, index: number): string => new Date(now.getTime() - (29 - index) * 86_400_000).toISOString().slice(0, 10));
+}
+
+/** Örnek yanıtlar: yol (sorgusuz) → gövde. */
+function fixtures(now: Date): Readonly<Record<string, object>> {
+  const days: string[] = last30Days(now);
+  const wave = (index: number, scale: number): number => Math.max(0, Math.round((Math.sin(index / 3) + 1.3) * scale + (index % 4)));
+  return {
+    "/v1/me": {
+      userId: "usr_example",
+      plan: "subscription",
+      trialMeetingsTotal: 3,
+      trialMeetingsLeft: 0,
+      monthlyHoursUsed: 3.4,
+      monthlyHoursCap: 10,
+      subscription: { status: "active", currentPeriodEnd: new Date(now.getTime() + 20 * 86_400_000).toISOString(), cancelAt: null, access: "active", graceEndsAt: null },
+    },
+    "/v1/admin/stats": {
+      generatedAt: now.toISOString(),
+      downloads: { total: 1284, last30Days: days.map((day: string, index: number) => ({ day, count: wave(index, 9) })) },
+      users: { total: 412, newLast30Days: days.map((day: string, index: number) => ({ day, count: wave(index + 5, 3) })), byProvider: { apple: 251, google: 161 } },
+      trials: { activeTrialUsers: 96, exhaustedTrialUsers: 188 },
+      subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, mrrUsd: 425.29 },
+      meetings: { last30Days: days.map((day: string, index: number) => ({ day, trial: wave(index, 4), subscription: wave(index + 2, 7) })), hoursThisMonth: 213.5 },
+      spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },
+      tokens: { thisMonth: 48_210_000 },
+      reports: { openFeedback: 3, openCrash: 1, openContact: 2 },
+    },
+    "/v1/admin/reports": {
+      items: [
+        { id: "rep_1", kind: "feedback", status: "open", createdAt: now.getTime() - 3_600_000, userId: "usr_example", email: "mia@example.com", appVersion: "0.2.0", os: "macOS 26.1", summary: "Would love a keyboard shortcut to start recording" },
+        { id: "rep_2", kind: "feedback", status: "open", createdAt: now.getTime() - 86_400_000, userId: null, email: null, appVersion: "0.2.0", os: "macOS 26.0", summary: "Speaker names were swapped in a long meeting" },
+      ],
+      nextBefore: null,
+    },
+    "/v1/admin/reports/rep_1": {
+      id: "rep_1",
+      kind: "feedback",
+      status: "open",
+      createdAt: now.getTime() - 3_600_000,
+      userId: "usr_example",
+      email: "mia@example.com",
+      appVersion: "0.2.0",
+      os: "macOS 26.1",
+      message: "Would love a keyboard shortcut to start recording.\nOtherwise the notes are spot on — thank you!",
+      payload: null,
+    },
+  };
+}
 
 /** Komut satırı bağımsız değişkeni; yoksa hata. */
 function argument(index: number, name: string): string {
   const value: string | undefined = process.argv[index];
   if (value === undefined || value === "") {
-    throw new Error(`Eksik bağımsız değişken: ${name}. Kullanım: node scripts/screenshots.ts <site> <çıktı> <chrome> <jeton>`);
+    throw new Error(`Eksik bağımsız değişken: ${name}. Kullanım: node scripts/screenshots.ts <site> <çıktı> <chrome>`);
   }
   return value;
+}
+
+/**
+ * Beklenen konsol hataları: Google Identity Services sayfaya kendi `<style>` öğelerini ve iframe yüklenene dek görünen
+ * yer tutucu düğmede `data:` adresli bir Google simgesi ekler; Google'ın belgelediği CSP bunlara izin vermez (asıl düğme
+ * iframe içinde çizildiği için etkilenmez; giriş sayfasında Google dışında `data:` görsel ekleyen yok). 404 sayfasının
+ * kendisi 404 durumuyla gelir.
+ */
+function isExpectedConsoleError(message: ConsoleMessage, shot: string): boolean {
+  const fromGoogle: boolean = message.location().url.startsWith(googleScriptUrl);
+  const googlePlaceholderIcon: boolean = shot.startsWith("signin") && message.text().startsWith("Loading the image 'data:image/png");
+  const notFoundDocument: boolean = shot.startsWith("notfound") && message.text().includes("status of 404");
+  return fromGoogle || googlePlaceholderIcon || notFoundDocument;
 }
 
 /** Sayfanın konsol hatalarını ve yakalanmamış hatalarını toplar. */
 function collectErrors(page: Page, shot: () => string, findings: Finding[]): void {
   page.on("console", (message: ConsoleMessage): void => {
-    if (message.type() === "error") {
-      findings.push({ shot: shot(), problem: `console: ${message.text()}` });
+    if (message.type() === "error" && !isExpectedConsoleError(message, shot())) {
+      findings.push({ shot: shot(), problem: `console: ${message.text().slice(0, 300)} @ ${message.location().url}` });
     }
   });
   page.on("pageerror", (error: Error): void => {
     findings.push({ shot: shot(), problem: `pageerror: ${error.message}` });
+  });
+}
+
+/** API isteklerini örnek yanıtlarla karşılar; tanımsız yol 404 döner ve sorun olarak kaydedilir. */
+async function routeApi(context: BrowserContext, findings: Finding[]): Promise<void> {
+  const bodies: Readonly<Record<string, object>> = fixtures(new Date());
+  await context.route(`${apiBase}/**`, async (route: Route): Promise<void> => {
+    const url: URL = new URL(route.request().url());
+    const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: cors });
+      return;
+    }
+    const body: object | undefined = bodies[url.pathname];
+    if (body === undefined) {
+      findings.push({ shot: "api", problem: `örnek yanıt yok: ${route.request().method()} ${url.pathname}` });
+      await route.fulfill({ status: 404, headers: cors, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "örnek yok" } }) });
+      return;
+    }
+    await route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
   });
 }
 
@@ -65,7 +169,7 @@ async function checkOverflow(page: Page, shot: string, findings: Finding[]): Pro
     for (const element of Array.from(document.querySelectorAll("body *"))) {
       const rect: DOMRect = element.getBoundingClientRect();
       if (rect.width > 0 && (rect.right > viewport + 1 || rect.left < -1) && getComputedStyle(element).position !== "fixed") {
-        const insideClip: boolean = element.closest(".film, .faq, dialog, .visually-hidden, .skip-link") !== null;
+        const insideClip: boolean = element.closest(".film, .faq, dialog, .visually-hidden, .skip-link, .table-wrap, .detail__payload") !== null;
         if (!insideClip) {
           offenders.push(`${element.tagName.toLowerCase()}.${String(element.className).split(" ").join(".")} (${Math.round(rect.left)}–${Math.round(rect.right)})`);
         }
@@ -81,7 +185,7 @@ async function checkOverflow(page: Page, shot: string, findings: Finding[]): Pro
   }
 }
 
-/** Sayfayı açar, yazı tipinin yüklenmesini bekler, taşmayı denetler ve tam sayfa görüntüsünü kaydeder. */
+/** Yazı tipinin yüklenmesini bekler, taşmayı denetler ve tam sayfa görüntüsünü kaydeder. */
 async function capture(page: Page, outDir: string, shot: string, findings: Finding[]): Promise<void> {
   await page.evaluate(async (): Promise<void> => {
     await document.fonts.ready;
@@ -90,27 +194,48 @@ async function capture(page: Page, outDir: string, shot: string, findings: Findi
   await page.screenshot({ path: join(outDir, `${shot}.png`), fullPage: true });
 }
 
-/** Yeni bağlam: Türkçe tarayıcı, hareket azaltılmış (kaydırmaya bağlı belirme tam sayfa görüntüde içeriği gizlemesin). */
-async function newContext(browser: Browser, variant: Variant): Promise<BrowserContext> {
+/** Yeni bağlam: hareket azaltılmış (gösterim son hâlinde, kaydırmaya bağlı belirme içeriği gizlemez). */
+async function newContext(browser: Browser, variant: Variant, reducedMotion: "reduce" | "no-preference"): Promise<BrowserContext> {
   return browser.newContext({
     viewport: { width: variant.width, height: 900 },
     deviceScaleFactor: variant.width < 600 ? 2 : 1,
     colorScheme: variant.colorScheme,
-    reducedMotion: "reduce",
-    locale: "tr-TR",
+    reducedMotion,
+    locale: "en-GB",
   });
 }
 
-/** Durgun sayfaların görüntüleri. */
-async function captureStaticPages(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+/** Örnek oturumu sekmeye yazar (hesap ve yönetim sayfaları oturum ister). */
+async function signIn(page: Page): Promise<void> {
+  await page.addInitScript((): void => {
+    sessionStorage.setItem("ainotepad.session", JSON.stringify({ accessToken: "example-access", refreshToken: "example-refresh", accessExpiresAt: Date.now() + 3_600_000 }));
+  });
+}
+
+/** Tüm sayfaların görüntüleri. */
+async function capturePages(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
   for (const variant of variants) {
-    const context: BrowserContext = await newContext(browser, variant);
-    for (const target of pages) {
+    const context: BrowserContext = await newContext(browser, variant, "reduce");
+    await routeApi(context, findings);
+    for (const target of targets) {
       const shot: string = `${target.name}-${variant.name}`;
       const page: Page = await context.newPage();
       collectErrors(page, (): string => shot, findings);
+      if (target.signedIn) {
+        await signIn(page);
+      }
       await page.goto(`${base}${target.path}`, { waitUntil: "load" });
       await page.waitForSelector(target.ready, { timeout: 20_000 });
+      if (target.ready.includes("iframe")) {
+        // Google düğmesinin iframe içeriği (yazı ve yazı tipi) ayrıca yüklenir.
+        await page.waitForTimeout(2000);
+      }
+      if (target.name === "admin") {
+        await page.click("#inbox-list .inbox__item");
+        await page.waitForSelector("#detail-body:not(.hidden)");
+        // Ayrıntı görünür alana kaydırılır; tam sayfa görüntüde yapışkan üst çubuk ortada kalmasın.
+        await page.evaluate((): void => window.scrollTo(0, 0));
+      }
       await capture(page, outDir, shot, findings);
       await page.close();
     }
@@ -118,59 +243,84 @@ async function captureStaticPages(browser: Browser, base: string, outDir: string
   }
 }
 
-/** Giriş formu: Turnstile deneme anahtarı geçer, form gerçek sunucuya gönderilir, "e-postanı kontrol et" görünür. */
-async function captureEmailSent(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
-  const variant: Variant = { name: "1440-light", width: 1440, colorScheme: "light" };
-  const context: BrowserContext = await newContext(browser, variant);
-  const page: Page = await context.newPage();
-  const shot: string = "signin-sent-1440-light";
-  collectErrors(page, (): string => shot, findings);
-  await page.goto(`${base}/tr/giris`, { waitUntil: "load" });
-  await page.fill("#email", "deneme@example.com");
-  await page.waitForSelector("#email-submit:not([disabled])", { timeout: 20_000 });
-  await page.click("#email-submit");
-  await page.waitForSelector("#signin-sent:not(.hidden)", { timeout: 20_000 });
-  await capture(page, outDir, shot, findings);
-  await context.close();
-}
-
-/** Hesap sayfası: e-posta bağlantısıyla (dile özgü olmayan `/giris/eposta`) giriş, sonra her görünümde yeniden yükleme. */
-async function captureAccount(browser: Browser, base: string, outDir: string, token: string, findings: Finding[]): Promise<void> {
-  const context: BrowserContext = await newContext(browser, { name: "1440-light", width: 1440, colorScheme: "light" });
-  const page: Page = await context.newPage();
-  let shot: string = "account-login";
-  collectErrors(page, (): string => shot, findings);
-  await page.goto(`${base}/giris/eposta#token=${token}`);
-  await page.waitForURL(`${base}/tr/hesap`, { timeout: 20_000 });
-  for (const variant of variants) {
-    shot = `account-${variant.name}`;
-    await page.setViewportSize({ width: variant.width, height: 900 });
-    await page.emulateMedia({ colorScheme: variant.colorScheme, reducedMotion: "reduce" });
-    await page.reload({ waitUntil: "load" });
-    await page.waitForSelector("#account-content:not(.hidden)", { timeout: 20_000 });
-    await capture(page, outDir, shot, findings);
+/** Ana sayfa gösteriminin kareleri (animasyon zamanı elle ayarlanır) ve 5 sn'lik ana iş parçacığı ölçüsü. */
+async function captureDemo(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+  for (const variant of [variants[0], variants[2]]) {
+    if (variant === undefined) {
+      continue;
+    }
+    const context: BrowserContext = await newContext(browser, variant, "no-preference");
+    const page: Page = await context.newPage();
+    const shot: string = `demo-${variant.name}`;
+    collectErrors(page, (): string => shot, findings);
+    await page.goto(`${base}/`, { waitUntil: "load" });
+    const demo = page.locator("#hero-demo");
+    await demo.scrollIntoViewIfNeeded();
+    for (const seconds of [3, 7.5, 11, 15]) {
+      await page.evaluate((ms: number): void => {
+        for (const animation of document.getAnimations()) {
+          const timing = animation.effect?.getComputedTiming();
+          if (timing !== undefined && timing.duration === 18_000) {
+            animation.currentTime = ms;
+          }
+        }
+      }, seconds * 1000);
+      await page.waitForTimeout(80);
+      await demo.screenshot({ path: join(outDir, `${shot}-${String(seconds).replace(".", "_")}s.png`) });
+    }
+    if (variant.width === 1440) {
+      const client: CDPSession = await context.newCDPSession(page);
+      await client.send("Performance.enable");
+      const before = await client.send("Performance.getMetrics");
+      await page.waitForTimeout(5000);
+      const after = await client.send("Performance.getMetrics");
+      const metric = (metrics: { metrics: { name: string; value: number }[] }, name: string): number => metrics.metrics.find((item): boolean => item.name === name)?.value ?? 0;
+      const delta = (name: string): number => Math.round((metric(after, name) - metric(before, name)) * 1000) / 1000;
+      console.log("demo_main_thread_5s", {
+        taskSeconds: delta("TaskDuration"),
+        scriptSeconds: delta("ScriptDuration"),
+        styleSeconds: delta("RecalcStyleDuration"),
+        layoutSeconds: delta("LayoutDuration"),
+        layouts: delta("LayoutCount"),
+        styleRecalcs: delta("RecalcStyleCount"),
+      });
+    }
+    await context.close();
   }
-  shot = "account-delete-dialog";
-  await page.click("#delete-button");
-  await page.fill("#confirm-input", "sil");
-  await page.waitForSelector("#confirm-delete:not([disabled])");
-  await page.screenshot({ path: join(outDir, `${shot}-390-dark.png`) });
+}
+
+/** Tema düğmesi: tıklanınca tema değişir, seçim yeniden yüklemede kalır. */
+async function checkThemeToggle(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+  const variant: Variant = { name: "1440-light", width: 1440, colorScheme: "light" };
+  const context: BrowserContext = await newContext(browser, variant, "reduce");
+  const page: Page = await context.newPage();
+  collectErrors(page, (): string => "theme-toggle", findings);
+  await page.goto(`${base}/pricing`, { waitUntil: "load" });
+  await page.click("[data-theme-toggle]");
+  await page.reload({ waitUntil: "load" });
+  const state: { readonly theme: string | undefined; readonly pressed: string | null } = await page.evaluate(() => ({
+    theme: document.documentElement.dataset["theme"],
+    pressed: document.querySelector("[data-theme-toggle]")?.getAttribute("aria-pressed") ?? null,
+  }));
+  if (state.theme !== "dark" || state.pressed !== "true") {
+    findings.push({ shot: "theme-toggle", problem: `seçim kalmadı: ${JSON.stringify(state)}` });
+  }
+  await page.screenshot({ path: join(outDir, "theme-toggle-dark.png") });
   await context.close();
 }
 
-/** Tüm görüntüleri alır ve sorunları yazdırır; sorun varsa çıkış kodu 1. */
+/** Tüm denetimleri yapar ve sorunları yazdırır; sorun varsa çıkış kodu 1. */
 async function main(): Promise<void> {
   const base: string = argument(2, "site adresi").replace(/\/$/, "");
   const outDir: string = argument(3, "çıktı klasörü");
   const chromePath: string = argument(4, "Chrome yolu");
-  const token: string = argument(5, "giriş jetonu");
   await mkdir(outDir, { recursive: true });
   const browser: Browser = await chromium.launch({ executablePath: chromePath, headless: true });
   const findings: Finding[] = [];
   try {
-    await captureStaticPages(browser, base, outDir, findings);
-    await captureEmailSent(browser, base, outDir, findings);
-    await captureAccount(browser, base, outDir, token, findings);
+    await capturePages(browser, base, outDir, findings);
+    await captureDemo(browser, base, outDir, findings);
+    await checkThemeToggle(browser, base, outDir, findings);
   } finally {
     await browser.close();
   }

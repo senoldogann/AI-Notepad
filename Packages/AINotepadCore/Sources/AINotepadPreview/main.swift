@@ -93,7 +93,7 @@ MainActor.assumeIsolated {
     levels.showSample(values: [0.2, 0.6, 0.35, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.65, 0.45, 0.85, 0.55, 0.75])
     for (name, expanded, y) in [("island-collapsed", false, 600.0), ("island-expanded", true, 460.0)] {
         let number: Int = showWindow(
-            view: IslandView(state: sampleState(phase: .recording), levels: levels, layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
+            view: IslandView(appName: "AI-Notepad", state: sampleState(phase: .recording), levels: levels, layout: layout, isExpanded: expanded, onTap: {}, onHover: { _ in }, onStop: {}, onSetLanguage: { _ in }),
             frame: NSRect(x: 600, y: y, width: layout.frame.width, height: layout.frame.height)
         )
         print("\(name) \(number)")

@@ -57,6 +57,7 @@ async function userRowCounts(userId: string): Promise<Record<string, number>> {
     ["subscriptions", "SELECT COUNT(*) AS count FROM subscriptions WHERE user_id = ?1"],
     ["stripe_customers", "SELECT COUNT(*) AS count FROM stripe_customers WHERE user_id = ?1"],
     ["trial_starts", "SELECT COUNT(*) AS count FROM trial_starts WHERE user_id = ?1"],
+    ["reports", "SELECT COUNT(*) AS count FROM reports WHERE user_id = ?1"],
   ];
   const counts: Record<string, number> = {};
   for (const [table, sql] of queries) {
@@ -98,14 +99,11 @@ describe("DELETE /v1/me (hesap silme)", () => {
     )
       .bind(otherMeeting, other.userId, deviceId)
       .run();
-    // E-posta kimliği ve giriş bağlantıları; başka adresin bağlantısı kalır.
-    const email: string = `kisi-${randomId()}@ornek.test`;
-    const otherEmail: string = `baska-${randomId()}@ornek.test`;
-    await env.DB.batch([
-      env.DB.prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES ('email', ?, ?, ?, 0)").bind(email, userId, email),
-      env.DB.prepare("INSERT INTO email_login_tokens (token_hash, email, created_at, expires_at) VALUES (?, ?, 0, 1)").bind(randomToken(16), email),
-      env.DB.prepare("INSERT INTO email_login_tokens (token_hash, email, created_at, expires_at) VALUES (?, ?, 0, 1)").bind(randomToken(16), otherEmail),
-    ]);
+    // Hesabın raporları silinir; başka hesabın ve jetonsuz gönderilmiş rapor kalır.
+    const feedback = { kind: "feedback", message: "Hesabımın geri bildirimi", email: "kisi@ornek.test" };
+    expect((await harness.call(req("POST", "/v1/reports", { token: session.accessToken, json: feedback }))).status).toBe(202);
+    expect((await harness.call(req("POST", "/v1/reports", { token: other.accessToken, json: feedback }))).status).toBe(202);
+    expect((await harness.call(req("POST", "/v1/reports", { json: feedback }))).status).toBe(202);
     await grantSubscription(userId, "active", harness.clock.nowMs + 20 * 86_400_000);
     const stored = await env.DB.prepare("SELECT stripe_subscription_id, stripe_customer_id FROM subscriptions WHERE user_id = ?")
       .bind(userId)
@@ -128,8 +126,8 @@ describe("DELETE /v1/me (hesap silme)", () => {
     expect(stripe.lists[0]?.searchParams.get("status")).toBe("all");
     expect(stripe.canceled).toEqual([stored?.stripe_subscription_id]);
     expect(Object.values(await userRowCounts(userId)).every((count: number): boolean => count === 0)).toBe(true);
-    const emailTokens = await env.DB.prepare("SELECT email FROM email_login_tokens WHERE email IN (?, ?)").bind(email, otherEmail).all<{ email: string }>();
-    expect(emailTokens.results).toEqual([{ email: otherEmail }]);
+    const remainingReports = await env.DB.prepare("SELECT user_id FROM reports ORDER BY user_id").all<{ user_id: string | null }>();
+    expect(remainingReports.results).toEqual([{ user_id: null }, { user_id: other.userId }]);
     const otherRow = await env.DB.prepare("SELECT device_id FROM meeting_sessions WHERE id = ?").bind(otherMeeting).first<{ device_id: string | null }>();
     expect(otherRow).toEqual({ device_id: null });
     const anonymous = await env.DB.prepare("SELECT COUNT(*) AS count, SUM(accounts) AS accounts FROM deleted_trial_starts").first<{ count: number; accounts: number }>();
