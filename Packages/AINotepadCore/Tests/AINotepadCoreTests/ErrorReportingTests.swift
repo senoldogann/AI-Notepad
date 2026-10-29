@@ -108,15 +108,16 @@ import Testing
 }
 
 @Suite struct TimeoutTests {
-    // İptale yanıt vermeyen bekleme de süre dolunca bırakılır.
+    // İptale yanıt vermeyen bekleme de süre dolunca bırakılır. Yavaş iş çok uzun (60 sn), sınır onun üçte biri: yüklü
+    // CI makinesinde 0,2 sn'lik zamanlayıcı saniyelerce gecikebilir, ama bekleme yavaş işe kalsaydı sınır yine aşılırdı.
     @Test func stopsWaitingAfterTimeout() async {
         let slow: Task<Void, Never> = Task {
-            do { try await Task.sleep(for: .seconds(5)) } catch {}
+            do { try await Task.sleep(for: .seconds(60)) } catch {}
         }
         let started: ContinuousClock.Instant = .now
         let finished: Bool = await finishesWithin(seconds: 0.2) { await slow.value }
         #expect(!finished)
-        #expect(ContinuousClock.now - started < .seconds(2))
+        #expect(ContinuousClock.now - started < .seconds(20))
         #expect(await finishesWithin(seconds: 2) {})
         slow.cancel()
     }

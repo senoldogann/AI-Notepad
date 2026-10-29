@@ -11,7 +11,7 @@ struct PeoplePage: View {
     @State private var selected: String?
     @State private var isAdding: Bool = false
     @State private var filter: String = ""
-    @AppStorage(SettingsKey.peopleListVisible) private var listVisible: Bool = false
+    @AppStorage(SettingsKey.peopleListVisible) private var listVisible: Bool = true
 
     var body: some View {
         let people: [PersonSummary] = peopleDirectory(
@@ -149,11 +149,19 @@ struct PeoplePage: View {
                     }
                 }
             } label: {
-                Text(verbatim: current?.name ?? "")
+                // Ok, düğmenin bir kişi seçici olduğunu belli eder.
+                HStack(spacing: 6) {
+                    Text(verbatim: current?.name ?? "")
+                    Image(systemName: "chevron.down")
+                        .appFont(size: 10, weight: .semibold)
+                        .foregroundStyle(Theme.muted)
+                }
             }
             .menuStyle(.button)
             .buttonStyle(.pill)
+            .menuIndicator(.hidden)
             .fixedSize()
+            .accessibilityLabel("Kişi seç")
             .hoverHint("Başka bir kişiyi aç", alignment: .leading, edge: .bottom)
             Spacer(minLength: 8)
             Button("Kişi ekle", systemImage: "person.badge.plus") {
@@ -397,7 +405,8 @@ private struct PersonDetail: View {
                                                 .foregroundStyle(Theme.muted)
                                         }
                                         Spacer(minLength: 8)
-                                        Text(item.element.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                                        // Kişinin bu toplantıdaki konuşma payı (etiketsiz yüzde neyin oranı olduğunu söylemiyordu).
+                                        Text("Konuşma payı \(item.element.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))")
                                             .appFont(size: 12, weight: .medium)
                                             .monospacedDigit()
                                             .foregroundStyle(Theme.muted)

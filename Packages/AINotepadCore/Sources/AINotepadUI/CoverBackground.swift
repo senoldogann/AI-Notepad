@@ -11,6 +11,7 @@ public struct CoverBackground: View {
 
     public var body: some View {
         FilmGradient(seed: seed, palette: filmPalette(seed: seed))
+            .dimmedInDarkTheme()
             .overlay { LinearGradient(colors: [.clear, .black.opacity(0.38)], startPoint: .top, endPoint: .bottom) }
     }
 }
@@ -25,6 +26,37 @@ public struct CoverImage: View {
 
     public var body: some View {
         FilmGradient(seed: seed, palette: filmPalette(seed: seed))
+            .dimmedInDarkTheme()
+    }
+}
+
+/// Koyu temada kapağın karartması (0...1): pastel kapak siyah zeminde parlamasın, rengini yine korusun.
+let darkCoverDimming: Double = 0.34
+
+/// Koyu temada kapağın doygunluğu (1: değişmez).
+let darkCoverSaturation: Double = 0.85
+
+public extension View {
+    /// Kapağı koyu temada kısar (bkz. `DarkCoverDimming`).
+    func dimmedInDarkTheme() -> some View {
+        modifier(DarkCoverDimming())
+    }
+}
+
+/// Kapağı koyu temada kısar: durgun bir karartma ve biraz daha az doygunluk (canlandırılmaz; açık temada kapak olduğu
+/// gibi kalır). Yalnız büyük kapaklarda (toplantı kapakları, ana sayfadaki kayıt kartı): marka kutuları ve gradyan
+/// panolarındaki koyu simge ve yazılar karartmayla okunmaz olurdu.
+private struct DarkCoverDimming: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content
+                .saturation(darkCoverSaturation)
+                .overlay { Color.black.opacity(darkCoverDimming).allowsHitTesting(false) }
+        } else {
+            content
+        }
     }
 }
 

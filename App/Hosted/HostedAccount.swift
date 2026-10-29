@@ -105,10 +105,14 @@ private func saveHostedAvatar(picture: URL?, userId: String) {
     }
 }
 
-/// Ödeme ya da portaldan uygulamaya dönünce aboneliğin beklendiği deneme sayısı (5 sn arayla, 2 dk).
-private let hostedBillingReturnPollAttempts: Int = 24
-/// Ödeme sayfası açıkken aboneliğin beklendiği deneme sayısı (5 sn arayla, 15 dk: kart bilgisi girmeye yeter).
-private let hostedCheckoutWatchAttempts: Int = 180
+/// Ödeme ya da portaldan uygulamaya dönünce aboneliğin beklendiği aralıklar (sn): 5 sn arayla 2 dk. Abonelik bu sürede
+/// görünmezse kullanıcı vazgeçmiş sayılır; sonraki her öne gelişte hak durumu zaten bir dakikadan eskiyse yenilenir.
+private let hostedBillingReturnPollDelays: [Double] = Array(repeating: 5, count: 24)
+/// Ödeme sayfası açıkken aboneliğin beklendiği aralıklar (sn): ilk 2 dk 5 sn'de bir (ödemelerin çoğu bu sürede biter),
+/// 5. dakikaya dek 15 sn'de bir, 15. dakikaya dek 30 sn'de bir (kart bilgisi girmeye yeter). Her okuma sunucu isteği,
+/// çevrimdışı kuyruk turu ve Anahtar Zinciri okumasıdır: sabit 5 sn'lik 180 okuma yerine 56.
+private let hostedCheckoutWatchDelays: [Double] =
+    Array(repeating: 5, count: 24) + Array(repeating: 15, count: 12) + Array(repeating: 30, count: 20)
 
 /// Sunucunun bu hesabın denemesini bu Mac'te reddettiği anın kaydı (hesap başına; abone olunca etkisizdir, bir gün
 /// sonra sunucuya yeniden sorulur: bkz. `hostedTrialRefusalMaxAgeSec`). Saf fonksiyondur.
@@ -252,8 +256,10 @@ final class HostedAccount {
         }
         pathMonitor.start(queue: DispatchQueue(label: "com.senoldogan.AINotepad.hosted.path"))
         // Uygulama kapanırken açık kalan sunucu oturumu kapatılmaya çalışılır (en çok 3 sn); olmazsa sonraki açılışta.
-        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { (_: Notification) -> Void in
-            endOpenMeetingBeforeQuit()
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
+            MainActor.assumeIsolated {
+                endOpenMeetingBeforeQuit(userID: self?.signedInUserIDCache)
+            }
         })
     }
 
@@ -553,18 +559,22 @@ final class HostedAccount {
         }
         let returnedFromBilling: Bool = awaitingBillingReturn
         awaitingBillingReturn = false
+        // Kullanıcı uygulamaya döndü: ödeme sayfasının izlemesi (bkz. `watchCheckout`) durur, yerini aşağıdaki kısa
+        // bekleme alır (uygulama zaten önde; 15 dk boyunca arka planda okuma sürmesin).
+        if returnedFromBilling {
+            stopCheckoutWatch()
+        }
         await refresh()
-        // Ödeme sayfası izleniyorsa (bkz. `watchCheckout`) ikinci bir bekleme açılmaz.
-        if returnedFromBilling, checkoutWatch == nil {
-            _ = await pollForSubscription(attempts: hostedBillingReturnPollAttempts)
+        if returnedFromBilling {
+            _ = await pollForSubscription(delays: hostedBillingReturnPollDelays)
         }
     }
 
-    /// Abonelik görünene dek 5 sn arayla en çok `attempts` kez hak durumunu yeniler (Stripe bildirimi birkaç saniye
+    /// Abonelik görünene dek `delays` aralıklarıyla (sn) hak durumunu yeniler (Stripe bildirimi birkaç saniye
     /// gecikebilir; Başlat düğmesi uygulamaya yeniden geçmeyi beklemeden açılsın). Abonelik zaten görünüyorsa (ör.
-    /// portaldan dönüş) hemen biter. Döner: abonelik göründü mü.
-    private func pollForSubscription(attempts: Int) async -> Bool {
-        for _ in 0..<attempts {
+    /// portaldan dönüş) hemen biter; görev iptal edilirse durur. Döner: abonelik göründü mü.
+    private func pollForSubscription(delays: [Double]) async -> Bool {
+        for delay in delays {
             guard case .signedIn(let entitlements) = state else {
                 return false
             }
@@ -575,7 +585,7 @@ final class HostedAccount {
                 break
             }
             do {
-                try await Task.sleep(for: .seconds(5))
+                try await Task.sleep(for: .seconds(delay))
             } catch is CancellationError {
                 return false
             } catch {
@@ -584,20 +594,20 @@ final class HostedAccount {
             }
             await refresh()
         }
-        accountLogger.warning("Abonelik beklendi ama görünmedi, deneme: \(attempts, privacy: .public)")
+        accountLogger.warning("Abonelik beklendi ama görünmedi, deneme: \(delays.count, privacy: .public)")
         return false
     }
 
-    /// Ödeme sayfası tarayıcıda açıldı: kullanıcı uygulamaya dönmeden abonelik beklenir (en çok
-    /// `hostedCheckoutWatchAttempts` × 5 sn); görününce uygulama öne gelir, kullanıcı tarayıcıdan geri dönmek zorunda
-    /// kalmaz. Önceki izleme varsa durdurulur.
+    /// Ödeme sayfası tarayıcıda açıldı: kullanıcı uygulamaya dönmeden abonelik beklenir (en çok 15 dk, giderek seyrelen
+    /// aralıklarla; bkz. `hostedCheckoutWatchDelays`); görününce uygulama öne gelir, kullanıcı tarayıcıdan geri dönmek
+    /// zorunda kalmaz. Önceki izleme varsa durdurulur; kullanıcı uygulamaya dönünce de durur (bkz. `refreshOnActivation`).
     private func watchCheckout() {
-        checkoutWatch?.cancel()
+        stopCheckoutWatch()
         checkoutWatch = Task { [weak self] in
             guard let self else {
                 return
             }
-            let subscribed: Bool = await self.pollForSubscription(attempts: hostedCheckoutWatchAttempts)
+            let subscribed: Bool = await self.pollForSubscription(delays: hostedCheckoutWatchDelays)
             // İptal edilen (yerine yenisi açılan) izleme, yenisinin referansını silmesin.
             if !Task.isCancelled {
                 self.checkoutWatch = nil
@@ -607,6 +617,21 @@ final class HostedAccount {
                 NSApp.activate()
             }
         }
+    }
+
+    /// İstemcinin jetonundaki (oturumdaki) hesabın açık sunucu oturumları alanı: oturumlar o hesabın jetonuyla açılır
+    /// ve kapatılır. Oturum yoksa `notSignedIn`.
+    private func signedInOpenMeetingsDefaults(client: HostedClient) async throws -> UserDefaults {
+        guard let userID = try await client.signedInUserID() else {
+            throw HostedClientError.notSignedIn
+        }
+        return try hostedOpenMeetingsDefaults(userID: userID)
+    }
+
+    /// Ödeme sayfasının izlemesini durdurur (yoksa bir şey yapmaz).
+    private func stopCheckoutWatch() {
+        checkoutWatch?.cancel()
+        checkoutWatch = nil
     }
 
     /// Ağ geri geldi: hak durumu bilinmiyorsa yeniden okunur, kapatılamamış sunucu oturumu kapatılır ve bekleyen
@@ -769,12 +794,21 @@ final class HostedAccount {
     /// Hesabı ve sunucudaki tüm verilerini siler (bitmemiş abonelik Stripe'ta iptal edilir).
     func deleteAccount() async {
         stateGeneration += 1
+        // Silinen hesabın açık oturum listesi (silmeden sonra oturum yoktur, hesap ondan önce okunur).
+        let userID: String? = signedInUserIDCache
         await perform { (client: HostedClient) async throws -> Void in
             try await client.deleteAccount()
         }
         currentMeeting = nil
         clearHostedOfflinePermit()
-        clearHostedOpenMeetingIDs()
+        guard let userID else {
+            return
+        }
+        do {
+            clearHostedOpenMeetingIDs(defaults: try hostedOpenMeetingsDefaults(userID: userID))
+        } catch {
+            accountLogger.error("Silinen hesabın açık oturum listesi temizlenemedi, hata: \(String(describing: error), privacy: .private)")
+        }
     }
 
     // MARK: Ödeme
@@ -825,7 +859,7 @@ final class HostedAccount {
             let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: false)
             currentMeeting = started
             isOfflineRecording = false
-            addHostedOpenMeetingID(meetingID: started.meetingId)
+            addHostedOpenMeetingID(meetingID: started.meetingId, defaults: try await signedInOpenMeetingsDefaults(client: client))
             try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: started.meetingId, createdAt: Date()))
             accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
             Task { await refresh() }
@@ -906,7 +940,7 @@ final class HostedAccount {
         let client: HostedClient = try HostedServices.requireClient()
         do {
             let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meetingID)
-            removeHostedOpenMeetingID(meetingID: meetingID)
+            removeHostedOpenMeetingID(meetingID: meetingID, defaults: try await signedInOpenMeetingsDefaults(client: client))
             accountLogger.info("Toplantı oturumu kapandı, dakika: \(ended.minutes ?? 0, privacy: .public)")
         } catch {
             // Kapatılamadı: kimlik açık oturumlar listesinde kalır, yetim kapatma (ağ gelince, öne gelince, açılışta)
@@ -922,18 +956,30 @@ final class HostedAccount {
         }
     }
 
-    /// Kapatılamamış sunucu oturumunu (uygulama çöktü, kapatma isteği başarısız oldu) kapatır; o oturumla kayıt
-    /// sürüyorsa dokunmaz. Sunucu oturumu zaten kapalı ya da bilinmiyorsa kayıt silinir; ağ hatasında sonra yeniden
-    /// denenir.
+    /// Oturumdaki hesabın kapatılamamış sunucu oturumlarını (uygulama çöktü, kapatma isteği başarısız oldu) kapatır; o
+    /// oturumla kayıt sürüyorsa dokunmaz. Sunucu oturumu zaten kapalı ya da bilinmiyorsa kayıt silinir; ağ hatasında
+    /// sonra yeniden denenir. Oturum yoksa bir şey yapmaz (başka hesapların listesi o hesap girince kapatılır).
     func closeOrphanedMeeting() async {
-        migrateLegacyHostedOpenMeetingID()
-        for meetingID in orphanedMeetingIDs(openIDs: loadHostedOpenMeetingIDs(), recordingMeetingID: currentMeeting?.meetingId) {
+        let client: HostedClient
+        let defaults: UserDefaults
+        do {
+            client = try HostedServices.requireClient()
+            guard let userID = try await client.signedInUserID() else {
+                return
+            }
+            defaults = try hostedOpenMeetingsDefaults(userID: userID)
+        } catch {
+            accountLogger.warning("Açık kalan toplantı oturumları okunamadı, sonra yeniden denenecek, hata: \(String(describing: error), privacy: .private)")
+            return
+        }
+        migrateLegacyHostedOpenMeetingIDs(defaults: defaults)
+        for meetingID in orphanedMeetingIDs(openIDs: loadHostedOpenMeetingIDs(defaults: defaults), recordingMeetingID: currentMeeting?.meetingId) {
             do {
-                let ended: HostedEndedMeeting = try await HostedServices.requireClient().endMeeting(meetingID: meetingID)
-                removeHostedOpenMeetingID(meetingID: meetingID)
+                let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meetingID)
+                removeHostedOpenMeetingID(meetingID: meetingID, defaults: defaults)
                 accountLogger.info("Açık kalan toplantı oturumu kapatıldı, dakika: \(ended.minutes ?? 0, privacy: .public)")
             } catch let error as HostedAPIError where !isRetryableHostedError(error: error) {
-                removeHostedOpenMeetingID(meetingID: meetingID)
+                removeHostedOpenMeetingID(meetingID: meetingID, defaults: defaults)
                 accountLogger.warning("Açık kalan toplantı oturumu sunucuda yok ya da kapalı, kod: \(error.rawCode, privacy: .public)")
             } catch {
                 accountLogger.warning("Açık kalan toplantı oturumu kapatılamadı, sonra yeniden denenecek, hata: \(String(describing: error), privacy: .private)")
@@ -1030,41 +1076,57 @@ enum HostedMeetingStart {
     case offline(maxMinutes: Int)
 }
 
-/// Açık (kapatılamamış) sunucu oturumlarının UserDefaults anahtarı (uygulama çökse de sonra kapatılır).
+/// Açık (kapatılamamış) sunucu oturumlarının anahtarı (uygulama çökse de sonra kapatılır). Liste oturumu açan hesabın
+/// ayar alanındadır (bkz. `hostedOpenMeetingsDefaults`); önceki sürümlerde ortak ayarlardaydı.
 private let hostedOpenMeetingsKey: String = "hosted.openMeetingIDs"
 /// Çevrimdışı kayıt izninin UserDefaults anahtarı.
 private let hostedOfflinePermitKey: String = "hosted.offlinePermit"
 
-/// 0.1.4'ün tek açık oturum anahtarı: yeni listeye taşınır (bkz. `migrateLegacyHostedOpenMeetingID`).
+/// 0.1.4'ün tek açık oturum anahtarı: yeni listeye taşınır (bkz. `migrateLegacyHostedOpenMeetingIDs`).
 private let legacyHostedOpenMeetingKey: String = "hosted.openMeetingID"
 
-/// 0.1.4'ten kalan açık oturumu yeni listeye taşır ve eski anahtarı siler (yetim kapatma sonra kapatır).
-private func migrateLegacyHostedOpenMeetingID() {
-    guard let legacy = UserDefaults.standard.string(forKey: legacyHostedOpenMeetingKey) else {
+/// Hesabın açık sunucu oturumlarının tutulduğu ayar alanı (bkz. `hostedAccountDefaults`). Liste hesap başınadır:
+/// başka bir hesapla giriş yapılınca önceki hesabın oturumları yeni hesabın jetonuyla kapatılmaya çalışılıp (sunucu
+/// bulamaz) listeden düşmez; o hesap yeniden girince kapatılır.
+private func hostedOpenMeetingsDefaults(userID: String) throws -> UserDefaults {
+    try hostedAccountDefaults(accountKey: accountDataKey(userId: userID))
+}
+
+/// Önceki sürümlerin ortak ayarlardaki açık oturumlarını (liste ve 0.1.4'ün tek kaydı) oturumdaki hesabın listesine
+/// katar ve eskilerini siler (yetim kapatma sonra kapatır). Başka bir hesabın oturumuysa sunucu bulamaz ve yetim kapatma
+/// onu listeden siler (önceki davranış).
+private func migrateLegacyHostedOpenMeetingIDs(defaults: UserDefaults) {
+    let shared: [String] = UserDefaults.standard.stringArray(forKey: hostedOpenMeetingsKey) ?? []
+    let legacy: String? = UserDefaults.standard.string(forKey: legacyHostedOpenMeetingKey)
+    guard !shared.isEmpty || legacy != nil else {
         return
     }
-    UserDefaults.standard.set(mergingLegacyOpenMeeting(ids: loadHostedOpenMeetingIDs(), legacy: legacy), forKey: hostedOpenMeetingsKey)
-    UserDefaults.standard.removeObject(forKey: legacyHostedOpenMeetingKey)
-    accountLogger.info("Eski sürümden kalan açık toplantı oturumu kapatılmak üzere listeye taşındı")
-}
-
-/// Saklanan açık sunucu oturumları (yoksa boş).
-private func loadHostedOpenMeetingIDs() -> [String] {
-    UserDefaults.standard.stringArray(forKey: hostedOpenMeetingsKey) ?? []
-}
-
-/// Açık sunucu oturumunu ekler.
-private func addHostedOpenMeetingID(meetingID: String) {
-    UserDefaults.standard.set(addingOpenMeeting(ids: loadHostedOpenMeetingIDs(), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
-}
-
-/// Kapatılan oturumu çıkarır.
-private func removeHostedOpenMeetingID(meetingID: String) {
-    UserDefaults.standard.set(removingOpenMeeting(ids: loadHostedOpenMeetingIDs(), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
-}
-
-private func clearHostedOpenMeetingIDs() {
+    let merged: [String] = shared.reduce(loadHostedOpenMeetingIDs(defaults: defaults)) { (ids: [String], meetingID: String) -> [String] in
+        addingOpenMeeting(ids: ids, meetingID: meetingID)
+    }
+    defaults.set(mergingLegacyOpenMeeting(ids: merged, legacy: legacy), forKey: hostedOpenMeetingsKey)
     UserDefaults.standard.removeObject(forKey: hostedOpenMeetingsKey)
+    UserDefaults.standard.removeObject(forKey: legacyHostedOpenMeetingKey)
+    accountLogger.info("Önceki sürümden kalan açık toplantı oturumları hesabın listesine taşındı, sayı: \(shared.count + (legacy == nil ? 0 : 1), privacy: .public)")
+}
+
+/// Hesabın saklanan açık sunucu oturumları (yoksa boş).
+private func loadHostedOpenMeetingIDs(defaults: UserDefaults) -> [String] {
+    defaults.stringArray(forKey: hostedOpenMeetingsKey) ?? []
+}
+
+/// Açık sunucu oturumunu hesabın listesine ekler.
+private func addHostedOpenMeetingID(meetingID: String, defaults: UserDefaults) {
+    defaults.set(addingOpenMeeting(ids: loadHostedOpenMeetingIDs(defaults: defaults), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
+}
+
+/// Kapatılan oturumu hesabın listesinden çıkarır.
+private func removeHostedOpenMeetingID(meetingID: String, defaults: UserDefaults) {
+    defaults.set(removingOpenMeeting(ids: loadHostedOpenMeetingIDs(defaults: defaults), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
+}
+
+private func clearHostedOpenMeetingIDs(defaults: UserDefaults) {
+    defaults.removeObject(forKey: hostedOpenMeetingsKey)
 }
 
 /// Kaydın sunucu oturumu; bağ yoksa ya da bağlar okunamazsa nil (okunamazsa hata loglanır).
@@ -1107,10 +1169,21 @@ private func clearHostedOfflinePermit() {
     UserDefaults.standard.removeObject(forKey: hostedOfflinePermitKey)
 }
 
-/// Uygulama kapanırken açık sunucu oturumunu kapatmayı dener (en çok 3 sn bekler; olmazsa sonraki açılışta kapatılır).
+/// Uygulama kapanırken oturumdaki hesabın (`userID`; yoksa bir şey yapılmaz) açık sunucu oturumlarını kapatmayı dener
+/// (en çok 3 sn bekler; olmazsa sonraki açılışta kapatılır).
 @MainActor
-private func endOpenMeetingBeforeQuit() {
-    let meetingIDs: [String] = loadHostedOpenMeetingIDs()
+private func endOpenMeetingBeforeQuit(userID: String?) {
+    guard let userID else {
+        return
+    }
+    let defaults: UserDefaults
+    do {
+        defaults = try hostedOpenMeetingsDefaults(userID: userID)
+    } catch {
+        accountLogger.error("Kapanışta açık oturum listesi okunamadı, hata: \(String(describing: error), privacy: .private)")
+        return
+    }
+    let meetingIDs: [String] = loadHostedOpenMeetingIDs(defaults: defaults)
     guard !meetingIDs.isEmpty else {
         return
     }
@@ -1129,7 +1202,7 @@ private func endOpenMeetingBeforeQuit() {
                 _ = try await client.endMeeting(meetingID: meetingID)
                 // Ana aktöre geçilmez: ana iş parçacığı aşağıda bu görevi bekliyor (geçseydi kapanış her seferinde 3 sn
                 // takılırdı); UserDefaults iş parçacığı güvenlidir.
-                removeHostedOpenMeetingID(meetingID: meetingID)
+                removeHostedOpenMeetingID(meetingID: meetingID, defaults: defaults)
             } catch {
                 accountLogger.warning("Kapanışta toplantı oturumu kapatılamadı, sonraki açılışta denenecek, hata: \(String(describing: error), privacy: .private)")
             }

@@ -3,8 +3,9 @@ import Foundation
 import os
 
 // Abonelik sürümünde yerel veri hesap başınadır: her hesap yalnızca kendi toplantılarını, Sor geçmişini, kişilerini, ses
-// izlerini, klasörlerini ve Sor tariflerini görür (bkz. AINotepadCore `AccountData.swift`). Bir süreç tek bir hesabın
-// verisini yükler; başka hesapla giriş yapılınca uygulama (kayıt ve işleme yokken) yeniden başlar.
+// izlerini, klasörlerini, Sor tariflerini, notların gittiği yerleri (kanallar, Notion, webhook, Apple Notlar, Markdown
+// klasörü) ve görev araçlarını görür (bkz. AINotepadCore `AccountData.swift`). Bir süreç tek bir hesabın verisini yükler;
+// başka hesapla giriş yapılınca uygulama (kayıt ve işleme yokken) yeniden başlar.
 
 private let accountDataLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "HostedAccountData")
 
@@ -21,9 +22,18 @@ enum HostedDataState: Equatable {
 }
 
 /// Eski (hesapsız) düzende standart ayarlarda duran kullanıcı içeriği: hesaba taşınır (bkz. `userContentDefaults`).
-private let legacyUserContentDefaultsKeys: [String] = [SettingsKey.folders, userRecipesKey]
+/// Markdown klasörü ve kendiliğinden gönderim ayarları da hesabındır: B hesabının notları A'nın seçtiği klasöre ya da
+/// Apple Notlar'a gitmesin.
+private let legacyUserContentDefaultsKeys: [String] = [
+    SettingsKey.folders, userRecipesKey, SettingsKey.markdownFolder, SettingsKey.markdownAutoExport, SettingsKey.appleNotesAutoSend,
+]
 
-/// Hesabın kendi ayar alanı (klasörler, Sor tarifleri): `<paket kimliği>.account.<anahtar>`.
+/// Eski düzende uygulamanın Anahtar Zinciri servisinde duran kullanıcı bağlantıları (not hedefleri, görev araçları):
+/// hesabın servisine taşınır (bkz. `userContentKeychainService`).
+private let legacyUserContentSecretAccounts: [SecretAccount] = [.destinations, .taskTrackers]
+
+/// Hesabın kendi ayar alanı (klasörler, Sor tarifleri, dışa aktarma ayarları, açık sunucu oturumları):
+/// `<paket kimliği>.account.<anahtar>`.
 func hostedAccountDefaults(accountKey: String) throws -> UserDefaults {
     guard isValidAccountDataKey(key: accountKey) else {
         throw StorageError.invalidAccountKey(key: accountKey)
@@ -46,10 +56,28 @@ func hostedActiveAccountDefaults() throws -> UserDefaults {
     return try hostedAccountDefaults(accountKey: key)
 }
 
+/// Hesabın kendi Anahtar Zinciri servisi (not hedefleri, görev araçları): `<uygulamanın servisi>.account.<anahtar>`.
+/// Oturum jetonu uygulamanın servisinde kalır (hesaptan önce okunur).
+func hostedAccountKeychainService(accountKey: String) throws -> String {
+    guard isValidAccountDataKey(key: accountKey) else {
+        throw StorageError.invalidAccountKey(key: accountKey)
+    }
+    return "\(appKeychainService).account.\(accountKey)"
+}
+
+/// Yüklü hesabın Anahtar Zinciri servisi; hesap yüklenmediyse `accountNotSelected`.
+func hostedActiveAccountKeychainService() throws -> String {
+    guard let key = AppPaths.activeAccountKey() else {
+        throw StorageError.accountNotSelected
+    }
+    return try hostedAccountKeychainService(accountKey: key)
+}
+
 /// Giriş yapan hesabın verisini bu süreç için hazırlar ve yükler: önceki (hesapsız) veri kimse sahiplenmediyse ya da bu
 /// hesabınsa hesaba taşınır (bekleyen kayıtlar sahiplerine; bkz. `migrateLegacyUserData`), standart ayarlardaki
-/// klasörler ve Sor tarifleri hesabın ayar alanına geçer, sonra hesap yüklenir. Taşıma başarısız olursa hata fırlar,
-/// hesap yüklenmez ve veri yerinde kalır (hiçbir şey silinmez).
+/// klasörler, Sor tarifleri ve dışa aktarma ayarları hesabın ayar alanına, Anahtar Zinciri'ndeki not hedefleri ve görev
+/// araçları hesabın servisine geçer, sonra hesap yüklenir. Taşıma başarısız olursa hata fırlar, hesap yüklenmez ve veri
+/// yerinde kalır (hiçbir şey kaybolmaz; sonraki denemede kaldığı yerden sürer).
 func prepareHostedAccountData(userId: String) throws -> String {
     let key: String = accountDataKey(userId: userId)
     let ownerKeys: [String: String] = loadHostedRecordOwners().mapValues { (owner: String) -> String in accountDataKey(userId: owner) }
@@ -57,6 +85,7 @@ func prepareHostedAccountData(userId: String) throws -> String {
     switch result.claim {
     case .claim, .resume:
         moveLegacyUserContentDefaults(destination: try hostedAccountDefaults(accountKey: key))
+        try moveLegacyUserContentSecrets(destinationService: try hostedAccountKeychainService(accountKey: key))
     case .ownedByAnotherAccount:
         break
     }
@@ -80,6 +109,28 @@ private func moveLegacyUserContentDefaults(destination: UserDefaults) {
         destination.set(value, forKey: key)
         UserDefaults.standard.removeObject(forKey: key)
         accountDataLogger.info("Ayar hesaba taşındı, anahtar: \(key, privacy: .public)")
+    }
+}
+
+/// Uygulamanın Anahtar Zinciri servisindeki kullanıcı bağlantılarını (not hedefleri, görev araçları) hesabın servisine
+/// taşır: önce hesaba yazılır, sonra eskisi silinir (yarıda kalırsa sonraki denemede sürer). Hesapta o öğe zaten varsa
+/// hiçbir şeyin üzerine yazılmaz: eski öğe yerinde kalır (abonelik sürümü onu artık okumaz) ve uyarı loglanır. Anahtar
+/// Zinciri hatası fırlatılır.
+private func moveLegacyUserContentSecrets(destinationService: String) throws {
+    for account in legacyUserContentSecretAccounts {
+        let value: String
+        do {
+            value = try readSecret(service: appKeychainService, account: account)
+        } catch KeychainError.notFound {
+            continue
+        }
+        guard try !localSecretExists(service: destinationService, account: account) else {
+            accountDataLogger.warning("Bağlantılar hesapta zaten var, eski öğe yerinde bırakıldı, hesap: \(account.rawValue, privacy: .public)")
+            continue
+        }
+        try saveSecret(service: destinationService, account: account, value: value)
+        try deleteSecret(service: appKeychainService, account: account)
+        accountDataLogger.info("Bağlantılar hesaba taşındı, öğe: \(account.rawValue, privacy: .public)")
     }
 }
 

@@ -715,23 +715,24 @@ struct MeetingDetailPage: View {
     }
 
     /// Notun dili: asıl not (yazıldığı dil, `original`), sık kullanılan Fince ve İngilizce, sonra diğer diller. Asıl
-    /// notun dili paylaşım dili olarak yinelenmez.
+    /// notun dili paylaşım dili olarak yinelenmez. Adlar arayüz dilinde (kapaktaki dil çipiyle aynı: Türkçe arayüzde
+    /// "İngilizce").
     private func noteLanguageMenu(original: ShareLanguage) -> some View {
         let featured: [ShareLanguage] = [ShareLanguage.finnish, .english].filter { $0 != original }
         return Menu {
-            Button(original.nativeName) { noteLanguage = nil }
+            Button(original.interfaceName) { noteLanguage = nil }
             ForEach(featured, id: \.self) { (language: ShareLanguage) in
-                Button(language.nativeName) { noteLanguage = language }
+                Button(language.interfaceName) { noteLanguage = language }
             }
             Divider()
             Menu("Diğer diller") {
                 ForEach(ShareLanguage.allCases.filter { ![.finnish, .english, original].contains($0) }, id: \.self) { (language: ShareLanguage) in
-                    Button(language.nativeName) { noteLanguage = language }
+                    Button(language.interfaceName) { noteLanguage = language }
                 }
             }
         } label: {
             Label {
-                Text(verbatim: (noteLanguage ?? original).nativeName)
+                Text(verbatim: (noteLanguage ?? original).interfaceName)
             } icon: {
                 Image(systemName: "globe")
             }
@@ -750,29 +751,15 @@ struct MeetingDetailPage: View {
             + (terms == 1 ? [String(localized: "1 terim")] : terms > 1 ? [String(localized: "\(terms) terim")] : [])
     }
 
-    /// Kapaktaki eylemler: "Dinle" ve "Notu yenile" görünür; dışa aktarma simge; yönetim "⋯" menüsünde. Dar panelde
-    /// "Dinle" dışındaki her şey menüye toplanır.
+    /// Kapaktaki eylemler: "Dinle", "Notu yenile" ve "Tarif" görünür; dışa aktarma simge; yönetim "⋯" menüsünde. Yer
+    /// daralınca önce dışa aktarma simgeleri menüye geçer, sonra "Notu yenile" ve "Tarif" yalnız simgeye iner: "⋯"
+    /// boşlukta tek başına kalmaz.
     private var heroActions: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: DesignTokens.Spacing.s) {
                 listenButton
-                Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
-                    .buttonStyle(.pill)
-                    .disabled(isLocked)
-                    .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
-                Menu {
-                    ForEach(model.recipes) { (recipe: Recipe) in
-                        Button(recipe.title, systemImage: recipe.symbol) { onRunRecipe(recipe) }
-                    }
-                } label: {
-                    Label("Tarif", systemImage: "wand.and.stars")
-                }
-                .menuStyle(.button)
-                .buttonStyle(.pill)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .disabled(record.note == nil)
-                .hoverHint("Bu toplantıya tarif uygula: takip e-postası, aksiyonlar, proje planı…", alignment: .leading, edge: .bottom)
+                regenerateButton
+                recipeMenu
                 Spacer(minLength: DesignTokens.Spacing.s)
                 if let text = displayedShareText {
                     ShareLink(item: text, subject: Text(record.note?.title ?? record.title)) {
@@ -780,17 +767,18 @@ struct MeetingDetailPage: View {
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.pill)
+                    .accessibilityLabel("Notu paylaş")
                     .hoverHint("Notu paylaş (Mail, Mesajlar, Notlar…); seçili dilde", alignment: .trailing, edge: .bottom)
                 }
-                Button("PDF", systemImage: "doc.richtext") { exportPDF() }
+                Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.pill)
                     .hoverHint("PDF olarak İndirilenler'e kaydet", alignment: .trailing, edge: .bottom)
-                Button("Markdown", systemImage: "square.and.arrow.down") { exportMarkdown() }
+                Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kaydet", alignment: .trailing, edge: .bottom)
-                Button("Kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
+                Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.pill)
                     .hoverHint("Markdown olarak kopyala", alignment: .trailing, edge: .bottom)
@@ -804,6 +792,21 @@ struct MeetingDetailPage: View {
             }
             HStack(spacing: DesignTokens.Spacing.s) {
                 listenButton
+                regenerateButton
+                recipeMenu
+                Spacer(minLength: DesignTokens.Spacing.s)
+                moreMenu {
+                    exportItems
+                    Divider()
+                    fileExportItems
+                    Divider()
+                    manageItems
+                }
+            }
+            HStack(spacing: DesignTokens.Spacing.s) {
+                listenButton
+                regenerateButton.labelStyle(.iconOnly)
+                recipeMenu.labelStyle(.iconOnly)
                 Spacer(minLength: DesignTokens.Spacing.s)
                 moreMenu {
                     exportItems
@@ -814,6 +817,32 @@ struct MeetingDetailPage: View {
                 }
             }
         }
+    }
+
+    /// Notu yeniden yazar (konuşmacı adlarıyla).
+    private var regenerateButton: some View {
+        Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
+            .buttonStyle(.pill)
+            .disabled(isLocked)
+            .hoverHint("Notu adlarla yeniden yaz", alignment: .leading, edge: .bottom)
+    }
+
+    /// Toplantıya tarif uygular (takip e-postası, aksiyonlar…).
+    private var recipeMenu: some View {
+        Menu {
+            ForEach(model.recipes) { (recipe: Recipe) in
+                Button(recipe.title, systemImage: recipe.symbol) { onRunRecipe(recipe) }
+            }
+        } label: {
+            Label("Tarif", systemImage: "wand.and.stars")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.pill)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(record.note == nil)
+        .accessibilityLabel("Tarif uygula")
+        .hoverHint("Bu toplantıya tarif uygula: takip e-postası, aksiyonlar, proje planı…", alignment: .leading, edge: .bottom)
     }
 
     /// Baştan dinle; bu toplantı çalıyorsa duraklat/sürdür.
@@ -845,20 +874,13 @@ struct MeetingDetailPage: View {
         .buttonStyle(.pill)
         .menuIndicator(.hidden)
         .fixedSize()
+        .accessibilityLabel("Diğer işlemler")
         .hoverHint("Diğer işlemler", alignment: .trailing, edge: .bottom)
     }
 
-    /// Dar panelde menüye taşınan not ve dışa aktarma eylemleri.
+    /// Dar alanda menüye taşınan dışa aktarma eylemleri ("Notu yenile" ve "Tarif" düğme olarak kalır).
     @ViewBuilder
     private var exportItems: some View {
-        Button("Notu yenile", systemImage: "sparkles") { model.regenerateNote(meetingID: record.id) }
-            .disabled(isLocked)
-        Menu("Tarif uygula", systemImage: "wand.and.stars") {
-            ForEach(model.recipes) { (recipe: Recipe) in
-                Button(recipe.title, systemImage: recipe.symbol) { onRunRecipe(recipe) }
-            }
-        }
-        .disabled(record.note == nil)
         Button("PDF olarak kaydet", systemImage: "doc.richtext") { exportPDF() }
         Button("Markdown olarak kaydet", systemImage: "square.and.arrow.down") { exportMarkdown() }
         Button("Markdown olarak kopyala", systemImage: "doc.on.doc") { copyMarkdown() }
@@ -943,11 +965,11 @@ struct MeetingDetailPage: View {
         .disabled(record.note == nil)
         Button("Klasöre Markdown kaydet", systemImage: "folder") {
             // Klasör henüz seçilmediyse hata yerine seçim penceresi açılır; seçilince hemen yazılır.
-            if (UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? "").isEmpty {
+            if model.markdownFolder.isEmpty {
                 guard let folder = pickMarkdownFolder() else {
                     return
                 }
-                UserDefaults.standard.set(folder.path, forKey: SettingsKey.markdownFolder)
+                model.setMarkdownFolder(path: folder.path)
             }
             if let error = model.exportToFolder(meetingID: record.id) {
                 export = .failed(error)
@@ -1882,7 +1904,7 @@ private struct SharedNoteSection: View {
             } else {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text("\(language.nativeName) sürümü hazırlanıyor…")
+                    Text("\(language.interfaceName) sürümü hazırlanıyor…")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 }
@@ -2012,7 +2034,8 @@ private func decisionNumber(index: Int) -> String {
     index + 1 < 10 ? "0\(index + 1)" : "\(index + 1)"
 }
 
-/// Görev kartı: sahibinin harf rozeti, sahibi ve iş, varsa tarih çipi.
+/// Görev kartı: sahibinin harf rozeti, iş, altında sahibinin adı ve varsa tarih çipi. Ad işin önünde ("Alex — …")
+/// yinelenmez: rozet yanında okunmayı zorlaştırıyordu.
 private struct TaskCard: View {
     let model: AppModel
     let record: MeetingRecord
@@ -2024,20 +2047,25 @@ private struct TaskCard: View {
             TaskCheckbox(isDone: isDone) { model.toggleTask(meetingID: record.id, task: task) }
                 .disabled(model.isLocked(meetingID: record.id))
             SpeakerAvatar(text: ownerInitial(owner: task.owner), color: ownerColor(task: task, speakerNames: record.speakerNames), size: 26)
+                .accessibilityLabel(Text(verbatim: task.owner))
             VStack(alignment: .leading, spacing: 6) {
-                let owner: Text = Text(task.owner).fontWeight(.semibold)
-                Text("\(owner) — \(task.description)")
+                Text(task.description)
                     .strikethrough(isDone, color: Theme.muted)
                     .foregroundStyle(isDone ? Theme.muted : Theme.ink)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                if let due = task.dueDate {
-                    Label(due, systemImage: "calendar")
-                        .appFont(size: 12, weight: .regular)
+                HStack(spacing: 8) {
+                    Text(verbatim: task.owner)
+                        .appFont(size: 12, weight: .medium)
                         .foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Theme.soft, in: Capsule())
+                    if let due = task.dueDate {
+                        Label(due, systemImage: "calendar")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Theme.soft, in: Capsule())
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

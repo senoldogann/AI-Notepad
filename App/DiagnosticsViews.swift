@@ -287,6 +287,31 @@ private func copyToPasteboard(text: String) {
     NSPasteboard.general.setString(text, forType: .string)
 }
 
+/// Bölümün maddeleri iki sütunlu tabloda: solda soluk etiket, sağda değer (seçilebilir). Etiket sütunu her bölümde
+/// aynı genişlikte (değerler bölümler boyunca alt alta hizalı); uzun etiket ve değerler kendi sütununda alta kayar.
+private struct DiagnosticsGrid: View {
+    let items: [DiagnosticsItem]
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+            ForEach(Array(items.enumerated()), id: \.offset) { (item: (offset: Int, element: DiagnosticsItem)) in
+                GridRow {
+                    Text(verbatim: item.element.label)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: 190, alignment: .leading)
+                        .gridColumnAlignment(.leading)
+                    Text(verbatim: item.element.value)
+                        .foregroundStyle(Theme.ink)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+}
+
 /// Ayarlar › Tanılama: sürüm, sistem, hesap, sunucuya erişim, izinler, canlı metin modeli, güncelleme ve son hatalar.
 /// Ses, metin, not, anahtar, jeton ve e-posta gösterilmez; hepsi yalnızca bu Mac'te, kullanıcı kopyalamadıkça hiçbir
 /// yere gitmez.
@@ -322,11 +347,8 @@ struct DiagnosticsSettings: View {
             }
             ForEach(Array(sections.enumerated()), id: \.offset) { (entry: (offset: Int, element: DiagnosticsSection)) in
                 SettingsRow(title: Text(verbatim: entry.element.title)) {
-                    ForEach(Array(entry.element.items.enumerated()), id: \.offset) { (item: (offset: Int, element: DiagnosticsItem)) in
-                        Text(verbatim: "\(item.element.label): \(item.element.value)")
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    DiagnosticsGrid(items: entry.element.items)
+                        .padding(.top, 4)
                 } control: {
                     EmptyView()
                 }

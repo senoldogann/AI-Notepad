@@ -35,6 +35,23 @@ enum DemoScene: String {
     case update = "guncelleme"
     /// Ayarlar (sekme `--ayar` ile seçilir; görsel kontrol için).
     case settings = "ayarlar"
+    /// Kişiler (görsel kontrol için).
+    case people = "kisiler"
+    /// Görevlerim (görsel kontrol için).
+    case tasks = "gorevler"
+}
+
+/// `--tanitim-boyut <genişlik>x<yükseklik>` argümanından ana pencerenin boyutu (dar pencere denetimi için); yoksa ya da
+/// biçim tanınmazsa nil. Saf fonksiyondur.
+func demoWindowSize(arguments: [String]) -> NSSize? {
+    guard let index = arguments.firstIndex(of: "--tanitim-boyut"), arguments.indices.contains(index + 1) else {
+        return nil
+    }
+    let parts: [Double] = arguments[index + 1].split(separator: "x").compactMap { (part: Substring) -> Double? in Double(part) }
+    guard parts.count == 2 else {
+        return nil
+    }
+    return NSSize(width: parts[0], height: parts[1])
 }
 
 /// Tanıtım modu hataları.
@@ -53,7 +70,7 @@ enum DemoModeError: Error, CustomStringConvertible {
         case .dataFolderOutsideHome(let dataFolder, let home):
             "Tanıtım modu: veri klasörü (\(dataFolder)) geçici evin (\(home)) dışında; kullanıcının verisine yazılmaz."
         case .unknownScene(let value):
-            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor, canli ya da abone olmalı."
+            "Tanıtım modu: sahne tanınmadı (gelen: \(value ?? "yok")); ana, not, sor, canli, abone, guncelleme, ayarlar, kisiler ya da gorevler olmalı."
         }
     }
 }
@@ -133,6 +150,10 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
         }
     case .settings:
         router.section = .settings
+    case .people:
+        router.section = .people
+    case .tasks:
+        router.section = .tasks
     case .update:
         router.section = .home
         updater.showUpdateForDemo(update: AvailableAppUpdate(
@@ -176,8 +197,10 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
         } catch {
             return
         }
-        // Sor sahnesi küçük pencerede: cevap pencereyi doldurur, sitedeki dar kartta okunur kalır.
-        placeDemoWindows(mainSize: scene == .ask ? NSSize(width: 940, height: 600) : NSSize(width: 1200, height: 780))
+        // Sor sahnesi küçük pencerede: cevap pencereyi doldurur, sitedeki dar kartta okunur kalır. `--tanitim-boyut`
+        // verilirse o boyut (dar pencere denetimi).
+        let sceneSize: NSSize = scene == .ask ? NSSize(width: 940, height: 600) : NSSize(width: 1200, height: 780)
+        placeDemoWindows(mainSize: demoWindowSize(arguments: CommandLine.arguments) ?? sceneSize)
     }
 }
 

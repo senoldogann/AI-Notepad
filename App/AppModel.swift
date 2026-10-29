@@ -2413,25 +2413,48 @@ final class AppModel {
     /// Gönderim sonuçlarının kalkma zamanlayıcıları (`durum dizisi|toplantı`); yeni durum gelince eskisi iptal edilir.
     @ObservationIgnored private var sendStateFades: [String: Task<Void, Never>] = [:]
 
-    /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler.
-    @ObservationIgnored let destinationVault: DestinationVault = DestinationVault(service: appKeychainService, account: .destinations, clientName: appName) {
-        (connection: ChannelConnection) async throws -> ChannelConnection in
-        try await refreshConnectionTokens(connection: connection)
-    }
-    /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır.
-    @ObservationIgnored let trackerVault: TrackerVault = TrackerVault(service: appKeychainService, clientName: appName)
+    /// Hedeflerin deposu (ilk kullanımda kurulur, bkz. `destinationVault()`).
+    @ObservationIgnored private var destinationVaultCache: DestinationVault?
+    /// Görev araçlarının deposu (ilk kullanımda kurulur, bkz. `trackerVault()`).
+    @ObservationIgnored private var trackerVaultCache: TrackerVault?
     /// Kendiliğinden gönderim sürüyor: açılış, saatlik denetim ve işleme sonu aynı anda ikinci tur başlatmasın.
     @ObservationIgnored private var autoSendRunning: Bool = false
     /// Tur sürerken yeni istek geldi (ör. bir toplantı bitti): tur bitince bir kez daha çalışır, toplantı bir saat
     /// beklemez.
     @ObservationIgnored private var autoSendRequested: Bool = false
 
+    /// Hedeflerin deposu: hesap jetonlarını hedef başına tek seferde yeniler. Abonelikte yüklü hesabın Anahtar Zinciri
+    /// servisindedir (bkz. `userContentKeychainService`); hesap yüklenmediyse hata. Süreçte hesap değişmediği için bir
+    /// kez kurulur.
+    func destinationVault() throws -> DestinationVault {
+        if let destinationVaultCache {
+            return destinationVaultCache
+        }
+        let vault: DestinationVault = DestinationVault(service: try userContentKeychainService(), account: .destinations, clientName: appName) {
+            (connection: ChannelConnection) async throws -> ChannelConnection in
+            try await refreshConnectionTokens(connection: connection)
+        }
+        destinationVaultCache = vault
+        return vault
+    }
+
+    /// Görev araçlarının deposu: aynı araca işlemler sırayla, yenilenen jeton hemen yazılır. Hedefler gibi hesabın
+    /// servisindedir (bkz. `destinationVault()`).
+    func trackerVault() throws -> TrackerVault {
+        if let trackerVaultCache {
+            return trackerVaultCache
+        }
+        let vault: TrackerVault = TrackerVault(service: try userContentKeychainService(), clientName: appName)
+        trackerVaultCache = vault
+        return vault
+    }
+
     /// Hedefleri ve görev araçlarını yükler; eski sürümün tek bağlantısı (hesap ya da webhook) bir kez hedeflere taşınır.
     func loadDestinations() async {
         do {
             try await migrateLegacyChannelIfNeeded()
-            destinations = try await destinationVault.all()
-            taskTrackers = try await trackerVault.all()
+            destinations = try await destinationVault().all()
+            taskTrackers = try await trackerVault().all()
         } catch {
             Self.logger.error("Hedefler okunamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bağlantılar okunamadı: \(userFacingMessage(error: error))"))
@@ -2439,12 +2462,13 @@ final class AppModel {
     }
 
     private func migrateLegacyChannelIfNeeded() async throws {
-        guard try await destinationVault.all().isEmpty else {
+        guard try await destinationVault().all().isEmpty else {
             return
         }
-        let connection: ChannelConnection? = try await optionalSecretInBackground(service: appKeychainService, account: .channel)
+        let service: String = try userContentKeychainService()
+        let connection: ChannelConnection? = try await optionalSecretInBackground(service: service, account: .channel)
             .map { (text: String) throws -> ChannelConnection in try decodeChannelConnection(text: text) }
-        let webhook: URL? = try await optionalSecretInBackground(service: appKeychainService, account: .webhook).flatMap { URL(string: $0) }
+        let webhook: URL? = try await optionalSecretInBackground(service: service, account: .webhook).flatMap { URL(string: $0) }
         let migrated: [NoteDestination] = migratedDestinations(
             connection: connection, webhook: webhook, autoSend: UserDefaults.standard.bool(forKey: SettingsKey.webhookAutoSend), now: Date()
         ) { UUID().uuidString }
@@ -2452,10 +2476,10 @@ final class AppModel {
             return
         }
         for destination in migrated {
-            try await destinationVault.upsert(destination)
+            try await destinationVault().upsert(destination)
         }
-        try deleteSecret(service: appKeychainService, account: .channel)
-        try deleteSecret(service: appKeychainService, account: .webhook)
+        try deleteSecret(service: service, account: .channel)
+        try deleteSecret(service: service, account: .webhook)
         Self.logger.info("Eski kanal bağlantısı hedeflere taşındı, sayı: \(migrated.count, privacy: .public)")
     }
 
@@ -2463,8 +2487,8 @@ final class AppModel {
     @discardableResult
     func addDestination(target: DestinationTarget) async throws -> NoteDestination {
         let destination: NoteDestination = NoteDestination(id: UUID().uuidString, target: target, autoSend: false, createdAt: Date(), needsReconnect: false)
-        try await destinationVault.upsert(destination)
-        destinations = try await destinationVault.all()
+        try await destinationVault().upsert(destination)
+        destinations = try await destinationVault().all()
         return destination
     }
 
@@ -2472,8 +2496,8 @@ final class AppModel {
     /// Değişmeden önceki kayıtlı hedef döner (yerini alan eski izni geri almak için).
     @discardableResult
     func replaceDestinationTarget(id: String, target: DestinationTarget) async throws -> NoteDestination {
-        let previous: NoteDestination = try await destinationVault.replaceTarget(id: id, target: target)
-        destinations = try await destinationVault.all()
+        let previous: NoteDestination = try await destinationVault().replaceTarget(id: id, target: target)
+        destinations = try await destinationVault().all()
         return previous
     }
 
@@ -2481,8 +2505,8 @@ final class AppModel {
     /// jetonlar taşıyabilir).
     func setAutoSend(destinationID: String, enabled: Bool) async {
         do {
-            try await destinationVault.setAutoSend(id: destinationID, enabled: enabled)
-            destinations = try await destinationVault.all()
+            try await destinationVault().setAutoSend(id: destinationID, enabled: enabled)
+            destinations = try await destinationVault().all()
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -2493,8 +2517,8 @@ final class AppModel {
     /// servisin ayarlarından nasıl kaldırılacağı gösterilir.
     func removeDestination(id: String) async {
         do {
-            let removed: NoteDestination = try await destinationVault.remove(id: id)
-            destinations = try await destinationVault.all()
+            let removed: NoteDestination = try await destinationVault().remove(id: id)
+            destinations = try await destinationVault().all()
             do {
                 try await revokeDestination(destination: removed, clientName: appName)
             } catch {
@@ -2508,7 +2532,7 @@ final class AppModel {
 
     /// Hesap hedefinin kanallarını yeniden listeler (yeniden giriş yapmadan kanal değiştirmek için).
     func channelOptions(destinationID: String) async throws -> (signIn: ChannelSignIn, options: [ChannelOption]) {
-        let connection: ChannelConnection = try await destinationVault.connection(id: destinationID)
+        let connection: ChannelConnection = try await destinationVault().connection(id: destinationID)
         // Bağlantı alınırken jetonlar yenilenip yazılmış olabilir: bellekteki liste eski jetonlarla kalmasın.
         await refreshDestinationList()
         let signIn: ChannelSignIn = ChannelSignIn(service: connection.service, tokens: connection.tokens, workspace: connection.workspace)
@@ -2537,7 +2561,7 @@ final class AppModel {
         // Elle gönderim belirsiz işaretini kaldırır: kullanıcı kontrol edip yeniden göndermeyi seçti.
         clearUncertain(meetingID: meetingID, destinationID: destinationID)
         do {
-            try await deliverNote(vault: destinationVault, destination: destination, record: record, note: note)
+            try await deliverNote(vault: destinationVault(), destination: destination, record: record, note: note)
             markSent(meetingID: meetingID, destination: destination)
             Self.logger.info("Not hedefe gönderildi, toplantı: \(meetingID, privacy: .public), hedef: \(destinationName(destination: destination), privacy: .public)")
             return nil
@@ -2612,7 +2636,7 @@ final class AppModel {
             decisions: [], tasks: [], glossary: []
         )
         do {
-            try await deliverNote(vault: destinationVault, destination: destination, record: sample, note: note)
+            try await deliverNote(vault: destinationVault(), destination: destination, record: sample, note: note)
             await refreshDestinationList()
             return nil
         } catch {
@@ -2624,7 +2648,7 @@ final class AppModel {
 
     private func refreshDestinationList() async {
         do {
-            destinations = try await destinationVault.all()
+            destinations = try await destinationVault().all()
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -2784,7 +2808,7 @@ final class AppModel {
         }
         for id in missing {
             do {
-                try await destinationVault.resolveNotionIdentity(id: id)
+                try await destinationVault().resolveNotionIdentity(id: id)
                 Self.logger.info("Notion hesabının kimliği okundu, hedef: \(id, privacy: .public)")
             } catch {
                 Self.logger.warning("Notion hesabının kimliği okunamadı, hedef: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
@@ -2804,19 +2828,19 @@ final class AppModel {
         let connection: MCPConnection = try await signInToMCP(service: service, appName: appName) { (url: URL) async -> Void in
             await MainActor.run { openSignInPage(url: url) }
         }
-        let connected: TrackerConnectResult = try await trackerVault.connect(service: service, connection: connection, newID: UUID().uuidString)
+        let connected: TrackerConnectResult = try await trackerVault().connect(service: service, connection: connection, newID: UUID().uuidString)
         let tracker: TaskTracker = connected.tracker
         if let replaced = connected.replaced {
             revokeReplacedGrant(connection: replaced, service: service.displayName)
         }
         defer { Task { await self.refreshTrackerList() } }
         do {
-            try await trackerVault.withTracker(id: tracker.id) {
+            try await trackerVault().withTracker(id: tracker.id) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
                 try await validateTracker(service: current.service, connection: current.connection, clientName: appName, persist: persist)
             }
         } catch TaskTrackerError.noCreateTool(let name) {
-            await revokeTracker(tracker: try await trackerVault.remove(id: tracker.id))
+            await revokeTracker(tracker: try await trackerVault().remove(id: tracker.id))
             throw TaskTrackerError.noCreateTool(service: name)
         }
         await resolveTrackerIdentity(id: tracker.id)
@@ -2827,7 +2851,7 @@ final class AppModel {
     /// gönderim engellenmez, o zamana dek gönderildi işareti yalnızca bu cihazın araç kimliğiyle denetlenir.
     private func resolveTrackerIdentity(id: String) async {
         do {
-            try await trackerVault.resolveIdentity(id: id)
+            try await trackerVault().resolveIdentity(id: id)
             Self.logger.info("Görev aracının hesap kimliği okundu, araç: \(id, privacy: .public)")
         } catch {
             Self.logger.warning("Görev aracının hesap kimliği okunamadı, araç: \(id, privacy: .public), hata: \(String(describing: error), privacy: .private)")
@@ -2839,7 +2863,7 @@ final class AppModel {
     func removeTracker(id: String) async {
         let removed: TaskTracker
         do {
-            removed = try await trackerVault.remove(id: id)
+            removed = try await trackerVault().remove(id: id)
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
             await refreshTrackerList()
@@ -2863,12 +2887,12 @@ final class AppModel {
 
     /// Görev aracında seçilebilir hedefler (Linear takımları, Jira projeleri); Ayarlar'daki seçici gösterir.
     func trackerTargets(id: String) async throws -> [String] {
-        try await trackerVault.targets(id: id)
+        try await trackerVault().targets(id: id)
     }
 
     func setTrackerTarget(id: String, target: String) async {
         do {
-            try await trackerVault.setTarget(id: id, target: target.trimmingCharacters(in: .whitespacesAndNewlines))
+            try await trackerVault().setTarget(id: id, target: target.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -2877,7 +2901,7 @@ final class AppModel {
 
     private func refreshTrackerList() async {
         do {
-            taskTrackers = try await trackerVault.all()
+            taskTrackers = try await trackerVault().all()
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -2907,7 +2931,7 @@ final class AppModel {
             let title: String = note.title
             let language: ShareLanguage = selectedNoteLanguage()
             try requireOnDeviceLanguages(provider: llm, meetingLanguages: note.writtenLanguage.meetingLanguage.map { [$0] } ?? [], outputLanguage: language)
-            let result: TrackerSendResult = try await trackerVault.withTracker(id: trackerID) {
+            let result: TrackerSendResult = try await trackerVault().withTracker(id: trackerID) {
                 (current: TaskTracker, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> TrackerSendResult in
                 try await sendTasksToTracker(tracker: current, clientName: appName, persist: persist, tasks: tasks, meetingTitle: title, language: language, llm: llm)
             }
@@ -2957,6 +2981,56 @@ final class AppModel {
 
     // MARK: Apple Notlar ve klasör
 
+    /// Notun Markdown olarak yazıldığı klasör (Obsidian, iCloud Drive…); seçilmediyse boş. Abonelikte hesabındır (bkz.
+    /// `userContentDefaults`), hesap verisi yüklenince okunur (bkz. `loadExportSettings`).
+    private(set) var markdownFolder: String = ""
+    /// Not hazır olunca (ve her değişince) klasördeki kopya kendiliğinden yazılır.
+    private(set) var markdownAutoExport: Bool = false
+    /// Not hazır olunca Apple Notlar'a kendiliğinden gönderilir (bir kez).
+    private(set) var appleNotesAutoSend: Bool = false
+
+    /// Dışa aktarma ayarlarını okur (açılışta; abonelikte hesap verisi yüklenince). Okunamazsa neden gösterilir.
+    func loadExportSettings() {
+        do {
+            let defaults: UserDefaults = try userContentDefaults()
+            markdownFolder = defaults.string(forKey: SettingsKey.markdownFolder) ?? ""
+            markdownAutoExport = defaults.bool(forKey: SettingsKey.markdownAutoExport)
+            appleNotesAutoSend = defaults.bool(forKey: SettingsKey.appleNotesAutoSend)
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Markdown klasörünü saklar; saklanamazsa neden gösterilir.
+    func setMarkdownFolder(path: String) {
+        do {
+            try userContentDefaults().set(path, forKey: SettingsKey.markdownFolder)
+            markdownFolder = path
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Klasöre kendiliğinden yazmayı açar ya da kapatır; saklanamazsa neden gösterilir.
+    func setMarkdownAutoExport(enabled: Bool) {
+        do {
+            try userContentDefaults().set(enabled, forKey: SettingsKey.markdownAutoExport)
+            markdownAutoExport = enabled
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Apple Notlar'a kendiliğinden göndermeyi açar ya da kapatır; saklanamazsa neden gösterilir.
+    func setAppleNotesAutoSend(enabled: Bool) {
+        do {
+            try userContentDefaults().set(enabled, forKey: SettingsKey.appleNotesAutoSend)
+            appleNotesAutoSend = enabled
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
     /// Notu Apple Notlar'da uygulamanın adını taşıyan klasöre ("AI-Notepad" ya da "Gistsmith") yazar (ilk seferde macOS izin sorar); hata varsa kullanıcı metni döner.
     func sendToAppleNotes(meetingID: String) async -> String? {
         guard let record = meetings.first(where: { $0.id == meetingID }), let note = record.note else {
@@ -2979,7 +3053,7 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }) else {
             return nil
         }
-        let path: String = UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? ""
+        let path: String = markdownFolder
         guard !path.isEmpty else {
             return String(localized: "Önce Ayarlar › Bağlantılar'dan bir klasör seç.")
         }
@@ -2994,7 +3068,7 @@ final class AppModel {
 
     /// Not değişince (düzenleme, yeniden yazma, konuşmacı adı) klasördeki Markdown kopyası güncellenir.
     private func refreshFolderCopy(meetingID: String) {
-        guard UserDefaults.standard.bool(forKey: SettingsKey.markdownAutoExport), let error = exportToFolder(meetingID: meetingID) else {
+        guard markdownAutoExport, let error = exportToFolder(meetingID: meetingID) else {
             return
         }
         errorMessages = appendUnique(messages: errorMessages, message: error)
@@ -3012,10 +3086,10 @@ final class AppModel {
         guard record.note != nil else {
             return
         }
-        if UserDefaults.standard.bool(forKey: SettingsKey.markdownAutoExport), let error = exportToFolder(meetingID: record.id) {
+        if markdownAutoExport, let error = exportToFolder(meetingID: record.id) {
             errorMessages = appendUnique(messages: errorMessages, message: error)
         }
-        guard UserDefaults.standard.bool(forKey: SettingsKey.appleNotesAutoSend), record.notesSentAt == nil else {
+        guard appleNotesAutoSend, record.notesSentAt == nil else {
             return
         }
         Task {
@@ -3339,6 +3413,7 @@ final class AppModel {
         loadFolders()
         #endif
         loadRecipes()
+        loadExportSettings()
         loadAskHistory()
         // Toplantılar arka planda okunur (büyük arşivde açılış donmasın); listeye bağlı işler okuma bitince başlar.
         Task {
