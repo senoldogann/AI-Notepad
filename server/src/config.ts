@@ -61,6 +61,8 @@ export interface Config {
   readonly adminIdentities: readonly string[];
   /** `GET /v1/download/mac` yönlendirmesinin hedefi (DMG). */
   readonly dmgUrl: string;
+  /** DMG ile aynı GitHub sürümündeki Sparkle appcast'i; `GET /v1/download/mac/version` sürümü buradan okur. */
+  readonly appcastUrl: string;
   /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
   readonly priceUsdMonthly: number;
   /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
@@ -160,6 +162,7 @@ export interface PlaceholderCandidates {
   readonly APP_ATTEST_APP_IDS: readonly string[];
   readonly GOOGLE_CLIENT_IDS: readonly string[];
   readonly DMG_URL: string;
+  readonly APPCAST_URL: string;
   readonly STRIPE_PRICE_ID: string;
 }
 
@@ -189,6 +192,7 @@ export function placeholderSettings(settings: PlaceholderCandidates): string[] {
     ["APP_ATTEST_APP_IDS", settings.APP_ATTEST_APP_IDS.some((appId: string): boolean => appId.startsWith("TEAMID"))],
     ["GOOGLE_CLIENT_IDS", settings.GOOGLE_CLIENT_IDS.some(containsPlaceholder)],
     ["DMG_URL", isPlaceholderUrl(settings.DMG_URL)],
+    ["APPCAST_URL", isPlaceholderUrl(settings.APPCAST_URL)],
     ["STRIPE_PRICE_ID", containsPlaceholder(settings.STRIPE_PRICE_ID)],
   ];
   return checks.filter(([, placeholder]: readonly [string, boolean]): boolean => placeholder).map(([name]: readonly [string, boolean]): string => name);
@@ -216,6 +220,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_IDS: csv,
   ADMIN_IDENTITIES: adminIdentityList,
   DMG_URL: z.url({ protocol: /^https$/ }),
+  APPCAST_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
   REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
@@ -311,6 +316,7 @@ export function parseConfig(env: Env): Config {
     googleClientIds: value.GOOGLE_CLIENT_IDS,
     adminIdentities: value.ADMIN_IDENTITIES,
     dmgUrl: value.DMG_URL,
+    appcastUrl: value.APPCAST_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
     reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {

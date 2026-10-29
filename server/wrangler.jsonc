@@ -43,6 +43,8 @@
     "ADMIN_IDENTITIES": "",
     // `GET /v1/download/mac` buraya yönlendirir (302) ve günlük sayacı artırır.
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
+    // DMG ile aynı sürümdeki Sparkle akışı: `GET /v1/download/mac/version` sitedeki sürüm numarasını buradan okur.
+    "APPCAST_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/appcast.xml",
     // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
     "PRICE_USD_MONTHLY": "5.99",
     // Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günde en çok saklanan bayt; aşılınca
@@ -170,6 +172,7 @@
         // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
         "ADMIN_IDENTITIES": "google:101383806107899312129",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
+        "APPCAST_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/appcast.xml",
         "PRICE_USD_MONTHLY": "5.99",
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "REPORT_BYTES_PER_DAY": "2000000",
@@ -215,7 +218,9 @@
         "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
         "ELEVENLABS_BILLING_DAY": "11",
         // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
-        "DEEPGRAM_POLICY": "on",
+        // Kapalı: kurulan Deepgram akışı jetonun süresi dolsa da sürer ve sunucu onu kesemez; akış sunucu üzerinden
+        // sınırlanana dek canlı metin Mac'te (WhisperKit).
+        "DEEPGRAM_POLICY": "off",
         "DEEPGRAM_BUDGET_USD": "185",
         "DEEPGRAM_USD_PER_MINUTE": "0.0092",
         "DAILY_SPEND_CEILING_USD": "25",

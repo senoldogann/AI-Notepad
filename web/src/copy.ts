@@ -224,17 +224,12 @@ export interface DownloadCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  /** Sürüm etiketi ("Version" + numara). */
+  /** Sürüm etiketi ("Version" + sunucudan okunan numara). */
   readonly versionLabel: string;
-  readonly buttonNote: string;
-  readonly requirementsTitle: string;
-  readonly requirements: readonly IconText[];
   readonly installTitle: string;
   readonly installSteps: readonly TitledText[];
-  readonly updatesTitle: string;
-  readonly updatesText: string;
-  readonly helpTitle: string;
-  readonly helpText: string;
+  /** Sayfanın sonundaki tek satır: güncellemeler ve yardım bağlantısı. */
+  readonly footnote: string;
   readonly helpCta: string;
 }
 
@@ -716,27 +711,14 @@ export const copy: Copy = {
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
     versionLabel: "Version",
-    buttonNote: "Signed with an Apple Developer ID and notarized by Apple.",
-    requirementsTitle: "System requirements",
-    requirements: [
-      { icon: "laptop", title: "macOS 26", text: "or later" },
-      { icon: "chip", title: "Apple silicon", text: "M1 or later" },
-      { icon: "globe", title: "Internet", text: "for the live transcript, notes, translation and speaker separation" },
-      { icon: "disk", title: "~1 GB free space", text: "for the on-device speech model, used when the live transcript runs offline" },
-    ],
-    installTitle: "Installing on your Mac",
+    installTitle: "Three steps to your first meeting",
     installSteps: [
-      { title: "Open the disk image", text: `Double-click the ${productName} disk image (.dmg) you downloaded.` },
-      { title: "Drag to Applications", text: `Drag the ${productName} icon into the Applications folder, then eject the disk image.` },
-      { title: "Open it", text: `Open ${productName} from Applications. If macOS asks whether to open an app downloaded from the internet, choose “Open”.` },
-      { title: "Grant permissions", text: "The setup page asks for microphone and system-audio permissions. You can change them later in System Settings › Privacy & Security." },
-      { title: "Sign in", text: "Sign in with Apple or Google and start your first meeting. The trial is 3 meetings or 7 days, whichever comes first." },
+      { title: "Install", text: `Open the disk image and drag ${productName} into Applications.` },
+      { title: "Allow audio", text: "Open the app and allow the microphone and system audio, so it hears both sides of the call." },
+      { title: "Sign in", text: "Sign in with Apple or Google and start listening. Your first 3 meetings or 7 days are free." },
     ],
-    updatesTitle: "Updates",
-    updatesText: "New versions arrive inside the app and are installed with your approval.",
-    helpTitle: "Need a hand?",
-    helpText: "Questions about installing, your account or your subscription? Send us a message and we'll get back to you by email.",
-    helpCta: "Contact us",
+    footnote: "Updates arrive automatically inside the app.",
+    helpCta: "Questions? Contact us",
   },
   signIn: {
     meta: { title: `Sign in — ${productName}`, description: `Sign in to your ${productName} account with Apple or Google.` },
