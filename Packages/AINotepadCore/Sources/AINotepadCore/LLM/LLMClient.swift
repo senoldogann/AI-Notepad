@@ -172,6 +172,9 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
     case .openAICompatible(let config):
         return try await sendPreparedLLM(call: try prepareOpenAICall(config: config, request: request))
     case .onDevice(let config):
+        guard #available(macOS 26.0, *) else {
+            throw OnDeviceLLMError.unavailable(reason: .requiresNewerSystem)
+        }
         return try await sendOnDevice(config: config, request: request)
     case .hosted(let config):
         do {

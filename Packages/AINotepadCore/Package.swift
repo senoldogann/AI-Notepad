@@ -5,7 +5,7 @@ let package = Package(
     name: "AINotepadCore",
     // Arayüz metinleri Türkçe yazılır; çalışma anında uygulamanın String Catalog'undan (ana paket) çevrilir.
     defaultLocalization: "tr",
-    platforms: [.macOS(.v26), .iOS(.v26)],
+    platforms: [.macOS(.v15), .iOS(.v26)],
     products: [
         .library(name: "AINotepadCore", targets: ["AINotepadCore"]),
         .library(name: "AINotepadUI", targets: ["AINotepadUI"]),

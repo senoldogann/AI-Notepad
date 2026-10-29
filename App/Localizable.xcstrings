@@ -15390,6 +15390,56 @@
           }
         }
       }
+    },
+    "Cihaz içi konuşma tanıma macOS 26 gerektirir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition requires macOS 26."
+          }
+        }
+      }
+    },
+    "Cihaz içi model (Apple Intelligence) macOS 26 gerektirir.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model (Apple Intelligence) requires macOS 26."
+          }
+        }
+      }
+    },
+    "macOS 26 gerektirir: Apple Intelligence ve cihaz içi konuşma tanıma bu macOS sürümünde yok.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires macOS 26: Apple Intelligence and on-device speech recognition aren't available on this version of macOS."
+          }
+        }
+      }
+    },
+    "Cihaz içi konuşma tanıma macOS 26 gerektirir. Ayarlar'dan Mac'te (WhisperKit) ya da bulut (Deepgram) motorunu seç.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device speech recognition requires macOS 26. In Settings, choose the On this Mac (WhisperKit) or cloud (Deepgram) engine."
+          }
+        }
+      }
+    },
+    "Cihaz içi model macOS 26 gerektirir. Ayarlar'da kendi anahtarınla bir sağlayıcı seç (ör. Anthropic).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model requires macOS 26. In Settings, choose a provider with your own key (e.g. Anthropic)."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -38,6 +38,9 @@ public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTex
             textDelta: { (line: Substring) -> String? in openAITextDelta(line: line) }, onText: onText
         )
     case .onDevice(let config):
+        guard #available(macOS 26.0, *) else {
+            throw OnDeviceLLMError.unavailable(reason: .requiresNewerSystem)
+        }
         return try await streamOnDevice(config: config, request: request, onText: onText)
     case .hosted(let config):
         // Sunucu Anthropic'in akış olaylarını aynen iletir. Jeton 401 ile reddedilirse (metin görünmeden) bir kez

@@ -283,17 +283,16 @@ private struct GeneralSettings: View {
                 case .whisperKit: Text("Ses Mac'ten çıkmaz; kayıt bitince konuşmacılar Mac'te (SpeakerKit) ayrılır. Not için LLM gerekir.")
                 case .appleSpeech: Text("Apple'ın konuşma tanıması; ses Mac'ten çıkmaz, anahtar ve büyük model indirmesi gerekmez. Dil algılanmaz (ana toplantı diliyle başlar), konuşmacılar ayrılmaz.")
                 }
+                if !appleSpeechSupportedBySystem() {
+                    Text("Cihaz içi konuşma tanıma macOS 26 gerektirir.")
+                }
             } control: {
                 SettingsMenu(selection: Binding<LiveEngine>(
                     get: { model.liveEngine },
                     set: { (engine: LiveEngine) -> Void in
                         Task { await model.selectEngine(engine: engine) }
                     }
-                ), options: [
-                    (LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)")),
-                    (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
-                    (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
-                ])
+                ), options: liveEngineOptions())
                 .disabled(model.isRecording || model.isStarting)
             }
             #endif
@@ -784,6 +783,30 @@ private func accentName(accent: PanelAccent) -> String {
     }
 }
 
+/// Canlı metin motoru seçenekleri: cihaz içi tanıma yalnızca sistem destekliyorsa (macOS 26+) listelenir.
+private func liveEngineOptions() -> [(LiveEngine, Text)] {
+    let others: [(LiveEngine, Text)] = [
+        (LiveEngine.deepgram, Text("Deepgram (bulut, ~1 sn)")),
+        (LiveEngine.whisperKit, Text("Mac'te (WhisperKit, internetsiz)")),
+    ]
+    guard appleSpeechSupportedBySystem() else {
+        return others
+    }
+    return [(LiveEngine.appleSpeech, Text("Cihaz içi (ücretsiz, anahtarsız)"))] + others
+}
+
+/// LLM sağlayıcı seçenekleri: cihaz içi model yalnızca sistem destekliyorsa (macOS 26+) listelenir.
+private func llmProviderOptions() -> [(String, Text)] {
+    let others: [(String, Text)] = [
+        (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
+        (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
+    ]
+    guard onDeviceLLMSupportedBySystem() else {
+        return others
+    }
+    return [(LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)"))] + others
+}
+
 /// Cihaz içi modelin (Apple Intelligence) durumu: kullanılabilirlik, ne yapılacağı, desteklenen diller ve ana toplantı
 /// dili ya da not dili desteklenmiyorsa uyarı.
 private struct OnDeviceLLMStatus: View {
@@ -849,13 +872,11 @@ private struct LLMSettings: View {
         VStack(alignment: .leading, spacing: 0) {
             LocalLLMSetup(model: model)
             SettingsRow(title: Text("Sağlayıcı")) {
-                EmptyView()
+                if !onDeviceLLMSupportedBySystem() {
+                    Text("Cihaz içi model (Apple Intelligence) macOS 26 gerektirir.")
+                }
             } control: {
-                SettingsMenu(selection: $provider, options: [
-                    (LLMProviderKind.onDevice.rawValue, Text("Cihaz içi (ücretsiz, anahtarsız)")),
-                    (LLMProviderKind.anthropic.rawValue, Text("Anthropic (Claude)")),
-                    (LLMProviderKind.openAICompatible.rawValue, Text("OpenAI uyumlu (OpenAI, Ollama, OpenCode Go…)")),
-                ])
+                SettingsMenu(selection: $provider, options: llmProviderOptions())
             }
             if provider == LLMProviderKind.onDevice.rawValue {
                 OnDeviceLLMStatus()

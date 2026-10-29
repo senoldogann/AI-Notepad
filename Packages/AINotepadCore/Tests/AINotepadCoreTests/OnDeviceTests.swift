@@ -4,6 +4,7 @@ import Testing
 @testable import AINotepadCore
 
 @Suite struct OnDeviceLLMTests {
+    @available(macOS 26.0, *)
     @Test func mapsAvailabilityToReason() {
         #expect(onDeviceUnavailableReason(availability: .available) == nil)
         #expect(onDeviceUnavailableReason(availability: .unavailable(.deviceNotEligible)) == .deviceNotEligible)
@@ -13,7 +14,7 @@ import Testing
 
     // Her neden kullanıcıya ne yapacağını ayrı bir cümleyle söyler.
     @Test func eachReasonHasItsOwnMessage() {
-        let reasons: [OnDeviceUnavailableReason] = [.deviceNotEligible, .appleIntelligenceNotEnabled, .modelNotReady, .unknown(detail: "x")]
+        let reasons: [OnDeviceUnavailableReason] = [.deviceNotEligible, .appleIntelligenceNotEnabled, .modelNotReady, .unknown(detail: "x"), .requiresNewerSystem]
         let messages: [String] = reasons.map { onDeviceUnavailableMessage(reason: $0) }
         #expect(Set(messages).count == reasons.count)
         #expect(messages[1].contains("Apple Intelligence"))
