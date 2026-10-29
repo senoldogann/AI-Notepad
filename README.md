@@ -72,7 +72,7 @@
 3. Follow the setup page: grant microphone and system-audio permissions and add your API keys
    (Deepgram, ElevenLabs, Anthropic — or choose the on-device engine and an OpenAI-compatible LLM).
 
-Requirements: macOS 26 or later on Apple Silicon.
+Requirements: macOS 15 or later on Apple Silicon (on-device speech and Apple Intelligence need macOS 26).
 
 ## Build from source
 

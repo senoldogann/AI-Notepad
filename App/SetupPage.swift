@@ -477,12 +477,16 @@ private struct ProfileStep: View {
                 HStack(alignment: .top, spacing: 12) {
                     ChoiceCard(
                         symbol: "cpu", title: "Hemen başla (cihaz içi)",
-                        text: "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır.",
+                        text: onDeviceModeSupported
+                            ? "Ücretsiz, anahtarsız: yazıya dökme ve not Apple Intelligence ile bu Mac'te. Konuşmacılar ayrılmaz, not daha kısadır."
+                            : "macOS 26 gerektirir: Apple Intelligence ve cihaz içi konuşma tanıma bu macOS sürümünde yok.",
                         isSelected: isOnDevice
                     ) {
                         provider = LLMProviderKind.onDevice.rawValue
                         Task { await model.selectEngine(engine: .appleSpeech) }
                     }
+                    .disabled(!onDeviceModeSupported)
+                    .opacity(onDeviceModeSupported ? 1 : 0.55)
                     ChoiceCard(
                         symbol: "key.fill", title: "Kendi anahtarlarımla",
                         text: "Daha yüksek kalite: Claude ile not, konuşmacılar ayrılır. Sonraki adımda anahtarları girersin.",
@@ -538,6 +542,11 @@ private struct ProfileStep: View {
             }
             #endif
         }
+    }
+
+    /// Cihaz içi mod bu sistemde seçilebilir mi: konuşma tanıma ve model ikisi de macOS 26 ister.
+    private var onDeviceModeSupported: Bool {
+        appleSpeechSupportedBySystem() && onDeviceLLMSupportedBySystem()
     }
 
     /// Cihaz içi mod seçili: Apple konuşma tanıma ve Apple Intelligence.

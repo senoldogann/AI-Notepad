@@ -1,6 +1,6 @@
 # AI-Notepad
 
-macOS 26+ menü çubuğu uygulaması: toplantıları canlı yazıya döker ve Türkçeye çevirir.
+macOS 15+ menü çubuğu uygulaması: toplantıları canlı yazıya döker ve Türkçeye çevirir.
 Tasarım: `docs/superpowers/specs/`. Planlar: `docs/superpowers/plans/`.
 
 ## Yapı
