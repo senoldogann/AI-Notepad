@@ -1,0 +1,113 @@
+{
+  "sourceLanguage": "tr",
+  "strings": {
+    "CFBundleDisplayName": {
+      "comment": "Bundle display name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Gistsmith"
+          }
+        }
+      },
+      "shouldTranslate": false
+    },
+    "CFBundleName": {
+      "comment": "Bundle name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Gistsmith"
+          }
+        }
+      },
+      "shouldTranslate": false
+    },
+    "NSAppleEventsUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith writes your meeting note to Apple Notes when you ask it to."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith toplantı notunu istediğinde Apple Notlar'a yazar."
+          }
+        }
+      }
+    },
+    "NSAudioCaptureUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith listens to system audio to transcribe the other participants in your meetings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
+          }
+        }
+      }
+    },
+    "NSCalendarsFullAccessUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith shows your upcoming meetings, reminds you before they start and saves the note under the meeting's name."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith yaklaşan toplantılarını gösterir, başlamadan önce hatırlatır ve notu toplantının adıyla kaydeder."
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription": {
+      "comment": "Privacy - Microphone Usage Description",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith uses the microphone to transcribe what you say in meetings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
+          }
+        }
+      }
+    },
+    "NSRemindersFullAccessUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith adds tasks from your meeting notes to Reminders when you ask it to."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gistsmith toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

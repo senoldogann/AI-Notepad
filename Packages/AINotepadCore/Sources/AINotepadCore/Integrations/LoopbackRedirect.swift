@@ -11,6 +11,7 @@ private let loopbackLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 public final class LoopbackRedirect: @unchecked Sendable {
     private let listener: NWListener
     private let expectedState: String
+    private let appName: String
     private let queue: DispatchQueue = DispatchQueue(label: "com.senoldogan.AINotepad.loopback")
     private let lock: NSLock = NSLock()
     private var continuation: CheckedContinuation<URL, any Error>?
@@ -25,7 +26,8 @@ public final class LoopbackRedirect: @unchecked Sendable {
     }
 
     /// Rastgele boş bir yerel bağlantı noktasında dinlemeye başlar; yalnızca `expectedState` taşıyan dönüşü kabul eder.
-    public static func start(expectedState: String) async throws -> LoopbackRedirect {
+    /// `appName`: tarayıcıya dönen sayfada görünen uygulama adı.
+    public static func start(expectedState: String, appName: String) async throws -> LoopbackRedirect {
         let parameters: NWParameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
         let listener: NWListener
@@ -34,14 +36,15 @@ public final class LoopbackRedirect: @unchecked Sendable {
         } catch {
             throw MCPRemoteError.network(server: "127.0.0.1", reason: "yerel dinleyici açılamadı: \(error.localizedDescription)")
         }
-        let redirect: LoopbackRedirect = LoopbackRedirect(listener: listener, expectedState: expectedState)
+        let redirect: LoopbackRedirect = LoopbackRedirect(listener: listener, expectedState: expectedState, appName: appName)
         try await redirect.listen()
         return redirect
     }
 
-    private init(listener: NWListener, expectedState: String) {
+    private init(listener: NWListener, expectedState: String, appName: String) {
         self.listener = listener
         self.expectedState = expectedState
+        self.appName = appName
     }
 
     /// Dinleyiciyi başlatır; bağlantı işleyicisi başlamadan önce kurulur (hiçbir bağlantı sahipsiz kalmaz). Dinleyici
@@ -139,10 +142,11 @@ public final class LoopbackRedirect: @unchecked Sendable {
         connection.start(queue: queue)
         let redirectURI: String = self.redirectURI
         let expectedState: String = self.expectedState
+        let appName: String = self.appName
         connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [weak self] (data: Data?, _: NWConnection.ContentContext?, _: Bool, _: NWError?) -> Void in
             let request: String = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
             let decision: LoopbackDecision = loopbackDecision(request: request, redirectURI: redirectURI, expectedState: expectedState)
-            connection.send(content: Data(loopbackResponse(decision: decision).utf8), completion: .contentProcessed { (_: NWError?) -> Void in
+            connection.send(content: Data(loopbackResponse(decision: decision, appName: appName).utf8), completion: .contentProcessed { (_: NWError?) -> Void in
                 connection.cancel()
             })
             switch decision {
@@ -183,20 +187,21 @@ func loopbackDecision(request: String, redirectURI: String, expectedState: Strin
 
 /// Tarayıcıya dönen sayfa: başarıda "dönebilirsin", izin verilmediyse ya da istek bu girişe ait değilse açıklama.
 /// Uygulamanın görünümünde (beyaz zemin, durağan pastel gradyan kapak, ses dalgası logosu; koyu temada ters); dış
-/// kaynak yüklemez. Saf fonksiyondur.
-func loopbackResponse(decision: LoopbackDecision) -> String {
+/// kaynak yüklemez. `appName`: uygulamanın görünen adı (sayfanın başlığı, metinler ve alttaki ad). Saf fonksiyondur.
+func loopbackResponse(decision: LoopbackDecision, appName: String) -> String {
+    let name: String = htmlEscaped(appName)
     let (status, title, detail, isSuccess): (String, String, String, Bool) = switch decision {
-    case .notFound: ("404 Not Found", "Sayfa yok", "Bu adres yalnızca AI-Notepad girişinin dönüşü içindir.", false)
-    case .foreign: ("400 Bad Request", "Bu dönüş bu girişe ait değil", "AI-Notepad'de bağlantıyı yeniden başlat.", false)
-    case .completed(_, true): ("200 OK", "Bağlantı tamamlandı", "AI-Notepad'e dönebilirsin; bu sekmeyi kapatabilirsin.", true)
-    case .completed(_, false): ("200 OK", "Bağlantı tamamlanmadı", "İzin verilmedi; AI-Notepad'e dönüp yeniden deneyebilirsin.", false)
+    case .notFound: ("404 Not Found", "Sayfa yok", "Bu adres yalnızca \(name) girişinin dönüşü içindir.", false)
+    case .foreign: ("400 Bad Request", "Bu dönüş bu girişe ait değil", "\(name) uygulamasında bağlantıyı yeniden başlat.", false)
+    case .completed(_, true): ("200 OK", "Bağlantı tamamlandı", "\(name)'e dönebilirsin; bu sekmeyi kapatabilirsin.", true)
+    case .completed(_, false): ("200 OK", "Bağlantı tamamlanmadı", "İzin verilmedi; \(name)'e dönüp yeniden deneyebilirsin.", false)
     }
     let badge: String = isSuccess
         ? "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7\"/></svg>"
         : "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><path d=\"M12 7v6M12 17h.01\"/></svg>"
     let html: String = """
     <!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\
-    <meta name="color-scheme" content="light dark"><title>AI-Notepad</title><style>
+    <meta name="color-scheme" content="light dark"><title>\(name)</title><style>
     :root{--bg:#FDFCFC;--card:#FFFFFF;--ink:#0A0A0A;--muted:#6B6B6B;--line:#ECEAE8;--ok:#1F9D55;--warn:#D97706}
     @media (prefers-color-scheme:dark){:root{--bg:#0B0B0C;--card:#141416;--ink:#F4F4F5;--muted:#A1A1AA;--line:#26262A}}
     *{box-sizing:border-box;margin:0}
@@ -222,7 +227,7 @@ func loopbackResponse(decision: LoopbackDecision) -> String {
     <i style="height:14px"></i><i style="height:26px"></i><i style="height:40px"></i><i style="height:22px"></i><i style="height:48px"></i>\
     <i style="height:30px"></i><i style="height:18px"></i><i style="height:36px"></i><i style="height:12px"></i></div></div>\
     <div class="body"><span class="badge" aria-hidden="true">\(badge)</span><h1>\(title)</h1><p>\(detail)</p>\
-    <div class="brand">AI-Notepad</div></div></main></body></html>
+    <div class="brand">\(name)</div></div></main></body></html>
     """
     return "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n" + html
 }

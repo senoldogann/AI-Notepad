@@ -9,5 +9,6 @@ Config/Local.xcconfig
 # Ajan çalışma kopyaları
 .claude/worktrees/
 
-# Sparkle appcast ve yayınlanan DMG kopyaları (scripts/release.sh)
+# Sparkle appcast ve yayınlanan DMG kopyaları (scripts/release.sh, scripts/release-gistsmith.sh)
 release-archive/
+release-archive-gistsmith/

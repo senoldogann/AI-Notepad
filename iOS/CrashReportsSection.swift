@@ -18,7 +18,7 @@ struct CrashReportNotice: View {
             let state: CrashReportSendState? = center.sendStates[report.id]
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("AI-Notepad beklenmedik şekilde kapandı — raporu gönder?", systemImage: "exclamationmark.bubble")
+                    Label("\(appName) beklenmedik şekilde kapandı — raporu gönder?", systemImage: "exclamationmark.bubble")
                         .appFont(size: 15, weight: .medium)
                     Text("Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider.")
                         .appFont(size: 13, weight: .regular)

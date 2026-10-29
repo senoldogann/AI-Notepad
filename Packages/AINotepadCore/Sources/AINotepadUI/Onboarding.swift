@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Karşılamanın film gradyanlı paneli (ElevenLabs kapakları gibi): üstte uygulama işareti, ortada adımın görseli
 /// (cam kutularda simgeler), altta koyu mürekkeple başlık, kısa tanıtım ve adım noktaları (pastel zeminde beyaz yazı
-/// okunmuyordu). Adım değişince gradyan ve içerik yumuşakça geçer.
+/// okunmuyordu). Adım değişince gradyan ve içerik yumuşakça geçer. `appName`: işaretin yanındaki ürün adı.
 public struct OnboardingPanel: View {
+    let appName: String
     let palette: FilmPalette
     let seed: String
     let symbols: [String]
@@ -13,9 +14,10 @@ public struct OnboardingPanel: View {
     let stepCount: Int
 
     public init(
-        palette: FilmPalette, seed: String, symbols: [String], title: LocalizedStringKey, subtitle: LocalizedStringKey,
+        appName: String, palette: FilmPalette, seed: String, symbols: [String], title: LocalizedStringKey, subtitle: LocalizedStringKey,
         stepIndex: Int, stepCount: Int
     ) {
+        self.appName = appName
         self.palette = palette
         self.seed = seed
         self.symbols = symbols
@@ -29,7 +31,7 @@ public struct OnboardingPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 AppMark(size: 30, barsRaised: true, lineDrawn: true)
-                Text(verbatim: "AI-Notepad")
+                Text(verbatim: appName)
                     .appFont(size: 15, weight: .semibold)
             }
             Spacer(minLength: 24)

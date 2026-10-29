@@ -11,6 +11,8 @@ public let islandWing: CGFloat = 150
 /// ve son cümle yumuşak geçişle. Pencere açılma payını içerir; saydam kısım tıklamaları geçirir. "Hareketi azalt"
 /// açıksa hareketler durur.
 public struct IslandView: View {
+    /// VoiceOver'ın okuduğu ad (uygulamanın görünen adı).
+    let appName: String
     let state: LiveViewState
     /// Ses seviyeleri (ses çubukları, rozet halkası ve parıltı).
     let levels: AudioLevels
@@ -25,6 +27,7 @@ public struct IslandView: View {
     let onSetLanguage: @MainActor (MeetingLanguage) -> Void
 
     public init(
+        appName: String,
         state: LiveViewState,
         levels: AudioLevels,
         layout: IslandLayout,
@@ -34,6 +37,7 @@ public struct IslandView: View {
         onStop: @escaping @MainActor () -> Void,
         onSetLanguage: @escaping @MainActor (MeetingLanguage) -> Void
     ) {
+        self.appName = appName
         self.state = state
         self.levels = levels
         self.layout = layout
@@ -102,7 +106,7 @@ public struct IslandView: View {
         // VoiceOver: ada tek düğme; durum, dil ve son cümle okunur.
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("AI-Notepad")
+        .accessibilityLabel(Text(verbatim: appName))
         .accessibilityValue(accessibilitySummary)
         .accessibilityHint("Paneli gösterir ya da gizler")
         .accessibilityAction(named: "Kaydı durdur") { onStop() }

@@ -98,9 +98,9 @@ final class EventKitConnector {
 func eventKitMessage(error: any Error) -> String {
     switch error {
     case EventKitError.remindersAccessDenied:
-        String(localized: "Anımsatıcılar'a erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Anımsatıcılar'dan AI-Notepad'e izin ver.")
+        String(localized: "Anımsatıcılar'a erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Anımsatıcılar'dan \(appName)'e izin ver.")
     case EventKitError.calendarAccessDenied:
-        String(localized: "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den AI-Notepad'e izin ver.")
+        String(localized: "Takvime erişim izni yok: Sistem Ayarları › Gizlilik ve Güvenlik › Takvimler'den \(appName)'e izin ver.")
     case EventKitError.noReminderList:
         String(localized: "Anımsatıcılar'da liste yok: Anımsatıcılar uygulamasında bir liste oluştur.")
     case EventKitError.saveFailed(let reason):

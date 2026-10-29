@@ -5,17 +5,17 @@ private let mcpIntegrationLogger: Logger = Logger(subsystem: "com.senoldogan.AIN
 
 // MARK: Giriş
 
-/// Uzak MCP sunucusuna tek tıkla giriş: yetkilendirme sunucusu bulunur, AI-Notepad dinamik olarak kaydolur (uygulama
-/// kaydı ya da API anahtarı gerekmez), tarayıcıda izin istenir, dönüş yerel adreste yakalanır ve jetonlar alınır.
-/// `openBrowser` giriş sayfasını varsayılan tarayıcıda açar.
-public func signInToMCP(service: MCPService, openBrowser: @Sendable (URL) async -> Void) async throws -> MCPConnection {
+/// Uzak MCP sunucusuna tek tıkla giriş: yetkilendirme sunucusu bulunur, uygulama `appName` adıyla dinamik olarak
+/// kaydolur (uygulama kaydı ya da API anahtarı gerekmez; servisin izin ekranında bu ad görünür), tarayıcıda izin
+/// istenir, dönüş yerel adreste yakalanır ve jetonlar alınır. `openBrowser` giriş sayfasını varsayılan tarayıcıda açar.
+public func signInToMCP(service: MCPService, appName: String, openBrowser: @Sendable (URL) async -> Void) async throws -> MCPConnection {
     let server: URL = service.serverURL
     let name: String = server.host() ?? service.displayName
     let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: server)
     let state: String = makeOAuthState()
-    let loopback: LoopbackRedirect = try await LoopbackRedirect.start(expectedState: state)
+    let loopback: LoopbackRedirect = try await LoopbackRedirect.start(expectedState: state, appName: appName)
     defer { loopback.stop() }
-    let clientID: String = try await registerClient(metadata: metadata, redirectURI: loopback.redirectURI, server: name)
+    let clientID: String = try await registerClient(metadata: metadata, redirectURI: loopback.redirectURI, server: name, clientName: appName)
     let pkce: PKCEPair = makePKCEPair()
     guard let authorizeURL = mcpAuthorizeURL(metadata: metadata, clientID: clientID, redirectURI: loopback.redirectURI, pkce: pkce, state: state, resource: server) else {
         throw MCPRemoteError.invalidResponse(server: name, reason: "giriş adresi kurulamadı")

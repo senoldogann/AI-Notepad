@@ -47,8 +47,9 @@ public struct AppMark: View {
 
 /// Açılış ekranı (~1,2 sn): işaret bulanıktan netleşerek büyür, çubuklar konuşur gibi yükselir, çizgi soldan uzanır,
 /// ad ve slogan aşağıdan belirir; sonra `onFinish`. Tıklayınca hemen geçilir; "Hareketi azalt" açıksa yalnızca kısa
-/// bir bekleme.
+/// bir bekleme. `appName`: işaretin altındaki ürün adı (uygulamanın görünen adı).
 public struct LaunchSplash: View {
+    let appName: String
     let onFinish: @MainActor () -> Void
     @State private var appeared: Bool = false
     @State private var barsRaised: Bool = false
@@ -58,7 +59,8 @@ public struct LaunchSplash: View {
     @State private var isFadingOut: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
-    public init(onFinish: @escaping @MainActor () -> Void) {
+    public init(appName: String, onFinish: @escaping @MainActor () -> Void) {
+        self.appName = appName
         self.onFinish = onFinish
     }
 
@@ -69,7 +71,7 @@ public struct LaunchSplash: View {
                 .blur(radius: appeared ? 0 : 10)
                 .opacity(appeared ? 1 : 0)
             VStack(spacing: 6) {
-                Text(verbatim: "AI-Notepad")
+                Text(verbatim: appName)
                     .appFont(size: 26, weight: .medium)
                     .tracking(-0.5)
                     .foregroundStyle(Theme.ink)
@@ -88,7 +90,7 @@ public struct LaunchSplash: View {
         .onTapGesture { onFinish() }
         .task { await play() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: "AI-Notepad"))
+        .accessibilityLabel(Text(verbatim: appName))
     }
 
     /// Animasyon adımları, sonra sönme. Ekran kendi saydamlığıyla söner ve `onFinish` onu animasyonsuz kaldırır:

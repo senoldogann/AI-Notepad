@@ -163,6 +163,7 @@ private struct IslandHost: View {
         let layout: IslandLayout = layoutState.layout
         if state.isIslandVisible {
             IslandView(
+                appName: appName,
                 state: state,
                 levels: model.audioLevels,
                 layout: layout,
