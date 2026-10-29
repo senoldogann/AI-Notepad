@@ -98,32 +98,52 @@ private func fastestRun(runs: Int, work: () -> Void) -> Double {
 private final class ReloadProbe {
     var loads: Int = 0
     var applied: [Int] = []
+    /// Okumayı isteyen geç gelen istek sayısı.
+    var lateRequests: Int = 0
 }
 
 @MainActor @Suite struct MeetingReloaderTests {
-    // Okuma sürerken gelen istekler tek bir ek okumada birleşir; her çağıran son okuma bitince döner.
+    // Okuma sürerken gelen istekler tek bir ek okumada birleşir; her çağıran son okuma bitince döner. İlk okuma sabit bir
+    // süre değil, beş istek de gelene kadar sürer: yüklü makinede ana aktör gecikince okuma isteklerden önce bitebiliyordu.
     @Test func rapidRequestsCoalesce() async throws {
         let reloader: MeetingReloader = MeetingReloader()
         let probe: ReloadProbe = ReloadProbe()
+        let (started, startedSignal): (AsyncStream<Void>, AsyncStream<Void>.Continuation) = AsyncStream<Void>.makeStream()
+        let (gate, gateSignal): (AsyncStream<Void>, AsyncStream<Void>.Continuation) = AsyncStream<Void>.makeStream()
         let load: @MainActor () async throws -> MeetingLoadResult = { () async throws -> MeetingLoadResult in
             probe.loads += 1
-            try await Task.sleep(for: .milliseconds(100))
+            if probe.loads == 1 {
+                startedSignal.yield()
+                for await _ in gate {
+                    break
+                }
+            }
             return MeetingLoadResult(meetings: [], failures: [], downloading: ["\(probe.loads)"])
         }
-        let request: @MainActor () -> Task<Void, Never> = { () -> Task<Void, Never> in
+        let apply: @MainActor (MeetingLoadResult) -> Void = { (result: MeetingLoadResult) -> Void in
+            probe.applied.append(Int(result.downloading[0]) ?? -1)
+        }
+        let fail: @MainActor (any Error) -> Void = { (error: any Error) -> Void in
+            Issue.record("beklenmeyen hata: \(error)")
+        }
+        // İlk okuma başlar; o sürerken beş istek daha gelir. Beşincisi kapıyı açar: kapı, o istek okumayı bekleyenlere
+        // katıldıktan sonra açılır (istek askıya alınana dek ana aktör başka işe geçmez).
+        let first: Task<Void, Never> = Task { () async -> Void in
+            await reloader.reload(load: load, apply: apply, fail: fail)
+        }
+        for await _ in started {
+            break
+        }
+        let late: [Task<Void, Never>] = (0..<5).map { (_: Int) -> Task<Void, Never> in
             Task { () async -> Void in
-                await reloader.reload(load: load, apply: { (result: MeetingLoadResult) -> Void in
-                    probe.applied.append(Int(result.downloading[0]) ?? -1)
-                }, fail: { (error: any Error) -> Void in
-                    Issue.record("beklenmeyen hata: \(error)")
-                })
+                probe.lateRequests += 1
+                if probe.lateRequests == 5 {
+                    gateSignal.yield()
+                }
+                await reloader.reload(load: load, apply: apply, fail: fail)
             }
         }
-        // İlk okuma başlar; o sürerken beş istek daha gelir.
-        let first: Task<Void, Never> = request()
-        try await Task.sleep(for: .milliseconds(30))
-        let requests: [Task<Void, Never>] = [first] + (0..<5).map { (_: Int) -> Task<Void, Never> in request() }
-        for request in requests {
+        for request in [first] + late {
             await request.value
         }
         #expect(probe.loads == 2)
