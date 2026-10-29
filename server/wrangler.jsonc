@@ -126,7 +126,7 @@
         "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
         // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
         "ADMIN_IDENTITIES": "",
-        "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
+        "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
         "PRICE_USD_MONTHLY": "5.99",
         "REPORTS_PER_DAY": "500",
         "APP_ATTEST_POLICY": "optional",
