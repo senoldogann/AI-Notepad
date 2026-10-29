@@ -87,6 +87,21 @@ export function pill(text: string, tone: "" | "ok" | "warn"): HTMLSpanElement {
   return node("span", tone === "" ? "pill pill--compact" : `pill pill--compact pill--${tone}`, text);
 }
 
+/**
+ * Tablo gövdesini satırlarıyla doldurur ve hücreleri başlıklarına hizalar: başlığı `numeric` olan sütunun hücreleri de
+ * sağa yaslanır. Sütun hizasının tek kaynağı sayfadaki `<th>`'dir (admin.astro); betik sütun sırası bilmez.
+ */
+export function fillTable(body: HTMLTableSectionElement, rows: readonly HTMLTableRowElement[]): void {
+  const table: HTMLElement | null = body.parentElement;
+  const header: HTMLTableRowElement | null = table instanceof HTMLTableElement ? (table.tHead?.rows.item(0) ?? null) : null;
+  for (const row of rows) {
+    Array.from(row.cells).forEach((cell: HTMLTableCellElement, index: number): void => {
+      cell.classList.toggle("numeric", header?.cells.item(index)?.classList.contains("numeric") ?? false);
+    });
+  }
+  body.replaceChildren(...rows);
+}
+
 /** Tablo satırı: hücreler metin ya da hazır öğe. */
 export function tableRow(cells: readonly (string | HTMLElement)[]): HTMLTableRowElement {
   const row: HTMLTableRowElement = document.createElement("tr");

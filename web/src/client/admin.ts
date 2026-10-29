@@ -1,9 +1,10 @@
-// Yönetim paneli: dört görünüm — genel bakış (özet kutuları ve son 30 günün çubuk grafikleri; satır içi SVG,
-// kütüphanesiz, her grafiğin metin özeti var), kullanıcılar (admin-users.ts), işletim (admin-ops.ts) ve bildirim kutusu
+// Yönetim paneli: beş görünüm — genel bakış (özet kutuları ve son 30 günün çubuk grafikleri; satır içi SVG,
+// kütüphanesiz, her grafiğin metin özeti var), içgörüler (admin-insights.ts: sorunlar, huni, indirme kaynakları, iptal
+// nedenleri), kullanıcılar (admin-users.ts), işletim (admin-ops.ts) ve bildirim kutusu
 // (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme). Panel yalnızca `/v1/admin/stats`
 // başarılı olunca şablondan eklenir; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
 // "sayfa bulunamadı" görünümü gösterilir, girişe yönlendirilmez (panelin varlığı belli olmaz). Kullanıcılar ve işletim
-// görünümleri ilk açılışlarında yüklenir; "Yenile" açık görünümü ve özet istatistikleri yeniler.
+// görünümleri (ve içgörüler) ilk açılışlarında yüklenir; "Yenile" açık görünümü ve özet istatistikleri yeniler.
 import { ApiRequestError } from "./api";
 import {
   type AdminStats,
@@ -20,6 +21,7 @@ import {
   setReportStatus,
 } from "./admin-api";
 import { fillCounts, formatCount, formatCompact, formatDay, formatRate, formatTime, formatUsd } from "./admin-format";
+import { type InsightsView, createInsightsView } from "./admin-insights";
 import { type OperationsView, createOperationsView } from "./admin-ops";
 import { type UsersView, createUsersView } from "./admin-users";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
@@ -34,8 +36,8 @@ const chartHeight: number = 60;
 const barGap: number = 3;
 
 /** Panelin görünümleri. */
-type AdminView = "overview" | "users" | "operations" | "inbox";
-const adminViews: readonly AdminView[] = ["overview", "users", "operations", "inbox"];
+type AdminView = "overview" | "insights" | "users" | "operations" | "inbox";
+const adminViews: readonly AdminView[] = ["overview", "insights", "users", "operations", "inbox"];
 
 /** Grafikteki bir günün çubuk parçaları (yığılmış: alttan üste). */
 interface ChartDay {
@@ -448,6 +450,9 @@ async function main(): Promise<void> {
     if (next === "users") {
       users.ensureLoaded().catch(showFailure);
     }
+    if (next === "insights") {
+      insights.ensureLoaded().catch(showFailure);
+    }
     if (next === "operations") {
       operations.ensureLoaded().catch(showFailure);
     }
@@ -467,6 +472,7 @@ async function main(): Promise<void> {
     users.openUser(id).catch(showFailure);
   };
   const operations: OperationsView = createOperationsView(openUser, openReport);
+  const insights: InsightsView = createInsightsView(openUser);
 
   const refresh = async (): Promise<void> => {
     hideNotice(notice);
@@ -476,6 +482,7 @@ async function main(): Promise<void> {
       current === "inbox" ? loadList(false) : Promise.resolve(),
       current === "users" ? users.refresh() : Promise.resolve(),
       current === "operations" ? operations.refresh() : Promise.resolve(),
+      current === "insights" ? insights.refresh() : Promise.resolve(),
     ]);
     renderStats(stats);
   };

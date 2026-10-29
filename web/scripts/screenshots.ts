@@ -65,6 +65,7 @@ const targets: readonly Target[] = [
   { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
   { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
   { name: "admin", path: "/admin", ready: "#kpi-mrr:not(:empty)", signedIn: true, account: null },
+  { name: "admin-insights", path: "/admin#insights", ready: "#insights-funnel-rows tr", signedIn: true, account: null },
   { name: "admin-users", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-user", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-operations", path: "/admin#operations", ready: "#ops-open-rows tr", signedIn: true, account: null },
@@ -166,6 +167,8 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         meetingsTotal: [42, 1, 17, 0][index] ?? 0,
         hoursThisMonth: [8.25, 0.5, 3.1, 0][index] ?? 0,
         lastActiveAt: index === 3 ? null : now.getTime() - (index + 1) * 3_600_000,
+        failedMeetings: index === 1 ? 1 : index === 2 ? 3 : 0,
+        lastFailureCode: index === 1 ? "upstream_rejected:elevenlabs" : index === 2 ? "meeting_budget_exhausted" : null,
       })),
       nextCursor: "1760529600000:e1f2a3b4-c5d6-4e7f-8091-a2b3c4d5e6f7",
     },
@@ -180,14 +183,17 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         meetingsTotal: 42,
         hoursThisMonth: 8.25,
         lastActiveAt: now.getTime() - 3_600_000,
+        failedMeetings: 1,
+        lastFailureCode: "upstream_unavailable:anthropic",
       },
       trialDeviceVerifiedAt: at(-12),
       stripeCustomerId: "cus_ExampleCustomer01",
+      cancellation: { at: at(-1), reason: "cancellation_requested", feedback: "too_expensive", comment: "Great notes, but I only have a few meetings a month." },
       usage: { usedHours: 8.25, capHours: 10, audioHours: 7.9, tokens: 2_310_000, tokenCap: 6_500_000, accountTokens: 410_000, accountTokenCap: 1_500_000 },
       meetings: [
-        { id: "m1", kind: "subscription", state: "open", startedAt: now.getTime() - 1_800_000, durationMinutes: 30, deferred: false, reprocessCount: 0, audioMinutes: 28.5, tokensUsed: 41_000, tokenBudget: 900_000, attested: true, deepgram: true },
-        { id: "m2", kind: "subscription", state: "ended", startedAt: now.getTime() - 86_400_000, durationMinutes: 52, deferred: true, reprocessCount: 1, audioMinutes: 51.2, tokensUsed: 310_000, tokenBudget: 900_000, attested: true, deepgram: false },
-        { id: "m3", kind: "trial", state: "expired", startedAt: now.getTime() - 9 * 86_400_000, durationMinutes: 90, deferred: false, reprocessCount: 0, audioMinutes: 0, tokensUsed: 0, tokenBudget: 400_000, attested: false, deepgram: false },
+        { id: "m1", kind: "subscription", state: "open", startedAt: now.getTime() - 1_800_000, durationMinutes: 30, deferred: false, reprocessCount: 0, audioMinutes: 28.5, tokensUsed: 41_000, tokenBudget: 900_000, attested: true, deepgram: true, noteCompleted: false, failureCount: 0, lastFailureCode: null, lastFailureAt: null },
+        { id: "m2", kind: "subscription", state: "ended", startedAt: now.getTime() - 86_400_000, durationMinutes: 52, deferred: true, reprocessCount: 1, audioMinutes: 51.2, tokensUsed: 310_000, tokenBudget: 900_000, attested: true, deepgram: false, noteCompleted: true, failureCount: 2, lastFailureCode: "upstream_unavailable:anthropic", lastFailureAt: now.getTime() - 86_000_000 },
+        { id: "m3", kind: "trial", state: "expired", startedAt: now.getTime() - 9 * 86_400_000, durationMinutes: 90, deferred: false, reprocessCount: 0, audioMinutes: 0, tokensUsed: 0, tokenBudget: 400_000, attested: false, deepgram: false, noteCompleted: false, failureCount: 1, lastFailureCode: "meeting_not_active", lastFailureAt: now.getTime() - 9 * 86_000_000 },
       ],
       reports: [{ id: "rep_1", kind: "feedback", status: "open", createdAt: now.getTime() - 3_600_000, summary: "Would love a keyboard shortcut to start recording" }],
       timeline: [
@@ -199,6 +205,96 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         { kind: "trial_started", at: at(-12), detail: null },
         { kind: "account_created", at: at(-12), detail: null },
       ],
+    },
+    "/v1/admin/insights": {
+      generatedAt: now.toISOString(),
+      problems: {
+        // Son 7 günde deneme tavanına takılan istek var: satırın uyarı görünümü de çekilir.
+        last7Days: {
+          trialCapacityReached: 14,
+          spendCeilingReached: 0,
+          refusals: [
+            { detail: "trial_capacity_reached", count: 14 },
+            { detail: "trial_exhausted", count: 9 },
+            { detail: "meeting_budget_exhausted", count: 2 },
+          ],
+          providerErrors: [{ detail: "elevenlabs", count: 3 }],
+          serverErrors: [
+            { detail: "trial_capacity_reached", count: 14 },
+            { detail: "upstream_unavailable", count: 3 },
+          ],
+          serverErrorsTotal: 17,
+        },
+        last30Days: {
+          trialCapacityReached: 52,
+          spendCeilingReached: 4,
+          refusals: [
+            { detail: "trial_capacity_reached", count: 52 },
+            { detail: "trial_exhausted", count: 41 },
+            { detail: "trial_device_used", count: 9 },
+            { detail: "spend_ceiling_reached", count: 4 },
+            { detail: "meeting_budget_exhausted", count: 6 },
+            { detail: "deepgram_unavailable", count: 2 },
+          ],
+          providerErrors: [
+            { detail: "elevenlabs", count: 7 },
+            { detail: "anthropic", count: 5 },
+            { detail: "devicecheck", count: 1 },
+          ],
+          serverErrors: [
+            { detail: "trial_capacity_reached", count: 52 },
+            { detail: "upstream_unavailable", count: 12 },
+            { detail: "spend_ceiling_reached", count: 4 },
+            { detail: "internal_error", count: 1 },
+          ],
+          serverErrorsTotal: 69,
+        },
+      },
+      funnel: {
+        days: 30,
+        steps: [
+          { step: "downloads", count: 412 },
+          { step: "accounts", count: 168 },
+          { step: "first_meeting", count: 121 },
+          { step: "first_note", count: 104 },
+          { step: "three_meetings", count: 58 },
+          { step: "subscribed", count: 17 },
+          { step: "canceled", count: 3 },
+        ],
+      },
+      downloads: {
+        total: 412,
+        bySource: [
+          { detail: "home-hero", count: 231 },
+          { detail: "download-page", count: 104 },
+          { detail: "home-cta", count: 52 },
+          { detail: "direct", count: 19 },
+          { detail: "account", count: 6 },
+        ],
+        byReferrerHost: [
+          { detail: "gistsmith.com", count: 371 },
+          { detail: "", count: 25 },
+          { detail: "producthunt.com", count: 11 },
+          { detail: "news.ycombinator.com", count: 5 },
+        ],
+      },
+      cancellations: {
+        total: 5,
+        byFeedback: [
+          { detail: "too_expensive", count: 2 },
+          { detail: "unused", count: 1 },
+          { detail: "missing_features", count: 1 },
+          { detail: "", count: 1 },
+        ],
+        byReason: [
+          { detail: "cancellation_requested", count: 4 },
+          { detail: "payment_failed", count: 1 },
+        ],
+        recent: [
+          { userId: exampleUserIds[0], at: at(-1), reason: "cancellation_requested", feedback: "too_expensive", comment: "Great notes, but I only have a few meetings a month." },
+          { userId: exampleUserIds[2], at: at(-6), reason: "cancellation_requested", feedback: "missing_features", comment: null },
+        ],
+      },
     },
     "/v1/admin/operations": {
       generatedAt: now.toISOString(),
@@ -395,6 +491,11 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
       // Ayrıntı görünür alana kaydırılır; tam sayfa görüntüde yapışkan üst çubuk ortada kalmasın.
       await page.evaluate((): void => window.scrollTo(0, 0));
       await capture(page, outDir, shot, findings);
+      // İçgörüler görünümü kabuğun içinde kayar: alt kartlar (indirme kaynakları, iptal nedenleri) ayrı bir görüntüde.
+      if (target.name === "admin-insights") {
+        await page.evaluate((): void => document.querySelector(".console__main")?.scrollTo(0, 100_000));
+        await capture(page, outDir, `${shot}-bottom`, findings);
+      }
       await page.close();
     }
     await context.close();
