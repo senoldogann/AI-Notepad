@@ -943,11 +943,11 @@ struct MeetingDetailPage: View {
         .disabled(record.note == nil)
         Button("Klasöre Markdown kaydet", systemImage: "folder") {
             // Klasör henüz seçilmediyse hata yerine seçim penceresi açılır; seçilince hemen yazılır.
-            if (UserDefaults.standard.string(forKey: SettingsKey.markdownFolder) ?? "").isEmpty {
+            if model.markdownFolder.isEmpty {
                 guard let folder = pickMarkdownFolder() else {
                     return
                 }
-                UserDefaults.standard.set(folder.path, forKey: SettingsKey.markdownFolder)
+                model.setMarkdownFolder(path: folder.path)
             }
             if let error = model.exportToFolder(meetingID: record.id) {
                 export = .failed(error)

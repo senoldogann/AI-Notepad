@@ -1458,9 +1458,6 @@ private func channelSetupFadeDelay(setup: ChannelSetup) -> Duration? {
 private struct WebhookSettings: View {
     let model: AppModel
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
-    @AppStorage(SettingsKey.appleNotesAutoSend) private var notesAutoSend: Bool = false
-    @AppStorage(SettingsKey.markdownFolder) private var markdownFolder: String = ""
-    @AppStorage(SettingsKey.markdownAutoExport) private var markdownAuto: Bool = false
     @State private var setup: ChannelSetup = .idle
     /// Tarayıcıda süren Notion girişi: "Vazgeç" bunu iptal eder (yerel dönüş dinleyicisi kapanır).
     @State private var notionSignIn: Task<Void, Never>?
@@ -1709,25 +1706,33 @@ private struct WebhookSettings: View {
             tile: BrandTile(mark: .symbol("note.text"), palette: .coral, seed: "apple-notlar", size: 38), title: Text("Apple Notlar"),
             detail: notesStatus.map { Text(verbatim: $0) } ?? Text("\"\(appName)\" klasörüne, hesap gerekmez"), badge: nil
         ) {
-            Toggle("Apple Notlar'a gönder", isOn: $notesAutoSend)
-                .settingsToggle()
-                .onChange(of: notesAutoSend) { (_: Bool, enabled: Bool) in
-                    // İlk açılışta izin penceresi çıksın ve doğru çalıştığı görülsün: son not gönderilir.
-                    if enabled, let latest = model.meetings.first(where: { $0.note != nil }) {
-                        Task {
-                            let error: String? = await model.sendToAppleNotes(meetingID: latest.id)
-                            notesStatus = error ?? String(localized: "Son not Notlar'a yazıldı.")
-                            if error != nil {
-                                notesAutoSend = false
-                            }
-                        }
-                    }
-                }
+            Toggle("Apple Notlar'a gönder", isOn: Binding<Bool>(
+                get: { model.appleNotesAutoSend },
+                set: { (enabled: Bool) -> Void in setNotesAutoSend(enabled: enabled) }
+            ))
+            .settingsToggle()
+        }
+    }
+
+    /// Apple Notlar'a kendiliğinden gönderimi açar ya da kapatır. Açılınca izin penceresi çıksın ve doğru çalıştığı
+    /// görülsün diye son not gönderilir; gönderilemezse ayar yeniden kapanır.
+    private func setNotesAutoSend(enabled: Bool) {
+        model.setAppleNotesAutoSend(enabled: enabled)
+        guard enabled, let latest = model.meetings.first(where: { $0.note != nil }) else {
+            return
+        }
+        Task {
+            let error: String? = await model.sendToAppleNotes(meetingID: latest.id)
+            notesStatus = error ?? String(localized: "Son not Notlar'a yazıldı.")
+            if error != nil {
+                model.setAppleNotesAutoSend(enabled: false)
+            }
         }
     }
 
     private var folderCard: some View {
-        ConnectionCard(
+        let markdownFolder: String = model.markdownFolder
+        return ConnectionCard(
             tile: BrandTile(mark: .symbol("folder.fill"), palette: .ocean, seed: "klasor", size: 38), title: Text("Klasör (Obsidian, iCloud)"),
             detail: folderStatus.map { Text(verbatim: $0) } ?? (markdownFolder.isEmpty ? Text("Markdown dosyası olarak") : Text(verbatim: (markdownFolder as NSString).abbreviatingWithTildeInPath)),
             badge: nil
@@ -1739,7 +1744,11 @@ private struct WebhookSettings: View {
             } else {
                 HStack(spacing: 6) {
                     Button("Değiştir") { chooseFolder() }.controlSize(.small)
-                    Toggle("Klasöre yaz", isOn: $markdownAuto).settingsToggle()
+                    Toggle("Klasöre yaz", isOn: Binding<Bool>(
+                        get: { model.markdownAutoExport },
+                        set: { (enabled: Bool) -> Void in model.setMarkdownAutoExport(enabled: enabled) }
+                    ))
+                    .settingsToggle()
                 }
             }
         }
@@ -1913,8 +1922,8 @@ private struct WebhookSettings: View {
         guard let url = pickMarkdownFolder() else {
             return
         }
-        markdownFolder = url.path
-        markdownAuto = true
+        model.setMarkdownFolder(path: url.path)
+        model.setMarkdownAutoExport(enabled: true)
         folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
             ?? String(localized: "Son not klasöre yazıldı.")
     }
