@@ -87,7 +87,7 @@ require_new_build() {
 }
 
 # Şemayı Release olarak arşivler ve Developer ID ile dışa aktarır: Xcode'un otomatik imzalaması profili geliştirici
-# hesabından alır (iCloud ve Apple ile giriş profil ister), hardened runtime ve zaman damgasıyla imzalar. Uygulama
+# hesabından alır (iCloud profil ister; özel yetkisi olmayan uygulamaya profil gömülmez), hardened runtime ve zaman damgasıyla imzalar. Uygulama
 # `<çıktı>/export/` altına çıkar.
 archive_and_export() {
     local scheme="$1"
@@ -144,9 +144,10 @@ require_sparkle_keychain_key() {
     }
 }
 
-# Dışa aktarılan uygulamanın dağıtıma uygunluğu: Developer ID imzası, hardened runtime, mikrofon yetkisi, gömülü
-# profil, Developer ID ile yeniden imzalanmış Sparkle yardımcıları, Info.plist'teki Sparkle açık anahtarı ve hata
-# ayıklayıcı izninin yokluğu. Sürüme özgü yetkiler (iCloud, Apple ile giriş) çağıran betikte denetlenir.
+# Dışa aktarılan uygulamanın dağıtıma uygunluğu: Developer ID imzası, hardened runtime, mikrofon yetkisi,
+# Developer ID ile yeniden imzalanmış Sparkle yardımcıları, Info.plist'teki Sparkle açık anahtarı ve hata
+# ayıklayıcı izninin yokluğu. Sürüme özgü yetkiler ve gömülü profil (yalnızca iCloud'lu geliştirici sürümünde) çağıran
+# betikte denetlenir.
 verify_distribution_app() {
     local app="$1"
     local sparkle_public_key="$2"
@@ -161,7 +162,6 @@ verify_distribution_app() {
     [[ "$entitlements" == *"com.apple.security.device.audio-input"* ]] || { echo "Mikrofon yetkisi (entitlement) eksik." >&2; exit 1; }
     # Hata ayıklayıcı izni dağıtımda olmamalı (Apple noter onayı reddeder).
     [[ "$entitlements" != *"get-task-allow"* ]] || { echo "get-task-allow yetkisi var (noter onayı reddeder)." >&2; exit 1; }
-    [[ -f "$app/Contents/embedded.provisionprofile" ]] || { echo "Developer ID profili gömülü değil." >&2; exit 1; }
     # Sparkle gömülü ve açık anahtar uygulamada (yoksa yayınlanan sürüm güncelleme alamaz).
     [[ -d "$app/Contents/Frameworks/Sparkle.framework" ]] || { echo "Sparkle.framework uygulamaya gömülmemiş." >&2; exit 1; }
     # Sparkle'ın yardımcıları pakette ad-hoc imzalı gelir; Developer ID dışa aktarımı onları yeniden imzalamalı (noter

@@ -50,7 +50,8 @@ sparkle_bin="$(sparkle_tools_dir)"
 require_sparkle_keychain_key "$sparkle_bin" "$sparkle_account" "$sparkle_public_key"
 
 verify_distribution_app "$app" "$sparkle_public_key"
-# iCloud eşitlemesi Developer ID profilindeki iCloud yetkisini ister.
+# iCloud eşitlemesi Developer ID profilindeki iCloud yetkisini ister; profil uygulamaya gömülü olmalı.
+[[ -f "$app/Contents/embedded.provisionprofile" ]] || { echo "Developer ID profili gömülü değil." >&2; exit 1; }
 [[ "$(app_entitlements "$app")" == *"iCloud.com.senoldogan.AINotepad"* ]] || { echo "iCloud yetkisi eksik." >&2; exit 1; }
 require_info_value "$app" CFBundleDisplayName "AI-Notepad"
 require_info_value "$app" SUFeedURL "https://github.com/$repo/releases/latest/download/appcast.xml"
