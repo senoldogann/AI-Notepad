@@ -148,12 +148,12 @@
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",
         "APP_ATTEST_ALLOWED_CATEGORIES": "6",
-        // Bkz. üstteki geliştirme `vars` açıklaması. DEVICECHECK_KEY_ID yer tutucusu gerçek anahtar kimliğiyle
-        // değiştirilmeden ve DEVICECHECK_PRIVATE_KEY gizli değeri girilmeden üretim her istekte 500 verir.
+        // Bkz. üstteki geliştirme `vars` açıklaması. Anahtar Apple Developer › Keys'te "Gistsmith DeviceCheck"; gizli
+        // DEVICECHECK_PRIVATE_KEY (.p8 içeriği) girilmeden üretim her istekte 500 verir.
         "DEVICECHECK_POLICY": "required",
         "DEVICECHECK_ENVIRONMENT": "production",
         "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
-        "DEVICECHECK_KEY_ID": "DEVICECHECK_KEY_ID_PENDING",
+        "DEVICECHECK_KEY_ID": "HRQ8LH4N52",
         "TRIAL_MEETINGS": "3",
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
