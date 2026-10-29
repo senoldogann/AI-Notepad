@@ -9,6 +9,7 @@ A faster live transcript, clearer limits and recordings that survive a lost conn
 - **Record without a connection.** If the internet drops, recording continues; the note is written once you're back online.
 - **Import a recording.** Bring an audio or video file and get the same note as a live meeting.
 - **Your avatar in the sidebar.** Your Google profile photo appears next to Settings; Apple accounts get their own colour orb.
+- **Subscribe in one step.** When your free trial has ended and you try to record or ask, a short window explains why and takes you straight to checkout.
 - **Back to the app by itself.** After signing in or paying in your browser, Gistsmith comes to the front on its own and Start is ready.
 - **Your meetings stay with your account.** Each account you sign in with sees only its own meetings, notes and people on this Mac; meetings you already have move to the first account you sign in with.
 
