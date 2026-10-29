@@ -277,7 +277,9 @@ final class AppModel {
             startedAt: recordingStartedAt, statusText: statusText,
             // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
             languageText: languageText(locked: isRecording ? lockedLanguage : nil, mode: languageMode, isRecording: isRecording),
-            noteLanguageText: selectedNoteLanguage().interfaceName, errors: errorMessages
+            noteLanguageText: selectedNoteLanguage().interfaceName,
+            // Çözülmüş hatalar (ör. abone olduktan sonra "deneme bitti") panelde de kalmaz.
+            errors: visibleErrorMessages(errors: errorMessages, shownElsewhere: [], resolved: resolvedErrorMessages())
         )
         if let cache = viewStateCache, cache.inputs == inputs {
             return cache.state

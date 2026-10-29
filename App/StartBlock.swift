@@ -63,14 +63,24 @@ func resolveStartBlock(action: StartBlockAction, router: MainWindowRouter) {
 }
 
 /// Çözülmüş durumların hata mesajları: hata şeridinde artık gösterilmez (ör. giriş yapıldıktan sonra "giriş
-/// yapılmamış", oturum yeniden açıldıktan sonra "oturumun kapandı").
+/// yapılmamış", oturum yeniden açıldıktan sonra "oturumun kapandı", abone olduktan sonra "deneme bitti" ya da "bu
+/// Mac'te deneme kullanıldı").
 @MainActor
 func resolvedErrorMessages() -> [String] {
     #if HOSTED_EDITION
     guard HostedAccount.shared.hasSession == true else {
         return []
     }
-    return [userFacingMessage(error: HostedClientError.notSignedIn), userFacingMessage(error: HostedClientError.sessionEnded)]
+    let session: [String] = [userFacingMessage(error: HostedClientError.notSignedIn), userFacingMessage(error: HostedClientError.sessionEnded)]
+    guard case .signedIn(let entitlements) = HostedAccount.shared.state else {
+        return session
+    }
+    switch hostedPlanStatus(entitlements: entitlements) {
+    case .subscribed, .ending, .grace:
+        return session + hostedMessagesResolvedBySubscription()
+    case .trial, .expired:
+        return session
+    }
     #else
     return []
     #endif

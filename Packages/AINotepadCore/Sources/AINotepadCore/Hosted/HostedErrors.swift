@@ -135,6 +135,21 @@ public func isRetryableHostedError(error: HostedAPIError) -> Bool {
     }
 }
 
+/// Abone olunca geçersizleşen deneme ve abonelik hatalarının kodları (Başlat bunlardan biriyle reddedildiyse abonelik
+/// açıldıktan sonra hata şeridinde kalmamalı).
+public let hostedCodesResolvedBySubscription: [HostedErrorCode] = [
+    .subscriptionRequired, .trialExhausted, .trialNotStarted, .trialIPLimit, .trialDeviceUsed,
+    .deviceCheckRequired, .deviceCheckInvalid, .trialCapacityReached,
+]
+
+/// Abone olunca geçersizleşen hataların kullanıcıya gösterilen metinleri (bkz. `hostedCodesResolvedBySubscription`;
+/// bu kodların metni isteğin yoluna bağlı değildir). Saf fonksiyondur.
+public func hostedMessagesResolvedBySubscription() -> [String] {
+    hostedCodesResolvedBySubscription.map { (code: HostedErrorCode) -> String in
+        hostedErrorMessage(error: HostedAPIError(code: code, rawCode: code.rawValue, status: 403, serverMessage: "", path: "/v1/meetings/start"))
+    }
+}
+
 /// Sunucu hatasının kullanıcıya gösterilen, ne yapılacağını söyleyen metni. Saf fonksiyondur.
 public func hostedErrorMessage(error: HostedAPIError) -> String {
     guard let code = error.code else {
