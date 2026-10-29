@@ -175,7 +175,8 @@
         "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
         // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
         "ADMIN_IDENTITIES": "google:101383806107899312129",
-        // Access uygulamasının AUD etiketi (Zero Trust › Access › Applications › Overview). Boşken denetim kapalıdır.
+        // Access uygulamasının AUD etiketi. Bilerek boş (denetim kapalı): yönetim paneli API'yi Access çerezi olmadan
+        // çağırır; açılırsa panel 403 alır (bkz. src/auth/access.ts).
         "CF_ACCESS_TEAM_DOMAIN": "dry-heart-1ee2.cloudflareaccess.com",
         "CF_ACCESS_AUD": "",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",

@@ -16,8 +16,11 @@ export function accessJwksUrl(teamDomain: string): string {
 /**
  * Yönetici uçlarının ikinci kapısı: istek Cloudflare Access'ten geçmiş olmalı. `Cf-Access-Jwt-Assertion` jetonu ekibin
  * JWKS'iyle (RS256), `iss` = `https://<ekip>`, `aud` ∋ `CF_ACCESS_AUD` ve süreyle doğrulanır. `CF_ACCESS_AUD` boşsa
- * denetim kapalıdır (yerel geliştirme; uyarı yazılır) ve yalnızca `ADMIN_IDENTITIES` denetlenir. Jeton yoksa ya da
- * geçersizse 403.
+ * denetim kapalıdır (uyarı yazılır) ve yalnızca `ADMIN_IDENTITIES` denetlenir. Jeton yoksa ya da geçersizse 403.
+ *
+ * Üretimde `CF_ACCESS_AUD` bilerek boştur: yönetim paneli (site) API'yi tarayıcıdan, Access çerezi olmadan çağırır;
+ * API alan adı Access'in arkasında olmadığı için başlık gelmez ve denetim açılırsa panel 403 alır. Açmadan önce API'nin
+ * `/v1/admin/*` yolu panelle aynı Access uygulamasına alınmalı ve panel isteklerini çerezle göndermelidir.
  */
 export async function requireCloudflareAccess(platform: Platform, access: CloudflareAccessConfig, request: Request): Promise<void> {
   if (access.audience === null) {
