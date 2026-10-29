@@ -83,9 +83,18 @@ const localConfig: SiteConfig = {
   googleClientId: googleWebClientId,
 };
 
-/** Mac indirme adresi: sunucu indirmeyi sayar ve DMG'ye yönlendirir (302). Sitedeki tüm indirme düğmeleri bunu kullanır. Saf fonksiyondur. */
-export function macDownloadUrl(config: SiteConfig): string {
-  return `${config.apiBase}/v1/download/mac`;
+/**
+ * Sitedeki indirme düğmesinin yeri: sunucunun `?src=` izin listesiyle (`server/src/downloads.ts` →
+ * `siteDownloadSources`) aynı olmalı; tanınmayan değer `other` sayılır.
+ */
+export type DownloadSource = "home-hero" | "home-cta" | "download-page" | "account";
+
+/**
+ * Mac indirme adresi: sunucu indirmeyi düğmenin yeriyle (`src`) sayar ve DMG'ye yönlendirir (302). Sitedeki tüm
+ * indirme düğmeleri bunu kullanır. Saf fonksiyondur.
+ */
+export function macDownloadUrl(config: SiteConfig, source: DownloadSource): string {
+  return `${config.apiBase}/v1/download/mac?src=${source}`;
 }
 
 /** Hedefe göre yapılandırmalar. */

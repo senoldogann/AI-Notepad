@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { continueAfterDisconnect, runAfterResponse } from "../background";
 import type { Config } from "../config";
-import { ApiError, isRetryableStatus } from "../errors";
+import { ApiError, ProviderApiError, isRetryableStatus } from "../errors";
 import { jsonResponse } from "../http";
 import { type LogFields, errorName, log } from "../log";
 import type { MeetingRow } from "../meetings";
@@ -24,6 +24,7 @@ import {
   tightestLimit,
   trialAccountTokenLimit,
 } from "../reservations";
+import { recordMeetingFailure, recordOpsEvents } from "../opsEvents";
 import { llmCostMicroUsd } from "../usage";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
 
@@ -102,12 +103,12 @@ function mapAnthropicError(error: unknown, userId: string, meetingId: string | n
   if (error instanceof Anthropic.APIError) {
     log("error", "anthropic_failed", { userId, meetingId, status: error.status ?? null, requestId: error.requestID ?? null });
     if (error.status !== undefined && !isRetryableStatus(error.status)) {
-      return new ApiError("upstream_rejected", `Yapay zekâ isteği reddedildi (durum ${error.status}).`);
+      return new ProviderApiError("anthropic", "upstream_rejected", `Yapay zekâ isteği reddedildi (durum ${error.status}).`);
     }
-    return new ApiError("upstream_unavailable", "Yapay zekâ servisi şu an yanıt vermiyor; biraz sonra yeniden dene.");
+    return new ProviderApiError("anthropic", "upstream_unavailable", "Yapay zekâ servisi şu an yanıt vermiyor; biraz sonra yeniden dene.");
   }
   log("error", "anthropic_failed", { userId, meetingId, error: errorName(error) });
-  return new ApiError("upstream_unavailable", "Yapay zekâ servisi şu an yanıt vermiyor; biraz sonra yeniden dene.");
+  return new ProviderApiError("anthropic", "upstream_unavailable", "Yapay zekâ servisi şu an yanıt vermiyor; biraz sonra yeniden dene.");
 }
 
 /** Toplam girdi tokenı (önbellek okuma/yazma dahil). Saf fonksiyondur. */
@@ -115,9 +116,32 @@ function totalInputTokens(usage: { input_tokens: number | null; cache_creation_i
   return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 
-/** Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da). */
-async function chargeUsage(db: D1Database, scope: LLMScope, reservation: UsageReservation, usage: TokenUsage, now: Date): Promise<void> {
-  await db.batch(settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now));
+/**
+ * Başarıyla biterse toplantıya ilk not anını (`meeting_sessions.first_note_at`) yazacak çağrının toplantısı: not
+ * yazma ve düzenleme istemcide `effort: medium` ile gelir (canlı çeviri ve hızlı özellikler `low`); hesap çağrısında
+ * ve `low`'da null. Saf fonksiyondur.
+ */
+export function noteMeetingIdOf(scope: LLMScope, request: LLMRequest): string | null {
+  return scope.kind === "meeting" && request.effort === "medium" ? scope.meeting.id : null;
+}
+
+/**
+ * Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da).
+ * `noteMeetingId` verildiyse (başarılı not çağrısı) aynı işlemde toplantının ilk not anı yazılır (yalnızca boşsa).
+ */
+async function chargeUsage(
+  db: D1Database,
+  scope: LLMScope,
+  reservation: UsageReservation,
+  usage: TokenUsage,
+  noteMeetingId: string | null,
+  now: Date,
+): Promise<void> {
+  const noteStatements: D1PreparedStatement[] =
+    noteMeetingId === null
+      ? []
+      : [db.prepare("UPDATE meeting_sessions SET first_note_at = ? WHERE id = ? AND first_note_at IS NULL").bind(now.getTime(), noteMeetingId)];
+  await db.batch([...settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now), ...noteStatements]);
   log("info", "llm_usage", { userId: scope.userId, meetingId: scopeMeetingId(scope), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }
 
@@ -138,6 +162,7 @@ async function callMessage(
   scope: LLMScope,
   reservation: UsageReservation,
   estimatedInput: number,
+  noteMeetingId: string | null,
   now: Date,
 ): Promise<CallOutcome<Anthropic.Message>> {
   let message: Anthropic.Message;
@@ -147,7 +172,8 @@ async function callMessage(
     await chargeFailure(db, reservation, estimatedInput, now);
     return { ok: false, error: mapAnthropicError(error, scope.userId, scopeMeetingId(scope)) };
   }
-  await chargeUsage(db, scope, reservation, { inputTokens: totalInputTokens(message.usage), outputTokens: message.usage.output_tokens }, now);
+  const usage: TokenUsage = { inputTokens: totalInputTokens(message.usage), outputTokens: message.usage.output_tokens };
+  await chargeUsage(db, scope, reservation, usage, noteMeetingId, now);
   return { ok: true, value: message };
 }
 
@@ -220,10 +246,12 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
   };
   const logFields: LogFields = { userId: scope.userId, meetingId: scopeMeetingId(scope), reservationId: reservation.id };
 
+  const noteMeetingId: string | null = noteMeetingIdOf(scope, request);
+
   if (request.stream !== true) {
     const outcome: CallOutcome<Anthropic.Message> = await continueAfterDisconnect(
       context,
-      callMessage(db, client, retry, params, scope, reservation, estimatedInput, now),
+      callMessage(db, client, retry, params, scope, reservation, estimatedInput, noteMeetingId, now),
       "llm_settle_failed",
       logFields,
     );
@@ -243,7 +271,12 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     throw opened.error;
   }
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  runAfterResponse(context, pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, now), "llm_settle_failed", logFields);
+  runAfterResponse(
+    context,
+    pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, noteMeetingId, now),
+    "llm_settle_failed",
+    logFields,
+  );
   return new Response(readable, {
     status: 200,
     headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store" },
@@ -257,8 +290,9 @@ export function sseEvent(type: string, data: object): string {
 
 /**
  * Anthropic akışını olay olay istemciye aktarır ve kullanımı sayar (`message_start` girdi, `message_delta` çıktı).
- * Akış ortasında hata olursa istemciye `error` olayı gider (üst servis mesajı olmadan). İstemci koparsa üst akış iptal
- * edilir. Akış tamamlanmadıysa ayrılan bütçenin tamamı harcanmış sayılır.
+ * Akış ortasında hata olursa istemciye `error` olayı gider (üst servis mesajı olmadan); hata servis sayacına ve
+ * (toplantıdaysa) toplantıya yazılır. İstemci koparsa üst akış iptal edilir. Akış tamamlanmadıysa ayrılan bütçenin
+ * tamamı harcanmış sayılır; yalnızca tamamlanan akış toplantının ilk not anını yazar (`noteMeetingId`).
  */
 async function pumpStream(
   db: D1Database,
@@ -268,6 +302,7 @@ async function pumpStream(
   reservation: UsageReservation,
   estimatedInput: number,
   maxTokens: number,
+  noteMeetingId: string | null,
   now: Date,
 ): Promise<void> {
   const writer: WritableStreamDefaultWriter<Uint8Array> = writable.getWriter();
@@ -311,14 +346,18 @@ async function pumpStream(
       log("warn", "anthropic_stream_failed", { userId: scope.userId, meetingId: scopeMeetingId(scope), error: errorName(error), retryable });
       const errorType: string = retryable ? "overloaded_error" : "api_error";
       await forward(sseEvent("error", { type: "error", error: { type: errorType, message: "Yapay zekâ akışı yarıda kesildi." } }));
+      await recordOpsEvents(db, [{ kind: "provider_error", detail: "anthropic" }], now);
+      if (scope.kind === "meeting") {
+        await recordMeetingFailure(db, scope.userId, scope.meeting.id, "upstream_unavailable:anthropic", now);
+      }
     }
   } finally {
-    const usage: TokenUsage =
-      completed && outputTokens !== null
-        ? { inputTokens: inputTokens ?? estimatedInput, outputTokens }
-        : { inputTokens: inputTokens ?? estimatedInput, outputTokens: maxTokens };
+    const finished: boolean = completed && outputTokens !== null;
+    const usage: TokenUsage = finished
+      ? { inputTokens: inputTokens ?? estimatedInput, outputTokens: outputTokens ?? maxTokens }
+      : { inputTokens: inputTokens ?? estimatedInput, outputTokens: maxTokens };
     try {
-      await chargeUsage(db, scope, reservation, usage, now);
+      await chargeUsage(db, scope, reservation, usage, finished ? noteMeetingId : null, now);
     } finally {
       if (!clientGone) {
         await writer.close();

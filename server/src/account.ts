@@ -28,10 +28,12 @@ interface StoredIdentity {
  *   o sınırı mevcut durumdan daha fazla zayıflatmaz).
  * Hesaba bağlı raporlar (geri bildirim, çökme) bağı kaldırılarak değil, silinerek gider: serbest metin, e-posta ve
  * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu)
- * hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
+ * hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir. Abonelik iptal nedenleri (`subscription_cancellations`;
+ * serbest yorum içerebilir) de silinir.
  * Süren ayırmaların tahmini maliyeti silinmeden günlük harcamaya yazılır (`userReservationRemovalStatements`): silme
  * sırasında süren çağrı kesinleşirken yabancı anahtar hatası almaz, harcama da kaybolmaz.
- * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
+ * `daily_spend` (toplam, kişisel değil), `downloads`, `download_sources`, `download_visitors`, `ops_events`,
+ * `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
   return [
@@ -45,6 +47,7 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
       .bind(userId, dayKey(now)),
     db.prepare("DELETE FROM trial_starts WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM reports WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM subscription_cancellations WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM refresh_tokens WHERE family_id IN (SELECT id FROM refresh_families WHERE user_id = ?)").bind(userId),
     db.prepare("DELETE FROM refresh_families WHERE user_id = ?").bind(userId),

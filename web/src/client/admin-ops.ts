@@ -2,7 +2,7 @@
 // gerçek süreye indirilmemiş Deepgram tahminleri, Stripe webhook'unun son olayları ve son çökme raporları. Uyarı eşiği
 // aşılan kutu (ör. bir günden eski bekleyen ayırma) uyarı görünümüne geçer.
 import { type OpenMeeting, type Operations, type RecentCrash, fetchOperations } from "./admin-api";
-import { fillCounts, formatCount, formatRelative, formatTime, node, pill, shortId, tableRow } from "./admin-format";
+import { fillCounts, fillTable, formatCount, formatRelative, formatTime, node, pill, shortId, tableRow } from "./admin-format";
 import type { OpenReport } from "./admin-users";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
@@ -77,14 +77,16 @@ function renderOperations(ops: Operations, onOpenUser: (id: string) => void, onO
   const reports: Operations["reports"]["last7Days"] = ops.reports.last7Days;
   setOpsKpi("reports", formatCount(reports.feedback + reports.crash + reports.contact), fillCounts(adminText.opsReportsSub, reports), false);
 
-  element("ops-open-rows", HTMLElement).replaceChildren(...ops.meetings.openItems.map((meeting: OpenMeeting): HTMLTableRowElement => openMeetingRow(meeting, nowMs, onOpenUser)));
+  fillTable(
+    element("ops-open-rows", HTMLTableSectionElement),
+    ops.meetings.openItems.map((meeting: OpenMeeting): HTMLTableRowElement => openMeetingRow(meeting, nowMs, onOpenUser)),
+  );
   element("ops-open-empty", HTMLElement).classList.toggle("hidden", ops.meetings.openItems.length > 0);
-  element("ops-stripe-rows", HTMLElement).replaceChildren(
-    ...ops.stripe.last7DaysByType.map((entry: { readonly type: string; readonly count: number }): HTMLTableRowElement => {
-      const row: HTMLTableRowElement = tableRow([node("span", "mono", entry.type), formatCount(entry.count)]);
-      row.cells.item(1)?.classList.add("numeric");
-      return row;
-    }),
+  fillTable(
+    element("ops-stripe-rows", HTMLTableSectionElement),
+    ops.stripe.last7DaysByType.map((entry: { readonly type: string; readonly count: number }): HTMLTableRowElement =>
+      tableRow([node("span", "mono", entry.type), formatCount(entry.count)]),
+    ),
   );
   element("ops-stripe-empty", HTMLElement).classList.toggle("hidden", ops.stripe.last7DaysByType.length > 0);
   element("ops-crashes", HTMLElement).replaceChildren(...ops.reports.recentCrashes.map((crash: RecentCrash): HTMLLIElement => crashItem(crash, onOpenReport)));

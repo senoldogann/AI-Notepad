@@ -60,10 +60,16 @@ const trialLedgerRetentionMs: number = 730 * dayMs;
 /** Toplantılar, aylık kullanım ve kullanılmayan cihazlar 13 ay (~395 gün) tutulur (yıllık karşılaştırma + bir ay). */
 const usageRetentionMs: number = 395 * dayMs;
 
+/** İndirme kaynakları ve "Sorunlar" sayaçları 400 gün tutulur (yıllık karşılaştırma). */
+const aggregateCounterRetentionMs: number = 400 * dayMs;
+/** Abonelik iptal nedenleri (serbest yorum içerebilir) raporlar gibi 180 gün tutulur. */
+const cancellationRetentionMs: number = 180 * dayMs;
+
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. 13 tablo koşulu × 3 tur + 3 toplu işlem
- * = en çok 42 sorgu; Workers ücretsiz planının çağrı başına 50 D1 sorgusu sınırının altındadır. Kalan satırlar ertesi
- * gün silinir.
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 19 tablo koşulu × 3 tur
+ * = 57 silme sorgusu + 3 toplu işlemin 6 ifadesi = 63 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
+ * ekler). Workers Paid planının çağrı başına 1000 sorgu sınırının çok altındadır; ücretsiz plana (50) dönülürse
+ * `maxBatchesPerTable` 2'ye indirilmelidir. Kalan satırlar ertesi gün silinir. Koşul eklerken bu sayıyı güncelle.
  */
 export const scheduledCleanupLimits: CleanupLimits = { batchSize: 1000, maxBatchesPerTable: 3 };
 
@@ -72,7 +78,8 @@ export const scheduledCleanupLimits: CleanupLimits = { batchSize: 1000, maxBatch
  * - kullanılmış ama süresi dolmamış yenileme jetonu (yeniden kullanım algılaması için) yalnızca ailesi düşürülmüşse ya
  *   da ailede daha sonra kullanılmış bir jeton varsa silinir; jetonu kalmayan aile silinir (erişim jetonu aile
  *   bulunamayınca zaten geçersizdir);
- * - deneme başlangıçları yalnızca bugün sayılır (IP başına günlük sınır), daha eskileri silinir;
+ * - deneme başlangıçları yalnızca bugün sayılır (IP başına günlük sınır), daha eskileri silinir; indirme ziyaretçi
+ *   özetleri de yalnızca bugünün tekilleştirmesi içindir;
  * - aylık kullanım 13 ay tutulur (sınırlar yalnızca bu aya bakar).
  */
 function cleanupTargets(now: Date): CleanupTarget[] {
@@ -111,6 +118,10 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { name: "monthly_usage", table: "monthly_usage", where: "month < ?", binds: [monthKey(new Date(nowMs - usageRetentionMs))] },
     { name: "reports", table: "reports", where: "created_at < ?", binds: [nowMs - reportRetentionMs] },
     { name: "trial_identity_ledger", table: "trial_identity_ledger", where: "updated_at < ?", binds: [nowMs - trialLedgerRetentionMs] },
+    { name: "download_visitors", table: "download_visitors", where: "day < ?", binds: [today] },
+    { name: "download_sources", table: "download_sources", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "ops_events", table: "ops_events", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "subscription_cancellations", table: "subscription_cancellations", where: "created_at < ?", binds: [nowMs - cancellationRetentionMs] },
   ];
 }
 

@@ -104,6 +104,8 @@ interface UserItemBody {
   readonly meetingsTotal: number;
   readonly hoursThisMonth: number;
   readonly lastActiveAt: string | null;
+  readonly failedMeetings: number;
+  readonly lastFailureCode: string | null;
 }
 
 interface UserPageBody {
@@ -118,12 +120,47 @@ interface MeetingItemBody {
   readonly deferred: boolean;
   readonly reprocessCount: number;
   readonly audioMinutes: number;
+  readonly noteCompleted: boolean;
+  readonly failureCount: number;
+  readonly lastFailureCode: string | null;
+  readonly lastFailureAt: string | null;
+}
+
+/** Ayrıntı sayısı. */
+interface DetailCountBody {
+  readonly detail: string;
+  readonly count: number;
+}
+
+/** Sorun penceresi. */
+interface ProblemWindowBody {
+  readonly trialCapacityReached: number;
+  readonly spendCeilingReached: number;
+  readonly refusals: DetailCountBody[];
+  readonly providerErrors: DetailCountBody[];
+  readonly serverErrors: DetailCountBody[];
+  readonly serverErrorsTotal: number;
+}
+
+/** `GET /v1/admin/insights` yanıtı. */
+interface InsightsBody {
+  readonly generatedAt: string;
+  readonly problems: { last7Days: ProblemWindowBody; last30Days: ProblemWindowBody };
+  readonly funnel: { days: number; steps: Array<{ step: string; count: number }> };
+  readonly downloads: { total: number; bySource: DetailCountBody[]; byReferrerHost: DetailCountBody[] };
+  readonly cancellations: {
+    total: number;
+    byFeedback: DetailCountBody[];
+    byReason: DetailCountBody[];
+    recent: Array<{ userId: string; at: string; reason: string | null; feedback: string | null; comment: string | null }>;
+  };
 }
 
 interface UserDetailBody {
   readonly user: UserItemBody;
   readonly trialDeviceVerifiedAt: string | null;
   readonly stripeCustomerId: string | null;
+  readonly cancellation: { at: string; reason: string | null; feedback: string | null; comment: string | null } | null;
   readonly usage: { usedHours: number; capHours: number; audioHours: number; tokens: number; tokenCap: number; accountTokens: number; accountTokenCap: number };
   readonly meetings: MeetingItemBody[];
   readonly reports: Array<{ id: string; kind: string; status: string; createdAt: string; summary: string }>;
@@ -474,6 +511,8 @@ describe("yönetici API'si", () => {
       meetingsTotal: 1,
       hoursThisMonth: 0,
       lastActiveAt: iso(nowMs),
+      failedMeetings: 0,
+      lastFailureCode: null,
     });
     expect(JSON.stringify(found)).not.toContain(subject);
 
@@ -578,6 +617,137 @@ describe("yönetici API'si", () => {
 
     await expectError(await adminGet(harness, admin, `/v1/admin/users/${randomId()}`), 404, "not_found");
     await expectError(await adminGet(harness, admin, "/v1/admin/users/kisa"), 404, "not_found");
+  });
+
+  it("içgörüler: sorunlar, huni, indirme kaynakları ve iptal nedenleri; bırakma kesimleri ve toplantı hataları", async () => {
+    const harness: Harness = await defaultHarness();
+    // Önceki testlerin hesapları ve sayaçları pencerelerin dışında kalsın.
+    harness.clock.nowMs += 500 * dayMs;
+    const nowMs: number = harness.clock.nowMs;
+    const iso = (ms: number): string => new Date(ms).toISOString();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    // Kohort (son 30 gün): toplantısız, notlu ama hatalı tek toplantılı ve 3 toplantılı iptal etmiş abone. Kohort dışı:
+    // denemesi bitmiş (süre doldu), abone olmamış hesap.
+    const idle: string = await insertUser(nowMs - dayMs);
+    const noted: string = await insertUser(nowMs - 2 * dayMs);
+    const subscriber: string = await insertUser(nowMs - 25 * dayMs);
+    const trialEnded: string = await insertUser(nowMs - 60 * dayMs);
+    const notedMeeting: string = randomId();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET trial_started_at = ? WHERE id = ?").bind(nowMs - 60 * dayMs, trialEnded),
+      env.DB.prepare("UPDATE users SET trial_started_at = ? WHERE id = ?").bind(nowMs - 2 * dayMs, noted),
+      env.DB.prepare(
+        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, end_reason, token_budget, first_note_at,
+           failure_count, last_failure_code, last_failure_at)
+         VALUES (?1, ?2, 'trial', ?3, ?4, ?4, 'ended', 1, ?4, 2, 'upstream_rejected:elevenlabs', ?4)`,
+      ).bind(notedMeeting, noted, nowMs - 2 * dayMs, nowMs - 2 * dayMs + 30 * 60_000),
+      env.DB.prepare(
+        `INSERT INTO meeting_sessions (id, user_id, kind, started_at, max_ends_at, ended_at, end_reason, token_budget) VALUES
+           (?1, ?4, 'subscription', ?5, ?5, ?5, 'ended', 1), (?2, ?4, 'subscription', ?6, ?6, ?6, 'ended', 1),
+           (?3, ?4, 'subscription', ?7, ?7, ?7, 'ended', 1), (?8, ?9, 'trial', ?10, ?10, ?10, 'ended', 1)`,
+      ).bind(randomId(), randomId(), randomId(), subscriber, nowMs - 24 * dayMs, nowMs - 23 * dayMs, nowMs - 22 * dayMs, randomId(), trialEnded, nowMs - 60 * dayMs),
+      env.DB.prepare(
+        `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at, last_event_created, updated_at)
+         VALUES (?, 'cus_insight', 'sub_insight', 'canceled', ?, NULL, 1, ?)`,
+      ).bind(subscriber, nowMs - dayMs, nowMs - dayMs),
+      env.DB.prepare(
+        `INSERT INTO subscription_cancellations (stripe_subscription_id, user_id, created_at, event_created, reason, feedback, comment)
+         VALUES ('sub_insight', ?, ?, 1, 'cancellation_requested', 'too_expensive', 'Pahalı')`,
+      ).bind(subscriber, nowMs - dayMs),
+      env.DB.prepare(
+        `INSERT INTO ops_events (day, kind, detail, count) VALUES
+           (?1, 'refusal', 'trial_capacity_reached', 4), (?1, 'provider_error', 'elevenlabs', 2), (?1, 'server_error', 'internal_error', 1),
+           (?2, 'refusal', 'spend_ceiling_reached', 3), (?2, 'refusal', 'trial_capacity_reached', 1), (?2, 'server_error', 'spend_ceiling_reached', 3)`,
+      ).bind(dayOf(nowMs, 0), dayOf(nowMs, -10)),
+    ]);
+
+    // İndirmeler: aynı ağdan ikinci indirme sayılmaz; kaynak izin listesinden, Referer'dan yalnızca alan adı.
+    const download = async (query: string, ip: string, referer: string | null): Promise<void> => {
+      const headers: Record<string, string> = referer === null ? {} : { referer };
+      const response: Response = await harness.call(req("GET", `/v1/download/mac${query}`, { clientIp: ip, headers }));
+      expect(response.status).toBe(302);
+    };
+    await download("?src=home-hero", "203.0.113.7", "https://www.producthunt.com/posts/gistsmith?ref=abc");
+    await download("?src=home-hero", "203.0.113.7", "https://www.producthunt.com/posts/gistsmith?ref=abc");
+    await download("?src=../../etc", "203.0.113.8", null);
+    await download("", "2001:db8::1", "javascript:alert(1)");
+    const visitors = await env.DB.prepare("SELECT visitor_hash FROM download_visitors WHERE day = ?").bind(dayOf(nowMs, 0)).all<{ visitor_hash: string }>();
+    expect(visitors.results).toHaveLength(3);
+    expect(JSON.stringify(visitors.results)).not.toContain("203.0.113");
+
+    const response: Response = await adminGet(harness, admin, "/v1/admin/insights");
+    expect(response.status).toBe(200);
+    const insights = await response.json<InsightsBody>();
+    expect(insights.generatedAt).toBe(iso(nowMs));
+    expect(insights.problems.last7Days).toEqual({
+      trialCapacityReached: 4,
+      spendCeilingReached: 0,
+      refusals: [{ detail: "trial_capacity_reached", count: 4 }],
+      providerErrors: [{ detail: "elevenlabs", count: 2 }],
+      serverErrors: [{ detail: "internal_error", count: 1 }],
+      serverErrorsTotal: 1,
+    });
+    expect(insights.problems.last30Days).toMatchObject({ trialCapacityReached: 5, spendCeilingReached: 3, serverErrorsTotal: 4 });
+    expect(insights.funnel).toEqual({
+      days: 30,
+      steps: [
+        { step: "downloads", count: 3 },
+        { step: "accounts", count: 3 },
+        { step: "first_meeting", count: 2 },
+        { step: "first_note", count: 1 },
+        { step: "three_meetings", count: 1 },
+        { step: "subscribed", count: 1 },
+        { step: "canceled", count: 1 },
+      ],
+    });
+    expect(insights.downloads).toEqual({
+      total: 3,
+      bySource: [
+        { detail: "direct", count: 1 },
+        { detail: "home-hero", count: 1 },
+        { detail: "other", count: 1 },
+      ],
+      byReferrerHost: [
+        { detail: "", count: 1 },
+        { detail: "other", count: 1 },
+        { detail: "producthunt.com", count: 1 },
+      ],
+    });
+    expect(insights.cancellations).toEqual({
+      total: 1,
+      byFeedback: [{ detail: "too_expensive", count: 1 }],
+      byReason: [{ detail: "cancellation_requested", count: 1 }],
+      recent: [{ userId: subscriber, at: iso(nowMs - dayMs), reason: "cancellation_requested", feedback: "too_expensive", comment: "Pahalı" }],
+    });
+
+    // Bırakma kesimleri.
+    const segment = async (name: string): Promise<string[]> =>
+      (await (await adminGet(harness, admin, `/v1/admin/users?segment=${name}`)).json<UserPageBody>()).items.map((item: UserItemBody): string => item.id);
+    expect(await segment("no_meeting")).toContain(idle);
+    expect(await segment("no_meeting")).not.toContain(noted);
+    expect(await segment("trial_ended")).toContain(trialEnded);
+    expect(await segment("trial_ended")).not.toContain(noted);
+    expect(await segment("trial_ended")).not.toContain(subscriber);
+    const inactive: string[] = await segment("inactive");
+    expect(inactive).toEqual(expect.arrayContaining([subscriber, trialEnded]));
+    expect(inactive).not.toContain(noted);
+    expect(inactive).not.toContain(idle);
+    expect(await segment("failed")).toEqual([noted]);
+
+    // Kullanıcı başına "ne ters gitti": listede hatalı toplantı sayısı ve son kod, ayrıntıda toplantının hatası ve not durumu.
+    const failedUser: UserItemBody | undefined = (await (await adminGet(harness, admin, "/v1/admin/users?segment=failed")).json<UserPageBody>()).items[0];
+    expect(failedUser).toMatchObject({ failedMeetings: 1, lastFailureCode: "upstream_rejected:elevenlabs" });
+    const detail = await (await adminGet(harness, admin, `/v1/admin/users/${noted}`)).json<UserDetailBody>();
+    expect(detail.meetings[0]).toMatchObject({
+      id: notedMeeting,
+      noteCompleted: true,
+      failureCount: 2,
+      lastFailureCode: "upstream_rejected:elevenlabs",
+      lastFailureAt: iso(nowMs - 2 * dayMs + 30 * 60_000),
+    });
+    expect(detail.cancellation).toBeNull();
+    const canceled = await (await adminGet(harness, admin, `/v1/admin/users/${subscriber}`)).json<UserDetailBody>();
+    expect(canceled.cancellation).toEqual({ at: iso(nowMs - dayMs), reason: "cancellation_requested", feedback: "too_expensive", comment: "Pahalı" });
   });
 
   it("işletim görünümü: açık ve bitirilmemiş toplantılar, takılı ayırmalar, Deepgram tahminleri, Stripe olayları ve son çökmeler", async () => {

@@ -4,6 +4,7 @@ import { verifyAppleIdentityToken } from "./auth/apple";
 import { verifyGoogleIdentityToken } from "./auth/google";
 import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
+import { adminInsights } from "./adminInsights";
 import { adminOperations } from "./adminOps";
 import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
 import { requireCloudflareAccess } from "./auth/access";
@@ -24,16 +25,16 @@ import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
-import { countDownload, latestMacVersion } from "./downloads";
-import { entitlements, requireAccountLLMAccess } from "./entitlements";
+import { type DownloadOrigin, countDownload, downloadSourceOf, latestMacVersion, referrerHostOf } from "./downloads";
+import { type AccountLLMAccess, entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
 import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBodyBytes, readJsonBody } from "./http";
 import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
-import { type LLMScope, proxyLLM } from "./llm/proxy";
+import { proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
-import { type MeetingStartRequest, endMeeting, reprocessMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import { type MeetingRow, type MeetingStartRequest, endMeeting, reprocessMeeting, requireUsableMeeting, startMeeting } from "./meetings";
 import {
   type ReportInput,
   createReport,
@@ -45,6 +46,7 @@ import {
   reportStatusUpdateSchema,
   setReportStatus,
 } from "./reports";
+import { failureEvents, meetingFailureCode, recordMeetingFailure, recordOpsEvents } from "./opsEvents";
 import { requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { cachedTranscriptionResponse, parseTranscribeParams, proxyTranscription } from "./transcribe";
@@ -131,6 +133,29 @@ async function enforceLimit(limiter: RateLimit, key: string): Promise<void> {
   }
 }
 
+/**
+ * Toplantıya bağlı isteğin işi: başarısız olursa hata kodu (`meetingFailureCode`) kullanıcının toplantısına yazılır
+ * (`recordMeetingFailure`; yönetim panelinde "ne ters gitti"; yazım hatası yanıtı değiştirmez) ve hata olduğu gibi
+ * fırlatılır.
+ */
+async function withMeetingFailures(
+  db: D1Database,
+  userId: string,
+  meetingId: string,
+  now: Date,
+  work: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await work();
+  } catch (error: unknown) {
+    const code: string | null = meetingFailureCode(error);
+    if (code !== null) {
+      await recordMeetingFailure(db, userId, meetingId, code, now);
+    }
+    throw error;
+  }
+}
+
 /** Toplantı kimliği başlığı (`x-meeting-id`, UUID). */
 function meetingIdHeader(request: Request): string {
   const value: string | null = optionalMeetingIdHeader(request);
@@ -208,6 +233,8 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   const method: string = request.method;
   const authed = async (): Promise<AuthedUser> => authenticate(db, config, bearerToken(request), context.platform.now());
 
+  // Sağlık denetimi hız sınırından önce döner (izleme hiç 429 almaz) ve D1'e dokunmaz: döngüyle çağırmak yalnızca
+  // Worker isteği harcar, veritabanı okuma ya da yazımı harcatamaz.
   if (path === "/v1/health" && method === "GET") {
     return jsonResponse(200, { status: "ok" });
   }
@@ -289,14 +316,20 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
   if (endMatch !== null && endMatch[1] !== undefined && method === "POST") {
     const user: AuthedUser = await authed();
-    const row = await endMeeting(db, user.userId, endMatch[1], now);
-    return jsonResponse(200, { meetingId: row.id, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
+    const meetingId: string = endMatch[1];
+    return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> => {
+      const row = await endMeeting(db, user.userId, meetingId, now);
+      return jsonResponse(200, { meetingId: row.id, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
+    });
   }
   const reprocessMatch: RegExpExecArray | null = meetingReprocessPath.exec(path);
   if (reprocessMatch !== null && reprocessMatch[1] !== undefined && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
-    return jsonResponse(200, await reprocessMeeting(db, config, user.userId, reprocessMatch[1], now));
+    const meetingId: string = reprocessMatch[1];
+    return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> =>
+      jsonResponse(200, await reprocessMeeting(db, config, user.userId, meetingId, now)),
+    );
   }
 
   if (path === "/v1/llm/messages" && method === "POST") {
@@ -305,31 +338,45 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     // Toplantı kimliği varsa çağrı o toplantının bütçesinden düşer; yoksa hesap çağrısıdır (deneme ya da abonelik
     // hakkı gerekir, kullanıcının günlük ve aylık sınırı geçerlidir).
     const meetingId: string | null = optionalMeetingIdHeader(request);
-    let scope: LLMScope;
     if (meetingId === null) {
-      scope = { kind: "account", userId: user.userId, access: await requireAccountLLMAccess(db, config, user.userId, now) };
-      if (scope.access === "trial") {
+      const access: AccountLLMAccess = await requireAccountLLMAccess(db, config, user.userId, now);
+      if (access === "trial") {
         await requireTrialSpendHeadroom(db, config, now);
       }
-    } else {
-      scope = { kind: "meeting", userId: user.userId, meeting: await requireUsableMeeting(db, config, user.userId, meetingId, now) };
+      await requireSpendHeadroom(db, config, now);
+      const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
+      return proxyLLM(db, context, config, { kind: "account", userId: user.userId, access }, body);
     }
-    await requireSpendHeadroom(db, config, now);
-    const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
-    return proxyLLM(db, context, config, scope, body);
+    return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> => {
+      const meeting: MeetingRow = await requireUsableMeeting(db, config, user.userId, meetingId, now);
+      // Deneme toplantısının harcaması deneme tavanına da sayılır: açık ya da yeniden açılmış deneme toplantısı tavan
+      // dolduktan sonra yeni harcama açamaz.
+      if (meeting.kind === "trial") {
+        await requireTrialSpendHeadroom(db, config, now);
+      }
+      await requireSpendHeadroom(db, config, now);
+      const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
+      return proxyLLM(db, context, config, { kind: "meeting", userId: user.userId, meeting }, body);
+    });
   }
   if (path === "/v1/transcribe" && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
-    // Ödenmiş sonuç pencere ve harcama denetimlerinden önce döner (bkz. `cachedTranscriptionResponse`).
-    const repeated: Response | null = await cachedTranscriptionResponse(db, request, user.userId, meetingIdHeader(request), now);
-    if (repeated !== null) {
-      return repeated;
-    }
-    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
-    await requireSpendHeadroom(db, config, now);
-    const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);
-    return proxyTranscription(db, context, config, meeting, request, params);
+    const meetingId: string = meetingIdHeader(request);
+    return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> => {
+      // Ödenmiş sonuç pencere ve harcama denetimlerinden önce döner (bkz. `cachedTranscriptionResponse`).
+      const repeated: Response | null = await cachedTranscriptionResponse(db, request, user.userId, meetingId, now);
+      if (repeated !== null) {
+        return repeated;
+      }
+      const meeting: MeetingRow = await requireUsableMeeting(db, config, user.userId, meetingId, now);
+      if (meeting.kind === "trial") {
+        await requireTrialSpendHeadroom(db, config, now);
+      }
+      await requireSpendHeadroom(db, config, now);
+      const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);
+      return proxyTranscription(db, context, config, meeting, request, params);
+    });
   }
 
   if (path === "/v1/live/deepgram-token" && method === "POST") {
@@ -337,8 +384,11 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     // yeni jeton ister (bkz. `deepgram.ts`). Gövde yoktur; toplantı `x-meeting-id` başlığındadır.
     const user: AuthedUser = await authed();
     await enforceLimit(env.DEEPGRAM_USER_LIMITER, `user:${user.userId}`);
-    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
-    return jsonResponse(200, await issueDeepgramGrant(db, context.platform, config, meeting, now));
+    const meetingId: string = meetingIdHeader(request);
+    return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> => {
+      const meeting: MeetingRow = await requireUsableMeeting(db, config, user.userId, meetingId, now);
+      return jsonResponse(200, await issueDeepgramGrant(db, context.platform, config, meeting, now));
+    });
   }
 
   if (path === "/v1/billing/checkout" && method === "POST") {
@@ -368,7 +418,9 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     return jsonResponse(202, {});
   }
   if (path === "/v1/download/mac/version" && method === "GET") {
-    // İndirme sayfasındaki sürüm numarası; tarayıcı ve kenar önbelleği 5 dk tutar (GitHub her görüntülemede çağrılmaz).
+    // İndirme sayfasındaki sürüm numarası. `max-age=300` yalnızca tarayıcıda işe yarar: Worker yanıtı Cloudflare
+    // kenarında önbelleklenmez, her önbelleksiz görüntüleme GitHub'a bir istek atar ve bir Worker isteği sayılır. D1'e
+    // dokunmaz (hız sınırının arkasındadır).
     const version: string = await latestMacVersion(context.platform, config.appcastUrl);
     return new Response(JSON.stringify({ version }), {
       status: 200,
@@ -376,7 +428,12 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     });
   }
   if (path === "/v1/download/mac" && method === "GET") {
-    await countDownload(db, now);
+    // Ağ başına günde bir indirme sayılır (bkz. `countDownload`): tekrar isteği tek okuma yapar, D1'e yazmaz.
+    const origin: DownloadOrigin = {
+      source: downloadSourceOf(new URL(request.url).searchParams.get("src")),
+      referrerHost: referrerHostOf(request.headers.get("referer")),
+    };
+    await countDownload(db, config.secrets.trialHash, ipKey, origin, now);
     return new Response(null, { status: 302, headers: { location: config.dmgUrl } });
   }
   // Bağlantı denetleyicileri HEAD sorar: aynı yönlendirme, indirme sayılmaz.
@@ -407,6 +464,9 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
   }
   if (path === "/v1/admin/operations" && method === "GET") {
     return jsonResponse(200, await adminOperations(db, config, now));
+  }
+  if (path === "/v1/admin/insights" && method === "GET") {
+    return jsonResponse(200, await adminInsights(db, now));
   }
   if (path === "/v1/admin/users" && method === "GET") {
     return jsonResponse(200, await listAdminUsers(db, config, parseAdminUserFilter(new URL(request.url)), now));
@@ -454,6 +514,8 @@ async function stripeWebhook(request: Request, env: Env, context: RequestContext
     const result: { duplicate: boolean } = await handleStripeWebhook(env.DB, context.platform, config, payload, signature);
     return finalizeResponse(jsonResponse(200, { received: true, duplicate: result.duplicate }), null);
   } catch (error: unknown) {
+    // Sayaç hata yanıtından önce yazılır (`recordOpsEvents`, hatası yanıtı değiştirmez); imzasız ya da bozuk istekler sayılmaz.
+    await recordOpsEvents(env.DB, failureEvents(error), context.platform.now());
     if (error instanceof ApiError) {
       return finalizeResponse(errorResponse(error), null);
     }
@@ -486,6 +548,9 @@ export async function handleRequest(request: Request, env: Env, context: Request
   try {
     return finalizeResponse(await route(request, env, config, context, path), corsOrigin);
   } catch (error: unknown) {
+    // Yönetim panelinin "Sorunlar" sayaçları (`failureEvents`: ürün retleri, servis hataları, 5xx; yazım hatası yanıtı
+    // değiştirmez). Kimliksiz isteklerin biçim, kimlik ve hız sınırı hataları sayılmaz.
+    await recordOpsEvents(env.DB, failureEvents(error), context.platform.now());
     if (error instanceof ApiError) {
       return finalizeResponse(errorResponse(error), corsOrigin);
     }

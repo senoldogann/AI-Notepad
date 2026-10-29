@@ -1,6 +1,7 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): dört görünüm — genel
-// bakış (özet kutuları ve son 30 günün grafikleri), kullanıcılar (liste ve ayrıntı), işletim (açık toplantılar, takılı
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): beş görünüm — genel
+// bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri),
+// kullanıcılar (liste, bırakma kesimleri ve ayrıntı), işletim (açık toplantılar, takılı
 // işler, Stripe olayları, son çökmeler) ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
 // yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
@@ -98,6 +99,7 @@ const charts: readonly { readonly id: string; readonly title: string; readonly l
 /** Panelin görünümleri (betik `view-<id>` düğmesiyle `panel-<id>` açar). */
 const views: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
   { id: "overview", label: text.views.overview, icon: "chart" },
+  { id: "insights", label: text.views.insights, icon: "sparkle" },
   { id: "users", label: text.views.users, icon: "users" },
   { id: "operations", label: text.views.operations, icon: "laptop" },
   { id: "inbox", label: text.views.inbox, icon: "inbox" },
@@ -110,9 +112,14 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
   { kind: "contact", label: text.tabs.contact, icon: "mail" },
 ];
 
-/** Kullanıcı listesi kesimleri (değer sunucunun `segment` parametresidir; boş = tümü). */
-const segments: readonly { readonly value: string; readonly label: string }[] = [
-  { value: "", label: text.users.segments.all },
+/** Kesim seçeneği (değer sunucunun `segment` parametresidir; boş = tümü). */
+interface SegmentOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** Plan kesimleri. */
+const planSegments: readonly SegmentOption[] = [
   { value: "subscribed", label: text.users.segments.subscribed },
   { value: "past_due", label: text.users.segments.pastDue },
   { value: "canceled", label: text.users.segments.canceled },
@@ -120,40 +127,108 @@ const segments: readonly { readonly value: string; readonly label: string }[] = 
   { value: "free", label: text.users.segments.free },
 ];
 
+/** Bırakma kesimleri: kullanıcının nerede durduğu ya da neyin ters gittiği. */
+const dropOffSegments: readonly SegmentOption[] = [
+  { value: "no_meeting", label: text.users.segments.noMeeting },
+  { value: "trial_ended", label: text.users.segments.trialEnded },
+  { value: "inactive", label: text.users.segments.inactive },
+  { value: "failed", label: text.users.segments.failed },
+];
+
+/**
+ * Tablo sütunu: başlık ve sayısal mı. Sayısal sütunun başlığı da hücreleri de sağa yaslanır; betik hücreleri başlığa
+ * göre hizalar (`fillTable`), sütun hizasının tek kaynağı burasıdır.
+ */
+interface Column {
+  readonly label: string;
+  readonly numeric: boolean;
+}
+
+/** Metin sütunu. Saf fonksiyondur. */
+function textColumn(label: string): Column {
+  return { label, numeric: false };
+}
+
+/** Sayı sütunu. Saf fonksiyondur. */
+function numberColumn(label: string): Column {
+  return { label, numeric: true };
+}
+
 const providerOptions: readonly { readonly value: string; readonly label: string }[] = [
   { value: "", label: text.users.providers.all },
   { value: "apple", label: text.users.providers.apple },
   { value: "google", label: text.users.providers.google },
 ];
 
-const userColumns: readonly string[] = [
-  text.users.columns.user,
-  text.users.columns.provider,
-  text.users.columns.created,
-  text.users.columns.plan,
-  text.users.columns.trial,
-  text.users.columns.subscription,
-  text.users.columns.meetings,
-  text.users.columns.hours,
-  text.users.columns.lastActive,
+const userColumns: readonly Column[] = [
+  textColumn(text.users.columns.user),
+  textColumn(text.users.columns.provider),
+  textColumn(text.users.columns.created),
+  textColumn(text.users.columns.plan),
+  textColumn(text.users.columns.trial),
+  textColumn(text.users.columns.subscription),
+  numberColumn(text.users.columns.meetings),
+  numberColumn(text.users.columns.hours),
+  textColumn(text.users.columns.lastActive),
+  textColumn(text.users.columns.problems),
 ];
 
-const meetingColumns: readonly string[] = [
-  text.users.meetingColumns.started,
-  text.users.meetingColumns.kind,
-  text.users.meetingColumns.state,
-  text.users.meetingColumns.duration,
-  text.users.meetingColumns.audio,
-  text.users.meetingColumns.tokens,
-  text.users.meetingColumns.notes,
+const meetingColumns: readonly Column[] = [
+  textColumn(text.users.meetingColumns.started),
+  textColumn(text.users.meetingColumns.kind),
+  textColumn(text.users.meetingColumns.state),
+  numberColumn(text.users.meetingColumns.duration),
+  numberColumn(text.users.meetingColumns.audio),
+  numberColumn(text.users.meetingColumns.tokens),
+  textColumn(text.users.meetingColumns.problem),
+  textColumn(text.users.meetingColumns.notes),
 ];
 
-const openColumns: readonly string[] = [
-  text.operations.openColumns.user,
-  text.operations.openColumns.kind,
-  text.operations.openColumns.started,
-  text.operations.openColumns.endsBy,
-  text.operations.openColumns.notes,
+const openColumns: readonly Column[] = [
+  textColumn(text.operations.openColumns.user),
+  textColumn(text.operations.openColumns.kind),
+  textColumn(text.operations.openColumns.started),
+  textColumn(text.operations.openColumns.endsBy),
+  textColumn(text.operations.openColumns.notes),
+];
+
+const stripeColumns: readonly Column[] = [textColumn(text.operations.stripeColumns.type), numberColumn(text.operations.stripeColumns.count)];
+
+/** İçgörüler görünümünün tabloları (betik `<id>-rows` gövdesini, varsa `<id>-empty` bildirimini doldurur). */
+const problemColumns: readonly Column[] = [
+  textColumn(text.insights.problemsColumns.problem),
+  numberColumn(text.insights.problemsColumns.last7),
+  numberColumn(text.insights.problemsColumns.last30),
+];
+
+const funnelColumns: readonly Column[] = [
+  textColumn(text.insights.funnelColumns.step),
+  numberColumn(text.insights.funnelColumns.count),
+  numberColumn(text.insights.funnelColumns.fromPrevious),
+  numberColumn(text.insights.funnelColumns.lost),
+];
+
+/** Sayı tablosu kartları: indirme düğmeleri, yönlendiren siteler, iptal nedenleri. */
+const countTables: readonly { readonly id: string; readonly title: string; readonly columns: readonly Column[]; readonly empty: string; readonly note: string | null }[] = [
+  {
+    id: "insights-sources",
+    title: text.insights.sourcesTitle,
+    columns: [textColumn(text.insights.sourceColumns.source), numberColumn(text.insights.sourceColumns.count)],
+    empty: text.insights.noDownloads,
+    note: null,
+  },
+  {
+    id: "insights-referrers",
+    title: text.insights.referrersTitle,
+    columns: [textColumn(text.insights.referrerColumns.host), numberColumn(text.insights.referrerColumns.count)],
+    empty: text.insights.noDownloads,
+    note: text.insights.downloadsNote,
+  },
+];
+
+const feedbackColumns: readonly Column[] = [
+  textColumn(text.insights.cancellationColumns.reason),
+  numberColumn(text.insights.cancellationColumns.count),
 ];
 
 /** Kullanıcı ayrıntısının ölçerleri (betik `user-meter-<id>` ve `user-meter-<id>-text` doldurur). */
@@ -172,6 +247,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   { id: "trial", label: text.users.fields.trial, mono: false },
   { id: "trial-device", label: text.users.fields.trialDevice, mono: false },
   { id: "stripe", label: text.users.fields.stripeCustomer, mono: true },
+  { id: "cancellation", label: text.users.fields.cancellation, mono: false },
 ];
 ---
 
@@ -279,6 +355,85 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
             </section>
           </div>
 
+          {/* ---------- İçgörüler ---------- */}
+          <div id="panel-insights" class="admin__panel hidden">
+            <div class="insights-grid">
+              <section class="card table-card" aria-labelledby="insights-problems-title">
+                <h2 class="detail__label table-card__title" id="insights-problems-title">{text.insights.problemsTitle}</h2>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-problems-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{problemColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="insights-problems-rows"></tbody>
+                  </table>
+                </div>
+                <p id="insights-problems-empty" class="muted table-empty hidden">{text.insights.noProblems}</p>
+              </section>
+
+              <section class="card table-card" aria-labelledby="insights-funnel-title">
+                <h2 class="detail__label table-card__title" id="insights-funnel-title">{text.insights.funnelTitle}</h2>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-funnel-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{funnelColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="insights-funnel-rows"></tbody>
+                  </table>
+                </div>
+                <p class="small muted table-note">{text.insights.funnelNote}</p>
+              </section>
+
+              {
+                countTables.map((table) => (
+                  <section class="card table-card" aria-labelledby={`${table.id}-title`}>
+                    <h2 class="detail__label table-card__title" id={`${table.id}-title`}>
+                      {table.title}
+                    </h2>
+                    <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
+                      <table class="data-table">
+                        <thead>
+                          <tr>
+                            {table.columns.map((column: Column) => (
+                              <th scope="col" class:list={{ numeric: column.numeric }}>
+                                {column.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody id={`${table.id}-rows`} />
+                      </table>
+                    </div>
+                    <p id={`${table.id}-empty`} class="muted table-empty hidden">
+                      {table.empty}
+                    </p>
+                    {table.note === null ? null : <p class="small muted table-note">{table.note}</p>}
+                  </section>
+                ))
+              }
+
+              <section class="card table-card" aria-labelledby="insights-feedback-title">
+                <h2 class="detail__label table-card__title" id="insights-feedback-title">{text.insights.cancellationsTitle}</h2>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-feedback-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{feedbackColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="insights-feedback-rows"></tbody>
+                  </table>
+                </div>
+                <p id="insights-feedback-empty" class="muted table-empty hidden">{text.insights.noCancellations}</p>
+                <p id="insights-reasons" class="small muted table-note"></p>
+              </section>
+
+              <section class="card user-card" aria-labelledby="insights-cancellations-title">
+                <h2 class="detail__label" id="insights-cancellations-title">{text.insights.recentCancellationsTitle}</h2>
+                <ul id="insights-cancellations" class="link-list"></ul>
+                <p id="insights-cancellations-empty" class="muted hidden">{text.insights.noCancellations}</p>
+              </section>
+            </div>
+          </div>
+
           {/* ---------- Kullanıcılar ---------- */}
           <div id="panel-users" class="admin__panel hidden">
             <section id="users-list-view" class="users" aria-labelledby="users-title">
@@ -299,7 +454,13 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <div class="field">
                   <label for="users-segment">{text.users.segmentLabel}</label>
                   <select id="users-segment" class="input input--small select">
-                    {segments.map((segment) => <option value={segment.value}>{segment.label}</option>)}
+                    <option value="">{text.users.segments.all}</option>
+                    <optgroup label={text.users.segmentGroups.plan}>
+                      {planSegments.map((segment: SegmentOption) => <option value={segment.value}>{segment.label}</option>)}
+                    </optgroup>
+                    <optgroup label={text.users.segmentGroups.dropOff}>
+                      {dropOffSegments.map((segment: SegmentOption) => <option value={segment.value}>{segment.label}</option>)}
+                    </optgroup>
                   </select>
                 </div>
                 <div class="field">
@@ -318,7 +479,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <div class="table-scroll" tabindex="0" role="region" aria-labelledby="users-title">
                   <table class="data-table">
                     <thead>
-                      <tr>{userColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                      <tr>{userColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
                     </thead>
                     <tbody id="users-rows"></tbody>
                   </table>
@@ -378,7 +539,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <div class="table-scroll" tabindex="0" role="region" aria-label={text.users.meetingsTitle}>
                   <table class="data-table">
                     <thead>
-                      <tr>{meetingColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                      <tr>{meetingColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
                     </thead>
                     <tbody id="user-meetings"></tbody>
                   </table>
@@ -424,7 +585,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-open-title">
                   <table class="data-table">
                     <thead>
-                      <tr>{openColumns.map((column: string) => <th scope="col">{column}</th>)}</tr>
+                      <tr>{openColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
                     </thead>
                     <tbody id="ops-open-rows"></tbody>
                   </table>
@@ -437,10 +598,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-stripe-title">
                   <table class="data-table">
                     <thead>
-                      <tr>
-                        <th scope="col">{text.operations.stripeColumns.type}</th>
-                        <th scope="col" class="numeric">{text.operations.stripeColumns.count}</th>
-                      </tr>
+                      <tr>{stripeColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
                     </thead>
                     <tbody id="ops-stripe-rows"></tbody>
                   </table>
@@ -1429,6 +1587,81 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     grid-column: 1 / -1;
   }
 
+  /* ---------- İçgörüler ---------- */
+
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .table-note {
+    padding: 0 14px 10px;
+    line-height: 1.5;
+  }
+
+  .table-note:empty {
+    display: none;
+  }
+
+  /* Uyarı satırı (bugünlerde tavana takılan istek var): ilk hücre uyarı renginde. */
+  .data-table :global(tr.is-warn td:first-child) {
+    color: var(--warn);
+    font-weight: 600;
+  }
+
+  /* Huni adımı: adı ve altında en büyük adıma göre ince çubuk. */
+  .data-table :global(.funnel__step) {
+    display: grid;
+    gap: 6px;
+    min-width: 150px;
+  }
+
+  .data-table :global(.funnel__bar) {
+    width: 100%;
+    height: 4px;
+  }
+
+  /* Hücredeki rozetler en az iki rozet genişliğinde sarar: dar sütun onları tek tek alt alta dizip satırı uzatmaz. */
+  .data-table :global(td .pill-row) {
+    min-width: 15rem;
+  }
+
+  /* Hata kodu: eş aralıklı, en çok 26 karakterde sarar (sıkışan tablo onu harf harf bölmez); toplantı satırında uyarı
+     renginde. */
+  .data-table :global(.failure-code) {
+    display: inline-block;
+    width: max-content;
+    max-width: 26ch;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--muted);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* İçgörü tablolarında ilk sütun (sorun, adım, düğme, site) sarar: telefonda sayılar görünür alanda kalır. */
+  .insights-grid .data-table :global(td:first-child) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .insights-grid .data-table :global(td:first-child .mono) {
+    font-size: 0.75rem;
+  }
+
+  .data-table :global(.failure-code--warn) {
+    color: var(--warn);
+  }
+
+  /* Yorum gibi uzun başlıklar satıra sarar. */
+  .link-list :global(.link-list__title--wrap) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   @media (max-width: 1040px) {
     .kpi-group__grid,
     .ops-kpis {
@@ -1470,6 +1703,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     .charts,
     .inbox__body,
     .user-detail__grid,
+    .insights-grid,
     .ops-grid {
       grid-template-columns: minmax(0, 1fr);
     }

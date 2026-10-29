@@ -53,7 +53,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `ELEVENLABS_MONTHLY_AUDIO_HOURS`, `ELEVENLABS_BILLING_DAY` | ElevenLabs aylık kredi planının ses saati (Creator: ~110 saat) ve yenilendiği gün (1–28, UTC). Dönem kullanımı `daily_spend.audio_seconds`'tan; %80 ve %95 aşılınca `elevenlabs_capacity_threshold` alarmı, eşik üstündeyken her gün Cron'da `elevenlabs_capacity_high` alarmı; `GET /v1/admin/stats` → `elevenLabs: {cycleStart, usedHours, capHours, percent}`. |
 | `REPORT_BYTES_PER_DAY` | Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günlük bayt bütçesi; ayrıca hesap başına günde 20 rapor. |
 | `TRIAL_DAYS` | Denemenin süresi (gün); hesabın ilk deneme toplantısıyla başlar. Deneme `TRIAL_MEETINGS` toplantı ya da bu süre, hangisi önce dolarsa. |
-| `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir; açık deneme toplantıları sürer. |
+| `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca deneme harcaması açan her istek (yeni ve açık deneme toplantıları, yeniden işleme, denemedeki hesap çağrısı) `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı, günde bir kez). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir. |
 | `DEVICECHECK_POLICY` | Mac başına ücretsiz deneme (Apple DeviceCheck) için tek anahtar: `required` (üretim) ya da `off` (yerel, testler: DeviceCheck hiç çağrılmaz). Ayrıntı: aşağıda "Deneme kötüye kullanımı". |
 | `DEVICECHECK_ENVIRONMENT` | `production` (`api.devicecheck.apple.com`) ya da `development` (`api.development.devicecheck.apple.com`); üretimde `required` iken `production` olmalı. |
 | `DEEPGRAM_POLICY` | Deepgram canlı metni için tek anahtar: `on` (üretim) ya da `off` (yerel, testler, acil kapatma: jeton verilmez, `/v1/me` → `liveEngine: "whisperkit"`, uygulama canlı metni Mac'te üretir). Ayrıntı: aşağıda "Deepgram canlı metni". |
@@ -61,9 +61,12 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `DEVICECHECK_TEAM_ID`, `DEVICECHECK_KEY_ID` | Yetki JWT'sinin `iss`'i (Apple ekip kimliği) ve `kid`'i (DeviceCheck anahtar kimliği); `required` iken 10 karakterlik Apple biçiminde olmalı (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez). |
 
 Hız sınırları `ratelimits`'tedir (süre 10 ya da 60 sn): `AUTH_IP_LIMITER` (giriş, IP başına 10/dk), `API_IP_LIMITER`
-(her uç, 300/dk), `START_USER_LIMITER` ve `PROXY_USER_LIMITER` (kullanıcı başına), `REPORT_IP_LIMITER` (raporlar, IP
+(her uç, 1200/dk), `START_USER_LIMITER` ve `PROXY_USER_LIMITER` (kullanıcı başına), `REPORT_IP_LIMITER` (raporlar, IP
 başına 5/dk), `DEEPGRAM_USER_LIMITER` (Deepgram jetonu, kullanıcı başına 10/dk). Her ortamın kendi `namespace_id`'si
-vardır.
+vardır. IP sınırı yalnızca kimliksiz sel için kaba bir kapıdır: asıl maliyet kullanıcı başına sınırlardadır
+(`PROXY_USER_LIMITER` 120/dk). Aynı NAT ya da operatör CGNAT'ı arkasında canlı çeviri yapan kişi dakikada ~15 istek
+attığından 300/dk ~20 kişide 429 veriyordu; 1200/dk ~80 kişiye yeter. Kimliksiz uçlar bu sınırda bile D1 yazımı
+harcatamaz: `/v1/health` D1'e dokunmaz, `/v1/download/mac` ağ başına günde bir kez yazar.
 
 Eksik ya da geçersiz bir değer her istekte `500 internal_error` ve `config_invalid` logu verir. Üretimde yer tutucu
 kalmışsa da öyledir (`TEAMID…` uygulama kimliği, `placeholder` içeren Google istemci ya da fiyat kimliği, `example.com`
@@ -89,7 +92,12 @@ ses saniyesinin günlük toplamını (`daily_spend.audio_seconds`) ekler; sayaç
 metninin toplantı başına jeton sayısını ve bütçe tahminini (`deepgram_live_meetings`) ekler; satırlar silinmez (bütçe
 ömür boyu) ve kullanıcıya bağlanmaz. `0018` kimlik defterine o ayın kullanımını (`usage_month`, `usage_seconds`,
 `usage_tokens`, `usage_account_tokens`) ve `monthly_usage`'a devralınan süreyi (`carried_seconds`) ekler (aşağıda
-"Deneme kötüye kullanımı").
+"Deneme kötüye kullanımı"). `0032` Deepgram bütçesinin tek satırlık toplamını (`deepgram_budget`, tetikleyicilerle
+güncellenir; var olan satırlardan doldurulur) ekler: bütçe denetimi tabloyu taramaz. `0033` "Sorunlar" sayacını
+(`ops_events`) ve tavan alarmlarının günlük işaretini (`daily_spend.ceiling_alerted_at`, `trial_ceiling_alerted_at`),
+`0034` indirme kaynaklarını (`download_sources`) ve ağ başına günlük tekilleştirmeyi (`download_visitors`), `0035`
+toplantının ilk not anını ve hata alanlarını (`meeting_sessions.first_note_at`, `failure_count`, `last_failure_code`,
+`last_failure_at`), `0036` Stripe iptal nedenlerini (`subscription_cancellations`) ekler.
 
 ## Deepgram canlı metni
 
@@ -209,8 +217,10 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da; yerel satırda ya da Stripe'taki listede) Checkout `409 subscription_exists` döner, istemci Portal'ı açar |
 | `POST /v1/billing/webhook` | Stripe imzası | olayın anlık görüntüsüne değil Stripe'taki güncel duruma güvenilir: müşterinin abonelikleri listelenir, kullanıcı başına tek geçerli abonelik yazılır (yaşayanlardan erişimi en yüksek, eşitse en eski). Yaşayan ikinci abonelik alarmla iptal edilir; tanınmayan müşterinin yaşayan aboneliği iptal edilir. `past_due` ek süresi (`PAST_DUE_GRACE_DAYS`) `past_due`'ya geçişten sayılır. `customer.deleted` eşlemeyi siler; `charge.refunded` alarm; `charge.dispute.created` alarm ve aboneliği hemen iptal. Hesap silinirken müşterinin açık Checkout oturumları da sona erdirilir |
 | `POST /v1/reports` | `feedback` ve `crash` için Bearer; `contact` için isteğe bağlı | `{kind, message?, email?, appVersion?, os?, payload?, turnstileToken?}` → `202 {}`. `contact` (site): `message` (≤5000), `email` (≤254) ve `turnstileToken` zorunlu, Turnstile doğrulanır. `feedback`: `message` zorunlu. `crash`: `payload` zorunlu (JSON nesnesi, ≤64 KB, aşarsa `413`; MetricKit ise listede kısa imza). `appVersion` ≤40, `os` ≤80. Türe ait olmayan alan reddedilir (ör. `feedback` + `payload`, `crash` + `turnstileToken`). Jeton varsa geçerli olmalı (`401`), rapor hesaba bağlanır; `feedback`/`crash` jetonsuz `401 unauthorized`. Gövde ayrıştırmadan önce en çok 160 KB (`413`); IP başına 5/dk, hesap başına günde 20, tür başına günde `REPORT_BYTES_PER_DAY` bayt (`429 daily_cap_reached`) |
-| `GET /v1/download/mac` | — | `302` → `DMG_URL`; UTC gün sayacını artırır (IP, tarayıcı ya da tanımlayıcı saklanmaz). Sayaç yazılamazsa yine yönlendirir (`download_count_failed` uyarısı) |
+| `GET /v1/download/mac` | — | `?src=<home-hero \| home-cta \| download-page \| account>` (yoksa `direct`, tanınmayan `other`) → `302` → `DMG_URL`; ağ başına günde bir indirme sayılır: UTC gün toplamı ve kaynak + Referer alan adı sayacı (`download_sources`; yol ya da tam adres değil). Tekilleştirme için ağın gün ile HMAC özeti ertesi güne dek tutulur; tekrar indirme D1'e yazmaz. Sayaç yazılamazsa yine yönlendirir (`download_count_failed` uyarısı) |
 | `GET /v1/admin/stats` | Bearer + yönetici | indirme, kullanıcı, deneme, abonelik (MRR = (`active` − `ending`) × `PRICE_USD_MONTHLY`), toplantı, harcama, token ve açık rapor özetleri; 30 günlük seriler (UTC, eskiden yeniye, boş gün 0). Tanımlar `src/admin.ts` → `adminStats` |
+| `GET /v1/admin/insights` | Bearer + yönetici | sorunlar (son 7 ve 30 gün: deneme kapasitesi ve harcama tavanı retleri, koda göre retler, servise göre üst servis hataları, 5xx), son 30 günün hunisi (indirme → hesap → ilk toplantı → ilk not → ≥ 3 toplantı → abone → iptal), indirme kaynakları ve Referer alan adları, Stripe iptal nedenleri. Tanımlar `src/adminInsights.ts` |
+| `GET /v1/admin/users` | Bearer + yönetici | `?q=<kimlik öneki>&segment=&provider=&cursor=`; `segment`: `subscribed`, `past_due`, `canceled`, `trial`, `free` ya da bırakma kesimleri `no_meeting`, `trial_ended`, `inactive` (7 gündür toplantı yok), `failed` (toplantısında istek başarısız). Tanımlar `src/adminUsers.ts` |
 | `GET /v1/admin/reports` | Bearer + yönetici | `?kind=&status=&before=<ms>` → `{items: [{id, kind, status, createdAt, userId, email, appVersion, os, summary}], nextBefore}`; sayfa 50, yeniden eskiye, `createdAt` ISO 8601, `nextBefore` ms ya da son sayfada `null` |
 | `GET /v1/admin/reports/{id}` | Bearer + yönetici | `{id, kind, status, createdAt, userId, email, appVersion, os, message, payload}` |
 | `POST /v1/admin/reports/{id}` | Bearer + yönetici | `{status: "open" \| "done"}` → `204` |
@@ -218,6 +228,9 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği düz
 `403 forbidden` döner (gövdede kimlik yok).
 Günlük harcama tavanı aşılınca toplantı başlatma ve her vekil çağrısı `503 spend_ceiling_reached` döner; günlük deneme
-harcaması tavanı aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` döner. Site kaynağı
+harcaması tavanı aşılınca deneme harcaması açan her istek (yeni deneme toplantısı, denemedeki hesap çağrısı, açık ya da
+yeniden açılmış deneme toplantısının yapay zekâ ve yazıya dökme çağrıları, deneme toplantısını yeniden işleme)
+`503 trial_capacity_reached` döner. İki tavanın alarmı günde bir kez yazılır; retlerin sayısı yönetim panelindedir
+(`ops_events`). Site kaynağı
 (`SITE_ORIGIN`) CORS'u yalnızca site uçlarında (giriş, `/v1/me`, ödeme, raporlar) ve yönetici uçlarında alır; her yanıt
 `Cache-Control: no-store` taşır.

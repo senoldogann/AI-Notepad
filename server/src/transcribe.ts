@@ -2,7 +2,7 @@ import { z } from "zod";
 import { continueAfterDisconnect } from "./background";
 import type { Config } from "./config";
 import { Base64Error, base64Decode, decodeUtf8Strict, randomToken, utf8 } from "./crypto";
-import { ApiError, UpstreamError, isRetryableStatus } from "./errors";
+import { ApiError, ProviderApiError, UpstreamError, isRetryableStatus } from "./errors";
 import { jsonResponse } from "./http";
 import { alertOnElevenLabsCrossing, requireElevenLabsHeadroom } from "./elevenLabsCapacity";
 import { errorName, log } from "./log";
@@ -470,7 +470,7 @@ async function sendToElevenLabs(
       return { ok: false, error: uploadError, uploaded: false };
     }
     log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error), uploaded });
-    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma servisine ulaşılamadı; yeniden dene."), uploaded };
+    return { ok: false, error: new ProviderApiError("elevenlabs", "upstream_unavailable", "Konuşma tanıma servisine ulaşılamadı; yeniden dene."), uploaded };
   }
   if (!response.ok) {
     // Üst servis gövdeyi okumadan yanıt verdiyse gönderim kendiliğinden kesilir; beklemeden kaydı arka planda tamamla.
@@ -483,8 +483,8 @@ async function sendToElevenLabs(
     const upstream: UpstreamError = new UpstreamError("elevenlabs", response.status, isRetryableStatus(response.status), "yanıt başarısız");
     log("error", "elevenlabs_failed", { userId: meeting.user_id, meetingId: meeting.id, status: upstream.status, uploaded });
     const error: ApiError = upstream.retryable
-      ? new ApiError("upstream_unavailable", "Konuşma tanıma servisi şu an yanıt vermiyor; yeniden dene.")
-      : new ApiError("upstream_rejected", `Konuşma tanıma isteği reddedildi (durum ${upstream.status}).`);
+      ? new ProviderApiError("elevenlabs", "upstream_unavailable", "Konuşma tanıma servisi şu an yanıt vermiyor; yeniden dene.")
+      : new ProviderApiError("elevenlabs", "upstream_rejected", `Konuşma tanıma isteği reddedildi (durum ${upstream.status}).`);
     return { ok: false, error, uploaded };
   }
   // Başarılı yanıt gövdenin tamamı okunduktan sonra gelir; gönderim yine de başarısız olduysa yanıt kullanılmaz.
@@ -493,7 +493,7 @@ async function sendToElevenLabs(
     await response.body?.cancel();
     log("error", "elevenlabs_upload_failed_after_response", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(uploadFailure) });
     const error: ApiError =
-      uploadFailure instanceof ApiError ? uploadFailure : new ApiError("upstream_unavailable", "Konuşma tanıma servisine ses gönderilemedi; yeniden dene.");
+      uploadFailure instanceof ApiError ? uploadFailure : new ProviderApiError("elevenlabs", "upstream_unavailable", "Konuşma tanıma servisine ses gönderilemedi; yeniden dene.");
     return { ok: false, error, uploaded: false };
   }
   let body: unknown;
@@ -501,12 +501,12 @@ async function sendToElevenLabs(
     body = await response.json();
   } catch (error: unknown) {
     log("error", "elevenlabs_malformed", { userId: meeting.user_id, meetingId: meeting.id, error: errorName(error) });
-    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
+    return { ok: false, error: new ProviderApiError("elevenlabs", "upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
   }
   const parsed = transcriptionSchema.safeParse(body);
   if (!parsed.success) {
     log("error", "elevenlabs_malformed", { userId: meeting.user_id, meetingId: meeting.id });
-    return { ok: false, error: new ApiError("upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
+    return { ok: false, error: new ProviderApiError("elevenlabs", "upstream_unavailable", "Konuşma tanıma yanıtı okunamadı."), uploaded: true };
   }
   return { ok: true, transcription: parsed.data };
 }

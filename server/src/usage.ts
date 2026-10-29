@@ -172,31 +172,55 @@ export async function todayTrialSpendMicroUsd(db: D1Database, now: Date): Promis
   return row?.trial_micro_usd ?? 0;
 }
 
+/** Tavan alarmının günlük işaret sütunu (`daily_spend`; sabit ad, kullanıcı girdisi değil). */
+type CeilingAlertColumn = "ceiling_alerted_at" | "trial_ceiling_alerted_at";
+
 /**
- * Günlük harcama tavanı: aşıldıysa alarm logu yazar ve 503 `spend_ceiling_reached` fırlatır. Toplantı başlatmada ve
- * her vekil çağrısında (LLM, konuşma tanıma) denetlenir.
+ * Günün ilk tavan reddi mi: işaret sütunu boşsa doldurur ve true döner; doluysa (alarm bugün yazıldı) false. Gün satırı
+ * yoksa (ör. tavan 0) işaretle birlikte eklenir.
+ */
+async function firstCeilingRefusalToday(db: D1Database, column: CeilingAlertColumn, now: Date): Promise<boolean> {
+  const result: D1Result = await db
+    .prepare(
+      `INSERT INTO daily_spend (day, ${column}) VALUES (?, ?)
+       ON CONFLICT(day) DO UPDATE SET ${column} = excluded.${column} WHERE daily_spend.${column} IS NULL`,
+    )
+    .bind(dayKey(now), now.getTime())
+    .run();
+  return result.meta.changes === 1;
+}
+
+/**
+ * Günlük harcama tavanı: aşıldıysa 503 `spend_ceiling_reached` fırlatır; alarm logu günde bir kez (günün ilk reddinde)
+ * yazılır, sonraki retler yönetim panelinin sayacında görünür (`opsEvents.ts`). Toplantı başlatmada ve her vekil
+ * çağrısında (LLM, konuşma tanıma) denetlenir.
  */
 export async function requireSpendHeadroom(db: D1Database, config: Config, now: Date): Promise<void> {
   const spent: number = await todaySpendMicroUsd(db, now);
   if (spent < config.dailySpendCeilingMicroUsd) {
     return;
   }
-  log("alert", "daily_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailySpendCeilingMicroUsd });
+  if (await firstCeilingRefusalToday(db, "ceiling_alerted_at", now)) {
+    log("alert", "daily_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailySpendCeilingMicroUsd });
+  }
   throw new ApiError("spend_ceiling_reached", "Servis bugün yoğun; şu an yeni istek alınamıyor. Lütfen daha sonra yeniden dene.");
 }
 
 /**
- * Günlük deneme harcaması tavanı: bugünkü deneme harcaması `dailyTrialSpendCeilingMicroUsd`'e ulaştıysa alarm logu yazar
- * ve 503 `trial_capacity_reached` fırlatır. Yeni deneme toplantısı başlatmada ve denemedeki hesap çağrısında (toplantı
- * dışı yapay zekâ) denetlenir; açık deneme toplantıları kendi bütçesiyle (ve genel tavanla) sürer. Kötüye kullanılan
- * deneme genel tavanı (`requireSpendHeadroom`) tüketip aboneleri durduramasın diye ayrıdır; aboneler yalnızca genel
- * tavana tabidir.
+ * Günlük deneme harcaması tavanı: bugünkü deneme harcaması `dailyTrialSpendCeilingMicroUsd`'e ulaştıysa 503
+ * `trial_capacity_reached` fırlatır; alarm logu günde bir kez yazılır (`requireSpendHeadroom` gibi). Deneme harcaması
+ * açan her yolda denetlenir: yeni deneme toplantısı, denemedeki hesap çağrısı (toplantı dışı yapay zekâ), açık ya da
+ * yeniden açılmış deneme toplantısının yapay zekâ ve yazıya dökme çağrıları ve deneme toplantısını yeniden işleme.
+ * Kötüye kullanılan deneme genel tavanı (`requireSpendHeadroom`) tüketip aboneleri durduramasın diye ayrıdır; aboneler
+ * yalnızca genel tavana tabidir.
  */
 export async function requireTrialSpendHeadroom(db: D1Database, config: Config, now: Date): Promise<void> {
   const spent: number = await todayTrialSpendMicroUsd(db, now);
   if (spent < config.dailyTrialSpendCeilingMicroUsd) {
     return;
   }
-  log("alert", "daily_trial_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailyTrialSpendCeilingMicroUsd });
+  if (await firstCeilingRefusalToday(db, "trial_ceiling_alerted_at", now)) {
+    log("alert", "daily_trial_spend_ceiling_reached", { day: dayKey(now), spentMicroUsd: spent, ceilingMicroUsd: config.dailyTrialSpendCeilingMicroUsd });
+  }
   throw new ApiError("trial_capacity_reached", "Ücretsiz denemeler bugün kapasitede; yarın yeniden dene ya da abone ol.");
 }

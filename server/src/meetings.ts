@@ -594,8 +594,8 @@ export interface ReprocessedMeeting {
  * şimdiye dek kullanılan + pay; ilk geçiş bütçesini neredeyse bitirmiş toplantı da tam pay alır). Toplantının toplam
  * yapay zekâ bütçesi böylece en çok ilk bütçe + `maxMeetingReprocesses` × pay olur. Yeni deneme, başlatma ya da
  * toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
- * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı doluysa
- * (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503. Toplantı zaten açıksa (ek süre içinde) hak harcanmaz.
+ * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı (deneme
+ * toplantısında deneme tavanı da) doluysa (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503. Toplantı zaten açıksa (ek süre içinde) hak harcanmaz.
  * En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`. Başkasının ya da olmayan toplantı
  * `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
  */
@@ -617,6 +617,10 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
   const endMs: number = Math.min(row.ended_at ?? row.max_ends_at, row.max_ends_at);
   if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
     throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
+  }
+  // Deneme toplantısının yeniden işlenmesi deneme harcaması açar: deneme tavanı doluysa hak harcanmadan 503.
+  if (row.kind === "trial") {
+    await requireTrialSpendHeadroom(db, config, now);
   }
   await requireSpendHeadroom(db, config, now);
   const until: number = nowMs + config.meetingGraceMs;

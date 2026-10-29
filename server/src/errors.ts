@@ -100,6 +100,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Üst servisin başarısızlığından doğan istemci hatası (`upstream_rejected` ya da `upstream_unavailable`): hangi servisin
+ * (`anthropic`, `elevenlabs`, `stripe`, `turnstile`, kimlik sağlayıcısı anahtarları) başarısız olduğunu taşır; yönetim
+ * panelindeki servis hatası sayacı bundan yazılır (`opsEvents.ts`). İstemciye giden gövde `ApiError` ile aynıdır.
+ */
+export class ProviderApiError extends ApiError {
+  override readonly name: string = "ProviderApiError";
+  readonly service: string;
+
+  constructor(service: string, code: "upstream_rejected" | "upstream_unavailable", message: string) {
+    super(code, message);
+    this.service = service;
+  }
+}
+
 /** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";

@@ -13,10 +13,18 @@ export function accessJwksUrl(teamDomain: string): string {
   return `https://${teamDomain}/cdn-cgi/access/certs`;
 }
 
+/** `CF_ACCESS_AUD` boşsa (Access denetimi kapalı) uyarı yazar; günlük bakım (`index.ts`) çağırır, günde bir satır. */
+export function warnIfAccessCheckDisabled(access: CloudflareAccessConfig): void {
+  if (access.audience === null) {
+    log("warn", "cf_access_check_disabled", {});
+  }
+}
+
 /**
  * Yönetici uçlarının ikinci kapısı: istek Cloudflare Access'ten geçmiş olmalı. `Cf-Access-Jwt-Assertion` jetonu ekibin
  * JWKS'iyle (RS256), `iss` = `https://<ekip>`, `aud` ∋ `CF_ACCESS_AUD` ve süreyle doğrulanır. `CF_ACCESS_AUD` boşsa
- * denetim kapalıdır (uyarı yazılır) ve yalnızca `ADMIN_IDENTITIES` denetlenir. Jeton yoksa ya da geçersizse 403.
+ * denetim kapalıdır ve yalnızca `ADMIN_IDENTITIES` denetlenir; bunun uyarısı her yönetici isteğinde değil günlük
+ * bakımda bir kez yazılır (`warnIfAccessCheckDisabled`). Jeton yoksa ya da geçersizse 403.
  *
  * Üretimde `CF_ACCESS_AUD` bilerek boştur: yönetim paneli (site) API'yi tarayıcıdan, Access çerezi olmadan çağırır;
  * API alan adı Access'in arkasında olmadığı için başlık gelmez ve denetim açılırsa panel 403 alır. Açmadan önce API'nin
@@ -24,7 +32,6 @@ export function accessJwksUrl(teamDomain: string): string {
  */
 export async function requireCloudflareAccess(platform: Platform, access: CloudflareAccessConfig, request: Request): Promise<void> {
   if (access.audience === null) {
-    log("warn", "cf_access_check_disabled", {});
     return;
   }
   const token: string | null = request.headers.get(accessJwtHeader);

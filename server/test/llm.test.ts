@@ -67,6 +67,17 @@ async function meetingTokens(meetingId: string): Promise<number> {
   return row?.tokens_used ?? -1;
 }
 
+/** Toplantının ilk not anı ve hata alanları. */
+async function meetingOutcome(meetingId: string): Promise<{ first_note_at: number | null; failure_count: number; last_failure_code: string | null }> {
+  const row = await env.DB.prepare("SELECT first_note_at, failure_count, last_failure_code FROM meeting_sessions WHERE id = ?")
+    .bind(meetingId)
+    .first<{ first_note_at: number | null; failure_count: number; last_failure_code: string | null }>();
+  if (row === null) {
+    throw new Error("toplantı yok");
+  }
+  return row;
+}
+
 const basic = { effort: "low", max_tokens: 1000, messages: [{ role: "user", content: "Bu toplantıyı özetle." }] };
 
 describe("LLM vekili: izin listesi", () => {
@@ -184,6 +195,22 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
     expect(text).not.toContain("Overloaded");
     // Girdi message_start'tan (200), çıktı ayrılan üst sınırdan (1000).
     expect(await meetingTokens(context.meeting.meetingId)).toBe(1200);
+    // Yarıda kalan akış servis hatası olarak sayılır ve toplantıya yazılır; not tamamlanmış sayılmaz.
+    expect(await meetingOutcome(context.meeting.meetingId)).toEqual({ first_note_at: null, failure_count: 1, last_failure_code: "upstream_unavailable:anthropic" });
+  });
+
+  it("toplantıda tamamlanan not çağrısı (medium) ilk not anını bir kez yazar; canlı çeviri (low) ve hesap çağrısı yazmaz", async () => {
+    const context: Context = await setup();
+    context.harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    expect((await llm(context, basic, null)).status).toBe(200);
+    expect((await meetingOutcome(context.meeting.meetingId)).first_note_at).toBeNull();
+    const firstNoteAt: number = context.harness.clock.nowMs;
+    expect((await llm(context, { ...basic, effort: "medium" }, null)).status).toBe(200);
+    context.harness.clock.nowMs += 60_000;
+    context.harness.stub(anthropicUrl, async (): Promise<Response> => new Response(sse(streamEvents), { headers: { "content-type": "text/event-stream" } }));
+    await (await llm(context, { ...basic, effort: "medium", stream: true }, null)).text();
+    await context.harness.drain();
+    expect(await meetingOutcome(context.meeting.meetingId)).toEqual({ first_note_at: firstNoteAt, failure_count: 0, last_failure_code: null });
   });
 
   it("geçici hata (529) yeniden denenir; kalıcı hata (400) mesajı sızdırmadan 502 olur ve ayırma geri verilir", async () => {
@@ -205,6 +232,13 @@ describe("LLM vekili: üst istek ve muhasebe", () => {
     const body = await expectError(await llm(context, basic, null), 502, "upstream_rejected");
     expect(body.error.message).not.toContain("gizli");
     expect(await meetingTokens(context.meeting.meetingId)).toBe(before);
+    // Hata toplantıya servis adıyla yazılır ve "Sorunlar" sayacına girer.
+    expect(await meetingOutcome(context.meeting.meetingId)).toMatchObject({ failure_count: 1, last_failure_code: "upstream_rejected:anthropic" });
+    const day: string = new Date(context.harness.clock.nowMs).toISOString().slice(0, 10);
+    const provider = await env.DB.prepare("SELECT count FROM ops_events WHERE day = ? AND kind = 'provider_error' AND detail = 'anthropic'")
+      .bind(day)
+      .first<{ count: number }>();
+    expect(provider?.count).toBeGreaterThanOrEqual(1);
 
     let failures: number = 0;
     context.harness.stub(anthropicUrl, async (): Promise<Response> => {

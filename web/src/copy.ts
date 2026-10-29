@@ -325,6 +325,8 @@ export interface AdminUsersCopy {
   readonly searchPlaceholder: string;
   readonly search: string;
   readonly segmentLabel: string;
+  /** Kesim seçiminin grupları: plan ve bırakma kesimleri. */
+  readonly segmentGroups: { readonly plan: string; readonly dropOff: string };
   readonly segments: {
     readonly all: string;
     readonly subscribed: string;
@@ -332,6 +334,10 @@ export interface AdminUsersCopy {
     readonly canceled: string;
     readonly trial: string;
     readonly free: string;
+    readonly noMeeting: string;
+    readonly trialEnded: string;
+    readonly inactive: string;
+    readonly failed: string;
   };
   readonly providerLabel: string;
   readonly providers: { readonly all: string; readonly apple: string; readonly google: string };
@@ -345,6 +351,7 @@ export interface AdminUsersCopy {
     readonly meetings: string;
     readonly hours: string;
     readonly lastActive: string;
+    readonly problems: string;
   };
   readonly empty: string;
   readonly loadMore: string;
@@ -357,6 +364,7 @@ export interface AdminUsersCopy {
     readonly trialDevice: string;
     readonly subscription: string;
     readonly trial: string;
+    readonly cancellation: string;
   };
   readonly usageTitle: string;
   readonly usage: { readonly hours: string; readonly tokens: string; readonly accountTokens: string; readonly audio: string };
@@ -371,6 +379,7 @@ export interface AdminUsersCopy {
     readonly audio: string;
     readonly tokens: string;
     readonly notes: string;
+    readonly problem: string;
   };
   readonly noMeetings: string;
   readonly reportsTitle: string;
@@ -395,6 +404,26 @@ export interface AdminOperationsCopy {
   readonly noStripe: string;
   readonly crashesTitle: string;
   readonly noCrashes: string;
+}
+
+/** Yönetim panelinin içgörüler görünümü (sorunlar, huni, indirme kaynakları, iptal nedenleri). */
+export interface AdminInsightsCopy {
+  readonly problemsTitle: string;
+  readonly problemsColumns: { readonly problem: string; readonly last7: string; readonly last30: string };
+  readonly noProblems: string;
+  readonly funnelTitle: string;
+  readonly funnelColumns: { readonly step: string; readonly count: string; readonly fromPrevious: string; readonly lost: string };
+  readonly funnelNote: string;
+  readonly sourcesTitle: string;
+  readonly sourceColumns: { readonly source: string; readonly count: string };
+  readonly referrersTitle: string;
+  readonly referrerColumns: { readonly host: string; readonly count: string };
+  readonly noDownloads: string;
+  readonly downloadsNote: string;
+  readonly cancellationsTitle: string;
+  readonly cancellationColumns: { readonly reason: string; readonly count: string };
+  readonly noCancellations: string;
+  readonly recentCancellationsTitle: string;
 }
 
 /** Yönetim panelinin durgun metinleri (değerlere bağlı olanlar client/copy.ts'te). */
@@ -431,9 +460,17 @@ export interface AdminCopy {
   /** Özet kutusu gruplarının başlıkları. */
   readonly groups: { readonly growth: string; readonly revenue: string; readonly usage: string; readonly costs: string };
   /** Panelin görünümleri (üstteki sekmeler). */
-  readonly views: { readonly label: string; readonly overview: string; readonly users: string; readonly operations: string; readonly inbox: string };
+  readonly views: {
+    readonly label: string;
+    readonly overview: string;
+    readonly insights: string;
+    readonly users: string;
+    readonly operations: string;
+    readonly inbox: string;
+  };
   readonly users: AdminUsersCopy;
   readonly operations: AdminOperationsCopy;
+  readonly insights: AdminInsightsCopy;
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -535,7 +572,7 @@ export const copy: Copy = {
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
-    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and there's nothing to set up.`,
+    lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and no one else in the meeting needs to install anything.`,
     secondaryCta: "See pricing",
     assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
     facts: {
@@ -915,14 +952,26 @@ export const copy: Copy = {
       refusals: "Trials refused, 30 days",
     },
     groups: { growth: "Growth", revenue: "Revenue", usage: "Usage", costs: "Costs & capacity" },
-    views: { label: "Dashboard sections", overview: "Overview", users: "Users", operations: "Operations", inbox: "Inbox" },
+    views: { label: "Dashboard sections", overview: "Overview", insights: "Insights", users: "Users", operations: "Operations", inbox: "Inbox" },
     users: {
       title: "Users",
       searchLabel: "Account ID",
       searchPlaceholder: "Search by account ID prefix",
       search: "Search",
-      segmentLabel: "Plan",
-      segments: { all: "All", subscribed: "Subscribed", pastDue: "Payment due", canceled: "Cancelled", trial: "Trial", free: "No plan" },
+      segmentLabel: "Segment",
+      segmentGroups: { plan: "Plan", dropOff: "Drop-off" },
+      segments: {
+        all: "All",
+        subscribed: "Subscribed",
+        pastDue: "Payment due",
+        canceled: "Cancelled",
+        trial: "Trial",
+        free: "No plan",
+        noMeeting: "Signed in, no meeting",
+        trialEnded: "Trial ended, not subscribed",
+        inactive: "Inactive for 7+ days",
+        failed: "Meetings with errors",
+      },
       providerLabel: "Sign-in",
       providers: { all: "Any", apple: "Apple", google: "Google" },
       columns: {
@@ -933,8 +982,9 @@ export const copy: Copy = {
         trial: "Trial",
         subscription: "Subscription",
         meetings: "Meetings",
-        hours: "Hours this month",
+        hours: "Hours, month",
         lastActive: "Last active",
+        problems: "Problems",
       },
       empty: "No accounts match.",
       loadMore: "Load more",
@@ -947,13 +997,23 @@ export const copy: Copy = {
         trialDevice: "Trial tied to a Mac",
         subscription: "Subscription",
         trial: "Trial",
+        cancellation: "Why they cancelled",
       },
       usageTitle: "This month",
       usage: { hours: "Meeting hours", tokens: "AI tokens", accountTokens: "AI outside meetings", audio: "Transcribed audio" },
       timelineTitle: "Timeline",
       timelineNote: "Built from the account's current dates; past subscription changes aren't stored.",
       meetingsTitle: "Meetings",
-      meetingColumns: { started: "Started", kind: "Plan", state: "Status", duration: "Length", audio: "Audio", tokens: "Tokens", notes: "Notes" },
+      meetingColumns: {
+        started: "Started",
+        kind: "Plan",
+        state: "Status",
+        duration: "Length",
+        audio: "Audio",
+        tokens: "Tokens",
+        notes: "Notes",
+        problem: "What went wrong",
+      },
       noMeetings: "No meetings yet.",
       reportsTitle: "Reports from this account",
       noReports: "No reports.",
@@ -975,6 +1035,25 @@ export const copy: Copy = {
       noStripe: "No Stripe events in the last 7 days.",
       crashesTitle: "Latest crash reports",
       noCrashes: "No crash reports.",
+    },
+    insights: {
+      problemsTitle: "Problems",
+      problemsColumns: { problem: "Problem", last7: "7 days", last30: "30 days" },
+      noProblems: "No refusals, service errors or server errors in the last 30 days.",
+      funnelTitle: "Funnel, last 30 days",
+      funnelColumns: { step: "Step", count: "People", fromPrevious: "Of previous step", lost: "Lost" },
+      funnelNote:
+        "Downloads count each network once a day. The other steps follow the accounts created in the last 30 days and aren't nested: someone can subscribe without a meeting. “First note” counts only meetings held since the server began tracking finished notes.",
+      sourcesTitle: "Downloads by button, 30 days",
+      sourceColumns: { source: "Button", count: "Downloads" },
+      referrersTitle: "Downloads by referring site, 30 days",
+      referrerColumns: { host: "Site", count: "Downloads" },
+      noDownloads: "No downloads with a source yet.",
+      downloadsNote: "Visitors to the website itself are in Cloudflare Web Analytics.",
+      cancellationsTitle: "Why people cancel",
+      cancellationColumns: { reason: "Reason", count: "Cancellations" },
+      noCancellations: "No cancellation reasons yet. They appear once the cancellation reason form is on in Stripe's customer portal.",
+      recentCancellationsTitle: "Latest cancellations",
     },
     chartsTitle: "Last 30 days",
     charts: {

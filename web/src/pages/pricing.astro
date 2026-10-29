@@ -6,13 +6,19 @@ import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
 import { copy, type CommonCopy, type IconItem, type IconText, type PricingCopy } from "../copy";
-import { routes } from "../routes";
+import { faqStructuredData, structuredDataJson } from "../lib/structured-data";
+import { pageUrl, routes } from "../routes";
+import { siteConfig } from "../site";
 
 const text: PricingCopy = copy.pricing;
 const common: CommonCopy = copy.common;
+/** Arama motorları için sayfanın sık sorulan soruları (JSON-LD; aşağıdaki `Faq` ile aynı girdiler). */
+const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pageUrl("pricing", siteConfig.siteOrigin)));
 ---
 
 <Base page="pricing" meta={text.meta} indexed={true}>
+  {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
+  <script is:inline type="application/ld+json" set:html={structuredData} />
   <section class="page intro">
     <p class="eyebrow">{common.nav.pricing}</p>
     <h1 class="title-xl">{text.title}</h1>

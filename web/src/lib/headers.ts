@@ -6,6 +6,7 @@
 // geniş politikayı taşır (sayfası olmayan adresler, ör. bilinmeyen adresin 404'ü, için); her sayfanın kendi kuralı
 // yalnızca o sayfanın kullandığı hizmetlere izin veren dar politikayı ekler. Böylece Apple betiği yalnızca giriş
 // sayfasında, Turnstile yalnızca iletişim sayfasında çalışabilir. Google ile giriş Google'a yönlendirir; betik yüklenmez.
+// Cloudflare Web Analytics işaretçisi her sayfada olduğundan iki katmanın da tüm politikalarında açıktır.
 import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
 import { type PageKey, privatePages, routes } from "../routes";
 
@@ -33,6 +34,14 @@ const serviceSources: Readonly<Record<ExternalService, ServiceSources>> = {
   appleSignIn: { script: [originOf(appleAuthScriptUrl)], style: [], connect: [], frame: [appleIdOrigin], formAction: [appleIdOrigin] },
   turnstile: { script: [turnstileOrigin], style: [], connect: [], frame: [turnstileOrigin], formAction: [] },
 };
+
+/**
+ * Cloudflare Web Analytics (çerezsiz): Pages projesinde panelden açılır ve işaretçi betiğini her sayfaya kendisi ekler.
+ * Betik bu kaynaktan yüklenir, ölçümleri ikinci kaynağa gönderir. Her sayfada çalıştığı için hizmet listesine değil
+ * geniş ve dar politikaların hepsine eklenir (birleşen politikalardan biri izin vermezse betik engellenir).
+ */
+const webAnalyticsScriptOrigin: string = "https://static.cloudflareinsights.com";
+const webAnalyticsConnectOrigin: string = "https://cloudflareinsights.com";
 
 /** Tüm dış hizmetler (geniş politika). */
 const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile"];
@@ -64,11 +73,11 @@ function directive(name: string, base: readonly string[], services: readonly Ext
 export function contentSecurityPolicy(config: SiteConfig, services: readonly ExternalService[]): string {
   const directives: readonly string[] = [
     "default-src 'none'",
-    directive("script-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.script),
+    directive("script-src", ["'self'", webAnalyticsScriptOrigin], services, (sources: ServiceSources): readonly string[] => sources.script),
     directive("style-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.style),
     "img-src 'self'",
     "font-src 'self'",
-    directive("connect-src", ["'self'", originOf(config.apiBase)], services, (sources: ServiceSources): readonly string[] => sources.connect),
+    directive("connect-src", ["'self'", originOf(config.apiBase), webAnalyticsConnectOrigin], services, (sources: ServiceSources): readonly string[] => sources.connect),
     directive("frame-src", [], services, (sources: ServiceSources): readonly string[] => sources.frame),
     "manifest-src 'self'",
     directive("form-action", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.formAction),

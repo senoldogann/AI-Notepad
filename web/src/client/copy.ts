@@ -144,6 +144,43 @@ export interface AdminClientCopy {
   readonly opsReportsSub: string;
   /** Göreli zaman: `{value}` önce. */
   readonly ago: string;
+  /** Huni adımlarının adları. */
+  readonly funnelSteps: {
+    readonly downloads: string;
+    readonly accounts: string;
+    readonly first_meeting: string;
+    readonly first_note: string;
+    readonly three_meetings: string;
+    readonly subscribed: string;
+    readonly canceled: string;
+  };
+  /** İndirme düğmelerinin adları (sunucunun `src` değerleri); bilinmeyen değer olduğu gibi gösterilir. */
+  readonly downloadSources: Readonly<Record<string, string>>;
+  /** Referer alan adı yok ya da okunamadı. */
+  readonly referrerNone: string;
+  readonly referrerOther: string;
+  /** Stripe Müşteri Portalı iptal seçenekleri (`feedback`); bilinmeyen değer olduğu gibi gösterilir. */
+  readonly cancellationFeedback: Readonly<Record<string, string>>;
+  readonly cancellationNoFeedback: string;
+  /** Stripe'ın iptal nedenleri (`reason`). */
+  readonly cancellationReasons: Readonly<Record<string, string>>;
+  /** Stripe nedenlerinin özet satırı: `{list}`. */
+  readonly cancellationReasonsLine: string;
+  /** Sorun satırları: `{code}`, `{service}`. */
+  readonly problemRows: {
+    readonly trialCapacity: string;
+    readonly spendCeiling: string;
+    readonly serverErrors: string;
+    readonly refusal: string;
+    readonly provider: string;
+    readonly server: string;
+  };
+  /** Kullanıcı listesindeki sorun hücresi: `{count}` hatalı toplantı. */
+  readonly failedMeetings: string;
+  /** Toplantının hata hücresi: `{count}`, `{code}`. */
+  readonly meetingFailure: string;
+  /** Toplantı rozetleri: not tamamlandı. */
+  readonly noteDone: string;
 }
 
 /** Tarayıcı metinleri. */
@@ -241,6 +278,54 @@ export const clientCopy: ClientCopy = {
     opsWebhookNever: "No events stored in the last 90 days",
     opsReportsSub: "{feedback} feedback · {crash} crashes · {contact} contact",
     ago: "{value} ago",
+    funnelSteps: {
+      downloads: "Downloads",
+      accounts: "Accounts created",
+      first_meeting: "Started a meeting",
+      first_note: "Got a finished note",
+      three_meetings: "3 or more meetings",
+      subscribed: "Subscribed",
+      canceled: "Cancelled",
+    },
+    downloadSources: {
+      "home-hero": "Home page, top",
+      "home-cta": "Home page, bottom",
+      "download-page": "Download page",
+      account: "Account page",
+      direct: "Direct link (no button)",
+      other: "Unknown button",
+    },
+    referrerNone: "No referrer",
+    referrerOther: "Unreadable referrer",
+    cancellationFeedback: {
+      too_expensive: "Too expensive",
+      missing_features: "Missing features",
+      switched_service: "Switched to another service",
+      unused: "Not using it enough",
+      too_complex: "Too complicated",
+      low_quality: "Quality not good enough",
+      customer_service: "Customer service",
+      other: "Other",
+    },
+    cancellationNoFeedback: "No reason picked",
+    cancellationReasons: {
+      cancellation_requested: "cancelled by the customer",
+      payment_failed: "payment failed",
+      payment_disputed: "payment disputed",
+      canceled_by_retention_policy: "retention policy",
+    },
+    cancellationReasonsLine: "Stripe: {list}",
+    problemRows: {
+      trialCapacity: "Trials refused: daily trial ceiling",
+      spendCeiling: "Requests refused: daily spend ceiling",
+      serverErrors: "Server errors (5xx)",
+      refusal: "Refused: {code}",
+      provider: "Service failed: {service}",
+      server: "5xx: {code}",
+    },
+    failedMeetings: "{count} meetings with errors; the latest error is shown",
+    meetingFailure: "{count}× {code}",
+    noteDone: "Note ready",
   },
 };
 
