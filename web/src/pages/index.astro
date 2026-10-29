@@ -4,7 +4,7 @@
 // fiyat, SSS.
 import Base from "../layouts/Base.astro";
 import AppShot, { type ShotCallout } from "../components/AppShot.astro";
-import BrandLogo from "../components/BrandLogo.astro";
+import BrandTile from "../components/BrandTile.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
 import HeroDemo from "../components/HeroDemo.astro";
@@ -13,7 +13,7 @@ import MeetingCard from "../components/MeetingCard.astro";
 import Waveform from "../components/Waveform.astro";
 import { macDownloadUrl } from "../config";
 import { copy, type CommonCopy, type HomeCopy } from "../copy";
-import { type Brand, brands, fileBrands, mcpBrands, noteDestinationBrands, taskBrands } from "../lib/brands";
+import { type Brand, brands, fileBrands, marqueeBrands, mcpBrands, noteDestinationBrands, taskBrands } from "../lib/brands";
 import type { FilmLayout, FilmPalette } from "../lib/film";
 import type { IconName } from "../lib/icons";
 import { cyclic } from "../lib/list";
@@ -153,6 +153,22 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
         <p class="fact__label muted">{text.facts.tasks.label}</p>
       </li>
     </ul>
+  </section>
+
+  <section class="marquee" aria-labelledby="marquee-label">
+    <p class="marquee__label" id="marquee-label">{text.marqueeLabel}</p>
+    <div class="marquee__viewport">
+      <ul class="marquee__track">
+        {
+          [...marqueeBrands, ...marqueeBrands].map((brand: Brand, index: number) => (
+            <li class="marquee__item" aria-hidden={index >= marqueeBrands.length ? "true" : undefined}>
+              <BrandTile brand={brand} size="medium" />
+              <span class="marquee__name">{brands[brand].name}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
   </section>
 
   <section class="section page showcase" aria-labelledby="showcase-title">
@@ -307,12 +323,12 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
         <div class="integration__text">
           <h3 class="integration__title"><span class="icon-chip icon-chip--small"><Icon name="sparkle" size={18} class="" /></span>{text.integrations.ai.title}</h3>
           <p class="muted">{text.integrations.ai.text}</p>
-          <ul class="brand-tiles">
+          <ul class="brand-list">
             {
               mcpBrands.map((brand: Brand) => (
-                <li class="brand-tile">
-                  <span class="brand-tile__mark"><BrandLogo brand={brand} size={26} fill={brands[brand].color} /></span>
-                  <span class="brand-tile__name">{brands[brand].name}</span>
+                <li class="brand-item">
+                  <BrandTile brand={brand} size="medium" />
+                  <span class="brand-item__name">{brands[brand].name}</span>
                 </li>
               ))
             }
@@ -320,7 +336,7 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
         </div>
         <Film palette="sunset" layout="clouds-right" class="integration__cover">
           <div class="glass mcp-chat">
-            <p class="mcp-chat__label"><span class="mcp-chat__mark"><BrandLogo brand="claude" size={14} fill={brands.claude.color} /></span>{text.integrations.mcpDemo.label}</p>
+            <div class="mcp-chat__label"><BrandTile brand="claude" size="small" />{text.integrations.mcpDemo.label}</div>
             <p class="mcp-chat__question">{text.integrations.mcpDemo.question}</p>
             <p class="mcp-chat__tool"><Icon name="search" size={13} class="" />{text.integrations.mcpDemo.tool}</p>
             <p class="mcp-chat__answer">{text.integrations.mcpDemo.answerLead}</p>
@@ -340,13 +356,11 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
               {text.integrations[group.key].title}
             </h3>
             <p class="muted">{text.integrations[group.key].text}</p>
-            <ul class="brand-tiles">
+            <ul class="brand-list">
               {group.brands.map((brand: Brand) => (
-                <li class="brand-tile">
-                  <span class="brand-tile__mark">
-                    <BrandLogo brand={brand} size={26} fill={brands[brand].color} />
-                  </span>
-                  <span class="brand-tile__name">{brands[brand].name}</span>
+                <li class="brand-item">
+                  <BrandTile brand={brand} size="medium" />
+                  <span class="brand-item__name">{brands[brand].name}</span>
                 </li>
               ))}
             </ul>
@@ -702,6 +716,80 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
     border-radius: 4px;
   }
 
+  /* Kayan entegrasyon şeridi: liste iki kez yazılır, iz yarısı kadar kayar ve dikiş görünmez. Yalnızca `transform`
+     hareket eder (karolar bir kez çizilir); üstüne gelince durur, hareket azaltılmışsa kaymaz ve tek liste ortalanır. */
+  .marquee {
+    display: grid;
+    gap: 18px;
+    margin-top: clamp(48px, 7vw, 88px);
+  }
+
+  .marquee__label {
+    margin: 0;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .marquee__viewport {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .marquee__track {
+    display: flex;
+    width: max-content;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    animation: marquee 48s linear infinite;
+  }
+
+  .marquee__viewport:hover .marquee__track {
+    animation-play-state: paused;
+  }
+
+  .marquee__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-right: clamp(28px, 4vw, 48px);
+  }
+
+  .marquee__name {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee__track {
+      width: auto;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px 0;
+      animation: none;
+    }
+
+    .marquee__item[aria-hidden="true"] {
+      display: none;
+    }
+
+    .marquee__viewport {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+  }
+
   /* Entegrasyonlar: geniş yapay zekâ kartı (MCP örneğiyle), altında üç grup. Logolar markanın renginde, beyaz karoda. */
   .integrations {
     display: grid;
@@ -757,7 +845,7 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
     border-radius: calc(var(--radius-m) - 6px);
   }
 
-  .brand-tiles {
+  .brand-list {
     display: flex;
     flex-wrap: wrap;
     gap: 14px 6px;
@@ -766,27 +854,14 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
     list-style: none;
   }
 
-  .brand-tile {
+  .brand-item {
     display: grid;
     justify-items: center;
     gap: 6px;
-    width: 56px;
+    width: 58px;
   }
 
-  .brand-tile__mark {
-    display: grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-    background: #ffffff;
-    border: 1px solid rgb(10 10 10 / 0.08);
-    box-shadow:
-      0 1px 2px rgb(10 10 10 / 0.06),
-      0 6px 16px rgb(10 10 10 / 0.08);
-  }
-
-  .brand-tile__name {
+  .brand-item__name {
     font-size: 0.75rem;
     line-height: 1.25;
     text-align: center;
@@ -814,16 +889,6 @@ const useCaseStyles: readonly { readonly icon: IconName; readonly palette: FilmP
     font-size: 0.75rem;
     font-weight: 600;
     color: #5a4a40;
-  }
-
-  .mcp-chat__mark {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    background: #ffffff;
-    border: 1px solid rgb(10 10 10 / 0.08);
   }
 
   .mcp-chat__question {

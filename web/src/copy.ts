@@ -158,6 +158,8 @@ export interface HomeCopy {
     readonly followUp: TitledText & { readonly recipe: string; readonly subject: string; readonly lines: readonly string[] };
     readonly privacy: TitledText & { readonly badge: string };
   };
+  /** Kayan entegrasyon şeridinin etiketi. */
+  readonly marqueeLabel: string;
   /** Not ekranındaki açıklama balonları (ekran görüntüsüne göre konumlar Home'da). */
   readonly noteCallouts: {
     readonly dueDate: string;
@@ -601,17 +603,18 @@ export const copy: Copy = {
       ],
       link: "Read the privacy policy",
     },
+    marqueeLabel: "Works with the tools you already use",
     noteCallouts: {
       dueDate: "Owner and due date",
       transcript: "Full transcript, by speaker",
     },
     integrations: {
       eyebrow: "Integrations",
-      title: "Works with the tools you already use.",
+      title: "Your meetings, where your work happens.",
       lead: "Send the note where your team works, put tasks in your tracker, and let your AI apps read your meetings.",
       notes: {
         title: "Notes to your team",
-        text: "Send the finished note to a Notion page or a channel in Slack, Microsoft Teams, Discord or Zoom Team Chat.",
+        text: "Send the finished note to Notion, Apple Notes or a channel in Slack, Microsoft Teams, Discord or Zoom Team Chat; anything else through a webhook (Zapier, Make, n8n).",
       },
       tasks: {
         title: "Tasks to your tracker",
