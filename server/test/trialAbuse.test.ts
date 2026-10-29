@@ -148,7 +148,62 @@ describe("kimlik deneme defteri (hesap silinince deneme sıfırlanmaz)", () => {
     expect(await trialMeetingsLeft(harness, third)).toBe(0);
   });
 
-  it("deneme harcamamış hesap silinince defterde satır kalmaz", async () => {
+  it("aynı ay içinde silinip yeniden açılan hesap bu ayın kullanımını devralır; sonraki ay sıfırdan başlar", async () => {
+    const harness: Harness = await defaultHarness();
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const identityHash: string = await trialIdentityHash(env.TRIAL_HASH_SECRET, "google", subject);
+    const monthlyHours = async (session: Session): Promise<number> => {
+      const response: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
+      expect(response.status).toBe(200);
+      return (await response.json<{ monthlyHoursUsed: number }>()).monthlyHoursUsed;
+    };
+    const meetingOf = async (session: Session, minutes: number): Promise<Session> => {
+      const meeting: StartedMeetingBody = await (await start(harness, session, null, null)).json<StartedMeetingBody>();
+      harness.clock.nowMs += minutes * 60_000;
+      const fresh: Session = await refreshed(harness, session);
+      expect((await harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/end`, { token: fresh.accessToken }))).status).toBe(200);
+      return fresh;
+    };
+
+    // 1 saatlik toplantı ve bu ayın token kullanımı (kesinleşmiş kullanım gibi yazılır).
+    let first: Session = await signInWithGoogle(harness, subject);
+    first = await meetingOf(first, 60);
+    const month: string = new Date(harness.clock.nowMs).toISOString().slice(0, 7);
+    await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens, account_tokens) VALUES (?, ?, 1000, 500, 700)")
+      .bind(first.userId, month)
+      .run();
+    expect(await monthlyHours(first)).toBe(1);
+    expect((await deleteMe(harness, first, null)).status).toBe(204);
+    const ledger = await env.DB.prepare(
+      "SELECT usage_month, usage_seconds, usage_tokens, usage_account_tokens FROM trial_identity_ledger WHERE identity_hash = ?",
+    )
+      .bind(identityHash)
+      .first();
+    expect(ledger).toEqual({ usage_month: month, usage_seconds: 3600, usage_tokens: 1500, usage_account_tokens: 700 });
+
+    // Aynı ay: süre ve token'lar devralınır; yeni kullanım üstüne eklenir ve yeniden silmede büyüğü kalır.
+    let again: Session = await signInWithGoogle(harness, subject);
+    expect(await monthlyHours(again)).toBe(1);
+    const seeded = await env.DB.prepare("SELECT carried_seconds, input_tokens, output_tokens, account_tokens FROM monthly_usage WHERE user_id = ?")
+      .bind(again.userId)
+      .first();
+    expect(seeded).toEqual({ carried_seconds: 3600, input_tokens: 1500, output_tokens: 0, account_tokens: 700 });
+    again = await meetingOf(again, 30);
+    expect(await monthlyHours(again)).toBe(1.5);
+    expect((await deleteMe(harness, again, null)).status).toBe(204);
+    const grown = await env.DB.prepare("SELECT usage_month, usage_seconds FROM trial_identity_ledger WHERE identity_hash = ?").bind(identityHash).first();
+    expect(grown).toEqual({ usage_month: month, usage_seconds: 5400 });
+
+    // Sonraki ay: defterdeki eski ay yok sayılır, kullanım sıfırdan başlar (deneme sayısı yine devralınır).
+    harness.clock.nowMs = Date.UTC(2026, 10, 2, 12);
+    const nextMonth: Session = await signInWithGoogle(harness, subject);
+    expect(await monthlyHours(nextMonth)).toBe(0);
+    const fresh = await env.DB.prepare("SELECT COUNT(*) AS count FROM monthly_usage WHERE user_id = ?").bind(nextMonth.userId).first<{ count: number }>();
+    expect(fresh?.count).toBe(0);
+    expect(await ledgerRow(subject)).toEqual({ trial_meetings_used: 2, device_verified: 0 });
+  });
+
+  it("deneme harcamamış ve bu ay kullanımı olmayan hesap silinince defterde satır kalmaz", async () => {
     const harness: Harness = await defaultHarness();
     const subject: string = `google-${crypto.randomUUID()}`;
     const session: Session = await signInWithGoogle(harness, subject);

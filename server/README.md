@@ -87,7 +87,9 @@ yenileme jetonunun yerine geçen jetonu (`refresh_tokens.replaced_by`) ekler. `0
 e-postaları siler (yeni girişlerde de saklanmaz) ve cihaz saklama temizliği için dizin ekler. `0016` ElevenLabs'e giden
 ses saniyesinin günlük toplamını (`daily_spend.audio_seconds`) ekler; sayaç göçle sıfırdan başlar. `0017` Deepgram canlı
 metninin toplantı başına jeton sayısını ve bütçe tahminini (`deepgram_live_meetings`) ekler; satırlar silinmez (bütçe
-ömür boyu) ve kullanıcıya bağlanmaz.
+ömür boyu) ve kullanıcıya bağlanmaz. `0018` kimlik defterine o ayın kullanımını (`usage_month`, `usage_seconds`,
+`usage_tokens`, `usage_account_tokens`) ve `monthly_usage`'a devralınan süreyi (`carried_seconds`) ekler (aşağıda
+"Deneme kötüye kullanımı").
 
 ## Deepgram canlı metni
 
@@ -128,7 +130,10 @@ engel vardır:
   metninin `TRIAL_HASH_SECRET` ile HMAC özeti; kimlik açık saklanmaz) harcanan deneme sayısı, denemenin başladığı an
   ve Mac doğrulaması `trial_identity_ledger`'a yazılır. Aynı kimlikle yeniden açılan hesap bunları devralır
   (`users.carried_trial_meetings`, `users.trial_started_at`, `users.trial_device_verified_at`) ve IP sınırına yeni deneme hesabı olarak girmez.
-  Satır son güncellemeden 730 gün sonra silinir.
+  Defter o ayın (UTC) kullanımını da taşır (süre, token, toplantı dışı token; aynı ay için büyüğü): aynı ay içinde
+  yeniden açılan hesap bunu `monthly_usage`'a devralır (süre `carried_seconds` olarak aylık süre sınırına eklenir),
+  sonraki ay sıfırdan başlar; silip yeniden açarak aylık sınırlar sıfırlanamaz. Kullanımı olmayan, deneme harcamamış ve
+  Mac doğrulamamış hesap için satır yazılmaz. Satır son güncellemeden 730 gün sonra silinir.
 - **Mac başına deneme** (`src/deviceCheck.ts`, `DEVICECHECK_POLICY=required`): Apple DeviceCheck her Mac için iki bit
   saklar; sunucu cihaz kimliği görmez. `bit0` = "bu Mac bir hesaba deneme verdi" (`bit1` kullanılmaz, korunur).
   Denemesi henüz bir Mac'e bağlanmamış hesabın deneme toplantısı `deviceCheckToken` ister (`400 device_check_required`);

@@ -56,14 +56,16 @@ export interface MonthlyUsage {
   readonly meetingSeconds: number;
   /** Kesinleşmiş ses süresi + süresi dolmamış ses ayırmaları. */
   readonly audioSeconds: number;
-  /** Sınıra sayılan süre: toplantı ve ses süresinden büyüğü (aynı toplantının sesi iki kez sayılmaz). */
+  /** Aynı kimliğin bu ay silinmiş hesabından devralınan süre (bkz. `trialLedger.ts`). */
+  readonly carriedSeconds: number;
+  /** Sınıra sayılan süre: devralınan + toplantı ve ses süresinden büyüğü (aynı toplantının sesi iki kez sayılmaz). */
   readonly usedSeconds: number;
 }
 
 /** Kullanıcının bu ayki kullanımı. */
 export async function monthlyUsage(db: D1Database, userId: string, now: Date): Promise<MonthlyUsage> {
   const nowMs: number = now.getTime();
-  const [meetingRow, usageRow]: [{ seconds: number | null } | null, { audio_seconds: number } | null] = await Promise.all([
+  const [meetingRow, usageRow]: [{ seconds: number | null } | null, { audio_seconds: number; carried_seconds: number } | null] = await Promise.all([
     db
       .prepare(
         `SELECT SUM(MAX(0, MIN(COALESCE(ended_at, ?), max_ends_at, ?) - started_at)) / 1000.0 AS seconds
@@ -75,14 +77,16 @@ export async function monthlyUsage(db: D1Database, userId: string, now: Date): P
       .prepare(
         `SELECT COALESCE((SELECT audio_seconds FROM monthly_usage WHERE user_id = ?1 AND month = ?2), 0)
            + (SELECT COALESCE(SUM(audio_seconds), 0) FROM usage_reservations WHERE user_id = ?1 AND month = ?2 AND kind = 'audio' AND expires_at > ?3)
-           AS audio_seconds`,
+           AS audio_seconds,
+           COALESCE((SELECT carried_seconds FROM monthly_usage WHERE user_id = ?1 AND month = ?2), 0) AS carried_seconds`,
       )
       .bind(userId, monthKey(now), nowMs)
-      .first<{ audio_seconds: number }>(),
+      .first<{ audio_seconds: number; carried_seconds: number }>(),
   ]);
   const meetingSeconds: number = Math.ceil(meetingRow?.seconds ?? 0);
   const audioSeconds: number = Math.ceil(usageRow?.audio_seconds ?? 0);
-  return { meetingSeconds, audioSeconds, usedSeconds: Math.max(meetingSeconds, audioSeconds) };
+  const carriedSeconds: number = Math.ceil(usageRow?.carried_seconds ?? 0);
+  return { meetingSeconds, audioSeconds, carriedSeconds, usedSeconds: carriedSeconds + Math.max(meetingSeconds, audioSeconds) };
 }
 
 /** Bugünkü tahmini toplam harcama (mikro dolar). */
