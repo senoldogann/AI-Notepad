@@ -45,9 +45,8 @@ const common: CommonCopy = copy.common;
             {text.apple}
           </button>
         </div>
-        <div id="google-button" class="auth__google"></div>
-        <!-- Uygulama adına girişte Google'a yönlendiren düğme; renkli "G" Google'ın marka işaretidir. -->
-        <button id="google-redirect-button" class="button button--google button--block hidden" type="button" disabled>
+        <!-- Google'a yönlendiren düğme (site girişi ve uygulama adına giriş); renkli "G" Google'ın marka işaretidir. -->
+        <button id="google-redirect-button" class="button button--google button--block" type="button" disabled>
           <svg class="button__google" viewBox="0 0 48 48" width="18" height="18" aria-hidden="true" focusable="false">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
             <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
@@ -147,37 +146,18 @@ const common: CommonCopy = copy.common;
     background: light-dark(#1f1f1f, #e8e8e8);
   }
 
-  /* Google'ın açık düğme görünümü: beyaz zemin, ince çerçeve, renkli "G". */
+  /* Google'ın düğme görünümü (açık: beyaz zemin, ince çerçeve; koyu: Google'ın koyu düğmesi), renkli "G". */
   .button--google {
     min-height: 40px;
-    background: #fff;
-    color: #1f1f1f;
-    border: 1px solid #747775;
+    background: light-dark(#fff, #131314);
+    color: light-dark(#1f1f1f, #e3e3e3);
+    border: 1px solid light-dark(#747775, #8e918f);
     font-weight: 500;
     gap: 10px;
   }
 
   .button--google:hover {
-    background: #f8f9fa;
-  }
-
-  /* Google'ın betiği düğmeyi önce satır içi stilli bir yer tutucuyla çizer; CSP o stilleri engellediği için yer
-     tutucu (dev logo ve yazı) gizlenir, iframe gelene kadar düğme boyutunda sakin bir hap görünür. */
-  .auth__google {
-    display: flex;
-    justify-content: center;
-    height: 44px;
-    overflow: hidden;
-    border-radius: 999px;
-    color-scheme: normal;
-  }
-
-  .auth__google:not(:has(iframe)) {
-    background: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.08));
-  }
-
-  .auth__google :global([role="button"]) {
-    display: none;
+    background: light-dark(#f8f9fa, #1f1f20);
   }
 
   .app-return {

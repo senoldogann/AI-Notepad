@@ -277,12 +277,21 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         check value while you sign in to the Mac app from the browser, so the answer can only go back to that app; removed
         when sign-in finishes or the tab closes.
       </li>
+      <li>
+        <strong>Google sign-in check</strong> (<code>sessionStorage</code>, key <code>gistsmith.siteSignIn</code>): random
+        check values while you sign in on this site with Google, so only your own sign-in is accepted when Google sends
+        you back; removed as soon as you're back or the tab closes.
+      </li>
+      <li>
+        <strong>Tab identifier</strong> (<code>sessionStorage</code>, key <code>gistsmith.tab</code>): a random value that
+        lets a duplicated tab notice it is a copy, so it asks you to sign in again instead of signing you out everywhere.
+      </li>
     </ul>
     <p>
       These are strictly necessary for features you ask for, so they don't require consent. Third-party services load
-      only on the pages that need them. On the <a href={routes.signIn}>sign-in page</a>, Apple's and Google's sign-in
-      scripts are loaded from Apple and Google; they may use their own cookies and process your IP address and browser
-      information when you sign in, under Apple's and Google's privacy policies. On the{" "}
+      only on the pages that need them. On the <a href={routes.signIn}>sign-in page</a>, Apple's sign-in script is loaded
+      from Apple, and signing in with Google takes you to Google's own sign-in page; Apple and Google may use their own
+      cookies and process your IP address and browser information when you sign in, under their privacy policies. On the{" "}
       <a href={routes.contact}>contact page</a>, Cloudflare Turnstile checks that the form is used by a person; it
       processes technical data such as your IP address and browser characteristics. Cloudflare, which hosts the site,
       processes IP addresses to deliver and protect it.
