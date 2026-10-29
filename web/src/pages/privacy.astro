@@ -1,6 +1,6 @@
 ---
 // Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
-// transcribe.ts, llm/, auth/, billing.ts, migrations/, wrangler.jsonc), abonelik uygulaması (App/Hosted: canlı metin
+// transcribe.ts, llm/, auth/, billing.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması (App/Hosted: canlı metin
 // Mac'te, iCloud eşitlemesi yok) ve bu sitenin tarayıcı depolaması (public/theme.js, src/client/session.ts).
 import LegalSection from "../components/LegalSection.astro";
 import Legal from "../layouts/Legal.astro";
@@ -53,7 +53,10 @@ const mail: string = `mailto:${operator.email}`;
         server does not store them. We keep only usage numbers (how long, how many tokens) to apply the plan limits.
       </li>
       <li>We don't use cookies, analytics or advertising trackers on this website, and we don't sell your data.</li>
-      <li>You can delete your account yourself at any time; the data on our server is deleted immediately.</li>
+      <li>
+        You can delete your account yourself at any time; the data on our server is deleted immediately, except a
+        pseudonymous record of how many free-trial meetings your sign-in identity has used (see section 9).
+      </li>
     </ul>
   </LegalSection>
 
@@ -128,6 +131,19 @@ const mail: string = `mailto:${operator.email}`;
             </td>
             <td>Applying the trial and plan limits; controlling costs</td>
             <td>(b) contract</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Free-trial abuse prevention.</strong> (a) Apple DeviceCheck: Apple lets us store two bits for each
+              device with Apple, and we use one of them to record that a Mac has already been used for a free trial. The app
+              sends a short-lived token from Apple; we never receive a device identifier, and the bits are stored by Apple,
+              not by us. (b) A pseudonymous keyed one-way hash of your sign-in identity (Apple or Google account
+              identifier), stored together with the number of free-trial meetings used and whether a Mac was verified for
+              your trial. We keep it after you delete your account, so deleting and re-creating an account does not give a
+              new free trial.
+            </td>
+            <td>Preventing the same person or Mac from getting the free trial again (fraud prevention)</td>
+            <td>(f) legitimate interest in preventing fraud and abuse</td>
           </tr>
           <tr>
             <td>
@@ -262,7 +278,7 @@ const mail: string = `mailto:${operator.email}`;
       your Stripe customer ID, your subscription status and period, and your billing country — never your card details.
     </p>
     <p>
-      Apple (Sign in with Apple, App Attest) and Google (Sign in with Google) are also independent controllers for their
+      Apple (Sign in with Apple, App Attest, DeviceCheck) and Google (Sign in with Google) are also independent controllers for their
       sign-in services, under their own privacy policies. We do not sell personal data or share it for advertising.
     </p>
   </LegalSection>
@@ -270,6 +286,8 @@ const mail: string = `mailto:${operator.email}`;
   <LegalSection sections={sections} id="retention">
     <ul>
       <li>Account, device registrations, meeting session records and monthly usage: while your account exists; deleted immediately when you delete it.</li>
+      <li>The pseudonymous free-trial record (a keyed hash of your sign-in identity and the number of free-trial meetings used): while your account exists and for up to 24 months after you delete it, then deleted automatically.</li>
+      <li>The DeviceCheck bit for your Mac is stored by Apple, not by us; it holds no personal details, only that the Mac has already given a free trial.</li>
       <li>Sign-in tokens: up to 60 days; deleted within a day after they expire or you sign out.</li>
       <li>Daily usage totals: 2 days. The hashed IP record for new trials: until the end of that day.</li>
       <li>Contact messages, feedback and crash reports: 180 days.</li>
@@ -288,10 +306,14 @@ const mail: string = `mailto:${operator.email}`;
       deleted together in a single step.
     </p>
     <p>
-      What remains: today's trial counter for your network (a hashed IP address, not linked to any account, deleted at
-      the end of the day), payment records kept by Stripe and Link as the seller, messages and reports until their
-      180 days run out (ask us if you want them deleted sooner), and technical logs and backups until they expire. Notes
-      and recordings on your Mac stay where they are; you delete them in the app.
+      What remains: a pseudonymous record of your free-trial use (a keyed one-way hash of your sign-in identity, the
+      number of free-trial meetings used and whether a Mac was verified), kept for up to 24 months to prevent free-trial
+      abuse — if you sign in again with the same Apple or Google account, your new account continues the trial where the
+      old one left off; the DeviceCheck bit for your Mac, which Apple stores; today's trial counter for your network (a
+      hashed IP address, not linked to any account, deleted at the end of the day); payment records kept by Stripe and
+      Link as the seller; messages and reports until their 180 days run out (ask us if you want them deleted sooner); and
+      technical logs and backups until they expire. Notes and recordings on your Mac stay where they are; you delete them
+      in the app.
     </p>
   </LegalSection>
 

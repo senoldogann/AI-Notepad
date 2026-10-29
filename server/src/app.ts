@@ -15,6 +15,7 @@ import {
 } from "./auth/tokens";
 import { verifyTurnstile } from "./auth/turnstile";
 import { findOrCreateUser } from "./auth/users";
+import { trialIdentityHash } from "./trialLedger";
 import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAssertion } from "./attest/devices";
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
@@ -27,7 +28,7 @@ import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBody
 import { llmRequestSchema } from "./llm/request";
 import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
-import { endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
+import { type MeetingStartRequest, endMeeting, requireUsableMeeting, startMeeting } from "./meetings";
 import {
   type ReportInput,
   createReport,
@@ -182,7 +183,11 @@ const deviceAttestSchema = z.strictObject({
   attestation: z.string().min(1).max(32_768),
   challenge: z.string().min(16).max(128),
 });
-const meetingStartSchema = z.strictObject({ device: deviceAssertionSchema.optional() });
+/** `deviceCheckToken`: Apple DeviceCheck jetonu (base64, ~2–3 KB); deneme toplantısı için gerekir (bkz. `requireTrialDevice`). */
+const meetingStartSchema = z.strictObject({
+  device: deviceAssertionSchema.optional(),
+  deviceCheckToken: z.base64().min(1).max(8192).optional(),
+});
 const meetingEndPath: RegExp = /^\/v1\/meetings\/([0-9a-f-]{36})\/end$/;
 
 /** İstek bağlamı ve yapılandırmayla yönlendirme. */
@@ -212,7 +217,8 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     if (path === "/v1/auth/apple") {
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
-      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identity.email, now);
+      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "apple", identity.subject);
+      const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, identity.email, now);
       log("info", "login", { provider: "apple", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
@@ -220,7 +226,8 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyGoogleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
       // E-posta saklanmaz; Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
-      const userId: string = await findOrCreateUser(db, "google", identity.subject, null, now);
+      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "google", identity.subject);
+      const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, null, now);
       log("info", "login", { provider: "google", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
     }
@@ -273,7 +280,8 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     const deviceId: string | null =
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
     const clientIpHash: string = await hmacSha256Hex(config.secrets.accessToken, `trial-ip:${context.clientIp}`);
-    return jsonResponse(201, await startMeeting(db, config, user.userId, deviceId, clientIpHash, now));
+    const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null };
+    return jsonResponse(201, await startMeeting(db, context.platform, config, user.userId, startRequest, now));
   }
   const endMatch: RegExpExecArray | null = meetingEndPath.exec(path);
   if (endMatch !== null && endMatch[1] !== undefined && method === "POST") {

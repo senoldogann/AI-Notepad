@@ -64,3 +64,22 @@ enum HostedDeviceAttestation {
         }
     }
 }
+
+/// Apple DeviceCheck jetonu: sunucu bununla Apple'da bu Mac'in iki bitini okur ve yazar (`bit0` = "bu Mac bir hesaba
+/// ücretsiz deneme verdi"); Apple sunucuya cihaz kimliği vermez. App Attest'in aksine macOS'ta çalışır. Jeton kısa
+/// ömürlüdür, her deneme toplantısı başlatmada yeniden üretilir ve loglanmaz.
+enum HostedDeviceCheck {
+    /// Jetonu base64 olarak üretir; DeviceCheck desteklenmiyorsa ya da üretilemezse `HostedDeviceCheckError`.
+    static func token() async throws -> String {
+        guard DCDevice.current.isSupported else {
+            attestLogger.error("DeviceCheck desteklenmiyor")
+            throw HostedDeviceCheckError.unsupported
+        }
+        do {
+            return try await DCDevice.current.generateToken().base64EncodedString()
+        } catch {
+            attestLogger.error("DeviceCheck jetonu üretilemedi, hata: \(String(describing: error), privacy: .public)")
+            throw HostedDeviceCheckError.tokenFailed(reason: String(describing: error))
+        }
+    }
+}

@@ -588,7 +588,7 @@ export const copy: Copy = {
     signOut: "Sign out",
     dangerTitle: "Delete account",
     dangerText:
-      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law.",
+      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law. To prevent free-trial abuse, a pseudonymous record of how many free-trial meetings your sign-in has used is kept for up to 24 months, so signing in again with the same account continues the trial instead of restarting it.",
     deleteButton: "Delete account",
     dialogTitle: "Delete your account?",
     dialogText: "This can't be undone. If you have a subscription, it is cancelled immediately and ends with your account; the remaining time is not refunded automatically.",
@@ -597,7 +597,7 @@ export const copy: Copy = {
     cancel: "Cancel",
     confirmDelete: "Permanently delete my account",
     deletedTitle: "Your account was deleted",
-    deletedText: "Your account data on our server is gone. The notes and recordings on your Mac are still there.",
+    deletedText: "Your account data on our server is gone, apart from the pseudonymous free-trial record described in the privacy policy. The notes and recordings on your Mac are still there.",
     deletedRedirect: "Taking you to the home page…",
     backHome: "Back to the home page",
     noScript: "The account page needs JavaScript.",

@@ -86,10 +86,16 @@ export async function subscriptionState(db: D1Database, userId: string): Promise
   return row === null ? null : { status: row.status, currentPeriodEnd: row.current_period_end, cancelAt: row.cancel_at };
 }
 
-/** Kullanıcının harcadığı deneme toplantısı sayısı. */
+/**
+ * Kullanıcının harcadığı deneme toplantısı sayısı: deneme toplantıları + aynı kimliğin silinmiş hesaplarından
+ * devralınan (`users.carried_trial_meetings`, bkz. `trialLedger.ts`).
+ */
 export async function userTrialMeetingsUsed(db: D1Database, userId: string): Promise<number> {
   const row: { count: number } | null = await db
-    .prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ? AND kind = 'trial'")
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ?1 AND kind = 'trial')
+         + COALESCE((SELECT carried_trial_meetings FROM users WHERE id = ?1), 0) AS count`,
+    )
     .bind(userId)
     .first<{ count: number }>();
   return row?.count ?? 0;

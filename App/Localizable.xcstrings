@@ -2505,6 +2505,39 @@
         }
       }
     },
+    "Bu Mac Apple ile doğrulanamadı (DeviceCheck). İnternet bağlantını kontrol edip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac couldn't be verified with Apple (DeviceCheck). Check your internet connection and try again."
+          }
+        }
+      }
+    },
+    "Bu Mac Apple tarafından doğrulanamadı; uygulamayı yeniden açıp tekrar dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple couldn't verify this Mac; reopen the app and try again."
+          }
+        }
+      }
+    },
+    "Bu Mac Apple'ın cihaz doğrulamasını (DeviceCheck) desteklemiyor; ücretsiz deneme başlatılamıyor. Abone olarak devam edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac doesn't support Apple's device verification (DeviceCheck), so a free trial can't start. You can continue by subscribing."
+          }
+        }
+      }
+    },
     "Bu Mac doğrulanamadı; uygulamayı yeniden açıp tekrar dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -2532,6 +2565,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not installed on this Mac"
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has already used a free trial with another account. To continue, subscribe in Settings › Account."
           }
         }
       }
@@ -11912,6 +11956,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shorten the summary"
+          }
+        }
+      }
+    },
+    "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial needs Apple to verify this Mac; update the app and try again."
           }
         }
       }

@@ -1,0 +1,251 @@
+import { env } from "cloudflare:workers";
+import { type CryptoKey as JoseKey, decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
+import { describe, expect, it } from "vitest";
+import { deviceCheckUrl } from "../src/deviceCheck";
+import type { Env } from "../src/env";
+import { trialIdentityHash } from "../src/trialLedger";
+import {
+  type Harness,
+  type Session,
+  type StartedMeetingBody,
+  defaultHarness,
+  envWith,
+  expectError,
+  grantSubscription,
+  req,
+  signInWithGoogle,
+} from "./helpers";
+
+const teamId: string = "79DZ4AA4DW";
+const keyId: string = "TESTKEY123";
+
+/** Sahte Apple DeviceCheck: jeton → bitler; her çağrıda JWT ve gövde doğrulanır. */
+interface FakeDeviceCheck {
+  readonly env: Env;
+  readonly bits: Map<string, { bit0: boolean; bit1: boolean }>;
+  readonly calls: Array<{ endpoint: string; token: string }>;
+  /** Sıradaki çağrılara dönecek hata durumları (boşalınca normal yanıt). */
+  readonly failures: number[];
+}
+
+interface DeviceCheckBody {
+  readonly device_token: string;
+  readonly transaction_id: string;
+  readonly timestamp: number;
+  readonly bit0?: boolean;
+  readonly bit1?: boolean;
+}
+
+let keysPromise: Promise<{ privateKeyPem: string; publicKey: JoseKey }> | null = null;
+
+/** Sahte DeviceCheck anahtarı (dosya başına bir kez). */
+async function deviceCheckKeys(): Promise<{ privateKeyPem: string; publicKey: JoseKey }> {
+  keysPromise ??= (async (): Promise<{ privateKeyPem: string; publicKey: JoseKey }> => {
+    const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+    return { privateKeyPem: await exportPKCS8(privateKey), publicKey };
+  })();
+  return keysPromise;
+}
+
+/** DeviceCheck `required` ortamı ve geliştirme adresine bağlı sahte Apple servisi. */
+async function fakeDeviceCheck(harness: Harness): Promise<FakeDeviceCheck> {
+  const { privateKeyPem, publicKey } = await deviceCheckKeys();
+  const fake: FakeDeviceCheck = {
+    env: envWith({ DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: keyId, DEVICECHECK_TEAM_ID: teamId, DEVICECHECK_PRIVATE_KEY: privateKeyPem }),
+    bits: new Map(),
+    calls: [],
+    failures: [],
+  };
+  harness.stub(deviceCheckUrl("development", "query_two_bits").replace("query_two_bits", ""), async (request: Request): Promise<Response> => {
+    const jwt: string = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
+    expect(decodeProtectedHeader(jwt)).toEqual({ alg: "ES256", kid: keyId });
+    const verified = await jwtVerify(jwt, publicKey, { issuer: teamId });
+    expect(typeof verified.payload.iat).toBe("number");
+    const body: DeviceCheckBody = await request.json<DeviceCheckBody>();
+    expect(body.transaction_id.length).toBeGreaterThan(0);
+    expect(body.timestamp).toBe(harness.clock.nowMs);
+    const endpoint: string = new URL(request.url).pathname.split("/").at(-1) ?? "";
+    fake.calls.push({ endpoint, token: body.device_token });
+    const failure: number | undefined = fake.failures.shift();
+    if (failure !== undefined) {
+      return new Response(failure === 400 ? "Missing or incorrectly formatted device token payload" : "Internal Server Error", { status: failure });
+    }
+    if (endpoint === "query_two_bits") {
+      const stored = fake.bits.get(body.device_token);
+      return stored === undefined ? new Response("Failed to find bit state") : Response.json({ ...stored, last_update_time: "2026-10" });
+    }
+    expect(endpoint).toBe("update_two_bits");
+    fake.bits.set(body.device_token, { bit0: body.bit0 ?? false, bit1: body.bit1 ?? false });
+    return new Response("");
+  });
+  return fake;
+}
+
+/** Toplantı başlatır; `deviceCheckToken` null ise gövdede alan yoktur. */
+function start(harness: Harness, session: Session, environment: Env | null, deviceCheckToken: string | null): Promise<Response> {
+  const json: object = deviceCheckToken === null ? {} : { deviceCheckToken };
+  return harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json, env: environment }));
+}
+
+function deleteMe(harness: Harness, session: Session, environment: Env | null): Promise<Response> {
+  return harness.call(req("DELETE", "/v1/me", { token: session.accessToken, env: environment }));
+}
+
+async function trialMeetingsLeft(harness: Harness, session: Session): Promise<number> {
+  const response: Response = await harness.call(req("GET", "/v1/me", { token: session.accessToken }));
+  expect(response.status).toBe(200);
+  return (await response.json<{ trialMeetingsLeft: number }>()).trialMeetingsLeft;
+}
+
+/** Google kimliğinin defter satırı (yoksa null). */
+async function ledgerRow(subject: string): Promise<{ trial_meetings_used: number; device_verified: number } | null> {
+  const identityHash: string = await trialIdentityHash(env.ACCESS_TOKEN_SECRET, "google", subject);
+  return env.DB.prepare("SELECT trial_meetings_used, device_verified FROM trial_identity_ledger WHERE identity_hash = ?")
+    .bind(identityHash)
+    .first<{ trial_meetings_used: number; device_verified: number }>();
+}
+
+/** Mac'in DeviceCheck jetonu (base64; gerçeği ~2,2 KB). */
+function macToken(name: string): string {
+  return btoa(`devicecheck-${name}-${"x".repeat(64)}`);
+}
+
+describe("kimlik deneme defteri (hesap silinince deneme sıfırlanmaz)", () => {
+  it("silinip aynı kimlikle yeniden açılan hesap kalan denemeyle sürer; IP sayacına yeni hesap olarak girmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const first: Session = await signInWithGoogle(harness, subject);
+    expect((await start(harness, first, null, null)).status).toBe(201);
+    expect((await start(harness, first, null, null)).status).toBe(201);
+    expect((await deleteMe(harness, first, null)).status).toBe(204);
+
+    // Kimlik açık saklanmaz: anahtar sunucu sırrıyla HMAC özetidir.
+    expect(await ledgerRow(subject)).toEqual({ trial_meetings_used: 2, device_verified: 0 });
+    const raw = await env.DB.prepare("SELECT COUNT(*) AS count FROM trial_identity_ledger WHERE identity_hash LIKE ?")
+      .bind(`%${subject}%`)
+      .first<{ count: number }>();
+    expect(raw?.count).toBe(0);
+
+    const again: Session = await signInWithGoogle(harness, subject);
+    expect(again.userId).not.toBe(first.userId);
+    expect(await trialMeetingsLeft(harness, again)).toBe(1);
+    const last: StartedMeetingBody = await (await start(harness, again, null, null)).json<StartedMeetingBody>();
+    expect(last).toMatchObject({ kind: "trial", trialMeetingsLeft: 0 });
+    const ipRows = await env.DB.prepare("SELECT COUNT(*) AS count FROM trial_starts WHERE user_id = ?").bind(again.userId).first<{ count: number }>();
+    expect(ipRows?.count).toBe(0);
+    await expectError(await start(harness, again, null, null), 402, "trial_exhausted");
+
+    // Yeniden silme defteri küçültmez; denemesi biten hesap toplantı dışı yapay zekâ da alamaz.
+    const account: Response = await harness.call(
+      req("POST", "/v1/llm/messages", { token: again.accessToken, json: { effort: "low", max_tokens: 10, messages: [{ role: "user", content: "x" }] } }),
+    );
+    await expectError(account, 402, "subscription_required");
+    expect((await deleteMe(harness, again, null)).status).toBe(204);
+    const third: Session = await signInWithGoogle(harness, subject);
+    expect(await trialMeetingsLeft(harness, third)).toBe(0);
+  });
+
+  it("deneme harcamamış hesap silinince defterde satır kalmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const session: Session = await signInWithGoogle(harness, subject);
+    expect((await deleteMe(harness, session, null)).status).toBe(204);
+    expect(await ledgerRow(subject)).toBeNull();
+  });
+});
+
+describe("Apple DeviceCheck ile Mac başına deneme", () => {
+  it("ilk hesap Mac'i işaretler ve sonraki denemeleri jetonsuz başlatır; aynı Mac'teki ikinci hesap reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const mac: string = macToken("a");
+    fake.bits.set(mac, { bit0: false, bit1: true });
+    const owner: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+
+    expect((await start(harness, owner, fake.env, mac)).status).toBe(201);
+    expect(fake.calls).toEqual([
+      { endpoint: "query_two_bits", token: mac },
+      { endpoint: "update_two_bits", token: mac },
+    ]);
+    // bit1 okunduğu gibi korunur.
+    expect(fake.bits.get(mac)).toEqual({ bit0: true, bit1: true });
+    expect((await start(harness, owner, fake.env, null)).status).toBe(201);
+    expect((await start(harness, owner, fake.env, mac)).status).toBe(201);
+    expect(fake.calls).toHaveLength(2);
+
+    const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await expectError(await start(harness, other, fake.env, mac), 403, "trial_device_used");
+    const meetings = await env.DB.prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ?").bind(other.userId).first<{ count: number }>();
+    expect(meetings?.count).toBe(0);
+    // Başka bir Mac'te ikinci hesap denemeye başlar.
+    expect((await start(harness, other, fake.env, macToken("b"))).status).toBe(201);
+  });
+
+  it("jetonsuz deneme `device_check_required`; Apple'ın 400'ü `device_check_invalid`; 5xx yeniden denenir", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await expectError(await start(harness, session, fake.env, null), 400, "device_check_required");
+    expect(fake.calls).toHaveLength(0);
+
+    fake.failures.push(400);
+    await expectError(await start(harness, session, fake.env, macToken("bozuk")), 400, "device_check_invalid");
+    expect(fake.calls).toHaveLength(1);
+
+    fake.calls.length = 0;
+    fake.failures.push(500, 503);
+    expect((await start(harness, session, fake.env, macToken("c"))).status).toBe(201);
+    expect(fake.calls.map((call): string => call.endpoint)).toEqual(["query_two_bits", "query_two_bits", "query_two_bits", "update_two_bits"]);
+
+    // Apple sürekli yanıt vermezse üç denemeden sonra 502; Mac işaretlenmez.
+    const other: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    fake.calls.length = 0;
+    fake.failures.push(500, 500, 500);
+    await expectError(await start(harness, other, fake.env, macToken("d")), 502, "upstream_unavailable");
+    expect(fake.calls).toHaveLength(3);
+    expect(fake.bits.has(macToken("d"))).toBe(false);
+  });
+
+  it("base64 olmayan jeton Apple'a gitmeden reddedilir", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await expectError(await start(harness, session, fake.env, "jeton değil!"), 400, "invalid_body");
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("abonelik toplantısı DeviceCheck istemez", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
+    const started: StartedMeetingBody = await (await start(harness, session, fake.env, null)).json<StartedMeetingBody>();
+    expect(started.kind).toBe("subscription");
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("silinip aynı kimlikle yeniden açılan hesap Mac doğrulamasını da devralır", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const first: Session = await signInWithGoogle(harness, subject);
+    expect((await start(harness, first, fake.env, macToken("e"))).status).toBe(201);
+    expect((await deleteMe(harness, first, fake.env)).status).toBe(204);
+    expect(await ledgerRow(subject)).toEqual({ trial_meetings_used: 1, device_verified: 1 });
+
+    const again: Session = await signInWithGoogle(harness, subject);
+    fake.calls.length = 0;
+    const started: StartedMeetingBody = await (await start(harness, again, fake.env, null)).json<StartedMeetingBody>();
+    expect(started).toMatchObject({ kind: "trial", trialMeetingsLeft: 1 });
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("denemesi bitmiş hesap Mac'i işaretlemeden `trial_exhausted` alır", async () => {
+    const harness: Harness = await defaultHarness();
+    const fake: FakeDeviceCheck = await fakeDeviceCheck(harness);
+    const session: Session = await signInWithGoogle(harness, `google-${crypto.randomUUID()}`);
+    await env.DB.prepare("UPDATE users SET carried_trial_meetings = 3 WHERE id = ?").bind(session.userId).run();
+    await expectError(await start(harness, session, fake.env, null), 402, "trial_exhausted");
+    expect(fake.calls).toHaveLength(0);
+  });
+});

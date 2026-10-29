@@ -81,6 +81,21 @@ describe("üretim yapılandırmasında yer tutucular", () => {
     expect(configErrorFields(envWith({ DMG_URL: "http://indir.ornek.test/a.dmg" }))).toEqual(["DMG_URL"]);
   });
 
+  it("DeviceCheck `required` iken ekip ve anahtar kimliği Apple biçiminde, anahtar PEM olmalı; `off` diğerlerine bakmaz", () => {
+    expect(parseConfig(envWith({ DEVICECHECK_POLICY: "off", DEVICECHECK_KEY_ID: "DEVICECHECK_KEY_ID_PENDING" })).deviceCheck).toEqual({ policy: "off" });
+    expect(configErrorFields(envWith({ DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "DEVICECHECK_KEY_ID_PENDING" }))).toEqual([
+      "DEVICECHECK_KEY_ID",
+      "DEVICECHECK_PRIVATE_KEY",
+    ]);
+    const pem: string = "-----BEGIN PRIVATE KEY-----\nMIG\n-----END PRIVATE KEY-----";
+    const required: Env = envWith({ DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "ABCDE12345", DEVICECHECK_PRIVATE_KEY: pem });
+    expect(parseConfig(required).deviceCheck).toMatchObject({ policy: "required", environment: "development", teamId: "79DZ4AA4DW", keyId: "ABCDE12345" });
+    // Üretimde DeviceCheck geliştirme adresine bağlanamaz.
+    expect(configErrorFields(envWith({ ...productionFilledIn, DEVICECHECK_POLICY: "required", DEVICECHECK_KEY_ID: "ABCDE12345", DEVICECHECK_PRIVATE_KEY: pem }))).toEqual([
+      "DEVICECHECK_ENVIRONMENT",
+    ]);
+  });
+
   it("yer tutuculu üretim sunucusu her istekte (sağlık dahil) 500 verir ve yalnızca ayar adlarını loglar", async () => {
     const harness: Harness = await defaultHarness();
     const errors = vi.spyOn(console, "error");

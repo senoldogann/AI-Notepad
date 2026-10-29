@@ -2,12 +2,24 @@ import { cancelAllSubscriptions } from "./billing";
 import type { Config } from "./config";
 import { log } from "./log";
 import type { Platform } from "./platform";
+import { ledgerOnDeletionStatement, trialIdentityHash } from "./trialLedger";
+import type { IdentityProvider } from "./auth/users";
 import { dayKey } from "./usage";
+
+/** Hesabın giriş kimliği. */
+interface StoredIdentity {
+  readonly provider: IdentityProvider;
+  readonly subject: string;
+}
 
 /**
  * Hesabın tüm satırlarını tek D1 toplu işleminde (tek işlem; yarıda kalmaz) silen ifadeler. Sıra yabancı anahtarlara
  * göredir (önce çocuk satırlar). Oturum aileleri ve yenileme jetonları silinir: hesabın tüm erişim ve yenileme
  * jetonları hemen geçersizdir. Kötüye kullanım sayaçları hesap bağı olmadan kalır:
+ * - her giriş kimliğinin deneme defteri satırına (`trial_identity_ledger`, kimliğin HMAC özeti `identityHashes`)
+ *   hesabın harcadığı deneme sayısı ve cihaz doğrulaması yazılır (satırlar silinmeden önce, aynı işlemde): aynı
+ *   kimlikle yeniden açılan hesap yeni deneme almaz. Hiç deneme harcamamış hesap için satır yazılmaz; satır son
+ *   güncellemeden 730 gün sonra silinir (`cleanup.ts`);
  * - bugünkü deneme başlangıcı IP özeti başına günlük sayaca (`deleted_trial_starts`) eklenir; silip yeniden açarak IP
  *   başına günlük deneme sınırı aşılamaz;
  * - hesabın kaydettiği cihazları başka hesapların toplantıları da göstermiş olabilir: o toplantıların cihaz bağı
@@ -18,8 +30,9 @@ import { dayKey } from "./usage";
  * anonim geri bildirim) hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
  * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
-function accountDeletionStatements(db: D1Database, userId: string, now: Date): D1PreparedStatement[] {
+function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
   return [
+    ...identityHashes.map((identityHash: string): D1PreparedStatement => ledgerOnDeletionStatement(db, identityHash, userId, now)),
     db
       .prepare(
         `INSERT INTO deleted_trial_starts (ip_hash, day, accounts)
@@ -49,11 +62,18 @@ function accountDeletionStatements(db: D1Database, userId: string, now: Date): D
 /**
  * Hesabı siler (GDPR silme hakkı). Önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (yeniden denemeyle);
  * Stripe başarısız olursa hiçbir satır silinmez ve istemci yeniden dener. Sonra hesabın tüm satırları tek işlemde
- * silinir. Tekrar çağrı güvenlidir: iptal edilmiş abonelik atlanır, olmayan satır silinmez. Stripe'taki müşteri ve
+ * silinir; kimliklerin deneme defteri aynı işlemde önce yazılır. Tekrar çağrı güvenlidir: iptal edilmiş abonelik atlanır, olmayan satır silinmez. Stripe'taki müşteri ve
  * faturalar vergi kayıtları için Stripe'ta kalır; sunucuda onları bu hesaba bağlayan satır kalmaz.
  */
 export async function deleteAccount(db: D1Database, platform: Platform, config: Config, userId: string, now: Date): Promise<void> {
   const canceledSubscriptions: number = await cancelAllSubscriptions(db, platform, config, userId);
-  await db.batch(accountDeletionStatements(db, userId, now));
+  const identities: D1Result<StoredIdentity> = await db
+    .prepare("SELECT provider, subject FROM auth_identities WHERE user_id = ?")
+    .bind(userId)
+    .all<StoredIdentity>();
+  const identityHashes: string[] = await Promise.all(
+    identities.results.map((identity: StoredIdentity): Promise<string> => trialIdentityHash(config.secrets.accessToken, identity.provider, identity.subject)),
+  );
+  await db.batch(accountDeletionStatements(db, userId, identityHashes, now));
   log("info", "account_deleted", { userId, canceledSubscriptions });
 }

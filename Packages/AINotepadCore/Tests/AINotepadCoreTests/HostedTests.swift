@@ -125,6 +125,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         }
         #expect(message(.trialExhausted, 402).contains("abone ol"))
         #expect(message(.trialIPLimit, 429).contains("Yarın"))
+        #expect(message(.trialDeviceUsed, 403).contains("abone ol"))
+        #expect(hostedDeviceCheckMessage(error: .unsupported).contains("Abone"))
         #expect(message(.monthlyCapReached, 429).contains("ay başında"))
         #expect(message(.subscriptionExists, 409).contains("Hesabı yönet"))
         #expect(message(.spendCeilingReached, 503).contains("yoğun"))

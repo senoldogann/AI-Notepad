@@ -22,6 +22,9 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case subscriptionExists = "subscription_exists"
     case trialExhausted = "trial_exhausted"
     case trialIPLimit = "trial_ip_limit"
+    case trialDeviceUsed = "trial_device_used"
+    case deviceCheckRequired = "device_check_required"
+    case deviceCheckInvalid = "device_check_invalid"
     case monthlyCapReached = "monthly_cap_reached"
     case dailyCapReached = "daily_cap_reached"
     case transcriptionClosed = "transcription_closed"
@@ -74,6 +77,14 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case malformedResponse(path: String, status: Int, body: String)
 }
 
+/// Apple DeviceCheck jetonu üretilemedi (ücretsiz deneme toplantısı için gerekir).
+public enum HostedDeviceCheckError: Error, Sendable, Equatable {
+    /// Bu Mac'te DeviceCheck desteklenmiyor.
+    case unsupported
+    /// Jeton üretilemedi; neden hata ayıklama içindir.
+    case tokenFailed(reason: String)
+}
+
 /// Sunucu hata gövdesinin biçimi.
 private struct RawHostedErrorBody: Decodable {
     struct Detail: Decodable {
@@ -120,6 +131,12 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.")
     case .trialIPLimit:
         return String(localized: "Bu ağdan bugün çok fazla yeni deneme başlatıldı. Yarın yeniden dene ya da abone ol.")
+    case .trialDeviceUsed:
+        return String(localized: "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için Ayarlar › Hesap'tan abone ol.")
+    case .deviceCheckRequired:
+        return String(localized: "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.")
+    case .deviceCheckInvalid:
+        return String(localized: "Bu Mac Apple tarafından doğrulanamadı; uygulamayı yeniden açıp tekrar dene.")
     case .monthlyCapReached:
         return String(localized: "Bu ayki kullanım sınırına ulaştın; sınır ay başında sıfırlanır.")
     case .dailyCapReached:
@@ -180,6 +197,16 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Sunucuya ulaşılamadı; internet bağlantını kontrol et.")
     case .malformedResponse(_, let status, _):
         String(localized: "Sunucudan beklenmeyen yanıt geldi (HTTP \(status)). Uygulamayı güncelleyip yeniden dene.")
+    }
+}
+
+/// DeviceCheck hatasının kullanıcıya gösterilen metni. Saf fonksiyondur.
+public func hostedDeviceCheckMessage(error: HostedDeviceCheckError) -> String {
+    switch error {
+    case .unsupported:
+        String(localized: "Bu Mac Apple'ın cihaz doğrulamasını (DeviceCheck) desteklemiyor; ücretsiz deneme başlatılamıyor. Abone olarak devam edebilirsin.")
+    case .tokenFailed:
+        String(localized: "Bu Mac Apple ile doğrulanamadı (DeviceCheck). İnternet bağlantını kontrol edip yeniden dene.")
     }
 }
 

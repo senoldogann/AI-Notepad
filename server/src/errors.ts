@@ -20,6 +20,9 @@ export type ErrorCode =
   | "subscription_exists"
   | "trial_exhausted"
   | "trial_ip_limit"
+  | "trial_device_used"
+  | "device_check_required"
+  | "device_check_invalid"
   | "monthly_cap_reached"
   | "daily_cap_reached"
   | "transcription_closed"
@@ -53,6 +56,9 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   subscription_exists: 409,
   trial_exhausted: 402,
   trial_ip_limit: 429,
+  trial_device_used: 403,
+  device_check_required: 400,
+  device_check_invalid: 400,
   monthly_cap_reached: 403,
   daily_cap_reached: 429,
   transcription_closed: 403,
@@ -97,7 +103,7 @@ export class ForbiddenIdentityError extends ApiError {
   }
 }
 
-/** Üst servis (Anthropic, ElevenLabs, Apple, Google, Stripe, Turnstile) hatası; gövde değil yalnızca durum taşır. */
+/** Üst servis (Anthropic, ElevenLabs, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
   readonly service: string;

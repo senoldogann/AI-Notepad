@@ -108,7 +108,7 @@ private func localServerBase() throws -> URL {
         #expect(hostedPlanStatus(entitlements: before) == .trial(left: before.trialMeetingsTotal, total: before.trialMeetingsTotal))
         #expect(before.monthlyHoursCap > 0)
 
-        let started: HostedStartedMeeting = try await client.startMeeting(device: nil)
+        let started: HostedStartedMeeting = try await client.startMeeting(device: nil, deviceCheckToken: nil)
         #expect(started.kind == "trial")
         #expect(started.trialMeetingsLeft == before.trialMeetingsTotal - 1)
         #expect(await client.currentMeetingID() == started.meetingId)
