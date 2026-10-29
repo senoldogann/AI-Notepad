@@ -51,7 +51,14 @@ export interface AdminStats {
   readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DaySpend[] };
   readonly tokens: { readonly thisMonth: number };
   readonly reports: { readonly openFeedback: number; readonly openCrash: number; readonly openContact: number };
+  /** Stripe anahtarının modu (canlı ya da test). */
+  readonly stripe: { readonly mode: StripeMode };
+  /** ElevenLabs plan döngüsündeki yazıya çevirme saatleri ve planın sınırı. */
+  readonly elevenLabs: { readonly usedHours: number; readonly capHours: number; readonly percent: number };
 }
+
+/** Stripe anahtarının modu. */
+export type StripeMode = "live" | "test";
 
 /** Bildirim türü. */
 export type ReportKind = "feedback" | "crash" | "contact";
@@ -158,6 +165,8 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
   const spend: JsonObject = objectField(body, "spend", response, path);
   const tokens: JsonObject = objectField(body, "tokens", response, path);
   const reports: JsonObject = objectField(body, "reports", response, path);
+  const stripe: JsonObject = objectField(body, "stripe", response, path);
+  const elevenLabs: JsonObject = objectField(body, "elevenLabs", response, path);
   const dayCounts = (owner: JsonObject, key: string): DayCount[] =>
     objectArrayField(owner, key, response, path).map((item: JsonObject): DayCount => ({ day: dayField(item, response, path), count: numberField(item, "count", response, path) }));
   return {
@@ -202,7 +211,22 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       openCrash: numberField(reports, "openCrash", response, path),
       openContact: numberField(reports, "openContact", response, path),
     },
+    stripe: { mode: stripeModeField(stripe, response, path) },
+    elevenLabs: {
+      usedHours: numberField(elevenLabs, "usedHours", response, path),
+      capHours: numberField(elevenLabs, "capHours", response, path),
+      percent: numberField(elevenLabs, "percent", response, path),
+    },
   };
+}
+
+/** Stripe modu alanı: "live" ya da "test". */
+function stripeModeField(object: JsonObject, response: RawResponse, path: string): StripeMode {
+  const mode: string = stringField(object, "mode", response, path);
+  if (mode !== "live" && mode !== "test") {
+    throw new ApiResponseError(path, response.status, `bilinmeyen Stripe modu "${mode}"`, response.text);
+  }
+  return mode;
 }
 
 /** Bildirim listesi öğesini okur. */

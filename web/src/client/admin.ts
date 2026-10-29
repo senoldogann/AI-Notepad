@@ -161,7 +161,7 @@ function renderStats(stats: AdminStats): void {
     formatCount(stats.subscriptions.active),
     fill(adminText.subscribersSub, { grace: formatCount(stats.subscriptions.grace), ending: formatCount(stats.subscriptions.ending), canceled: formatCount(stats.subscriptions.canceledTotal) }),
   );
-  setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), adminText.mrrSub);
+  setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), `${adminText.mrrSub} · ${stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest}`);
   setKpi("spend", formatUsd(stats.spend.todayUsd), fill(adminText.spendSub, { ceiling: formatUsd(stats.spend.ceilingUsd) }));
   const meter: HTMLProgressElement = element("kpi-spend-meter", HTMLProgressElement);
   meter.max = Math.max(stats.spend.ceilingUsd, 0.01);
@@ -169,6 +169,15 @@ function renderStats(stats: AdminStats): void {
   meter.classList.toggle("meter--warn", stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
   setKpi("hours", formatCount(stats.meetings.hoursThisMonth), adminText.hoursSub);
   setKpi("tokens", formatCount(stats.tokens.thisMonth), adminText.tokensSub);
+  setKpi(
+    "elevenlabs",
+    `${Math.round(stats.elevenLabs.percent)}%`,
+    fill(adminText.elevenLabsSub, { used: formatCount(stats.elevenLabs.usedHours), cap: formatCount(stats.elevenLabs.capHours) }),
+  );
+  const capacity: HTMLProgressElement = element("kpi-elevenlabs-meter", HTMLProgressElement);
+  capacity.max = Math.max(stats.elevenLabs.capHours, 0.01);
+  capacity.value = Math.min(stats.elevenLabs.usedHours, capacity.max);
+  capacity.classList.toggle("meter--warn", stats.elevenLabs.percent >= 80);
 
   renderChart("downloads", countDays(stats.downloads.last30Days, formatCount), formatCount);
   renderChart("users", countDays(stats.users.newLast30Days, formatCount), formatCount);

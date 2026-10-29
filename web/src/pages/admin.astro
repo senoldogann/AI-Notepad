@@ -19,6 +19,7 @@ const kpis: readonly { readonly id: string; readonly label: string; readonly ico
   { id: "spend", label: text.kpis.spend, icon: "wallet" },
   { id: "hours", label: text.kpis.hours, icon: "clock" },
   { id: "tokens", label: text.kpis.tokens, icon: "tokens" },
+  { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "waveform" },
 ];
 
 /** Grafikler: kimlik (betik `chart-<id>` çizer) ve başlık. */
@@ -78,7 +79,7 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
                 {kpi.label}
               </p>
               <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-              {kpi.id === "spend" ? <progress id="kpi-spend-meter" class="meter" aria-label={kpi.label} max="1" value="0" /> : null}
+              {kpi.id === "spend" || kpi.id === "elevenlabs" ? <progress id={`kpi-${kpi.id}-meter`} class="meter" aria-label={kpi.label} max="1" value="0" /> : null}
               <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small muted" />
             </div>
           ))

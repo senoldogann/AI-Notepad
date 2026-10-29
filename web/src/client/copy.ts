@@ -63,6 +63,10 @@ export interface AdminClientCopy {
   /** `{grace}`, `{ending}`, `{canceled}`. */
   readonly subscribersSub: string;
   readonly mrrSub: string;
+  /** MRR alt satırına eklenir: Stripe'ın modu. */
+  readonly stripeTest: string;
+  readonly stripeLive: string;
+  readonly elevenLabsSub: string;
   /** `{ceiling}`. */
   readonly spendSub: string;
   readonly hoursSub: string;
@@ -121,6 +125,9 @@ export const clientCopy: ClientCopy = {
     trialsSub: "{count} used up",
     subscribersSub: "{grace} in grace · {ending} ending · {canceled} cancelled in total",
     mrrSub: "From renewing subscriptions, taxes included",
+    stripeTest: "Stripe test mode",
+    stripeLive: "Stripe live",
+    elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",
     spendSub: "of {ceiling} daily ceiling",
     hoursSub: "Recorded across all users",
     tokensSub: "Input and output, all users",

@@ -294,6 +294,7 @@ export interface AdminCopy {
     readonly spend: string;
     readonly hours: string;
     readonly tokens: string;
+    readonly elevenLabs: string;
   };
   readonly chartsTitle: string;
   readonly charts: {
@@ -707,6 +708,7 @@ export const copy: Copy = {
       spend: "AI spend today",
       hours: "Meeting hours this month",
       tokens: "Tokens this month",
+      elevenLabs: "Transcription capacity",
     },
     chartsTitle: "Last 30 days",
     charts: {
