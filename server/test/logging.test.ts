@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { refreshRetryWindowMs } from "../src/auth/tokens";
 import { runAfterResponse } from "../src/background";
 import type { RequestContext } from "../src/platform";
 import { type Harness, type Session, type StartedMeetingBody, defaultHarness, req, signIn, startMeeting } from "./helpers";
@@ -26,8 +27,8 @@ describe("log hijyeni", () => {
         }),
       );
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
-      // 30 saniyelik yeniden deneme süresinden sonra eski jeton yeniden kullanımdır.
-      harness.clock.nowMs += 31_000;
+      // Yeniden deneme süresinden (10 dk) sonra eski jeton yeniden kullanımdır.
+      harness.clock.nowMs += refreshRetryWindowMs + 1_000;
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
 
       const ours: string[] = lines.filter((line: string): boolean => line.startsWith("{"));
