@@ -117,6 +117,8 @@ struct HostedAccountSettings: View {
                 Text(verbatim: hostedTrialText(left: left, total: total))
                 if left == 0 {
                     Text("Deneme bitti; yeni toplantı için abone ol.").foregroundStyle(Theme.ink)
+                } else if let trialEndsAt = entitlements.trialEndsAt {
+                    Text("Deneme \(trialEndsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde biter.")
                 }
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(renewsAt.formatted(date: .abbreviated, time: .omitted)) tarihinde yenilenir.")

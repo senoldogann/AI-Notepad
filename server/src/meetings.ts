@@ -1,7 +1,15 @@
 import type { Config } from "./config";
 import { randomId } from "./crypto";
 import { type DeviceBits, queryDeviceBits, updateDeviceBits } from "./deviceCheck";
-import { deviceTrialMeetingsUsed, hasSubscriptionAccess, subscriptionState, userTrialMeetingsUsed } from "./entitlements";
+import {
+  type TrialState,
+  deviceTrialMeetingsUsed,
+  hasSubscriptionAccess,
+  isTrialExpired,
+  subscriptionState,
+  trialMeetingsLeft,
+  userTrialState,
+} from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { Platform } from "./platform";
@@ -193,9 +201,9 @@ export async function startMeeting(
 
 /**
  * Deneme için Mac denetimi (Apple DeviceCheck, `bit0` = "bu Mac bir hesaba deneme verdi"). Politika `off` ise, hesabın
- * denemesi zaten bir Mac'e bağlandıysa (`users.trial_device_verified_at`) ya da hesabın denemesi bittiyse (kapı
- * `trial_exhausted` verir; Mac boşuna işaretlenmez) bir şey yapmaz. Yoksa jeton gerekir (`device_check_required`);
- * `bit0` doluysa `trial_device_used`. Boşsa önce Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi), sonra hesap
+ * denemesi zaten bir Mac'e bağlandıysa (`users.trial_device_verified_at`) ya da hesabın denemesi bittiyse (toplantılar
+ * harcandı ya da süre doldu; kapı `trial_exhausted` verir, Mac boşuna işaretlenmez) bir şey yapmaz. Yoksa jeton
+ * gerekir (`device_check_required`); `bit0` doluysa `trial_device_used`. Boşsa önce Mac işaretlenir (`bit0` = true, `bit1` okunduğu gibi), sonra hesap
  * doğrulanmış sayılır: hesabın sonraki deneme toplantıları jeton istemez. Mac kapıdan (IP sınırı) önce işaretlenir;
  * kapı reddederse Mac yine bu hesabındır ve hesap yeniden deneyebilir. Apple karşılaştır-yaz sunmaz: aynı Mac'te iki
  * hesabın aynı anda ilk denemesi ikisine de geçebilir (kabul edilen yarış).
@@ -216,7 +224,7 @@ async function requireTrialDevice(
     .prepare("SELECT trial_device_verified_at AS verified_at FROM users WHERE id = ?")
     .bind(userId)
     .first<{ verified_at: number | null }>();
-  if (row === null || row.verified_at !== null || (await userTrialMeetingsUsed(db, userId)) >= config.trialMeetings) {
+  if (row === null || row.verified_at !== null || trialMeetingsLeft(await userTrialState(db, userId), config, now) === 0) {
     return;
   }
   if (deviceCheckToken === null) {
@@ -237,9 +245,12 @@ async function requireTrialDevice(
 
 /**
  * Deneme toplantısı. Her hesabın doğrulanmış bir kimliği vardır (Apple ya da Google `sub`; hesap başka yoldan
- * oluşmaz). Hak üç koşula bağlıdır:
+ * oluşmaz). Hak dört koşula bağlıdır:
  * - hesap başına `trialMeetings` toplantı; aynı kimliğin silinmiş hesaplarının harcadığı denemeler de sayılır
  *   (`users.carried_trial_meetings`, bkz. `trialLedger.ts`);
+ * - deneme süresi (`trialDurationMs`) dolmamış olmalı: süre hesabın ilk deneme toplantısıyla başlar
+ *   (`users.trial_started_at`, ilk toplantıyla aynı işlemde yazılır; silinmiş hesaptan devralınabilir) ve dolunca
+ *   kullanılmamış toplantılar da düşer;
  * - doğrulanmış cihaz bildirildiyse cihaz başına `trialMeetings` toplantı (yeni hesap aynı cihazda yeni deneme almaz);
  * - hesabın ilk denemesiyse, aynı IP'den (HMAC özeti) bugün denemeye başlamış hesap sayısı (silinmiş hesaplar dahil)
  *   `trialAccountsPerIpPerDay` altında olmalı. Denemeyi devralan (yeniden açılmış) hesap yeni deneme hesabı sayılmaz.
@@ -259,6 +270,7 @@ async function startTrialMeeting(
   const gate: StartGate = {
     sql: `(SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND kind = 'trial')
         + (SELECT carried_trial_meetings FROM users WHERE id = ?) < ?
+      AND COALESCE((SELECT trial_started_at FROM users WHERE id = ?) + ?, ? + 1) > ?
       AND (? IS NULL OR (SELECT COUNT(*) FROM meeting_sessions WHERE device_id = ? AND kind = 'trial') < ?)
       AND (EXISTS (SELECT 1 FROM meeting_sessions WHERE user_id = ? AND kind = 'trial')
         OR (SELECT carried_trial_meetings FROM users WHERE id = ?) > 0
@@ -268,6 +280,10 @@ async function startTrialMeeting(
       userId,
       userId,
       config.trialMeetings,
+      userId,
+      config.trialDurationMs,
+      now.getTime(),
+      now.getTime(),
       deviceId,
       deviceId,
       config.trialMeetings,
@@ -290,20 +306,19 @@ async function startTrialMeeting(
          AND (SELECT carried_trial_meetings FROM users WHERE id = ?) = 0`,
     )
     .bind(userId, clientIpHash, day, now.getTime(), meetingId, userId, userId);
+  // Denemenin süresi ilk deneme toplantısıyla başlar (devralınmış başlangıç korunur).
+  const recordTrialStartedAt: D1PreparedStatement = db
+    .prepare("UPDATE users SET trial_started_at = ? WHERE id = ? AND trial_started_at IS NULL AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)")
+    .bind(now.getTime(), userId, meetingId);
   const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget };
-  const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart], now);
+  const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart, recordTrialStartedAt], now);
   if (!inserted) {
     await requireDailyStartLeft(db, config, userId, now);
   }
-  const accountUsed: number = await userTrialMeetingsUsed(db, userId);
+  const trial: TrialState = await userTrialState(db, userId);
   const deviceUsed: number | null = deviceId === null ? null : await deviceTrialMeetingsUsed(db, deviceId);
   if (!inserted) {
-    const exhausted: boolean = accountUsed >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings;
-    log("info", "trial_refused", { userId, attested: deviceId !== null, reason: exhausted ? "exhausted" : "ip_daily_limit" });
-    if (exhausted) {
-      throw new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
-    }
-    throw new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
+    throw trialRefusal(config, userId, deviceId, trial, deviceUsed, now);
   }
   log("info", "meeting_started", { userId, meetingId, kind: "trial", attested: deviceId !== null });
   return {
@@ -312,8 +327,26 @@ async function startTrialMeeting(
     tokenBudget: config.trialMeetingTokenBudget,
     maxDurationMinutes: config.trialMaxMeetingMinutes,
     expiresAt: new Date(maxEndsAt).toISOString(),
-    trialMeetingsLeft: Math.max(0, config.trialMeetings - Math.max(accountUsed, deviceUsed ?? 0)),
+    trialMeetingsLeft: Math.max(0, config.trialMeetings - Math.max(trial.used, deviceUsed ?? 0)),
   };
+}
+
+/**
+ * Reddedilen deneme başlatmanın hatası (nedeni loglanır): toplantılar harcandıysa (hesap ya da cihaz) ya da süre
+ * dolduysa `trial_exhausted` (0.1.4 Mac uygulaması da bu kodu tanır), değilse IP başına günlük sınır `trial_ip_limit`.
+ */
+function trialRefusal(config: Config, userId: string, deviceId: string | null, trial: TrialState, deviceUsed: number | null, now: Date): ApiError {
+  const usedUp: boolean = trial.used >= config.trialMeetings || (deviceUsed ?? 0) >= config.trialMeetings;
+  const expired: boolean = !usedUp && isTrialExpired(trial, config.trialDurationMs, now);
+  const reason: string = usedUp ? "exhausted" : expired ? "expired" : "ip_daily_limit";
+  log("info", "trial_refused", { userId, attested: deviceId !== null, reason });
+  if (usedUp) {
+    return new ApiError("trial_exhausted", "Ücretsiz deneme toplantıların bitti (hesap ya da bu cihaz için). Devam etmek için abone ol.");
+  }
+  if (expired) {
+    return new ApiError("trial_exhausted", `Ücretsiz deneme süren doldu (${config.trialDays} gün). Devam etmek için abone ol.`);
+  }
+  return new ApiError("trial_ip_limit", "Bu ağdan bugün çok fazla yeni deneme başlatıldı; yarın yeniden dene ya da abone ol.");
 }
 
 /** Toplantıyı bitirir; zaten bittiyse kayıtlı sonucu döndürür. Başkasının toplantısı `not_found`. */

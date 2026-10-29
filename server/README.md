@@ -45,6 +45,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `DMG_URL` | `GET /v1/download/mac` yönlendirmesinin hedefi (https). |
 | `PRICE_USD_MONTHLY` | Aylık fiyat; yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur). |
 | `REPORTS_PER_DAY` | Tüm kullanıcılar için günlük rapor sınırı (geri bildirim, çökme, iletişim). |
+| `TRIAL_DAYS` | Denemenin süresi (gün); hesabın ilk deneme toplantısıyla başlar. Deneme `TRIAL_MEETINGS` toplantı ya da bu süre, hangisi önce dolarsa. |
 | `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir; açık deneme toplantıları sürer. |
 | `DEVICECHECK_POLICY` | Mac başına ücretsiz deneme (Apple DeviceCheck) için tek anahtar: `required` (üretim) ya da `off` (yerel, testler: DeviceCheck hiç çağrılmaz). Ayrıntı: aşağıda "Deneme kötüye kullanımı". |
 | `DEVICECHECK_ENVIRONMENT` | `production` (`api.devicecheck.apple.com`) ya da `development` (`api.development.devicecheck.apple.com`); üretimde `required` iken `production` olmalı. |
@@ -66,16 +67,21 @@ testlerde yer tutucular geçerlidir.
 `0007` e-posta giriş tablosunu siler ve `auth_identities` tablosunu `google` sağlayıcısına izin verecek biçimde yeniden
 kurar (`email` kimliği varsa göç açıkça başarısız olur; üretimde e-posta hiç gönderilmediği için yoktur). `0008`
 raporları, indirme sayacını ve istatistik dizinlerini ekler. `0009` kimlik deneme defterini ve kullanıcının devraldığı
-deneme sayısı ile Mac doğrulama anını ekler (aşağıda "Deneme kötüye kullanımı").
+deneme sayısı ile Mac doğrulama anını ekler (aşağıda "Deneme kötüye kullanımı"). `0010` denemenin başladığı anı
+(`users.trial_started_at`, defterde de) ekler; var olan hesaplar ilk deneme toplantısından, var olan defter satırları
+silinme anından doldurulur.
 
 ## Deneme kötüye kullanımı
 
-Deneme hesap başına `TRIAL_MEETINGS` toplantıdır; üç ek engel vardır:
+Deneme hesap başına `TRIAL_MEETINGS` toplantı ya da `TRIAL_DAYS` gündür, hangisi önce dolarsa. Süre hesabın ilk deneme
+toplantısıyla başlar (`users.trial_started_at`, ilk toplantıyla aynı işlemde yazılır); dolunca kullanılmamış toplantılar
+da düşer (`402 trial_exhausted`, `trial_refused` logunda `reason: expired`) ve toplantı dışı yapay zekâ kapanır. Üç ek
+engel vardır:
 
 - **Kimlik deneme defteri** (`src/trialLedger.ts`): hesap silinince her giriş kimliği için (`trial-identity:<sağlayıcı>:<sub>`
-  metninin `ACCESS_TOKEN_SECRET` ile HMAC özeti; kimlik açık saklanmaz) harcanan deneme sayısı ve Mac doğrulaması
-  `trial_identity_ledger`'a yazılır. Aynı kimlikle yeniden açılan hesap bunları devralır
-  (`users.carried_trial_meetings`, `users.trial_device_verified_at`) ve IP sınırına yeni deneme hesabı olarak girmez.
+  metninin `ACCESS_TOKEN_SECRET` ile HMAC özeti; kimlik açık saklanmaz) harcanan deneme sayısı, denemenin başladığı an
+  ve Mac doğrulaması `trial_identity_ledger`'a yazılır. Aynı kimlikle yeniden açılan hesap bunları devralır
+  (`users.carried_trial_meetings`, `users.trial_started_at`, `users.trial_device_verified_at`) ve IP sınırına yeni deneme hesabı olarak girmez.
   Satır son güncellemeden 730 gün sonra silinir.
 - **Mac başına deneme** (`src/deviceCheck.ts`, `DEVICECHECK_POLICY=required`): Apple DeviceCheck her Mac için iki bit
   saklar; sunucu cihaz kimliği görmez. `bit0` = "bu Mac bir hesaba deneme verdi" (`bit1` kullanılmaz, korunur).
@@ -133,7 +139,7 @@ ertesi gün silinir (`cleanup_incomplete` uyarısı). Yerelde: `npx wrangler dev
 | `POST /v1/auth/apple` | — | `{identityToken, nonce}`; Apple'a `sha256hex(nonce)` verilir |
 | `POST /v1/auth/google` | — | `{identityToken, nonce}`; Google'a `sha256hex(nonce)` verilir. `iss` `https://accounts.google.com` ya da `accounts.google.com`, `aud` ∈ `GOOGLE_CLIENT_IDS`, RS256, nonce tek kullanımlık. Kimlik `google:<sub>`; e-posta saklanmaz. Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı). Oturum yanıtı ve deneme kuralları Apple ile aynı |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür |
-| `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |
+| `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü; süre dolduysa 0), `trialDays`, `trialEndsAt` (ilk deneme toplantısı + `TRIAL_DAYS`, ISO 8601; deneme başlamadıysa ya da abonelikte `null`), aylık saat ve sınır, abonelik erişimi (`active` / `grace` / `none`) |
 | `DELETE /v1/me` | Bearer | hesabı siler (GDPR), `204`: önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (başarısızsa hiçbir şey silinmez, `502`); sonra kimlikler, oturumlar, cihazlar, toplantılar, kullanım, abonelik ve Stripe müşteri eşlemesi, deneme kayıtları ve hesabın raporları tek işlemde silinir; aynı işlemde önce her kimliğin deneme defteri satırı yazılır (harcanan deneme ve Mac doğrulaması, kimliğin HMAC özetiyle; deneme harcanmadıysa yazılmaz) (raporlar serbest metin ve e-posta taşıyabildiği için bağı kaldırılmaz, silinir; jetonsuz gönderilmiş raporlar hesaba bağlanamaz, 180 günde silinir). Bugünkü deneme başlangıcı IP özeti başına günlük sayaçta hesap bağı olmadan kalır. Stripe'taki müşteri ve faturalar vergi kayıtları için Stripe'ta kalır. Tekrarı (aynı jetonla) `204` |
 | `POST /v1/device/challenge` | Bearer | `{purpose: "attest" \| "assert"}` |
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |

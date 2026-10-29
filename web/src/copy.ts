@@ -325,7 +325,7 @@ export const copy: Copy = {
     darkMode: "Dark mode",
     price: "$5.99",
     perMonth: "/ month",
-    offer: "3 meetings free, then $5.99 a month",
+    offer: "3 meetings or 7 days free, then $5.99 a month",
     requirementsShort: "macOS 26 · Apple silicon",
     taxNote: "Plus applicable taxes, shown at checkout.",
     footer: {
@@ -343,7 +343,7 @@ export const copy: Copy = {
     meta: {
       title: `${productName} — ${tagline}`,
       description:
-        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks the moment the meeting ends. 3 meetings free.",
+        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks the moment the meeting ends. 3 meetings or 7 days free.",
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
@@ -422,13 +422,13 @@ export const copy: Copy = {
       { title: "Get your note", text: "The meeting ends, the note is ready: tasks first, then decisions and a summary. Share it or send it on." },
     ],
     pricingTitle: "One plan. Simple pricing.",
-    pricingLead: "Your first 3 meetings are free, no card needed. Then $5.99 a month; cancel anytime.",
+    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month; cancel anytime.",
     pricingCta: "Pricing details",
     faqTitle: "Questions",
     faq: [
       {
         question: "How does the free trial work?",
-        answer: "Your first 3 meetings are free and no card is needed. Trial meetings can be up to 90 minutes long. After that you continue with the $5.99 monthly subscription.",
+        answer: "The trial is free and needs no card: 3 meetings or 7 days from your first meeting, whichever comes first. Meetings you haven't used by then expire. Trial meetings can be up to 90 minutes long. After that you continue with the $5.99 monthly subscription.",
       },
       {
         question: "Does a bot join my meetings?",
@@ -453,19 +453,19 @@ export const copy: Copy = {
       },
     ],
     finalTitle: "Let it write the note for your next meeting.",
-    finalLead: "3 meetings free. Set up in a minute.",
+    finalLead: "3 meetings or 7 days free. Set up in a minute.",
   },
   pricing: {
     meta: {
       title: `Pricing — ${productName}`,
-      description: "One plan: $5.99 a month. First 3 meetings free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
+      description: "One plan: $5.99 a month. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
     title: "One plan. Simple pricing.",
-    lead: "Try 3 meetings for free. If you like it, continue for $5.99 a month.",
+    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month.",
     planName: productName,
     planTagline: "Everything from live transcript to tasks.",
     included: [
-      { icon: "gift", text: "First 3 meetings free, no card needed" },
+      { icon: "gift", text: "3 meetings or 7 days free, no card needed" },
       { icon: "calendar", text: "Up to 10 hours of meetings a month (fair use)" },
       { icon: "timer", text: "Up to 4 hours per meeting" },
       { icon: "waveform", text: "Live transcript, live translation, “What did I miss?” and Ask" },
@@ -477,7 +477,7 @@ export const copy: Copy = {
     subscribe: "Subscribe",
     limitsTitle: "The limits, plainly",
     limits: [
-      { icon: "gift", title: "Trial", text: "3 meetings, each up to 90 minutes. Opening a new account does not reset the trial." },
+      { icon: "gift", title: "Trial", text: "3 meetings or 7 days from your first meeting, whichever comes first; each meeting up to 90 minutes. Opening a new account does not reset the trial." },
       {
         icon: "calendar",
         title: "10 hours a month",
@@ -513,10 +513,10 @@ export const copy: Copy = {
   download: {
     meta: {
       title: `Download — ${productName}`,
-      description: `Download ${productName} for your Mac: macOS 26 and Apple silicon. First 3 meetings free.`,
+      description: `Download ${productName} for your Mac: macOS 26 and Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
-    lead: "For Mac. Your first 3 meetings are free, no card needed.",
+    lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
     versionLabel: "Version",
     buttonNote: "Signed with an Apple Developer ID and notarized by Apple.",
     requirementsTitle: "System requirements",
@@ -532,7 +532,7 @@ export const copy: Copy = {
       { title: "Drag to Applications", text: `Drag the ${productName} icon into the Applications folder, then eject the disk image.` },
       { title: "Open it", text: `Open ${productName} from Applications. If macOS asks whether to open an app downloaded from the internet, choose “Open”.` },
       { title: "Grant permissions", text: "The setup page asks for microphone and system-audio permissions. You can change them later in System Settings › Privacy & Security." },
-      { title: "Sign in", text: "Sign in with Apple or Google and start your first meeting. The first 3 are free." },
+      { title: "Sign in", text: "Sign in with Apple or Google and start your first meeting. The trial is 3 meetings or 7 days, whichever comes first." },
     ],
     updatesTitle: "Updates",
     updatesText: "New versions arrive inside the app and are installed with your approval.",

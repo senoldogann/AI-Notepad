@@ -58,6 +58,9 @@
     "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
     "DEVICECHECK_KEY_ID": "DEVICECHECK_KEY_ID_PENDING",
     "TRIAL_MEETINGS": "3",
+    // Deneme: TRIAL_MEETINGS toplantı ya da TRIAL_DAYS gün, hangisi önce dolarsa. Süre hesabın ilk deneme toplantısıyla
+    // başlar (kayıtla değil); süre dolunca kullanılmamış toplantılar da düşer (`402 trial_exhausted`).
+    "TRIAL_DAYS": "7",
     // Aboneliği olmayan kullanıcının toplantıya bağlı olmayan çağrıları (Sor, notu yeniden yazma, düzenleme, görev
     // aracı) için günlük token sınırı. Türetme: 90 dakikalık toplantının notunu yeniden yazmak ~100 K token (aşağıdaki
     // bütçe açıklaması), bir Sor cevabı ~10–30 K. 300 K ≈ günde 3 not yenileme ya da ~10–20 soru: denemeyi değerlendirmeye
@@ -155,6 +158,8 @@
         "DEVICECHECK_TEAM_ID": "79DZ4AA4DW",
         "DEVICECHECK_KEY_ID": "HRQ8LH4N52",
         "TRIAL_MEETINGS": "3",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "TRIAL_DAYS": "7",
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
         "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",

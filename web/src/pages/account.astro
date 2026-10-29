@@ -36,7 +36,7 @@ const text: AccountCopy = copy.account;
           <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="gift" size={17} class="" /></span>{text.trialLabel}</p>
           <p id="trial-value" class="stat__value tabular"></p>
         </div>
-        <div class="card stat">
+        <div id="hours-card" class="card stat hidden">
           <p class="stat__label"><span class="icon-chip icon-chip--small"><Icon name="clock" size={17} class="" /></span><span id="hours-label">{text.hoursLabel}</span></p>
           <p id="hours-value" class="stat__value tabular"></p>
           <progress id="hours-meter" class="meter" aria-labelledby="hours-label" max="10" value="0"></progress>
