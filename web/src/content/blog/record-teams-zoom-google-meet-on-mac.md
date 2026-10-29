@@ -60,7 +60,7 @@ On an iPhone, apps can't record the sound of a Teams or Zoom call. iOS doesn't a
 
 ## How Gistsmith handles it
 
-Gistsmith, the meeting notepad we make, uses exactly these two permissions. It runs on Macs with Apple silicon and macOS 26 or later.
+Gistsmith, the meeting notepad we make, uses exactly these two permissions. It runs on Macs with Apple silicon and macOS 15 or later.
 
 - During setup it asks for the **microphone** (your voice) and **system audio** (the other people). The system audio step starts a short capture so macOS can show its prompt.
 - It records the two streams separately, so your lines and everyone else's stay apart, and speakers are separated in the final transcript.

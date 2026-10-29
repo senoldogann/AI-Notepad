@@ -153,7 +153,7 @@ interface Requirements {
   readonly processor: string;
 }
 
-/** `macOS 26 or later · Apple silicon` biçimindeki metni ikiye ayırır; başka biçimde `StructuredDataSourceError`. Saf fonksiyondur. */
+/** `macOS 15 or later · Apple silicon` biçimindeki metni ikiye ayırır; başka biçimde `StructuredDataSourceError`. Saf fonksiyondur. */
 function requirements(text: string): Requirements {
   const parts: readonly string[] = text.split(" · ");
   const operatingSystem: string | undefined = parts[0];

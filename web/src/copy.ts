@@ -766,7 +766,7 @@ export const copy: Copy = {
     yearlyPrice: "$49",
     perYear: "/ year",
     offer: "3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included",
-    requirementsShort: "macOS 26 or later · Apple silicon",
+    requirementsShort: "macOS 15 or later · Apple silicon",
     taxNote: "Taxes included.",
     renewalNote: "Renews automatically every month or year, depending on your plan, until you cancel. Cancel anytime.",
     ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
@@ -1099,7 +1099,7 @@ export const copy: Copy = {
   download: {
     meta: {
       title: `Download — ${productName}`,
-      description: `Download ${productName} for your Mac: macOS 26 or later on Apple silicon. 3 meetings or 7 days free.`,
+      description: `Download ${productName} for your Mac: macOS 15 or later on Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
@@ -1143,7 +1143,7 @@ export const copy: Copy = {
       price: "$5.99 a month or $49 a year, taxes included",
       free: "Free trial: 3 meetings or 7 days, whichever comes first; no card needed",
       capture: "No bot. Listens to your Mac's system audio and microphone",
-      platforms: "Mac with Apple silicon, macOS 26 or later",
+      platforms: "Mac with Apple silicon, macOS 15 or later",
       limits: "Up to 10 meeting hours a month and up to 4 hours per meeting",
       languages: "30+ languages, with live translation during the meeting",
       notes: "The note starts with your own tasks, then decisions and a summary; templates for different kinds of meetings",
