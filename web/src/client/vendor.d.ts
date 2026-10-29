@@ -53,7 +53,7 @@ interface GoogleButtonConfiguration {
   readonly size: "large";
   readonly text: "continue_with";
   readonly shape: "pill";
-  readonly logo_alignment: "left";
+  readonly logo_alignment: "left" | "center";
   /** Piksel; Google 200–400 arasını kabul eder. */
   readonly width: number;
   readonly locale: string;

@@ -145,7 +145,8 @@ function renderGoogleButton(google: GoogleGlobal, container: HTMLElement, theme:
     size: "large",
     text: "continue_with",
     shape: "pill",
-    logo_alignment: "left",
+    // Logo metnin yanında (Apple düğmesi gibi), düğmenin sol kenarına yaslı değil.
+    logo_alignment: "center",
     width,
     locale: "en",
   });
