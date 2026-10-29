@@ -62,7 +62,7 @@ async function fetchJwks(platform: Platform, issuer: IdentityTokenIssuer): Promi
 }
 
 /** Jetonun başlığındaki `kid`; başlık çözülemezse `invalid_token`. */
-function tokenKeyId(identityToken: string, issuer: IdentityTokenIssuer): string | null {
+export function tokenKeyId(identityToken: string, issuer: IdentityTokenIssuer): string | null {
   let header: ProtectedHeaderParameters;
   try {
     header = decodeProtectedHeader(identityToken);
@@ -79,7 +79,7 @@ function tokenKeyId(identityToken: string, issuer: IdentityTokenIssuer): string 
  * Sağlayıcının anahtarları: önbellekte taze (`jwksCacheTtlMs`) ve jetonun `kid`'ini içeren kayıt varsa o; yoksa
  * (ilk istek, süresi dolmuş ya da bilinmeyen `kid`: anahtar dönüşü) yeniden alınır ve önbelleğe yazılır.
  */
-async function issuerKeys(platform: Platform, issuer: IdentityTokenIssuer, keyId: string | null): Promise<JSONWebKeySet> {
+export async function issuerKeys(platform: Platform, issuer: IdentityTokenIssuer, keyId: string | null): Promise<JSONWebKeySet> {
   const nowMs: number = platform.now().getTime();
   const cached: CachedJwks | undefined = platform.jwksCache.get(issuer.jwksUrl);
   if (cached !== undefined && nowMs - cached.fetchedAt < jwksCacheTtlMs && cached.keys.keys.some((key): boolean => key.kid === keyId)) {

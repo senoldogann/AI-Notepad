@@ -4,6 +4,7 @@ import { verifyAppleIdentityToken } from "./auth/apple";
 import { verifyGoogleIdentityToken } from "./auth/google";
 import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
+import { requireCloudflareAccess } from "./auth/access";
 import {
   type AuthedUser,
   type SessionTokens,
@@ -373,6 +374,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   }
 
   if (path.startsWith(adminPrefix)) {
+    await requireCloudflareAccess(context.platform, config.access, request);
     return routeAdmin(request, db, config, path, await authed(), now);
   }
 
@@ -381,7 +383,10 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
 const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
 
-/** Yönetici uçları: kimliği doğrulanmış çağıran `ADMIN_IDENTITIES` listesinde olmalı (değilse 403 + kendi kimliği). */
+/**
+ * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
+ * `ADMIN_IDENTITIES` listesinde olmalı (değilse 403 + kendi kimliği).
+ */
 async function routeAdmin(request: Request, db: D1Database, config: Config, path: string, user: AuthedUser, now: Date): Promise<Response> {
   await requireAdmin(db, config, user.userId);
   const method: string = request.method;

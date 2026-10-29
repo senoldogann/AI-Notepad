@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
+import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
+import { accessJwksUrl } from "../src/auth/access";
 import { randomId } from "../src/crypto";
 import type { Env } from "../src/env";
 import {
@@ -170,6 +172,41 @@ describe("yönetici API'si", () => {
     const admin: Session = await signInWithGoogle(harness, adminSubject);
     await expectError(await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken })), 403, "forbidden");
     await expectError(await harness.call(req("GET", "/v1/admin/stats", {})), 401, "unauthorized");
+  });
+
+  it("Cloudflare Access AUD ayarlıysa yönetici uçları geçerli Access jetonu ister; boşsa denetim kapalı", async () => {
+    const harness: Harness = await defaultHarness();
+    const teamDomain: string = "dry-heart-1ee2.cloudflareaccess.com";
+    const audience: string = "a".repeat(64);
+    const accessEnv: Env = envWith({ ADMIN_IDENTITIES: `google:${adminSubject}`, CF_ACCESS_TEAM_DOMAIN: teamDomain, CF_ACCESS_AUD: audience });
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const publicJwk: JWK = { ...(await exportJWK(publicKey)), kid: "access-key", alg: "RS256" };
+    harness.stub(accessJwksUrl(teamDomain), async (): Promise<Response> => Response.json({ keys: [publicJwk], public_cert: {}, public_certs: [] }));
+    const accessToken = (aud: string, issuer: string): Promise<string> =>
+      new SignJWT({ email: "yonetici@ornek.test", type: "app" })
+        .setProtectedHeader({ alg: "RS256", kid: "access-key" })
+        .setIssuer(issuer)
+        .setAudience([aud])
+        .setSubject("access-sub")
+        .setIssuedAt(Math.floor(harness.clock.nowMs / 1000))
+        .setExpirationTime(Math.floor(harness.clock.nowMs / 1000) + 600)
+        .sign(privateKey);
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const stats = (headers: Record<string, string>): Promise<Response> =>
+      harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken, env: accessEnv, headers }));
+
+    await expectError(await stats({}), 403, "forbidden");
+    await expectError(await stats({ "cf-access-jwt-assertion": await accessToken("b".repeat(64), `https://${teamDomain}`) }), 403, "forbidden");
+    await expectError(await stats({ "cf-access-jwt-assertion": await accessToken(audience, "https://baska.cloudflareaccess.com") }), 403, "forbidden");
+    expect((await stats({ "cf-access-jwt-assertion": await accessToken(audience, `https://${teamDomain}`) })).status).toBe(200);
+    // Access'ten geçse de yönetici olmayan reddedilir.
+    const user: Session = await signInWithGoogle(harness, `google-${randomId()}`);
+    const userStats: Response = await harness.call(
+      req("GET", "/v1/admin/stats", { token: user.accessToken, env: accessEnv, headers: { "cf-access-jwt-assertion": await accessToken(audience, `https://${teamDomain}`) } }),
+    );
+    await expectError(userStats, 403, "forbidden");
+    // AUD boşsa (varsayılan) jetonsuz istek yalnızca yönetici listesiyle denetlenir.
+    expect((await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken, env: adminEnv }))).status).toBe(200);
   });
 
   it("CORS yalnızca site kaynağına açıktır", async () => {

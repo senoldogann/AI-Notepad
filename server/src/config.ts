@@ -59,6 +59,8 @@ export interface Config {
   readonly googleClientIds: readonly string[];
   /** Yönetici API'sine erişebilen kimlikler (`<sağlayıcı>:<sub>`); boşsa kimse yönetici değildir. */
   readonly adminIdentities: readonly string[];
+  /** Yönetici uçlarının Cloudflare Access denetimi (bkz. `requireCloudflareAccess`). */
+  readonly access: CloudflareAccessConfig;
   /** `GET /v1/download/mac` yönlendirmesinin hedefi (DMG). */
   readonly dmgUrl: string;
   /** DMG ile aynı GitHub sürümündeki Sparkle appcast'i; `GET /v1/download/mac/version` sürümü buradan okur. */
@@ -151,6 +153,12 @@ export interface StripeWebhookConfig {
   };
 }
 
+/** Cloudflare Access: ekip alan adı ve uygulamanın AUD etiketi (boşsa denetim kapalı: null). */
+export interface CloudflareAccessConfig {
+  readonly teamDomain: string;
+  readonly audience: string | null;
+}
+
 /** Yapılandırma eksik ya da geçersiz: dağıtım hatasıdır, istemciye ayrıntı verilmez. */
 export class ConfigError extends Error {
   override readonly name: string = "ConfigError";
@@ -233,6 +241,9 @@ const envSchema = z.object({
   APPLE_CLIENT_IDS: csv,
   GOOGLE_CLIENT_IDS: csv,
   ADMIN_IDENTITIES: adminIdentityList,
+  CF_ACCESS_TEAM_DOMAIN: z.string().regex(/^[a-z0-9-]+\.cloudflareaccess\.com$/),
+  /** Access uygulamasının AUD etiketi; boşsa yönetici uçlarında Access denetimi kapalıdır. */
+  CF_ACCESS_AUD: z.string().regex(/^([0-9a-f]{64})?$/),
   DMG_URL: z.url({ protocol: /^https$/ }),
   APPCAST_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
@@ -355,6 +366,7 @@ export function parseConfig(env: Env): Config {
     appleClientIds: value.APPLE_CLIENT_IDS,
     googleClientIds: value.GOOGLE_CLIENT_IDS,
     adminIdentities: value.ADMIN_IDENTITIES,
+    access: { teamDomain: value.CF_ACCESS_TEAM_DOMAIN, audience: value.CF_ACCESS_AUD === "" ? null : value.CF_ACCESS_AUD },
     dmgUrl: value.DMG_URL,
     appcastUrl: value.APPCAST_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,

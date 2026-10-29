@@ -41,6 +41,10 @@
     // Yönetici API'si (`/v1/admin/…`) için `<sağlayıcı>:<sub>` listesi; boşsa kimse yönetici değildir. Kendi kimliğin
     // D1'deki `auth_identities` tablosundadır (bkz. README "İlk dağıtım").
     "ADMIN_IDENTITIES": "",
+    // Yönetici uçlarının Cloudflare Access denetimi: ekip alan adı ve Access uygulamasının AUD etiketi (64 onaltılık).
+    // AUD boşsa denetim kapalıdır (yerelde Access yok); yalnızca `ADMIN_IDENTITIES` denetlenir.
+    "CF_ACCESS_TEAM_DOMAIN": "dry-heart-1ee2.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "",
     // `GET /v1/download/mac` buraya yönlendirir (302) ve günlük sayacı artırır.
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
     // DMG ile aynı sürümdeki Sparkle akışı: `GET /v1/download/mac/version` sitedeki sürüm numarasını buradan okur.
@@ -171,6 +175,9 @@
         "GOOGLE_CLIENT_IDS": "461373321454-ku1ot0ildt8b9toe7aerq1imidfgu1ah.apps.googleusercontent.com",
         // Boş: kimse yönetici değil. Bkz. üstteki geliştirme `vars` açıklaması.
         "ADMIN_IDENTITIES": "google:101383806107899312129",
+        // Access uygulamasının AUD etiketi (Zero Trust › Access › Applications › Overview). Boşken denetim kapalıdır.
+        "CF_ACCESS_TEAM_DOMAIN": "dry-heart-1ee2.cloudflareaccess.com",
+        "CF_ACCESS_AUD": "",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
         "APPCAST_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/appcast.xml",
         "PRICE_USD_MONTHLY": "5.99",

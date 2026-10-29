@@ -78,6 +78,11 @@ describe("üretim yapılandırmasında yer tutucular", () => {
     expect(parseConfig(envWith({ ADMIN_IDENTITIES: " google:123 , apple:000.abc " })).adminIdentities).toEqual(["google:123", "apple:000.abc"]);
     expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "123" }))).toEqual(["ADMIN_IDENTITIES"]);
     expect(configErrorFields(envWith({ ADMIN_IDENTITIES: "email:kisi@ornek.test" }))).toEqual(["ADMIN_IDENTITIES"]);
+    // Cloudflare Access: AUD boşsa denetim kapalı (null), değilse 64 onaltılık karakter.
+    expect(parseConfig(envWith({})).access).toEqual({ teamDomain: "dry-heart-1ee2.cloudflareaccess.com", audience: null });
+    expect(parseConfig(envWith({ CF_ACCESS_AUD: "f".repeat(64) })).access.audience).toBe("f".repeat(64));
+    expect(configErrorFields(envWith({ CF_ACCESS_AUD: "kisa" }))).toEqual(["CF_ACCESS_AUD"]);
+    expect(configErrorFields(envWith({ CF_ACCESS_TEAM_DOMAIN: "ornek.com" }))).toEqual(["CF_ACCESS_TEAM_DOMAIN"]);
     expect(configErrorFields(envWith({ DMG_URL: "http://indir.ornek.test/a.dmg" }))).toEqual(["DMG_URL"]);
   });
 

@@ -13,6 +13,8 @@ export interface Env {
   readonly APPLE_CLIENT_IDS: string;
   readonly GOOGLE_CLIENT_IDS: string;
   readonly ADMIN_IDENTITIES: string;
+  readonly CF_ACCESS_TEAM_DOMAIN: string;
+  readonly CF_ACCESS_AUD: string;
   readonly DMG_URL: string;
   readonly APPCAST_URL: string;
   readonly PRICE_USD_MONTHLY: string;
