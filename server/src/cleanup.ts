@@ -57,6 +57,13 @@ function cleanupTargets(now: Date): CleanupTarget[] {
       binds: [nowMs],
     },
     {
+      // Ailede daha sonra kullanılmış bir jeton varsa eski kullanılmış jeton yeniden kullanım algılamasına gerekmez.
+      table: "refresh_tokens",
+      where: `used_at IS NOT NULL AND EXISTS (SELECT 1 FROM refresh_tokens AS newer
+        WHERE newer.family_id = refresh_tokens.family_id AND newer.used_at > refresh_tokens.used_at)`,
+      binds: [],
+    },
+    {
       table: "refresh_families",
       where: "NOT EXISTS (SELECT 1 FROM refresh_tokens WHERE refresh_tokens.family_id = refresh_families.id)",
       binds: [],
@@ -102,7 +109,7 @@ export async function cleanupExpiredRows(db: D1Database, now: Date, limits: Clea
   }
   report["usage_reservations"] = expiredCount;
   for (const target of cleanupTargets(now)) {
-    report[target.table] = await deleteInBatches(db, target, limits);
+    report[target.table] = (report[target.table] ?? 0) + (await deleteInBatches(db, target, limits));
   }
   log("info", "cleanup_done", report);
   return report;

@@ -45,9 +45,9 @@ describe("süresi dolmuş satırların temizliği", () => {
       ).bind(first, nowMs - 10),
       env.DB.prepare(
         `INSERT INTO refresh_tokens (token_hash, family_id, created_at, expires_at, used_at) VALUES
-           ('t_live', 'f_live', 0, ?1, NULL), ('t_used_live', 'f_live', 0, ?1, ?2), ('t_expired', 'f_live', 0, ?2, NULL),
-           ('t_revoked', 'f_revoked', 0, ?1, NULL)`,
-      ).bind(later, nowMs - 10),
+           ('t_live', 'f_live', 0, ?1, NULL), ('t_used_live', 'f_live', 0, ?1, ?2), ('t_used_older', 'f_live', 0, ?1, ?3),
+           ('t_expired', 'f_live', 0, ?2, NULL), ('t_revoked', 'f_revoked', 0, ?1, NULL)`,
+      ).bind(later, nowMs - 10, nowMs - 20),
       env.DB.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES ('evt_old', 'x', ?), ('evt_recent', 'x', ?)").bind(
         nowMs - 91 * dayMs,
         nowMs - dayMs,
@@ -71,7 +71,7 @@ describe("süresi dolmuş satırların temizliği", () => {
       usage_reservations: 0,
       used_nonces: 1,
       device_challenges: 2,
-      refresh_tokens: 2,
+      refresh_tokens: 3,
       refresh_families: 2,
       stripe_events: 1,
       trial_starts: 1,
@@ -85,7 +85,7 @@ describe("süresi dolmuş satırların temizliği", () => {
     // Raporlar durumundan bağımsız 180 gün tutulur.
     expect(await ids("SELECT id FROM reports")).toEqual(["r_recent"]);
     expect(await ids("SELECT challenge_hash AS id FROM device_challenges")).toEqual(["c_live"]);
-    // Kullanılmış ama süresi dolmamış jeton yeniden kullanım algılaması için kalır.
+    // Ailenin en son kullanılmış jetonu yeniden kullanım algılaması için kalır; daha eskisi silinir.
     expect(await ids("SELECT token_hash AS id FROM refresh_tokens")).toEqual(["t_live", "t_used_live"]);
     expect(await ids("SELECT id FROM refresh_families")).toEqual(["f_live"]);
     expect(await ids("SELECT id FROM stripe_events")).toEqual(["evt_recent"]);

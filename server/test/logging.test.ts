@@ -24,6 +24,8 @@ describe("log hijyeni", () => {
         }),
       );
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
+      // 30 saniyelik yeniden deneme süresinden sonra eski jeton yeniden kullanımdır.
+      harness.clock.nowMs += 31_000;
       await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }));
 
       const ours: string[] = lines.filter((line: string): boolean => line.startsWith("{"));

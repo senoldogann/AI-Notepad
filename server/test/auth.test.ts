@@ -271,11 +271,45 @@ describe("yenileme jetonu ve çıkış", () => {
     expect(second.refreshToken).not.toBe(first.refreshToken);
     expect((await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).status).toBe(200);
 
-    // Çalınmış eski jeton: yeniden kullanım tespit edilir.
+    // Çalınmış eski jeton (30 saniyelik yeniden deneme süresinden sonra): yeniden kullanım tespit edilir.
+    harness.clock.nowMs += 31_000;
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } })), 401, "invalid_token");
     // Meşru yeni jeton ve erişim jetonu da artık geçersiz.
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } })), 401, "invalid_token");
     await expectError(await harness.call(req("GET", "/v1/me", { token: second.accessToken })), 401, "invalid_token");
+  });
+
+  it("yanıtı kaybolan yenileme 30 saniye içinde aynı jetonla yeniden denenebilir; kaybolan jeton geçersizleşir, aile düşmez", async () => {
+    const harness: Harness = await defaultHarness();
+    const first: Session = await signIn(harness);
+    const lost: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 10_000;
+    const retried: Response = await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }));
+    expect(retried.status).toBe(200);
+    const second: Session = await retried.json<Session>();
+    expect(second.refreshToken).not.toBe(lost.refreshToken);
+    expect((await harness.call(req("GET", "/v1/me", { token: second.accessToken }))).status).toBe(200);
+    // Kaybolan jeton artık yok (aile düşürülmez); yeni jeton dönmeye devam eder.
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: lost.refreshToken } })), 401, "invalid_token");
+    const third: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } }))).json<Session>();
+    expect((await harness.call(req("GET", "/v1/me", { token: third.accessToken }))).status).toBe(200);
+    // Süre geçtikten sonra hemen önceki jeton yeniden kullanımdır: aile düşer.
+    harness.clock.nowMs += 31_000;
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: second.refreshToken } })), 401, "invalid_token");
+    await expectError(await harness.call(req("GET", "/v1/me", { token: third.accessToken })), 401, "invalid_token");
+  });
+
+  it("dönüşte ailede yalnızca hemen önceki kullanılmış jeton kalır", async () => {
+    const harness: Harness = await defaultHarness();
+    let session: Session = await signIn(harness);
+    for (let index: number = 0; index < 5; index += 1) {
+      session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: session.refreshToken } }))).json<Session>();
+    }
+    const family = await env.DB.prepare("SELECT id FROM refresh_families WHERE user_id = ?").bind(session.userId).first<{ id: string }>();
+    const rows = await env.DB.prepare("SELECT used_at IS NOT NULL AS used FROM refresh_tokens WHERE family_id = ? ORDER BY used")
+      .bind(family?.id ?? "")
+      .all<{ used: number }>();
+    expect(rows.results).toEqual([{ used: 0 }, { used: 1 }]);
   });
 
   it("süresi dolmuş erişim jetonu reddedilir, yenileme yeni jeton verir", async () => {
