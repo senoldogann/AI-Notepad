@@ -319,6 +319,12 @@ final class HostedAccount {
         if visibleNotice == notice {
             return
         }
+        // Son deneme toplantısı açılınca kalan hak 0'a iner; o toplantı sürerken "deneme bitti" gösterilmez (kayıt
+        // duracak sanılmasın). Toplantı kapanınca yapılan yenilemede gösterilir.
+        if notice == .trialEnded && currentMeeting != nil {
+            visibleNotice = nil
+            return
+        }
         let key: String = hostedNoticeStorageKey(notice: notice, userId: entitlements.userId, now: now)
         guard !UserDefaults.standard.bool(forKey: key) else {
             visibleNotice = nil
