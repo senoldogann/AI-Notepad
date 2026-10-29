@@ -1,6 +1,6 @@
 ---
 // Giriş sayfası: Apple ile giriş ve Google ile giriş (resmî Google düğmesi). `?app=1&nonce=…` ile Mac uygulaması adına
-// yalnızca Google girişi yapılır ve jeton uygulamaya iletilir. Betik: src/client/sign-in.ts.
+// giriş yapılır ve jeton uygulamaya iletilir. Betik: src/client/sign-in.ts.
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
@@ -38,7 +38,7 @@ const common: CommonCopy = copy.common;
       <p id="signin-error" class="notice notice--error hidden" role="alert"></p>
 
       <div id="signin-panel" class="auth__forms">
-        <div id="apple-block" class="auth__apple">
+        <div class="auth__apple">
           <button id="apple-button" class="button button--apple button--block" type="button" disabled>
             <Icon name="apple" size={17} class="button__apple" />
             {text.apple}

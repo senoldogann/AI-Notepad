@@ -321,33 +321,39 @@ private func googleTestToken(claims: String) -> String {
     }
 
     // Giriş sayfası adresi: site kökü + /sign-in, app=1 ve nonce'un SHA-256'sı.
-    @Test func googleSignInPage() throws {
-        let page: URL = hostedGoogleSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"))
+    @Test func browserSignInPage() throws {
+        let page: URL = hostedBrowserSignInPage(siteBase: try parseHostedBaseURL(value: "https://gistsmith.com"), nonceHash: hostedNonceHash(nonce: "abc"))
         #expect(page.absoluteString == "https://gistsmith.com/sign-in?app=1&nonce=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
-    // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür.
-    @Test func googleCallbackResolution() throws {
+    // Dönüş yalnızca bekleyen, süresi geçmemiş denemeyle ve aynı nonce'la kabul edilir; adres sıkı çözülür, sağlayıcı
+    // yoldan (Apple ya da Google) okunur.
+    @Test func browserCallbackResolution() throws {
         let started: Date = Date(timeIntervalSince1970: 1_000_000)
-        let attempt: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "ham-nonce", startedAt: started)
+        let attempt: HostedBrowserSignInAttempt = HostedBrowserSignInAttempt(rawNonce: "ham-nonce", startedAt: started)
         let token: String = googleTestToken(claims: #"{"sub":"1","nonce":"\#(hostedNonceHash(nonce: "ham-nonce"))"}"#)
         let url: URL = try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)"))
-        let resolved: HostedGoogleSignInCallback = try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(599), lifetimeSec: hostedGoogleSignInLifetimeSec)
-        #expect(resolved == HostedGoogleSignInCallback(identityToken: token, rawNonce: "ham-nonce"))
-        #expect(throws: HostedGoogleSignInError.noPendingAttempt) {
-            try resolveHostedGoogleCallback(url: url, pending: nil, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        let resolved: HostedBrowserSignInCallback = try resolveHostedBrowserCallback(url: url, pending: attempt, now: started.addingTimeInterval(599), lifetimeSec: hostedBrowserSignInLifetimeSec)
+        #expect(resolved == HostedBrowserSignInCallback(provider: .google, identityToken: token, rawNonce: "ham-nonce"))
+        let appleURL: URL = try #require(URL(string: "com.senoldogan.ainotepad.hosted://auth/apple#idToken=\(token)"))
+        let apple: HostedBrowserSignInCallback = try resolveHostedBrowserCallback(url: appleURL, pending: attempt, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
+        #expect(apple == HostedBrowserSignInCallback(provider: .apple, identityToken: token, rawNonce: "ham-nonce"))
+        #expect(throws: HostedBrowserSignInError.noPendingAttempt) {
+            try resolveHostedBrowserCallback(url: url, pending: nil, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
-        #expect(throws: HostedGoogleSignInError.attemptExpired) {
-            try resolveHostedGoogleCallback(url: url, pending: attempt, now: started.addingTimeInterval(601), lifetimeSec: hostedGoogleSignInLifetimeSec)
+        #expect(throws: HostedBrowserSignInError.attemptExpired) {
+            try resolveHostedBrowserCallback(url: url, pending: attempt, now: started.addingTimeInterval(601), lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
-        let other: HostedGoogleSignInAttempt = HostedGoogleSignInAttempt(rawNonce: "baska-nonce", startedAt: started)
-        #expect(throws: HostedGoogleSignInError.nonceMismatch) {
-            try resolveHostedGoogleCallback(url: url, pending: other, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+        let other: HostedBrowserSignInAttempt = HostedBrowserSignInAttempt(rawNonce: "baska-nonce", startedAt: started)
+        #expect(throws: HostedBrowserSignInError.nonceMismatch) {
+            try resolveHostedBrowserCallback(url: url, pending: other, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
         }
         let noNonce: String = googleTestToken(claims: #"{"sub":"1"}"#)
         for bad in [
             "com.senoldogan.ainotepad://auth/google#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/email#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/#idToken=\(token)",
+            "com.senoldogan.ainotepad.hosted://auth/apple/x#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google?idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google?x=1#idToken=\(token)",
             "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(token)&extra=1",
@@ -357,8 +363,8 @@ private func googleTestToken(claims: String) -> String {
             "com.senoldogan.ainotepad.hosted://auth/google",
             "com.senoldogan.ainotepad.hosted://auth/google#idToken=\(noNonce)",
         ] {
-            #expect(throws: HostedGoogleSignInError.self) {
-                try resolveHostedGoogleCallback(url: try #require(URL(string: bad)), pending: attempt, now: started, lifetimeSec: hostedGoogleSignInLifetimeSec)
+            #expect(throws: HostedBrowserSignInError.self) {
+                try resolveHostedBrowserCallback(url: try #require(URL(string: bad)), pending: attempt, now: started, lifetimeSec: hostedBrowserSignInLifetimeSec)
             }
         }
     }

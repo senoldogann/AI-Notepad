@@ -1,7 +1,8 @@
-// Mac uygulamasından başlatılan Google ile giriş. Uygulama giriş sayfasını `/sign-in?app=1&nonce=<64 hex>` ile açar;
-// `nonce` uygulamanın kendi ham nonce'unun SHA-256 özetidir ve Google'a olduğu gibi verilir. Google'ın kimlik jetonu
-// sunucuya gönderilmez: `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile uygulamaya iletilir, uygulama
-// jetonu kendi ham nonce'uyla sunucuya yollar.
+// Mac uygulamasından başlatılan Apple ya da Google ile giriş (Developer ID ile dağıtılan uygulama Apple ile girişi
+// kendisi yapamaz: Apple bu yetkiyi yalnızca App Store uygulamalarına verir). Uygulama giriş sayfasını
+// `/sign-in?app=1&nonce=<64 hex>` ile açar; `nonce` uygulamanın kendi ham nonce'unun SHA-256 özetidir ve sağlayıcıya
+// olduğu gibi verilir. Kimlik jetonu sunucuya gönderilmez: `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…`
+// ile uygulamaya iletilir, uygulama jetonu kendi ham nonce'uyla sunucuya yollar.
 
 /** Abonelik uygulamasının adres şeması (App/Hosted, Info.plist `CFBundleURLSchemes`). */
 export const appUrlScheme: string = "com.senoldogan.ainotepad.hosted";
@@ -25,7 +26,10 @@ export function signInMode(search: string): SignInMode {
   return nonce !== null && hashedNoncePattern.test(nonce) ? { kind: "app", hashedNonce: nonce.toLowerCase() } : { kind: "invalid-app" };
 }
 
-/** Google kimlik jetonunu uygulamaya ileten adres (jeton `#` parçasında: sunuculara ve geçmişe gitmez). Saf fonksiyondur. */
-export function appGoogleSignInUrl(idToken: string): string {
-  return `${appUrlScheme}://auth/google#idToken=${encodeURIComponent(idToken)}`;
+/** Uygulama adına girişin sağlayıcısı (dönüş adresinin yolu). */
+export type AppSignInProvider = "apple" | "google";
+
+/** Kimlik jetonunu uygulamaya ileten adres (jeton `#` parçasında: sunuculara ve geçmişe gitmez). Saf fonksiyondur. */
+export function appSignInUrl(provider: AppSignInProvider, idToken: string): string {
+  return `${appUrlScheme}://auth/${provider}#idToken=${encodeURIComponent(idToken)}`;
 }

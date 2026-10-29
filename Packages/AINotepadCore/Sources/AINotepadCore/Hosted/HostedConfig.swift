@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 import Security
 
-/// Abonelik uygulamasının özel adres şeması: sitedeki Google girişi uygulamayı
-/// `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile açar (bkz. `hostedGoogleIDToken`).
+/// Abonelik uygulamasının özel adres şeması: sitedeki giriş uygulamayı
+/// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` ile açar (bkz. `hostedBrowserIdentity`).
 public let hostedURLScheme: String = "com.senoldogan.ainotepad.hosted"
 
 /// Abonelik uygulamasının Anahtar Zinciri servis adı (geliştirici sürümünün `keychainService`'inden ayrı).
@@ -35,7 +35,7 @@ public func requireSecureHostedBaseURL(url: URL) throws {
 }
 
 /// Apple ve Google ile giriş için rastgele ham nonce (32 bayt, onaltılık, CSPRNG). Ham değer sunucuya, SHA-256'sı
-/// kimlik sağlayıcısına (Apple isteği ya da Google giriş sayfası) verilir.
+/// kimlik sağlayıcısına (sitedeki giriş sayfası üzerinden) verilir.
 public func makeHostedNonce() throws -> String {
     var bytes: [UInt8] = [UInt8](repeating: 0, count: 32)
     let status: OSStatus = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)

@@ -16,7 +16,6 @@
 #
 # Bir kerelik hazırlık (noter onayı profili, Sparkle araçları): bkz. scripts/release-common.sh. Sparkle anahtarı
 # `generate_keys --account gistsmith`; açık anahtar Config/Signing.xcconfig'teki SPARKLE_PUBLIC_KEY_GISTSMITH'tir.
-# Developer ID profili Apple ile giriş yetkisini içermeli (Xcode'un otomatik imzalaması alır).
 #
 # release-archive-gistsmith/ (repoya girmez) appcast.xml'in yerel kopyasını tutar; silinmez, her sürüm üstüne eklenir.
 # Başka bir Mac'ten yayınlarken önce yayımlanmış appcast indirilir:
@@ -51,9 +50,9 @@ sparkle_bin="$(sparkle_tools_dir)"
 require_sparkle_keychain_key "$sparkle_bin" "$sparkle_account" "$sparkle_public_key"
 
 verify_distribution_app "$app" "$sparkle_public_key"
-# Abonelik hesabı Apple ile girişi kullanır; iç kimlikler değişmez (izinler, Anahtar Zinciri ve veri klasörü paket
-# kimliğine bağlı).
-[[ "$(app_entitlements "$app")" == *"com.apple.developer.applesignin"* ]] || { echo "Apple ile giriş yetkisi eksik." >&2; exit 1; }
+# Apple ile giriş yetkisi olmamalı: Apple onu Developer ID profillerine vermez (dışa aktarım reddedilir); giriş tarayıcıda
+# yapılır. İç kimlikler değişmez (izinler, Anahtar Zinciri ve veri klasörü paket kimliğine bağlı).
+[[ "$(app_entitlements "$app")" != *"com.apple.developer.applesignin"* ]] || { echo "Apple ile giriş yetkisi Developer ID'de kullanılamaz." >&2; exit 1; }
 require_info_value "$app" CFBundleIdentifier "com.senoldogan.AINotepad.hosted"
 require_info_value "$app" CFBundleDisplayName "Gistsmith"
 require_info_value "$app" HostedAPIBase "https://api.gistsmith.com"

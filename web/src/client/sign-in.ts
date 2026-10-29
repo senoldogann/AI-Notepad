@@ -1,9 +1,9 @@
 // Giriş sayfası: Apple ile giriş (açılır pencere) ve Google ile giriş (Google Identity Services düğmesi). Her ikisinde
 // tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik jetonunu ham nonce'la sunucuya yollar;
-// başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına girişte (app-handoff.ts) yalnızca
-// Google düğmesi görünür ve jeton uygulamaya iletilir.
+// başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına girişte (app-handoff.ts) iki
+// düğme de görünür; nonce özeti uygulamanındır ve jeton sunucuya değil uygulamaya iletilir.
 import { type RawResponse, parseSession, send } from "./api";
-import { appGoogleSignInUrl, type SignInMode, signInMode } from "./app-handoff";
+import { appSignInUrl, type SignInMode, signInMode } from "./app-handoff";
 import { type ClientCopy, clientCopy } from "./copy";
 import { type Theme, currentTheme, dataValue, element, errorText, hideNotice, loadScript, onThemeChange, showNotice } from "./dom";
 import { saveSession } from "./session";
@@ -52,20 +52,28 @@ function finishSignIn(response: RawResponse, path: string, accountPath: string):
   window.location.assign(accountPath);
 }
 
-/** Apple'ı nonce ve state ile hazırlar. `init` tıklamadan önce yapılır: açılır pencere tıklamayla eş zamanlı açılmalı. */
-function prepareApple(apple: AppleIdGlobal, redirectUri: string, nonce: Nonce, state: string): void {
+/** Apple'ı nonce özeti ve state ile hazırlar. `init` tıklamadan önce yapılır: açılır pencere tıklamayla eş zamanlı açılmalı. */
+function prepareApple(apple: AppleIdGlobal, redirectUri: string, hashedNonce: string, state: string): void {
   apple.auth.init({
     clientId: siteConfig.appleServiceId,
     scope: "email",
     redirectURI: redirectUri,
     state,
-    nonce: nonce.hashed,
+    nonce: hashedNonce,
     usePopup: true,
   });
 }
 
+/** Apple'a hangi nonce özetinin verileceği ve kimlik jetonunun ne yapılacağı. */
+interface AppleFlow {
+  /** Apple'a verilecek nonce özeti (her denemede yeni olabilir). */
+  readonly nextHashedNonce: () => Promise<string>;
+  /** Kimlik jetonu geldiğinde. Hata fırlatırsa bildirim gösterilir ve yeni nonce'la yeniden hazırlanır. */
+  readonly onIdentityToken: (identityToken: string) => Promise<void>;
+}
+
 /** Apple düğmesini bağlar. Betik yüklenemezse düğme kapalı kalır ve Google önerilir. */
-async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): Promise<void> {
+async function setUpApple(text: ClientCopy, notice: HTMLElement, redirectUri: string, flow: AppleFlow): Promise<void> {
   const button: HTMLButtonElement = element("apple-button", HTMLButtonElement);
   try {
     await loadScript(appleAuthScriptUrl);
@@ -80,29 +88,20 @@ async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: st
     console.error("apple_script_failed", { error: "window.AppleID tanımsız" });
     return;
   }
-  let nonce: Nonce = await newNonce();
   let state: string = randomHex(16);
-  prepareApple(apple, redirectUri, nonce, state);
+  prepareApple(apple, redirectUri, await flow.nextHashedNonce(), state);
   button.disabled = false;
   button.addEventListener("click", (): void => {
     hideNotice(notice);
     button.disabled = true;
-    const attempt: { readonly nonce: Nonce; readonly state: string } = { nonce, state };
+    const attemptState: string = state;
     void apple.auth
       .signIn()
       .then(async (result: AppleSignInResponse): Promise<void> => {
-        if (result.authorization.state !== attempt.state) {
+        if (result.authorization.state !== attemptState) {
           throw new AppleStateError("Apple yanıtındaki state eşleşmiyor.");
         }
-        const path: string = "/v1/auth/apple";
-        const response: RawResponse = await send({
-          method: "POST",
-          path,
-          body: { identityToken: result.authorization.id_token, nonce: attempt.nonce.raw },
-          accessToken: null,
-          attempts: 1,
-        });
-        finishSignIn(response, path, accountPath);
+        await flow.onIdentityToken(result.authorization.id_token);
       })
       .catch(async (error: unknown): Promise<void> => {
         // Apple penceresi kapatıldıysa ya da iptal edildiyse (Apple `{error: "popup_closed_by_user"}` gibi düz nesne
@@ -113,9 +112,8 @@ async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: st
         } else {
           showNotice(notice, errorText(error, text));
         }
-        nonce = await newNonce();
         state = randomHex(16);
-        prepareApple(apple, redirectUri, nonce, state);
+        prepareApple(apple, redirectUri, await flow.nextHashedNonce(), state);
         button.disabled = false;
       });
   });
@@ -198,36 +196,63 @@ function handOffToApp(url: string): void {
   window.location.href = url;
 }
 
-/** Sitenin kendi girişi: Apple ve Google, jeton sunucuya. */
-function startSiteSignIn(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): void {
-  void setUpApple(text, notice, accountPath, redirectUri);
+/** Sitenin kendi girişi için nonce kaynağı: her denemede yeni ham nonce; jeton gelince ham hali sunucuya gider. */
+interface SiteNonces {
+  readonly next: () => Promise<string>;
+  readonly raw: () => string;
+}
+
+/** Yeni site nonce kaynağı. */
+function siteNonces(): SiteNonces {
   let pending: Nonce | null = null;
-  void setUpGoogle(text, notice, {
-    nextHashedNonce: async (): Promise<string> => {
+  return {
+    next: async (): Promise<string> => {
       pending = await newNonce();
       return pending.hashed;
     },
-    onCredential: async (credential: string): Promise<void> => {
-      const nonce: Nonce | null = pending;
-      if (nonce === null) {
-        throw new Error("Google nonce hazırlanmadan jeton geldi.");
+    raw: (): string => {
+      if (pending === null) {
+        throw new Error("Nonce hazırlanmadan jeton geldi.");
       }
-      const path: string = "/v1/auth/google";
-      const response: RawResponse = await send({ method: "POST", path, body: { identityToken: credential, nonce: nonce.raw }, accessToken: null, attempts: 1 });
-      finishSignIn(response, path, accountPath);
+      return pending.raw;
     },
+  };
+}
+
+/** Kimlik jetonunu ham nonce'la sunucuya yollar, oturumu saklar ve hesap sayfasına geçer. */
+async function signInOnSite(path: "/v1/auth/apple" | "/v1/auth/google", identityToken: string, rawNonce: string, accountPath: string): Promise<void> {
+  const response: RawResponse = await send({ method: "POST", path, body: { identityToken, nonce: rawNonce }, accessToken: null, attempts: 1 });
+  finishSignIn(response, path, accountPath);
+}
+
+/** Sitenin kendi girişi: Apple ve Google, jeton sunucuya. */
+function startSiteSignIn(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): void {
+  const appleNonces: SiteNonces = siteNonces();
+  void setUpApple(text, notice, redirectUri, {
+    nextHashedNonce: appleNonces.next,
+    onIdentityToken: (identityToken: string): Promise<void> => signInOnSite("/v1/auth/apple", identityToken, appleNonces.raw(), accountPath),
+  });
+  const googleNonces: SiteNonces = siteNonces();
+  void setUpGoogle(text, notice, {
+    nextHashedNonce: googleNonces.next,
+    onCredential: (credential: string): Promise<void> => signInOnSite("/v1/auth/google", credential, googleNonces.raw(), accountPath),
   });
 }
 
-/** Uygulama adına giriş: yalnızca Google, uygulamanın nonce özetiyle; jeton uygulamaya. */
-function startAppSignIn(text: ClientCopy, notice: HTMLElement, hashedNonce: string): void {
-  element("apple-block", HTMLElement).classList.add("hidden");
+/** Uygulama adına giriş: Apple ya da Google, uygulamanın nonce özetiyle; jeton uygulamaya. */
+function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: string, hashedNonce: string): void {
   element("signin-intro", HTMLElement).classList.add("hidden");
   element("signin-app-intro", HTMLElement).classList.remove("hidden");
+  void setUpApple(text, notice, redirectUri, {
+    nextHashedNonce: async (): Promise<string> => hashedNonce,
+    onIdentityToken: async (identityToken: string): Promise<void> => {
+      handOffToApp(appSignInUrl("apple", identityToken));
+    },
+  });
   void setUpGoogle(text, notice, {
     nextHashedNonce: async (): Promise<string> => hashedNonce,
     onCredential: async (credential: string): Promise<void> => {
-      handOffToApp(appGoogleSignInUrl(credential));
+      handOffToApp(appSignInUrl("google", credential));
     },
   });
 }
@@ -245,7 +270,7 @@ function main(): void {
     return;
   }
   if (mode.kind === "app") {
-    startAppSignIn(text, notice, mode.hashedNonce);
+    startAppSignIn(text, notice, dataValue(root, "redirectUri"), mode.hashedNonce);
     return;
   }
   startSiteSignIn(text, notice, dataValue(root, "accountPath"), dataValue(root, "redirectUri"));

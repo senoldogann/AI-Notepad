@@ -16,8 +16,8 @@ public func userFacingMessage(error: any Error) -> String {
         return hostedClientMessage(error: error)
     case let error as HostedDeviceCheckError:
         return hostedDeviceCheckMessage(error: error)
-    case let error as HostedGoogleSignInError:
-        return hostedGoogleSignInMessage(error: error)
+    case let error as HostedBrowserSignInError:
+        return hostedBrowserSignInMessage(error: error)
     case let error as OnDeviceLLMError:
         return onDeviceMessage(error: error)
     case let error as AppleSpeechError:

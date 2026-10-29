@@ -1,6 +1,5 @@
 import AINotepadCore
 import AppKit
-import AuthenticationServices
 import Foundation
 import Observation
 import os
@@ -52,7 +51,7 @@ enum HostedServices {
         try client.get()
     }
 
-    /// Sitenin adresi (Google ile giriş sayfası orada).
+    /// Sitenin adresi (giriş sayfası orada).
     static func siteBase() throws -> URL {
         try hostedURL(bundle: .main, key: "HostedSiteBase")
     }
@@ -81,8 +80,8 @@ final class HostedAccount {
     var errorMessage: String?
     /// Bir işlem sürüyor (düğmeler kilitli).
     private(set) var isWorking: Bool = false
-    /// Dönüşü beklenen Google ile giriş denemesi (ham nonce yalnızca burada, bellekte; tek kullanımlık).
-    private(set) var pendingGoogleSignIn: HostedGoogleSignInAttempt?
+    /// Dönüşü beklenen tarayıcıda giriş denemesi (ham nonce yalnızca burada, bellekte; tek kullanımlık).
+    private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
     @ObservationIgnored private var sessionObserver: (any NSObjectProtocol)?
@@ -145,67 +144,49 @@ final class HostedAccount {
 
     // MARK: Giriş ve çıkış
 
-    /// Apple ile giriş sonucu: kimlik jetonu ve isteğe verilen nonce'un ham hali sunucuya gider.
-    func completeAppleSignIn(result: Result<ASAuthorization, any Error>, nonce: String) async {
-        let authorization: ASAuthorization
-        switch result {
-        case .success(let value):
-            authorization = value
-        case .failure(let error):
-            // Kullanıcı vazgeçtiyse hata gösterilmez.
-            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-                return
-            }
-            accountLogger.error("Apple ile giriş başarısız, hata: \(String(describing: error), privacy: .public)")
-            errorMessage = String(localized: "Apple ile giriş başarısız: \(error.localizedDescription)")
-            return
-        }
-        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-              let tokenData = credential.identityToken, let identityToken = String(data: tokenData, encoding: .utf8) else {
-            errorMessage = String(localized: "Apple kimlik jetonu gelmedi; yeniden dene.")
-            return
-        }
-        await perform { (client: HostedClient) async throws -> Void in
-            try await client.signInWithApple(identityToken: identityToken, nonce: nonce)
-        }
-    }
-
-    /// Google ile girişi başlatır: yeni ham nonce üretilir (önceki deneme geçersizleşir) ve sitedeki giriş sayfası
-    /// nonce'un SHA-256'sıyla tarayıcıda açılır. Site hesabı seçtirip uygulamayı `auth/google#idToken=…` ile açar.
-    func startGoogleSignIn() {
+    /// Tarayıcıda girişi başlatır: yeni ham nonce üretilir (önceki deneme geçersizleşir) ve sitedeki giriş sayfası
+    /// nonce'un SHA-256'sıyla tarayıcıda açılır. Kullanıcı orada Apple ya da Google hesabını seçer; site uygulamayı
+    /// `auth/<apple|google>#idToken=…` ile açar. (Developer ID ile dağıtılan uygulama Apple ile girişi kendisi yapamaz.)
+    func startBrowserSignIn() {
         errorMessage = nil
         do {
-            let attempt: HostedGoogleSignInAttempt = try makeHostedGoogleSignInAttempt(now: Date())
-            let page: URL = hostedGoogleSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
-            pendingGoogleSignIn = attempt
+            let attempt: HostedBrowserSignInAttempt = try makeHostedBrowserSignInAttempt(now: Date())
+            let page: URL = hostedBrowserSignInPage(siteBase: try HostedServices.siteBase(), nonceHash: hostedNonceHash(nonce: attempt.rawNonce))
+            pendingBrowserSignIn = attempt
             guard NSWorkspace.shared.open(page) else {
-                pendingGoogleSignIn = nil
-                accountLogger.error("Google giriş sayfası açılamadı, adres: \(page.host() ?? "-", privacy: .public)")
+                pendingBrowserSignIn = nil
+                accountLogger.error("Giriş sayfası açılamadı, adres: \(page.host() ?? "-", privacy: .public)")
                 errorMessage = String(localized: "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.")
                 return
             }
-            accountLogger.info("Google ile giriş başlatıldı")
+            accountLogger.info("Tarayıcıda giriş başlatıldı")
         } catch {
-            accountLogger.error("Google ile giriş başlatılamadı, hata: \(String(describing: error), privacy: .public)")
+            accountLogger.error("Tarayıcıda giriş başlatılamadı, hata: \(String(describing: error), privacy: .public)")
             errorMessage = userFacingMessage(error: error)
         }
     }
 
-    /// Uygulamayı açan bağlantı (Google girişinin dönüşü): bekleyen denemeyle eşleşirse kimlik jetonu ve ham nonce
-    /// sunucuya gider. Deneme sonuç ne olursa olsun düşer (ikinci dönüş reddedilir); her ret hesap hatasında görünür.
+    /// Uygulamayı açan bağlantı (tarayıcıda girişin dönüşü): bekleyen denemeyle eşleşirse kimlik jetonu ve ham nonce
+    /// sağlayıcının giriş ucuna gider. Deneme sonuç ne olursa olsun düşer (ikinci dönüş reddedilir); her ret hesap
+    /// hatasında görünür.
     func handle(url: URL) async {
-        let pending: HostedGoogleSignInAttempt? = pendingGoogleSignIn
-        pendingGoogleSignIn = nil
-        let callback: HostedGoogleSignInCallback
+        let pending: HostedBrowserSignInAttempt? = pendingBrowserSignIn
+        pendingBrowserSignIn = nil
+        let callback: HostedBrowserSignInCallback
         do {
-            callback = try resolveHostedGoogleCallback(url: url, pending: pending, now: Date(), lifetimeSec: hostedGoogleSignInLifetimeSec)
+            callback = try resolveHostedBrowserCallback(url: url, pending: pending, now: Date(), lifetimeSec: hostedBrowserSignInLifetimeSec)
         } catch {
-            accountLogger.error("Google girişi dönüşü reddedildi, hata: \(String(describing: error), privacy: .public)")
+            accountLogger.error("Giriş dönüşü reddedildi, hata: \(String(describing: error), privacy: .public)")
             errorMessage = userFacingMessage(error: error)
             return
         }
         await perform { (client: HostedClient) async throws -> Void in
-            try await client.signInWithGoogle(identityToken: callback.identityToken, nonce: callback.rawNonce)
+            switch callback.provider {
+            case .apple:
+                try await client.signInWithApple(identityToken: callback.identityToken, nonce: callback.rawNonce)
+            case .google:
+                try await client.signInWithGoogle(identityToken: callback.identityToken, nonce: callback.rawNonce)
+            }
         }
     }
 

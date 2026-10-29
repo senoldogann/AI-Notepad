@@ -1,6 +1,5 @@
 import AINotepadCore
 import AINotepadUI
-import AuthenticationServices
 import SwiftUI
 
 /// Deneme sayacı: "3 toplantıdan 2 tanesi kaldı" (iyelik eki sayıya göre değiştiği için "tanesi"). Saf fonksiyondur.
@@ -14,12 +13,10 @@ func hostedMonthlyUsageText(used: Double, cap: Double) -> String {
     return String(localized: "Bu ay \(used.formatted(style)) / \(cap.formatted(style)) saat")
 }
 
-/// Apple ile ve Google ile giriş; kurulumda ve Ayarlar › Hesap'ta aynı.
+/// Giriş: tarayıcıda Apple ya da Google hesabı seçilir, ardından uygulama açılıp girişi tamamlar (Developer ID ile
+/// dağıtılan uygulama Apple ile girişi kendisi yapamaz). Kurulumda ve Ayarlar › Hesap'ta aynı.
 struct HostedSignInPanel: View {
     let account: HostedAccount
-    /// Apple isteğine verilen nonce'un ham hali (yanıt gelince sunucuya gider).
-    @State private var pendingNonce: String?
-    @Environment(\.colorScheme) private var colorScheme: ColorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,38 +24,17 @@ struct HostedSignInPanel: View {
                 .appFont(size: 13, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            SignInWithAppleButton(.signIn) { (request: ASAuthorizationAppleIDRequest) -> Void in
-                request.requestedScopes = [.email]
-                do {
-                    let nonce: String = try makeHostedNonce()
-                    pendingNonce = nonce
-                    request.nonce = hostedNonceHash(nonce: nonce)
-                } catch {
-                    pendingNonce = nil
-                    account.errorMessage = userFacingMessage(error: error)
-                }
-            } onCompletion: { (result: Result<ASAuthorization, any Error>) -> Void in
-                guard let nonce = pendingNonce else {
-                    account.errorMessage = String(localized: "Apple ile giriş başlatılamadı; yeniden dene.")
-                    return
-                }
-                pendingNonce = nil
-                Task { await account.completeAppleSignIn(result: result, nonce: nonce) }
-            }
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            .frame(width: 260, height: 36)
-            .disabled(account.isWorking)
             Button {
-                account.startGoogleSignIn()
+                account.startBrowserSignIn()
             } label: {
-                Text("Google ile devam et")
+                Text("Giriş yap")
                     .frame(width: 228)
             }
             .buttonStyle(.pill)
             .disabled(account.isWorking)
-            Text(account.pendingGoogleSignIn == nil
-                ? "Google hesabını tarayıcıda seçersin; ardından Gistsmith açılır ve girişi tamamlar."
-                : "Tarayıcıda Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.")
+            Text(account.pendingBrowserSignIn == nil
+                ? "Tarayıcıda Apple ya da Google hesabını seçersin; ardından Gistsmith açılır ve girişi tamamlar."
+                : "Tarayıcıda Apple ya da Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.")
                 .appFont(size: 12, weight: .regular)
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)

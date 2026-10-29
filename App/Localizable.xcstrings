@@ -1675,39 +1675,6 @@
         }
       }
     },
-    "Apple ile giriş başarısız: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign in with Apple failed: %@"
-          }
-        }
-      }
-    },
-    "Apple ile giriş başlatılamadı; yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't start Sign in with Apple; try again."
-          }
-        }
-      }
-    },
-    "Apple kimlik jetonu gelmedi; yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple didn't return an identity token; try again."
-          }
-        }
-      }
-    },
     "Apple ya da Google ile giriş": {
       "extractionState": "manual",
       "localizations": {
@@ -2494,17 +2461,6 @@
         }
       }
     },
-    "Bu Google girişi uygulamadan başlatılmamış ya da zaten kullanılmış. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This Google sign-in wasn't started from the app or was already used. Press \"Continue with Google\" again."
-          }
-        }
-      }
-    },
     "Bu Mac Apple ile doğrulanamadı (DeviceCheck). İnternet bağlantını kontrol edip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -2742,6 +2698,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This device doesn't support Apple Intelligence, so on-device notes can't be written. Choose a provider with your own key in Settings (e.g. Anthropic)."
+          }
+        }
+      }
+    },
+    "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in wasn't started from the app or was already used. Click \"Sign in\" again."
           }
         }
       }
@@ -4467,6 +4434,39 @@
         }
       }
     },
+    "Giriş 10 dakika içinde tamamlanmadı. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in wasn't completed within 10 minutes. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş başka bir denemeden döndü. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in came back from a different attempt. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş yap": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in"
+          }
+        }
+      }
+    },
     "Giriş yapıldı": {
       "extractionState": "manual",
       "localizations": {
@@ -4489,67 +4489,23 @@
         }
       }
     },
+    "Girişten dönen bağlantı geçersiz. \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link returned from sign-in is invalid. Click \"Sign in\" again."
+          }
+        }
+      }
+    },
     "Git": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Go"
-          }
-        }
-      }
-    },
-    "Google girişi başka bir denemeden döndü. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Google sign-in returned from a different attempt. Press \"Continue with Google\" again."
-          }
-        }
-      }
-    },
-    "Google girişinden dönen bağlantı geçersiz. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The link returned from Google sign-in is invalid. Press \"Continue with Google\" again."
-          }
-        }
-      }
-    },
-    "Google hesabını tarayıcıda seçersin; ardından Gistsmith açılır ve girişi tamamlar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You choose your Google account in the browser; then Gistsmith opens and completes sign-in."
-          }
-        }
-      }
-    },
-    "Google ile devam et": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continue with Google"
-          }
-        }
-      }
-    },
-    "Google ile giriş 10 dakika içinde tamamlanmadı. \"Google ile devam et\"e yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Google sign-in wasn't completed within 10 minutes. Press \"Continue with Google\" again."
           }
         }
       }
@@ -9535,13 +9491,24 @@
         }
       }
     },
-    "Tarayıcıda Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.": {
+    "Tarayıcıda Apple ya da Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose your Google account in the browser; Gistsmith then opens by itself. If it isn't completed within 10 minutes, press again."
+            "value": "Choose your Apple or Google account in the browser; Gistsmith then opens by itself. If it isn't finished within 10 minutes, click again."
+          }
+        }
+      }
+    },
+    "Tarayıcıda Apple ya da Google hesabını seçersin; ardından Gistsmith açılır ve girişi tamamlar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You choose your Apple or Google account in the browser; then Gistsmith opens and completes sign-in."
           }
         }
       }

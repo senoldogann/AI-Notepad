@@ -549,7 +549,7 @@ export const copy: Copy = {
     legalBetween: "and confirm you have read the",
     noScript: "Signing in needs JavaScript.",
     appTitle: `Sign in to the ${productName} app`,
-    appLead: "Continue with Google. When you're done, the app opens and finishes signing you in.",
+    appLead: "Continue with Apple or Google. When you're done, the app opens and finishes signing you in.",
     appReturning: "Returning to the app…",
     appReturningHelp: `If ${productName} didn't open, use the button below.`,
     appOpen: `Open ${productName}`,
