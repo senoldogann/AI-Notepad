@@ -136,11 +136,23 @@ const common: CommonCopy = copy.common;
     background: light-dark(#1f1f1f, #e8e8e8);
   }
 
+  /* Google'ın betiği düğmeyi önce satır içi stilli bir yer tutucuyla çizer; CSP o stilleri engellediği için yer
+     tutucu (dev logo ve yazı) gizlenir, iframe gelene kadar düğme boyutunda sakin bir hap görünür. */
   .auth__google {
     display: flex;
     justify-content: center;
-    min-height: 40px;
+    height: 44px;
+    overflow: hidden;
+    border-radius: 999px;
     color-scheme: normal;
+  }
+
+  .auth__google:not(:has(iframe)) {
+    background: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.08));
+  }
+
+  .auth__google :global([role="button"]) {
+    display: none;
   }
 
   .app-return {
