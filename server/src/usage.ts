@@ -27,6 +27,16 @@ export function monthStartMs(now: Date): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
 }
 
+/** Sonraki ayın ilk anı (UTC), milisaniye. Saf fonksiyondur. */
+export function nextMonthStartMs(now: Date): number {
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+}
+
+/** Sonraki günün ilk anı (UTC), milisaniye. Saf fonksiyondur. */
+export function nextDayStartMs(now: Date): number {
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+}
+
 /** Claude çağrısının tahmini maliyeti (mikro dolar, yukarı yuvarlanır). Saf fonksiyondur. */
 export function llmCostMicroUsd(inputTokens: number, outputTokens: number): number {
   const long: boolean = inputTokens > haikuLongPromptThreshold;

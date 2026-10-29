@@ -1,7 +1,8 @@
 import type { Config } from "./config";
 import { type LiveEngine, liveEngine } from "./deepgram";
 import { ApiError } from "./errors";
-import { type MonthlyUsage, monthlyUsage } from "./usage";
+import { type ReservationLimit, remainingOf, subscriberAccountTokenLimit, trialAccountTokenLimit } from "./reservations";
+import { type MonthlyUsage, monthlyUsage, nextDayStartMs, nextMonthStartMs } from "./usage";
 
 /** Webhook'un yazdığı abonelik durumu. */
 export interface SubscriptionState {
@@ -21,6 +22,19 @@ export type Plan = "trial" | "subscription";
  * `none` (erişim yok: `unpaid`, `canceled`, `incomplete_expired`, süresi geçmiş ya da bilinmeyen durum).
  */
 export type SubscriptionAccess = "active" | "grace" | "none";
+
+/** Toplantı dışı yapay zekâ hakkının dönemi (UTC): abonede ay, denemede gün. */
+export type AccountTokensPeriod = "month" | "day";
+
+/** Toplantı dışı yapay zekâ (Sor, notu yeniden yazma, düzenleme, görev aracı) hakkının kullanımı. */
+export interface AccountTokenAllowance {
+  /** Dönemde sayılan token: kesinleşmiş kullanım + süren çağrıların ayırması (sınırın denetlediği miktar). */
+  readonly used: number;
+  readonly cap: number;
+  readonly period: AccountTokensPeriod;
+  /** Dönemin bittiği (hakkın sıfırlandığı) an, ms. */
+  readonly resetsAtMs: number;
+}
 
 /** `GET /v1/me` yanıtı. */
 export interface Entitlements {
@@ -44,6 +58,19 @@ export interface Entitlements {
    * (Mac'te; Deepgram kapalı ya da bütçesi dolu). Jeton yine reddedilebilir; istemci o zaman da Mac'e geçer.
    */
   readonly liveEngine: LiveEngine;
+  /**
+   * Toplantı dışı yapay zekâ hakkı (Sor, notu yeniden yazma, düzenleme, görev aracı). Abonelik erişimi varsa (`plan:
+   * subscription`) aylık `MONTHLY_ACCOUNT_TOKEN_CAP`, yoksa (deneme) günlük `TRIAL_ACCOUNT_DAILY_TOKENS`; dönemi
+   * `accountTokensPeriod`. `accountTokensUsed` sınırın saydığı miktardır (kesinleşmiş + süren çağrılar; sınırı biraz
+   * aşabilir). Denemede hak yalnızca deneme başlamış ve bitmemişken kullanılabilir (bkz. `requireAccountLLMAccess`).
+   */
+  readonly accountTokensUsed: number;
+  readonly accountTokensCap: number;
+  readonly accountTokensPeriod: AccountTokensPeriod;
+  /** Toplantı dışı hakkın sıfırlandığı an (ISO 8601): abonede sonraki UTC ayının, denemede sonraki UTC gününün başı. */
+  readonly accountTokensResetsAt: string;
+  /** Aylık sınırların (`monthlyHoursCap`, abonede `accountTokensCap`) sıfırlandığı an: sonraki UTC ayının başı (ISO 8601). */
+  readonly monthlyResetsAt: string;
   readonly subscription: {
     readonly status: string;
     readonly currentPeriodEnd: string;
@@ -202,6 +229,22 @@ export async function requireAccountLLMAccess(db: D1Database, config: Config, us
   throw new ApiError("subscription_required", "Deneme bitti; toplantı dışında yapay zekâ özellikleri için abone ol.");
 }
 
+/**
+ * Toplantı dışı yapay zekâ hakkının kullanımı: abonelik erişimi varsa aylık abone sınırı, yoksa denemenin günlük
+ * sınırı. Kullanım, sınırın kendisinin denetlediği kalan miktardan çıkarılır (aynı SQL).
+ */
+export async function accountTokenAllowance(db: D1Database, config: Config, userId: string, subscriber: boolean, now: Date): Promise<AccountTokenAllowance> {
+  const limit: ReservationLimit = subscriber ? subscriberAccountTokenLimit(config, userId, now) : trialAccountTokenLimit(config, userId, now);
+  const cap: number = subscriber ? config.monthlyAccountTokenCap : config.trialAccountDailyTokens;
+  const [remaining]: number[] = await remainingOf(db, [limit]);
+  return {
+    used: Math.max(0, cap - (remaining ?? cap)),
+    cap,
+    period: subscriber ? "month" : "day",
+    resetsAtMs: subscriber ? nextMonthStartMs(now) : nextDayStartMs(now),
+  };
+}
+
 /** Saatin onda biri hassasiyetle saat. Saf fonksiyondur. */
 export function hoursRoundedUp(seconds: number): number {
   return Math.ceil((seconds / 3600) * 10) / 10;
@@ -222,6 +265,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
       liveEngine(db, config),
     ]);
   const access: SubscriptionAccess = subscriptionAccess(subscription, now, config.pastDueGraceMs);
+  const allowance: AccountTokenAllowance = await accountTokenAllowance(db, config, userId, access !== "none", now);
   const accountLeft: number = trialMeetingsLeft(trial, config, now);
   const trialEnd: number | null = access === "none" ? trialEndsAtMs(trial, config.trialDurationMs) : null;
   const deviceLeft: number | null = deviceUsed === null ? null : Math.max(0, config.trialMeetings - deviceUsed);
@@ -237,6 +281,11 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
     monthlyHoursUsed: hoursRoundedUp(usage.usedSeconds),
     monthlyHoursCap: config.monthlyCapSeconds / 3600,
     liveEngine: engine,
+    accountTokensUsed: allowance.used,
+    accountTokensCap: allowance.cap,
+    accountTokensPeriod: allowance.period,
+    accountTokensResetsAt: new Date(allowance.resetsAtMs).toISOString(),
+    monthlyResetsAt: new Date(nextMonthStartMs(now)).toISOString(),
     subscription:
       subscription === null
         ? null
