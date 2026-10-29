@@ -189,6 +189,9 @@ private actor DeepgramConnection {
     /// Kapanışta alma bağlantı hatasıyla bitti: Deepgram son sonuçları vermemiş olabilir.
     private var receiveFailedWhileClosing: Bool = false
     private var hasFailed: Bool = false
+    /// `session` geçersiz kılındı (kapanış ya da kalıcı hata): üzerinde yeni görev açılamaz (açılırsa
+    /// `NSGenericException` ile çöker). Jeton beklenirken kapanış biterse bağlanma burada durur.
+    private var isSessionInvalidated: Bool = false
 
     /// Adlar ve terimler; dil değişince yeni adrese de eklenir.
     private let keyterms: [String]
@@ -239,6 +242,11 @@ private actor DeepgramConnection {
     /// Bağlanır ve el sıkışmanın bittiğini ping ile doğrular. Kısa ömürlü jeton her bağlantıda yeniden alınır.
     private func connect() async throws {
         let header: String = try await authorizationHeader(authorization: authorization)
+        // Jeton beklenirken (aktör yeniden girişi) kapanış bitmiş ya da akış kalıcı hata vermiş olabilir: oturum geçersiz
+        // kılındıysa yeni WebSocket görevi açılmaz.
+        guard canOpenConnection(sessionInvalidated: isSessionInvalidated, closeDeadlinePassed: closeDeadlinePassed, hasFailed: hasFailed) else {
+            throw CloudSTTError.connectionFailed(service: "deepgram", reason: "akış kapandı")
+        }
         var request: URLRequest = URLRequest(url: url)
         request.setValue(header, forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
@@ -520,7 +528,7 @@ private actor DeepgramConnection {
         isConnected = false
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
-        session.finishTasksAndInvalidate()
+        invalidateSession()
         // Kalıcı hata zaten bildirildi; değilse yazıya dökülmeden kalan son ses bildirilir ki son geçiş onu kapsasın.
         let remaining: Int = unacknowledged.count + inFlight.count + pending.count
         if !hasFailed, let tailSec = untranscribedTailSec(remainingSamples: remaining, closedCleanly: closedCleanly, sampleRate: deepgramSampleRate) {
@@ -548,6 +556,15 @@ private actor DeepgramConnection {
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
+    /// Oturumu bir kez geçersiz kılar; sonra bağlanma denemeleri yeni görev açmaz (bkz. `canOpenConnection`).
+    private func invalidateSession() {
+        guard !isSessionInvalidated else {
+            return
+        }
+        isSessionInvalidated = true
+        session.finishTasksAndInvalidate()
+    }
+
     /// Kalıcı hata: kullanıcıya gösterilecek mesajı yayınla ve akışı bitir.
     private func fail(error: any Error) {
         guard !hasFailed else {
@@ -557,11 +574,17 @@ private actor DeepgramConnection {
         isConnected = false
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
-        session.finishTasksAndInvalidate()
+        invalidateSession()
         deepgramLogger.error("Deepgram akışı durdu: \(String(describing: error), privacy: .private)")
         events.yield(.failed(message: deepgramFailureMessage(error: error)))
         events.finish()
     }
+}
+
+/// Yeni WebSocket bağlantısı açılabilir mi: oturum geçersiz kılınmadıysa, kapanış süresi dolmadıysa ve akış kalıcı hata
+/// vermediyse. Saf fonksiyondur.
+func canOpenConnection(sessionInvalidated: Bool, closeDeadlinePassed: Bool, hasFailed: Bool) -> Bool {
+    !sessionInvalidated && !closeDeadlinePassed && !hasFailed
 }
 
 /// Kullanıcıya gösterilecek Türkçe hata metni (anahtar içermez).

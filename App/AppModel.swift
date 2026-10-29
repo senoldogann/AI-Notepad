@@ -177,6 +177,9 @@ final class AppModel {
     var processingSteps: [String: ProcessingStep] = [:]
     /// Kayıttaki toplantının kimliği: bu toplantı için tekrar işle / ses sil / ad verme kilitli.
     var activeMeetingID: String?
+    /// Biten kayıt işlemeye devrediliyor (sunucu oturumu kapatılıyor, kayıt yazılıyor): bu arada yeni kayıt, kuyruk,
+    /// çıkış ve güncellemeyle yeniden başlatma beklenir (bkz. `isBusy`, `isReadyToRecord`).
+    private(set) var handingOffMeetingID: String?
     /// "Arka planda devam et" ile kapatılan hazırlanma kartları (panel ve ana pencere ortak).
     var dismissedProgressIDs: Set<String> = []
     /// Kayıt bitirilirken kart kapatıldı; yeni kayıtta sıfırlanır.
@@ -259,9 +262,9 @@ final class AppModel {
     var isReadyToRecord: Bool {
         #if HOSTED_EDITION
         // Abonelik: canlı motor kayıt başında seçilir; Mac modeli gerekirse kayıt sürerken hazırlanır.
-        !isFinishing
+        !isFinishing && handingOffMeetingID == nil
         #else
-        !isFinishing && (liveEngine == .deepgram || modelStatus == .ready)
+        !isFinishing && handingOffMeetingID == nil && (liveEngine == .deepgram || modelStatus == .ready)
         #endif
     }
 
@@ -1199,6 +1202,13 @@ final class AppModel {
     /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı kaydedilip işlenir.
     private func sessionEnded() async {
         await waitForPendingTranslations(timeoutSec: 10)
+        // Biten kayıt ilk beklemeden önce oturumdan alınır ve "devrediliyor" sayılır: sunucu oturumu kapatılırken yeni
+        // kayıt bu kaydın `session`ını ezemez, kuyruk ve çıkış/güncelleme beklenir (isBusy), kayıt düzenlenemez.
+        let finished: RecordingSession? = session
+        session = nil
+        handingOffMeetingID = finished?.directory.lastPathComponent
+        activeMeetingID = nil
+        defer { handingOffMeetingID = nil }
         isRecording = false
         isFinishing = false
         recordingStartedAt = nil
@@ -1219,21 +1229,21 @@ final class AppModel {
         recordingLimitTask = nil
         shortMeetingDeadline = nil
         let recordedOffline: Bool = HostedAccount.shared.isOfflineRecording
+        // Kapatılacak oturum beklemeden önce alınır: geç dönen kapatma yeni kaydın oturumuna dokunmaz.
+        let serverMeetingID: String? = HostedAccount.shared.currentMeeting?.meetingId
         // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
         do {
-            try await HostedAccount.shared.endMeeting()
+            try await HostedAccount.shared.endMeeting(meetingID: serverMeetingID)
         } catch {
             Self.logger.error("Toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Toplantı oturumu kapatılamadı: \(userFacingMessage(error: error))"))
         }
         #endif
-        guard let finished = session else {
+        guard let finished else {
             return
         }
-        // Kayıt, oturum temizlenmeden yazılır: motoru (yerel ya da bulut) kaydın gerçek motorudur, şimdiki ayar değil.
+        // Kaydın motoru kaydın gerçek motorudur (oturumdan), şimdiki ayar değil.
         let record: MeetingRecord = liveRecord(directory: finished.directory, startedAt: finished.startedAt, status: .processing, endedAt: Date())
-        session = nil
-        activeMeetingID = nil
         #if HOSTED_EDITION
         if recordedOffline {
             // Çevrimdışı kayıt: ses ve canlı metin bu Mac'te; son geçiş ve not bağlantı gelince (kayıt silinmez).
@@ -1309,7 +1319,7 @@ final class AppModel {
 
     /// Bu toplantı üzerinde değişiklik yapılabilir mi (kayıtta ya da işlemede değil).
     func isLocked(meetingID: String) -> Bool {
-        activeMeetingID == meetingID || processingMeetingIDs.contains(meetingID)
+        activeMeetingID == meetingID || handingOffMeetingID == meetingID || processingMeetingIDs.contains(meetingID)
     }
 
     /// Toplantıyı sonradan işler (son geçiş + not) ve kaydeder. Son geçiş kaydın motoruna göre yapılır
@@ -1791,7 +1801,12 @@ final class AppModel {
     /// İçe aktarılmakta olan dosya sayısı (dönüştürme sürerken).
     var importingCount: Int = 0
     /// Kayıt, işleme ya da içe aktarma sürüyor mu (çıkış ve dil değişikliği bunu bekler).
-    var isBusy: Bool { phase != .idle || !processingMeetingIDs.isEmpty || importingCount > 0 }
+    var isBusy: Bool {
+        isRecorderBusy(
+            isRecording: isRecording, isFinishing: isFinishing, isHandingOff: handingOffMeetingID != nil,
+            processingCount: processingMeetingIDs.count, importingCount: importingCount
+        )
+    }
     /// Son içe aktarma hatası (Toplantılar listesinde gösterilir).
     var importError: String?
 

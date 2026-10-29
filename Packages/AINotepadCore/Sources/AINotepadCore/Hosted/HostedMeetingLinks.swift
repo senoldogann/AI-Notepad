@@ -41,3 +41,30 @@ public func hostedTranscribeTimeoutSec(durationSec: Double) -> Double {
 /// `transcription_in_progress` sonrası bekleme (saniye) ve en çok deneme: sunucunun ses ayırması 20 dk sürer.
 public let hostedTranscribeBusyDelaySec: Double = 60
 public let hostedTranscribeBusyAttempts: Int = 20
+
+/// Açık (kapatılamamış) sunucu oturumlarına ekler; tekrar eklenmez. Saf fonksiyondur.
+public func addingOpenMeeting(ids: [String], meetingID: String) -> [String] {
+    ids.contains(meetingID) ? ids : ids + [meetingID]
+}
+
+/// Kapatılan oturumu listeden çıkarır. Saf fonksiyondur.
+public func removingOpenMeeting(ids: [String], meetingID: String) -> [String] {
+    ids.filter { $0 != meetingID }
+}
+
+/// Kapatılacak yetim oturumlar: kaydı süren oturum dışındaki açık oturumlar. Saf fonksiyondur.
+public func orphanedMeetingIDs(openIDs: [String], recordingMeetingID: String?) -> [String] {
+    openIDs.filter { $0 != recordingMeetingID }
+}
+
+/// Kapatma yanıtı (başarılı ya da başarısız) geldiğinde "şimdiki toplantı" temizlenmeli mi: yalnızca hâlâ kapatılan
+/// oturumsa (bu arada yeni kayıt başladıysa onun oturumuna dokunulmaz). Saf fonksiyondur.
+public func shouldClearCurrentMeeting(currentMeetingID: String?, endedMeetingID: String) -> Bool {
+    currentMeetingID == endedMeetingID
+}
+
+/// Kaydedici meşgul mü: kayıt sürüyor ya da bitiyor, biten kayıt henüz işlemeye devredilmedi, toplantı işleniyor ya da
+/// dosya içe aktarılıyor. Meşgulken yeni kayıt, kuyruk, çıkış ve güncellemeyle yeniden başlatma beklenir. Saf fonksiyondur.
+public func isRecorderBusy(isRecording: Bool, isFinishing: Bool, isHandingOff: Bool, processingCount: Int, importingCount: Int) -> Bool {
+    isRecording || isFinishing || isHandingOff || processingCount > 0 || importingCount > 0
+}

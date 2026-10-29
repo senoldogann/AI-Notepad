@@ -457,7 +457,7 @@ final class HostedAccount {
         }
         currentMeeting = nil
         clearHostedOfflinePermit()
-        clearHostedOpenMeetingID()
+        clearHostedOpenMeetingIDs()
     }
 
     // MARK: Ödeme
@@ -499,7 +499,7 @@ final class HostedAccount {
             let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID)
             currentMeeting = started
             isOfflineRecording = false
-            saveHostedOpenMeetingID(meetingID: started.meetingId)
+            addHostedOpenMeetingID(meetingID: started.meetingId)
             try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: started.meetingId, createdAt: Date()))
             accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
             Task { await refresh() }
@@ -538,35 +538,46 @@ final class HostedAccount {
     /// Kayıt bitince toplantı oturumunu kapatır; not ve son geçiş sunucunun ek süresinde aynı toplantıyla sürer.
     /// Kapatılamazsa oturum kimliği saklı kalır, ağ gelince ya da sonraki açılışta yeniden denenir (aylık süre boşuna
     /// akmasın). Her durumda hak durumu yenilenir (göstergeler güncel kalsın).
-    func endMeeting() async throws {
+    func endMeeting(meetingID: String?) async throws {
         isOfflineRecording = false
-        guard let meeting = currentMeeting else {
+        guard let meetingID else {
             return
         }
         defer { Task { await refresh() } }
         let client: HostedClient = try HostedServices.requireClient()
-        let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meeting.meetingId)
-        currentMeeting = nil
-        clearHostedOpenMeetingID()
-        accountLogger.info("Toplantı oturumu kapandı, dakika: \(ended.minutes ?? 0, privacy: .public)")
+        do {
+            let ended: HostedEndedMeeting = try await client.endMeeting(meetingID: meetingID)
+            removeHostedOpenMeetingID(meetingID: meetingID)
+            accountLogger.info("Toplantı oturumu kapandı, dakika: \(ended.minutes ?? 0, privacy: .public)")
+        } catch {
+            // Kapatılamadı: kimlik açık oturumlar listesinde kalır, yetim kapatma (ağ gelince, öne gelince, açılışta)
+            // kapatır. "Şimdiki toplantı" yine bırakılır; yoksa yetim sayılmaz ve aylık süre en çok süreye kadar akardı.
+            if shouldClearCurrentMeeting(currentMeetingID: currentMeeting?.meetingId, endedMeetingID: meetingID) {
+                currentMeeting = nil
+            }
+            throw error
+        }
+        // Bu arada yeni kayıt başladıysa onun oturumuna dokunulmaz.
+        if shouldClearCurrentMeeting(currentMeetingID: currentMeeting?.meetingId, endedMeetingID: meetingID) {
+            currentMeeting = nil
+        }
     }
 
     /// Kapatılamamış sunucu oturumunu (uygulama çöktü, kapatma isteği başarısız oldu) kapatır; o oturumla kayıt
     /// sürüyorsa dokunmaz. Sunucu oturumu zaten kapalı ya da bilinmiyorsa kayıt silinir; ağ hatasında sonra yeniden
     /// denenir.
     func closeOrphanedMeeting() async {
-        guard let meetingID = loadHostedOpenMeetingID(), currentMeeting?.meetingId != meetingID else {
-            return
-        }
-        do {
-            let ended: HostedEndedMeeting = try await HostedServices.requireClient().endMeeting(meetingID: meetingID)
-            clearHostedOpenMeetingID()
-            accountLogger.info("Açık kalan toplantı oturumu kapatıldı, dakika: \(ended.minutes ?? 0, privacy: .public)")
-        } catch let error as HostedAPIError where !isRetryableHostedError(error: error) {
-            clearHostedOpenMeetingID()
-            accountLogger.warning("Açık kalan toplantı oturumu sunucuda yok ya da kapalı, kod: \(error.rawCode, privacy: .public)")
-        } catch {
-            accountLogger.warning("Açık kalan toplantı oturumu kapatılamadı, sonra yeniden denenecek, hata: \(String(describing: error), privacy: .private)")
+        for meetingID in orphanedMeetingIDs(openIDs: loadHostedOpenMeetingIDs(), recordingMeetingID: currentMeeting?.meetingId) {
+            do {
+                let ended: HostedEndedMeeting = try await HostedServices.requireClient().endMeeting(meetingID: meetingID)
+                removeHostedOpenMeetingID(meetingID: meetingID)
+                accountLogger.info("Açık kalan toplantı oturumu kapatıldı, dakika: \(ended.minutes ?? 0, privacy: .public)")
+            } catch let error as HostedAPIError where !isRetryableHostedError(error: error) {
+                removeHostedOpenMeetingID(meetingID: meetingID)
+                accountLogger.warning("Açık kalan toplantı oturumu sunucuda yok ya da kapalı, kod: \(error.rawCode, privacy: .public)")
+            } catch {
+                accountLogger.warning("Açık kalan toplantı oturumu kapatılamadı, sonra yeniden denenecek, hata: \(String(describing: error), privacy: .private)")
+            }
         }
     }
 
@@ -637,23 +648,28 @@ enum HostedMeetingStart {
     case offline(maxMinutes: Int)
 }
 
-/// Açık sunucu oturumunun UserDefaults anahtarı (uygulama çökse de sonra kapatılır).
-private let hostedOpenMeetingKey: String = "hosted.openMeetingID"
+/// Açık (kapatılamamış) sunucu oturumlarının UserDefaults anahtarı (uygulama çökse de sonra kapatılır).
+private let hostedOpenMeetingsKey: String = "hosted.openMeetingIDs"
 /// Çevrimdışı kayıt izninin UserDefaults anahtarı.
 private let hostedOfflinePermitKey: String = "hosted.offlinePermit"
 
-/// Açık sunucu oturumunu saklar.
-private func saveHostedOpenMeetingID(meetingID: String) {
-    UserDefaults.standard.set(meetingID, forKey: hostedOpenMeetingKey)
+/// Saklanan açık sunucu oturumları (yoksa boş).
+private func loadHostedOpenMeetingIDs() -> [String] {
+    UserDefaults.standard.stringArray(forKey: hostedOpenMeetingsKey) ?? []
 }
 
-/// Saklanan açık sunucu oturumu; yoksa nil.
-private func loadHostedOpenMeetingID() -> String? {
-    UserDefaults.standard.string(forKey: hostedOpenMeetingKey)
+/// Açık sunucu oturumunu ekler.
+private func addHostedOpenMeetingID(meetingID: String) {
+    UserDefaults.standard.set(addingOpenMeeting(ids: loadHostedOpenMeetingIDs(), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
 }
 
-private func clearHostedOpenMeetingID() {
-    UserDefaults.standard.removeObject(forKey: hostedOpenMeetingKey)
+/// Kapatılan oturumu çıkarır.
+private func removeHostedOpenMeetingID(meetingID: String) {
+    UserDefaults.standard.set(removingOpenMeeting(ids: loadHostedOpenMeetingIDs(), meetingID: meetingID), forKey: hostedOpenMeetingsKey)
+}
+
+private func clearHostedOpenMeetingIDs() {
+    UserDefaults.standard.removeObject(forKey: hostedOpenMeetingsKey)
 }
 
 /// Kaydın sunucu oturumu; bağ yoksa ya da bağlar okunamazsa nil (okunamazsa hata loglanır).
@@ -699,7 +715,8 @@ private func clearHostedOfflinePermit() {
 /// Uygulama kapanırken açık sunucu oturumunu kapatmayı dener (en çok 3 sn bekler; olmazsa sonraki açılışta kapatılır).
 @MainActor
 private func endOpenMeetingBeforeQuit() {
-    guard let meetingID = loadHostedOpenMeetingID() else {
+    let meetingIDs: [String] = loadHostedOpenMeetingIDs()
+    guard !meetingIDs.isEmpty else {
         return
     }
     let client: HostedClient
@@ -712,11 +729,13 @@ private func endOpenMeetingBeforeQuit() {
     }
     let done: DispatchSemaphore = DispatchSemaphore(value: 0)
     Task.detached {
-        do {
-            _ = try await client.endMeeting(meetingID: meetingID)
-            clearHostedOpenMeetingID()
-        } catch {
-            accountLogger.warning("Kapanışta toplantı oturumu kapatılamadı, sonraki açılışta denenecek, hata: \(String(describing: error), privacy: .private)")
+        for meetingID in meetingIDs {
+            do {
+                _ = try await client.endMeeting(meetingID: meetingID)
+                await MainActor.run { removeHostedOpenMeetingID(meetingID: meetingID) }
+            } catch {
+                accountLogger.warning("Kapanışta toplantı oturumu kapatılamadı, sonraki açılışta denenecek, hata: \(String(describing: error), privacy: .private)")
+            }
         }
         done.signal()
     }
