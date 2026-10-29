@@ -225,9 +225,10 @@
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
         // Bkz. üstteki geliştirme `vars` açıklaması.
-        // Creator planı 121 K kredi + otomatik yükleme (eşik 10 $, 25 $'lık yükleme, ayda en çok 150 $ ≈ 824 K kredi);
-        // ölçülen ~1.080 kredi/saat ile ~875 saat. Hesaptaki otomatik yükleme ayarı değişirse bu da değişmeli.
-        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "850",
+        // Otomatik yükleme kapalı (sahibin kararı: her ödeme önce sorulur). Bu dönem (11 Ekim–11 Kasım): Creator planı
+        // 121 K + bir kez alınan 137,5 K yükleme kredisi = 258,5 K; ölçülen ~1.080 kredi/saat ile ~239 saat. Yükleme
+        // kredisi 12 ay geçerli, ay başında sıfırlanmaz; her dönem başında hesaptaki kalan krediye göre yeniden ayarla.
+        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "235",
         "ELEVENLABS_BILLING_DAY": "11",
         // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
         // Açık (sahibin kararı): kurulan akış jetonun süresi dolsa da sürebilir. DEEPGRAM_BUDGET_USD tahmini izler, kesin
