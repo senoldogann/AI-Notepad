@@ -60,6 +60,14 @@ enum HostedServices {
     }
 }
 
+/// Davet kodunun ödeme öncesi doğrulaması.
+enum HostedReferralCheck: Equatable {
+    /// Geçerli; sunucunun sadeleştirdiği kod ödeme sayfasına gönderilir.
+    case valid(code: String)
+    /// Geçersiz; kullanıcıya gösterilecek neden.
+    case invalid(message: String)
+}
+
 /// Hesap ekranının durumu.
 enum HostedAccountState: Equatable {
     /// İlk okuma sürüyor.
@@ -156,6 +164,8 @@ final class HostedAccount {
     private(set) var pendingSignInProvider: HostedSignInProvider?
     /// Ana pencerede açılacak abone olma teklifi (bkz. `meetingNoteReady`); kayıt ya da işleme sürerken açılmaz.
     private(set) var upsell: HostedUpsellMoment?
+    /// Abonenin davet kodu ve sayıları (Ayarlar › Hesap açılınca okunur; bkz. `loadReferral`); yoksa nil.
+    private(set) var referral: HostedReferral?
     /// Sunucu bu hesabın ücretsiz denemesini bu Mac'te reddetti (Mac denemesini başka bir hesapla kullandı); hak durumu
     /// kalan deneme 0 olarak gösterilir (bkz. `hostedEntitlementsOnThisMac`).
     private(set) var isTrialRefusedOnThisMac: Bool = false
@@ -368,6 +378,12 @@ final class HostedAccount {
     /// atlanır, bkz. `HostedDeviceAttestation`). Oturum varken hak durumu okunamazsa (ağ, sunucu) çıkış yapılmış
     /// sayılmaz: önceden okunmuş hak durumu kalır ve hata gösterilir; hiç okunmamışsa durum "bilinmiyor" olur.
     func refresh() async {
+        #if DEBUG
+        // Tanıtım modu sunucuya bağlanmaz ve Anahtar Zinciri'ni okumaz: sahnenin yazdığı durum kalır.
+        if isDemoMode {
+            return
+        }
+        #endif
         refreshesInFlight += 1
         defer { refreshesInFlight -= 1 }
         stateGeneration += 1
@@ -480,10 +496,12 @@ final class HostedAccount {
         }
         let lastShownKey: String = "hosted.upsell.lastShownAt.\(entitlements.userId)"
         let trialEndedKey: String = "hosted.upsell.trialEndedShown.\(entitlements.userId)"
+        let trialEndingKey: String = "hosted.upsell.trialEndingShown.\(entitlements.userId)"
         guard let moment = hostedUpsellMoment(
             entitlements: entitlements,
             lastShownAt: UserDefaults.standard.object(forKey: lastShownKey) as? Date,
             trialEndedShown: UserDefaults.standard.bool(forKey: trialEndedKey),
+            trialEndingShown: UserDefaults.standard.bool(forKey: trialEndingKey),
             now: Date(),
             intervalSec: hostedUpsellIntervalSec
         ) else {
@@ -492,6 +510,9 @@ final class HostedAccount {
         UserDefaults.standard.set(Date(), forKey: lastShownKey)
         if moment == .trialEnded {
             UserDefaults.standard.set(true, forKey: trialEndedKey)
+        }
+        if moment == .trialEnding {
+            UserDefaults.standard.set(true, forKey: trialEndingKey)
         }
         upsell = moment
         accountLogger.info("Abone olma teklifi gösteriliyor, an: \(moment.rawValue, privacy: .public)")
@@ -502,7 +523,19 @@ final class HostedAccount {
     func showUpsellForDemo(moment: HostedUpsellMoment) {
         upsell = moment
     }
+
+    /// Tanıtım modu: hak durumu ve davet bilgisi sunucuya sorulmadan yazılır (bkz. `App/DemoData.swift`).
+    func showAccountForDemo(entitlements: HostedEntitlements, referral: HostedReferral?) {
+        state = .signedIn(entitlements)
+        self.referral = referral
+    }
     #endif
+
+    /// "Abone ol"a basıldı (Ayarlar › Hesap, kullanım bildirimi): planlar ana pencerede açılır. Deneme bittiyse ya da
+    /// abonelik sona erdiyse teklif nedenini de söyler (`subscriptionRequired`).
+    func showPlans() {
+        upsell = requiresSubscription ? .subscriptionRequired : .planChoice
+    }
 
     /// Ücretli özellikler (kayıt, Sor, not) için abone olmak gerekiyor mu: deneme bitti ya da abonelik sona erdi (aylık
     /// sınırın dolması abonelikle çözülmez; hak durumu bilinmiyorsa sunucu karar verir).
@@ -774,6 +807,7 @@ final class HostedAccount {
         defer { isWorking = false }
         // Süren hak durumu okuması çıkıştan sonra dönerse oturumu "giriş yapıldı" göstermesin.
         stateGeneration += 1
+        referral = nil
         do {
             try await HostedServices.requireClient().signOut()
         } catch HostedClientError.network(let path, _) {
@@ -813,18 +847,67 @@ final class HostedAccount {
 
     // MARK: Ödeme
 
-    /// Stripe Checkout'u tarayıcıda açar ve abonelik görününce uygulamayı öne getirir (bkz. `watchCheckout`); bitmemiş
-    /// abonelik varsa Müşteri Portalı açılır.
-    func subscribe() async {
+    /// Seçilen planın Stripe Checkout'unu tarayıcıda açar (`referralCode`: doğrulanmış davet kodu, yoksa nil) ve
+    /// abonelik görününce uygulamayı öne getirir (bkz. `watchCheckout`); bitmemiş abonelik varsa Müşteri Portalı açılır.
+    /// Hata yoksa true; açılamadıysa false ve neden `errorMessage`'da (teklif açık kalır, neden orada görünür).
+    func subscribe(plan: HostedBillingPlan, referralCode: String?) async -> Bool {
+        #if DEBUG
+        // Tanıtım modu sunucuya bağlanmaz ve Anahtar Zinciri'ni okumaz.
+        if isDemoMode {
+            return true
+        }
+        #endif
         await perform { (client: HostedClient) async throws -> Void in
             do {
-                NSWorkspace.shared.open(try await client.checkoutURL())
+                NSWorkspace.shared.open(try await client.checkoutURL(plan: plan, referralCode: referralCode))
                 await self.markAwaitingBillingReturn()
                 await self.watchCheckout()
             } catch let error as HostedAPIError where error.code == .subscriptionExists {
                 NSWorkspace.shared.open(try await client.portalURL())
                 await self.markAwaitingBillingReturn()
             }
+        }
+        return errorMessage == nil
+    }
+
+    /// Davet kodunu ödemeden önce sunucuya doğrulatır: biçimsiz kod sunucuya sorulmaz; geçerliyse sadeleşmiş kod,
+    /// değilse kullanıcıya gösterilecek neden.
+    func validateReferral(input: String) async -> HostedReferralCheck {
+        let code: String = normalizedHostedReferralCode(input: input)
+        guard isWellFormedHostedReferralCode(code: code) else {
+            return .invalid(message: String(localized: "Davet kodu 8 karakterdir, ör. K7M2QX9D."))
+        }
+        #if DEBUG
+        // Tanıtım modu sunucuya bağlanmaz: biçimi doğru kod geçerli sayılır.
+        if isDemoMode {
+            return .valid(code: code)
+        }
+        #endif
+        do {
+            return .valid(code: try await HostedServices.requireClient().validateReferral(code: code).code)
+        } catch {
+            accountLogger.warning("Davet kodu doğrulanmadı, hata: \(String(describing: error), privacy: .private)")
+            return .invalid(message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Abonenin davet kodunu ve sayılarını okur (Ayarlar › Hesap açılınca). Abonelik erişimi yoksa ya da okunamazsa
+    /// davet bölümü görünmez (hata loglanır; davet isteğe bağlıdır, hesap ekranını bozmaz).
+    func loadReferral() async {
+        #if DEBUG
+        if isDemoMode {
+            return
+        }
+        #endif
+        guard case .signedIn(let entitlements) = state, let subscription = entitlements.subscription, subscription.access != .none else {
+            referral = nil
+            return
+        }
+        do {
+            referral = try await HostedServices.requireClient().referral()
+        } catch {
+            accountLogger.error("Davet bilgisi okunamadı, hata: \(String(describing: error), privacy: .private)")
+            referral = nil
         }
     }
 

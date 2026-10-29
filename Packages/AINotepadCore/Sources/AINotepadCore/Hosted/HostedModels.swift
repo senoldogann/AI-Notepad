@@ -57,6 +57,90 @@ public struct HostedSubscription: Decodable, Sendable, Equatable {
     public let access: HostedSubscriptionAccess
     /// Ek sürenin bittiği an; ek süre yoksa nil.
     public let graceEndsAt: Date?
+    /// Aboneliğin planı (`monthly`, `yearly`); tanınmayan eski fiyatta ve alanı bilmeyen eski sunucuda nil. Tanınmayan
+    /// değer hak yanıtını bozmasın diye metin olarak okunur; arayüz `billingPlan`'ı kullanır.
+    public let plan: String?
+
+    /// Aboneliğin planı; bilinmiyorsa nil.
+    public var billingPlan: HostedBillingPlan? {
+        plan.flatMap { (value: String) -> HostedBillingPlan? in HostedBillingPlan(rawValue: value) }
+    }
+}
+
+/// Abonelik planı: aylık ya da yıllık (sunucunun `plan` değerleri).
+public enum HostedBillingPlan: String, Codable, Sendable, Equatable, CaseIterable {
+    case monthly
+    case yearly
+}
+
+/// `POST /v1/billing/checkout` gövdesi: seçilen plan ve doğrulanmış davet kodu (nil ise gövdeye yazılmaz).
+struct HostedCheckoutBody: Encodable, Equatable {
+    let plan: HostedBillingPlan
+    let referralCode: String?
+}
+
+/// `GET /v1/referral` yanıtı: abonenin davet kodu ve davet sayıları. Kod ve bağlantı yalnızca program açıkken ve hesabın
+/// abonelik erişimi varken dolu gelir.
+public struct HostedReferral: Decodable, Sendable, Equatable {
+    /// Davet programı açık mı.
+    public let enabled: Bool
+    public let code: String?
+    public let inviteUrl: URL?
+    /// Kodla abone olan arkadaş sayısı.
+    public let joined: Int
+    /// Kazanılan (hesaba yazılan) ücretsiz ay sayısı.
+    public let rewarded: Int
+    /// Abone olmuş ama ödülü henüz yazılmamış arkadaş sayısı (ilk ödemesi bekleme süresinde).
+    public let pending: Int
+    public let rewardsLeftThisYear: Int
+    public let rewardsPerYear: Int
+    /// Ödülün tutarı (USD; bir aylık abonelik).
+    public let rewardUsd: Double
+    /// Arkadaşın ilk ödemesinden ödüle dek beklenen gün (iade süresi).
+    public let holdDays: Int
+
+    public init(
+        enabled: Bool, code: String?, inviteUrl: URL?, joined: Int, rewarded: Int, pending: Int,
+        rewardsLeftThisYear: Int, rewardsPerYear: Int, rewardUsd: Double, holdDays: Int
+    ) {
+        self.enabled = enabled
+        self.code = code
+        self.inviteUrl = inviteUrl
+        self.joined = joined
+        self.rewarded = rewarded
+        self.pending = pending
+        self.rewardsLeftThisYear = rewardsLeftThisYear
+        self.rewardsPerYear = rewardsPerYear
+        self.rewardUsd = rewardUsd
+        self.holdDays = holdDays
+    }
+}
+
+/// `POST /v1/referral/validate` gövdesi.
+struct HostedReferralValidateBody: Encodable {
+    let code: String
+}
+
+/// `POST /v1/referral/validate` yanıtı: sunucunun sadeleştirdiği geçerli kod.
+public struct HostedReferralValidation: Decodable, Sendable, Equatable {
+    public let code: String
+}
+
+/// Davet kodunun harfleri: karışan 0, 1, I, L ve O yoktur (sunucuyla aynı).
+public let hostedReferralAlphabet: Set<Character> = Set("23456789ABCDEFGHJKMNPQRSTUVWXYZ")
+
+/// Davet kodunun uzunluğu.
+public let hostedReferralCodeLength: Int = 8
+
+/// Girilen davet kodunu sunucunun biçimine getirir: boşluklar ve tireler atılır, harfler büyütülür (sunucu da aynısını
+/// yapar). Saf fonksiyondur.
+public func normalizedHostedReferralCode(input: String) -> String {
+    String(input.uppercased(with: Locale(identifier: "en_US_POSIX")).filter { (character: Character) -> Bool in !character.isWhitespace && character != "-" })
+}
+
+/// Sadeleşmiş kod davet kodu biçiminde mi (8 harf, alfabeden); biçimsiz kod sunucuya sorulmaz. Saf fonksiyondur.
+public func isWellFormedHostedReferralCode(code: String) -> Bool {
+    code.count == hostedReferralCodeLength && code.allSatisfy { (character: Character) -> Bool in hostedReferralAlphabet.contains(character) }
 }
 
 /// `GET /v1/me` yanıtı: plan, deneme hakkı, aylık kullanım ve abonelik.

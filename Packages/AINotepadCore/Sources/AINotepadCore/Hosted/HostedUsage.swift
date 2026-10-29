@@ -190,11 +190,16 @@ public func isHostedRefreshDue(lastRefresh: Date?, now: Date, intervalSec: Doubl
 public enum HostedUpsellMoment: String, Sendable, Equatable {
     /// Deneme toplantısının notu hazır; denemede hâlâ toplantı var.
     case trialNoteReady
+    /// Deneme bitmek üzere (son toplantı kaldı ya da süresi `hostedTrialEndingWindowSec` içinde doluyor): o ana dek
+    /// yapılanların özeti ve planlar.
+    case trialEnding
     /// Son deneme toplantısının notu hazır: deneme bitti.
     case trialEnded
     /// Kullanıcı abonelik gerektiren bir şey denedi (kayıt başlatma, Sor, not) ama hakkı yok: deneme bitti, bu Mac'te
     /// deneme kullanıldı ya da abonelik sona erdi.
     case subscriptionRequired
+    /// Kullanıcı "Abone ol"a bastı (Ayarlar › Hesap, kullanım bildirimi): planlar.
+    case planChoice
 }
 
 /// Sunucunun abonelik reddinden açılan teklif en çok bu aralıkla bir gösterilir (saniye): arka plandaki işler (bekleyen
@@ -204,15 +209,39 @@ public let hostedSubscriptionPromptIntervalSec: Double = 10 * 60
 /// Deneme notu hazır olunca teklif en çok bu aralıkla bir gösterilir (saniye): günde bir.
 public let hostedUpsellIntervalSec: Double = 24 * 60 * 60
 
+/// Deneme süresinin bitmesine bu kadar (saniye) kala deneme "bitmek üzere" sayılır.
+public let hostedTrialEndingWindowSec: Double = 48 * 60 * 60
+
+/// Deneme bitmek üzere mi: tek toplantı kaldı ya da süresi `hostedTrialEndingWindowSec` içinde doluyor (kalan 0 ise
+/// bitmiştir, bitmek üzere değil). Saf fonksiyondur.
+public func isHostedTrialEnding(entitlements: HostedEntitlements, left: Int, now: Date) -> Bool {
+    guard left > 0 else {
+        return false
+    }
+    if left == 1 {
+        return true
+    }
+    guard let endsAt = entitlements.trialEndsAt else {
+        return false
+    }
+    return endsAt.timeIntervalSince(now) <= hostedTrialEndingWindowSec
+}
+
 /// Bir toplantının notu hazır olunca teklif gösterilsin mi; gösterilecekse hangi an. Yalnızca denemede: deneme bittiyse
-/// (kalan 0) hesap başına bir kez `trialEnded`; bitmediyse son gösterimden en az `intervalSec` geçtiyse
-/// `trialNoteReady`. Abonede, süresi bitmiş abonelikte ve aralık dolmadıysa nil. Saf fonksiyondur.
-public func hostedUpsellMoment(entitlements: HostedEntitlements, lastShownAt: Date?, trialEndedShown: Bool, now: Date, intervalSec: Double) -> HostedUpsellMoment? {
+/// (kalan 0) hesap başına bir kez `trialEnded`; bitmek üzereyse (`isHostedTrialEnding`) hesap başına bir kez
+/// `trialEnding`; değilse son gösterimden en az `intervalSec` geçtiyse `trialNoteReady`. Abonede, süresi bitmiş
+/// abonelikte ve aralık dolmadıysa nil. Saf fonksiyondur.
+public func hostedUpsellMoment(
+    entitlements: HostedEntitlements, lastShownAt: Date?, trialEndedShown: Bool, trialEndingShown: Bool, now: Date, intervalSec: Double
+) -> HostedUpsellMoment? {
     guard case .trial(let left, _) = hostedPlanStatus(entitlements: entitlements) else {
         return nil
     }
     if left == 0 {
         return trialEndedShown ? nil : .trialEnded
+    }
+    if !trialEndingShown && isHostedTrialEnding(entitlements: entitlements, left: left, now: now) {
+        return .trialEnding
     }
     if let lastShownAt, now.timeIntervalSince(lastShownAt) < intervalSec {
         return nil

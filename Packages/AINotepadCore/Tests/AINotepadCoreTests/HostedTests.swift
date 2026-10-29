@@ -395,17 +395,46 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         """#
         let now: Date = Date(timeIntervalSince1970: 2_000_000)
         let trial: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.utf8))
-        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
-        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-3600), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
-        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-hostedUpsellIntervalSec), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: nil, trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-3600), trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        #expect(hostedUpsellMoment(entitlements: trial, lastShownAt: now.addingTimeInterval(-hostedUpsellIntervalSec), trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
         let ended: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.replacingOccurrences(of: #""trialMeetingsLeft":2"#, with: #""trialMeetingsLeft":0"#).utf8))
         // Deneme bitince günlük aralık beklenmez, ama yalnızca bir kez.
-        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: now.addingTimeInterval(-60), trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialEnded)
-        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: nil, trialEndedShown: true, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: now.addingTimeInterval(-60), trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialEnded)
+        #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: nil, trialEndedShown: true, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
         let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON
             .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
             .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#).utf8))
-        #expect(hostedUpsellMoment(entitlements: subscriber, lastShownAt: nil, trialEndedShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        #expect(hostedUpsellMoment(entitlements: subscriber, lastShownAt: nil, trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
+        // Son toplantı kaldı: günlük aralık beklenmeden bir kez "bitmek üzere"; gösterildiyse günlük teklif sürer.
+        let lastOne: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.replacingOccurrences(of: #""trialMeetingsLeft":2"#, with: #""trialMeetingsLeft":1"#).utf8))
+        #expect(hostedUpsellMoment(entitlements: lastOne, lastShownAt: now.addingTimeInterval(-60), trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == .trialEnding)
+        #expect(hostedUpsellMoment(entitlements: lastOne, lastShownAt: nil, trialEndedShown: false, trialEndingShown: true, now: now, intervalSec: hostedUpsellIntervalSec) == .trialNoteReady)
+    }
+
+    // Abonelik planı yanıttan okunur; tanınmayan ya da eksik plan hak yanıtını bozmaz.
+    @Test func subscriptionPlanDecodes() throws {
+        func subscription(_ plan: String) throws -> HostedSubscription {
+            let json: String = #"{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active""# + plan + "}"
+            return try hostedJSONDecoder().decode(HostedSubscription.self, from: Data(json.utf8))
+        }
+        #expect(try subscription(#","plan":"yearly""#).billingPlan == .yearly)
+        #expect(try subscription(#","plan":"monthly""#).billingPlan == .monthly)
+        #expect(try subscription(#","plan":null"#).billingPlan == nil)
+        #expect(try subscription(#","plan":"weekly""#).billingPlan == nil)
+        #expect(try subscription("").billingPlan == nil)
+    }
+
+    // Fiyat hesapları ve davet kodunun biçimi (sunucuyla aynı kural).
+    @Test func planPricesAndReferralCodes() {
+        #expect(hostedYearlyMonthlyEquivalentCents() == 408)
+        #expect(hostedYearlySavingsPercent() == 32)
+        #expect(hostedReferralFirstPaymentCents(plan: .monthly) == 0)
+        #expect(hostedReferralFirstPaymentCents(plan: .yearly) == 4301)
+        #expect(normalizedHostedReferralCode(input: " k7m2-qx9d ") == "K7M2QX9D")
+        #expect(isWellFormedHostedReferralCode(code: "K7M2QX9D"))
+        #expect(!isWellFormedHostedReferralCode(code: "K7M2QX9"))
+        #expect(!isWellFormedHostedReferralCode(code: "K7M2QX0D"))
     }
 
     // İçe aktarma toplantının ses hakkını aşarsa kuyruğa alınmadan reddedilir; eski sunucu (alan yok) denetlenmez.
