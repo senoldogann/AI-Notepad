@@ -66,8 +66,9 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let trialMeetingsTotal: Int
     /// Denemenin süresi (gün; ilk deneme toplantısından başlar); alanı bilmeyen eski sunucuda nil.
     public let trialDays: Int?
-    /// Etkin kalan deneme (hesap ve doğrulanmış cihazın küçüğü).
-    public let trialMeetingsLeft: Int
+    /// Etkin kalan deneme (hesap ve doğrulanmış cihazın küçüğü). Sunucu bu Mac'te denemeyi reddettiyse uygulama 0 yapar
+    /// (bkz. `hostedEntitlementsOnThisMac`).
+    public internal(set) var trialMeetingsLeft: Int
     public let accountTrialMeetingsLeft: Int
     public let deviceTrialMeetingsLeft: Int?
     /// Deneme süresinin bittiği an (ilk deneme toplantısı + deneme günleri); deneme başlamadıysa, abonelikte ya da
@@ -203,6 +204,19 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case grace(endsAt: Date)
     /// Abonelik sona erdi (iptal edildi ya da ödenmedi) ve deneme hakkı kalmadı: yeni kayıt için yeniden abone olunmalı.
     case expired(endedAt: Date)
+}
+
+/// Bu Mac'te görülen hak durumu: sunucu bu hesabın ücretsiz denemesini bu Mac'te reddettiyse (`trial_device_used`: Mac
+/// denemesini başka bir hesapla kullandı; Apple DeviceCheck yalnızca toplantı açılırken sorulur, hak yanıtı bunu
+/// bilemez) ve hesap denemedeyse kalan deneme 0 gösterilir; kenar çubuğu, Hesap kartı ve Başlat düğmesi böylece aynı
+/// şeyi söyler. Abonelikte değişmez. Saf fonksiyondur.
+public func hostedEntitlementsOnThisMac(entitlements: HostedEntitlements, trialRefusedOnThisMac: Bool) -> HostedEntitlements {
+    guard trialRefusedOnThisMac, case .trial = hostedPlanStatus(entitlements: entitlements) else {
+        return entitlements
+    }
+    var shown: HostedEntitlements = entitlements
+    shown.trialMeetingsLeft = 0
+    return shown
 }
 
 /// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.

@@ -2825,6 +2825,17 @@
         }
       }
     },
+    "Bu Mac'te deneme kullanıldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial used on this Mac"
+          }
+        }
+      }
+    },
     "Bu Mac'te yüklü değil": {
       "localizations": {
         "en": {
@@ -2842,6 +2853,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signed out on this Mac. The server couldn't be reached; your session on the server closes on its own within 60 days."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kayda devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial on this Mac was already used with another account. Subscribe to keep recording."
+          }
+        }
+      }
+    },
+    "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı; devam etmek için abone ol. Toplantıların ve notların bu Mac'te kalır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free trial on this Mac was already used with another account; subscribe to continue. Your meetings and notes stay on this Mac."
           }
         }
       }

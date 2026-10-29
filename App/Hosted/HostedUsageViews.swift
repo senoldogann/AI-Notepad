@@ -202,7 +202,9 @@ struct HostedUsageCard: View {
             }
             HostedTrialSegments(left: left, total: total, height: 8)
             Group {
-                if left == 0 {
+                if left == 0 && account.isTrialRefusedOnThisMac {
+                    Text("Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı; devam etmek için abone ol. Toplantıların ve notların bu Mac'te kalır.")
+                } else if left == 0 {
                     Text("Deneme bitti; yeni toplantılar için abone ol. Toplantıların ve notların bu Mac'te kalır.")
                 } else if let endsAt = entitlements.trialEndsAt {
                     Text("Deneme \(endsAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))) tarihinde biter (\(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa).")
@@ -252,7 +254,7 @@ struct HostedSidebarUsage: View {
                 VStack(alignment: .leading, spacing: 6) {
                     switch hostedPlanStatus(entitlements: entitlements) {
                     case .trial(let left, let total):
-                        Text(verbatim: hostedTrialLeftText(left: left))
+                        Text(verbatim: left == 0 && account.isTrialRefusedOnThisMac ? String(localized: "Bu Mac'te deneme kullanıldı") : hostedTrialLeftText(left: left))
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(left == 0 ? meterFull : Theme.muted)
                         HostedTrialSegments(left: left, total: total, height: 4)

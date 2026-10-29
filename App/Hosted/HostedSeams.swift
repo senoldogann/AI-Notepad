@@ -264,6 +264,8 @@ func hostedStartBlockNotice() -> StartBlockNotice? {
         return nil
     }
     switch block {
+    case .trialEnded where HostedAccount.shared.isTrialRefusedOnThisMac:
+        return StartBlockNotice(reason: String(localized: "Bu Mac'te ücretsiz deneme başka bir hesapla kullanıldı. Kayda devam etmek için abone ol."), action: .subscribe)
     case .trialEnded:
         return StartBlockNotice(reason: String(localized: "Ücretsiz denemen bitti. Kayda devam etmek için abone ol."), action: .subscribe)
     case .monthlyCapReached:

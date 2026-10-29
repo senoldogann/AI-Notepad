@@ -91,6 +91,12 @@ private final class HostedWebSignInPresenter: NSObject, ASWebAuthenticationPrese
     }
 }
 
+/// Sunucunun bu hesabın denemesini bu Mac'te reddettiğinin kaydı (hesap başına; abone olunca etkisizdir). Saf
+/// fonksiyondur.
+private func hostedTrialRefusedKey(userId: String) -> String {
+    "hosted.trialRefusedOnThisMac.\(userId)"
+}
+
 /// Yeni girişten önce bu Mac'teki eski oturum sunucuda kapatılır. Sunucuya ulaşılamazsa yerel oturum yine silinir
 /// (bkz. `HostedClient.signOut`) ve uyarı loglanır; sunucudaki yenileme jetonu kullanılmadığı için en geç
 /// `REFRESH_TOKEN_DAYS` (60) gün içinde kendiliğinden geçersizleşir.
@@ -125,6 +131,9 @@ final class HostedAccount {
     private(set) var pendingBrowserSignIn: HostedBrowserSignInAttempt?
     /// Açık giriş penceresinin sağlayıcısı (düğmede bekleme göstergesi için).
     private(set) var pendingSignInProvider: HostedSignInProvider?
+    /// Sunucu bu hesabın ücretsiz denemesini bu Mac'te reddetti (Mac denemesini başka bir hesapla kullandı); hak durumu
+    /// kalan deneme 0 olarak gösterilir (bkz. `hostedEntitlementsOnThisMac`).
+    private(set) var isTrialRefusedOnThisMac: Bool = false
     /// Son başlatılan toplantının sınırları (kayıt panelinde ve Ayarlar'da gösterilir).
     private(set) var currentMeeting: HostedStartedMeeting?
     /// Ana penceredeki kullanım bildirimi (%80, %100, son deneme toplantısı, deneme bitti). Her biri dönem başına bir
@@ -272,11 +281,13 @@ final class HostedAccount {
         }
         do {
             await HostedDeviceAttestation.prepare(client: client)
-            let entitlements: HostedEntitlements = try await client.entitlements()
+            let received: HostedEntitlements = try await client.entitlements()
             // Bu arada çıkış yapıldıysa ya da daha yeni bir okuma başladıysa eski sonuç yazılmaz.
             guard isCurrentSessionGeneration(started: generation, current: stateGeneration) else {
                 return
             }
+            isTrialRefusedOnThisMac = UserDefaults.standard.bool(forKey: hostedTrialRefusedKey(userId: received.userId))
+            let entitlements: HostedEntitlements = hostedEntitlementsOnThisMac(entitlements: received, trialRefusedOnThisMac: isTrialRefusedOnThisMac)
             state = .signedIn(entitlements)
             lastRefreshAt = Date()
             saveHostedOfflinePermit(permit: hostedOfflinePermit(entitlements: entitlements, now: Date()))
@@ -320,8 +331,9 @@ final class HostedAccount {
             return
         }
         // Son deneme toplantısı açılınca kalan hak 0'a iner; o toplantı sürerken "deneme bitti" gösterilmez (kayıt
-        // duracak sanılmasın). Toplantı kapanınca yapılan yenilemede gösterilir.
-        if notice == .trialEnded && currentMeeting != nil {
+        // duracak sanılmasın), toplantı kapanınca yapılan yenilemede gösterilir. Deneme bu Mac'te reddedildiyse de
+        // gösterilmez: deneme hiç bitmedi, nedeni Başlat düğmesinin yanında yazar.
+        if notice == .trialEnded && (currentMeeting != nil || isTrialRefusedOnThisMac) {
             visibleNotice = nil
             return
         }
@@ -572,7 +584,23 @@ final class HostedAccount {
     /// olduğu biliniyorsa gönderilir; sunucu `device_check_required` derse bir kez jetonla yinelenir (aboneler
     /// DeviceCheck'e hiç takılmaz). Jeton üretilemezse hata fırlar.
     /// `deferred`: sonradan işlenen kayıt (bekleyen, içe aktarılan); sunucu süren canlı toplantıyı kapatmaz.
+    /// Sunucu bu Mac'te denemeyi reddederse (`trial_device_used`) bu hesap için hatırlanır ve hak durumu yenilenir: kenar
+    /// çubuğu, Hesap kartı ve Başlat düğmesi "denemen yok, abone ol" der; Başlat bir daha sunucuya gitmez.
     private func openServerMeeting(client: HostedClient, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
+        do {
+            return try await requestServerMeeting(client: client, clientRef: clientRef, deferred: deferred)
+        } catch let error as HostedAPIError where error.code == .trialDeviceUsed {
+            if let userID = try await client.signedInUserID() {
+                UserDefaults.standard.set(true, forKey: hostedTrialRefusedKey(userId: userID))
+                accountLogger.info("Deneme bu Mac'te reddedildi (Mac denemesini başka hesapla kullandı); hesap için hatırlandı")
+                Task { await refresh() }
+            }
+            throw error
+        }
+    }
+
+    /// Toplantı oturumu isteği; sunucu DeviceCheck isterse jetonla bir kez yinelenir.
+    private func requestServerMeeting(client: HostedClient, clientRef: String, deferred: Bool) async throws -> HostedStartedMeeting {
         let device: HostedDeviceAssertion? = await HostedDeviceAttestation.assertion(client: client, action: "meetings.start")
         let deviceCheckToken: String? = isKnownTrial ? try await HostedDeviceCheck.token() : nil
         do {

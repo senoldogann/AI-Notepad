@@ -366,6 +366,25 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(tokens.accountTokensUsed == 250 && tokens.accountTokensCap == 1000)
     }
 
+    // Sunucu denemeyi bu Mac'te reddettiyse denemedeki hesap 0 kalan gösterir (başlat engeli de devreye girer); abone
+    // etkilenmez.
+    @Test func trialRefusedOnThisMac() throws {
+        let trialJSON: String = #"""
+        {"userId":"u","plan":"trial","trialMeetingsTotal":3,"trialMeetingsLeft":3,"accountTrialMeetingsLeft":3,"deviceTrialMeetingsLeft":null,
+         "monthlyHoursUsed":0,"monthlyHoursCap":10,"subscription":null}
+        """#
+        let trial: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.utf8))
+        let refused: HostedEntitlements = hostedEntitlementsOnThisMac(entitlements: trial, trialRefusedOnThisMac: true)
+        #expect(hostedPlanStatus(entitlements: refused) == .trial(left: 0, total: 3))
+        #expect(hostedStartBlock(entitlements: refused) == .trialEnded)
+        #expect(hostedEntitlementsOnThisMac(entitlements: trial, trialRefusedOnThisMac: false) == trial)
+        let subscriberJSON: String = trialJSON
+            .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#)
+        let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(subscriberJSON.utf8))
+        #expect(hostedEntitlementsOnThisMac(entitlements: subscriber, trialRefusedOnThisMac: true) == subscriber)
+    }
+
     // İçe aktarma toplantının ses hakkını aşarsa kuyruğa alınmadan reddedilir; eski sunucu (alan yok) denetlenmez.
     @Test func importLongerThanMeetingAllowanceIsRejected() throws {
         let json: String = #"""
