@@ -72,8 +72,6 @@ export interface CommonCopy {
     /** Sayfa sonundaki çekmede görünen kısa teşekkür (PullReveal.astro). */
     readonly pullThanks: string;
     readonly copyright: string;
-    /** İşletmenin hukuki bilgisi: unvan, işletme kimliği ve adres (alt bilginin en altında). */
-    readonly business: string;
   };
   readonly lastUpdated: string;
   readonly contents: string;
@@ -386,7 +384,6 @@ export const copy: Copy = {
       cookies: "Cookies",
       pullThanks: "Thanks for listening.",
       copyright: `© 2026 ${operator.name}`,
-      business: `${operator.name} · Business ID ${operator.businessId} · ${operator.address}`,
     },
     lastUpdated: "Last updated",
     contents: "On this page",
