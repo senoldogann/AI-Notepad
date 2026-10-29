@@ -92,6 +92,23 @@ interface NewMeeting {
   readonly deferred: boolean;
 }
 
+/** Aynı anda ek süresi içinde olan (işlenen) en çok sonradan işlenen kayıt oturumu. */
+export const maxPendingDeferredMeetings: number = 3;
+
+/** Bekleyen kayıt sınırı dolduysa `rate_limited` (istemci kuyruğu bir süre sonra yeniden dener). */
+async function requirePendingDeferredLeft(db: D1Database, config: Config, userId: string, deferred: boolean, now: Date): Promise<void> {
+  if (!deferred) {
+    return;
+  }
+  const row: { count: number } | null = await db
+    .prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ? AND deferred = 1 AND ended_at > ?")
+    .bind(userId, now.getTime() - config.meetingGraceMs)
+    .first<{ count: number }>();
+  if ((row?.count ?? 0) >= maxPendingDeferredMeetings) {
+    throw new ApiError("rate_limited", `Aynı anda en çok ${maxPendingDeferredMeetings} bekleyen kayıt işlenir; diğerleri biraz sonra işlenecek.`);
+  }
+}
+
 /** Abonelik toplantısının ek koşulu yoktur: aylık sınır eklemeden önce denetlenir. */
 const noGate: StartGate = { sql: "1", binds: [] };
 
@@ -99,7 +116,9 @@ const noGate: StartGate = { sql: "1", binds: [] };
  * Toplantıyı tek D1 toplu işleminde (tek işlem) ekler. Satır yalnızca kullanıcının bugünkü başlatma sayısı
  * `maxMeetingStartsPerDay` altındaysa ve `gate` sağlanıyorsa eklenir. Eklenirse aynı işlemde günlük başlatma sayısı
  * artar ve kullanıcının açık toplantısı ek süresiz kapanır (`superseded`; aynı anda tek toplantı, yeniden başlatarak
- * bütçe katlanamaz). Eklenmezse hiçbir sayaç ve açık toplantı değişmez. `followUps` eklemeden sonra çalışır ve kendi
+ * bütçe katlanamaz). Sonradan işlenen kayıt (`deferred`) bitmiş olarak eklenir (canlı kullanılamaz: Deepgram jetonu
+ * almaz, yalnızca ek sürede son geçiş ve not), açık toplantıyı kapatmaz ve ek süresi içindeki bekleyenler
+ * `maxPendingDeferredMeetings`'i geçemez. Eklenmezse hiçbir sayaç ve açık toplantı değişmez. `followUps` eklemeden sonra çalışır ve kendi
  * "toplantı eklendi mi" koşulunu taşır. Eklendiyse true döner.
  */
 async function insertMeeting(
@@ -116,9 +135,11 @@ async function insertMeeting(
     db.prepare("INSERT OR IGNORE INTO daily_usage (user_id, day) VALUES (?, ?)").bind(meeting.userId, day),
     db
       .prepare(
-        `INSERT OR IGNORE INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget, client_ref)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?
-         WHERE (SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?) < ? AND (${gate.sql})`,
+        `INSERT OR IGNORE INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget, client_ref,
+           deferred, ended_at, minutes, end_reason)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN ? END, CASE WHEN ? = 1 THEN 0 END, CASE WHEN ? = 1 THEN 'ended' END
+         WHERE (SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?) < ? AND (${gate.sql})
+           AND (? = 0 OR (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ? AND deferred = 1 AND ended_at > ?) < ?)`,
       )
       .bind(
         meeting.id,
@@ -129,10 +150,19 @@ async function insertMeeting(
         meeting.maxEndsAt,
         meeting.tokenBudget,
         meeting.clientRef,
+        meeting.deferred ? 1 : 0,
+        meeting.deferred ? 1 : 0,
+        nowMs,
+        meeting.deferred ? 1 : 0,
+        meeting.deferred ? 1 : 0,
         meeting.userId,
         day,
         config.maxMeetingStartsPerDay,
         ...gate.binds,
+        meeting.deferred ? 1 : 0,
+        meeting.userId,
+        nowMs - config.meetingGraceMs,
+        maxPendingDeferredMeetings,
       ),
     db
       .prepare(
@@ -218,6 +248,7 @@ export async function startMeeting(
     if (raced !== null) {
       return raced;
     }
+    await requirePendingDeferredLeft(db, config, userId, request.deferred, now);
     await requireDailyStartLeft(db, config, userId, now);
     log("error", "meeting_insert_failed", { userId, kind: "subscription" });
     throw new ApiError("internal_error", "Toplantı başlatılamadı; yeniden dene.");
@@ -354,6 +385,7 @@ async function startTrialMeeting(
     if (raced !== null) {
       return raced;
     }
+    await requirePendingDeferredLeft(db, config, userId, deferred, now);
     await requireDailyStartLeft(db, config, userId, now);
   }
   const trial: TrialState = await userTrialState(db, userId);

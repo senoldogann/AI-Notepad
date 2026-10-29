@@ -272,15 +272,28 @@ describe("haklar ve toplantı oturumları", () => {
   it("sonradan işlenen kayıt (deferred) açık toplantıyı kapatmaz", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
     const live: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
     const deferred: Response = await harness.call(
       req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef: "bekleyen-1", deferred: true } }),
     );
     expect(deferred.status).toBe(201);
     expect((await openState(live.meetingId))?.ended_at).toBeNull();
+    // Bekleyen kayıt bitmiş olarak açılır: canlı kullanılamaz (Deepgram jetonu yok), açık toplantı sayılmaz.
+    const pending: StartedMeetingBody = await deferred.json<StartedMeetingBody>();
+    expect((await openState(pending.meetingId))?.end_reason).toBe("ended");
     // Normal başlatma ise açık toplantıyı kapatır.
     await startMeeting(harness, session);
     expect((await openState(live.meetingId))?.end_reason).toBe("superseded");
+    // Ek süresi içinde en çok 3 bekleyen: dördüncüsü rate_limited, süre geçince yenisi açılır.
+    const startDeferred = (ref: string, token: string): Promise<Response> =>
+      harness.call(req("POST", "/v1/meetings/start", { token, json: { clientRef: ref, deferred: true } }));
+    expect((await startDeferred("bekleyen-2", session.accessToken)).status).toBe(201);
+    expect((await startDeferred("bekleyen-3", session.accessToken)).status).toBe(201);
+    await expectError(await startDeferred("bekleyen-4", session.accessToken), 429, "rate_limited");
+    harness.clock.nowMs += 31 * 60_000;
+    const later: Session = await refreshed(harness, session);
+    expect((await startDeferred("bekleyen-4", later.accessToken)).status).toBe(201);
   });
 
   it("toplantı bittikten sonra 30 dakika not için açık kalır, sonra kapanır", async () => {
