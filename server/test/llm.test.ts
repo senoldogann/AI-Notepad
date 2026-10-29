@@ -251,9 +251,35 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     return { monthly: monthly?.used ?? 0, daily: daily?.used ?? 0 };
   }
 
-  it("denemesi kalan yeni hesap toplantısız çağırabilir; max_tokens küçük sınırla kısılır, kullanıcı sınırına sayılır", async () => {
+  it("denemesi hiç başlamamış hesap toplantısız çağıramaz (trial_not_started), dışarı istek gitmez", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
+    const before: number = harness.outbound.length;
+    const refused = await expectError(await accountLLM(harness, session, basic, null), 403, "trial_not_started");
+    expect(refused.error.message).toContain("toplantı başlat");
+    expect(harness.outbound.length).toBe(before);
+  });
+
+  it("DeviceCheck zorunluyken denemesi Mac'e bağlanmamış hesap toplantısız çağıramaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    expect((await startMeeting(harness, session)).status).toBe(201);
+    // Deneme DeviceCheck kapalıyken başladı; politika açılınca Mac doğrulaması da gerekir.
+    const required: Env = envWith({
+      DEVICECHECK_POLICY: "required",
+      DEVICECHECK_KEY_ID: "ABCDEFGHIJ",
+      DEVICECHECK_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nMIG\n-----END PRIVATE KEY-----",
+    });
+    await expectError(await accountLLM(harness, session, basic, required), 403, "trial_not_started");
+    await env.DB.prepare("UPDATE users SET trial_device_verified_at = ? WHERE id = ?").bind(harness.clock.nowMs, session.userId).run();
+    harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
+    expect((await accountLLM(harness, session, basic, required)).status).toBe(200);
+  });
+
+  it("ilk toplantıyla denemesi başlamış hesap toplantısız çağırabilir; max_tokens küçük sınırla kısılır, kullanıcı sınırına sayılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    expect((await startMeeting(harness, session)).status).toBe(201);
     let maxTokens: number = 0;
     harness.stub(anthropicUrl, async (request: Request): Promise<Response> => {
       maxTokens = (await request.json<{ max_tokens: number }>()).max_tokens;
@@ -264,14 +290,15 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
     expect(maxTokens).toBe(Number(env.LLM_ACCOUNT_MAX_TOKENS));
     expect(maxTokens).toBeLessThan(Number(env.LLM_MAX_TOKENS));
     expect(await userTokens(session.userId)).toEqual({ monthly: 150, daily: 150 });
-    // Hiçbir toplantı açılmadı ve deneme hakkı düşmedi.
+    // Çağrı yeni toplantı açmadı ve deneme hakkı düşürmedi.
     const meetings = await env.DB.prepare("SELECT COUNT(*) AS count FROM meeting_sessions WHERE user_id = ?").bind(session.userId).first<{ count: number }>();
-    expect(meetings?.count).toBe(0);
+    expect(meetings?.count).toBe(1);
   });
 
   it("akışlı toplantısız çağrı aktarılır ve kullanıcıya sayılır", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
+    expect((await startMeeting(harness, session)).status).toBe(201);
     harness.stub(anthropicUrl, async (): Promise<Response> => new Response(sse(streamEvents), { headers: { "content-type": "text/event-stream" } }));
     const response: Response = await accountLLM(harness, session, { ...basic, stream: true }, null);
     expect(response.status).toBe(200);
@@ -311,6 +338,7 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
   it("günlük ve aylık token sınırı ve harcama tavanı toplantısız çağrıda da geçerli", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
+    expect((await startMeeting(harness, session)).status).toBe(201);
     harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(10, 5)));
     await expectError(await accountLLM(harness, session, basic, envWith({ DAILY_TOKEN_CAP: "500" })), 429, "daily_cap_reached");
     await expectError(await accountLLM(harness, session, basic, envWith({ MONTHLY_TOKEN_CAP: "500" })), 403, "monthly_cap_reached");
@@ -321,6 +349,7 @@ describe("LLM vekili: toplantısız (hesap) çağrılar", () => {
   it("aboneliği olmayan kullanıcının toplantısız çağrıları küçük günlük deneme sınırına sayılır; aşınca 429", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
+    expect((await startMeeting(harness, session)).status).toBe(201);
     harness.stub(anthropicUrl, async (): Promise<Response> => Response.json(message(120, 30)));
     expect((await accountLLM(harness, session, basic, null)).status).toBe(200);
     const row = await env.DB.prepare("SELECT trial_account_tokens_used AS used, trial_account_tokens_reserved AS reserved FROM daily_usage WHERE user_id = ?")

@@ -19,6 +19,7 @@ export type ErrorCode =
   | "subscription_required"
   | "subscription_exists"
   | "trial_exhausted"
+  | "trial_not_started"
   | "trial_ip_limit"
   | "trial_device_used"
   | "device_check_required"
@@ -56,6 +57,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   subscription_required: 402,
   subscription_exists: 409,
   trial_exhausted: 402,
+  trial_not_started: 403,
   trial_ip_limit: 429,
   trial_device_used: 403,
   device_check_required: 400,

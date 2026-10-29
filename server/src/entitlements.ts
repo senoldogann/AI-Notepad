@@ -97,22 +97,26 @@ export interface TrialState {
   readonly used: number;
   /** İlk deneme toplantısının başladığı an (ms; devralınmış olabilir); deneme başlamadıysa null. */
   readonly startedAt: number | null;
+  /** Hesabın denemesinin bir Mac'e (DeviceCheck) bağlandığı an (ms); bağlanmadıysa null. */
+  readonly deviceVerifiedAt: number | null;
 }
 
 /**
  * Kullanıcının deneme durumu: harcanan deneme toplantısı (deneme toplantıları + `users.carried_trial_meetings`, bkz.
- * `trialLedger.ts`) ve denemenin başladığı an (`users.trial_started_at`).
+ * `trialLedger.ts`), denemenin başladığı an (`users.trial_started_at`) ve Mac doğrulaması
+ * (`users.trial_device_verified_at`).
  */
 export async function userTrialState(db: D1Database, userId: string): Promise<TrialState> {
-  const row: { used: number; started_at: number | null } | null = await db
+  const row: { used: number; started_at: number | null; device_verified_at: number | null } | null = await db
     .prepare(
       `SELECT (SELECT COUNT(*) FROM meeting_sessions WHERE user_id = ?1 AND kind = 'trial')
          + COALESCE((SELECT carried_trial_meetings FROM users WHERE id = ?1), 0) AS used,
-         (SELECT trial_started_at FROM users WHERE id = ?1) AS started_at`,
+         (SELECT trial_started_at FROM users WHERE id = ?1) AS started_at,
+         (SELECT trial_device_verified_at FROM users WHERE id = ?1) AS device_verified_at`,
     )
     .bind(userId)
-    .first<{ used: number; started_at: number | null }>();
-  return { used: row?.used ?? 0, startedAt: row?.started_at ?? null };
+    .first<{ used: number; started_at: number | null; device_verified_at: number | null }>();
+  return { used: row?.used ?? 0, startedAt: row?.started_at ?? null, deviceVerifiedAt: row?.device_verified_at ?? null };
 }
 
 /** Deneme süresinin bittiği an (ms); deneme başlamadıysa null. Saf fonksiyondur. */
@@ -147,11 +151,22 @@ export async function deviceTrialMeetingsUsed(db: D1Database, deviceId: string):
 export type AccountLLMAccess = "subscription" | "trial";
 
 /**
+ * Deneme ilk toplantıyla başladı mı: `users.trial_started_at` dolu ve DeviceCheck politikası `required` ise deneme bir
+ * Mac'e bağlanmış (`users.trial_device_verified_at`). Deneme toplantısı DeviceCheck'i, IP başına yeni deneme sınırını ve
+ * deneme süresini başlatır; toplantı dışı deneme çağrısı bunları atlayamasın diye yalnızca başlamış denemede açılır.
+ * Saf fonksiyondur.
+ */
+export function isTrialStarted(trial: TrialState, config: Config): boolean {
+  return trial.startedAt !== null && (config.deviceCheck.policy === "off" || trial.deviceVerifiedAt !== null);
+}
+
+/**
  * Toplantıya bağlı olmayan yapay zekâ çağrısı (Sor, notu yeniden yazma, düzenleme, görev aracı) hakkı: erişimi olan
- * abonelik (`active` ya da `grace`) ya da hesabın kullanılmamış ve süresi dolmamış deneme toplantısı. Deneme bitmiş
+ * abonelik (`active` ya da `grace`) ya da ilk toplantıyla başlamış (`isTrialStarted`), toplantıları harcanmamış ve
+ * süresi dolmamış deneme. Deneme hiç başlamadıysa `trial_not_started` (önce bir toplantı başlatılmalı); bittiyse
  * (toplantılar harcanmış ya da süre dolmuş) ve abonelik yoksa `subscription_required`. Hak toplantı bütçesiyle değil,
  * kullanıcının günlük ve aylık token sınırıyla ve küçük çağrı başı `max_tokens` ile sınırlanır; denemede ayrıca
- * `TRIAL_ACCOUNT_DAILY_TOKENS`.
+ * `TRIAL_ACCOUNT_DAILY_TOKENS`, abonelikte ayrıca `MONTHLY_ACCOUNT_TOKEN_CAP`.
  */
 export async function requireAccountLLMAccess(db: D1Database, config: Config, userId: string, now: Date): Promise<AccountLLMAccess> {
   const [subscription, trial]: [SubscriptionState | null, TrialState] = await Promise.all([
@@ -160,6 +175,9 @@ export async function requireAccountLLMAccess(db: D1Database, config: Config, us
   ]);
   if (hasSubscriptionAccess(subscription, now, config.pastDueGraceMs)) {
     return "subscription";
+  }
+  if (!isTrialStarted(trial, config)) {
+    throw new ApiError("trial_not_started", "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.");
   }
   if (trialMeetingsLeft(trial, config, now) > 0) {
     return "trial";
