@@ -1,7 +1,9 @@
 ---
 // Sayfanın sonu: en altta kaydırmaya devam edilince sayfa hafifçe yukarı kayar, arkadaki bu katman (logo, dinleyen ses
 // dalgası, kısa bir teşekkür) görünür; bırakınca sayfa yaylanarak yerine döner. Katman sayfanın arkasında sabittir ve
-// yalnızca çekilirken görünür; ekran okuyucudan gizlidir (süs). Davranış: src/client/pull-reveal.ts.
+// yalnızca çekilirken görünür; ekran okuyucudan gizlidir (süs). Zemin durgun pastel gökkuşağıdır (şeftali → gül →
+// lavanta → gök; film kapakları gibi koyu temada da açık kalır, yazı koyu); yalnızca dalga çubukları dönüşümle oynar.
+// Davranış: src/client/pull-reveal.ts.
 import Logo from "./Logo.astro";
 import Waveform from "./Waveform.astro";
 import { copy, type CommonCopy } from "../copy";
@@ -9,7 +11,7 @@ import { copy, type CommonCopy } from "../copy";
 const text: CommonCopy = copy.common;
 ---
 
-<div class="pull-reveal" aria-hidden="true">
+<div id="pull-reveal" class="pull-reveal" aria-hidden="true">
   <div class="pull-reveal__inner">
     <Logo size={32} />
     <Waveform seed={text.footer.pullThanks} width={160} height={30} class="pull-reveal__wave" />
@@ -33,9 +35,25 @@ const text: CommonCopy = copy.common;
     justify-items: center;
     align-content: end;
     padding-bottom: 22px;
-    background: var(--soft);
+    /* Durgun gradyan: hiç hareket etmez (bulanıklık filtresi yok). Ortadaki yumuşak ışık yazıyı okunur kılar. */
+    background-color: #f6d3c4;
+    background-image:
+      radial-gradient(ellipse 46% 70% at 50% 78%, rgb(255 248 240 / 0.85) 0%, rgb(255 248 240 / 0.35) 55%, transparent 100%),
+      linear-gradient(100deg, #f7c9b2 0%, #f4bcc6 32%, #dac6ee 66%, #bfd4f4 100%);
+    color: #2e2622;
     pointer-events: none;
     visibility: hidden;
+  }
+
+  /* Film kapaklarının ince greni (durgun döşeme). */
+  .pull-reveal::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("/grain.png");
+    background-size: 180px 180px;
+    mix-blend-mode: overlay;
+    opacity: 0.45;
   }
 
   :global(html.is-pulling) .pull-reveal,
@@ -45,6 +63,7 @@ const text: CommonCopy = copy.common;
 
   /* Çekme oranı `--pull` (0–1): içerik çekildikçe belirir ve büyür. */
   .pull-reveal__inner {
+    position: relative;
     display: grid;
     justify-items: center;
     gap: 10px;
@@ -59,7 +78,8 @@ const text: CommonCopy = copy.common;
   }
 
   .pull-reveal__inner :global(.pull-reveal__wave) {
-    color: var(--muted);
+    color: #6b4b40;
+    opacity: 0.7;
   }
 
   /* Dalga çubukları yalnızca çekilirken "dinler" (yalnızca dönüşüm; bulanık katman yok). */
@@ -94,7 +114,7 @@ const text: CommonCopy = copy.common;
     font-size: 0.9375rem;
     font-weight: 500;
     letter-spacing: -0.01em;
-    color: var(--muted);
+    color: #2e2622;
   }
 
   @media (prefers-reduced-motion: reduce) {
