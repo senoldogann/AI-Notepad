@@ -4,12 +4,13 @@ import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
 import type { Env } from "./env";
 import type { Platform } from "./platform";
 
-/** Üretim platformu: gerçek fetch, saat ve Apple App Attestation kökü. */
+/** Üretim platformu: gerçek fetch, saat, Apple App Attestation kökü ve Worker örneği ömrünce JWKS önbelleği. */
 const platform: Platform = {
   fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => fetch(input, init),
   now: (): Date => new Date(),
   appAttestRootPem: appleAppAttestationRootPem,
   retryBaseDelayMs: 300,
+  jwksCache: new Map(),
 };
 
 export default {

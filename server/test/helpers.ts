@@ -59,6 +59,7 @@ export async function createHarness(rootPem: string): Promise<Harness> {
     now: (): Date => new Date(clock.nowMs),
     appAttestRootPem: rootPem,
     retryBaseDelayMs: 0,
+    jwksCache: new Map(),
   };
   const harness: Harness = {
     clock,

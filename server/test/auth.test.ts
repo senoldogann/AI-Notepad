@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
+import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
-import { appleIssuer } from "../src/auth/apple";
+import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
 import { googleJwksUrl } from "../src/auth/google";
+import { jwksCacheTtlMs } from "../src/auth/identityToken";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import {
   type AppleTokenFields,
@@ -96,6 +98,38 @@ describe("Apple ile giriş", () => {
     await expectError(response, 502, "upstream_unavailable");
     expect(calls).toBe(3);
     expect(harness.outbound.length - original).toBe(3);
+  });
+
+  it("Apple anahtarları önbellekte tutulur; bilinmeyen kid (anahtar dönüşü) ve süresi dolan önbellek yeniden alınır", async () => {
+    const harness: Harness = await defaultHarness();
+    const jwksCalls = (): number => harness.outbound.filter((request: Request): boolean => request.url === appleJwksUrl).length;
+    await signIn(harness);
+    await signIn(harness);
+    expect(jwksCalls()).toBe(1);
+
+    // Apple yeni bir anahtara geçti: jetonun kid'i önbellekte yok.
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const rotated: JWK = { ...(await exportJWK(publicKey)), kid: "test-apple-key-2", alg: "RS256", use: "sig" };
+    const original: JWK[] = harness.platform.jwksCache.get(appleJwksUrl)?.keys.keys ?? [];
+    harness.stub(appleJwksUrl, async (): Promise<Response> => Response.json({ keys: [...original, rotated] }));
+    const nonce: string = randomToken(24);
+    const issuedAt: number = Math.floor(harness.clock.nowMs / 1000);
+    const identityToken: string = await new SignJWT({ nonce: await sha256Hex(nonce) })
+      .setProtectedHeader({ alg: "RS256", kid: "test-apple-key-2" })
+      .setIssuer(appleIssuer)
+      .setAudience(clientId)
+      .setSubject(`apple-${randomId()}`)
+      .setIssuedAt(issuedAt)
+      .setExpirationTime(issuedAt + 600)
+      .sign(privateKey);
+    expect((await harness.call(req("POST", "/v1/auth/apple", { json: { identityToken, nonce } }))).status).toBe(200);
+    expect(jwksCalls()).toBe(2);
+    await signIn(harness);
+    expect(jwksCalls()).toBe(2);
+
+    harness.clock.nowMs += jwksCacheTtlMs;
+    await signIn(harness);
+    expect(jwksCalls()).toBe(3);
   });
 
   it("giriş uçları IP başına hız sınırlıdır", async () => {
