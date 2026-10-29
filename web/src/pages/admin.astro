@@ -1,11 +1,14 @@
 ---
 // Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): özet kutuları, son 30
 // günün grafikleri ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur (src/client/admin.ts).
+// Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve yalnızca sunucu yönetici
+// erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca nötr bir yükleme satırı
+// görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart "sayfa bulunamadı" görünümü.
 import Base from "../layouts/Base.astro";
 import Icon from "../components/Icon.astro";
+import NotFound from "../components/NotFound.astro";
 import { type AdminCopy, copy } from "../copy";
 import type { IconName } from "../lib/icons";
-import { routes } from "../routes";
 
 const text: AdminCopy = copy.admin;
 
@@ -69,7 +72,18 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
 ---
 
 <Base page="admin" meta={text.meta} indexed={false}>
-  <section class="page admin" id="admin">
+  <div id="admin-not-found" hidden data-title={copy.notFound.meta.title}>
+    <NotFound />
+  </div>
+
+  <section class="page admin" id="admin" data-title={text.documentTitle}>
+    <p id="admin-loading" class="muted admin__loading" role="status">{text.loading}</p>
+    <p id="admin-error" class="notice notice--error hidden" role="alert"></p>
+    <div id="admin-mount" class="admin__mount"></div>
+  </section>
+
+  {/* Panel: yönetici erişimi doğrulanınca `#admin-mount` içine kopyalanır (admin.ts). */}
+  <template id="admin-template">
     <div class="admin__head">
       <div>
         <h1 class="title-l">{text.title}</h1>
@@ -81,23 +95,7 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
       </button>
     </div>
 
-    <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
-    <p id="admin-error" class="notice notice--error hidden" role="alert"></p>
-    <p id="admin-loading" class="muted" role="status">{text.loading}</p>
-
-    <div id="admin-signed-out" class="card state hidden" role="status">
-      <h2 class="title-m">{text.signedOutTitle}</h2>
-      <p class="muted">{text.signedOutText}</p>
-      <a class="button button--primary" href={routes.signIn}>{copy.common.nav.signIn}</a>
-    </div>
-
-    <div id="admin-forbidden" class="card state hidden" role="alert">
-      <h2 class="title-m">{text.forbiddenTitle}</h2>
-      <p class="muted">{text.forbiddenText}</p>
-      <code id="admin-identity" class="identity"></code>
-    </div>
-
-    <div id="admin-content" class="admin__content hidden">
+    <div id="admin-content" class="admin__content">
       <div class="kpi-groups">
         {
           groups.map((group: KpiGroup) => (
@@ -204,7 +202,7 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
         </div>
       </section>
     </div>
-  </section>
+  </template>
 </Base>
 
 <script>
@@ -231,24 +229,18 @@ const tabs: readonly { readonly kind: string; readonly label: string; readonly i
     gap: clamp(32px, 4vw, 48px);
   }
 
-  .state {
+  /* Panel eklenince yükleme satırı gizlenir; panel kendi aralıklarıyla akar. */
+  .admin__mount {
     display: grid;
-    gap: 12px;
-    justify-items: start;
-    max-width: 40rem;
+    gap: 20px;
   }
 
-  .identity {
-    display: block;
-    max-width: 100%;
-    padding: 10px 14px;
-    border-radius: var(--radius-s);
-    background: var(--soft);
-    border: 1px solid var(--line);
-    font-family: var(--mono);
-    font-size: 0.875rem;
-    overflow-wrap: anywhere;
-    user-select: all;
+  .admin__mount:empty {
+    display: none;
+  }
+
+  .admin__loading {
+    min-height: 40vh;
   }
 
   .section-title {

@@ -1,6 +1,8 @@
 // Yönetim paneli: özet kutuları, son 30 günün çubuk grafikleri (satır içi SVG, kütüphanesiz; her grafiğin metin özeti
-// var) ve bildirim kutusu (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme). Oturum
-// yoksa "önce giriş yap", sunucu 403 `forbidden` dönerse "yetkisiz" ve sunucunun bildirdiği giriş kimliği gösterilir.
+// var) ve bildirim kutusu (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme). Panel
+// yalnızca `/v1/admin/stats` başarılı olunca şablondan eklenir; oturum yoksa ya da sunucu 403 (veya yenilemesi
+// başarısız 401) dönerse standart "sayfa bulunamadı" görünümü gösterilir, girişe yönlendirilmez (panelin varlığı
+// belli olmaz).
 import { ApiRequestError } from "./api";
 import {
   type AdminStats,
@@ -17,7 +19,7 @@ import {
   setReportStatus,
 } from "./admin-api";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
-import { element, errorText, hideNotice, showNotice } from "./dom";
+import { MissingElementError, dataValue, element, errorText, hideNotice, showNotice } from "./dom";
 import { SignedOutError, hasSession } from "./session";
 import { siteLocale } from "../config";
 
@@ -281,29 +283,50 @@ function clearDetail(): void {
   element("detail-empty", HTMLElement).classList.remove("hidden");
 }
 
-/** Oturum yok, yetki yok ya da başka hata: uygun durumu gösterir. */
+/** Oturum yok (yenileme de başarısız) ya da sunucu yönetici erişimini reddetti (403). Saf fonksiyondur. */
+function isAccessDenied(error: unknown): boolean {
+  return error instanceof SignedOutError || (error instanceof ApiRequestError && (error.status === 403 || error.status === 401));
+}
+
+/** Panelin yerine standart "sayfa bulunamadı" görünümünü koyar (panel varsa kaldırılır). */
+function showNotFound(): void {
+  const notFound: HTMLElement = element("admin-not-found", HTMLElement);
+  element("admin", HTMLElement).remove();
+  notFound.hidden = false;
+  document.title = dataValue(notFound, "title");
+}
+
+/** Erişim yoksa "sayfa bulunamadı"; başka hatada (ağ, sunucu) nötr bir bildirim. */
 function showFailure(error: unknown): void {
+  if (isAccessDenied(error)) {
+    showNotFound();
+    return;
+  }
   element("admin-loading", HTMLElement).classList.add("hidden");
-  if (error instanceof SignedOutError) {
-    element("admin-content", HTMLElement).classList.add("hidden");
-    element("admin-signed-out", HTMLElement).classList.remove("hidden");
-    return;
-  }
-  if (error instanceof ApiRequestError && error.status === 403) {
-    element("admin-content", HTMLElement).classList.add("hidden");
-    element("admin-identity", HTMLElement).textContent = error.identity ?? error.code;
-    element("admin-forbidden", HTMLElement).classList.remove("hidden");
-    return;
-  }
   showNotice(element("admin-error", HTMLElement), errorText(error, text));
+}
+
+/** Panel şablonunu sayfaya ekler ve sekme başlığını panelinkiyle değiştirir (erişim doğrulandıktan sonra). */
+function mountDashboard(): void {
+  const root: HTMLElement = element("admin", HTMLElement);
+  const template: HTMLTemplateElement | null = document.querySelector<HTMLTemplateElement>("template#admin-template");
+  if (template === null) {
+    throw new MissingElementError("template#admin-template bulunamadı.");
+  }
+  element("admin-mount", HTMLElement).replaceChildren(template.content.cloneNode(true));
+  element("admin-loading", HTMLElement).classList.add("hidden");
+  document.title = dataValue(root, "title");
 }
 
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
   if (!hasSession()) {
-    showFailure(new SignedOutError("Bu sekmede oturum yok."));
+    showNotFound();
     return;
   }
+  // Önce erişim doğrulanır; başarısızsa (403, oturum yok) panel hiç eklenmez.
+  const firstStats: AdminStats = await fetchStats();
+  mountDashboard();
   const notice: HTMLElement = element("admin-error", HTMLElement);
   const state: InboxState = { kind: "feedback", status: "open", items: [], nextBefore: null, selectedId: null };
 
@@ -330,8 +353,6 @@ async function main(): Promise<void> {
     hideNotice(notice);
     const [stats] = await Promise.all([fetchStats(), loadList(false)]);
     renderStats(stats);
-    element("admin-loading", HTMLElement).classList.add("hidden");
-    element("admin-content", HTMLElement).classList.remove("hidden");
   };
 
   const kinds: readonly ReportKind[] = ["feedback", "crash", "contact"];
@@ -389,7 +410,8 @@ async function main(): Promise<void> {
       });
   });
 
-  await refresh();
+  renderStats(firstStats);
+  await loadList(false);
 }
 
 main().catch(showFailure);
