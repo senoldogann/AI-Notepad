@@ -20,7 +20,7 @@ import {
 } from "./admin-api";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
 import { MissingElementError, dataValue, element, errorText, hideNotice, showNotice } from "./dom";
-import { SignedOutError, hasSession } from "./session";
+import { SignedOutError, claimTabSession, hasSession } from "./session";
 import { siteLocale } from "../config";
 
 const svgNamespace: string = "http://www.w3.org/2000/svg";
@@ -325,6 +325,7 @@ function mountDashboard(): void {
 
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
+  await claimTabSession();
   if (!hasSession()) {
     showNotFound();
     return;

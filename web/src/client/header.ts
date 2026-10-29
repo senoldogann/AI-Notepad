@@ -1,7 +1,8 @@
-// Üst çubuk: sekmede oturum varsa "Giriş yap" bağlantıları hesap sayfasına gider ve "Hesap" yazar. Dar ekrandaki menü
-// (`<details class="menu">`) Escape'le ya da dışına tıklanınca kapanır.
+// Üst çubuk: sekmenin oturumu sahiplenilir (kopya sekme, bkz. session.ts); oturum varsa "Giriş yap" bağlantıları
+// hesap sayfasına gider ve "Hesap" yazar. Dar ekrandaki menü (`<details class="menu">`) Escape'le ya da dışına
+// tıklanınca kapanır.
 import { MissingElementError, dataValue, element } from "./dom";
-import { hasSession } from "./session";
+import { claimTabSession, hasSession } from "./session";
 
 /** Oturum varsa giriş bağlantılarını hesap bağlantısına çevirir. */
 function linkAccount(header: HTMLElement): void {
@@ -40,11 +41,14 @@ function closeMenuOnDismiss(header: HTMLElement): void {
   });
 }
 
-/** Davranışları bağlar. */
-function main(): void {
+/** Davranışları bağlar; hesap bağlantısı sekmenin oturumu sahiplenildikten sonra (kopya sekmede oturum silinir). */
+async function main(): Promise<void> {
   const header: HTMLElement = element("site-header", HTMLElement);
-  linkAccount(header);
   closeMenuOnDismiss(header);
+  await claimTabSession();
+  linkAccount(header);
 }
 
-main();
+main().catch((error: unknown): void => {
+  console.error("header_failed", { error: error instanceof Error ? error.message : String(error) });
+});
