@@ -51,6 +51,12 @@ struct PanelHost: View {
                     ConsentBanner { withAnimation(.smooth(duration: 0.25)) { model.consentReminderVisible = false } }
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                #if HOSTED_EDITION
+                // Aylık sınıra az kaldığı için kısaltılmış toplantı: kalan dakika.
+                if model.isRecording, let deadline = model.shortMeetingDeadline {
+                    HostedMeetingLimitStrip(deadline: deadline)
+                }
+                #endif
             TranscriptPanel(
                 state: model.viewState,
                 actions: PanelActions(

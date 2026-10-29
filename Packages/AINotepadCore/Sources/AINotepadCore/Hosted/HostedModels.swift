@@ -73,6 +73,10 @@ public struct HostedEntitlements: Decodable, Sendable, Equatable {
     public let trialEndsAt: Date?
     public let monthlyHoursUsed: Double
     public let monthlyHoursCap: Double
+    /// Toplantı dışı yapay zekâ payının (Sor, notu yeniden yazma…) bu ay kullanılan ve toplam jetonu; alanı bilmeyen
+    /// sunucuda nil (gösterge gizlenir).
+    public let accountTokensUsed: Int?
+    public let accountTokensCap: Int?
     public let subscription: HostedSubscription?
 }
 

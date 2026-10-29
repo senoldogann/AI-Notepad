@@ -71,6 +71,7 @@ private enum SettingsSection: CaseIterable {
 /// satır (solda başlık ve açıklama, sağda denetim).
 struct SettingsPage: View {
     let model: AppModel
+    let router: MainWindowRouter
     let shortcuts: ShortcutController
     let updater: AppUpdater
     let crashReports: CrashReportCenter
@@ -87,6 +88,17 @@ struct SettingsPage: View {
         "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet."
         #endif
     }
+
+    #if HOSTED_EDITION
+    /// İstenmişse Hesap sekmesini seçer ve isteği sıfırlar.
+    private func selectAccountIfRequested() {
+        guard router.opensAccountSettings else {
+            return
+        }
+        router.opensAccountSettings = false
+        section = .account
+    }
+    #endif
 
     var body: some View {
         ScrollView {
@@ -119,6 +131,11 @@ struct SettingsPage: View {
                 .id(section)
                 .transition(.opacity)
                 .padding(.top, 8)
+                #if HOSTED_EDITION
+                // Kullanım göstergesi ya da bildirimi Ayarlar'ı Hesap sekmesinde açar.
+                .onAppear { selectAccountIfRequested() }
+                .onChange(of: router.opensAccountSettings) { (_: Bool, _: Bool) in selectAccountIfRequested() }
+                #endif
             }
             .animation(.smooth(duration: 0.2), value: section)
             // Geniş pencerede form satırları ekran boyu uzamasın; kaydırma alanı tam genişlikte.

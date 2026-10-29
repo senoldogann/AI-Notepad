@@ -192,6 +192,11 @@ final class AppModel {
     #if HOSTED_EDITION
     /// Abonelik: toplantının süre sınırını izleyen görev (bkz. `watchRecordingLimit`).
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
+    #if HOSTED_EDITION
+    /// Olağandan kısa toplantının bitiş anı (aylık sınıra az kaldı); kayıt panelinde kalan dakika gösterilir. Kısa
+    /// değilse ya da kayıt yoksa nil.
+    private(set) var shortMeetingDeadline: Date?
+    #endif
     #endif
 
     @ObservationIgnored private var engine: WhisperKitEngine?
@@ -637,6 +642,13 @@ final class AppModel {
         guard !isRecording, !isStarting, isReadyToRecord else {
             return
         }
+        #if HOSTED_EDITION
+        // Giriş kapısı (ikinci savunma; kayıt yolları `toggleRecordingFlow`'da da kapılı): oturum yoksa kayıt başlamaz.
+        guard !HostedAccount.shared.requiresSignIn else {
+            Self.logger.info("Giriş yapılmadan kayıt istendi, başlatılmadı")
+            return
+        }
+        #endif
         isStarting = true
         defer { isStarting = false }
         // Motor bir kez okunur: izin pencereleri açıkken ayar değişse de bulut/yerel kararı ile kaydın motoru aynı kalır
@@ -756,9 +768,13 @@ final class AppModel {
             let requestedAt: Date = Date()
             let started: HostedStartedMeeting = try await HostedAccount.shared.startMeeting()
             meetingDeadline = hostedRecordingDeadline(requestedAt: requestedAt, maxDurationMinutes: started.maxDurationMinutes, serverEndsAt: started.expiresAt)
+            // Aylık sınıra az kaldıysa toplantı olağandan kısadır: kalan dakika kayıt panelinde görünür.
+            shortMeetingDeadline = isShortenedHostedMeeting(started: started) ? meetingDeadline : nil
         } catch {
             Self.logger.error("Toplantı oturumu açılamadı, kayıt başlatılmadı, hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            // Ret aylık sınırdan ya da denemenin bitmesinden olabilir: göstergeler ve bildirim güncellensin.
+            Task { await HostedAccount.shared.refresh() }
             microphone.stop()
             systemAudio.stop()
             return
@@ -1035,6 +1051,7 @@ final class AppModel {
         #if HOSTED_EDITION
         recordingLimitTask?.cancel()
         recordingLimitTask = nil
+        shortMeetingDeadline = nil
         // Abonelik: toplantı oturumu kapanır; not ve son geçiş sunucunun ek süresinde aynı oturumla sürer.
         do {
             try await HostedAccount.shared.endMeeting()
@@ -1144,6 +1161,10 @@ final class AppModel {
             processingMeetingIDs.remove(record.id)
             processingSteps[record.id] = nil
             allowSleep(meetingID: record.id)
+            #if HOSTED_EDITION
+            // Son geçişin ses süresi aylık kullanıma sayılır: işleme bitince göstergeler yenilenir.
+            Task { await HostedAccount.shared.refresh() }
+            #endif
             autoSendToDestinations(record: saved)
             if saved.status == .done {
                 await cloud.moveFinishedMeetings(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
