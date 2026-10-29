@@ -484,7 +484,9 @@ public struct TranscriptPanel: View {
             }
             .onChange(of: transcriptVersion) { (_: TranscriptVersion, _: TranscriptVersion) in
                 if isFollowing {
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(transcriptBottomID, anchor: .bottom) }
+                    // Animasyonsuz: metin konuşurken saniyede birkaç kez güncellenir; her güncellemede animasyonlu kaydırma
+                    // kayıt boyunca hiç bitmeyen bir animasyon olup paneli her karede çizdiriyordu (işlemci).
+                    proxy.scrollTo(transcriptBottomID, anchor: .bottom)
                 } else {
                     hasUnseenText = true
                 }
