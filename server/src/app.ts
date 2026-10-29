@@ -334,12 +334,15 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
   if (path === "/v1/reports" && method === "POST") {
     await enforceLimit(env.REPORT_IP_LIMITER, `ip:${ipKey}`);
-    // Jeton isteğe bağlıdır; gönderildiyse geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
+    // Geri bildirim ve çökme raporu hesap ister (jetonsuz 401); sitedeki iletişim formunda jeton isteğe bağlıdır,
+    // Turnstile zorunludur. Gönderilen jeton geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
     const token: string | null = optionalBearerToken(request);
     const user: AuthedUser | null = token === null ? null : await authenticate(db, config, token, now);
     const body: ReportInput = await readJsonBody(request, reportSchema, reportBodyMaxBytes);
     if (body.kind === "contact") {
       await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
+    } else if (user === null) {
+      throw new ApiError("unauthorized", "Geri bildirim ve çökme raporu için giriş yapmış olmalısın.");
     }
     await createReport(db, config, body, user === null ? null : user.userId, now);
     return jsonResponse(202, {});

@@ -20,7 +20,7 @@
     }
   ],
   // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
-  // çökme, iletişim) IP başına dakikada 5; ayrıca tüm kullanıcılar için günlük `REPORTS_PER_DAY`.
+  // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
@@ -42,8 +42,10 @@
     "DMG_URL": "https://github.com/senoldogann/AI-Notepad/releases/latest/download/AI-Notepad.dmg",
     // Yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe fiyatıyla elle aynı tutulur).
     "PRICE_USD_MONTHLY": "5.99",
-    // Tüm kullanıcılar için günde en çok kabul edilen rapor; aşılınca `429 daily_cap_reached`.
-    "REPORTS_PER_DAY": "500",
+    // Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günde en çok saklanan bayt; aşılınca
+    // `429 daily_cap_reached`. 2 MB ≈ 30 en büyük (64 KB) çökme raporu ya da ~400 uzun geri bildirim. Üst sınır:
+    // 3 tür × 2 MB × 180 günlük saklama ≈ 1,1 GB.
+    "REPORT_BYTES_PER_DAY": "2000000",
     "APP_ATTEST_POLICY": "optional",
     "APP_ATTEST_ENVIRONMENT": "development",
     "APP_ATTEST_APP_IDS": "TEAMID0000.com.senoldogan.AINotepad.hosted",
@@ -146,7 +148,8 @@
         "ADMIN_IDENTITIES": "google:101383806107899312129",
         "DMG_URL": "https://github.com/senoldogann/gistsmith-releases/releases/latest/download/Gistsmith.dmg",
         "PRICE_USD_MONTHLY": "5.99",
-        "REPORTS_PER_DAY": "500",
+        // Bkz. üstteki geliştirme `vars` açıklaması.
+        "REPORT_BYTES_PER_DAY": "2000000",
         "APP_ATTEST_POLICY": "optional",
         "APP_ATTEST_ENVIRONMENT": "production",
         "APP_ATTEST_APP_IDS": "79DZ4AA4DW.com.senoldogan.AINotepad.hosted",

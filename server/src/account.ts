@@ -26,8 +26,8 @@ interface StoredIdentity {
  *   kaldırılır (cihaz başına deneme sayacı App Attest anahtarı başınadır ve yeni anahtar her zaman üretilebilir; bu,
  *   o sınırı mevcut durumdan daha fazla zayıflatmaz).
  * Hesaba bağlı raporlar (geri bildirim, çökme) bağı kaldırılarak değil, silinerek gider: serbest metin, e-posta ve
- * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu,
- * anonim geri bildirim) hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
+ * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu)
+ * hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
  * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {

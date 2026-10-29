@@ -99,11 +99,10 @@ describe("DELETE /v1/me (hesap silme)", () => {
     )
       .bind(otherMeeting, other.userId, deviceId)
       .run();
-    // Hesabın raporları silinir; başka hesabın ve jetonsuz gönderilmiş rapor kalır.
+    // Hesabın raporları silinir; başka hesabınki kalır.
     const feedback = { kind: "feedback", message: "Hesabımın geri bildirimi", email: "kisi@ornek.test" };
     expect((await harness.call(req("POST", "/v1/reports", { token: session.accessToken, json: feedback }))).status).toBe(202);
     expect((await harness.call(req("POST", "/v1/reports", { token: other.accessToken, json: feedback }))).status).toBe(202);
-    expect((await harness.call(req("POST", "/v1/reports", { json: feedback }))).status).toBe(202);
     await grantSubscription(userId, "active", harness.clock.nowMs + 20 * 86_400_000);
     const stored = await env.DB.prepare("SELECT stripe_subscription_id, stripe_customer_id FROM subscriptions WHERE user_id = ?")
       .bind(userId)
@@ -127,7 +126,7 @@ describe("DELETE /v1/me (hesap silme)", () => {
     expect(stripe.canceled).toEqual([stored?.stripe_subscription_id]);
     expect(Object.values(await userRowCounts(userId)).every((count: number): boolean => count === 0)).toBe(true);
     const remainingReports = await env.DB.prepare("SELECT user_id FROM reports ORDER BY user_id").all<{ user_id: string | null }>();
-    expect(remainingReports.results).toEqual([{ user_id: null }, { user_id: other.userId }]);
+    expect(remainingReports.results).toEqual([{ user_id: other.userId }]);
     const otherRow = await env.DB.prepare("SELECT device_id FROM meeting_sessions WHERE id = ?").bind(otherMeeting).first<{ device_id: string | null }>();
     expect(otherRow).toEqual({ device_id: null });
     const anonymous = await env.DB.prepare("SELECT COUNT(*) AS count, SUM(accounts) AS accounts FROM deleted_trial_starts").first<{ count: number; accounts: number }>();

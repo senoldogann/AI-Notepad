@@ -14,7 +14,7 @@ export interface Env {
   readonly ADMIN_IDENTITIES: string;
   readonly DMG_URL: string;
   readonly PRICE_USD_MONTHLY: string;
-  readonly REPORTS_PER_DAY: string;
+  readonly REPORT_BYTES_PER_DAY: string;
   readonly APP_ATTEST_POLICY: string;
   readonly APP_ATTEST_ENVIRONMENT: string;
   readonly APP_ATTEST_APP_IDS: string;

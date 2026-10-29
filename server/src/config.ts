@@ -41,8 +41,8 @@ export interface Config {
   readonly dmgUrl: string;
   /** Aylık abonelik fiyatı (USD); yalnızca yönetici istatistiğindeki MRR tahmini için (Stripe çağrılmaz). */
   readonly priceUsdMonthly: number;
-  /** Tüm kullanıcılar için günde en çok kabul edilen rapor (geri bildirim, çökme, iletişim). */
-  readonly reportsPerDay: number;
+  /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
+  readonly reportBytesPerDay: number;
   readonly attest: {
     readonly policy: AttestPolicy;
     readonly environment: AttestEnvironment;
@@ -185,7 +185,7 @@ const envSchema = z.object({
   ADMIN_IDENTITIES: adminIdentityList,
   DMG_URL: z.url({ protocol: /^https$/ }),
   PRICE_USD_MONTHLY: positiveNumber,
-  REPORTS_PER_DAY: positiveInt,
+  REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
   APP_ATTEST_APP_IDS: csv,
@@ -269,7 +269,7 @@ export function parseConfig(env: Env): Config {
     adminIdentities: value.ADMIN_IDENTITIES,
     dmgUrl: value.DMG_URL,
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
-    reportsPerDay: value.REPORTS_PER_DAY,
+    reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,
       environment: value.APP_ATTEST_ENVIRONMENT,
