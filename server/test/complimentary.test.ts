@@ -45,7 +45,7 @@ interface DetailBody {
 interface MeBody {
   readonly userId: string;
   readonly plan: string;
-  readonly subscription: { readonly status: string; readonly plan: string | null; readonly access: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null } | null;
+  readonly subscription: { readonly status: string; readonly plan: string | null; readonly access: string; readonly currentPeriodEnd: string; readonly cancelAt: string | null; readonly complimentary: boolean } | null;
   readonly [key: string]: unknown;
 }
 
@@ -62,7 +62,7 @@ interface SubscriptionRow {
 
 /** İstatistiklerin abonelik ve dönüşüm alanları. */
 interface StatsBody {
-  readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; monthly: number; yearly: number; mrrUsd: number; complimentary: number };
+  readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; monthly: number; yearly: number; mrrUsd: number; complimentary: number; freeInviteMonth: number };
   readonly conversion: { trialStarted: number; converted: number; subscribedWithoutTrial: number };
   readonly churn: { canceledLast30Days: number };
 }
@@ -163,7 +163,7 @@ describe("ücretsiz tam erişim", () => {
     expect(await subscriptionRow(target.userId)).toBeNull();
   });
 
-  it("haklar ödeyen aylık abonenin haklarıyla aynıdır; /v1/me yalnızca bilinen alanları ve aylık planı gönderir; toplantı abonelik toplantısıdır", async () => {
+  it("haklar ödeyen aylık abonenin haklarıyla aynıdır; /v1/me aylık planı ve complimentary: true gönderir; toplantı abonelik toplantısıdır", async () => {
     const harness: Harness = await defaultHarness();
     const { user } = await complimentaryUser(harness);
     const paying: Session = await signIn(harness);
@@ -175,9 +175,11 @@ describe("ücretsiz tam erişim", () => {
     expect(free.subscription).toMatchObject({ status: "active", plan: "monthly", access: "active", cancelAt: null });
     expect(Object.keys(free).sort()).toEqual(Object.keys(paid).sort());
     expect(Object.keys(free.subscription ?? {}).sort()).toEqual(Object.keys(paid.subscription ?? {}).sort());
-    expect(JSON.stringify(free)).not.toContain("compl");
-    // Dönem sonu ve hesap kimliği dışında her şey aynı.
-    expect({ ...free, userId: "", subscription: { ...free.subscription, currentPeriodEnd: "" } }).toEqual({
+    // Tek fark ücretsiz erişim işareti: uygulama planı yine aylık okur, site "Free access" yazar.
+    expect(free.subscription?.complimentary).toBe(true);
+    expect(paid.subscription?.complimentary).toBe(false);
+    // Dönem sonu, hesap kimliği ve işaret dışında her şey aynı.
+    expect({ ...free, userId: "", subscription: { ...free.subscription, currentPeriodEnd: "", complimentary: false } }).toEqual({
       ...paid,
       userId: "",
       subscription: { ...paid.subscription, currentPeriodEnd: "" },
@@ -203,11 +205,12 @@ describe("ücretsiz tam erişim", () => {
     expect(stripeRequests(harness)).toHaveLength(0);
   });
 
-  it("Portal ve Checkout Stripe'a gitmeden complimentary_subscription (409) döner; süresi bitince Checkout açılır", async () => {
+  it("Portal Stripe'a gitmeden sitedeki hesap sayfasını döner; Checkout complimentary_subscription (409); süresi bitince Checkout açılır", async () => {
     const harness: Harness = await defaultHarness();
     const { admin, user } = await complimentaryUser(harness);
-    const portal = await expectError(await harness.call(req("POST", "/v1/billing/portal", { token: user.accessToken })), 409, "complimentary_subscription");
-    expect(portal.error.message).toBe("This account has free access; there is nothing to manage.");
+    const portal: Response = await harness.call(req("POST", "/v1/billing/portal", { token: user.accessToken }));
+    expect(portal.status).toBe(200);
+    expect((await portal.json<{ url: string }>()).url).toBe("http://localhost:8788/account");
     await expectError(await harness.call(req("POST", "/v1/billing/checkout", { token: user.accessToken, json: { plan: "monthly" } })), 409, "complimentary_subscription");
     expect(stripeRequests(harness)).toHaveLength(0);
 

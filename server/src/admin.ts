@@ -53,6 +53,11 @@ export interface AdminStats {
     readonly mrrUsd: number;
     /** Süren ücretsiz erişim (`complimentary.ts`); yukarıdaki sayılara ve gelire girmez. */
     readonly complimentary: number;
+    /**
+     * Davetle gelip ilk ayı ücretsiz olan (henüz ücretli faturası ödenmemiş) aylık aboneler. `active`'e girer, `monthly`'ye
+     * ve MRR'a girmez: o ay gelir yoktur.
+     */
+    readonly freeInviteMonth: number;
   };
   readonly referrals: ReferralStats;
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
@@ -206,6 +211,13 @@ const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 
 /** Stripe'tan faturalanan (ücretsiz erişim olmayan) abonelik satırı için SQL koşulu (`subscriptions s`). */
 const billedSubscriptionSql: string = "s.complimentary = 0";
 
+/**
+ * Abonelik (`s`) davetle açılmış ve ilk ücretli faturası henüz ödenmemiş mi (davet indirimiyle ücretsiz ilk ay): davet
+ * satırı `joined` ve uygun fatura yok. Ödül, iade ya da itirazla satır başka duruma geçince bu koşul düşer.
+ */
+const freeInviteMonthSql: string =
+  "EXISTS (SELECT 1 FROM referral_redemptions r WHERE r.stripe_subscription_id = s.stripe_subscription_id AND r.status = 'joined' AND r.qualifying_invoice_id IS NULL)";
+
 interface SubscriptionCounts {
   readonly active: number;
   readonly grace: number;
@@ -214,6 +226,7 @@ interface SubscriptionCounts {
   readonly monthly: number;
   readonly yearly: number;
   readonly complimentary: number;
+  readonly freeInviteMonth: number;
 }
 
 interface DayValueRow {
@@ -313,7 +326,9 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  *   iptal edilmiş (`cancel_at` dolu, dönem sonunda biter); `canceledTotal`: durumu `canceled` olan satırlar (hesabı
  *   silinenler sayılmaz). Ücretsiz erişim (`complimentary.ts`) bunlara, plan sayılarına, MRR'a, dönüşüme ve kayba
  *   girmez; süren ücretsiz erişim ayrıca `complimentary`'de sayılır.
- * - `monthly`, `yearly`: yenilenecek ödenmiş abonelikler (`active` ve iptal edilmemiş) plan başına.
+ * - `monthly`, `yearly`: yenilenecek ödenmiş abonelikler (`active` ve iptal edilmemiş) plan başına. Davetle gelip
+ *   ücretsiz ilk ayındaki aylık abone `monthly`'ye girmez, `freeInviteMonth`'ta sayılır (`freeInviteMonthSql`); yıllıkta
+ *   davet indirimi ilk yılda bir kez 5,99 $ olduğundan yıllık abone `yearly`'de kalır.
  * - `mrrUsd` = `monthly` × `PRICE_USD_MONTHLY` + `yearly` × `PRICE_USD_YEARLY` / 12 (`monthlyRecurringRevenueUsd`).
  *   Ödemesi başarısız (`grace`), iptal edilmiş ve planı tanınmayan abonelikler sayılmaz; vergi, davet indirimleri ve
  *   Stripe ücreti düşülmez.
@@ -384,9 +399,10 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
            COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
            COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
            COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' THEN 1 ELSE 0 END), 0) AS monthly,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' AND NOT ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS monthly,
            COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly,
-           COALESCE(SUM(CASE WHEN s.complimentary = 1 AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS complimentary
+           COALESCE(SUM(CASE WHEN s.complimentary = 1 AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS complimentary,
+           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.plan = 'monthly' AND ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS freeInviteMonth
          FROM subscriptions s`,
       )
       .bind(nowMs, config.pastDueGraceMs)
@@ -480,7 +496,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
   const subscriptionByDay: number[] = valuesByDay(days, kindDayMap(meetingRows.results, "subscription"));
   const providers: Map<string, number> = keyMap(providerRows.results);
   const openReports: Map<string, number> = keyMap(reportRows.results);
-  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0, complimentary: 0 };
+  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0, complimentary: 0, freeInviteMonth: 0 };
   const billingEvents: Map<string, number> = keyMap(billingRows.results);
   const monthly: MonthlyUsageRow = monthlyUsageRow ?? { audio_seconds: 0, tokens: 0, account_tokens: 0, near_cap: 0 };
 
@@ -505,6 +521,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       yearly: subscriptions.yearly,
       mrrUsd: monthlyRecurringRevenueUsd(subscriptions.monthly, subscriptions.yearly, config.priceUsdMonthly, config.priceUsdYearly),
       complimentary: subscriptions.complimentary,
+      freeInviteMonth: subscriptions.freeInviteMonth,
     },
     referrals: referralRow ?? { joined: 0, pending: 0, granted: 0, voided: 0 },
     meetings: {

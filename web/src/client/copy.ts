@@ -38,8 +38,11 @@ export interface ClientCopy {
   readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
   /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
   readonly referralStats: string;
+  /** Ücretsiz erişimli hesapta davet kartı: `{joined}`. */
+  readonly referralStatsComplimentary: string;
   /** `plan`: abonelik planı bilinmiyorsa (eski fiyat) `subscription`. */
-  readonly plan: { readonly trial: string; readonly subscription: string; readonly monthly: string; readonly yearly: string };
+  /** `complimentary`: yöneticinin verdiği ücretsiz erişim. */
+  readonly plan: { readonly trial: string; readonly subscription: string; readonly monthly: string; readonly yearly: string; readonly complimentary: string };
   /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
   /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
@@ -55,11 +58,14 @@ export interface ClientCopy {
   readonly subscriptionCanceling: string;
   readonly subscriptionGrace: string;
   readonly subscriptionEnded: string;
+  /** Ücretsiz erişim: ödeme ve yönetilecek bir şey yok. */
+  readonly subscriptionComplimentary: string;
   readonly pillActive: string;
   readonly pillCanceling: string;
   readonly pillGrace: string;
   readonly pillEnded: string;
   readonly pillTrial: string;
+  readonly pillComplimentary: string;
   readonly working: string;
   /** `{count}` ve `{max}` karakter sayısıyla değişir. */
   readonly characters: string;
@@ -76,7 +82,10 @@ export interface AdminClientCopy {
   readonly usersSub: string;
   /** `{count}`. */
   readonly trialsSub: string;
-  /** `{monthly}`, `{yearly}`, `{grace}`, `{ending}`, `{canceled}`, `{free}` (ücretsiz erişim; sayıya ve gelire girmez). */
+  /**
+   * `{monthly}`, `{yearly}`, `{invite}` (davetle ücretsiz ilk ay; MRR'a girmez), `{grace}`, `{ending}`, `{canceled}`,
+   * `{free}` (ücretsiz erişim; sayıya ve gelire girmez).
+   */
   readonly subscribersSub: string;
   /** Davet programı: `{joined}`, `{pending}`, `{granted}`, `{voided}`. */
   readonly referralsSub: string;
@@ -239,7 +248,8 @@ export const clientCopy: ClientCopy = {
     yearly: "Invite applied: $5.99 off your first year.",
   },
   referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
-  plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly` },
+  referralStatsComplimentary: "{joined} joined. Your friends still get their first month free; your account is already free, so the $5.99 rewards don't apply.",
+  plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly`, complimentary: "Free access" },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",
   trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
   trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
@@ -249,11 +259,13 @@ export const clientCopy: ClientCopy = {
   subscriptionCanceling: "Cancelled; you can use it until {date}. It won't renew.",
   subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
   subscriptionEnded: "Your subscription has ended.",
+  subscriptionComplimentary: "Full access, free of charge. Nothing to pay or manage.",
   pillActive: "Active",
   pillCanceling: "Ending",
   pillGrace: "Payment due",
   pillEnded: "Ended",
   pillTrial: "Trial",
+  pillComplimentary: "Free",
   working: "Working…",
   characters: "{count} / {max}",
   admin: {
@@ -261,9 +273,9 @@ export const clientCopy: ClientCopy = {
     downloadsSub: "{count} in the last 30 days",
     usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
     trialsSub: "{count} used up",
-    subscribersSub: "{monthly} monthly · {yearly} yearly · {grace} in grace · {ending} ending · {canceled} cancelled in total · {free} with free access, not counted",
+    subscribersSub: "{monthly} monthly · {yearly} yearly · {invite} in free invite month · {grace} in grace · {ending} ending · {canceled} cancelled in total · {free} with free access, not counted",
     referralsSub: "Invites: {joined} joined · {pending} waiting · {granted} rewarded · {voided} voided",
-    mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, taxes included",
+    mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, free invite months excluded, taxes included",
     stripeTest: "Stripe test mode",
     stripeLive: "Stripe live",
     elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",

@@ -460,13 +460,15 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
 }
 
 /**
- * Stripe Müşteri Portalı oturumu. Süren ücretsiz erişimde (`complimentary.ts`) yönetilecek bir şey yoktur:
- * `complimentary_subscription`, Stripe çağrılmaz. Müşteri yoksa `subscription_required`.
+ * Hesap yönetimi adresi. Süren ücretsiz erişimde (`complimentary.ts`) Stripe'ta yönetilecek bir şey yoktur: Stripe
+ * çağrılmaz, sitedeki hesap sayfası döner (orada "Free access" yazar). Yayındaki uygulama portal adresini yalnızca
+ * açar; hata kodu dönülseydi genel bir hata gösterirdi. Müşteri yoksa `subscription_required`.
  */
 export async function createPortal(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
   const current: SubscriptionState | null = await subscriptionState(db, userId);
   if (current !== null && current.complimentary && !isTerminalSubscription(current, platform.now())) {
-    throw complimentaryAccessError();
+    log("info", "portal_complimentary_account_page", { userId });
+    return `${config.siteOrigin}/account`;
   }
   const customer: string | null = await storedCustomerId(db, userId);
   if (customer === null) {
