@@ -32,11 +32,15 @@ export interface FakeStripe {
   readonly customerKeys: Map<string, string>;
   /** Fatura kimliği → ödenmiş ödeme niyetleri. */
   readonly invoicePayments: Map<string, string[]>;
+  /** Fatura kimliği → aboneliği ve ödenip ödenmediği. */
+  readonly invoices: Map<string, { subscription: string; paid: boolean }>;
   /** Oluşturulan iadeler (form) ve idempotency anahtarları. */
   readonly refundForms: URLSearchParams[];
   readonly refundKeys: string[];
-  /** Ödeme kimliği → iadelerinin üst verisindeki amaç (`purpose`). */
-  readonly chargeRefunds: Map<string, Array<string | null>>;
+  /** İade ve iptallerin sırası (`refund:<ödeme>`, `cancel:<abonelik>`). */
+  readonly operations: string[];
+  /** Doluysa iade isteği 500 döner (geçici Stripe hatası). */
+  failRefunds: boolean;
 }
 
 /** Form gövdesi. */
@@ -67,9 +71,11 @@ export function stubStripeApi(harness: Harness): FakeStripe {
     charges: new Map(),
     customerKeys: new Map(),
     invoicePayments: new Map(),
+    invoices: new Map(),
     refundForms: [],
     refundKeys: [],
-    chargeRefunds: new Map(),
+    operations: [],
+    failRefunds: false,
   };
   harness.stub("https://api.stripe.com/v1/", async (request: Request): Promise<Response> => {
     const url: URL = new URL(request.url);
@@ -87,30 +93,49 @@ export function stubStripeApi(harness: Harness): FakeStripe {
       return Response.json({ id, object: "customer" });
     }
     if (method === "GET" && path === "/v1/invoice_payments") {
-      const invoice: string = url.searchParams.get("invoice") ?? "";
-      const paid: object[] = (fake.invoicePayments.get(invoice) ?? []).map((intent: string): object => ({
-        id: `inpay_${intent}`,
-        object: "invoice_payment",
-        invoice,
-        status: "paid",
-        payment: { type: "payment_intent", payment_intent: intent },
-      }));
+      const byInvoice: string | null = url.searchParams.get("invoice");
+      const byIntent: string | null = url.searchParams.get("payment[payment_intent]");
+      const paid: object[] = [...fake.invoicePayments.entries()]
+        .filter(([invoice]: [string, string[]]): boolean => byInvoice === null || invoice === byInvoice)
+        .flatMap(([invoice, intents]: [string, string[]]): object[] =>
+          intents
+            .filter((intent: string): boolean => byIntent === null || intent === byIntent)
+            .map((intent: string): object => ({ id: `inpay_${intent}`, object: "invoice_payment", invoice, status: "paid", payment: { type: "payment_intent", payment_intent: intent } })),
+        );
       return list("/v1/invoice_payments", paid);
     }
-    if (method === "POST" && path === "/v1/refunds") {
-      fake.refundForms.push(await formOf(request));
-      fake.refundKeys.push(request.headers.get("idempotency-key") ?? "");
-      return Response.json({ id: `re_${randomToken(6)}`, object: "refund", status: "succeeded" });
+    const invoiceObject = (id: string, entry: { subscription: string; paid: boolean }): object => ({
+      id,
+      object: "invoice",
+      status: entry.paid ? "paid" : "open",
+      parent: { type: "subscription_details", subscription_details: { subscription: entry.subscription, metadata: null } },
+    });
+    if (method === "GET" && path === "/v1/invoices") {
+      const subscription: string | null = url.searchParams.get("subscription");
+      const status: string | null = url.searchParams.get("status");
+      const found: object[] = [...fake.invoices.entries()]
+        .filter(([, entry]: [string, { subscription: string; paid: boolean }]): boolean => entry.subscription === subscription && (status !== "paid" || entry.paid))
+        .map(([id, entry]: [string, { subscription: string; paid: boolean }]): object => invoiceObject(id, entry));
+      return list("/v1/invoices", found);
     }
-    if (method === "GET" && path === "/v1/refunds") {
-      const charge: string = url.searchParams.get("charge") ?? "";
-      const refunds: object[] = (fake.chargeRefunds.get(charge) ?? []).map((purpose: string | null, index: number): object => ({
-        id: `re_${charge}_${index}`,
-        object: "refund",
-        charge,
-        metadata: purpose === null ? {} : { purpose },
-      }));
-      return list("/v1/refunds", refunds);
+    const invoicePath: RegExpExecArray | null = /^\/v1\/invoices\/([^/]+)$/.exec(path);
+    if (method === "GET" && invoicePath !== null) {
+      const id: string = invoicePath[1] ?? "";
+      const entry: { subscription: string; paid: boolean } | undefined = fake.invoices.get(id);
+      if (entry === undefined) {
+        return Response.json({ error: { type: "invalid_request_error", message: "No such invoice" } }, { status: 404 });
+      }
+      return Response.json(invoiceObject(id, entry));
+    }
+    if (method === "POST" && path === "/v1/refunds") {
+      if (fake.failRefunds) {
+        return Response.json({ error: { type: "api_error", message: "temporary" } }, { status: 500 });
+      }
+      const form: URLSearchParams = await formOf(request);
+      fake.refundForms.push(form);
+      fake.refundKeys.push(request.headers.get("idempotency-key") ?? "");
+      fake.operations.push(`refund:${form.get("payment_intent") ?? form.get("charge") ?? ""}`);
+      return Response.json({ id: `re_${randomToken(6)}`, object: "refund", status: "succeeded" });
     }
     if (method === "POST" && path === "/v1/checkout/sessions") {
       const form: URLSearchParams = await formOf(request);
@@ -154,6 +179,7 @@ export function stubStripeApi(harness: Harness): FakeStripe {
       }
       if (method === "DELETE") {
         fake.canceled.push(id);
+        fake.operations.push(`cancel:${id}`);
         const canceled: FakeSubscription = { ...current, status: "canceled" };
         fake.subscriptions.set(id, canceled);
         return Response.json(canceled);

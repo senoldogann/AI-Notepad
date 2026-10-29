@@ -47,6 +47,8 @@ interface CleanupBatch {
 const dayMs: number = 86_400_000;
 /** İşlenmiş Stripe olayları 90 gün tutulur (Stripe en çok 3 gün yeniden dener). */
 const stripeEventRetentionMs: number = 90 * dayMs;
+/** Kopya abonelik kaydının saklama süresi: geç ödenen faturası bu süre içinde iade edilir. */
+const duplicateSubscriptionRetentionMs: number = 400 * dayMs;
 /** Günlük harcama 90 gün tutulur (maliyet incelemesi için; tavan yalnızca bugüne bakar). */
 const dailySpendRetentionMs: number = 90 * dayMs;
 /** Kullanıcı başına günlük kullanım 2 gün tutulur (gece yarısını aşan çağrının kesinleştirmesi dünün satırını yazar). */
@@ -101,6 +103,7 @@ function cleanupTargets(now: Date): CleanupTarget[] {
       binds: [],
     },
     { name: "stripe_events", table: "stripe_events", where: "processed_at < ?", binds: [nowMs - stripeEventRetentionMs] },
+    { name: "duplicate_subscriptions", table: "duplicate_subscriptions", where: "created_at < ?", binds: [nowMs - duplicateSubscriptionRetentionMs] },
     { name: "trial_starts", table: "trial_starts", where: "day < ?", binds: [today] },
     { name: "deleted_trial_starts", table: "deleted_trial_starts", where: "day < ?", binds: [today] },
     { name: "daily_spend", table: "daily_spend", where: "day < ?", binds: [dayKey(new Date(nowMs - dailySpendRetentionMs))] },

@@ -369,30 +369,49 @@ describe("Stripe webhook", () => {
     expect(mapping?.count).toBe(0);
   });
 
-  it("tam iade aboneliği hemen bitirir (Stripe'ta iptal, erişim hemen kalkar); kısmi iade yalnızca alarmdır", async () => {
+  it("tam iade yalnızca ödemenin aboneliğini bitirir (eski aboneliğin iadesi yenisini kesmez); kısmi ve eşleşmeyen iade yalnızca alarm", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
     const send: Sender = sender(harness, stripe);
     const id = uniqueIds();
     const { session, customer } = await customerSession(harness);
     const now: number = Math.floor(harness.clock.nowMs / 1000);
-    await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub"), customer, "active", now, now + 30 * 86_400));
-    const refundEvent = (eventId: string, chargeId: string, refunded: boolean, created: number): string =>
-      eventOf(eventId, "charge.refunded", created, { id: chargeId, object: "charge", customer, amount_refunded: refunded ? 599 : 100, currency: "usd", refunded });
+    // Ocakta eski abonelik (iptal edilmiş), martta yeni abonelik.
+    stripe.subscriptions.set(id("sub_old"), fakeSubscription(id("sub_old"), customer, "canceled", now - 90 * 86_400, now - 60 * 86_400));
+    await send.change(id("evt_1"), "customer.subscription.created", now, fakeSubscription(id("sub_new"), customer, "active", now, now + 30 * 86_400));
+    stripe.invoices.set(id("in_old"), { subscription: id("sub_old"), paid: true });
+    stripe.invoicePayments.set(id("in_old"), [id("pi_old")]);
+    stripe.invoices.set(id("in_new"), { subscription: id("sub_new"), paid: true });
+    stripe.invoicePayments.set(id("in_new"), [id("pi_new")]);
+    const refundEvent = (eventId: string, chargeId: string, intent: string | null, refunded: boolean, created: number): string =>
+      eventOf(eventId, "charge.refunded", created, {
+        id: chargeId,
+        object: "charge",
+        customer,
+        payment_intent: intent,
+        amount_refunded: refunded ? 599 : 100,
+        currency: "usd",
+        refunded,
+      });
 
-    stripe.chargeRefunds.set(id("ch_part"), [null]);
-    expect((await postWebhook(harness, refundEvent(id("evt_part"), id("ch_part"), false, now + 1), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    // Kısmi iade, eski aboneliğin tam iadesi ve aboneliği bulunamayan ödeme yeni aboneliğe dokunmaz.
+    for (const [eventId, chargeId, intent, refunded] of [
+      [id("evt_part"), id("ch_part"), id("pi_new"), false],
+      [id("evt_old"), id("ch_old"), id("pi_old"), true],
+      [id("evt_free"), id("ch_free"), null, true],
+    ] as const) {
+      expect((await postWebhook(harness, refundEvent(eventId, chargeId, intent, refunded, now + 1), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    }
     expect(stripe.canceled).toEqual([]);
     expect((await plan(harness, session)).plan).toBe("subscription");
 
-    stripe.chargeRefunds.set(id("ch_full"), [null]);
-    expect((await postWebhook(harness, refundEvent(id("evt_full"), id("ch_full"), true, now + 2), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
-    expect(stripe.canceled).toEqual([id("sub")]);
-    // Erişim, iptal olayını beklemeden biter.
-    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub"), status: "canceled" });
+    // Yeni aboneliğin ödemesinin tam iadesi onu hemen bitirir.
+    expect((await postWebhook(harness, refundEvent(id("evt_full"), id("ch_new"), id("pi_new"), true, now + 2), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.canceled).toEqual([id("sub_new")]);
+    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub_new"), status: "canceled" });
     expect((await plan(harness, session)).plan).toBe("trial");
     // Geç gelen eski etkin olay iptali ezmez.
-    await send.replay(id("evt_old"), "customer.subscription.updated", now + 1, fakeSubscription(id("sub"), customer, "active", now, now + 30 * 86_400));
+    await send.replay(id("evt_old_update"), "customer.subscription.updated", now + 1, fakeSubscription(id("sub_new"), customer, "active", now, now + 30 * 86_400));
     expect((await plan(harness, session)).plan).toBe("trial");
   });
 
@@ -507,7 +526,7 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     expect(stripe.canceled).toEqual([]);
   });
 
-  it("aynı müşteride yaşayan ikinci abonelik alarmla iptal edilir; eski aktif abonelik kalır", async () => {
+  it("aynı müşteride yaşayan ikinci abonelik önce iade, sonra iptal edilir; iade hatasında yeniden denenir; geç ödemesi de iade edilir", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
     const send: Sender = sender(harness, stripe);
@@ -516,26 +535,49 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     const now: number = Math.floor(harness.clock.nowMs / 1000);
     const periodEnd: number = now + 30 * 86_400;
     await send.change(id("evt_1"), "customer.subscription.created", now - 400, fakeSubscription(id("sub_A"), customer, "active", now - 400, periodEnd));
+    stripe.invoices.set(id("in_B"), { subscription: id("sub_B"), paid: true });
     stripe.invoicePayments.set(id("in_B"), [id("pi_B")]);
-    await send.change(id("evt_2"), "customer.subscription.created", now - 300, {
-      ...fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd),
-      latest_invoice: id("in_B"),
-    });
-    expect(stripe.canceled).toEqual([id("sub_B")]);
-    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub_A"), status: "active" });
-    // Kopya aboneliğin ödemesi tam iade edilir ve işaretlenir; aynı olayın tekrarı ikinci iade açmaz (anahtar aynı).
-    expect(stripe.refundForms).toHaveLength(1);
-    expect(stripe.refundForms[0]?.get("payment_intent")).toBe(id("pi_B"));
+    const duplicate: FakeSubscription = fakeSubscription(id("sub_B"), customer, "active", now - 300, periodEnd);
+
+    // İade geçici olarak başarısız: abonelik iptal edilmez, olay 502 ile reddedilir (Stripe yeniden gönderir).
+    stripe.failRefunds = true;
+    expect((await send.change(id("evt_2"), "customer.subscription.created", now - 300, duplicate)).status).toBe(502);
+    expect(stripe.canceled).toEqual([]);
+    const marked = await env.DB.prepare("SELECT user_id FROM duplicate_subscriptions WHERE stripe_subscription_id = ?").bind(id("sub_B")).first<{ user_id: string }>();
+    expect(marked?.user_id).toBe(session.userId);
+
+    // Yeniden gönderim: önce iade, sonra iptal.
+    stripe.failRefunds = false;
+    expect((await send.replay(id("evt_2"), "customer.subscription.created", now - 300, duplicate)).status).toBe(200);
+    expect(stripe.operations).toEqual([`refund:${id("pi_B")}`, `cancel:${id("sub_B")}`]);
     expect(stripe.refundForms[0]?.get("reason")).toBe("duplicate");
     expect(stripe.refundForms[0]?.get("metadata[purpose]")).toBe("duplicate_subscription");
     expect(stripe.refundKeys).toEqual([`refund-duplicate-${id("sub_B")}-${id("pi_B")}`]);
+    expect(await storedSubscription(session.userId)).toEqual({ stripe_subscription_id: id("sub_A"), status: "active" });
 
-    // Kopya iadesinin `charge.refunded` olayı geçerli aboneliği bitirmez.
-    stripe.chargeRefunds.set(id("ch_B"), ["duplicate_subscription"]);
-    const duplicateRefund: string = eventOf(id("evt_ref"), "charge.refunded", now - 200, {
+    // İptalden sonra geç ödenen kopya faturası `invoice.paid` ile iade edilir; diğer faturalar dokunulmaz.
+    stripe.invoices.set(id("in_B2"), { subscription: id("sub_B"), paid: true });
+    stripe.invoicePayments.set(id("in_B2"), [id("pi_B2")]);
+    const latePaid = (eventId: string, invoice: string, subscription: string): string =>
+      eventOf(eventId, "invoice.paid", now - 100, {
+        id: invoice,
+        object: "invoice",
+        status: "paid",
+        parent: { type: "subscription_details", subscription_details: { subscription, metadata: null } },
+      });
+    expect((await postWebhook(harness, latePaid(id("evt_late"), id("in_B2"), id("sub_B")), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.operations.at(-1)).toBe(`refund:${id("pi_B2")}`);
+    stripe.invoices.set(id("in_A2"), { subscription: id("sub_A"), paid: true });
+    stripe.invoicePayments.set(id("in_A2"), [id("pi_A2")]);
+    expect((await postWebhook(harness, latePaid(id("evt_keep"), id("in_A2"), id("sub_A")), env.STRIPE_WEBHOOK_SECRET)).status).toBe(200);
+    expect(stripe.operations.at(-1)).toBe(`refund:${id("pi_B2")}`);
+
+    // Kopyanın tam iadesi geçerli aboneliği bitirmez.
+    const duplicateRefund: string = eventOf(id("evt_ref"), "charge.refunded", now - 50, {
       id: id("ch_B"),
       object: "charge",
       customer,
+      payment_intent: id("pi_B"),
       amount_refunded: 599,
       currency: "usd",
       refunded: true,

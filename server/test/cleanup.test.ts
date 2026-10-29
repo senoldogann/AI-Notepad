@@ -36,6 +36,10 @@ describe("süresi dolmuş satırların temizliği", () => {
            ('t_old', ?1, 'm', x'00', x'00', 0, ?2), ('t_new', ?1, 'm', x'00', x'00', 0, ?3)`,
       ).bind(first, nowMs - 1, later),
       env.DB.prepare(
+        `INSERT INTO duplicate_subscriptions (stripe_subscription_id, user_id, stripe_customer_id, created_at) VALUES
+           ('sub_dup_old', ?1, 'cus_x', ?2), ('sub_dup_new', ?1, 'cus_x', ?3)`,
+      ).bind(first, nowMs - 401 * dayMs, nowMs - 10 * dayMs),
+      env.DB.prepare(
         `INSERT INTO reports (id, kind, status, created_at, summary) VALUES
            ('r_old', 'feedback', 'open', ?, 'x'), ('r_old_done', 'crash', 'done', ?, 'x'), ('r_recent', 'contact', 'open', ?, 'x')`,
       ).bind(nowMs - 181 * dayMs, nowMs - 200 * dayMs, nowMs - 179 * dayMs),
@@ -98,6 +102,7 @@ describe("süresi dolmuş satırların temizliği", () => {
       refresh_tokens_superseded: 1,
       refresh_families: 2,
       stripe_events: 1,
+      duplicate_subscriptions: 1,
       trial_starts: 1,
       deleted_trial_starts: 1,
       daily_spend: 1,
@@ -119,6 +124,7 @@ describe("süresi dolmuş satırların temizliği", () => {
     expect(await ids("SELECT month AS id FROM monthly_usage")).toEqual([new Date(nowMs - 360 * dayMs).toISOString().slice(0, 7)]);
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces")).toEqual(["n_new"]);
     expect(await ids("SELECT key_hash AS id FROM transcription_results")).toEqual(["t_new"]);
+    expect(await ids("SELECT stripe_subscription_id AS id FROM duplicate_subscriptions")).toEqual(["sub_dup_new"]);
     // Raporlar durumundan bağımsız 180 gün tutulur.
     expect(await ids("SELECT id FROM reports")).toEqual(["r_recent"]);
     expect(await ids("SELECT challenge_hash AS id FROM device_challenges")).toEqual(["c_live"]);
