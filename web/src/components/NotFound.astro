@@ -1,0 +1,44 @@
+---
+// "Sayfa bulunamadı" görünümü: 404 sayfası ve yetkisiz ya da oturumsuz açılan yönetim adresi aynı görünümü kullanır
+// (yönetim panelinin varlığı belli olmaz).
+import Icon from "./Icon.astro";
+import { copy, type NotFoundCopy } from "../copy";
+import { routes } from "../routes";
+
+const text: NotFoundCopy = copy.notFound;
+---
+
+<section class="narrow not-found">
+  <p class="code tabular" aria-hidden="true">404</p>
+  <h1 class="title-l">{text.title}</h1>
+  <p class="muted">{text.text}</p>
+  <a class="button button--primary" href={routes.home}>
+    {text.home}
+    <Icon name="arrow-right" size={16} class="" />
+  </a>
+</section>
+
+<style>
+  .not-found {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding-block: clamp(64px, 12vw, 140px);
+    text-align: center;
+  }
+
+  .code {
+    font-size: clamp(4rem, 14vw, 8rem);
+    font-weight: 600;
+    letter-spacing: -0.06em;
+    line-height: 1;
+    background: linear-gradient(120deg, #e9896a, #c9a3e0 55%, #8ea3e6);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .not-found .button {
+    margin-top: 10px;
+  }
+</style>

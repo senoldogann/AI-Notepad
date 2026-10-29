@@ -10,6 +10,7 @@ export type IconName =
   | "chart"
   | "check"
   | "check-circle"
+  | "chevron-down"
   | "chip"
   | "clock"
   | "disk"
@@ -63,6 +64,7 @@ export const icons: Readonly<Record<IconName, IconShape>> = {
   chart: { style: "stroke", body: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6.5" rx="1"/><rect x="10.5" y="6.5" width="3" height="11" rx="1"/><rect x="15.5" y="13.5" width="3" height="4" rx="1"/>' },
   check: { style: "stroke", body: '<path d="m5 12.5 4.5 4.5L19 7.5"/>' },
   "check-circle": { style: "stroke", body: '<circle cx="12" cy="12" r="8.75"/><path d="m8.25 12.25 2.5 2.5 5-5"/>' },
+  "chevron-down": { style: "stroke", body: '<path d="m6.5 9.5 5.5 5.5 5.5-5.5"/>' },
   chip: {
     style: "stroke",
     body: '<rect x="6" y="6" width="12" height="12" rx="2.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',

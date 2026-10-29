@@ -53,7 +53,7 @@ const targets: readonly Target[] = [
   { name: "pricing", path: "/pricing", ready: "main", signedIn: false, account: null },
   { name: "download", path: "/download", ready: "main", signedIn: false, account: null },
   { name: "signin", path: "/sign-in", ready: "#google-button iframe", signedIn: false, account: null },
-  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "#google-button iframe", signedIn: false, account: null },
+  { name: "signin-app", path: "/sign-in?app=1&nonce=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ready: "main", signedIn: false, account: null },
   { name: "contact", path: "/contact", ready: "#contact-submit:not([disabled])", signedIn: false, account: null },
   { name: "privacy", path: "/privacy", ready: "main", signedIn: false, account: null },
   { name: "terms", path: "/terms", ready: "main", signedIn: false, account: null },
@@ -113,6 +113,9 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },
       tokens: { thisMonth: 48_210_000 },
       reports: { openFeedback: 3, openCrash: 1, openContact: 2 },
+      stripe: { mode: "test" },
+      // Kapasite eşiğin üstünde: kutunun uyarı görünümü de çekilir.
+      elevenLabs: { usedHours: 41.5, capHours: 50, percent: 83 },
     },
     "/v1/admin/reports": {
       items: [
@@ -149,13 +152,14 @@ function argument(index: number, name: string): string {
  * Beklenen konsol hataları: Google Identity Services sayfaya kendi `<style>` öğelerini ve iframe yüklenene dek görünen
  * yer tutucu düğmede `data:` adresli bir Google simgesi ekler; Google'ın belgelediği CSP bunlara izin vermez (asıl düğme
  * iframe içinde çizildiği için etkilenmez; giriş sayfasında Google dışında `data:` görsel ekleyen yok). 404 sayfasının
- * kendisi 404 durumuyla gelir.
+ * kendisi 404 durumuyla gelir; yönetici olmayanın yönetim isteği 403 alır.
  */
 function isExpectedConsoleError(message: ConsoleMessage, shot: string): boolean {
   const fromGoogle: boolean = message.location().url.startsWith(googleScriptUrl);
   const googlePlaceholderIcon: boolean = shot.startsWith("signin") && message.text().startsWith("Loading the image 'data:image/png");
   const notFoundDocument: boolean = shot.startsWith("notfound") && message.text().includes("status of 404");
-  return fromGoogle || googlePlaceholderIcon || notFoundDocument;
+  const adminForbidden: boolean = shot.startsWith("admin-forbidden") && message.text().includes("status of 403");
+  return fromGoogle || googlePlaceholderIcon || notFoundDocument || adminForbidden;
 }
 
 /** Sayfanın konsol hatalarını ve yakalanmamış hatalarını toplar. */
@@ -410,6 +414,51 @@ async function capturePullReveal(browser: Browser, base: string, outDir: string,
   }
 }
 
+/**
+ * Yönetim adresi yöneticiye açık değilse panel belli olmaz: oturumsuz ve sunucu 403 dönerken standart "sayfa bulunamadı"
+ * görünümü gelmeli, panel öğeleri sayfada olmamalı ve sekme başlığı panelin adını taşımamalı.
+ */
+async function checkAdminHidden(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
+  const cases: readonly { readonly name: string; readonly signedIn: boolean }[] = [
+    { name: "admin-signed-out", signedIn: false },
+    { name: "admin-forbidden", signedIn: true },
+  ];
+  for (const variant of [variants[0], variants[3]]) {
+    if (variant === undefined) {
+      continue;
+    }
+    for (const item of cases) {
+      const shot: string = `${item.name}-${variant.name}`;
+      const context: BrowserContext = await newContext(browser, variant, "reduce");
+      await context.route(`${apiBase}/**`, async (route: Route): Promise<void> => {
+        const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+        if (route.request().method() === "OPTIONS") {
+          await route.fulfill({ status: 204, headers: cors });
+          return;
+        }
+        await route.fulfill({ status: 403, headers: cors, contentType: "application/json", body: JSON.stringify({ error: { code: "forbidden", message: "yönetici değil", identity: "google:example" } }) });
+      });
+      const page: Page = await context.newPage();
+      collectErrors(page, (): string => shot, findings);
+      if (item.signedIn) {
+        await signIn(page);
+      }
+      await page.goto(`${base}/admin`, { waitUntil: "load" });
+      await page.waitForSelector("#admin-not-found:not([hidden])", { timeout: 10_000 });
+      const state: { readonly title: string; readonly panel: boolean; readonly text: string } = await page.evaluate(() => ({
+        title: document.title,
+        panel: document.getElementById("admin") !== null || document.getElementById("admin-content") !== null,
+        text: document.body.innerText,
+      }));
+      if (state.panel || state.title.includes("Dashboard") || state.text.includes("Dashboard") || state.text.includes("google:example")) {
+        findings.push({ shot, problem: `panel belli oluyor: ${JSON.stringify({ title: state.title, panel: state.panel })}` });
+      }
+      await page.screenshot({ path: join(outDir, `${shot}.png`) });
+      await context.close();
+    }
+  }
+}
+
 /** Tema düğmesi: tıklanınca tema değişir, seçim yeniden yüklemede kalır. */
 async function checkThemeToggle(browser: Browser, base: string, outDir: string, findings: Finding[]): Promise<void> {
   const variant: Variant = { name: "1440-light", width: 1440, colorScheme: "light" };
@@ -443,6 +492,7 @@ async function main(): Promise<void> {
     await captureDemo(browser, base, outDir, findings);
     await checkDemoEnd(browser, base, outDir, findings);
     await capturePullReveal(browser, base, outDir, findings);
+    await checkAdminHidden(browser, base, outDir, findings);
     await checkThemeToggle(browser, base, outDir, findings);
   } finally {
     await browser.close();

@@ -72,8 +72,6 @@ export interface CommonCopy {
     /** Sayfa sonundaki çekmede görünen kısa teşekkür (PullReveal.astro). */
     readonly pullThanks: string;
     readonly copyright: string;
-    /** İşletmenin hukuki bilgisi: unvan, işletme kimliği ve adres (alt bilginin en altında). */
-    readonly business: string;
   };
   readonly lastUpdated: string;
   readonly contents: string;
@@ -277,14 +275,14 @@ export interface AccountCopy {
 
 /** Yönetim panelinin durgun metinleri (değerlere bağlı olanlar client/copy.ts'te). */
 export interface AdminCopy {
+  /** Nötr başlık ve açıklama: yönetici erişimi doğrulanmadan panelin varlığı belli olmaz. */
   readonly meta: PageMeta;
+  /** Erişim doğrulanınca sekme başlığı. */
+  readonly documentTitle: string;
   readonly title: string;
   readonly refresh: string;
+  /** Nötr yükleme satırı. */
   readonly loading: string;
-  readonly signedOutTitle: string;
-  readonly signedOutText: string;
-  readonly forbiddenTitle: string;
-  readonly forbiddenText: string;
   readonly kpis: {
     readonly downloads: string;
     readonly users: string;
@@ -296,6 +294,8 @@ export interface AdminCopy {
     readonly tokens: string;
     readonly elevenLabs: string;
   };
+  /** Özet kutusu gruplarının başlıkları. */
+  readonly groups: { readonly growth: string; readonly revenue: string; readonly costs: string };
   readonly chartsTitle: string;
   readonly charts: {
     readonly downloads: string;
@@ -323,7 +323,6 @@ export interface AdminCopy {
   readonly payloadTitle: string;
   readonly markDone: string;
   readonly reopen: string;
-  readonly noScript: string;
 }
 
 /** 404 sayfası. */
@@ -386,7 +385,6 @@ export const copy: Copy = {
       cookies: "Cookies",
       pullThanks: "Thanks for listening.",
       copyright: `© 2026 ${operator.name}`,
-      business: `${operator.name} · Business ID ${operator.businessId} · ${operator.address}`,
     },
     lastUpdated: "Last updated",
     contents: "On this page",
@@ -691,14 +689,11 @@ export const copy: Copy = {
     noScript: "The account page needs JavaScript.",
   },
   admin: {
-    meta: { title: `Dashboard — ${productName}`, description: "Operator dashboard." },
+    meta: { title: productName, description: tagline },
+    documentTitle: `Dashboard — ${productName}`,
     title: "Dashboard",
     refresh: "Refresh",
-    loading: "Loading the dashboard…",
-    signedOutTitle: "Sign in first",
-    signedOutText: "The dashboard needs an admin session in this tab. Sign in, then open the dashboard again.",
-    forbiddenTitle: "Not authorized",
-    forbiddenText: "This account isn't on the server's admin list. To grant access, add this identity to the allowlist:",
+    loading: "Loading…",
     kpis: {
       downloads: "Downloads",
       users: "Users",
@@ -710,6 +705,7 @@ export const copy: Copy = {
       tokens: "Tokens this month",
       elevenLabs: "Transcription capacity",
     },
+    groups: { growth: "Growth", revenue: "Revenue", costs: "Costs & capacity" },
     chartsTitle: "Last 30 days",
     charts: {
       downloads: "Downloads per day",
@@ -731,7 +727,6 @@ export const copy: Copy = {
     payloadTitle: "Crash report",
     markDone: "Mark done",
     reopen: "Reopen",
-    noScript: "The dashboard needs JavaScript.",
   },
   notFound: {
     meta: { title: `Page not found — ${productName}`, description: "The address may be mistyped, or the page has moved." },

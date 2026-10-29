@@ -1,46 +1,10 @@
 ---
 // Bulunamayan sayfa (Cloudflare Pages tüm bilinmeyen adreslerde bunu 404 durumuyla döndürür).
 import Base from "../layouts/Base.astro";
-import Icon from "../components/Icon.astro";
-import { copy, type NotFoundCopy } from "../copy";
-import { routes } from "../routes";
-
-const text: NotFoundCopy = copy.notFound;
+import NotFound from "../components/NotFound.astro";
+import { copy } from "../copy";
 ---
 
-<Base page="notFound" meta={text.meta} indexed={false}>
-  <section class="narrow not-found">
-    <p class="code tabular" aria-hidden="true">404</p>
-    <h1 class="title-l">{text.title}</h1>
-    <p class="muted">{text.text}</p>
-    <a class="button button--primary" href={routes.home}>
-      {text.home}
-      <Icon name="arrow-right" size={16} class="" />
-    </a>
-  </section>
+<Base page="notFound" meta={copy.notFound.meta} indexed={false}>
+  <NotFound />
 </Base>
-
-<style>
-  .not-found {
-    display: grid;
-    justify-items: center;
-    gap: 14px;
-    padding-block: clamp(64px, 12vw, 140px);
-    text-align: center;
-  }
-
-  .code {
-    font-size: clamp(4rem, 14vw, 8rem);
-    font-weight: 600;
-    letter-spacing: -0.06em;
-    line-height: 1;
-    background: linear-gradient(120deg, #e9896a, #c9a3e0 55%, #8ea3e6);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .not-found .button {
-    margin-top: 10px;
-  }
-</style>

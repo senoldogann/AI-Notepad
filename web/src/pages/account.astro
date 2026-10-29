@@ -1,7 +1,7 @@
 ---
 // Hesap sayfası: başlıkta plan durumu (etiket), plan kartı (plan, deneme ya da abonelik satırı, abonede aylık kullanım,
 // Abone ol / Aboneliği yönet ve fiyat, yenileme notu), uygulamayı indirme kartı, yardım bağlantıları, çıkış ve ayrı
-// duran hesap silme alanı (onay penceresiyle). Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
+// duran, varsayılan kapalı hesap silme alanı (<details>; onay penceresiyle). Değerler tarayıcıda `/v1/me`'den doldurulur (src/client/account.ts).
 import Base from "../layouts/Base.astro";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
@@ -109,13 +109,17 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
         </div>
       </div>
 
-      <section class="danger" aria-labelledby="danger-title">
-        <div class="danger__text">
-          <h2 class="title-m" id="danger-title">{text.dangerTitle}</h2>
+      {/* Hesap silme: varsayılan kapalı, sakin bir satır; açılınca açıklama ve silme düğmesi görünür. */}
+      <details class="danger">
+        <summary class="danger__summary">
+          <h2 class="danger__title" id="danger-title">{text.dangerTitle}</h2>
+          <Icon name="chevron-down" size={18} class="danger__chevron" />
+        </summary>
+        <div class="danger__body">
           <p class="muted">{text.dangerText}</p>
+          <button id="delete-button" class="button button--danger" type="button">{text.deleteButton}</button>
         </div>
-        <button id="delete-button" class="button button--danger" type="button">{text.deleteButton}</button>
-      </section>
+      </details>
     </div>
 
     <div id="account-deleted" class="card deleted hidden" tabindex="-1" role="status">
@@ -323,27 +327,86 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
   /* ---------- Hesap silme ---------- */
 
   .danger {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px 32px;
     margin-top: 28px;
-    padding: clamp(20px, 3vw, 28px);
-    border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+    border: 1px solid var(--line);
     border-radius: var(--radius-m);
+    background: var(--card);
+    transition: border-color 200ms ease, background-color 200ms ease;
+  }
+
+  .danger[open] {
+    border-color: color-mix(in srgb, var(--danger) 28%, var(--line));
     background: color-mix(in srgb, var(--danger) 4%, var(--card));
   }
 
-  .danger__text {
-    display: grid;
-    gap: 8px;
-    flex: 1 1 28rem;
-    max-width: 44rem;
+  .danger__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px clamp(20px, 3vw, 28px);
+    border-radius: inherit;
+    cursor: pointer;
+    list-style: none;
   }
 
-  .danger__text p {
+  .danger__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .danger__title {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+  }
+
+  .danger :global(.danger__chevron) {
+    flex: none;
+    color: var(--muted);
+    transition: transform 220ms ease;
+  }
+
+  .danger[open] :global(.danger__chevron) {
+    transform: rotate(180deg);
+  }
+
+  .danger__body {
+    display: grid;
+    gap: 16px;
+    justify-items: start;
+    max-width: 44rem;
+    padding: 0 clamp(20px, 3vw, 28px) clamp(20px, 3vw, 28px);
+  }
+
+  .danger__body p {
     font-size: 0.9375rem;
+  }
+
+  /* Açılış yüksekliği yumuşak (destekleyen tarayıcılarda yalnızca CSS; hareket azaltılmışsa anında). */
+  @media (prefers-reduced-motion: no-preference) {
+    .danger {
+      interpolate-size: allow-keywords;
+    }
+
+    .danger::details-content {
+      block-size: 0;
+      overflow: hidden;
+      transition:
+        block-size 260ms ease,
+        content-visibility 260ms allow-discrete;
+    }
+
+    .danger[open]::details-content {
+      block-size: auto;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .danger,
+    .danger :global(.danger__chevron) {
+      transition: none;
+    }
   }
 
   .deleted {
