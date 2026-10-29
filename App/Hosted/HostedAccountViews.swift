@@ -60,6 +60,9 @@ struct HostedAccountError: View {
 /// Ayarlar › Hesap: giriş, deneme sayacı ya da abonelik durumu, aylık kullanım, ödeme, çıkış ve hesap silme.
 struct HostedAccountSettings: View {
     let account: HostedAccount
+    /// Kayıt, işleme ya da içe aktarma sürüyor: çıkış ve hesap silme kapalıdır (süren toplantının sunucu oturumu ve
+    /// faturası başka hesaba ya da silinmiş hesaba yazılmasın; bitince açılır).
+    let isMeetingInFlight: Bool
     /// Hesap silme satır içinde onaylanır (açılır pencere yok).
     @State private var confirmingDelete: Bool = false
 
@@ -87,7 +90,7 @@ struct HostedAccountSettings: View {
                     Button("Yeniden dene") { Task { await account.refresh() } }
                         .disabled(account.isWorking)
                 }
-                HostedSignOutRow(account: account)
+                HostedSignOutRow(account: account, isMeetingInFlight: isMeetingInFlight)
                 HostedAccountError(account: account)
                     .padding(.top, 12)
             }
@@ -121,10 +124,12 @@ struct HostedAccountSettings: View {
             }
         }
         HostedUsageCard(account: account, entitlements: entitlements)
-        HostedSignOutRow(account: account)
+        HostedSignOutRow(account: account, isMeetingInFlight: isMeetingInFlight)
         SettingsRow(title: Text("Hesabı sil")) {
             Text("Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.")
-            if confirmingDelete {
+            if isMeetingInFlight {
+                NoticeText("Kayıt ya da işleme sürüyor; bitince hesabı silebilirsin.", severity: .attention)
+            } else if confirmingDelete {
                 NoticeText("Emin misin? Bu işlem geri alınamaz.", severity: .error)
             }
         } control: {
@@ -135,10 +140,10 @@ struct HostedAccountSettings: View {
                         confirmingDelete = false
                         Task { await account.deleteAccount() }
                     }
-                    .disabled(account.isWorking)
+                    .disabled(account.isWorking || isMeetingInFlight)
                 } else {
                     Button("Hesabı sil…", role: .destructive) { confirmingDelete = true }
-                        .disabled(account.isWorking)
+                        .disabled(account.isWorking || isMeetingInFlight)
                 }
             }
         }
@@ -150,13 +155,17 @@ struct HostedAccountSettings: View {
 /// Ayarlar › Hesap'taki çıkış satırı (hak durumu okunamasa da çıkış yapılabilir).
 private struct HostedSignOutRow: View {
     let account: HostedAccount
+    let isMeetingInFlight: Bool
 
     var body: some View {
         SettingsRow(title: Text("Oturum")) {
             Text("Bu Mac'teki oturumu kapatır; toplantıların ve notların bu Mac'te kalır.")
+            if isMeetingInFlight {
+                NoticeText("Kayıt ya da işleme sürüyor; bitince çıkış yapabilirsin.", severity: .attention)
+            }
         } control: {
             Button("Çıkış yap") { Task { await account.signOut() } }
-                .disabled(account.isWorking)
+                .disabled(account.isWorking || isMeetingInFlight)
         }
     }
 }

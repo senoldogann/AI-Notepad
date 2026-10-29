@@ -3185,6 +3185,17 @@
         }
       }
     },
+    "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recording was made with another account; it will be processed when you sign in with that account."
+          }
+        }
+      }
+    },
     "Bu kayıt yalnızca bilgisayardan gelen sesi alıyor": {
       "localizations": {
         "en": {
@@ -6782,6 +6793,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "The app won't restart while recording or processing; you can update when it's done. It also installs on its own when you quit."
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürüyor; bitince hesabı silebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recording or processing is in progress; you can delete the account when it finishes."
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürüyor; bitince çıkış yapabilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recording or processing is in progress; you can sign out when it finishes."
           }
         }
       }
@@ -13117,6 +13150,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recording offline"
+          }
+        }
+      }
+    },
+    "Çevrimdışı kayıt yarıda kaldı; kaydedilen kısım bağlantı gelince işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The offline recording was interrupted; the recorded part will be processed when you're back online."
           }
         }
       }

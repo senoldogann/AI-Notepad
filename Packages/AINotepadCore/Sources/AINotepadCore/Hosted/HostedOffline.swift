@@ -87,7 +87,31 @@ public enum HostedQueuedMeetingPreparation: Sendable, Equatable {
     case blocked(reason: String)
 }
 
-/// Bekleyen kayıtlar içinden sıradaki: en eski. Saf fonksiyondur.
-public func nextQueuedMeeting(records: [MeetingRecord]) -> MeetingRecord? {
-    records.filter { $0.status == .queued }.min { $0.startedAt < $1.startedAt }
+/// Bekleyen kayıtların oturumdaki kullanıcıya göre ayrımı.
+public struct HostedQueuedRecords: Sendable, Equatable {
+    /// Bu kullanıcının bekleyen kayıtları (en eskisi önce); sırayla denenir, biri reddedilirse sonrakine geçilir.
+    public let own: [MeetingRecord]
+    /// Başka bir hesapla kaydedilmiş bekleyenler: bu hesapla işlenmez (o hesabın deneme ya da süresi düşer).
+    public let foreign: [MeetingRecord]
+}
+
+/// Bekleyen kayıtları sahiplerine göre ayırır (`owners`: kayıt kimliği → kuyruğa alındığı andaki kullanıcı). Sahibi
+/// bilinmeyen (sahiplik saklanmadan önce kuyruğa girmiş) kayıt oturumdaki kullanıcınındır. Saf fonksiyondur.
+public func hostedQueuedRecords(records: [MeetingRecord], owners: [String: String], userId: String) -> HostedQueuedRecords {
+    let queued: [MeetingRecord] = records.filter { $0.status == .queued }.sorted { $0.startedAt < $1.startedAt }
+    let isOwn: (MeetingRecord) -> Bool = { (record: MeetingRecord) -> Bool in (owners[record.id] ?? userId) == userId }
+    return HostedQueuedRecords(own: queued.filter(isOwn), foreign: queued.filter { !isOwn($0) })
+}
+
+/// Açılışta yarıda kalmış bulunan ve sunucu oturumuna bağlı olmayan (çevrimdışı) kayıtlar kuyruğa döner: bağlantı
+/// gelince kendi oturumuyla işlenir. Bağlı kayıt "yarıda kaldı" kalır ("Tekrar işle" kendi oturumunu yeniden açar). Saf
+/// fonksiyondur.
+public func queuingUnlinkedInterrupted(records: [MeetingRecord], linkedRecordIDs: Set<String>) -> [MeetingRecord] {
+    records.map { (record: MeetingRecord) -> MeetingRecord in
+        guard record.status == .interrupted, !linkedRecordIDs.contains(record.id) else {
+            return record
+        }
+        return record.with(status: .queued, failureMessage: nil)
+            .with(notice: String(localized: "Çevrimdışı kayıt yarıda kaldı; kaydedilen kısım bağlantı gelince işlenir."))
+    }
 }

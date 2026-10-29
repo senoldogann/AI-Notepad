@@ -540,6 +540,12 @@ private func silentWav() -> Data {
         }
         let after: HostedEntitlements = try await user.client.entitlements()
         #expect(after.trialMeetingsLeft == before.trialMeetingsLeft)
+        // Ölü bağ (sunucuda olmayan ya da başka hesabın oturumu) `not_found` döner: kuyruk bağı silip yeni oturum açar.
+        let missing: HostedAPIError? = await hostedError { _ = try await user.client.endMeeting(meetingID: UUID().uuidString.lowercased()) }
+        #expect(missing?.code == .notFound)
+        let foreign: SignedInUser = try await signedInUser(baseURL: baseURL)
+        let foreignReprocess: HostedAPIError? = await hostedError { _ = try await foreign.client.reprocessMeeting(meetingID: started.meetingId) }
+        #expect(foreignReprocess?.code == .notFound)
     }
 
     // İçe aktarılan dosya kayıt gibi sayılır: kuyruk sunucu oturumunu `clientRef` ile açar, deneme hakkı düşer; deneme

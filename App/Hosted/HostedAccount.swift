@@ -510,6 +510,9 @@ final class HostedAccount {
                 accountLogger.warning("Sunucuya ulaşılamadı; son hak durumu eski ya da izin vermiyor, kayıt başlatılmadı")
                 throw HostedClientError.offlineNotAllowed
             }
+            if let userID {
+                saveHostedRecordOwner(recordID: recordID, userId: userID)
+            }
             // Canlı istekler önceki toplantının bütçesine yazılmasın.
             await client.clearCurrentMeeting()
             currentMeeting = nil
@@ -594,14 +597,21 @@ final class HostedAccount {
         }
         do {
             let client: HostedClient = try HostedServices.requireClient()
-            let serverMeetingID: String
             if let linked = hostedServerMeetingIDOrNil(recordID: recordID) {
-                serverMeetingID = linked
-            } else {
-                let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: true)
-                serverMeetingID = started.meetingId
-                try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: serverMeetingID, createdAt: Date()))
+                do {
+                    _ = try await client.endMeeting(meetingID: linked)
+                    accountLogger.info("Bekleyen kaydın bağlı sunucu oturumu hazır")
+                    Task { await refresh() }
+                    return .ready(serverMeetingID: linked)
+                } catch let error as HostedAPIError where error.code == .notFound {
+                    // Oturum sunucuda yok (temizlendi ya da başka hesabındı): bağ silinir, kayıt yeni oturum açar.
+                    accountLogger.warning("Bekleyen kaydın bağlı oturumu sunucuda yok, bağ silindi")
+                    try removeHostedMeetingLink(recordID: recordID)
+                }
             }
+            let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: true)
+            let serverMeetingID: String = started.meetingId
+            try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: serverMeetingID, createdAt: Date()))
             _ = try await client.endMeeting(meetingID: serverMeetingID)
             accountLogger.info("Çevrimdışı kaydın sunucu oturumu hazır")
             Task { await refresh() }
@@ -612,6 +622,19 @@ final class HostedAccount {
             accountLogger.warning("Çevrimdışı kayıt sunucuda işlenemiyor, hata: \(String(describing: error), privacy: .private)")
             return .blocked(reason: userFacingMessage(error: error))
         }
+    }
+
+    /// İçe aktarılan kaydı oturumdaki kullanıcıya yazar (kuyruğa alınırken); oturum yoksa `notSignedIn`.
+    func claimQueuedRecord(recordID: String) async throws {
+        guard let userID = try await HostedServices.requireClient().signedInUserID() else {
+            throw HostedClientError.notSignedIn
+        }
+        saveHostedRecordOwner(recordID: recordID, userId: userID)
+    }
+
+    /// Oturumdaki kullanıcı (Anahtar Zinciri'nden, ağsız); oturum yoksa nil.
+    func signedInUserID() async throws -> String? {
+        try await HostedServices.requireClient().signedInUserID()
     }
 
     /// Bekleyen kaydın şimdilik işlenememe nedeni (hak durumundan).

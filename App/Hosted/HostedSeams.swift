@@ -181,6 +181,31 @@ func saveHostedMeetingLink(link: HostedMeetingLink) throws {
     UserDefaults.standard.set(try JSONEncoder().encode(links), forKey: hostedMeetingLinksKey)
 }
 
+/// Kaydın bağını siler (sunucu oturumu yok).
+func removeHostedMeetingLink(recordID: String) throws {
+    UserDefaults.standard.set(try JSONEncoder().encode(removingHostedMeetingLink(links: try loadHostedMeetingLinks(), recordID: recordID)), forKey: hostedMeetingLinksKey)
+}
+
+/// Bekleyen kayıtların sahipleri (kayıt kimliği → kullanıcı) için UserDefaults anahtarı.
+private let hostedRecordOwnersKey: String = "hosted.recordOwners"
+
+/// Bekleyen kayıtların sahipleri; yoksa boş.
+func loadHostedRecordOwners() -> [String: String] {
+    UserDefaults.standard.dictionary(forKey: hostedRecordOwnersKey) as? [String: String] ?? [:]
+}
+
+/// Kaydı oturumdaki kullanıcıya yazar (kuyruğa alınırken): başka hesapla giriş yapılınca o hesaba faturalanmaz.
+func saveHostedRecordOwner(recordID: String, userId: String) {
+    var owners: [String: String] = loadHostedRecordOwners()
+    owners[recordID] = userId
+    UserDefaults.standard.set(owners, forKey: hostedRecordOwnersKey)
+}
+
+/// Bağlı kayıtların kimlikleri (okunamazsa hata).
+func hostedLinkedRecordIDs() throws -> Set<String> {
+    Set(try loadHostedMeetingLinks().map(\.recordID))
+}
+
 /// Kurulum eksikleri (menüde ve Ana sayfada): sunucu adresi geçersizse ya da giriş yapılmamışsa.
 func hostedSetupProblems() async -> [String] {
     do {

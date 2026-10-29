@@ -29,6 +29,11 @@ public func hostedServerMeetingID(recordID: String, links: [HostedMeetingLink]) 
     links.last { $0.recordID == recordID }?.serverMeetingID
 }
 
+/// Kaydın bağını siler (sunucu oturumu artık yok: `not_found`). Saf fonksiyondur.
+public func removingHostedMeetingLink(links: [HostedMeetingLink], recordID: String) -> [HostedMeetingLink] {
+    links.filter { $0.recordID != recordID }
+}
+
 /// Son geçiş isteğinin istemci zaman aşımı (saniye): sunucunun ElevenLabs'i beklediği süreden (15 dk) uzun olmalı;
 /// kısa olursa istemci vazgeçip yeniden dener ve sunucu hâlâ süren yükleme için `transcription_in_progress` döner.
 public let hostedTranscribeMinimumTimeoutSec: Double = 16 * 60

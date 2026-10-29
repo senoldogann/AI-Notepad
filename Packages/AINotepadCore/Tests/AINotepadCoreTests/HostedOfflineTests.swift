@@ -90,14 +90,34 @@ private func record(id: String, startedAt: Double, status: MeetingStatus) -> Mee
         #expect(message(.dailyCapReached, "/v1/meetings/start").contains("toplantı sayısına"))
     }
 
+    // Yarıda kalan çevrimdışı (bağsız) kayıt kuyruğa döner; bağlı kayıt ve diğer durumlar değişmez.
+    @Test func unlinkedInterruptedRecordReturnsToQueue() {
+        let records: [MeetingRecord] = [
+            record(id: "offline", startedAt: 1, status: .interrupted), record(id: "online", startedAt: 2, status: .interrupted), record(id: "bitti", startedAt: 3, status: .done),
+        ]
+        let result: [MeetingRecord] = queuingUnlinkedInterrupted(records: records, linkedRecordIDs: ["online"])
+        #expect(result.map(\.status) == [.queued, .interrupted, .done])
+        #expect(result[0].failureMessage == nil)
+        #expect(result[0].notice?.contains("yarıda kaldı") == true)
+    }
+
     // Kuyruk en eskiden işlenir; bağ kayıt başına tektir ve en yeniler tutulur; son geçiş zaman aşımı sunucu
     // penceresinden uzundur.
     @Test func queueOrderLinksAndTimeout() {
         let records: [MeetingRecord] = [
             record(id: "b", startedAt: 200, status: .queued), record(id: "a", startedAt: 100, status: .done), record(id: "c", startedAt: 150, status: .queued),
         ]
-        #expect(nextQueuedMeeting(records: records)?.id == "c")
-        #expect(nextQueuedMeeting(records: [record(id: "x", startedAt: 1, status: .done)]) == nil)
+        // Kendi kayıtları en eskiden; başka hesabın kaydı bu hesapla işlenmez; sahibi bilinmeyen oturumdakinindir.
+        let queued: HostedQueuedRecords = hostedQueuedRecords(records: records + [record(id: "d", startedAt: 50, status: .queued)], owners: ["d": "baska", "b": "ben"], userId: "ben")
+        #expect(queued.own.map(\.id) == ["c", "b"])
+        #expect(queued.foreign.map(\.id) == ["d"])
+        #expect(hostedQueuedRecords(records: [record(id: "x", startedAt: 1, status: .done)], owners: [:], userId: "ben").own.isEmpty)
+        // Ölü bağ silinir, diğerleri kalır.
+        let pair: [HostedMeetingLink] = [
+            HostedMeetingLink(recordID: "r1", serverMeetingID: "s1", createdAt: Date(timeIntervalSince1970: 1)),
+            HostedMeetingLink(recordID: "r2", serverMeetingID: "s2", createdAt: Date(timeIntervalSince1970: 2)),
+        ]
+        #expect(removingHostedMeetingLink(links: pair, recordID: "r1").map(\.recordID) == ["r2"])
         var links: [HostedMeetingLink] = []
         for index in 0..<5 {
             links = appendingHostedMeetingLink(links: links, link: HostedMeetingLink(recordID: "r\(index % 3)", serverMeetingID: "s\(index)", createdAt: Date(timeIntervalSince1970: Double(index))), capacity: 2)

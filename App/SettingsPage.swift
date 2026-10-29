@@ -117,7 +117,7 @@ struct SettingsPage: View {
                     #if HOSTED_EDITION
                     // Giriş ya da çıkışta kurulum eksikleri uygulama düzeyinde yenilenir (bkz. AINotepadApp).
                     case .account:
-                        HostedAccountSettings(account: .shared)
+                        HostedAccountSettings(account: .shared, isMeetingInFlight: model.isBusy || model.isStarting)
                     #endif
                     case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()

@@ -1509,34 +1509,62 @@ final class AppModel {
     /// (bkz. `HostedAccount.prepareQueuedMeeting`), sonra son geçiş ve not o oturumla üretilir. Sunucuya hâlâ
     /// ulaşılamıyorsa bekler; sunucu şimdilik işlemiyorsa (deneme bitti, sınır) kayıt bekleyen kalır ve nedeni toplantıda
     /// görünür. Ağ gelince, hak durumu okununca, uygulama öne gelince ve her işleme bitince tetiklenir; birer birer işler.
+    @ObservationIgnored private var isRunningQueue: Bool = false
+
     func runOfflineQueue() async {
-        guard !isBusy, !isStarting, let record = nextQueuedMeeting(records: meetings) else {
+        guard !isBusy, !isStarting, !isRunningQueue else {
             return
         }
-        let recordID: String = record.id
-        switch await HostedAccount.shared.prepareQueuedMeeting(recordID: recordID) {
-        case .waitingForNetwork:
+        let userID: String
+        do {
+            guard let signedIn = try await HostedAccount.shared.signedInUserID() else {
+                return
+            }
+            userID = signedIn
+        } catch {
+            Self.logger.error("Kuyruk: oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
             return
-        case .blocked(let reason):
-            guard record.notice != reason, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
+        }
+        isRunningQueue = true
+        defer { isRunningQueue = false }
+        let queued: HostedQueuedRecords = hostedQueuedRecords(records: meetings, owners: loadHostedRecordOwners(), userId: userID)
+        for record in queued.foreign {
+            noteQueued(recordID: record.id, notice: String(localized: "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir."))
+        }
+        // Reddedilen kayıt (ör. oturumu açılamadı) sonrakileri bekletmez; ilk hazır olan işlenir, kalanlar işleme
+        // bitince yeniden tetiklenir.
+        for record in queued.own {
+            let recordID: String = record.id
+            switch await HostedAccount.shared.prepareQueuedMeeting(recordID: recordID) {
+            case .waitingForNetwork:
                 return
-            }
-            withSessionDirectory(id: recordID) { (directory: URL) -> Void in
-                saveRecord(record: current.with(notice: reason), directory: directory)
-            }
-            reloadMeetings()
-        case .ready:
-            // Hazırlık sürerken kayıt başlamış ya da toplantı silinmiş olabilir.
-            guard !isBusy, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
-                return
-            }
-            Self.logger.info("Çevrimdışı kayıt işleniyor, toplantı: \(recordID, privacy: .public)")
-            withSessionDirectory(id: recordID) { (directory: URL) -> Void in
-                process(record: current.with(notice: nil), directory: directory) { [weak self] () async -> LLMProvider? in
-                    await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
+            case .blocked(let reason):
+                noteQueued(recordID: recordID, notice: reason)
+            case .ready:
+                // Hazırlık sürerken kayıt başlamış ya da toplantı silinmiş olabilir.
+                guard !isBusy, let current = meetings.first(where: { $0.id == recordID }), current.status == .queued else {
+                    return
                 }
+                Self.logger.info("Çevrimdışı kayıt işleniyor, toplantı: \(recordID, privacy: .public)")
+                withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+                    process(record: current.with(notice: nil), directory: directory) { [weak self] () async -> LLMProvider? in
+                        await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: recordID) }
+                    }
+                }
+                return
             }
         }
+    }
+
+    /// Bekleyen kaydın işlenememe nedenini toplantıya yazar (değişmediyse dokunmaz).
+    private func noteQueued(recordID: String, notice: String) {
+        guard let current = meetings.first(where: { $0.id == recordID }), current.status == .queued, current.notice != notice else {
+            return
+        }
+        withSessionDirectory(id: recordID) { (directory: URL) -> Void in
+            saveRecord(record: current.with(notice: notice), directory: directory)
+        }
+        reloadMeetings()
     }
     #endif
 
@@ -1854,6 +1882,7 @@ final class AppModel {
             // sunucuda denetlenir; süre sesin gerçek uzunluğundan sayılır). Kuyruğa girer: içe aktarma bitince
             // `runOfflineQueue` oturumu `clientRef` ile açar, son geçiş ve not o oturumla yapılır; sunucu reddederse
             // ses silinmez, neden toplantıda yazar.
+            try await HostedAccount.shared.claimQueuedRecord(recordID: record.id)
             saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "İçe aktarıldı; sunucuda işlenmeyi bekliyor.")), directory: session.url)
             reloadMeetings()
             #else
@@ -3234,7 +3263,8 @@ final class AppModel {
             // Yalnızca bu cihazdaki toplantılar: iCloud'daki başka cihazın işlediği toplantı "yarıda kaldı" sayılmaz.
             // Okuma sürerken başlatılmış kayıt (kilitli) yarıda kalmış sayılmaz.
             let local: Set<String> = localMeetingIDsReportingFailure()
-            for record in staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) }) {
+            let interrupted: [MeetingRecord] = staleStatusesToInterrupt(records: meetings.filter { local.contains($0.id) && !isLocked(meetingID: $0.id) })
+            for record in hostedRequeued(records: interrupted) {
                 withSessionDirectory(id: record.id) { (directory: URL) -> Void in
                     saveRecord(record: record, directory: directory)
                 }
@@ -3247,6 +3277,24 @@ final class AppModel {
         startCloudSyncIfEnabled()
         Task { await refreshSetupProblems() }
         Task { await refreshSharedKeys() }
+    }
+
+    /// Abonelikte yarıda kalan çevrimdışı kayıt (sunucu oturumu yok) kuyruğa döner; geliştirici sürümünde değişmez.
+    private func hostedRequeued(records: [MeetingRecord]) -> [MeetingRecord] {
+        #if HOSTED_EDITION
+        do {
+            let requeued: [MeetingRecord] = queuingUnlinkedInterrupted(records: records, linkedRecordIDs: try hostedLinkedRecordIDs())
+            if requeued.contains(where: { $0.status == .queued }) {
+                Task { await runOfflineQueue() }
+            }
+            return requeued
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+            return records
+        }
+        #else
+        return records
+        #endif
     }
 
     /// Yerel toplantı kimlikleri; okunamazsa boş (o turda hiçbir toplantıya dokunulmaz) ve neden gösterilir.
