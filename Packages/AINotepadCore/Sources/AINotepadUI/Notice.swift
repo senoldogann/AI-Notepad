@@ -172,6 +172,8 @@ public struct NoticeText: View {
         self.text = Text(key)
     }
 
+    // `Text` gibi geri planda: yoksa sabit metin `String` sayılır ve hiç yerelleştirilmez.
+    @_disfavoredOverload
     public init<S: StringProtocol>(_ content: S, severity: NoticeSeverity) {
         self.severity = severity
         self.text = Text(content)
