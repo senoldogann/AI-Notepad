@@ -72,7 +72,7 @@ export async function deleteAccount(db: D1Database, platform: Platform, config: 
     .bind(userId)
     .all<StoredIdentity>();
   const identityHashes: string[] = await Promise.all(
-    identities.results.map((identity: StoredIdentity): Promise<string> => trialIdentityHash(config.secrets.accessToken, identity.provider, identity.subject)),
+    identities.results.map((identity: StoredIdentity): Promise<string> => trialIdentityHash(config.secrets.trialHash, identity.provider, identity.subject)),
   );
   await db.batch(accountDeletionStatements(db, userId, identityHashes, now));
   log("info", "account_deleted", { userId, canceledSubscriptions });

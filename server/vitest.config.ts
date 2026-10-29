@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 /** Sahte test gizli değerleri: gerçek anahtar değildir, yalnızca biçim doğrulamasını geçer. */
 const fakeSecrets: Record<string, string> = {
   ACCESS_TOKEN_SECRET: "test-access-token-secret-0123456789abcdef",
+  TRIAL_HASH_SECRET: "test-trial-hash-secret-0123456789abcdef00",
   ANTHROPIC_API_KEY: "test-anthropic-key-000000",
   ELEVENLABS_API_KEY: "test-elevenlabs-key-00000",
   STRIPE_SECRET_KEY: "sk_test_fake_0000000000000",

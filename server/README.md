@@ -27,11 +27,14 @@ AINOTEPAD_SERVER_LIVE_TESTS=1 LIVE_ANTHROPIC_API_KEY=... LIVE_STRIPE_SECRET_KEY=
 
 ## Gizli değerler (`wrangler secret put <AD> --env production`)
 
-`ACCESS_TOKEN_SECRET` (en az 32 karakter, rastgele), `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `STRIPE_SECRET_KEY`,
+`ACCESS_TOKEN_SECRET` (en az 32 karakter, rastgele), `TRIAL_HASH_SECRET` (en az 32 karakter, rastgele; erişim jetonu
+sırrından farklı), `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `TURNSTILE_SECRET_KEY` (sitedeki iletişim formu), `DEVICECHECK_PRIVATE_KEY` (yalnızca
 `DEVICECHECK_POLICY=required` iken: Apple Developer → Keys'te DeviceCheck yetkili anahtarın `.p8` dosyasının içeriği,
 olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production < AuthKey_XXXXXXXXXX.p8`).
-`ACCESS_TOKEN_SECRET` değiştirilirse IP ve kimlik özetleri değişir: kimlik deneme defteri eski hesaplarla eşleşmez.
+`TRIAL_HASH_SECRET` kimlik deneme defterinin ve deneme IP özetlerinin HMAC sırrıdır; değiştirilirse defterdeki eski
+satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği denemeyi yeniden alabilir). `ACCESS_TOKEN_SECRET`
+değiştirilirse yalnızca açık oturumlar düşer. Hız sınırı ve IP özeti IPv6'da adresin /64 önekine göredir.
 
 ## Ayarlar (`wrangler.jsonc` → `vars`)
 
@@ -79,7 +82,7 @@ da düşer (`402 trial_exhausted`, `trial_refused` logunda `reason: expired`) ve
 engel vardır:
 
 - **Kimlik deneme defteri** (`src/trialLedger.ts`): hesap silinince her giriş kimliği için (`trial-identity:<sağlayıcı>:<sub>`
-  metninin `ACCESS_TOKEN_SECRET` ile HMAC özeti; kimlik açık saklanmaz) harcanan deneme sayısı, denemenin başladığı an
+  metninin `TRIAL_HASH_SECRET` ile HMAC özeti; kimlik açık saklanmaz) harcanan deneme sayısı, denemenin başladığı an
   ve Mac doğrulaması `trial_identity_ledger`'a yazılır. Aynı kimlikle yeniden açılan hesap bunları devralır
   (`users.carried_trial_meetings`, `users.trial_started_at`, `users.trial_device_verified_at`) ve IP sınırına yeni deneme hesabı olarak girmez.
   Satır son güncellemeden 730 gün sonra silinir.

@@ -25,6 +25,7 @@ import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
 import { bearerToken, errorResponse, jsonResponse, optionalBearerToken, readBodyBytes, readJsonBody } from "./http";
+import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
 import { type LLMScope, proxyLLM } from "./llm/proxy";
 import { errorName, log } from "./log";
@@ -210,14 +211,16 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     return jsonResponse(200, { received: true, duplicate: result.duplicate });
   }
 
-  await enforceLimit(env.API_IP_LIMITER, `ip:${context.clientIp}`);
+  // Hız sınırı ve IP özeti IPv6'da /64 önekine göredir (`clientIpKey`); Turnstile gerçek IP'yi alır.
+  const ipKey: string = clientIpKey(context.clientIp);
+  await enforceLimit(env.API_IP_LIMITER, `ip:${ipKey}`);
 
   if (path.startsWith("/v1/auth/") && method === "POST") {
-    await enforceLimit(env.AUTH_IP_LIMITER, `ip:${context.clientIp}`);
+    await enforceLimit(env.AUTH_IP_LIMITER, `ip:${ipKey}`);
     if (path === "/v1/auth/apple") {
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyAppleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
-      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "apple", identity.subject);
+      const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "apple", identity.subject);
       const userId: string = await findOrCreateUser(db, "apple", identity.subject, identityHash, identity.email, now);
       log("info", "login", { provider: "apple", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
@@ -226,7 +229,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       const body = await readJsonBody(request, identityTokenSchema, smallBodyBytes);
       const identity = await verifyGoogleIdentityToken(db, context.platform, config, body.identityToken, body.nonce);
       // E-posta saklanmaz; Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı).
-      const identityHash: string = await trialIdentityHash(config.secrets.accessToken, "google", identity.subject);
+      const identityHash: string = await trialIdentityHash(config.secrets.trialHash, "google", identity.subject);
       const userId: string = await findOrCreateUser(db, "google", identity.subject, identityHash, null, now);
       log("info", "login", { provider: "google", userId });
       return jsonResponse(200, sessionBody(await startSession(db, config, userId, now)));
@@ -279,7 +282,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     }
     const deviceId: string | null =
       body.device === undefined ? null : await verifyDeviceAssertion(db, context.platform, config, user.userId, "meetings.start", body.device);
-    const clientIpHash: string = await hmacSha256Hex(config.secrets.accessToken, `trial-ip:${context.clientIp}`);
+    const clientIpHash: string = await hmacSha256Hex(config.secrets.trialHash, `trial-ip:${ipKey}`);
     const startRequest: MeetingStartRequest = { deviceId, clientIpHash, deviceCheckToken: body.deviceCheckToken ?? null };
     return jsonResponse(201, await startMeeting(db, context.platform, config, user.userId, startRequest, now));
   }
@@ -330,7 +333,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   }
 
   if (path === "/v1/reports" && method === "POST") {
-    await enforceLimit(env.REPORT_IP_LIMITER, `ip:${context.clientIp}`);
+    await enforceLimit(env.REPORT_IP_LIMITER, `ip:${ipKey}`);
     // Jeton isteğe bağlıdır; gönderildiyse geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
     const token: string | null = optionalBearerToken(request);
     const user: AuthedUser | null = token === null ? null : await authenticate(db, config, token, now);

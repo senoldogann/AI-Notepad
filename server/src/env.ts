@@ -51,6 +51,8 @@ export interface Env {
   readonly STRIPE_PRICE_ID: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
+  /** Kimlik deneme defteri ve deneme IP özetlerinin HMAC sırrı (erişim jetonu sırrından ayrı). */
+  readonly TRIAL_HASH_SECRET: string;
   readonly ANTHROPIC_API_KEY: string;
   readonly ELEVENLABS_API_KEY: string;
   readonly STRIPE_SECRET_KEY: string;

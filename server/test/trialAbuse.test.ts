@@ -102,7 +102,7 @@ async function trialMeetingsLeft(harness: Harness, session: Session): Promise<nu
 
 /** Google kimliğinin defter satırı (yoksa null). */
 async function ledgerRow(subject: string): Promise<{ trial_meetings_used: number; device_verified: number } | null> {
-  const identityHash: string = await trialIdentityHash(env.ACCESS_TOKEN_SECRET, "google", subject);
+  const identityHash: string = await trialIdentityHash(env.TRIAL_HASH_SECRET, "google", subject);
   return env.DB.prepare("SELECT trial_meetings_used, device_verified FROM trial_identity_ledger WHERE identity_hash = ?")
     .bind(identityHash)
     .first<{ trial_meetings_used: number; device_verified: number }>();
@@ -328,7 +328,7 @@ describe("deneme süresi (ilk deneme toplantısından 7 gün)", () => {
     expect((await start(harness, first, null, null)).status).toBe(201);
     harness.clock.nowMs = startMs + 3 * dayMs;
     expect((await deleteMe(harness, await refreshed(harness, first), null)).status).toBe(204);
-    const identityHash: string = await trialIdentityHash(env.ACCESS_TOKEN_SECRET, "google", subject);
+    const identityHash: string = await trialIdentityHash(env.TRIAL_HASH_SECRET, "google", subject);
     const ledger = await env.DB.prepare("SELECT trial_started_at FROM trial_identity_ledger WHERE identity_hash = ?").bind(identityHash).first();
     expect(ledger).toEqual({ trial_started_at: startMs });
 

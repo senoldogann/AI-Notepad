@@ -93,6 +93,8 @@ export interface Config {
   readonly stripePriceId: string;
   readonly secrets: {
     readonly accessToken: string;
+    /** Kimlik deneme defteri (`trialIdentityHash`) ve deneme IP özetinin HMAC sırrı. */
+    readonly trialHash: string;
     readonly anthropic: string;
     readonly elevenLabs: string;
     readonly stripe: string;
@@ -220,6 +222,7 @@ const envSchema = z.object({
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   ACCESS_TOKEN_SECRET: z.string().min(32),
+  TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
   ELEVENLABS_API_KEY: secret,
   STRIPE_SECRET_KEY: secret,
@@ -307,6 +310,7 @@ export function parseConfig(env: Env): Config {
     stripePriceId: value.STRIPE_PRICE_ID,
     secrets: {
       accessToken: value.ACCESS_TOKEN_SECRET,
+      trialHash: value.TRIAL_HASH_SECRET,
       anthropic: value.ANTHROPIC_API_KEY,
       elevenLabs: value.ELEVENLABS_API_KEY,
       stripe: value.STRIPE_SECRET_KEY,
