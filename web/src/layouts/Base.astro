@@ -3,6 +3,7 @@
 import "../styles/global.css";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
+import PullReveal from "../components/PullReveal.astro";
 import { productName } from "../config";
 import { copy, type PageMeta } from "../copy";
 import { type PageKey, pageUrl } from "../routes";
@@ -48,10 +49,14 @@ const canonical: string = pageUrl(page, origin);
   </head>
   <body>
     <a class="skip-link" href="#main">{copy.common.skipLink}</a>
-    <Header page={page} />
-    <main id="main" tabindex="-1">
-      <slot />
-    </main>
-    <Footer />
+    <!-- Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. -->
+    <div id="page-shell" class="page-shell">
+      <Header page={page} />
+      <main id="main" tabindex="-1">
+        <slot />
+      </main>
+      <Footer />
+    </div>
+    <PullReveal />
   </body>
 </html>

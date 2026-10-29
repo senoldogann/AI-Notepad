@@ -63,6 +63,9 @@ export interface CommonCopy {
     readonly account: string;
     readonly company: string;
     readonly fontLicense: string;
+    readonly cookies: string;
+    /** Sayfa sonundaki çekmede görünen kısa teşekkür (PullReveal.astro). */
+    readonly pullThanks: string;
     readonly copyright: string;
   };
   readonly lastUpdated: string;
@@ -352,6 +355,8 @@ export const copy: Copy = {
       account: "Account",
       company: "Company",
       fontLicense: "Inter font licence",
+      cookies: "Cookies",
+      pullThanks: "Thanks for listening.",
       copyright: `© 2026 ${operator.name}`,
     },
     lastUpdated: "Last updated",
