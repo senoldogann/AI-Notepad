@@ -75,8 +75,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/AINotepad.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "0.1.4"
+        CURRENT_PROJECT_VERSION: "5"
   # Abonelik sürümü: anahtarsız; yapay zekâ ve son geçiş bizim sunucumuz (server/) üzerinden, canlı metin WhisperKit.
   # Geliştirici sürümüyle aynı kaynaklar + App/Hosted; farklar yalnızca `HOSTED_EDITION` bayrağıyla birkaç noktada.
   # Ayrı paket kimliği, Anahtar Zinciri servisi ve adres şeması: iki uygulama aynı Mac'te yan yana durur.
@@ -144,8 +144,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/Hosted/AINotepadHosted.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Gistsmith
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Gistsmith toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "0.1.4"
+        CURRENT_PROJECT_VERSION: "5"
       configs:
         # Yerel sunucu: `cd server && npm run dev` (http yalnızca Debug'da kabul edilir).
         Debug:
@@ -203,8 +203,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad yüz yüze toplantıyı yazıya dökmek için mikrofonu kullanır."
         CODE_SIGN_ENTITLEMENTS: iOS/AINotepad.entitlements
-        MARKETING_VERSION: "0.1.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "0.1.4"
+        CURRENT_PROJECT_VERSION: "5"
     info:
       path: iOS/Info.plist
       properties:
@@ -248,8 +248,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         # Niyetlerin gövdesi eklentide boş derlenir (bkz. iOS/Shared/RecordingIntents.swift).
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
-        MARKETING_VERSION: "0.1.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "0.1.4"
+        CURRENT_PROJECT_VERSION: "5"
     info:
       path: iOSWidgets/Info.plist
       properties:
