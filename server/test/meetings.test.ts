@@ -129,6 +129,30 @@ describe("haklar ve toplantı oturumları", () => {
     expect((await me(harness, session)).trialMeetingsLeft).toBe(0);
   });
 
+  it("aynı clientRef ile yinelenen başlatma aynı oturumu döndürür; deneme ve günlük başlatma bir kez düşer", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const start = async (clientRef: string): Promise<Response> =>
+      harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef } }));
+    const first: Response = await start("kayit-2026-11-01");
+    expect(first.status).toBe(201);
+    const firstBody: StartedMeetingBody = await first.json<StartedMeetingBody>();
+    expect(firstBody).toMatchObject({ kind: "trial", trialMeetingsLeft: 2 });
+    // Bitmiş oturum da aynı kimlikle yeniden açılmaz (çevrimdışı kayıt işlenirken yanıt kaybolduysa).
+    await harness.call(req("POST", `/v1/meetings/${firstBody.meetingId}/end`, { token: session.accessToken }));
+    harness.clock.nowMs += 5 * 60_000;
+    const repeated: StartedMeetingBody = await (await start("kayit-2026-11-01")).json<StartedMeetingBody>();
+    expect(repeated).toMatchObject({ meetingId: firstBody.meetingId, kind: "trial", maxDurationMinutes: 90, trialMeetingsLeft: 2 });
+    expect((await me(harness, session)).trialMeetingsLeft).toBe(2);
+    const started = await env.DB.prepare("SELECT meetings_started FROM daily_usage WHERE user_id = ?").bind(session.userId).first<{ meetings_started: number }>();
+    expect(started?.meetings_started).toBe(1);
+    // Başka kimlik yeni oturumdur; geçersiz kimlik reddedilir.
+    const other: StartedMeetingBody = await (await start("kayit-2026-11-02")).json<StartedMeetingBody>();
+    expect(other.meetingId).not.toBe(firstBody.meetingId);
+    expect(other.trialMeetingsLeft).toBe(1);
+    await expectError(await start("../geçersiz"), 400, "invalid_body");
+  });
+
   it("yeni toplantı açık olanı kapatır; bitirme dakikayı yazar ve tekrarlanabilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);

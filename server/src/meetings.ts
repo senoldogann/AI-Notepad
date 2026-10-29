@@ -52,6 +52,8 @@ export interface MeetingStartRequest {
   readonly clientIpHash: string;
   /** İstemcinin Apple DeviceCheck jetonu (base64); deneme toplantısında gerekebilir (`requireTrialDevice`). */
   readonly deviceCheckToken: string | null;
+  /** İstemcinin kayıt kimliği; aynı kullanıcı ve kimlikle açılmış oturum varsa o döner (yeniden düşüm yok). */
+  readonly clientRef: string | null;
 }
 
 /** SQL bağ değeri. */
@@ -71,6 +73,7 @@ interface NewMeeting {
   readonly kind: "trial" | "subscription";
   readonly maxEndsAt: number;
   readonly tokenBudget: number;
+  readonly clientRef: string | null;
 }
 
 /** Abonelik toplantısının ek koşulu yoktur: aylık sınır eklemeden önce denetlenir. */
@@ -97,8 +100,8 @@ async function insertMeeting(
     db.prepare("INSERT OR IGNORE INTO daily_usage (user_id, day) VALUES (?, ?)").bind(meeting.userId, day),
     db
       .prepare(
-        `INSERT INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget)
-         SELECT ?, ?, ?, ?, ?, ?, ?
+        `INSERT OR IGNORE INTO meeting_sessions (id, user_id, device_id, kind, started_at, max_ends_at, token_budget, client_ref)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?
          WHERE (SELECT meetings_started FROM daily_usage WHERE user_id = ? AND day = ?) < ? AND (${gate.sql})`,
       )
       .bind(
@@ -109,6 +112,7 @@ async function insertMeeting(
         nowMs,
         meeting.maxEndsAt,
         meeting.tokenBudget,
+        meeting.clientRef,
         meeting.userId,
         day,
         config.maxMeetingStartsPerDay,
@@ -160,11 +164,17 @@ export async function startMeeting(
   request: MeetingStartRequest,
   now: Date,
 ): Promise<StartedMeeting> {
+  // Aynı kayıt için yinelenen başlatma (yanıt kaybolduysa, çevrimdışı kayıt sonradan açılırken): aynı oturum döner;
+  // deneme hakkı, günlük başlatma ve süre yeniden düşmez, açık toplantı kapanmaz.
+  const existing: StartedMeeting | null = await startedByClientRef(db, config, userId, request.clientRef, now);
+  if (existing !== null) {
+    return existing;
+  }
   await requireSpendHeadroom(db, config, now);
   if (!hasSubscriptionAccess(await subscriptionState(db, userId), now, config.pastDueGraceMs)) {
     await requireTrialSpendHeadroom(db, config, now);
     await requireTrialDevice(db, platform, config, userId, request.deviceCheckToken, now);
-    return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, now);
+    return startTrialMeeting(db, config, userId, request.deviceId, request.clientIpHash, request.clientRef, now);
   }
   const deviceId: string | null = request.deviceId;
   const usage: MonthlyUsage = await monthlyUsage(db, userId, now);
@@ -182,8 +192,14 @@ export async function startMeeting(
     kind: "subscription",
     maxEndsAt,
     tokenBudget: config.subscriberMeetingTokenBudget,
+    clientRef: request.clientRef,
   };
   if (!(await insertMeeting(db, config, meeting, noGate, [], now))) {
+    // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner.
+    const raced: StartedMeeting | null = await startedByClientRef(db, config, userId, request.clientRef, now);
+    if (raced !== null) {
+      return raced;
+    }
     await requireDailyStartLeft(db, config, userId, now);
     log("error", "meeting_insert_failed", { userId, kind: "subscription" });
     throw new ApiError("internal_error", "Toplantı başlatılamadı; yeniden dene.");
@@ -262,6 +278,7 @@ async function startTrialMeeting(
   userId: string,
   deviceId: string | null,
   clientIpHash: string,
+  clientRef: string | null,
   now: Date,
 ): Promise<StartedMeeting> {
   const meetingId: string = randomId();
@@ -310,9 +327,14 @@ async function startTrialMeeting(
   const recordTrialStartedAt: D1PreparedStatement = db
     .prepare("UPDATE users SET trial_started_at = ? WHERE id = ? AND trial_started_at IS NULL AND EXISTS (SELECT 1 FROM meeting_sessions WHERE id = ?)")
     .bind(now.getTime(), userId, meetingId);
-  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget };
+  const meeting: NewMeeting = { id: meetingId, userId, deviceId, kind: "trial", maxEndsAt, tokenBudget: config.trialMeetingTokenBudget, clientRef };
   const inserted: boolean = await insertMeeting(db, config, meeting, gate, [recordTrialStart, recordTrialStartedAt], now);
   if (!inserted) {
+    // Aynı kimlikle eşzamanlı başlatma kazandıysa onun oturumu döner (deneme bir kez düşer).
+    const raced: StartedMeeting | null = await startedByClientRef(db, config, userId, clientRef, now);
+    if (raced !== null) {
+      return raced;
+    }
     await requireDailyStartLeft(db, config, userId, now);
   }
   const trial: TrialState = await userTrialState(db, userId);
@@ -370,6 +392,32 @@ export async function endMeeting(db: D1Database, userId: string, meetingId: stri
   await settleDeepgramMeetings(db, now);
   log("info", "meeting_ended", { userId, meetingId, minutes: row.minutes, tokensUsed: row.tokens_used, audioSeconds: row.audio_seconds });
   return row;
+}
+
+/**
+ * İstemcinin kayıt kimliğiyle daha önce açılmış oturum (yoksa ya da kimlik verilmediyse null). Yanıt ilk başlatmanınkiyle
+ * aynı biçimdedir; deneme toplantısında kalan deneme şimdiki durumdan hesaplanır.
+ */
+async function startedByClientRef(db: D1Database, config: Config, userId: string, clientRef: string | null, now: Date): Promise<StartedMeeting | null> {
+  if (clientRef === null) {
+    return null;
+  }
+  const row: MeetingRow | null = await db
+    .prepare("SELECT * FROM meeting_sessions WHERE user_id = ? AND client_ref = ?")
+    .bind(userId, clientRef)
+    .first<MeetingRow>();
+  if (row === null) {
+    return null;
+  }
+  log("info", "meeting_start_repeated", { userId, meetingId: row.id, kind: row.kind });
+  return {
+    meetingId: row.id,
+    kind: row.kind,
+    tokenBudget: row.token_budget,
+    maxDurationMinutes: Math.max(1, Math.round((row.max_ends_at - row.started_at) / 60_000)),
+    expiresAt: new Date(row.max_ends_at).toISOString(),
+    trialMeetingsLeft: row.kind === "trial" ? trialMeetingsLeft(await userTrialState(db, userId), config, now) : null,
+  };
 }
 
 async function findMeeting(db: D1Database, userId: string, meetingId: string): Promise<MeetingRow | null> {
