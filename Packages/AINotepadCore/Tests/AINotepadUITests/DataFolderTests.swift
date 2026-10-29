@@ -9,11 +9,16 @@ private func repositoryRoot() -> URL {
         .deletingLastPathComponent().deletingLastPathComponent()
 }
 
+/// Info.plist'teki anahtarın değeri (yoksa nil).
+private func plistValue(plist path: String, key: String) throws -> (any Sendable)? {
+    let data: Data = try Data(contentsOf: repositoryRoot().appending(path: path))
+    let plist: [String: any Sendable] = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: any Sendable])
+    return plist[key]
+}
+
 /// Info.plist'teki veri klasörü adı (yoksa nil).
 private func dataFolderName(plist path: String) throws -> String? {
-    let data: Data = try Data(contentsOf: repositoryRoot().appending(path: path))
-    let plist: [String: Any] = try #require(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
-    return plist[dataFolderInfoKey] as? String
+    try plistValue(plist: path, key: dataFolderInfoKey) as? String
 }
 
 @Suite struct DataFolderTests {
@@ -36,6 +41,16 @@ private func dataFolderName(plist path: String) throws -> String? {
         #expect(project.contains("HOSTED_DATA_FOLDER_NAME: \"AINotepad Hosted Debug\""))
         #expect(project.contains("HOSTED_KEYCHAIN_SERVICE: \"AINotepadHosted\""))
         #expect(project.contains("HOSTED_KEYCHAIN_SERVICE: \"AINotepadHosted.debug\""))
+    }
+
+    // Yalnızca abonelik sürümü kullanıcı verisini hesap başına ayırır; geliştirici sürümü ve iPhone eskisi gibi
+    // klasörün kökünü kullanır.
+    @Test func onlyHostedEditionScopesDataPerAccount() throws {
+        #expect(try plistValue(plist: "App/Hosted/Info.plist", key: accountScopedDataInfoKey) as? Bool == true)
+        #expect(try plistValue(plist: "App/Info.plist", key: accountScopedDataInfoKey) == nil)
+        #expect(try plistValue(plist: "iOS/Info.plist", key: accountScopedDataInfoKey) == nil)
+        let project: String = try String(contentsOf: repositoryRoot().appending(path: "project.yml"), encoding: .utf8)
+        #expect(project.components(separatedBy: "\(accountScopedDataInfoKey): true").count == 2)
     }
 
     // Anahtar yoksa klasör tahmin edilmez: açık hata.

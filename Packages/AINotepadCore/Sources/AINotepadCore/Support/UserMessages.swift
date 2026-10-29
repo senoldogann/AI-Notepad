@@ -241,6 +241,16 @@ private func storageMessage(error: StorageError) -> String {
         String(localized: "Toplantı taşınamadı: \((path as NSString).lastPathComponent). İnternet bağlantısını kontrol edip yeniden dene.")
     case .dataFolderNotConfigured(let key, let bundle):
         String(localized: "Uygulamanın veri klasörü tanımlı değil (\(bundle) Info.plist'inde \(key) yok). Uygulamayı yeniden kur.")
+    case .accountNotSelected:
+        String(localized: "Hesabın verisi henüz açılmadı. Giriş yap.")
+    case .invalidAccountKey:
+        String(localized: "Hesap klasörü tanınmadı. Uygulamayı yeniden başlat; sürerse geri bildirim gönder.")
+    case .accountSwitchRequiresRelaunch:
+        String(localized: "Başka bir hesapla giriş yapıldı; o hesabın toplantıları için uygulama yeniden başlamalı.")
+    case .legacyDataConflict(let source, _):
+        String(localized: "Önceki toplantılar hesabına taşınamadı: \((source as NSString).lastPathComponent) hesap klasöründe zaten var. Hiçbir şey silinmedi; veriler eski yerinde.")
+    case .legacyDataMoveFailed(let source, _, let reason, _):
+        String(localized: "Önceki toplantılar hesabına taşınamadı (\((source as NSString).lastPathComponent): \(reason)). Hiçbir şey silinmedi; taşınamayanlar eski yerinde kaldı, yeniden dene.")
     }
 }
 

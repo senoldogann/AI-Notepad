@@ -54,9 +54,10 @@ public func loadMonoSamples(url: URL) throws -> [Float] {
     }
 }
 
-/// Kayıtlı seslerin dosyası: `Voices.json` (yalnızca sayılar; ses saklanmaz).
+/// Kayıtlı seslerin dosyası: kullanıcı verisinin altında `Voices.json` (yalnızca sayılar; ses saklanmaz; bkz.
+/// `AppPaths.userDataDirectory`).
 public func voicesFileURL() throws -> URL {
-    try AppPaths.applicationSupport().appending(path: "Voices.json")
+    try AppPaths.userDataDirectory().appending(path: "Voices.json")
 }
 
 /// Kayıtlı sesleri okur; dosya henüz yoksa boş.

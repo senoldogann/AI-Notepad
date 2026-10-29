@@ -65,6 +65,10 @@ enum AppEntry {
         if isDemoMode {
             do {
                 _ = try demoScene(arguments: CommandLine.arguments)
+                #if HOSTED_EDITION
+                // Abonelikte veri hesap başına: tanıtım verisi sahte bir hesabın klasörüne yazılır.
+                try AppPaths.activateAccount(key: accountDataKey(userId: "tanitim"))
+                #endif
                 try seedDemoData(now: Date())
             } catch {
                 FileHandle.standardError.write(Data("\(appName) tanıtım: \(error)\n".utf8))
@@ -77,42 +81,39 @@ enum AppEntry {
             return
         }
         #if HOSTED_EDITION
-        // Giriş kapısı: oturum yoksa yerel MCP sunucusu da açılmaz (toplantı arşivi girişten sonra kullanılır).
+        // Giriş kapısı: oturum yoksa yerel MCP sunucusu da açılmaz (toplantı arşivi girişten sonra kullanılır). Yalnızca
+        // giriş yapmış hesabın arşivi okunur; her araç çağrısında oturum yeniden denetlenir (bkz.
+        // `hostedMCPAccessDenial`: çıkış ya da başka hesapla giriş yapılınca arşiv okunmaz).
+        let archive: HostedMCPArchive
         do {
-            guard try hostedHasStoredSession(bundle: .main) else {
+            guard let current = try hostedMCPArchive(bundle: .main) else {
                 FileHandle.standardError.write(Data("\(appName) MCP: \(String(localized: "Önce uygulamayı açıp giriş yap."))\n".utf8))
                 exit(1)
             }
+            archive = current
         } catch {
             FileHandle.standardError.write(Data("\(appName) MCP: \(userFacingMessage(error: error))\n".utf8))
             exit(1)
         }
-        #endif
+        let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        runMCPServer(
+            input: .standardInput, output: .standardOutput, sessionsDirectories: [archive.sessionsDirectory],
+            accessDenial: { hostedMCPAccessDenial(archive: archive, bundle: .main) }, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
+        )
+        #else
         do {
             let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
             runMCPServer(
                 input: .standardInput, output: .standardOutput, sessionsDirectories: try AppPaths.meetingDirectories(location: storedStorageLocation()),
-                accessDenial: mcpAccessDenial, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
+                // Geliştirici sürümünde oturum yoktur, ret de yoktur.
+                accessDenial: { nil }, version: version, noteLanguage: selectedNoteLanguage(), appName: appName
             )
         } catch {
             FileHandle.standardError.write(Data("\(appName) MCP: toplantı klasörü açılamadı: \(error)\n".utf8))
             exit(1)
         }
+        #endif
     }
-}
-
-/// MCP araç çağrısının reddi: abonelik sürümünde oturum her çağrıda Anahtar Zinciri'nden yeniden okunur (sunucu
-/// açıldıktan sonra çıkış yapıldıysa arşiv okunmaz); geliştirici sürümünde oturum yoktur, ret de yoktur.
-private func mcpAccessDenial() -> String? {
-    #if HOSTED_EDITION
-    do {
-        return try hostedHasStoredSession(bundle: .main) ? nil : String(localized: "Önce uygulamayı açıp giriş yap.")
-    } catch {
-        return userFacingMessage(error: error)
-    }
-    #else
-    return nil
-    #endif
 }
 
 #if DEBUG
@@ -230,7 +231,11 @@ struct AINotepadApp: App {
                 // Tema açılışta bir kez uygulanır (hiç pencere açılmasa da ada ve menüler doğru temada olsun).
                 applyTheme(theme: AppTheme(rawValue: UserDefaults.standard.string(forKey: SettingsKey.theme) ?? "") ?? .light)
                 island.install()
-                model.performStartupMaintenance()
+                // Abonelikte toplantılar, kişiler ve geçmiş yalnızca giriş yapan hesabın verisi yüklüyse okunur; değilse
+                // giriş yapılıp hesap yüklenince (bkz. `HostedAccount.dataActivations`).
+                if isAccountDataReady() {
+                    model.performStartupMaintenance()
+                }
                 // Önceki açılışın çökme raporları (MetricKit) okunur ve yenileri dinlenir.
                 crashReports.start()
                 // Giriş kapısı kapalıyken (abonelik sürümü, oturum yok) genel kısayollar kaydedilmez; giriş yapılınca
@@ -450,8 +455,18 @@ struct AINotepadApp: App {
                 }
                 .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
                     if !isBusy {
+                        relaunchForAccountSwitchIfIdle(model: model)
                         Task { await model.runOfflineQueue() }
                     }
+                }
+                // Açılışta oturum yoktu, giriş yapılınca hesabın verisi yüklendi: toplantılar, kişiler ve geçmiş şimdi
+                // okunur. Başka bir hesapla giriş yapıldıysa uygulama (kayıt ve işleme yokken) yeniden başlar; o
+                // hesabın verisi yeni süreçte yüklenir.
+                .onChange(of: HostedAccount.shared.dataActivations) { (_: Int, _: Int) in
+                    model.performStartupMaintenance()
+                }
+                .onChange(of: HostedAccount.shared.dataState) { (_: HostedDataState, _: HostedDataState) in
+                    relaunchForAccountSwitchIfIdle(model: model)
                 }
                 // Kurulum eksikleri hesabın her durum değişiminde (giriş, çıkış, hesap silme, hak durumu yenilemesi)
                 // yeniden hesaplanır: açılışta bir kez hesaplanıp eskiyen "giriş yapılmamış" uyarısı kalmaz. Menü
@@ -543,6 +558,36 @@ func isSignInRequired() -> Bool {
     false
     #endif
 }
+
+/// Kullanıcı verisi okunabilir mi: abonelik sürümünde giriş yapan hesabın verisi bu süreçte yüklüyse (bkz.
+/// `HostedAccount.dataState`); geliştirici sürümünde her zaman.
+@MainActor
+func isAccountDataReady() -> Bool {
+    #if HOSTED_EDITION
+    HostedAccount.shared.isAccountDataLoaded
+    #else
+    true
+    #endif
+}
+
+#if HOSTED_EDITION
+/// Başka bir hesapla giriş yapıldıysa ve kayıt ya da işleme yoksa uygulamayı yeniden başlatır: yeni süreç o hesabın
+/// verisini yükler, bellekteki eski hesabın toplantıları hiç görünmez. Kayıt ya da işleme sürerken beklenir (giriş kapısı
+/// nedenini söyler); bitince yeniden denenir. Başlatıcı çalıştırılamazsa neden kapıda görünür.
+@MainActor
+private func relaunchForAccountSwitchIfIdle(model: AppModel) {
+    guard case .relaunchRequired = HostedAccount.shared.dataState, !model.isBusy else {
+        return
+    }
+    appLogger.info("Başka bir hesapla giriş yapıldı, uygulama yeniden başlatılıyor")
+    do {
+        try relaunchApplication()
+    } catch {
+        appLogger.error("Hesap değişiminde uygulama yeniden başlatılamadı, hata: \(String(describing: error), privacy: .private)")
+        HostedAccount.shared.reportRelaunchFailure(message: userFacingMessage(error: error))
+    }
+}
+#endif
 
 /// Menü çubuğu menüsü. Giriş kapısı kapalıyken yalnızca "Giriş yap…" ve "Çık" (kayıt sürüyorsa "Kaydı bitir").
 private struct MenuContent: View {

@@ -173,12 +173,16 @@ final class HostedAccount {
 
     private init() {
         do {
-            hasSession = try hostedHasStoredSession(bundle: .main)
+            let userID: String? = try hostedStoredUserID(bundle: .main)
+            hasSession = userID != nil
+            signedInUserIDCache = userID
         } catch {
             // Kapı kapalı kalır; ilk yenileme hesabı "kullanılamıyor" yapar ve nedeni kapıda görünür.
             accountLogger.error("Kayıtlı oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
             hasSession = nil
         }
+        // Açılışta oturum varsa o hesabın verisi, toplantılar okunmadan önce yüklenir (bkz. `syncAccountData`).
+        syncAccountData(userID: signedInUserIDCache)
         observers.append(NotificationCenter.default.addObserver(forName: .hostedSessionEnded, object: nil, queue: .main) { [weak self] (_: Notification) -> Void in
             MainActor.assumeIsolated {
                 self?.currentMeeting = nil
@@ -225,7 +229,75 @@ final class HostedAccount {
             return false
         }
         #endif
-        return hasSession != true
+        return hasSession != true || !isAccountDataLoaded
+    }
+
+    // MARK: Hesap verisi
+
+    /// Bu süreçte yüklü hesap verisinin durumu (bkz. `syncAccountData`). Giriş yapan hesabın verisi yüklü değilse giriş
+    /// kapısı kapalı kalır ve nedeni kapıda görünür: hiçbir hesap başka bir hesabın toplantılarını görmez.
+    private(set) var dataState: HostedDataState = .notLoaded
+    /// Hesap verisi bu süreçte ilk kez yüklendiğinde artar (açılışta oturum yoktu, sonra giriş yapıldı): uygulama
+    /// toplantıları, kişileri ve geçmişi o zaman okur (bkz. `AppModel.performStartupMaintenance`).
+    private(set) var dataActivations: Int = 0
+
+    /// Giriş yapan hesabın verisi yüklü mü.
+    var isAccountDataLoaded: Bool {
+        if case .loaded = dataState {
+            return true
+        }
+        return false
+    }
+
+    /// Yüklü hesap verisini giriş yapan hesapla eşler (açılışta ve her hesap okumasında): giriş yoksa yüklü veri kalır
+    /// (çıkış yerel veriyi silmez, kapı gizler); henüz hesap yüklenmediyse giriş yapanınki yüklenir (önceki veri
+    /// sahiplenilmediyse ona taşınır); başka bir hesabınki yüklüyse uygulama yeniden başlamalıdır (`relaunchRequired`;
+    /// uygulama kayıt ve işleme yokken yeniden başlatır).
+    private func syncAccountData(userID: String?) {
+        let loadedKey: String? = AppPaths.activeAccountKey()
+        #if DEBUG
+        // Tanıtım modu sunucuya bağlanmaz: açılışta yüklenen tanıtım hesabı kalır (bkz. App/DemoData.swift).
+        if isDemoMode {
+            if let loadedKey {
+                dataState = .loaded(accountKey: loadedKey)
+            }
+            return
+        }
+        #endif
+        switch accountDataTransition(loadedKey: loadedKey, signedInKey: userID.map { (id: String) -> String in accountDataKey(userId: id) }) {
+        case .keep:
+            if let loadedKey {
+                dataState = .loaded(accountKey: loadedKey)
+            }
+        case .activate:
+            guard let userID else {
+                return
+            }
+            do {
+                let key: String = try prepareHostedAccountData(userId: userID)
+                dataState = .loaded(accountKey: key)
+                dataActivations += 1
+            } catch {
+                accountLogger.error("Hesap verisi hazırlanamadı, hata: \(String(describing: error), privacy: .private)")
+                dataState = .failed(message: userFacingMessage(error: error))
+            }
+        case .relaunch(let accountKey):
+            if dataState != .relaunchRequired(accountKey: accountKey) {
+                accountLogger.info("Başka bir hesapla giriş yapıldı, uygulama boşta olunca yeniden başlayacak")
+            }
+            dataState = .relaunchRequired(accountKey: accountKey)
+        }
+    }
+
+    /// Hazırlanamayan hesap verisini yeniden dener (kapıdaki "Yeniden dene"); hesap değişiminde yeniden başlatma
+    /// başarısız olduysa yeniden başlatmayı yeniden ister.
+    func retryAccountData() {
+        syncAccountData(userID: signedInUserIDCache)
+    }
+
+    /// Hesap değişiminde uygulama yeniden başlatılamadı: neden kapıda görünür, "Yeniden dene" yeniden ister.
+    func reportRelaunchFailure(message: String) {
+        dataState = .failed(message: message)
     }
 
     /// Bu Mac'te oturum var mı (hak durumu okunmuş olsun ya da olmasın).
@@ -277,6 +349,9 @@ final class HostedAccount {
         }
         self.hasSession = hasSession
         signedInUserIDCache = userID
+        // Giriş yapan hesabın verisi, kapı açılmadan önce (aynı ana iş parçacığı adımında) yüklenir ya da yeniden
+        // başlatma istenir: başka hesabın toplantıları bir an bile görünmez.
+        syncAccountData(userID: userID)
         guard hasSession else {
             state = .signedOut
             return

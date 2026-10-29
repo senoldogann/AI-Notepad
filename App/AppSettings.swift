@@ -158,6 +158,16 @@ func applyDefaultInterfaceLanguageOnce(bundleIdentifier: String, language: Inter
 /// Açılışta geçerli olan arayüz dili (değiştirilince yeniden başlatma önerilir; Ayarlar yeniden kurulsa da kalır).
 let launchInterfaceLanguage: InterfaceLanguage = storedInterfaceLanguage()
 
+/// Kullanıcının oluşturduğu içeriğin (klasörler, Sor tarifleri) saklandığı ayar alanı: geliştirici sürümünde standart
+/// ayarlar; abonelikte yüklü hesabın kendi alanı (bkz. `hostedActiveAccountDefaults`), hesap yüklenmediyse hata.
+func userContentDefaults() throws -> UserDefaults {
+    #if HOSTED_EDITION
+    try hostedActiveAccountDefaults()
+    #else
+    UserDefaults.standard
+    #endif
+}
+
 /// Uygulamayı yeniden başlatır (arayüz dili değişince). Yeni kopya ancak bu kopya gerçekten kapandıktan sonra açılır:
 /// kapanış iptal edilirse (kayıt ya da işleme sürüyor, çıkış koruması) 30 sn bekleyip vazgeçer. İki kopya aynı anda
 /// çalışırsa yeni kopya kısayolları kaydedemez ve süren kaydı "yarıda kaldı" diye işaretlerdi. Başlatıcı

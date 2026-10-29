@@ -17,7 +17,8 @@ public enum AppPaths {
         return name
     }
 
-    /// `~/Library/Application Support/<veri klasörü>` (bkz. `dataFolderInfoKey`).
+    /// `~/Library/Application Support/<veri klasörü>` (bkz. `dataFolderInfoKey`). Doğrudan burada yalnızca hesaplar
+    /// arasında paylaşılan veri (modeller, çökme raporları) durur; kullanıcı verisi `userDataDirectory()` altındadır.
     public static func applicationSupport() throws -> URL {
         let base: URL
         do {
@@ -33,14 +34,15 @@ public enum AppPaths {
         try ensureDirectory(url: applicationSupport().appending(path: "Models", directoryHint: .isDirectory))
     }
 
-    /// Tüm toplantıların klasörü: `Sessions`.
+    /// Tüm toplantıların klasörü: kullanıcı verisinin altında `Sessions` (bkz. `userDataDirectory`).
     public static func sessionsDirectory() throws -> URL {
-        try ensureDirectory(url: applicationSupport().appending(path: "Sessions", directoryHint: .isDirectory))
+        try ensureDirectory(url: userDataDirectory().appending(path: sessionsFolderName, directoryHint: .isDirectory))
     }
 
-    /// Sor sohbetlerinin geçmişi: `AskHistory` (her sohbet bir JSON dosyası; iCloud'a eşitlenmez).
+    /// Sor sohbetlerinin geçmişi: kullanıcı verisinin altında `AskHistory` (her sohbet bir JSON dosyası; iCloud'a
+    /// eşitlenmez).
     public static func askHistoryDirectory() throws -> URL {
-        try ensureDirectory(url: applicationSupport().appending(path: "AskHistory", directoryHint: .isDirectory))
+        try ensureDirectory(url: userDataDirectory().appending(path: askHistoryFolderName, directoryHint: .isDirectory))
     }
 
     /// MetricKit çökme ve donma raporları: `CrashReports` (her teşhis paketi bir JSON dosyası; yalnız bu cihazda kalır,

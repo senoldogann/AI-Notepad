@@ -179,9 +179,9 @@ private func personSummary(name: String, saved: SavedPerson?, meetings: [PersonM
     )
 }
 
-/// Kişiler defterinin dosyası (`Application Support/AINotepad/People.json`).
+/// Kişiler defterinin dosyası: kullanıcı verisinin altında `People.json` (bkz. `AppPaths.userDataDirectory`).
 public func peopleFileURL() throws -> URL {
-    try AppPaths.applicationSupport().appending(path: "People.json")
+    try AppPaths.userDataDirectory().appending(path: "People.json")
 }
 
 /// Kişiler defterini okur; dosya henüz yoksa boş.

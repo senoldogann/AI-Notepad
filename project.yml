@@ -118,6 +118,9 @@ targets:
         # derlemesi ayrı klasör ve Anahtar Zinciri servisi kullanır (aşağıda `configs`): yerel sunucuyla denenen
         # derleme yayındaki oturumu ve toplantıları okuyamaz, silemez.
         AINotepadDataFolderName: "$(HOSTED_DATA_FOLDER_NAME)"
+        # Kullanıcı verisi (toplantılar, Sor geçmişi, kişiler, ses izleri) giriş yapan hesaba göre ayrı klasörde:
+        # `<veri klasörü>/Accounts/<anahtar>` (bkz. Packages/AINotepadCore/.../Support/AccountData.swift).
+        AINotepadAccountScopedData: true
         HostedKeychainService: "$(HOSTED_KEYCHAIN_SERVICE)"
         NSAudioCaptureUsageDescription: "Gistsmith toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "Gistsmith toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."

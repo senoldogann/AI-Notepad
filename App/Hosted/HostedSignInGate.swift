@@ -6,10 +6,10 @@ import SwiftUI
 
 private let gateLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "HostedGate")
 
-/// Bu Mac'te kayıtlı oturum var mı (Anahtar Zinciri; ağa gidilmez). Servis adı tanımlı değilse ya da Anahtar Zinciri
-/// okunamazsa hata fırlar.
-func hostedHasStoredSession(bundle: Bundle) throws -> Bool {
-    try HostedKeychainTokenStorage(service: hostedKeychainService(bundle: bundle)).load() != nil
+/// Bu Mac'te kayıtlı oturumun kullanıcısı (Anahtar Zinciri; ağa gidilmez); oturum yoksa nil. Servis adı tanımlı
+/// değilse ya da Anahtar Zinciri okunamazsa hata fırlar.
+func hostedStoredUserID(bundle: Bundle) throws -> String? {
+    try HostedKeychainTokenStorage(service: hostedKeychainService(bundle: bundle)).load()?.userId
 }
 
 /// Sitedeki yasal sayfa (gizlilik, koşullar); site adresi geçersizse nil (bağlantı gösterilmez, hata loglanır).
@@ -84,6 +84,7 @@ struct HostedSignInGate: View {
                 .padding(.top, 6)
                 HostedAccountError(account: account)
             }
+            HostedAccountDataNotice(account: account)
             HStack(spacing: 14) {
                 if let privacy = hostedLegalURL(path: "privacy") {
                     Link("Gizlilik", destination: privacy)
@@ -101,6 +102,34 @@ struct HostedSignInGate: View {
         }
         .frame(maxWidth: 420, alignment: .leading)
         .padding(40)
+    }
+}
+
+/// Giriş yapılmış ama hesabın verisi açılmamışsa kapıdaki neden: önceki toplantılar hesaba taşınamadı ("Yeniden dene";
+/// hiçbir şey silinmedi) ya da başka hesapla giriş yapıldı ve uygulama yeniden başlayacak. Giriş yoksa görünmez.
+private struct HostedAccountDataNotice: View {
+    let account: HostedAccount
+
+    var body: some View {
+        if account.hasSession == true {
+            switch account.dataState {
+            case .notLoaded, .loaded:
+                EmptyView()
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 8) {
+                    NoticeText(message as String, severity: .error)
+                        .appFont(size: 13, weight: .regular)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Yeniden dene") { account.retryAccountData() }
+                        .buttonStyle(.hoverPlain)
+                        .appFont(size: 13, weight: .medium)
+                }
+            case .relaunchRequired:
+                NoticeText("Başka bir hesapla giriş yaptın. Önceki hesabın kaydı ya da işlenen toplantısı bitince uygulama yeniden başlar ve bu hesabın toplantılarını açar.", severity: .info)
+                    .appFont(size: 13, weight: .regular)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

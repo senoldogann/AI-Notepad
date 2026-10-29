@@ -2672,6 +2672,27 @@
         }
       }
     },
+    "Başka bir hesapla giriş yaptın. Önceki hesabın kaydı ya da işlenen toplantısı bitince uygulama yeniden başlar ve bu hesabın toplantılarını açar.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in with another account. Once the previous account's recording or processing finishes, the app restarts and opens this account's meetings."
+          }
+        }
+      }
+    },
+    "Başka bir hesapla giriş yapıldı; o hesabın toplantıları için uygulama yeniden başlamalı.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in with another account; the app needs to restart to open that account's meetings."
+          }
+        }
+      }
+    },
     "Başka bir kanal ya da hesap ekle": {
       "localizations": {
         "en": {
@@ -3520,6 +3541,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Who did I talk to this week, and about what?"
+          }
+        }
+      }
+    },
+    "Bu hesabın toplantıları bu Mac'te henüz yok. Uygulamayı bir kez açıp bu hesapla giriş yap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account's meetings aren't on this Mac yet. Open the app once and sign in with this account."
           }
         }
       }
@@ -6357,6 +6388,17 @@
         }
       }
     },
+    "Hesabın verisi henüz açılmadı. Giriş yap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account's data isn't open yet. Sign in."
+          }
+        }
+      }
+    },
     "Hesabın, aboneliğin (hemen iptal edilir) ve sunucudaki tüm kayıtların silinir. Bu Mac'teki toplantılar ve notlar silinmez.": {
       "extractionState": "manual",
       "localizations": {
@@ -6417,6 +6459,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your account status can't be read right now; it refreshes on its own when you're back online."
+          }
+        }
+      }
+    },
+    "Hesap klasörü tanınmadı. Uygulamayı yeniden başlat; sürerse geri bildirim gönder.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account folder not recognized. Restart the app; if this keeps happening, send feedback."
           }
         }
       }
@@ -12348,6 +12401,16 @@
         }
       }
     },
+    "Uygulamada başka bir hesapla giriş yapıldı. O hesabın toplantıları için MCP istemcisini yeniden başlat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another account is now signed in to the app. Restart your MCP client to use that account's meetings."
+          }
+        }
+      }
+    },
     "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.": {
       "extractionState": "manual",
       "localizations": {
@@ -13925,6 +13988,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Earlier versions"
+          }
+        }
+      }
+    },
+    "Önceki toplantılar hesabına taşınamadı (%@: %@). Hiçbir şey silinmedi; taşınamayanlar eski yerinde kaldı, yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't move your earlier meetings to your account (%@: %@). Nothing was deleted; anything not moved is still in its old location. Try again."
+          }
+        }
+      }
+    },
+    "Önceki toplantılar hesabına taşınamadı: %@ hesap klasöründe zaten var. Hiçbir şey silinmedi; veriler eski yerinde.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't move your earlier meetings to your account: %@ already exists in the account folder. Nothing was deleted; your data is still in its old location."
           }
         }
       }

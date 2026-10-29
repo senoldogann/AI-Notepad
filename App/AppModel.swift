@@ -1552,6 +1552,12 @@ final class AppModel {
             Self.logger.error("Kuyruk: oturum okunamadı, hata: \(String(describing: error), privacy: .private)")
             return
         }
+        // Yüklü toplantılar giriş yapan hesabın değilse (başka hesapla giriş yapıldı, uygulama yeniden başlamayı
+        // bekliyor) hiçbiri işlenmez: kayıtlar sahiplerinin klasöründe bekler, başka hesaba faturalanmaz.
+        guard AppPaths.activeAccountKey() == accountDataKey(userId: userID) else {
+            Self.logger.info("Kuyruk: yüklü toplantılar giriş yapan hesabın değil, işlenmedi")
+            return
+        }
         let queued: HostedQueuedRecords = hostedQueuedRecords(records: meetings, owners: loadHostedRecordOwners(), userId: userID)
         for record in queued.foreign {
             noteQueued(recordID: record.id, notice: String(localized: "Bu kayıt başka bir hesapla yapıldı; o hesapla giriş yapınca işlenir."))
@@ -1786,8 +1792,33 @@ final class AppModel {
 
     // MARK: Klasörler
 
+    #if HOSTED_EDITION
+    /// Oluşturulan klasörler (toplantısız olanlar dahil); abonelikte hesabın ayar alanından, hesap verisi yüklenince
+    /// okunur (bkz. `loadFolders`).
+    var savedFolders: [String] = []
+    #else
     /// Oluşturulan klasörler (toplantısız olanlar dahil).
     var savedFolders: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.folders) ?? []
+    #endif
+
+    /// Kayıtlı klasörleri okur (açılışta; abonelikte hesap verisi yüklenince). Okunamazsa neden gösterilir.
+    func loadFolders() {
+        do {
+            savedFolders = try userContentDefaults().stringArray(forKey: SettingsKey.folders) ?? []
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
+
+    /// Klasör listesini saklar; saklanamazsa neden gösterilir.
+    private func storeFolders(folders: [String]) {
+        do {
+            try userContentDefaults().set(folders, forKey: SettingsKey.folders)
+            savedFolders = folders
+        } catch {
+            errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
+        }
+    }
 
     /// Klasörler ve toplantı sayıları.
     var folders: [FolderSummary] {
@@ -1800,14 +1831,12 @@ final class AppModel {
         guard !trimmed.isEmpty, !folders.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
             return
         }
-        savedFolders.append(trimmed)
-        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        storeFolders(folders: savedFolders + [trimmed])
     }
 
     /// Klasörü siler: toplantılar silinmez, klasörsüz kalır.
     func deleteFolder(name: String) {
-        savedFolders.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
-        UserDefaults.standard.set(savedFolders, forKey: SettingsKey.folders)
+        storeFolders(folders: savedFolders.filter { $0.caseInsensitiveCompare(name) != .orderedSame })
         moveMeetings(ids: Set(meetingsInFolder(records: meetings, folder: name).map(\.id)), to: nil)
     }
 
@@ -2189,7 +2218,7 @@ final class AppModel {
 
     private func storeUserRecipes(_ recipes: [Recipe]) {
         do {
-            try saveUserRecipes(recipes: recipes, defaults: .standard)
+            try saveUserRecipes(recipes: recipes, defaults: try userContentDefaults())
             userRecipes = recipes
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -2199,7 +2228,7 @@ final class AppModel {
     /// Kayıtlı kullanıcı tariflerini okur (açılışta); okunamazsa neden gösterilir, yerleşikler çalışır.
     func loadRecipes() {
         do {
-            userRecipes = try loadUserRecipes(defaults: .standard)
+            userRecipes = try loadUserRecipes(defaults: try userContentDefaults())
         } catch {
             errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
         }
@@ -3281,9 +3310,13 @@ final class AppModel {
     }
 
     /// Açılışta: kayıtları yükler, yarıda kalanları işaretler, saklama süresini uygular ve günlük uygulamayı başlatır.
+    /// Abonelikte hesap verisi yüklenmeden çağrılmaz (bkz. `isAccountDataReady`); süreç başına bir kez.
     func performStartupMaintenance() {
         loadVoices()
         loadPeople()
+        #if HOSTED_EDITION
+        loadFolders()
+        #endif
         loadRecipes()
         loadAskHistory()
         // Toplantılar arka planda okunur (büyük arşivde açılış donmasın); listeye bağlı işler okuma bitince başlar.
