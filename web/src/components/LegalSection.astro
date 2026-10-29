@@ -1,0 +1,27 @@
+---
+// Yasal metnin numaralı bölümü: başlık ve numara bölüm listesinden (lib/legal.ts), içerik yuvadan.
+import { type LegalSectionInfo, type NumberedLegalSection, numberedLegalSection } from "../lib/legal";
+
+interface Props {
+  readonly sections: readonly LegalSectionInfo[];
+  readonly id: string;
+}
+const { sections, id } = Astro.props;
+const { section, number }: NumberedLegalSection = numberedLegalSection(sections, id);
+---
+
+<section class="legal-section" id={section.id} aria-labelledby={`${section.id}-title`}>
+  <h2 id={`${section.id}-title`}><span class="legal-section__number tabular">{number}.</span> {section.title}</h2>
+  <slot />
+</section>
+
+<style>
+  .legal-section {
+    scroll-margin-top: 92px;
+  }
+
+  .legal-section__number {
+    color: var(--muted);
+    font-weight: 500;
+  }
+</style>

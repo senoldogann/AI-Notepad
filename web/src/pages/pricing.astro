@@ -3,19 +3,16 @@
 import Base from "../layouts/Base.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
-import { copy, type CommonCopy, type PricingCopy, type TitledText } from "../i18n/copy";
-import { type Lang, pagePath } from "../i18n/routes";
+import { copy, type CommonCopy, type IconItem, type IconText, type PricingCopy } from "../copy";
+import { routes } from "../routes";
 
-interface Props {
-  readonly lang: Lang;
-}
-const { lang } = Astro.props;
-const text: PricingCopy = copy[lang].pricing;
-const common: CommonCopy = copy[lang].common;
+const text: PricingCopy = copy.pricing;
+const common: CommonCopy = copy.common;
 ---
 
-<Base lang={lang} page="pricing" meta={text.meta} indexed={true}>
+<Base page="pricing" meta={text.meta} indexed={true}>
   <section class="page intro">
     <p class="eyebrow">{common.nav.pricing}</p>
     <h1 class="title-xl">{text.title}</h1>
@@ -34,12 +31,21 @@ const common: CommonCopy = copy[lang].common;
           <p class="plan__price"><span class="tabular">{common.price}</span><span class="plan__per">{common.perMonth}</span></p>
           <p class="plan__tax small muted">{common.taxNote}</p>
           <div class="plan__actions">
-            <a class="button button--primary button--block" href={pagePath("download", lang)}>{text.startFree}</a>
-            <a class="button button--secondary button--block" href={pagePath("account", lang)}>{text.subscribe}</a>
+            <a class="button button--primary button--block" href={routes.download}>{text.startFree}</a>
+            <a class="button button--secondary button--block" href={routes.account}>{text.subscribe}</a>
           </div>
         </div>
         <ul class="included">
-          {text.included.map((item: string) => <li class="included__item">{item}</li>)}
+          {
+            text.included.map((item: IconItem) => (
+              <li class="included__item">
+                <span class="icon-chip">
+                  <Icon name={item.icon} size={18} class="" />
+                </span>
+                <span>{item.text}</span>
+              </li>
+            ))
+          }
         </ul>
       </div>
     </article>
@@ -49,8 +55,11 @@ const common: CommonCopy = copy[lang].common;
     <h2 class="title-l reveal" id="limits-title">{text.limitsTitle}</h2>
     <div class="limits">
       {
-        text.limits.map((limit: TitledText) => (
+        text.limits.map((limit: IconText) => (
           <div class="card limit reveal">
+            <span class="icon-chip">
+              <Icon name={limit.icon} size={20} class="" />
+            </span>
             <h3 class="title-m">{limit.title}</h3>
             <p class="muted">{limit.text}</p>
           </div>
@@ -64,7 +73,7 @@ const common: CommonCopy = copy[lang].common;
   </section>
 
   <section class="page faq-section" aria-labelledby="pricing-faq-title">
-    <h2 class="title-l reveal" id="pricing-faq-title">{copy[lang].home.faqTitle}</h2>
+    <h2 class="title-l reveal" id="pricing-faq-title">{text.faqTitle}</h2>
     <Faq items={text.faq} />
   </section>
 </Base>
@@ -139,22 +148,9 @@ const common: CommonCopy = copy[lang].common;
 
   .included__item {
     display: flex;
-    gap: 12px;
+    align-items: center;
+    gap: 14px;
     line-height: 1.45;
-  }
-
-  .included__item::before {
-    content: "✓";
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--soft);
-    border: 1px solid var(--line);
-    font-size: 0.75rem;
-    font-weight: 700;
   }
 
   .limits {
@@ -167,7 +163,12 @@ const common: CommonCopy = copy[lang].common;
   .limit {
     display: grid;
     align-content: start;
+    justify-items: start;
     gap: 10px;
+  }
+
+  .limit .icon-chip {
+    margin-bottom: 6px;
   }
 
   .tax {
@@ -177,13 +178,19 @@ const common: CommonCopy = copy[lang].common;
     margin-top: clamp(40px, 5vw, 64px);
   }
 
+  /* SSS ana sayfadaki gibi: başlık solda, sorular sağda; sayfanın sol kenarıyla hizalı. */
   .faq-section {
     display: grid;
-    gap: 28px;
-    max-width: 880px;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: start;
   }
 
   @media (max-width: 960px) {
+    .faq-section {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .limits {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

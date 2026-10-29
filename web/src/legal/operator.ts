@@ -1,13 +1,28 @@
-// Yasal metinlerdeki işletmeci bilgileri. Yayından önce sahibin dolduracağı yer tutucular "[DOLDUR: …]" biçimindedir ve
-// sayfada görünür kalır: taslak yanlışlıkla yayımlanırsa eksik hemen fark edilir.
+// Hizmeti sunan işletme (veri sorumlusu): yasal metinler, alt bilgi ve iletişim bağlantıları buradan okur. İşletme
+// bilgisi değişince yalnızca burası değişir.
 
-/** Hizmeti sunan (veri sorumlusu): ad ya da ticari unvan. */
-export const operatorName: string = "[DOLDUR: işletmecinin adı / toiminimi]";
-/** Fin işletme kimliği (Y-tunnus). */
-export const operatorBusinessId: string = "[DOLDUR: Y-tunnus]";
-/** Posta adresi (Finlandiya). */
-export const operatorAddress: string = "[DOLDUR: posta adresi], Finlandiya";
-/** Gizlilik ve destek iletişim adresi. */
-export const contactEmail: string = "[DOLDUR: iletişim e-postası]";
-/** Metinlerin son güncellenme tarihi (ISO). */
-export const legalUpdated: string = "2026-10-28";
+/** İşletme bilgileri. */
+export interface Operator {
+  /** Ticari unvan. */
+  readonly name: string;
+  /** Hukuki biçim (Fince adıyla birlikte). */
+  readonly legalForm: string;
+  /** Fin işletme kimliği (Y-tunnus). */
+  readonly businessId: string;
+  /** Posta adresi. */
+  readonly address: string;
+  /** Gizlilik, destek ve hukuki iletişim adresi. */
+  readonly email: string;
+}
+
+/** Hizmeti sunan işletme. */
+export const operator: Operator = {
+  name: "T:mi Aslan Dogan Marketing",
+  legalForm: "a Finnish sole proprietorship (yksityinen elinkeinonharjoittaja)",
+  businessId: "3346878-5",
+  address: "Sarvivälkkeentie 3 C 27, 90240 Oulu, Finland",
+  email: "contact@senoldogan.dev",
+};
+
+/** Yasal metinlerin son güncellenme tarihi (ISO). */
+export const legalUpdated: string = "2026-10-29";

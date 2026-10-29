@@ -1,0 +1,170 @@
+---
+// İletişim sayfası: e-posta, mesaj ve Turnstile korumalı form (`POST /v1/reports`, tür `contact`); doğrudan e-posta
+// adresi de görünür. Betik: src/client/contact.ts.
+import Base from "../layouts/Base.astro";
+import Film from "../components/Film.astro";
+import Icon from "../components/Icon.astro";
+import { copy, type ContactCopy } from "../copy";
+import { operator } from "../legal/operator";
+import { routes } from "../routes";
+
+const text: ContactCopy = copy.contact;
+---
+
+<Base page="contact" meta={text.meta} indexed={true}>
+  <section class="page contact">
+    <div class="contact__intro">
+      <p class="eyebrow">{copy.common.nav.contact}</p>
+      <h1 class="title-xl">{text.title}</h1>
+      <p class="lead">{text.lead}</p>
+      <Film palette="ocean" layout="clouds-left" class="contact__cover">
+        <div class="glass contact__direct">
+          <span class="icon-chip"><Icon name="mail" size={20} class="" /></span>
+          <div>
+            <p class="contact__direct-title">{text.directTitle}</p>
+            <p class="contact__direct-text">{text.directText} <a href={`mailto:${operator.email}`}>{operator.email}</a></p>
+          </div>
+        </div>
+      </Film>
+    </div>
+
+    <div class="card contact__panel">
+      <noscript><p class="notice notice--error">{text.noScript}</p></noscript>
+      <p id="contact-error" class="notice notice--error hidden" role="alert"></p>
+
+      <form id="contact-form" class="contact__form">
+        <div class="field">
+          <label for="contact-email">{text.emailLabel}</label>
+          <input id="contact-email" class="input" type="email" name="email" autocomplete="email" inputmode="email" required maxlength="254" placeholder={text.emailPlaceholder} />
+        </div>
+        <div class="field">
+          <div class="field__row">
+            <label for="contact-message">{text.messageLabel}</label>
+            <span id="contact-counter" class="small muted tabular" aria-live="polite"></span>
+          </div>
+          <textarea id="contact-message" class="input textarea" name="message" required maxlength="5000" rows="8" placeholder={text.messagePlaceholder}></textarea>
+        </div>
+        <div id="turnstile" class="turnstile" role="group" aria-label={text.turnstileLabel}></div>
+        <button id="contact-submit" class="button button--primary button--block" type="submit" disabled>{text.submit}</button>
+        <p class="small muted">
+          {text.privacyNote} <a href={routes.privacy}>{copy.common.nav.privacy}</a>
+        </p>
+      </form>
+
+      <div id="contact-sent" class="sent hidden" tabindex="-1" role="status">
+        <span class="icon-chip sent__icon"><Icon name="check" size={20} class="" /></span>
+        <h2 class="title-m">{text.sentTitle}</h2>
+        <p class="muted">{text.sentText}</p>
+        <button id="contact-again" class="button button--secondary button--small" type="button">{text.sendAnother}</button>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import "../client/contact";
+</script>
+
+<style>
+  .contact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 80px);
+    align-items: start;
+    padding-top: clamp(48px, 8vw, 96px);
+  }
+
+  .contact__intro {
+    display: grid;
+    gap: 18px;
+  }
+
+  .contact__intro :global(.contact__cover) {
+    display: grid;
+    place-items: center;
+    min-height: 220px;
+    margin-top: 16px;
+    padding: 24px;
+  }
+
+  .contact__direct {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px;
+    max-width: 100%;
+  }
+
+  .contact__direct .icon-chip {
+    background: rgb(255 255 255 / 0.6);
+    border-color: rgb(10 10 10 / 0.08);
+    color: #0a0a0a;
+  }
+
+  .contact__direct-title {
+    font-weight: 600;
+  }
+
+  .contact__direct-text {
+    font-size: 0.9375rem;
+    color: #3a3a3a;
+    overflow-wrap: anywhere;
+  }
+
+  .contact__direct-text a {
+    color: #0a0a0a;
+    font-weight: 500;
+  }
+
+  .contact__panel {
+    display: grid;
+    gap: 16px;
+  }
+
+  .contact__form {
+    display: grid;
+    gap: 18px;
+  }
+
+  .field__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .textarea {
+    min-height: 180px;
+    padding-block: 12px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  /* Turnstile iframe'i sayfa temasından bağımsız saydam kalsın (tema parçacığa ayrıca verilir). */
+  .turnstile {
+    min-height: 65px;
+    color-scheme: normal;
+  }
+
+  .contact__form a {
+    color: var(--ink);
+  }
+
+  .sent {
+    display: grid;
+    gap: 10px;
+    justify-items: start;
+    padding-block: 12px;
+  }
+
+  .sent__icon {
+    color: var(--ok);
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 860px) {
+    .contact {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

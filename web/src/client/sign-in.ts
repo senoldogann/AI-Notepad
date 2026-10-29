@@ -1,28 +1,29 @@
-// Giriş sayfası: Apple ile giriş (açılır pencere, nonce) ve Turnstile korumalı e-posta bağlantısı. Başarılı girişte
-// oturum saklanır ve hesap sayfasına geçilir.
+// Giriş sayfası: Apple ile giriş (açılır pencere) ve Google ile giriş (Google Identity Services düğmesi). Her ikisinde
+// tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik jetonunu ham nonce'la sunucuya yollar;
+// başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına girişte (app-handoff.ts) yalnızca
+// Google düğmesi görünür ve jeton uygulamaya iletilir.
 import { type RawResponse, parseSession, send } from "./api";
-import { dataValue, element, errorText, hideNotice, pageCopy, showNotice } from "./dom";
+import { appGoogleSignInUrl, type SignInMode, signInMode } from "./app-handoff";
+import { type ClientCopy, clientCopy } from "./copy";
+import { type Theme, currentTheme, dataValue, element, errorText, hideNotice, loadScript, onThemeChange, showNotice } from "./dom";
 import { saveSession } from "./session";
-import { isAppSignInRequest, rememberAppSignIn } from "./app-handoff";
-import { appleAuthScriptUrl, turnstileScriptUrl } from "../config";
-import type { ClientCopy } from "../i18n/client-copy";
+import { appleAuthScriptUrl, googleScriptUrl } from "../config";
 import { siteConfig } from "../site";
-
-/** Dış betik yüklenemedi. */
-class ScriptLoadError extends Error {
-  override readonly name: string = "ScriptLoadError";
-}
 
 /** Apple yanıtındaki `state` gönderdiğimizle aynı değil. */
 class AppleStateError extends Error {
   override readonly name: string = "AppleStateError";
 }
 
-/** Apple'a verilen tek kullanımlık değerler. */
-interface AppleNonce {
+/** Sağlayıcıya verilen tek kullanımlık değerler: ham nonce sunucuya, özeti sağlayıcıya gider. */
+interface Nonce {
   readonly raw: string;
-  readonly state: string;
+  readonly hashed: string;
 }
+
+/** Google düğmesinin en dar ve en geniş hâli (Google'ın kabul ettiği aralık, piksel). */
+const googleButtonMinWidth: number = 200;
+const googleButtonMaxWidth: number = 400;
 
 /** Bayt dizisinin onaltılık yazımı. Saf fonksiyondur. */
 function hex(bytes: Uint8Array): string {
@@ -39,16 +40,10 @@ async function sha256Hex(text: string): Promise<string> {
   return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
 }
 
-/** Dış betiği bir kez yükler (CSP bu kaynaklara izin verir). */
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve: () => void, reject: (error: Error) => void): void => {
-    const script: HTMLScriptElement = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.addEventListener("load", (): void => resolve());
-    script.addEventListener("error", (): void => reject(new ScriptLoadError(`${src} yüklenemedi.`)));
-    document.head.append(script);
-  });
+/** Yeni nonce. Tek kullanımlıktır (sunucu ikinci kez kabul etmez); her denemeden sonra yenilenir. */
+async function newNonce(): Promise<Nonce> {
+  const raw: string = randomHex(32);
+  return { raw, hashed: await sha256Hex(raw) };
 }
 
 /** Girişten dönen oturumu saklar ve hesap sayfasına geçer. */
@@ -57,47 +52,42 @@ function finishSignIn(response: RawResponse, path: string, accountPath: string):
   window.location.assign(accountPath);
 }
 
-/**
- * Apple'ı yeni bir nonce ve state ile hazırlar. Nonce tek kullanımlıktır (sunucu ikinci kez kabul etmez); her denemeden
- * sonra yenilenir. `init` tıklamadan önce yapılır: açılır pencere tıklamayla eş zamanlı açılmalı.
- */
-async function prepareApple(apple: AppleIdGlobal, redirectUri: string): Promise<AppleNonce> {
-  const nonce: AppleNonce = { raw: randomHex(32), state: randomHex(16) };
+/** Apple'ı nonce ve state ile hazırlar. `init` tıklamadan önce yapılır: açılır pencere tıklamayla eş zamanlı açılmalı. */
+function prepareApple(apple: AppleIdGlobal, redirectUri: string, nonce: Nonce, state: string): void {
   apple.auth.init({
     clientId: siteConfig.appleServiceId,
     scope: "email",
     redirectURI: redirectUri,
-    state: nonce.state,
-    nonce: await sha256Hex(nonce.raw),
+    state,
+    nonce: nonce.hashed,
     usePopup: true,
   });
-  return nonce;
 }
 
-/** Apple düğmesini bağlar. Betik yüklenemezse düğme kapanır ve e-posta yolu önerilir. */
+/** Apple düğmesini bağlar. Betik yüklenemezse düğme kapalı kalır ve Google önerilir. */
 async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): Promise<void> {
   const button: HTMLButtonElement = element("apple-button", HTMLButtonElement);
   try {
     await loadScript(appleAuthScriptUrl);
   } catch (error: unknown) {
-    button.disabled = true;
     showNotice(notice, text.errors.appleUnavailable);
     console.error("apple_script_failed", { error: error instanceof Error ? error.message : String(error) });
     return;
   }
   const apple: AppleIdGlobal | undefined = window.AppleID;
   if (apple === undefined) {
-    button.disabled = true;
     showNotice(notice, text.errors.appleUnavailable);
     console.error("apple_script_failed", { error: "window.AppleID tanımsız" });
     return;
   }
-  let nonce: AppleNonce = await prepareApple(apple, redirectUri);
+  let nonce: Nonce = await newNonce();
+  let state: string = randomHex(16);
+  prepareApple(apple, redirectUri, nonce, state);
   button.disabled = false;
   button.addEventListener("click", (): void => {
     hideNotice(notice);
     button.disabled = true;
-    const attempt: AppleNonce = nonce;
+    const attempt: { readonly nonce: Nonce; readonly state: string } = { nonce, state };
     void apple.auth
       .signIn()
       .then(async (result: AppleSignInResponse): Promise<void> => {
@@ -108,7 +98,7 @@ async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: st
         const response: RawResponse = await send({
           method: "POST",
           path,
-          body: { identityToken: result.authorization.id_token, nonce: attempt.raw },
+          body: { identityToken: result.authorization.id_token, nonce: attempt.nonce.raw },
           accessToken: null,
           attempts: 1,
         });
@@ -123,80 +113,122 @@ async function setUpApple(text: ClientCopy, notice: HTMLElement, accountPath: st
         } else {
           showNotice(notice, errorText(error, text));
         }
-        nonce = await prepareApple(apple, redirectUri);
+        nonce = await newNonce();
+        state = randomHex(16);
+        prepareApple(apple, redirectUri, nonce, state);
         button.disabled = false;
       });
   });
 }
 
-/** E-posta formunu ve Turnstile'ı bağlar. */
-async function setUpEmail(text: ClientCopy, notice: HTMLElement, lang: string): Promise<void> {
-  const form: HTMLFormElement = element("email-form", HTMLFormElement);
-  const input: HTMLInputElement = element("email", HTMLInputElement);
-  const submit: HTMLButtonElement = element("email-submit", HTMLButtonElement);
-  const formPanel: HTMLElement = element("signin-panel", HTMLElement);
-  const sentPanel: HTMLElement = element("signin-sent", HTMLElement);
-  const again: HTMLButtonElement = element("signin-again", HTMLButtonElement);
-  const container: HTMLElement = element("turnstile", HTMLElement);
-  const submitLabel: string = submit.textContent;
+/** Google düğmesini kabın genişliğine ve sayfa temasına göre çizer (tema değişince yeniden çizilir). */
+function renderGoogleButton(google: GoogleGlobal, container: HTMLElement, theme: Theme): void {
+  const width: number = Math.round(Math.min(googleButtonMaxWidth, Math.max(googleButtonMinWidth, container.clientWidth)));
+  google.accounts.id.renderButton(container, {
+    type: "standard",
+    theme: theme === "dark" ? "filled_black" : "outline",
+    size: "large",
+    text: "continue_with",
+    shape: "pill",
+    logo_alignment: "left",
+    width,
+    locale: "en",
+  });
+}
 
-  let turnstileToken: string | null = null;
-  await loadScript(turnstileScriptUrl);
-  const turnstile: TurnstileGlobal | undefined = window.turnstile;
-  if (turnstile === undefined) {
-    throw new ScriptLoadError("window.turnstile tanımsız.");
+/** Google'a hangi nonce özetinin verileceği ve kimlik jetonunun ne yapılacağı. */
+interface GoogleFlow {
+  /** Google'a verilecek nonce özeti (her denemede yeni). */
+  readonly nextHashedNonce: () => Promise<string>;
+  /** Kimlik jetonu geldiğinde. Hata fırlatırsa bildirim gösterilir ve yeni nonce'la yeniden hazırlanır. */
+  readonly onCredential: (credential: string) => Promise<void>;
+}
+
+/** Google Identity Services'i yükler, düğmeyi çizer ve verilen akışa bağlar. Betik yüklenemezse Apple önerilir. */
+async function setUpGoogle(text: ClientCopy, notice: HTMLElement, flow: GoogleFlow): Promise<void> {
+  const container: HTMLElement = element("google-button", HTMLElement);
+  try {
+    await loadScript(googleScriptUrl);
+  } catch (error: unknown) {
+    container.classList.add("hidden");
+    showNotice(notice, text.errors.googleUnavailable);
+    console.error("google_script_failed", { error: error instanceof Error ? error.message : String(error) });
+    return;
   }
-  const widgetId: string = turnstile.render(container, {
-    sitekey: siteConfig.turnstileSiteKey,
-    action: "email-login",
-    theme: "auto",
-    language: lang,
-    callback: (token: string): void => {
-      turnstileToken = token;
-      submit.disabled = false;
+  const google: GoogleGlobal | undefined = window.google;
+  if (google === undefined) {
+    container.classList.add("hidden");
+    showNotice(notice, text.errors.googleUnavailable);
+    console.error("google_script_failed", { error: "window.google tanımsız" });
+    return;
+  }
+  const initialize = async (): Promise<void> => {
+    google.accounts.id.initialize({
+      client_id: siteConfig.googleClientId,
+      nonce: await flow.nextHashedNonce(),
+      ux_mode: "popup",
+      auto_select: false,
+      context: "signin",
+      itp_support: true,
+      callback: (response: GoogleCredentialResponse): void => {
+        hideNotice(notice);
+        flow.onCredential(response.credential).catch(async (error: unknown): Promise<void> => {
+          showNotice(notice, errorText(error, text));
+          await initialize();
+          renderGoogleButton(google, container, currentTheme());
+        });
+      },
+    });
+  };
+  await initialize();
+  renderGoogleButton(google, container, currentTheme());
+  onThemeChange((theme: Theme): void => {
+    renderGoogleButton(google, container, theme);
+  });
+}
+
+/** "Uygulamaya dönülüyor…" durumunu ve yedek düğmeyi gösterip uygulamayı açar. */
+function handOffToApp(url: string): void {
+  element("signin-panel", HTMLElement).classList.add("hidden");
+  element("signin-app-intro", HTMLElement).classList.add("hidden");
+  element("signin-app-open", HTMLAnchorElement).href = url;
+  const panel: HTMLElement = element("signin-app-return", HTMLElement);
+  panel.classList.remove("hidden");
+  panel.focus();
+  window.location.href = url;
+}
+
+/** Sitenin kendi girişi: Apple ve Google, jeton sunucuya. */
+function startSiteSignIn(text: ClientCopy, notice: HTMLElement, accountPath: string, redirectUri: string): void {
+  void setUpApple(text, notice, accountPath, redirectUri);
+  let pending: Nonce | null = null;
+  void setUpGoogle(text, notice, {
+    nextHashedNonce: async (): Promise<string> => {
+      pending = await newNonce();
+      return pending.hashed;
     },
-    "expired-callback": (): void => {
-      turnstileToken = null;
-      submit.disabled = true;
-    },
-    "error-callback": (code: string): void => {
-      turnstileToken = null;
-      submit.disabled = true;
-      showNotice(notice, text.errors.turnstile);
-      console.error("turnstile_failed", { code });
+    onCredential: async (credential: string): Promise<void> => {
+      const nonce: Nonce | null = pending;
+      if (nonce === null) {
+        throw new Error("Google nonce hazırlanmadan jeton geldi.");
+      }
+      const path: string = "/v1/auth/google";
+      const response: RawResponse = await send({ method: "POST", path, body: { identityToken: credential, nonce: nonce.raw }, accessToken: null, attempts: 1 });
+      finishSignIn(response, path, accountPath);
     },
   });
+}
 
-  form.addEventListener("submit", (event: SubmitEvent): void => {
-    event.preventDefault();
-    if (turnstileToken === null || !form.reportValidity()) {
-      return;
-    }
-    hideNotice(notice);
-    submit.disabled = true;
-    submit.textContent = text.working;
-    const token: string = turnstileToken;
-    turnstileToken = null;
-    void send({ method: "POST", path: "/v1/auth/email/start", body: { email: input.value.trim(), turnstileToken: token }, accessToken: null, attempts: 1 })
-      .then((): void => {
-        formPanel.classList.add("hidden");
-        sentPanel.classList.remove("hidden");
-        sentPanel.focus();
-      })
-      .catch((error: unknown): void => {
-        showNotice(notice, errorText(error, text));
-      })
-      .finally((): void => {
-        // Turnstile yanıtı tek kullanımlıktır: her gönderimden sonra yenilenir.
-        submit.textContent = submitLabel;
-        turnstile.reset(widgetId);
-      });
-  });
-
-  again.addEventListener("click", (): void => {
-    sentPanel.classList.add("hidden");
-    formPanel.classList.remove("hidden");
-    input.focus();
+/** Uygulama adına giriş: yalnızca Google, uygulamanın nonce özetiyle; jeton uygulamaya. */
+function startAppSignIn(text: ClientCopy, notice: HTMLElement, hashedNonce: string): void {
+  element("apple-block", HTMLElement).classList.add("hidden");
+  element("signin-intro", HTMLElement).classList.add("hidden");
+  element("signin-app-intro", HTMLElement).classList.remove("hidden");
+  void setUpGoogle(text, notice, {
+    nextHashedNonce: async (): Promise<string> => hashedNonce,
+    onCredential: async (credential: string): Promise<void> => {
+      handOffToApp(appGoogleSignInUrl(credential));
+    },
   });
 }
 
@@ -204,19 +236,19 @@ async function setUpEmail(text: ClientCopy, notice: HTMLElement, lang: string): 
 function main(): void {
   const root: HTMLElement = element("signin", HTMLElement);
   const notice: HTMLElement = element("signin-error", HTMLElement);
-  const text: ClientCopy = pageCopy();
-  const accountPath: string = dataValue(root, "accountPath");
-  const redirectUri: string = dataValue(root, "redirectUri");
-  const lang: string = document.documentElement.lang;
-  // Mac uygulamasından açıldıysa e-posta bağlantısı uygulamayı açar (bkz. app-handoff.ts).
-  if (isAppSignInRequest(window.location.search)) {
-    rememberAppSignIn(Date.now());
-    element("signin-app-note", HTMLElement).classList.remove("hidden");
+  const text: ClientCopy = clientCopy;
+  const mode: SignInMode = signInMode(window.location.search);
+  if (mode.kind === "invalid-app") {
+    element("signin-panel", HTMLElement).classList.add("hidden");
+    showNotice(notice, text.errors.appRequestInvalid);
+    console.error("app_sign_in_invalid", { search: window.location.search });
+    return;
   }
-  void setUpApple(text, notice, accountPath, redirectUri);
-  setUpEmail(text, notice, lang).catch((error: unknown): void => {
-    showNotice(notice, errorText(error, text));
-  });
+  if (mode.kind === "app") {
+    startAppSignIn(text, notice, mode.hashedNonce);
+    return;
+  }
+  startSiteSignIn(text, notice, dataValue(root, "accountPath"), dataValue(root, "redirectUri"));
 }
 
 main();

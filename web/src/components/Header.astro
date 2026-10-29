@@ -1,31 +1,31 @@
 ---
-// Üst çubuk: logo, menü, dil değiştirici ve indirme düğmesi. Dar ekranda menü <details> ile açılır (betik yok).
+// Üst çubuk: logo, menü, tema düğmesi ve indirme sayfası düğmesi. Dar ekranda menü <details> ile açılır (betik yok).
+// Tema düğmesini public/theme.js bağlar; betik yoksa düğme gizlidir (tema sistemi izler).
+import Icon from "./Icon.astro";
 import Logo from "./Logo.astro";
-import { copy, type CommonCopy } from "../i18n/copy";
-import { type Lang, type PageKey, langMeta, langs, pagePath } from "../i18n/routes";
+import { productName } from "../config";
+import { copy, type CommonCopy } from "../copy";
+import { type PageKey, routes } from "../routes";
 
 interface Props {
-  readonly lang: Lang;
-  /** Dil değiştiricinin öbür dilde açacağı sayfa; dile özgü olmayan sayfada ana sayfa. */
   readonly page: PageKey;
 }
-const { lang, page } = Astro.props;
-const text: CommonCopy = copy[lang].common;
-const otherLangs: Lang[] = langs.filter((candidate: Lang): boolean => candidate !== lang);
-const links: { readonly href: string; readonly label: string }[] = [
-  { href: `${pagePath("home", lang)}#features`, label: text.nav.features },
-  { href: pagePath("pricing", lang), label: text.nav.pricing },
-  { href: pagePath("download", lang), label: text.nav.download },
-  { href: pagePath("signIn", lang), label: text.nav.signIn },
+const { page } = Astro.props;
+const text: CommonCopy = copy.common;
+const links: readonly { readonly href: string; readonly label: string }[] = [
+  { href: `${routes.home}#features`, label: text.nav.features },
+  { href: routes.pricing, label: text.nav.pricing },
+  { href: routes.download, label: text.nav.download },
+  { href: routes.signIn, label: text.nav.signIn },
 ];
-const currentPath: string = pagePath(page, lang);
+const currentPath: string = routes[page];
 ---
 
 <header class="site-header">
   <div class="page site-header__inner">
-    <a class="brand" href={pagePath("home", lang)} aria-label={text.homeLabel}>
+    <a class="brand" href={routes.home} aria-label={text.homeLabel}>
       <Logo size={28} />
-      <span class="brand__name">AI-Notepad</span>
+      <span class="brand__name">{productName}</span>
     </a>
 
     <nav class="nav" aria-label={text.navLabel}>
@@ -43,15 +43,14 @@ const currentPath: string = pagePath(page, lang);
     </nav>
 
     <div class="site-header__actions">
-      {
-        otherLangs.map((other: Lang) => (
-          <a class="lang-link" href={pagePath(page, other)} hreflang={other} lang={other}>
-            <span class="visually-hidden">{text.languageLabel}: </span>
-            {langMeta[other].name}
-          </a>
-        ))
-      }
-      <a class="button button--primary button--small header-cta" href={pagePath("download", lang)}>{text.nav.download}</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label={text.darkMode} title={text.darkMode}>
+        <Icon name="moon" size={18} class="theme-toggle__icon theme-toggle__moon" />
+        <Icon name="sun" size={18} class="theme-toggle__icon theme-toggle__sun" />
+      </button>
+      <a class="button button--primary button--small header-cta" href={routes.download}>
+        <Icon name="apple" size={15} class="button__apple" />
+        {text.headerDownload}
+      </a>
       <details class="menu">
         <summary class="menu__button">
           <span class="visually-hidden">{text.navLabel}</span>
@@ -136,24 +135,58 @@ const currentPath: string = pagePath(page, lang);
   .site-header__actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     margin-left: auto;
   }
 
-  .lang-link {
-    display: inline-flex;
-    align-items: center;
-    min-height: 38px;
-    padding: 0 10px;
+  /* Tema düğmesi: ay (açık tema) ve güneş (koyu tema) üst üste; geçişte yalnızca dönme, ölçek ve saydamlık. */
+  .theme-toggle {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--line);
     border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--muted);
-    text-decoration: none;
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background-color 160ms ease;
   }
 
-  .lang-link:hover {
-    color: var(--ink);
+  .theme-toggle:hover {
+    background: var(--soft);
+  }
+
+  :global(:root:not([data-theme])) .theme-toggle {
+    display: none;
+  }
+
+  .theme-toggle :global(.theme-toggle__icon) {
+    grid-area: 1 / 1;
+    transition:
+      transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      opacity 240ms ease;
+  }
+
+  .theme-toggle :global(.theme-toggle__sun) {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.6);
+  }
+
+  :global(:root[data-theme="dark"]) .theme-toggle :global(.theme-toggle__moon) {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.6);
+  }
+
+  :global(:root[data-theme="dark"]) .theme-toggle :global(.theme-toggle__sun) {
+    opacity: 1;
+    transform: none;
+  }
+
+  .header-cta :global(.button__apple) {
+    margin-top: -2px;
   }
 
   .menu {
@@ -188,7 +221,7 @@ const currentPath: string = pagePath(page, lang);
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: var(--radius-s);
-    box-shadow: var(--shadow);
+    box-shadow: var(--elevation);
   }
 
   .menu__list a {

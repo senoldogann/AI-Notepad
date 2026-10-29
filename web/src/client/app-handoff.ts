@@ -1,43 +1,31 @@
-// Uygulamadan başlatılan e-posta girişi: Mac uygulaması giriş sayfasını `?app=1` ile açar. Site bunu bu tarayıcıda 15
-// dakika (bağlantının ömrü) hatırlar; e-posta bağlantısı açılınca jeton siteye giriş yapmak yerine uygulamaya
-// (`com.senoldogan.ainotepad.hosted://auth/email?token=…`) iletilir. Bağlantı başka bir tarayıcıda açılırsa site
-// normal girişi yapar.
+// Mac uygulamasından başlatılan Google ile giriş. Uygulama giriş sayfasını `/sign-in?app=1&nonce=<64 hex>` ile açar;
+// `nonce` uygulamanın kendi ham nonce'unun SHA-256 özetidir ve Google'a olduğu gibi verilir. Google'ın kimlik jetonu
+// sunucuya gönderilmez: `com.senoldogan.ainotepad.hosted://auth/google#idToken=…` ile uygulamaya iletilir, uygulama
+// jetonu kendi ham nonce'uyla sunucuya yollar.
 
 /** Abonelik uygulamasının adres şeması (App/Hosted, Info.plist `CFBundleURLSchemes`). */
 export const appUrlScheme: string = "com.senoldogan.ainotepad.hosted";
 
-/** Hatırlamanın saklandığı anahtar (değer: bitiş anı, ms). */
-const storageKey: string = "ainotepad.appSignIn";
+/** Giriş isteğinin türü: sitenin kendi girişi, uygulama adına giriş ya da bozuk uygulama isteği. */
+export type SignInMode =
+  | { readonly kind: "site" }
+  | { readonly kind: "app"; readonly hashedNonce: string }
+  | { readonly kind: "invalid-app" };
 
-/** Hatırlama süresi: e-posta bağlantısının ömrü. */
-const rememberMs: number = 15 * 60_000;
+/** SHA-256 onaltılık özet biçimi (64 küçük ya da büyük harf onaltılık). */
+const hashedNoncePattern: RegExp = /^[0-9a-fA-F]{64}$/;
 
-/** Giriş sayfası uygulamadan mı açıldı (`?app=1`). Saf fonksiyondur. */
-export function isAppSignInRequest(search: string): boolean {
-  return new URLSearchParams(search).get("app") === "1";
-}
-
-/** Saklanan değer hâlâ geçerli mi. Saf fonksiyondur. */
-export function isAppSignInPending(stored: string | null, nowMs: number): boolean {
-  if (stored === null || !/^\d+$/.test(stored)) {
-    return false;
+/** Adresin sorgusundan giriş türünü çıkarır: `app=1` varsa geçerli bir `nonce` da olmalı. Saf fonksiyondur. */
+export function signInMode(search: string): SignInMode {
+  const params: URLSearchParams = new URLSearchParams(search);
+  if (params.get("app") !== "1") {
+    return { kind: "site" };
   }
-  return Number(stored) > nowMs;
+  const nonce: string | null = params.get("nonce");
+  return nonce !== null && hashedNoncePattern.test(nonce) ? { kind: "app", hashedNonce: nonce.toLowerCase() } : { kind: "invalid-app" };
 }
 
-/** Jetonu uygulamaya ileten adres. Saf fonksiyondur. */
-export function appSignInUrl(token: string): string {
-  return `${appUrlScheme}://auth/email?token=${encodeURIComponent(token)}`;
-}
-
-/** Uygulamadan başlatılan girişi bu tarayıcıda hatırlar. */
-export function rememberAppSignIn(nowMs: number): void {
-  window.localStorage.setItem(storageKey, String(nowMs + rememberMs));
-}
-
-/** Uygulamadan başlatılmış bir giriş bekliyor mu; bekliyorsa (tek seferlik) silinir. */
-export function consumeAppSignIn(nowMs: number): boolean {
-  const pending: boolean = isAppSignInPending(window.localStorage.getItem(storageKey), nowMs);
-  window.localStorage.removeItem(storageKey);
-  return pending;
+/** Google kimlik jetonunu uygulamaya ileten adres (jeton `#` parçasında: sunuculara ve geçmişe gitmez). Saf fonksiyondur. */
+export function appGoogleSignInUrl(idToken: string): string {
+  return `${appUrlScheme}://auth/google#idToken=${encodeURIComponent(idToken)}`;
 }

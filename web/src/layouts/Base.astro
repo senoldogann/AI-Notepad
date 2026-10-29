@@ -1,69 +1,57 @@
 ---
-// Tüm sayfaların iskeleti: başlık ve açıklama, kanonik adres, hreflang, Open Graph, simgeler, üst çubuk ve alt bilgi.
+// Tüm sayfaların iskeleti: başlık ve açıklama, kanonik adres, Open Graph, simgeler, tema betiği, üst çubuk ve alt bilgi.
 import "../styles/global.css";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
-import { copy, type PageMeta } from "../i18n/copy";
-import { type Lang, type PageKey, langMeta, langs, pageUrl } from "../i18n/routes";
+import { productName } from "../config";
+import { copy, type PageMeta } from "../copy";
+import { type PageKey, pageUrl } from "../routes";
 import { siteConfig } from "../site";
 
 interface Props {
-  readonly lang: Lang;
   readonly page: PageKey;
   readonly meta: PageMeta;
-  /** Kişiye özel sayfalar (hesap, giriş bağlantısı) arama motorlarına kapalıdır. */
+  /** Kişiye özel sayfalar (hesap, yönetim) ve 404 arama motorlarına kapalıdır; kanonik adresleri de verilmez. */
   readonly indexed: boolean;
 }
-const { lang, page, meta, indexed } = Astro.props;
+const { page, meta, indexed } = Astro.props;
 const origin: string = siteConfig.siteOrigin;
-const canonical: string = pageUrl(page, lang, origin);
-const ogImage: string = `${origin}/og.png`;
+const canonical: string = pageUrl(page, origin);
 ---
 
 <!doctype html>
-<html lang={langMeta[lang].htmlLang}>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Tema ilk boyamadan önce uygulanır: engelleyici ama harici (CSP satır içi betiğe izin vermez). -->
+    <script is:inline src="/theme.js"></script>
     <title>{meta.title}</title>
     <meta name="description" content={meta.description} />
-    {indexed ? null : <meta name="robots" content="noindex" />}
-    <link rel="canonical" href={canonical} />
-    {langs.map((alternate: Lang) => <link rel="alternate" hreflang={alternate} href={pageUrl(page, alternate, origin)} />)}
-    <link rel="alternate" hreflang="x-default" href={`${origin}/`} />
+    {indexed ? <link rel="canonical" href={canonical} /> : <meta name="robots" content="noindex" />}
     <link rel="preload" href="/fonts/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#fdfcfc" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="AI-Notepad" />
+    <meta property="og:site_name" content={productName} />
     <meta property="og:title" content={meta.title} />
     <meta property="og:description" content={meta.description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={ogImage} />
+    <meta property="og:image" content={`${origin}/og.png`} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="AI-Notepad" />
-    <meta property="og:locale" content={langMeta[lang].ogLocale} />
-    {
-      langs
-        .filter((alternate: Lang): boolean => alternate !== lang)
-        .map((alternate: Lang) => <meta property="og:locale:alternate" content={langMeta[alternate].ogLocale} />)
-    }
+    <meta property="og:image:alt" content={productName} />
+    <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <a class="skip-link" href="#main">{copy[lang].common.skipLink}</a>
-    <Header lang={lang} page={page} />
+    <a class="skip-link" href="#main">{copy.common.skipLink}</a>
+    <Header page={page} />
     <main id="main" tabindex="-1">
       <slot />
     </main>
-    <Footer lang={lang} page={page} />
-    <script>
-      import { rememberLang } from "../client/lang";
-
-      rememberLang(document.documentElement.lang);
-    </script>
+    <Footer />
   </body>
 </html>
