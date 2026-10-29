@@ -1,25 +1,26 @@
 import Foundation
 
-// Tarayıcıda giriş (abonelik sürümü): Apple ve Google arayüzü sitededir. Developer ID ile dağıtılan uygulama Apple ile
+// Sitede giriş (abonelik sürümü): Apple ve Google arayüzü sitededir. Developer ID ile dağıtılan uygulama Apple ile
 // girişi kendisi yapamaz (Apple bu yetkiyi yalnızca App Store uygulamalarına verir). Uygulama her deneme için rastgele ham
-// nonce üretir, yalnızca bellekte tutar ve `<site>/sign-in?app=1&nonce=<sha256hex(ham)>` sayfasını tarayıcıda açar.
-// Kullanıcı Apple ya da Google hesabını seçince site uygulamayı
-// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=<JWT>` ile açar; uygulama `POST /v1/auth/<sağlayıcı>`
-// ile `{identityToken, nonce: ham}` gönderir. Sunucu jetonun `nonce` iddiasının `sha256hex(ham)` olduğunu denetler.
+// nonce üretir, yalnızca bellekte tutar ve `<site>/sign-in?app=1&nonce=<sha256hex(ham)>` sayfasını uygulama içi giriş
+// penceresinde (ASWebAuthenticationSession) açar. Site Apple ya da Google'a yönlendirir (açılır pencere yok), dönüşte
+// `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=<JWT>` adresine gider; giriş penceresi bu adresi
+// yakalar. Uygulama `POST /v1/auth/<sağlayıcı>` ile `{identityToken, nonce: ham}` gönderir. Sunucu jetonun `nonce`
+// iddiasının `sha256hex(ham)` olduğunu denetler.
 
-/// Tarayıcıda girişin sağlayıcısı: dönüş adresinin yolu (`/apple`, `/google`).
+/// Sitede girişin sağlayıcısı: dönüş adresinin yolu (`/apple`, `/google`).
 public enum HostedSignInProvider: String, Sendable, Equatable, CaseIterable {
     case apple
     case google
 }
 
-/// Tarayıcıda giriş denemesinin geçerlilik süresi (saniye): bundan sonra gelen dönüş reddedilir.
+/// Giriş denemesinin geçerlilik süresi (saniye): bundan sonra gelen dönüş reddedilir.
 public let hostedBrowserSignInLifetimeSec: Double = 600
 
 /// Kabul edilen en uzun kimlik jetonu (Apple ve Google kimlik jetonları 1–2 KB).
 private let identityTokenMaxLength: Int = 8192
 
-/// Başlatılmış, dönüşü beklenen tarayıcıda giriş denemesi. Ham nonce yalnızca bellekte durur, tek kullanımlıktır.
+/// Başlatılmış, dönüşü beklenen giriş denemesi. Ham nonce yalnızca bellekte durur, tek kullanımlıktır.
 public struct HostedBrowserSignInAttempt: Sendable, Equatable {
     public let rawNonce: String
     public let startedAt: Date
@@ -43,8 +44,11 @@ public struct HostedBrowserIdentity: Sendable, Equatable {
     public let identityToken: String
 }
 
-/// Tarayıcıda giriş dönüşünün reddedilme nedeni.
+/// Sitede girişin başarısız olma nedeni.
 public enum HostedBrowserSignInError: Error, Sendable, Equatable {
+    /// Uygulama içi giriş penceresi açılamadı ya da dönüşsüz kapandı (kullanıcının vazgeçmesi değil); neden hata
+    /// ayıklama içindir.
+    case sessionNotStarted(reason: String)
     /// Bekleyen deneme yok: giriş bu uygulamadan başlatılmamış ya da dönüş ikinci kez geldi.
     case noPendingAttempt
     /// Deneme süresi (`hostedBrowserSignInLifetimeSec`) geçti.
@@ -135,8 +139,8 @@ private func base64URLDecoded(text: String) -> Data? {
 }
 
 /// Dönüşü bekleyen denemeyle eşleştirir: deneme yoksa `noPendingAttempt`, süresi geçtiyse `attemptExpired`, adres
-/// bozuksa `invalidCallback`, jetonun nonce'u denemeninkinin SHA-256'sı değilse `nonceMismatch`. Çağıran denemeyi
-/// sonuç ne olursa olsun düşürür (tek kullanımlık; ikinci dönüş `noPendingAttempt` alır). Saf fonksiyondur.
+/// bozuksa `invalidCallback`, jetonun nonce'u denemeninkinin SHA-256'sı değilse `nonceMismatch`. Deneme kendi giriş
+/// penceresine bağlıdır ve pencere kapanınca düşer (tek kullanımlık). Saf fonksiyondur.
 public func resolveHostedBrowserCallback(
     url: URL, pending: HostedBrowserSignInAttempt?, now: Date, lifetimeSec: Double
 ) throws -> HostedBrowserSignInCallback {
@@ -153,9 +157,11 @@ public func resolveHostedBrowserCallback(
     return HostedBrowserSignInCallback(provider: identity.provider, identityToken: identity.identityToken, rawNonce: pending.rawNonce)
 }
 
-/// Tarayıcıda giriş hatasının kullanıcıya gösterilen metni. Saf fonksiyondur.
+/// Giriş hatasının kullanıcıya gösterilen metni. Saf fonksiyondur.
 public func hostedBrowserSignInMessage(error: HostedBrowserSignInError) -> String {
     switch error {
+    case .sessionNotStarted:
+        String(localized: "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.")
     case .noPendingAttempt:
         String(localized: "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. \"Giriş yap\"a yeniden bas.")
     case .attemptExpired:

@@ -16,7 +16,7 @@ private func writeAcceptanceResult(line: String) {
     do {
         try text.write(to: url, atomically: true, encoding: .utf8)
     } catch {
-        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .public)")
+        testLogger.error("Kabul testi sonucu yazılamadı: \(String(describing: error), privacy: .private)")
     }
 }
 #endif
@@ -33,10 +33,22 @@ enum AppEntry {
             _ = try AppPaths.dataFolderName(bundle: .main)
         } catch {
             let message: String = userFacingMessage(error: error)
-            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .public)")
+            appLogger.fault("Veri klasörü tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
             FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
             fatalError(message)
         }
+        #if HOSTED_EDITION
+        // Anahtar Zinciri servis adı da Info.plist'ten (Debug ve Release ayrı); yoksa oturum yanlış yere yazılmasın diye
+        // uygulama açılmaz.
+        do {
+            _ = try hostedKeychainService(bundle: .main)
+        } catch {
+            let message: String = userFacingMessage(error: error)
+            appLogger.fault("Anahtar Zinciri servisi tanımlı değil, uygulama açılmıyor, hata: \(String(describing: error), privacy: .private)")
+            FileHandle.standardError.write(Data("\(appName): \(message)\n".utf8))
+            fatalError(message)
+        }
+        #endif
         #if DEBUG
         if CommandLine.arguments.contains("--icloud-yokla") {
             probeICloud()
@@ -133,12 +145,13 @@ struct AINotepadApp: App {
         // Tek çalar: panel ve ana pencere aynı toplantıyı ya da birini çalar, ikisi üst üste değil.
         let player: MeetingAudioPlayer = MeetingAudioPlayer()
         _player = State(initialValue: player)
-        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün.
-        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main)))
-        let crashReports: CrashReportCenter = CrashReportCenter()
-        _crashReports = State(initialValue: crashReports)
         let model: AppModel = AppModel(liveEngine: engine, displayMode: displayMode, player: player)
         _model = State(initialValue: model)
+        // Güncelleme ve çökme raporları pencerelerden önce: menü ve ayarlar ilk karede doğru görünsün. Kayıt ya da
+        // işleme sürerken güncelleme uygulamayı yeniden başlatmaz (çıkış korumasıyla aynı koşul).
+        _updater = State(initialValue: AppUpdater(publicKey: sparklePublicKey(bundle: .main), isBusy: { model.isBusy }))
+        let crashReports: CrashReportCenter = CrashReportCenter()
+        _crashReports = State(initialValue: crashReports)
         let hideFromCapture: Bool = UserDefaults.standard.bool(forKey: SettingsKey.hideFromScreenCapture)
         let router: MainWindowRouter = MainWindowRouter()
         _router = State(initialValue: router)
@@ -284,9 +297,12 @@ struct AINotepadApp: App {
             }
             #endif
             #if HOSTED_EDITION
-            // Abonelik: hesap ve hak durumu açılışta okunur; kurulum eksikleri (giriş) güncellenir.
-            await HostedAccount.shared.refresh()
-            await model.refreshSetupProblems()
+            // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Konuşma modeli
+            // bunu beklemeden, paralel yüklenir (sunucu yavaşsa ya da ağ yoksa model gecikmesin).
+            Task {
+                await HostedAccount.shared.refresh()
+                await model.refreshSetupProblems()
+            }
             #else
             if await chooseOnDeviceOnFirstRun(defaults: .standard) {
                 appLogger.info("İlk açılış: anahtar yok, cihaz içi mod seçildi")
@@ -315,13 +331,9 @@ struct AINotepadApp: App {
                 }
             )
             #if HOSTED_EDITION
-            // Tarayıcıda girişin dönüşü (com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…) uygulamayı açar.
-            .onOpenURL { (url: URL) in
-                Task {
-                    await HostedAccount.shared.handle(url: url)
-                    await model.refreshSetupProblems()
-                }
-            }
+            // Giriş ya da çıkışta (kurulumda, Ayarlar'da ya da oturum sunucuda kapanınca) kurulum eksikleri (menüdeki
+            // "giriş yapılmamış") yenilenir.
+            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
             #endif
         }
         .defaultSize(width: 1180, height: 780)
@@ -367,6 +379,13 @@ struct AINotepadApp: App {
             MenuContent(model: model, panel: panel, island: island, shortcuts: shortcuts, router: router, updater: updater)
         } label: {
             MenuBarLabel(symbol: menuSymbol)
+                // Menü çubuğu simgesi hep açık: kayıt ve işleme bitince ertelenen güncelleme (varsa) burada sürdürülür,
+                // ana pencere kapalı olsa da.
+                .onChange(of: model.isBusy) { (_: Bool, isBusy: Bool) in
+                    if !isBusy {
+                        updater.resumePostponedRelaunch()
+                    }
+                }
         }
     }
 
@@ -488,6 +507,13 @@ private struct MenuContent: View {
             openMainWindow(router: router, section: .settings)
         }
         if updater.isEnabled {
+            // Bulunan ya da indirilen güncelleme: kayıt ya da işleme sürerken yeniden başlatılmaz.
+            if let update = updater.availableUpdate {
+                Button(updateMenuTitle(update: update, isBusy: model.isBusy), systemImage: "arrow.down.circle.fill") {
+                    updater.installUpdate()
+                }
+                .disabled(model.isBusy)
+            }
             Button("Güncellemeleri denetle…", systemImage: "arrow.down.circle") {
                 updater.checkForUpdates()
             }

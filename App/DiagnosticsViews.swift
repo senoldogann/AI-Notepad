@@ -1,0 +1,295 @@
+import AINotepadCore
+import AINotepadUI
+import AppKit
+import AVFAudio
+import CoreServices
+import EventKit
+import os
+import SwiftUI
+
+private let diagnosticsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Diagnostics")
+
+/// Uygulamanın log alt sistemi (son hatalar buradan okunur).
+private let appLogSubsystem: String = "com.senoldogan.AINotepad"
+
+/// Sunucu erişim denetiminin zaman aşımı.
+private let healthTimeoutSec: Double = 10
+
+/// Apple Notlar'ın paket kimliği (Apple Events izni bunun için sorulur).
+private let notesBundleID: String = "com.apple.Notes"
+
+/// Hata mesajlarından silinecek kullanıcı adları: kısa ve tam ad.
+func diagnosticsUserNames() -> [String] {
+    [NSUserName(), NSFullUserName()]
+}
+
+/// Tanılamada denetlenen sunucu: abonelik sürümünde hesabın sunucusu, geliştirici sürümünde rapor sunucusu.
+private func diagnosticsAPIBase() throws -> URL {
+    #if HOSTED_EDITION
+    try hostedDiagnosticsAPIBase()
+    #else
+    try anonymousReportDestination(bundle: .main).baseURL
+    #endif
+}
+
+/// Uygulama bölümü: ad, sürüm, derleme, sürüm türü, sistem ve Mac modeli (seri numarası ya da donanım kimliği yok).
+private func appDiagnostics(bundle: Bundle) -> DiagnosticsSection {
+    let version: String = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    let build: String = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+    #if HOSTED_EDITION
+    let edition: String = String(localized: "Abonelik sürümü")
+    #else
+    let edition: String = String(localized: "Geliştirici sürümü")
+    #endif
+    let model: String
+    do {
+        model = try macModelIdentifier()
+    } catch {
+        diagnosticsLogger.error("Mac modeli okunamadı, hata: \(String(describing: error), privacy: .private)")
+        model = String(localized: "okunamadı")
+    }
+    return DiagnosticsSection(title: String(localized: "Uygulama"), items: [
+        DiagnosticsItem(label: String(localized: "Ad"), value: appName),
+        DiagnosticsItem(label: String(localized: "Sürüm"), value: appVersionText(version: version, build: build)),
+        DiagnosticsItem(label: String(localized: "Tür"), value: edition),
+        DiagnosticsItem(label: String(localized: "Sistem"), value: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"),
+        DiagnosticsItem(label: String(localized: "Mac modeli"), value: model),
+    ])
+}
+
+/// Sunucu bölümü: adres ve erişim denetiminin sonucu.
+private func serverDiagnostics(base: Result<URL, any Error>, health: APIHealth?) -> DiagnosticsSection {
+    let title: String = String(localized: "Sunucu")
+    let url: URL
+    switch base {
+    case .success(let value):
+        url = value
+    case .failure(let error):
+        return DiagnosticsSection(title: title, items: [
+            DiagnosticsItem(label: String(localized: "Adres"), value: redactedDiagnosticText(text: userFacingMessage(error: error), userNames: diagnosticsUserNames())),
+        ])
+    }
+    let result: String
+    switch health {
+    case .none:
+        result = String(localized: "Denetleniyor…")
+    case .reachable(let latencyMs):
+        result = String(localized: "Erişilebilir, \(latencyMs) ms")
+    case .unhealthy(let status, let latencyMs):
+        result = String(localized: "Yanıt verdi ama sağlıklı değil (HTTP \(status)), \(latencyMs) ms")
+    case .unreachable(let reason):
+        result = String(localized: "Ulaşılamadı (\(reason))")
+    }
+    return DiagnosticsSection(title: title, items: [
+        DiagnosticsItem(label: String(localized: "Adres"), value: url.host() ?? url.absoluteString),
+        DiagnosticsItem(label: String(localized: "Erişim"), value: result),
+    ])
+}
+
+/// Mikrofon izninin metni.
+private func microphoneText(permission: AVAudioApplication.recordPermission) -> String {
+    switch permission {
+    case .granted: String(localized: "İzin verildi")
+    case .denied: String(localized: "Reddedildi")
+    case .undetermined: String(localized: "Henüz sorulmadı")
+    @unknown default: String(localized: "Bilinmiyor")
+    }
+}
+
+/// Takvim ya da anımsatıcı izninin metni.
+private func eventKitText(status: EKAuthorizationStatus) -> String {
+    switch status {
+    case .fullAccess: String(localized: "Tam erişim")
+    case .writeOnly: String(localized: "Yalnızca yazma")
+    case .denied: String(localized: "Reddedildi")
+    case .restricted: String(localized: "Kısıtlı")
+    case .notDetermined: String(localized: "Henüz sorulmadı")
+    @unknown default: String(localized: "Bilinmiyor")
+    }
+}
+
+/// Apple Notlar'ı denetleme (Apple Events) izni; sormadan okunur (Notlar kapalıysa macOS durumu söylemez).
+private func appleEventsText() -> String {
+    let target: NSAppleEventDescriptor = NSAppleEventDescriptor(bundleIdentifier: notesBundleID)
+    let status: OSStatus = AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, false)
+    switch status {
+    case noErr: return String(localized: "İzin verildi")
+    case OSStatus(errAEEventNotPermitted): return String(localized: "Reddedildi")
+    case OSStatus(errAEEventWouldRequireUserConsent): return String(localized: "Henüz sorulmadı")
+    case OSStatus(procNotFound): return String(localized: "Notlar açık değil; durum okunamıyor")
+    default: return String(localized: "Bilinmiyor (\(status))")
+    }
+}
+
+/// İzinler bölümü. Sistem sesi kaydı izninin durumunu macOS sorgulatmaz.
+@MainActor
+private func permissionDiagnostics(model: AppModel) -> DiagnosticsSection {
+    DiagnosticsSection(title: String(localized: "İzinler"), items: [
+        DiagnosticsItem(label: String(localized: "Mikrofon"), value: microphoneText(permission: model.microphonePermission)),
+        DiagnosticsItem(label: String(localized: "Sistem sesi"), value: String(localized: "macOS bu iznin durumunu bildirmiyor; ilk kayıtta sorulur")),
+        DiagnosticsItem(label: String(localized: "Takvim"), value: eventKitText(status: EKEventStore.authorizationStatus(for: .event))),
+        DiagnosticsItem(label: String(localized: "Anımsatıcılar"), value: eventKitText(status: EKEventStore.authorizationStatus(for: .reminder))),
+        DiagnosticsItem(label: String(localized: "Apple Notlar (Apple Events)"), value: appleEventsText()),
+    ])
+}
+
+/// Canlı metin bölümü: motor ve modelin durumu.
+@MainActor
+private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
+    let status: String
+    switch (model.liveEngine, model.modelStatus) {
+    case (.deepgram, _):
+        status = String(localized: "Bulut; model gerekmez")
+    case (_, .loading):
+        status = String(localized: "İndiriliyor ya da yükleniyor")
+    case (_, .ready):
+        status = String(localized: "Hazır")
+    case (_, .failed(let message)):
+        status = String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))")
+    }
+    return DiagnosticsSection(title: String(localized: "Canlı metin"), items: [
+        DiagnosticsItem(label: String(localized: "Motor"), value: model.liveEngine.rawValue),
+        DiagnosticsItem(label: String(localized: "Model"), value: status),
+    ])
+}
+
+/// Güncelleme bölümü: son denetim, otomatik indirme ve bekleyen güncelleme.
+@MainActor
+private func updateDiagnostics(updater: AppUpdater) -> DiagnosticsSection {
+    let title: String = String(localized: "Güncelleme")
+    guard updater.isEnabled else {
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Durum"), value: String(localized: "Kapalı (imza anahtarı yok)"))])
+    }
+    let pending: String = updater.availableUpdate.map { updateHeadline(update: $0) } ?? String(localized: "Yok")
+    return DiagnosticsSection(title: title, items: [
+        DiagnosticsItem(label: String(localized: "Son denetim"), value: updater.lastCheckDate.map { $0.formatted(.iso8601) } ?? String(localized: "Henüz denetlenmedi")),
+        DiagnosticsItem(label: String(localized: "Otomatik indirme"), value: updater.automaticallyUpdates ? String(localized: "Açık") : String(localized: "Kapalı")),
+        DiagnosticsItem(label: String(localized: "Bekleyen güncelleme"), value: pending),
+    ])
+}
+
+/// Son hatalar bölümü (en çok 50; zaman, kod, kısa mesaj).
+private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
+    let title: String = String(localized: "Son hatalar")
+    switch errors {
+    case .failure(let error):
+        return DiagnosticsSection(title: title, items: [
+            DiagnosticsItem(label: String(localized: "Okunamadı"), value: redactedDiagnosticText(text: String(describing: error), userNames: diagnosticsUserNames())),
+        ])
+    case .success(let entries) where entries.isEmpty:
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"))])
+    case .success(let entries):
+        return DiagnosticsSection(title: title, items: entries.map { (entry: DiagnosticErrorEntry) -> DiagnosticsItem in
+            DiagnosticsItem(label: "\(entry.date.formatted(.iso8601)) \(entry.code)", value: entry.message)
+        })
+    }
+}
+
+/// Bu uygulama oturumunun son hataları (log deposundan, ana iş parçacığı dışında).
+private func loadAppErrors() async -> Result<[DiagnosticErrorEntry], any Error> {
+    let userNames: [String] = diagnosticsUserNames()
+    return await Task.detached(priority: .utility) { () -> Result<[DiagnosticErrorEntry], any Error> in
+        Result { try loadRecentAppErrors(subsystem: appLogSubsystem, capacity: diagnosticErrorCapacity, userNames: userNames) }
+    }.value
+}
+
+/// Sunucuya erişimi denetler; adres yoksa nil (bölüm adres hatasını gösterir).
+private func probeAPI(base: Result<URL, any Error>) async -> APIHealth? {
+    guard case .success(let url) = base else {
+        return nil
+    }
+    do {
+        return try await checkAPIHealth(baseURL: url, timeoutSec: healthTimeoutSec)
+    } catch {
+        diagnosticsLogger.error("Sunucu denetlenemedi, hata: \(String(describing: error), privacy: .private)")
+        return .unreachable(reason: String(describing: type(of: error)))
+    }
+}
+
+/// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir.
+@MainActor
+func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: Result<[DiagnosticErrorEntry], any Error>) -> [DiagnosticsSection] {
+    let base: Result<URL, any Error> = Result { try diagnosticsAPIBase() }
+    var sections: [DiagnosticsSection] = [appDiagnostics(bundle: .main)]
+    #if HOSTED_EDITION
+    sections.append(hostedAccountDiagnostics(account: .shared))
+    #endif
+    sections += [
+        serverDiagnostics(base: base, health: health),
+        permissionDiagnostics(model: model),
+        transcriptionDiagnostics(model: model),
+        updateDiagnostics(updater: updater),
+        errorDiagnostics(errors: errors),
+    ]
+    return sections
+}
+
+/// Sunucuyu denetleyip son hataları okuyarak tanılamanın düz metnini üretir (panoya ve geri bildirime).
+@MainActor
+func diagnosticsReportText(model: AppModel, updater: AppUpdater) async -> String {
+    let health: APIHealth? = await probeAPI(base: Result { try diagnosticsAPIBase() })
+    let errors: Result<[DiagnosticErrorEntry], any Error> = await loadAppErrors()
+    return diagnosticsText(sections: collectDiagnostics(model: model, updater: updater, health: health, errors: errors), generatedAt: Date())
+}
+
+/// Metni panoya koyar.
+@MainActor
+private func copyToPasteboard(text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+}
+
+/// Ayarlar › Tanılama: sürüm, sistem, hesap, sunucuya erişim, izinler, canlı metin modeli, güncelleme ve son hatalar.
+/// Ses, metin, not, anahtar, jeton ve e-posta gösterilmez; hepsi yalnızca bu Mac'te, kullanıcı kopyalamadıkça hiçbir
+/// yere gitmez.
+struct DiagnosticsSettings: View {
+    let model: AppModel
+    let updater: AppUpdater
+    @State private var health: APIHealth?
+    @State private var errors: Result<[DiagnosticErrorEntry], any Error> = .success([])
+    @State private var isRefreshing: Bool = false
+    @State private var copied: Bool = false
+
+    var body: some View {
+        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errors)
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsRow(title: Text("Tanılama")) {
+                Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
+            } control: {
+                HStack(spacing: 8) {
+                    if isRefreshing {
+                        ProgressView().controlSize(.small)
+                    }
+                    Button("Yenile") { Task { await refresh() } }
+                        .disabled(isRefreshing)
+                    Button(copied ? "Kopyalandı" : "Tanılama bilgisini kopyala") {
+                        copyToPasteboard(text: diagnosticsText(sections: sections, generatedAt: Date()))
+                        copied = true
+                    }
+                    .buttonStyle(.pillPrimary)
+                }
+            }
+            ForEach(Array(sections.enumerated()), id: \.offset) { (entry: (offset: Int, element: DiagnosticsSection)) in
+                SettingsRow(title: Text(verbatim: entry.element.title)) {
+                    ForEach(Array(entry.element.items.enumerated()), id: \.offset) { (item: (offset: Int, element: DiagnosticsItem)) in
+                        Text(verbatim: "\(item.element.label): \(item.element.value)")
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } control: {
+                    EmptyView()
+                }
+            }
+        }
+        .task { await refresh() }
+    }
+
+    private func refresh() async {
+        isRefreshing = true
+        copied = false
+        defer { isRefreshing = false }
+        health = nil
+        health = await probeAPI(base: Result { try diagnosticsAPIBase() })
+        errors = await loadAppErrors()
+    }
+}

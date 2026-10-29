@@ -158,6 +158,8 @@ private let destinationLogger: Logger = Logger(subsystem: "com.senoldogan.AINote
 public actor DestinationVault {
     private let service: String
     private let account: SecretAccount
+    /// MCP sunucularına (Notion) bildirilen uygulama adı (görünen ad).
+    public nonisolated let clientName: String
     private let refresher: @Sendable (ChannelConnection) async throws -> ChannelConnection
     private var refreshes: [String: Task<ChannelConnection, any Error>] = [:]
     /// Notion hedefinde sıradaki işlem (bir öncekinin bitmesini bekler).
@@ -167,9 +169,10 @@ public actor DestinationVault {
     private var notionWritten: [String: String] = [:]
 
     /// `refresher`: uygulamada `refreshConnectionTokens`; testte sayaçlı yenileyici.
-    public init(service: String, account: SecretAccount, refresher: @escaping @Sendable (ChannelConnection) async throws -> ChannelConnection) {
+    public init(service: String, account: SecretAccount, clientName: String, refresher: @escaping @Sendable (ChannelConnection) async throws -> ChannelConnection) {
         self.service = service
         self.account = account
+        self.clientName = clientName
         self.refresher = refresher
     }
 
@@ -364,7 +367,7 @@ public actor DestinationVault {
     public func resolveNotionIdentity(id: String) async throws {
         try await withNotion(id: id) {
             (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
-            let identity: NotionIdentity = try await fetchNotionIdentity(connection: target.connection, persist: persist)
+            let identity: NotionIdentity = try await fetchNotionIdentity(connection: target.connection, clientName: self.clientName, persist: persist)
             try await self.storeNotionIdentity(id: id, clientID: target.connection.clientID, identity: identity)
         }
     }
@@ -407,7 +410,7 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
     case .notion:
         try await vault.withNotion(id: destination.id) {
             (target: NotionTarget, persist: @escaping @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> Void in
-            try await createNotionPage(connection: target.connection, persist: persist, record: record, note: note)
+            try await createNotionPage(connection: target.connection, clientName: vault.clientName, persist: persist, record: record, note: note)
         }
     }
 }
@@ -415,14 +418,14 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
 /// Kaldırılan hedefi servis tarafında da kapatır: Slack jetonu geri alınır, Discord girişinin oluşturduğu webhook
 /// silinir, Notion'un OAuth izni yetkilendirme sunucusunda geri alınır (bkz. `revokeMCPConnection`). Yapıştırılan
 /// webhook adreslerine (Discord'unkiler dahil) dokunulmaz: adres kullanıcınındır.
-public func revokeDestination(destination: NoteDestination) async throws {
+public func revokeDestination(destination: NoteDestination, clientName: String) async throws {
     switch destination.target {
     case .account(let connection):
         try await revokeChannelConnection(connection: connection)
     case .discordSignIn(let url):
         try await deleteDiscordWebhook(url: url)
     case .notion(let target):
-        try await revokeMCPConnection(connection: target.connection)
+        try await revokeMCPConnection(connection: target.connection, clientName: clientName)
     case .webhook:
         return
     }

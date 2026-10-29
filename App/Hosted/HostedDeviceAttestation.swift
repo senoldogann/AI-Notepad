@@ -39,7 +39,7 @@ enum HostedDeviceAttestation {
             await client.setDeviceKeyID(keyID: keyID)
             attestLogger.info("Cihaz doğrulandı (App Attest)")
         } catch {
-            attestLogger.warning("Cihaz doğrulanamadı, onaysız devam ediliyor, hata: \(String(describing: error), privacy: .public)")
+            attestLogger.warning("Cihaz doğrulanamadı, onaysız devam ediliyor, hata: \(String(describing: error), privacy: .private)")
         }
     }
 
@@ -59,7 +59,7 @@ enum HostedDeviceAttestation {
             attestLogger.warning("Cihaz anahtarı geçersiz, silindi; onaysız devam ediliyor")
             return nil
         } catch {
-            attestLogger.warning("Cihaz onayı üretilemedi, onaysız devam ediliyor, hata: \(String(describing: error), privacy: .public)")
+            attestLogger.warning("Cihaz onayı üretilemedi, onaysız devam ediliyor, hata: \(String(describing: error), privacy: .private)")
             return nil
         }
     }
@@ -78,7 +78,7 @@ enum HostedDeviceCheck {
         do {
             return try await DCDevice.current.generateToken().base64EncodedString()
         } catch {
-            attestLogger.error("DeviceCheck jetonu üretilemedi, hata: \(String(describing: error), privacy: .public)")
+            attestLogger.error("DeviceCheck jetonu üretilemedi, hata: \(String(describing: error), privacy: .private)")
             throw HostedDeviceCheckError.tokenFailed(reason: String(describing: error))
         }
     }

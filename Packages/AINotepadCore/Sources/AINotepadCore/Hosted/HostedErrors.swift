@@ -21,6 +21,7 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case subscriptionRequired = "subscription_required"
     case subscriptionExists = "subscription_exists"
     case trialExhausted = "trial_exhausted"
+    case trialNotStarted = "trial_not_started"
     case trialIPLimit = "trial_ip_limit"
     case trialDeviceUsed = "trial_device_used"
     case deviceCheckRequired = "device_check_required"
@@ -70,6 +71,8 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case insecureBaseURL(url: String)
     /// Info.plist'teki adres eksik ya da geçersiz.
     case invalidBaseURL(value: String)
+    /// Info.plist'te Anahtar Zinciri servis adı yok (derleme yapılandırması hatası).
+    case keychainServiceNotConfigured(key: String)
     /// Yapay zekâ çağrısı için açık toplantı oturumu yok.
     case noActiveMeeting
     /// Sunucuya ulaşılamadı.
@@ -129,7 +132,9 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
     }
     switch code {
     case .trialExhausted:
-        return String(localized: "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.")
+        return String(localized: "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.")
+    case .trialNotStarted:
+        return String(localized: "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.")
     case .trialIPLimit:
         return String(localized: "Bu ağdan bugün çok fazla yeni deneme başlatıldı. Yarın yeniden dene ya da abone ol.")
     case .trialDeviceUsed:
@@ -194,6 +199,8 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Sunucu adresi güvenli değil (https olmalı): \(url)")
     case .invalidBaseURL(let value):
         String(localized: "Sunucu adresi geçersiz: \(value)")
+    case .keychainServiceNotConfigured(let key):
+        String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik (\(key)); uygulamayı yeniden kur.")
     case .noActiveMeeting:
         String(localized: "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.")
     case .network:
@@ -224,7 +231,7 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
         return isClosedHostedAccess(error: hosted)
     case let client as HostedClientError:
         switch client {
-        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL:
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured:
             return true
         case .network, .malformedResponse:
             return false

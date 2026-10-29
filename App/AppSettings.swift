@@ -321,7 +321,7 @@ func storedKeyBinding(key: String, fallback: KeyBinding) -> KeyBinding {
         return try JSONDecoder().decode(KeyBinding.self, from: data)
     } catch {
         // Bozuk kayıt: varsayılan kullanılır, yeni seçim üzerine yazar.
-        settingsLogger.error("Kısayol ayarı okunamadı, anahtar: \(key, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+        settingsLogger.error("Kısayol ayarı okunamadı, anahtar: \(key, privacy: .public), hata: \(String(describing: error), privacy: .private)")
         return fallback
     }
 }
@@ -387,7 +387,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
             }
         } catch {
             // Anahtar Zinciri okunamadıysa anahtar var sayılır: mevcut kullanıcının ayarı değişmesin.
-            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .public)")
+            settingsLogger.error("İlk açılışta anahtar denetlenemedi, cihaz içi mod seçilmedi, hesap: \(account.rawValue, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             return false
         }
     }
@@ -395,7 +395,7 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     do {
         config = try onDeviceConfig()
     } catch {
-        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .public)")
+        settingsLogger.info("İlk açılışta cihaz içi model kullanılamıyor, hata: \(String(describing: error), privacy: .private)")
         return false
     }
     // Kayıtlı ana toplantı dili korunur (kurulumda bu arada seçilmiş olabilir: alan şimdi yeniden okunur); yoksa
@@ -478,7 +478,9 @@ func primaryMeetingLanguage() -> MeetingLanguage {
 }
 
 /// Bu uygulamanın Anahtar Zinciri servis adı: geliştirici sürümünde `AINotepad` (iPhone ile paylaşılan), abonelik
-/// sürümünde kendi servisi (kanal ve görev aracı bağlantıları geliştirici sürümünün öğelerine yazılmasın).
+/// sürümünde Info.plist'teki kendi servisi (Release `AINotepadHosted`, Debug `AINotepadHosted.debug`; kanal ve görev
+/// aracı bağlantıları geliştirici sürümünün ya da yayındaki sürümün öğelerine yazılmasın). Abonelik sürümünde değer
+/// `AppEntry.main`'de açılışta doğrulanır; yoksa uygulama açılmaz.
 let appKeychainService: String = {
     #if DEBUG
     // Tanıtım modu sahibin Anahtar Zinciri öğelerini okumaz (bkz. App/DemoData.swift).
@@ -487,7 +489,11 @@ let appKeychainService: String = {
     }
     #endif
     #if HOSTED_EDITION
-    return hostedKeychainService
+    do {
+        return try hostedKeychainService(bundle: .main)
+    } catch {
+        fatalError("Anahtar Zinciri servis adı tanımlı değil (Info.plist \(hostedKeychainServiceInfoKey)): \(error)")
+    }
     #else
     return keychainService
     #endif

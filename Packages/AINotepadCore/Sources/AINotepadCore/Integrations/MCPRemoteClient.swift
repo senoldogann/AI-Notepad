@@ -190,7 +190,7 @@ private func getJSON<Value: Decodable>(_ type: Value.Type, url: URL, server: Str
 
 /// Sunucunun yetkilendirme sunucusunu bulur: kimliksiz bir istekle 401 ve `resource_metadata` alınır (yoksa iyi
 /// bilinen adres denenir), oradan yetkilendirme sunucusunun bilgileri okunur.
-public func discoverAuthorization(server: URL) async throws -> AuthorizationServerMetadata {
+public func discoverAuthorization(server: URL, clientName: String) async throws -> AuthorizationServerMetadata {
     let name: String = server.host() ?? server.absoluteString
     var probe: URLRequest = URLRequest(url: server)
     probe.httpMethod = "POST"
@@ -198,7 +198,7 @@ public func discoverAuthorization(server: URL) async throws -> AuthorizationServ
     probe.setValue("application/json", forHTTPHeaderField: "content-type")
     probe.setValue("application/json, text/event-stream", forHTTPHeaderField: "accept")
     probe.setValue(mcpProtocolVersion, forHTTPHeaderField: "mcp-protocol-version")
-    probe.httpBody = try JSONEncoder().encode(JSONRPCRequest(id: 1, method: "initialize", params: initializeParams()))
+    probe.httpBody = try JSONEncoder().encode(JSONRPCRequest(id: 1, method: "initialize", params: initializeParams(clientName: clientName)))
     let response: URLResponse
     do {
         (_, response) = try await URLSession.shared.data(for: probe)
@@ -397,9 +397,9 @@ func mcpRevocationRequest(endpoint: URL, connection: MCPConnection) -> URLReques
 /// bağlantınınkiyle aynı olmalı: jeton yalnızca onu veren sunucuya gider. Geri alma adresi yoksa `noRevocationEndpoint`.
 /// Ağ hatası, 429 ve 5xx'te uyarıyla yeniden denenir, sonra son hata fırlar; diğer retler (4xx) hemen fırlar. Sunucu
 /// geçersiz ya da zaten geri alınmış jeton için de 200 döner (RFC 7009 §2.2).
-public func revokeMCPConnection(connection: MCPConnection) async throws {
+public func revokeMCPConnection(connection: MCPConnection, clientName: String) async throws {
     let server: String = connection.serverURL.host() ?? connection.serverURL.absoluteString
-    let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: connection.serverURL)
+    let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: connection.serverURL, clientName: clientName)
     guard metadata.tokenEndpoint == connection.tokenEndpoint else {
         throw MCPRemoteError.invalidResponse(server: server, reason: "yetkilendirme sunucusu değişmiş: \(metadata.tokenEndpoint.absoluteString)")
     }
@@ -459,11 +459,12 @@ private struct JSONRPCResponse: Decodable {
     let error: JSONRPCError?
 }
 
-private func initializeParams() -> JSONValue {
+/// `initialize` parametreleri; `clientName` uygulamanın görünen adıdır (AI-Notepad ya da Gistsmith). Saf fonksiyondur.
+private func initializeParams(clientName: String) -> JSONValue {
     .object([
         "protocolVersion": .string(mcpProtocolVersion),
         "capabilities": .object([:]),
-        "clientInfo": .object(["name": .string("AI-Notepad"), "version": .string("1.0")]),
+        "clientInfo": .object(["name": .string(clientName), "version": .string("1.0")]),
     ])
 }
 
@@ -519,10 +520,11 @@ public struct MCPRemoteSession: Sendable {
 
     private var serverName: String { serverURL.host() ?? serverURL.absoluteString }
 
-    /// Oturumu açar (`initialize` + `notifications/initialized`). 401 `expired`.
-    public static func open(serverURL: URL, accessToken: String) async throws -> MCPRemoteSession {
+    /// Oturumu açar (`initialize` + `notifications/initialized`); `clientName` sunucuya bildirilen uygulama adıdır.
+    /// 401 `expired`.
+    public static func open(serverURL: URL, accessToken: String, clientName: String) async throws -> MCPRemoteSession {
         let bare: MCPRemoteSession = MCPRemoteSession(serverURL: serverURL, accessToken: accessToken, sessionID: nil)
-        let (_, sessionID): (JSONValue, String?) = try await bare.call(id: 1, method: "initialize", params: initializeParams())
+        let (_, sessionID): (JSONValue, String?) = try await bare.call(id: 1, method: "initialize", params: initializeParams(clientName: clientName))
         let session: MCPRemoteSession = MCPRemoteSession(serverURL: serverURL, accessToken: accessToken, sessionID: sessionID)
         try await session.notify(method: "notifications/initialized")
         return session
@@ -663,7 +665,7 @@ public func jsonText(value: JSONValue) -> String {
         return String(decoding: try encoder.encode(value), as: UTF8.self)
     } catch {
         // JSONValue her zaman kodlanabilir; buraya düşülmesi bir programlama hatasıdır.
-        mcpRemoteLogger.fault("JSON değeri kodlanamadı, hata: \(String(describing: error), privacy: .public)")
+        mcpRemoteLogger.fault("JSON değeri kodlanamadı, hata: \(String(describing: error), privacy: .private)")
         return ""
     }
 }
@@ -671,7 +673,7 @@ public func jsonText(value: JSONValue) -> String {
 /// Bağlantıyla oturum açar; jeton süresi bitmek üzereyse önce yenilenir. Yenilenen bağlantı oturum kullanılmadan önce
 /// `persist(önceki, yeni)` ile hemen saklanır: sunucu yenileme jetonunu döndürdüyse eskisi artık geçersizdir, sonraki
 /// işlem başarısız olsa bile yeni jeton kaybolmamalı.
-public func openMCPSession(connection: MCPConnection, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> MCPRemoteSession {
+public func openMCPSession(connection: MCPConnection, clientName: String, persist: @Sendable (MCPConnection, MCPConnection) async throws -> Void) async throws -> MCPRemoteSession {
     let current: MCPConnection
     if needsRefresh(tokens: connection.tokens, now: Date()) {
         current = try await refreshMCPConnection(connection: connection)
@@ -680,12 +682,12 @@ public func openMCPSession(connection: MCPConnection, persist: @Sendable (MCPCon
         current = connection
     }
     do {
-        return try await MCPRemoteSession.open(serverURL: current.serverURL, accessToken: current.tokens.accessToken)
+        return try await MCPRemoteSession.open(serverURL: current.serverURL, accessToken: current.tokens.accessToken, clientName: clientName)
     } catch MCPRemoteError.expired {
         // Jeton süresinden önce geri alınmış olabilir: bir kez yenileyip yeniden denenir.
         let fresh: MCPConnection = try await refreshMCPConnection(connection: current)
         try await persist(current, fresh)
         mcpRemoteLogger.info("MCP jetonu erken yenilendi, sunucu: \(current.serverURL.host() ?? "?", privacy: .public)")
-        return try await MCPRemoteSession.open(serverURL: fresh.serverURL, accessToken: fresh.tokens.accessToken)
+        return try await MCPRemoteSession.open(serverURL: fresh.serverURL, accessToken: fresh.tokens.accessToken, clientName: clientName)
     }
 }

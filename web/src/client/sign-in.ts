@@ -1,13 +1,29 @@
-// Giriş sayfası: Apple ile giriş (açılır pencere) ve Google ile giriş (Google Identity Services düğmesi). Her ikisinde
-// tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik jetonunu ham nonce'la sunucuya yollar;
-// başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına girişte (app-handoff.ts) iki
-// düğme de görünür; nonce özeti uygulamanındır ve jeton sunucuya değil uygulamaya iletilir.
+// Giriş sayfası. Sitenin kendi girişi: Apple ile giriş (açılır pencere) ve Google ile giriş (Google Identity Services
+// düğmesi); tarayıcı rastgele bir ham nonce üretir, sağlayıcıya özetini verir, kimlik jetonunu ham nonce'la sunucuya
+// yollar; başarılı girişte oturum saklanır ve hesap sayfasına geçilir. Mac uygulaması adına giriş (app-handoff.ts):
+// açılır pencere yok, sayfa sağlayıcıya yönlendirir ve `#` parçasıyla geri döner; nonce özeti uygulamanındır ve jeton
+// sunucuya değil uygulamaya iletilir.
 import { type RawResponse, parseSession, send } from "./api";
-import { appSignInUrl, type SignInMode, signInMode } from "./app-handoff";
+import {
+  type AppSignInProvider,
+  type PendingAppSignIn,
+  type ProviderReturn,
+  type SignInMode,
+  appSignInPagePath,
+  appSignInUrl,
+  appleAuthorizeRedirect,
+  googleAuthorizeRedirect,
+  isCancellation,
+  parsePendingAppSignIn,
+  pendingAppSignInKey,
+  providerReturn,
+  serializePendingAppSignIn,
+  signInMode,
+} from "./app-handoff";
 import { type ClientCopy, clientCopy } from "./copy";
 import { type Theme, currentTheme, dataValue, element, errorText, hideNotice, loadScript, onThemeChange, showNotice } from "./dom";
 import { saveSession } from "./session";
-import { appleAuthScriptUrl, googleScriptUrl } from "../config";
+import { appleAuthScriptUrl, appleAuthorizeUrl, googleAuthorizeUrl, googleScriptUrl } from "../config";
 import { siteConfig } from "../site";
 
 /** Apple yanıtındaki `state` gönderdiğimizle aynı değil. */
@@ -239,22 +255,85 @@ function startSiteSignIn(text: ClientCopy, notice: HTMLElement, accountPath: str
   });
 }
 
-/** Uygulama adına giriş: Apple ya da Google, uygulamanın nonce özetiyle; jeton uygulamaya. */
+/** Sağlayıcının yetkilendirme adresi: uygulamanın nonce özeti ve bu denemenin `state`'iyle. */
+function providerAuthorizeUrl(pending: PendingAppSignIn, redirectUri: string): string {
+  return pending.provider === "apple"
+    ? appleAuthorizeRedirect(appleAuthorizeUrl, siteConfig.appleServiceId, redirectUri, pending.state, pending.hashedNonce)
+    : googleAuthorizeRedirect(googleAuthorizeUrl, siteConfig.googleClientId, redirectUri, pending.state, pending.hashedNonce);
+}
+
+/**
+ * Uygulama adına giriş: Apple ve Google düğmeleri sağlayıcıya yönlendirir (uygulamanın giriş penceresinde açılır
+ * pencere güvenilir çalışmaz). Yönlendirmeden önce sağlayıcı, rastgele `state` ve nonce özeti `sessionStorage`'a yazılır;
+ * yazılamazsa yönlendirilmez.
+ */
 function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: string, hashedNonce: string): void {
   element("signin-intro", HTMLElement).classList.add("hidden");
   element("signin-app-intro", HTMLElement).classList.remove("hidden");
-  void setUpApple(text, notice, redirectUri, {
-    nextHashedNonce: async (): Promise<string> => hashedNonce,
-    onIdentityToken: async (identityToken: string): Promise<void> => {
-      handOffToApp(appSignInUrl("apple", identityToken));
-    },
-  });
-  void setUpGoogle(text, notice, {
-    nextHashedNonce: async (): Promise<string> => hashedNonce,
-    onCredential: async (credential: string): Promise<void> => {
-      handOffToApp(appSignInUrl("google", credential));
-    },
-  });
+  element("google-button", HTMLElement).classList.add("hidden");
+  const apple: HTMLButtonElement = element("apple-button", HTMLButtonElement);
+  const google: HTMLButtonElement = element("google-redirect-button", HTMLButtonElement);
+  google.classList.remove("hidden");
+  const go = (provider: AppSignInProvider): void => {
+    hideNotice(notice);
+    const pending: PendingAppSignIn = { provider, state: randomHex(16), hashedNonce };
+    try {
+      window.sessionStorage.setItem(pendingAppSignInKey, serializePendingAppSignIn(pending));
+    } catch (error: unknown) {
+      console.error("app_sign_in_storage_failed", { error: error instanceof Error ? error.message : String(error) });
+      showNotice(notice, text.errors.storageUnavailable);
+      return;
+    }
+    apple.disabled = true;
+    google.disabled = true;
+    window.location.assign(providerAuthorizeUrl(pending, redirectUri));
+  };
+  apple.addEventListener("click", (): void => go("apple"));
+  google.addEventListener("click", (): void => go("google"));
+  apple.disabled = false;
+  google.disabled = false;
+}
+
+/** Bekleyen denemeyi okur ve siler (tek kullanımlık); depolama okunamazsa ya da kayıt yoksa null. */
+function takePendingAppSignIn(): PendingAppSignIn | null {
+  try {
+    const pending: PendingAppSignIn | null = parsePendingAppSignIn(window.sessionStorage.getItem(pendingAppSignInKey));
+    window.sessionStorage.removeItem(pendingAppSignInKey);
+    return pending;
+  } catch (error: unknown) {
+    console.error("app_sign_in_storage_failed", { error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
+/**
+ * Sağlayıcıdan `#` parçasıyla dönüşü işler: bekleyen deneme yoksa hata; `state` eşleşmezse ya da sağlayıcı hata
+ * döndürdüyse aynı nonce özetiyle giriş yeniden gösterilir (kullanıcı vazgeçtiyse bildirim yok); jeton gelirse
+ * uygulamaya iletilir. Jeton adreste ve tarayıcı geçmişinde kalmasın diye parça hemen silinir.
+ */
+function finishAppReturn(text: ClientCopy, notice: HTMLElement, result: Exclude<ProviderReturn, { readonly kind: "none" }>, signInPath: string, redirectUri: string): void {
+  const pending: PendingAppSignIn | null = takePendingAppSignIn();
+  window.history.replaceState(null, "", pending === null ? signInPath : appSignInPagePath(signInPath, pending.hashedNonce));
+  if (pending === null) {
+    element("signin-panel", HTMLElement).classList.add("hidden");
+    showNotice(notice, text.errors.appRequestInvalid);
+    console.error("app_return_without_pending", { kind: result.kind });
+    return;
+  }
+  startAppSignIn(text, notice, redirectUri, pending.hashedNonce);
+  if (result.kind === "error") {
+    if (!isCancellation(result.error)) {
+      console.warn("app_provider_error", { provider: pending.provider, error: result.error });
+      showNotice(notice, pending.provider === "apple" ? text.errors.appleFailed : text.errors.googleFailed);
+    }
+    return;
+  }
+  if (result.state !== pending.state) {
+    console.error("app_return_state_mismatch", { provider: pending.provider });
+    showNotice(notice, text.errors.appReturnInvalid);
+    return;
+  }
+  handOffToApp(appSignInUrl(pending.provider, result.idToken));
 }
 
 /** Sayfayı başlatır. */
@@ -262,6 +341,11 @@ function main(): void {
   const root: HTMLElement = element("signin", HTMLElement);
   const notice: HTMLElement = element("signin-error", HTMLElement);
   const text: ClientCopy = clientCopy;
+  const returned: ProviderReturn = providerReturn(window.location.hash);
+  if (returned.kind !== "none") {
+    finishAppReturn(text, notice, returned, window.location.pathname, dataValue(root, "redirectUri"));
+    return;
+  }
   const mode: SignInMode = signInMode(window.location.search);
   if (mode.kind === "invalid-app") {
     element("signin-panel", HTMLElement).classList.add("hidden");

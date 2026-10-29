@@ -40,6 +40,7 @@ targets:
         ATSApplicationFontsPath: "."
         # Veri klasörü: ~/Library/Application Support/AINotepad (bkz. AppPaths.dataFolderName).
         AINotepadDataFolderName: AINotepad
+        LSApplicationCategoryType: public.app-category.productivity
         NSAudioCaptureUsageDescription: "AI-Notepad toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "AI-Notepad toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "AI-Notepad toplantı notunu istediğinde Apple Notlar'a yazar."
@@ -54,6 +55,10 @@ targets:
         SUFeedURL: "https://github.com/$(RELEASES_REPO_AINOTEPAD)/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
         SUEnableAutomaticChecks: true
+        # 6 saatte bir denetlenir (açılıştaki ek denetim App/AppUpdater.swift'te); güncellemeler varsayılan olarak arka
+        # planda indirilir (Ayarlar › Genel'den kapatılabilir) ve uygulamadaki şeritte haber verilir.
+        SUScheduledCheckInterval: 21600
+        SUAutomaticallyUpdate: true
         # Geri bildirim ve çökme raporlarının gittiği sunucu (`POST /v1/reports`, hesapsız); Debug ve Release aynı.
         ReportsAPIBase: "https://api.gistsmith.com"
     configFiles:
@@ -79,7 +84,7 @@ targets:
         CURRENT_PROJECT_VERSION: "5"
   # Abonelik sürümü: anahtarsız; yapay zekâ ve son geçiş bizim sunucumuz (server/) üzerinden, canlı metin WhisperKit.
   # Geliştirici sürümüyle aynı kaynaklar + App/Hosted; farklar yalnızca `HOSTED_EDITION` bayrağıyla birkaç noktada.
-  # Ayrı paket kimliği, Anahtar Zinciri servisi ve adres şeması: iki uygulama aynı Mac'te yan yana durur.
+  # Ayrı paket kimliği, Anahtar Zinciri servisi ve veri klasörü: iki uygulama aynı Mac'te yan yana durur.
   # Ürün adı Gistsmith (Gistsmith.app, görünen ad, izin metinleri); iç kimlikler (paket kimliği, adres şeması, Anahtar
   # Zinciri servisi, veri klasörü, hedef adı) AINotepad olarak kalır. Arayüzdeki ad görünen addan okunur (App/AppName.swift).
   AINotepadHosted:
@@ -87,8 +92,9 @@ targets:
     platform: macOS
     sources:
       # İzin metinleri ve görünen ad bu sürümün kendi kataloğunda (App/Hosted/InfoPlist.xcstrings, "Gistsmith").
+      # Geliştirici sürümünün Info.plist'i (App/Info.plist) ve bu hedefin kendi Info.plist'i kaynak olarak kopyalanmaz.
       - path: App
-        excludes: ["InfoPlist.xcstrings"]
+        excludes: ["InfoPlist.xcstrings", "Info.plist", "Hosted/Info.plist"]
       - path: NOTICE
         buildPhase: resources
     dependencies:
@@ -103,8 +109,16 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ATSApplicationFontsPath: "."
-        # Kendi veri klasörü: geliştirici sürümünün ~/Library/Application Support/AINotepad'ine hiç dokunulmaz.
-        AINotepadDataFolderName: "AINotepad Hosted"
+        # Kaynak metinler Türkçe olsa da geliştirme bölgesi İngilizce: sistem dili ne Türkçe ne İngilizce olan
+        # kullanıcı (ör. Almanca) arayüzü İngilizce görür. tr.lproj ve en.lproj ikisi de pakette.
+        CFBundleDevelopmentRegion: en
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "© 2026 T:mi Aslan Dogan Marketing"
+        # Kendi veri klasörü: geliştirici sürümünün ~/Library/Application Support/AINotepad'ine hiç dokunulmaz. Debug
+        # derlemesi ayrı klasör ve Anahtar Zinciri servisi kullanır (aşağıda `configs`): yerel sunucuyla denenen
+        # derleme yayındaki oturumu ve toplantıları okuyamaz, silemez.
+        AINotepadDataFolderName: "$(HOSTED_DATA_FOLDER_NAME)"
+        HostedKeychainService: "$(HOSTED_KEYCHAIN_SERVICE)"
         NSAudioCaptureUsageDescription: "Gistsmith toplantıdaki diğer katılımcıların sesini yazıya dökmek için sistem sesini dinler."
         NSRemindersFullAccessUsageDescription: "Gistsmith toplantı notundaki görevleri istediğinde Anımsatıcılar'a ekler."
         NSAppleEventsUsageDescription: "Gistsmith toplantı notunu istediğinde Apple Notlar'a yazar."
@@ -115,11 +129,13 @@ targets:
         SUFeedURL: "https://github.com/$(RELEASES_REPO_GISTSMITH)/releases/latest/download/appcast.xml"
         SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY_GISTSMITH)"
         SUEnableAutomaticChecks: true
-        # Sitedeki Google girişi uygulamayı açar:
-        # com.senoldogan.ainotepad.hosted://auth/google#idToken=… (bkz. App/Hosted/HostedAccount.swift).
-        CFBundleURLTypes:
-          - CFBundleURLName: com.senoldogan.AINotepad.hosted.auth
-            CFBundleURLSchemes: [com.senoldogan.ainotepad.hosted]
+        # 6 saatte bir denetlenir (açılıştaki ek denetim App/AppUpdater.swift'te); güncellemeler varsayılan olarak arka
+        # planda indirilir (Ayarlar › Genel'den kapatılabilir) ve uygulamadaki şeritte haber verilir.
+        SUScheduledCheckInterval: 21600
+        SUAutomaticallyUpdate: true
+        # Adres şeması kaydı yok: giriş ASWebAuthenticationSession ile yapılır, dönüş
+        # (com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…) Launch Services'e uğramadan doğrudan o
+        # oturuma gelir (bkz. App/Hosted/HostedAccount.swift). Başka bir uygulama ya da eski bir kopya dönüşü alamaz.
         # Sunucu ve site adresleri derleme ayarlarından (aşağıda `configs`).
         HostedAPIBase: "$(HOSTED_API_BASE)"
         HostedSiteBase: "$(HOSTED_SITE_BASE)"
@@ -138,6 +154,9 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         GENERATE_INFOPLIST_FILE: YES
+        # Info.plist üretimi CFBundleDevelopmentRegion'ı bu ayardan yazar (yukarıdaki `info` değerini ezer): Türkçe ve
+        # İngilizce dışındaki sistem dillerinde arayüz İngilizce açılsın. Kataloglarda kaynak dil Türkçe kalır.
+        DEVELOPMENT_LANGUAGE: en
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
         # Geliştirici sürümünün yetkileri + Apple ile giriş; iCloud yok (eşitleme bu sürümde kapalı).
@@ -151,11 +170,15 @@ targets:
         Debug:
           HOSTED_API_BASE: "http://localhost:8787"
           HOSTED_SITE_BASE: "http://localhost:8788"
+          HOSTED_DATA_FOLDER_NAME: "AINotepad Hosted Debug"
+          HOSTED_KEYCHAIN_SERVICE: "AINotepadHosted.debug"
         # Üretim sunucusu ve sitesi. Release https dışındaki adresi reddeder. Site adresi sunucunun SITE_ORIGIN'iyle
         # aynı olmalı.
         Release:
           HOSTED_API_BASE: "https://api.gistsmith.com"
           HOSTED_SITE_BASE: "https://gistsmith.com"
+          HOSTED_DATA_FOLDER_NAME: "AINotepad Hosted"
+          HOSTED_KEYCHAIN_SERVICE: "AINotepadHosted"
   AINotepadiOS:
     type: application
     platform: iOS

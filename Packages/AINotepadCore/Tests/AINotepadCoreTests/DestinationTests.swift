@@ -82,7 +82,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         let created: NoteDestination = NoteDestination(id: "s", target: signedIn, autoSend: false, createdAt: now, needsReconnect: false)
         #expect(destinationSendKey(destination: pasted) == destinationSendKey(destination: created))
         #expect(destinationName(destination: created) == "Discord" && destinationDetail(destination: created) == "discord.com")
-        try await revokeDestination(destination: pasted)
+        try await revokeDestination(destination: pasted, clientName: "AI-Notepad")
     }
 
     // Kayıt işaretleri yinelenmez.
@@ -179,7 +179,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
     @Test func concurrentSendsRefreshOnce() async throws {
         try deleteSecret(service: service, account: .destinations)
         let counter: RefreshCounter = RefreshCounter()
-        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations, clientName: "AI-Notepad") { (connection: ChannelConnection) async throws -> ChannelConnection in
             await counter.increment()
             try await Task.sleep(for: .milliseconds(200))
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
@@ -204,7 +204,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
         // Yenileme başlayınca haber verir: kaldırma sabit bir beklemeyle değil, yenileme gerçekten sürerken yapılır
         // (yüklü makinede 50 ms yetmeyebiliyordu).
         let (started, startedSignal): (AsyncStream<Void>, AsyncStream<Void>.Continuation) = AsyncStream<Void>.makeStream()
-        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations, clientName: "AI-Notepad") { (connection: ChannelConnection) async throws -> ChannelConnection in
             startedSignal.yield()
             try await Task.sleep(for: .milliseconds(300))
             return connection.with(tokens: OAuthTokens(accessToken: "yeni", refreshToken: "r2", expiresAt: Date().addingTimeInterval(3600)))
@@ -221,7 +221,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
 
     @Test func expiredSessionMarksReconnect() async throws {
         try deleteSecret(service: service, account: .destinations)
-        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (_: ChannelConnection) async throws -> ChannelConnection in
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations, clientName: "AI-Notepad") { (_: ChannelConnection) async throws -> ChannelConnection in
             throw ChannelAuthError.expired(service: .slack)
         }
         try await vault.upsert(accountDestination(id: "d", refresh: "r1", expiresAt: Date().addingTimeInterval(-10)))
@@ -242,7 +242,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
     // Notion: yenilenen jeton işlem sonradan başarısız olsa da saklanır; sonra gelen ret hedefi "yeniden bağlan" yapar.
     @Test func notionRefreshSurvivesFailureAndExpiryMarksReconnect() async throws {
         try deleteSecret(service: service, account: .destinations)
-        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations, clientName: "AI-Notepad") { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
         let original: MCPConnection = mcpConnection(refresh: "n1")
         try await vault.upsert(NoteDestination(id: "n", target: .notion(NotionTarget(connection: original, pageTitle: "P", identity: nil)), autoSend: true, createdAt: Date(), needsReconnect: false))
         await #expect(throws: MCPRemoteError.http(server: "mcp.notion.com", status: 502, body: "")) {
@@ -268,7 +268,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
     // Notion: işlem sürerken kullanıcı yeniden bağlandıysa işlemin yenilemesi ve reddi yeni bağlantıya dokunmaz.
     @Test func notionReconnectDuringOperationIsKept() async throws {
         try deleteSecret(service: service, account: .destinations)
-        let vault: DestinationVault = DestinationVault(service: service, account: .destinations) { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
+        let vault: DestinationVault = DestinationVault(service: service, account: .destinations, clientName: "AI-Notepad") { (connection: ChannelConnection) async throws -> ChannelConnection in connection }
         let destination: NoteDestination = NoteDestination(
             id: "n", target: .notion(NotionTarget(connection: mcpConnection(refresh: "n1"), pageTitle: "P", identity: nil)), autoSend: true, createdAt: Date(), needsReconnect: false
         )
@@ -307,7 +307,7 @@ private func webhookDestination(id: String, autoSend: Bool, createdAt: Date, nee
     // (başka istemci kaydı) geri alınmak üzere döner.
     @Test func reconnectKeepsIdentityAndRefreshIsStored() async throws {
         try deleteSecret(service: service, account: .taskTrackers)
-        let vault: TrackerVault = TrackerVault(service: service)
+        let vault: TrackerVault = TrackerVault(service: service, clientName: "AI-Notepad")
         let first: TrackerConnectResult = try await vault.connect(service: .linear, connection: connection(refresh: "r1"), newID: "id-1")
         #expect(first.replaced == nil)
         try await vault.setTarget(id: first.tracker.id, target: "Eng")

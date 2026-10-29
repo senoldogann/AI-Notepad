@@ -58,7 +58,7 @@ final class PhoneCalendar {
             meetings = []
             state = .denied
         } catch {
-            Self.logger.error("Takvim izni istenemedi, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Takvim izni istenemedi, hata: \(String(describing: error), privacy: .private)")
             UserDefaults.standard.set(false, forKey: PhoneSettingsKey.calendarEnabled)
             meetings = []
             state = .failed(eventKitMessage(error: error))
@@ -92,7 +92,7 @@ final class PhoneCalendar {
             meetings = []
             state = .denied
         } catch {
-            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .public)")
+            Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .private)")
             meetings = []
             state = .failed(eventKitMessage(error: error))
         }

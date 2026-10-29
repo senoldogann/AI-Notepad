@@ -44,6 +44,12 @@ export const turnstileOrigin: string = "https://challenges.cloudflare.com";
 export const googleScriptUrl: string = "https://accounts.google.com/gsi/client";
 /** Google Identity Services iframe, istek ve stil kaynaklarının ortak öneki. */
 export const googleGsiBase: string = "https://accounts.google.com/gsi/";
+/**
+ * Uygulama adına girişte (açılır pencere yok) sayfanın yönlendirdiği yetkilendirme adresleri. Üst düzey gezinti CSP'ye
+ * takılmaz; dönüş `<siteOrigin>/sign-in` adresine `#` parçasıyla gelir.
+ */
+export const appleAuthorizeUrl: string = `${appleIdOrigin}/auth/authorize`;
+export const googleAuthorizeUrl: string = "https://accounts.google.com/o/oauth2/v2/auth";
 
 /**
  * Google ile girişin web OAuth istemcisi (Google Cloud Console; onay ekranındaki ad "Gistsmith"). İzinli JavaScript

@@ -10,8 +10,8 @@ public let reportsAPIBaseInfoKey: String = "ReportsAPIBase"
 /// Mesajın en uzun hali (sunucunun sınırı; JavaScript uzunluğu gibi UTF-16 birimiyle sayılır).
 public let reportMessageLimit: Int = 5000
 
-/// Teşhis paketinin (MetricKit JSON) en büyük hali, bayt (sunucunun sınırı).
-public let reportPayloadLimitBytes: Int = 512 * 1024
+/// Teşhis paketinin (MetricKit JSON) en büyük hali, bayt (sunucunun sınırı: rapor başına 64 KB).
+public let reportPayloadLimitBytes: Int = 64 * 1024
 
 /// E-posta adresinin en uzun hali (RFC 5321).
 private let reportEmailLimit: Int = 254

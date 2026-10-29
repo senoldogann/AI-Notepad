@@ -172,6 +172,10 @@ struct MainWindowView: View {
                         if let report = crashReports.reportToAnnounce {
                             CrashReportBanner(center: crashReports, report: report)
                         }
+                        // Bulunan ya da indirilen güncelleme (zamanlanmış denetimde Sparkle penceresi açılmaz).
+                        if updater.showsBanner, let update = updater.availableUpdate {
+                            UpdateBanner(updater: updater, update: update, isBusy: model.isBusy)
+                        }
                         detail
                             .id(router.section)
                             .transition(.opacity)

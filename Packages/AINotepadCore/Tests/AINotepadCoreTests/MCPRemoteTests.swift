@@ -188,7 +188,7 @@ extension CloudTests {
 @Suite struct MCPRemoteLiveTests {
     @Test(arguments: MCPService.allCases)
     func officialServersOfferDynamicRegistration(service: MCPService) async throws {
-        let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: service.serverURL)
+        let metadata: AuthorizationServerMetadata = try await discoverAuthorization(server: service.serverURL, clientName: "AI-Notepad")
         #expect(metadata.registrationEndpoint != nil, "\(service.rawValue): kayıt adresi yok")
         #expect(metadata.authorizationEndpoint.scheme == "https" && metadata.tokenEndpoint.scheme == "https")
         // Bağlantı kaldırılınca izin geri alınır (RFC 7009): üç sunucu da geri alma adresini bildirir.
@@ -196,7 +196,7 @@ extension CloudTests {
     }
 
     @Test func publicServerSessionListsAndCallsTools() async throws {
-        let session: MCPRemoteSession = try await MCPRemoteSession.open(serverURL: URL(string: "https://mcp.deepwiki.com/mcp")!, accessToken: "")
+        let session: MCPRemoteSession = try await MCPRemoteSession.open(serverURL: URL(string: "https://mcp.deepwiki.com/mcp")!, accessToken: "", clientName: "AI-Notepad")
         let tools: [MCPRemoteTool] = try await session.listTools()
         #expect(!tools.isEmpty)
         let structure: String = try await session.callTool(name: "read_wiki_structure", arguments: .object(["repoName": .string("modelcontextprotocol/swift-sdk")]))

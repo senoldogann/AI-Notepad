@@ -20,6 +20,7 @@ private func launchSettingsSection(arguments: [String]) -> SettingsSection {
     case "anahtarlar": return .keys
     case "baglantilar": return .connections
     case "kisayollar": return .shortcuts
+    case "tanilama": return .diagnostics
     #if HOSTED_EDITION
     case "hesap": return .account
     #endif
@@ -38,6 +39,8 @@ private enum SettingsSection: CaseIterable {
     case keys
     case connections
     case shortcuts
+    /// Sürüm, sistem, hesap, sunucuya erişim, izinler, model, güncelleme ve son hatalar (bkz. App/DiagnosticsViews.swift).
+    case diagnostics
 
     /// Sekme çubuğundaki sekmeler: abonelik sürümünde LLM ve Anahtarlar yok (model ve anahtar sunucudadır).
     static var visible: [SettingsSection] {
@@ -59,6 +62,7 @@ private enum SettingsSection: CaseIterable {
         case .keys: "Anahtarlar"
         case .connections: "Bağlantılar"
         case .shortcuts: "Kısayollar"
+        case .diagnostics: "Tanılama"
         }
     }
 }
@@ -74,13 +78,23 @@ struct SettingsPage: View {
     let onShowSetup: @MainActor () -> Void
     @State private var section: SettingsSection = launchSettingsSection(arguments: CommandLine.arguments)
 
+    /// Başlığın altındaki özet: yalnızca bu sürümde görünen sekmeleri anar (abonelik sürümünde motor, model ve anahtar
+    /// ayarı yok).
+    private var settingsSubtitle: LocalizedStringKey {
+        #if HOSTED_EDITION
+        "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet."
+        #else
+        "Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet."
+        #endif
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Ayarlar")
                     .appFont(size: 30, weight: .regular)
                     .tracking(-0.5)
-                Text("Arayüz dilini, tanıma motorunu, görünümü, yapay zekâ modellerini, anahtarları ve kısayolları yönet.")
+                Text(settingsSubtitle)
                     .appFont(size: 14, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .padding(.top, 4)
@@ -89,10 +103,9 @@ struct SettingsPage: View {
                 Group {
                     switch section {
                     #if HOSTED_EDITION
+                    // Giriş ya da çıkışta kurulum eksikleri uygulama düzeyinde yenilenir (bkz. AINotepadApp).
                     case .account:
                         HostedAccountSettings(account: .shared)
-                            // Giriş ya da çıkışta kurulum eksikleri (menüdeki "giriş yapılmamış") yenilenir.
-                            .onChange(of: HostedAccount.shared.isSignedIn) { (_: Bool, _: Bool) in model.settingsChanged() }
                     #endif
                     case .general: GeneralSettings(model: model, updater: updater, crashReports: crashReports, onShowSetup: onShowSetup)
                     case .appearance: AppearanceSettings()
@@ -100,6 +113,7 @@ struct SettingsPage: View {
                     case .keys: KeySettings(model: model)
                     case .connections: ConnectionSettings(model: model)
                     case .shortcuts: ShortcutSettings(shortcuts: shortcuts)
+                    case .diagnostics: DiagnosticsSettings(model: model, updater: updater)
                     }
                 }
                 .id(section)
@@ -448,7 +462,7 @@ private struct GeneralSettings: View {
             #endif
             UpdateSettingsRow(updater: updater)
             CrashReportsSettings(center: crashReports)
-            FeedbackSettingsRow()
+            FeedbackSettingsRow { await diagnosticsReportText(model: model, updater: updater) }
         }
     }
 }

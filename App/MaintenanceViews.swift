@@ -1,6 +1,9 @@
 import AINotepadCore
 import AINotepadUI
+import os
 import SwiftUI
+
+private let maintenanceLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Maintenance")
 
 /// Ayarlar › Genel: otomatik güncelleme (Sparkle) ve elle denetim. Güncelleme kapalıysa (imza anahtarı yok) görünmez.
 struct UpdateSettingsRow: View {
@@ -9,7 +12,7 @@ struct UpdateSettingsRow: View {
     var body: some View {
         if updater.isEnabled {
             SettingsRow(title: Text("Otomatik olarak güncelle")) {
-                Text("Yeni sürüm günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.")
+                Text("Yeni sürüm açılışta ve 6 saatte bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.")
             } control: {
                 HStack(spacing: 8) {
                     Button("Güncellemeleri denetle…") { updater.checkForUpdates() }
@@ -23,6 +26,139 @@ struct UpdateSettingsRow: View {
             }
         }
     }
+}
+
+/// Güncelleme şeridinin ve menü satırının başlığı: indirilmişse "hazır", değilse "çıktı". Saf fonksiyondur.
+func updateHeadline(update: AvailableAppUpdate) -> String {
+    update.isReadyToInstall
+        ? String(localized: "\(appName) \(update.version) hazır")
+        : String(localized: "\(appName) \(update.version) çıktı")
+}
+
+/// Menü çubuğu menüsündeki güncelleme satırı: başlık ve yapılacak iş; kayıt ya da işleme sürerken neden beklendiği.
+/// Saf fonksiyondur.
+func updateMenuTitle(update: AvailableAppUpdate, isBusy: Bool) -> String {
+    let headline: String = updateHeadline(update: update)
+    if isBusy {
+        return String(localized: "\(headline) — kayıt bitince güncellenebilir")
+    }
+    return update.isReadyToInstall
+        ? String(localized: "\(headline) — Yeniden başlat ve güncelle")
+        : String(localized: "\(headline) — Güncelle…")
+}
+
+/// Ana penceredeki güncelleme şeridi (çökme şeridiyle aynı sakin görünüm; açılır pencere yok): sürüm, "Neler yeni?"
+/// (sürüm notları şeridin içinde açılır) ve "Yeniden başlat ve güncelle". Kayıt ya da işleme sürerken düğme kapalıdır
+/// ve nedeni yazar; uygulama yalnızca kullanıcı isteyince ya da çıkışta güncellenir.
+struct UpdateBanner: View {
+    let updater: AppUpdater
+    let update: AvailableAppUpdate
+    /// Kayıt ya da işleme sürüyor.
+    let isBusy: Bool
+    @State private var showsNotes: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(Theme.muted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: updateHeadline(update: update))
+                        .appFont(size: 12, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                    Text(subtitle)
+                        .appFont(size: 11, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                notesLink
+                Button(update.isReadyToInstall ? "Yeniden başlat ve güncelle" : "Güncelle…") { updater.installUpdate() }
+                    .buttonStyle(.pill)
+                    .disabled(isBusy)
+                Button("Sonra") { updater.dismissBanner() }
+                    .buttonStyle(.hoverPlain)
+            }
+            if showsNotes, let notes = update.releaseNotes {
+                ReleaseNotesText(markdown: notes)
+                    .padding(.leading, 26)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Theme.soft)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Altyazı: kayıt sürerken neden beklendiği, ertelenmiş kurulum ya da ne olacağı.
+    private var subtitle: LocalizedStringKey {
+        if updater.isRelaunchPostponed {
+            "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek."
+        } else if isBusy {
+            "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+        } else if update.isReadyToInstall {
+            "İndirildi. Şimdi yeniden başlatabilir ya da uygulamadan çıkınca kurulmasını bekleyebilirsin."
+        } else {
+            "Yeni sürüm çıktı; \"Güncelle…\" indirip kurar."
+        }
+    }
+
+    /// "Neler yeni?": gömülü notlar şeridin içinde açılır; yoksa notların sayfası tarayıcıda açılır.
+    @ViewBuilder
+    private var notesLink: some View {
+        if update.releaseNotes != nil {
+            Button(showsNotes ? "Notları gizle" : "Neler yeni?") { showsNotes.toggle() }
+                .buttonStyle(.hoverPlain)
+        } else if let url = update.releaseNotesURL {
+            Link("Neler yeni?", destination: url)
+                .appFont(size: 12, weight: .regular)
+        }
+    }
+}
+
+/// Sürüm notları (Markdown; appcast'e gömülü). Markdown çözülemezse metin olduğu gibi gösterilir ve uyarı loglanır.
+private struct ReleaseNotesText: View {
+    let markdown: String
+
+    var body: some View {
+        ScrollView {
+            Text(attributed)
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .frame(maxHeight: 220)
+    }
+
+    private var attributed: AttributedString {
+        do {
+            return try AttributedString(markdown: markdown, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        } catch {
+            maintenanceLogger.warning("Sürüm notları Markdown olarak çözülemedi, düz metin gösteriliyor, hata: \(String(describing: error), privacy: .private)")
+            return AttributedString(markdown)
+        }
+    }
+}
+
+/// Çökme şeridindeki gizlilik notu: neyin nereye gittiği. Abonelik sürümünde rapor hesaba bağlı gider ve sunucu
+/// jetonsuz raporu kabul etmez (giriş gerekir).
+private var crashBannerPrivacyNote: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği yok. \"Gönder\"e basınca hesabına bağlı olarak geliştiricinin sunucusuna gider; bunun için giriş yapmış olmalısın."
+    #else
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider."
+    #endif
+}
+
+/// Ayarlar'daki çökme raporları satırının gizlilik notu (bkz. `crashBannerPrivacyNote`).
+private var crashSettingsPrivacyNote: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği yok) hesabına bağlı olarak geliştiricinin sunucusuna yollar; bunun için giriş yapmış olmalısın."
+    #else
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği ve anahtarlar yok) geliştiricinin sunucusuna yollar."
+    #endif
 }
 
 /// Ana penceredeki çökme şeridi: önceki açılışta uygulama çöktüyse bir kez sorar. "Gönder" (kullanıcının açık onayı)
@@ -40,7 +176,7 @@ struct CrashReportBanner: View {
                 Text("\(appName) beklenmedik şekilde kapandı — raporu gönder?")
                     .appFont(size: 12, weight: .medium)
                     .foregroundStyle(Theme.ink)
-                Text("Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği ve anahtarlar yok. \"Gönder\"e basınca geliştiricinin sunucusuna gider.")
+                Text(crashBannerPrivacyNote)
                     .appFont(size: 11, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +215,7 @@ struct CrashReportsSettings: View {
 
     var body: some View {
         SettingsRow(title: Text("Çökme raporları")) {
-            Text("macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği ve anahtarlar yok) geliştiricinin sunucusuna yollar.")
+            Text(crashSettingsPrivacyNote)
             if let problem = center.problem {
                 Text(problem).foregroundStyle(.red)
             }

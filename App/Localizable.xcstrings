@@ -83,6 +83,28 @@
         }
       }
     },
+    "%@ %@ hazır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is ready"
+          }
+        }
+      }
+    },
+    "%@ %@ çıktı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ is available"
+          }
+        }
+      }
+    },
     "%@ / %@": {
       "extractionState": "manual",
       "localizations": {
@@ -614,6 +636,39 @@
         }
       }
     },
+    "%@ — Güncelle…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Update…"
+          }
+        }
+      }
+    },
+    "%@ — Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Restart and update"
+          }
+        }
+      }
+    },
+    "%@ — kayıt bitince güncellenebilir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — can update after recording"
+          }
+        }
+      }
+    },
     "%@ → %@": {
       "localizations": {
         "en": {
@@ -1016,6 +1071,17 @@
         }
       }
     },
+    "3 toplantı ya da 7 gün ücretsiz": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 meetings or 7 days free"
+          }
+        }
+      }
+    },
     "3 toplantı ya da ilk toplantından itibaren 7 gün ücretsiz; anahtar gerekmez. Sonrası aylık abonelikle.": {
       "extractionState": "manual",
       "localizations": {
@@ -1023,17 +1089,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Free for 3 meetings or 7 days from your first meeting, no keys needed. After that, a monthly subscription."
-          }
-        }
-      }
-    },
-    "3 toplantı ücretsiz": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "3 meetings free"
           }
         }
       }
@@ -1090,6 +1145,17 @@
         }
       }
     },
+    "Abonelik iptal edildi, bitiş %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription canceled, ends %@"
+          }
+        }
+      }
+    },
     "Abonelik iptal edildi; %@ tarihine kadar kullanabilirsin, yenilenmez.": {
       "extractionState": "manual",
       "localizations": {
@@ -1097,6 +1163,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscription canceled; you can use it until %@. It won't renew."
+          }
+        }
+      }
+    },
+    "Abonelik sürümü": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription edition"
+          }
+        }
+      }
+    },
+    "Abonelik, yenilenme %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription, renews %@"
           }
         }
       }
@@ -1219,6 +1307,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save names: %@"
+          }
+        }
+      }
+    },
+    "Adres": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
           }
         }
       }
@@ -1546,6 +1645,17 @@
         }
       }
     },
+    "Anımsatıcılar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        }
+      }
+    },
     "Anımsatıcılar'a ekle": {
       "localizations": {
         "en": {
@@ -1662,6 +1772,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apple Notes"
+          }
+        }
+      }
+    },
+    "Apple Notlar (Apple Events)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Notes (Apple Events)"
           }
         }
       }
@@ -1847,6 +1968,17 @@
         }
       }
     },
+    "Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, sunucuya erişim, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The info from Settings › Diagnostics (account status, permissions, server reachability, recent errors) is added to the end of your message; no audio, transcripts, notes, keys or tokens."
+          }
+        }
+      }
+    },
     "Ayarlar'ı aç": {
       "localizations": {
         "en": {
@@ -1943,6 +2075,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "When on, a voiceprint (numbers that recognise a voice; this is biometric data) of everyone who speaks for more than 8 s is stored with the meeting; people you name are remembered on this Mac and named automatically in later meetings. Deleting a meeting forgets what was learned from it; deleting its audio removes its prints. Ask others before storing their voiceprints."
+          }
+        }
+      }
+    },
+    "Açılan giriş penceresinde Apple ya da Google hesabını seçersin; pencere kapanınca giriş tamamlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You choose your Apple or Google account in the sign-in window; signing in finishes when the window closes."
           }
         }
       }
@@ -2088,6 +2231,17 @@
         }
       }
     },
+    "Başarısız: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed: %@"
+          }
+        }
+      }
+    },
     "Başka bir kanal ya da hesap ekle": {
       "localizations": {
         "en": {
@@ -2180,6 +2334,17 @@
         }
       }
     },
+    "Bekleyen güncelleme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending update"
+          }
+        }
+      }
+    },
     "Benim sesim de": {
       "localizations": {
         "en": {
@@ -2236,6 +2401,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Bilinmiyor (%d)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown (%d)"
           }
         }
       }
@@ -2536,6 +2712,17 @@
         }
       }
     },
+    "Bu Mac'te çıkış yapıldı. Sunucuya ulaşılamadı; sunucudaki oturum en geç 60 gün içinde kendiliğinden kapanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out on this Mac. The server couldn't be reached; your session on the server closes on its own within 60 days."
+          }
+        }
+      }
+    },
     "Bu Mac'te ücretsiz deneme daha önce başka bir hesapla kullanıldı. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -2826,6 +3013,17 @@
         }
       }
     },
+    "Bu oturumda hata yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No errors in this session"
+          }
+        }
+      }
+    },
     "Bu sürüm cihaz doğrulaması istiyor; uygulamayı güncelle.": {
       "extractionState": "manual",
       "localizations": {
@@ -3078,6 +3276,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cloud and Claude keys"
+          }
+        }
+      }
+    },
+    "Bulut; model gerekmez": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud; no model needed"
           }
         }
       }
@@ -3574,6 +3783,17 @@
         }
       }
     },
+    "Deneme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial"
+          }
+        }
+      }
+    },
     "Deneme %@ tarihinde biter.": {
       "extractionState": "manual",
       "localizations": {
@@ -3581,6 +3801,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your trial ends on %@."
+          }
+        }
+      }
+    },
+    "Deneme bitişi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial ends"
           }
         }
       }
@@ -3622,6 +3853,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trying…"
+          }
+        }
+      }
+    },
+    "Denetleniyor…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
           }
         }
       }
@@ -4014,6 +4256,17 @@
         }
       }
     },
+    "Durum": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
     "Dün": {
       "localizations": {
         "en": {
@@ -4236,6 +4489,28 @@
         }
       }
     },
+    "Erişilebilir, %lld ms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reachable, %lld ms"
+          }
+        }
+      }
+    },
+    "Erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reachability"
+          }
+        }
+      }
+    },
     "Estonca": {
       "localizations": {
         "en": {
@@ -4406,6 +4681,17 @@
         }
       }
     },
+    "Geliştirici sürümü": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer edition"
+          }
+        }
+      }
+    },
     "Genel": {
       "localizations": {
         "en": {
@@ -4478,6 +4764,28 @@
         }
       }
     },
+    "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in window couldn't open. Bring the app to the front and click \"Sign in\" again."
+          }
+        }
+      }
+    },
+    "Giriş penceresinde Apple ya da Google hesabını seç. Vazgeçersen pencereyi kapatman yeter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your Apple or Google account in the sign-in window. To cancel, just close the window."
+          }
+        }
+      }
+    },
     "Giriş yap": {
       "extractionState": "manual",
       "localizations": {
@@ -4496,6 +4804,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Giriş yapıldı, durum bilinmiyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in, status unknown"
+          }
+        }
+      }
+    },
+    "Giriş yapıldı; hesap durumu şu an okunamıyor. Bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're signed in, but your account status can't be read right now. It refreshes on its own when you're back online."
+          }
+        }
+      }
+    },
+    "Giriş yapılmamış": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in"
           }
         }
       }
@@ -4803,12 +5144,34 @@
         }
       }
     },
+    "Güncelleme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        }
+      }
+    },
     "Güncellemeleri denetle…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Check for Updates…"
+          }
+        }
+      }
+    },
+    "Güncelle…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update…"
           }
         }
       }
@@ -4951,6 +5314,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start right away on-device, or get higher quality with your own keys; you can change this later in Settings."
+          }
+        }
+      }
+    },
+    "Henüz denetlenmedi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked yet"
           }
         }
       }
@@ -5150,6 +5524,17 @@
         }
       }
     },
+    "Hesabını, arayüz dilini, görünümü, bağlantıları ve kısayolları yönet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage your account, interface language, appearance, connections and shortcuts."
+          }
+        }
+      }
+    },
     "Hesap": {
       "extractionState": "manual",
       "localizations": {
@@ -5157,6 +5542,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account"
+          }
+        }
+      }
+    },
+    "Hesap durumu şu an okunamıyor; bağlantı gelince kendiliğinden yenilenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account status can't be read right now; it refreshes on its own when you're back online."
           }
         }
       }
@@ -5282,6 +5678,17 @@
         }
       }
     },
+    "Kalan deneme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trial left"
+          }
+        }
+      }
+    },
     "Kalan metin ve konuşmacılar tamamlanıyor.": {
       "localizations": {
         "en": {
@@ -5398,6 +5805,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change channel"
+          }
+        }
+      }
+    },
+    "Kapalı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        }
+      }
+    },
+    "Kapalı (imza anahtarı yok)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off (no signing key)"
           }
         }
       }
@@ -5834,12 +6263,34 @@
         }
       }
     },
+    "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app will restart and update when recording and processing finish."
+          }
+        }
+      }
+    },
     "Kayıt ve işleme bitince yeniden başlatılabilir": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You can restart once recording and processing finish"
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app won't restart while recording or processing; you can update when it's done. It also installs on its own when you quit."
           }
         }
       }
@@ -6780,6 +7231,17 @@
         }
       }
     },
+    "Kısıtlı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restricted"
+          }
+        }
+      }
+    },
     "LLM": {
       "localizations": {
         "en": {
@@ -6837,6 +7299,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lithuanian"
+          }
+        }
+      }
+    },
+    "Mac modeli": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac model"
           }
         }
       }
@@ -7073,23 +7546,23 @@
         }
       }
     },
+    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider ve hesabınla ilişkilendirilir; göndermek için giriş yapmış olmalısın. Toplantı içeriği gönderilmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer and are linked to your account; you need to be signed in to send. No meeting content is sent."
+          }
+        }
+      }
+    },
     "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider. Toplantı içeriği ve anahtarlar gönderilmez.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer. No meeting content and no keys are sent."
-          }
-        }
-      }
-    },
-    "Mesajın, yazdıysan e-postan ve işaretliyse tanılama bilgisi Gistsmith'in geliştiricisinin sunucusuna gider; giriş yaptıysan hesabınla ilişkilendirilir. Toplantı içeriği gönderilmez.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your message, your email if you entered one, and the diagnostic info if checked go to the server of Gistsmith's developer; if you're signed in, they're linked to your account. No meeting content is sent."
           }
         }
       }
@@ -7357,6 +7830,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "What did I miss?"
+          }
+        }
+      }
+    },
+    "Neden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reason"
+          }
+        }
+      }
+    },
+    "Neler yeni?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's new?"
           }
         }
       }
@@ -7633,6 +8128,17 @@
         }
       }
     },
+    "Notlar açık değil; durum okunamıyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes isn't open; status can't be read"
+          }
+        }
+      }
+    },
     "Notlar hangi kanala gitsin?": {
       "localizations": {
         "en": {
@@ -7649,6 +8155,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Written to the \"%@\" folder in Notes."
+          }
+        }
+      }
+    },
+    "Notları gizle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide notes"
           }
         }
       }
@@ -7853,6 +8370,17 @@
         }
       }
     },
+    "Okunamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read"
+          }
+        }
+      }
+    },
     "Okunamayan çökme raporu: %@": {
       "localizations": {
         "en": {
@@ -7869,6 +8397,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read"
+          }
+        }
+      }
+    },
+    "Okunuyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading"
           }
         }
       }
@@ -7989,6 +8528,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send automatically"
+          }
+        }
+      }
+    },
+    "Otomatik indirme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic download"
           }
         }
       }
@@ -8235,6 +8785,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "The report contains the version, the system and where the error happened; no meeting content and no keys. Pressing \"Send\" sends it to the developer's server."
+          }
+        }
+      }
+    },
+    "Raporda sürüm, sistem ve hatanın yeri var; toplantı içeriği yok. \"Gönder\"e basınca hesabına bağlı olarak geliştiricinin sunucusuna gider; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report contains the version, the system and where the error happened; no meeting content. Pressing \"Send\" sends it to the developer's server, linked to your account; you need to be signed in for this."
+          }
+        }
+      }
+    },
+    "Reddedildi": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
           }
         }
       }
@@ -8960,6 +9532,17 @@
         }
       }
     },
+    "Son denetim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last check"
+          }
+        }
+      }
+    },
     "Son geçiş başarısız: %@ Not canlı metinden yazıldı; \"Tekrar işle\" ile yeniden deneyebilirsin.": {
       "extractionState": "manual",
       "localizations": {
@@ -8989,6 +9572,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "No final pass: %@ The live transcript was used."
+          }
+        }
+      }
+    },
+    "Son hatalar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent errors"
           }
         }
       }
@@ -9033,6 +9627,17 @@
         }
       }
     },
+    "Sonra": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        }
+      }
+    },
     "Sor": {
       "localizations": {
         "en": {
@@ -9043,12 +9648,34 @@
         }
       }
     },
+    "Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Useful when reporting a problem: version, system, account status, server reachability, permissions, model, updates and recent errors. No audio, transcripts, notes, keys or tokens; nothing leaves this Mac unless you copy it."
+          }
+        }
+      }
+    },
     "Sor… (@ toplantı, / tarif)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Ask… (@ meeting, / recipe)"
+          }
+        }
+      }
+    },
+    "Sunucu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
           }
         }
       }
@@ -9237,6 +9864,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Sürüm ve sistem bilgisini ekle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include version and system info"
           }
         }
       }
@@ -9432,6 +10070,17 @@
         }
       }
     },
+    "Tam erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full access"
+          }
+        }
+      }
+    },
     "Tamamlanan görev yok": {
       "localizations": {
         "en": {
@@ -9472,12 +10121,35 @@
         }
       }
     },
-    "Tanılama bilgisi ekle": {
+    "Tanılama": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Include diagnostic info"
+            "value": "Diagnostics"
+          }
+        }
+      }
+    },
+    "Tanılama bilgisini ekle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include diagnostics"
+          }
+        }
+      }
+    },
+    "Tanılama bilgisini kopyala": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy diagnostics"
           }
         }
       }
@@ -9498,39 +10170,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Known voices"
-          }
-        }
-      }
-    },
-    "Tarayıcı açılamadı; varsayılan tarayıcını kontrol edip yeniden dene.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't open the browser; check your default browser and try again."
-          }
-        }
-      }
-    },
-    "Tarayıcıda Apple ya da Google hesabını seç; Gistsmith ardından kendiliğinden açılır. 10 dakika içinde tamamlanmazsa yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose your Apple or Google account in the browser; Gistsmith then opens by itself. If it isn't finished within 10 minutes, click again."
-          }
-        }
-      }
-    },
-    "Tarayıcıda Apple ya da Google hesabını seçersin; ardından Gistsmith açılır ve girişi tamamlar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You choose your Apple or Google account in the browser; then Gistsmith opens and completes sign-in."
           }
         }
       }
@@ -10432,6 +11071,17 @@
         }
       }
     },
+    "Tür": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edition"
+          }
+        }
+      }
+    },
     "Türkçe": {
       "localizations": {
         "en": {
@@ -10458,6 +11108,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ukrainian"
+          }
+        }
+      }
+    },
+    "Ulaşılamadı (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreachable (%@)"
           }
         }
       }
@@ -10510,6 +11171,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The app closed during recording or processing."
+          }
+        }
+      }
+    },
+    "Uygulamanın Anahtar Zinciri ayarı eksik (%@); uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's Keychain setting is missing (%@); reinstall the app."
           }
         }
       }
@@ -10725,12 +11397,34 @@
         }
       }
     },
+    "Yalnızca yazma": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write only"
+          }
+        }
+      }
+    },
     "Yanıt için e-posta (isteğe bağlı)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Email for a reply (optional)"
+          }
+        }
+      }
+    },
+    "Yanıt verdi ama sağlıklı değil (HTTP %lld), %lld ms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responded but not healthy (HTTP %lld), %lld ms"
           }
         }
       }
@@ -10941,12 +11635,24 @@
         }
       }
     },
-    "Yeni sürüm günde bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+    "Yeni sürüm açılışta ve 6 saatte bir denetlenir. Açıkken arka planda indirilir ve uygulamadan çıkınca kurulur; kapalıyken yalnızca haber verilir.": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New versions are checked once a day. When on, they download in the background and install when you quit the app; when off, you are only notified."
+            "value": "New versions are checked at launch and every 6 hours. When on, they download in the background and install when you quit the app; when off, you are only notified."
+          }
+        }
+      }
+    },
+    "Yeni sürüm çıktı; \"Güncelle…\" indirip kurar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new version is out; \"Update…\" downloads and installs it."
           }
         }
       }
@@ -10991,6 +11697,17 @@
         }
       }
     },
+    "Yeniden başlat ve güncelle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart and update"
+          }
+        }
+      }
+    },
     "Yeniden başlatılamadı: %@": {
       "localizations": {
         "en": {
@@ -11021,6 +11738,17 @@
         }
       }
     },
+    "Yenile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        }
+      }
+    },
     "Yerel model (ör. gpt-oss:20b, qwen3) ile not ve çeviri: anahtar gerekmez, toplantı metni Mac'ten çıkmaz. Konuşma tanıma için Genel › Canlı metin'de \"Mac'te (WhisperKit)\" seç.": {
       "localizations": {
         "en": {
@@ -11047,6 +11775,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit anyway"
+          }
+        }
+      }
+    },
+    "Yok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
           }
         }
       }
@@ -11283,6 +12022,17 @@
         }
       }
     },
+    "ilk toplantıyla başlar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "starts with the first meeting"
+          }
+        }
+      }
+    },
     "karar": {
       "localizations": {
         "en": {
@@ -11333,6 +12083,17 @@
         }
       }
     },
+    "macOS bu iznin durumunu bildirmiyor; ilk kayıtta sorulur": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS doesn't report this permission's status; it's asked on the first recording"
+          }
+        }
+      }
+    },
     "macOS bu iznin durumunu göstermez; deneyerek açılır": {
       "localizations": {
         "en": {
@@ -11353,12 +12114,34 @@
         }
       }
     },
+    "macOS'un topladığı çökme ve donma raporları yalnızca bu Mac'te saklanır; hiçbiri kendiliğinden gönderilmez. \"Gönder\" raporu (sürüm, sistem ve hatanın yeri; toplantı içeriği yok) hesabına bağlı olarak geliştiricinin sunucusuna yollar; bunun için giriş yapmış olmalısın.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash and hang reports collected by macOS are stored only on this Mac; none are sent automatically. \"Send\" sends a report (version, system and where the error happened; no meeting content) to the developer's server, linked to your account; you need to be signed in for this."
+          }
+        }
+      }
+    },
     "not": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "note"
+          }
+        }
+      }
+    },
+    "okunamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "couldn't read"
           }
         }
       }
@@ -11729,6 +12512,17 @@
         }
       }
     },
+    "Ödeme bekleniyor, ek süre bitişi %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment due, grace period ends %@"
+          }
+        }
+      }
+    },
     "Önce Ayarlar › Bağlantılar'dan bir klasör seç.": {
       "localizations": {
         "en": {
@@ -11949,6 +12743,17 @@
         }
       }
     },
+    "Ücretsiz deneme ilk toplantıyla başlar; önce bir toplantı başlat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial starts with your first meeting; start a meeting first."
+          }
+        }
+      }
+    },
     "Ücretsiz deneme için bu Mac'in Apple doğrulaması gerekiyor; uygulamayı güncelleyip yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -11960,17 +12765,6 @@
         }
       }
     },
-    "Ücretsiz deneme toplantıların bitti. Devam etmek için Ayarlar › Hesap'tan abone ol.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your free trial meetings are used up. To continue, subscribe in Settings › Account."
-          }
-        }
-      }
-    },
     "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.": {
       "extractionState": "manual",
       "localizations": {
@@ -11978,6 +12772,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Free trials are at capacity today. Try again tomorrow or subscribe in Settings › Account."
+          }
+        }
+      }
+    },
+    "Ücretsiz denemen bitti (3 toplantı ya da 7 gün). Devam etmek için abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your free trial has ended (3 meetings or 7 days). Subscribe to continue."
           }
         }
       }
@@ -12115,6 +12920,17 @@
         }
       }
     },
+    "İndirildi. Şimdi yeniden başlatabilir ya da uygulamadan çıkınca kurulmasını bekleyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded. Restart now, or let it install when you quit the app."
+          }
+        }
+      }
+    },
     "İndirilenler'de bu adla 999 dosya var; eskilerini silip yeniden dene.": {
       "localizations": {
         "en": {
@@ -12131,6 +12947,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved to Downloads: %@"
+          }
+        }
+      }
+    },
+    "İndiriliyor ya da yükleniyor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading or loading"
           }
         }
       }
