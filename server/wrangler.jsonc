@@ -199,7 +199,9 @@
         "TRIAL_DAYS": "7",
         // Türetme: üstteki geliştirme `vars` açıklaması.
         "TRIAL_ACCOUNT_DAILY_TOKENS": "300000",
-        "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "3",
+        // Lansman (sahibin kararı, 2026-10-29): aynı ofis ve mobil operatör (CGNAT) arkasındaki kullanıcılar takılmasın;
+        // Mac başına deneme DeviceCheck ile ayrıca sınırlı.
+        "TRIAL_ACCOUNTS_PER_IP_PER_DAY": "10",
         "TRIAL_MAX_MEETING_MINUTES": "90",
         "SUBSCRIBER_MAX_MEETING_MINUTES": "240",
         "MONTHLY_CAP_HOURS": "10",
@@ -223,7 +225,9 @@
         "SCRIBE_USD_PER_HOUR": "0.22",
         "SCRIBE_KEYTERMS_USD_PER_HOUR": "0.05",
         // Bkz. üstteki geliştirme `vars` açıklaması.
-        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
+        // Creator planı 121 K kredi + otomatik yükleme (eşik 10 $, 25 $'lık yükleme, ayda en çok 150 $ ≈ 824 K kredi);
+        // ölçülen ~1.080 kredi/saat ile ~875 saat. Hesaptaki otomatik yükleme ayarı değişirse bu da değişmeli.
+        "ELEVENLABS_MONTHLY_AUDIO_HOURS": "850",
         "ELEVENLABS_BILLING_DAY": "11",
         // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
         // Açık (sahibin kararı): kurulan akış jetonun süresi dolsa da sürebilir. DEEPGRAM_BUDGET_USD tahmini izler, kesin
@@ -232,9 +236,9 @@
         "DEEPGRAM_POLICY": "on",
         "DEEPGRAM_BUDGET_USD": "185",
         "DEEPGRAM_USD_PER_MINUTE": "0.0092",
-        "DAILY_SPEND_CEILING_USD": "25",
+        "DAILY_SPEND_CEILING_USD": "50",
         // Bkz. üstteki geliştirme `vars` açıklaması.
-        "DAILY_TRIAL_SPEND_CEILING_USD": "10",
+        "DAILY_TRIAL_SPEND_CEILING_USD": "25",
         "REFRESH_TOKEN_DAYS": "60",
         "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt"
       }
