@@ -5,6 +5,14 @@ import Testing
 @Suite struct LifecycleRulesTests {
     // Biten kayıt işlemeye devredilirken (sunucu oturumu kapatılıyor) kaydedici meşgul sayılır: yeni kayıt, kuyruk,
     // çıkış ve güncellemeyle yeniden başlatma bu aralıkta araya giremez.
+    // 0.1.4'ün tek açık oturum kaydı yeni listeye katılır (tekrar eklenmez); yoksa liste değişmez.
+    @Test func legacyOpenMeetingIsMerged() {
+        #expect(mergingLegacyOpenMeeting(ids: ["a"], legacy: "b") == ["a", "b"])
+        #expect(mergingLegacyOpenMeeting(ids: ["a"], legacy: "a") == ["a"])
+        #expect(mergingLegacyOpenMeeting(ids: ["a"], legacy: nil) == ["a"])
+        #expect(mergingLegacyOpenMeeting(ids: [], legacy: "") == [])
+    }
+
     @Test func handoffKeepsRecorderBusy() {
         #expect(isRecorderBusy(isRecording: false, isFinishing: false, isHandingOff: true, processingCount: 0, importingCount: 0))
         #expect(!isRecorderBusy(isRecording: false, isFinishing: false, isHandingOff: false, processingCount: 0, importingCount: 0))

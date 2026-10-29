@@ -52,6 +52,14 @@ public func addingOpenMeeting(ids: [String], meetingID: String) -> [String] {
     ids.contains(meetingID) ? ids : ids + [meetingID]
 }
 
+/// 0.1.4'ün tek açık oturum kaydını (`hosted.openMeetingID`) listeye katar; yoksa liste aynı kalır. Saf fonksiyondur.
+public func mergingLegacyOpenMeeting(ids: [String], legacy: String?) -> [String] {
+    guard let legacy, !legacy.isEmpty else {
+        return ids
+    }
+    return addingOpenMeeting(ids: ids, meetingID: legacy)
+}
+
 /// Kapatılan oturumu listeden çıkarır. Saf fonksiyondur.
 public func removingOpenMeeting(ids: [String], meetingID: String) -> [String] {
     ids.filter { $0 != meetingID }

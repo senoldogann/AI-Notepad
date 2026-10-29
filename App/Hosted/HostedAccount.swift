@@ -604,6 +604,7 @@ final class HostedAccount {
     /// sürüyorsa dokunmaz. Sunucu oturumu zaten kapalı ya da bilinmiyorsa kayıt silinir; ağ hatasında sonra yeniden
     /// denenir.
     func closeOrphanedMeeting() async {
+        migrateLegacyHostedOpenMeetingID()
         for meetingID in orphanedMeetingIDs(openIDs: loadHostedOpenMeetingIDs(), recordingMeetingID: currentMeeting?.meetingId) {
             do {
                 let ended: HostedEndedMeeting = try await HostedServices.requireClient().endMeeting(meetingID: meetingID)
@@ -711,6 +712,19 @@ enum HostedMeetingStart {
 private let hostedOpenMeetingsKey: String = "hosted.openMeetingIDs"
 /// Çevrimdışı kayıt izninin UserDefaults anahtarı.
 private let hostedOfflinePermitKey: String = "hosted.offlinePermit"
+
+/// 0.1.4'ün tek açık oturum anahtarı: yeni listeye taşınır (bkz. `migrateLegacyHostedOpenMeetingID`).
+private let legacyHostedOpenMeetingKey: String = "hosted.openMeetingID"
+
+/// 0.1.4'ten kalan açık oturumu yeni listeye taşır ve eski anahtarı siler (yetim kapatma sonra kapatır).
+private func migrateLegacyHostedOpenMeetingID() {
+    guard let legacy = UserDefaults.standard.string(forKey: legacyHostedOpenMeetingKey) else {
+        return
+    }
+    UserDefaults.standard.set(mergingLegacyOpenMeeting(ids: loadHostedOpenMeetingIDs(), legacy: legacy), forKey: hostedOpenMeetingsKey)
+    UserDefaults.standard.removeObject(forKey: legacyHostedOpenMeetingKey)
+    accountLogger.info("Eski sürümden kalan açık toplantı oturumu kapatılmak üzere listeye taşındı")
+}
 
 /// Saklanan açık sunucu oturumları (yoksa boş).
 private func loadHostedOpenMeetingIDs() -> [String] {
