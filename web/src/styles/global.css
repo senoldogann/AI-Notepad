@@ -341,8 +341,8 @@ p {
   background: rgb(255 255 255 / 0.72);
   color: #0a0a0a;
   border-color: rgb(255 255 255 / 0.6);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .button--glass:hover {
@@ -471,8 +471,8 @@ p {
   border: 1px solid rgb(255 255 255 / 0.7);
   border-radius: var(--radius-m);
   box-shadow: 0 10px 30px rgb(90 58 42 / 0.12);
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   color: #0a0a0a;
 }
 

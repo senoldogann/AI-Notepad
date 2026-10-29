@@ -90,8 +90,9 @@ const currentPath: string = routes[page];
     top: 0;
     z-index: 50;
     background: color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter: saturate(1.4) blur(14px);
+    /* Önce önekli, sonra standart: CSS sıkıştırıcı ikisini birleştirirken sonuncuyu tutar (Chrome yalnızca standardı tanır). */
     -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    backdrop-filter: saturate(1.4) blur(14px);
     border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   }
 
