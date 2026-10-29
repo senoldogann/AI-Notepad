@@ -1,7 +1,7 @@
 import type { Config } from "./config";
 import { randomId } from "./crypto";
 import { ApiError } from "./errors";
-import { addSpendStatement, addTrialSpendStatement, dayKey, monthKey, monthStartMs, monthlyUsedSecondsSql } from "./usage";
+import { dayKey, monthKey, monthStartMs, monthlyUsedSecondsSql } from "./usage";
 
 /**
  * Önceden ayırma (`usage_reservations`): üst servise giden her çağrı (LLM ya da ses) için tek satır. Satır, çağrının
@@ -286,9 +286,24 @@ export async function reserveUsage(db: D1Database, reservation: UsageReservation
   throw (failed ?? checks[0])?.limit.error ?? new Error("Ayırma sınırı olmadan çağrıldı.");
 }
 
-/** Harcama ifadesi: deneme harcamasıysa deneme toplamına da yazılır. */
+/**
+ * Harcama ifadesi: deneme harcamasıysa deneme toplamına da yazılır. Yalnızca ayırma satırı hâlâ duruyorsa yazılır:
+ * satırı kaldıran (süre dolumu temizliği ya da hesap silme) tahmini maliyeti zaten yazmıştır; gerçek maliyet ikinci kez
+ * eklenmez. Bu yüzden kesinleştirmede ayırmayı silen ifade en sonda çalışır.
+ */
 function spendStatement(db: D1Database, reservation: UsageReservation, microUsd: number, now: Date): D1PreparedStatement {
-  return (reservation.trialSpend ? addTrialSpendStatement : addSpendStatement)(db, now, microUsd);
+  return db
+    .prepare(
+      `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd)
+       SELECT ?1, ?2, CASE WHEN ?3 = 1 THEN ?2 ELSE 0 END WHERE EXISTS (SELECT 1 FROM usage_reservations WHERE id = ?4)
+       ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd`,
+    )
+    .bind(dayKey(now), microUsd, reservation.trialSpend ? 1 : 0, reservation.id);
+}
+
+/** Kesinleştirmenin son ifadesi: ayırma satırını siler (önceki ifadeler satırın varlığına bakar). */
+function deleteReservationStatement(db: D1Database, reservation: UsageReservation): D1PreparedStatement {
+  return db.prepare("DELETE FROM usage_reservations WHERE id = ?").bind(reservation.id);
 }
 
 /** Gerçekleşen token kullanımı. */
@@ -298,9 +313,11 @@ export interface TokenUsage {
 }
 
 /**
- * LLM ayırmasını kesinleştiren ifadeler: ayırma satırı silinir; gerçek kullanım toplantıya (varsa), kullanıcının ayına
- * ve gününe (denemedeki ya da abonenin hesap çağrısında ayrıca kendi sayacına) ve `spendMicroUsd` günlük harcamaya
- * yazılır. Ay ve gün ayırmanınkidir (gece yarısını aşan çağrı ayırdığı satırı kesinleştirir).
+ * LLM ayırmasını kesinleştiren ifadeler: gerçek kullanım toplantıya (varsa), kullanıcının ayına ve gününe (denemedeki
+ * ya da abonenin hesap çağrısında ayrıca kendi sayacına) ve `spendMicroUsd` günlük harcamaya yazılır, en sonda ayırma
+ * satırı silinir. Ay ve gün ayırmanınkidir (gece yarısını aşan çağrı ayırdığı satırı kesinleştirir). Hesap çağrı
+ * sürerken silindiyse kullanıcı sayaçları yazılmaz (yabancı anahtar hatası toplu işlemi düşürmez); harcama, ayırmayı
+ * silen hesap silme işleminde tahminle yazılmıştır (`reservationSpendOnRemovalStatement`).
  */
 export function settleLLMStatements(db: D1Database, reservation: UsageReservation, usage: TokenUsage, spendMicroUsd: number, now: Date): D1PreparedStatement[] {
   const actual: number = usage.inputTokens + usage.outputTokens;
@@ -309,23 +326,25 @@ export function settleLLMStatements(db: D1Database, reservation: UsageReservatio
       ? []
       : [db.prepare("UPDATE meeting_sessions SET tokens_used = tokens_used + ? WHERE id = ?").bind(actual, reservation.meetingId)];
   return [
-    db.prepare("DELETE FROM usage_reservations WHERE id = ?").bind(reservation.id),
     ...meeting,
     db
       .prepare(
-        `INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens, account_tokens) VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO monthly_usage (user_id, month, input_tokens, output_tokens, account_tokens)
+         SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)
          ON CONFLICT(user_id, month) DO UPDATE SET input_tokens = input_tokens + excluded.input_tokens,
            output_tokens = output_tokens + excluded.output_tokens, account_tokens = account_tokens + excluded.account_tokens`,
       )
       .bind(reservation.userId, reservation.month, usage.inputTokens, usage.outputTokens, reservation.accountTokens > 0 ? actual : 0),
     db
       .prepare(
-        `INSERT INTO daily_usage (user_id, day, tokens_used, trial_account_tokens_used) VALUES (?, ?, ?, ?)
+        `INSERT INTO daily_usage (user_id, day, tokens_used, trial_account_tokens_used)
+         SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)
          ON CONFLICT(user_id, day) DO UPDATE SET tokens_used = tokens_used + excluded.tokens_used,
            trial_account_tokens_used = trial_account_tokens_used + excluded.trial_account_tokens_used`,
       )
       .bind(reservation.userId, reservation.day, actual, reservation.trialAccountTokens > 0 ? actual : 0),
     spendStatement(db, reservation, spendMicroUsd, now),
+    deleteReservationStatement(db, reservation),
   ];
 }
 
@@ -333,7 +352,8 @@ export function settleLLMStatements(db: D1Database, reservation: UsageReservatio
  * Ses ayırmasını kesinleştiren ifadeler: ayırma satırı silinir (toplantının ses isteği serbest kalır); gerçek süre
  * toplantıya ve kullanıcının ayına, `spendMicroUsd` günlük harcamaya, `providerSeconds` (ElevenLabs'in kredisinden
  * düştüğü kabul edilen saniye) günlük ElevenLabs sayacına (`daily_spend.audio_seconds`) yazılır. Gerçek süre ayrılanı
- * aştıysa toplantının ses hakkı kapanır (`closeTranscription`).
+ * aştıysa toplantının ses hakkı kapanır (`closeTranscription`). Ayırma satırı en sonda silinir; harcama yalnızca satır
+ * hâlâ duruyorsa yazılır, kullanıcı sayacı yalnızca hesap duruyorsa (bkz. `settleLLMStatements`).
  */
 export function settleAudioStatements(
   db: D1Database,
@@ -345,23 +365,25 @@ export function settleAudioStatements(
   now: Date,
 ): D1PreparedStatement[] {
   return [
-    db.prepare("DELETE FROM usage_reservations WHERE id = ?").bind(reservation.id),
     db
       .prepare("UPDATE meeting_sessions SET audio_seconds = audio_seconds + ?, transcription_closed = MAX(transcription_closed, ?) WHERE id = ?")
       .bind(actualSeconds, closeTranscription ? 1 : 0, reservation.meetingId),
     db
       .prepare(
-        `INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)
+        `INSERT INTO monthly_usage (user_id, month, audio_seconds)
+         SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)
          ON CONFLICT(user_id, month) DO UPDATE SET audio_seconds = audio_seconds + excluded.audio_seconds`,
       )
       .bind(reservation.userId, reservation.month, actualSeconds),
     spendStatement(db, reservation, spendMicroUsd, now),
     db
       .prepare(
-        `INSERT INTO daily_spend (day, audio_seconds) VALUES (?, ?)
+        `INSERT INTO daily_spend (day, audio_seconds)
+         SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM usage_reservations WHERE id = ?3)
          ON CONFLICT(day) DO UPDATE SET audio_seconds = audio_seconds + excluded.audio_seconds`,
       )
-      .bind(dayKey(now), providerSeconds),
+      .bind(dayKey(now), providerSeconds, reservation.id),
+    deleteReservationStatement(db, reservation),
   ];
 }
 
@@ -372,17 +394,31 @@ export function settleAudioStatements(
  * silinir. Kullanıcının token ve süre sayaçlarına yazılmaz (istemci yanıt almadı).
  */
 export function expiredReservationStatements(db: D1Database, now: Date): D1PreparedStatement[] {
+  return removedReservationStatements(db, "expires_at <= ?", [now.getTime()]);
+}
+
+/**
+ * Hesap silinirken süren ayırmalarını kaldıran ifadeler (hesabın satırları silinmeden, aynı toplu işlemde): çağrılar
+ * üst serviste sürüyor olabilir; tahmini maliyetleri günlük harcamaya yazılır (sonraki kesinleştirme satırı bulamaz ve
+ * ikinci kez yazmaz), satırlar silinir.
+ */
+export function userReservationRemovalStatements(db: D1Database, userId: string): D1PreparedStatement[] {
+  return removedReservationStatements(db, "user_id = ?", [userId]);
+}
+
+/** Koşula uyan ayırmaların tahmini maliyetini ayırmanın gününe yazıp satırları silen ifadeler. */
+function removedReservationStatements(db: D1Database, condition: string, binds: readonly SqlValue[]): D1PreparedStatement[] {
   return [
     db
       .prepare(
         `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, audio_seconds)
          SELECT day, SUM(estimated_micro_usd), SUM(CASE WHEN trial_spend = 1 THEN estimated_micro_usd ELSE 0 END),
            SUM(CASE WHEN kind = 'audio' THEN audio_seconds ELSE 0 END)
-         FROM usage_reservations WHERE expires_at <= ? GROUP BY day
+         FROM usage_reservations WHERE ${condition} GROUP BY day
          ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd,
            audio_seconds = audio_seconds + excluded.audio_seconds`,
       )
-      .bind(now.getTime()),
-    db.prepare("DELETE FROM usage_reservations WHERE expires_at <= ?").bind(now.getTime()),
+      .bind(...binds),
+    db.prepare(`DELETE FROM usage_reservations WHERE ${condition}`).bind(...binds),
   ];
 }

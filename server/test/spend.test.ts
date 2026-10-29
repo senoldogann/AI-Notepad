@@ -1,6 +1,16 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 import {
+  type UsageReservation,
+  audioReservation,
+  llmReservation,
+  meetingAudioLimit,
+  meetingTokenLimit,
+  reserveUsage,
+  settleAudioStatements,
+  settleLLMStatements,
+} from "../src/reservations";
+import {
   type Harness,
   type Session,
   type StartedMeetingBody,
@@ -11,6 +21,7 @@ import {
   signIn,
   startMeeting,
 } from "./helpers";
+import { stubStripeApi } from "./stripeFake";
 
 /** 1000 girdi + 1000 çıktı tokenlık (600 mikro dolar) Haiku yanıtı. */
 function stubHaiku(harness: Harness): void {
@@ -118,5 +129,47 @@ describe("günlük deneme harcaması tavanı", () => {
     expect((await llmCall(harness, trial, trialMeeting.meetingId)).status).toBe(200);
     expect((await startMeeting(harness, subscriber)).status).toBe(201);
     expect((await llmCall(harness, subscriber, null)).status).toBe(200);
+  });
+});
+
+describe("hesap silinirken süren çağrı", () => {
+  it("kesinleştirme yabancı anahtar hatası almaz; harcama silmede tahminle bir kez yazılır", async () => {
+    const harness: Harness = await defaultHarness();
+    // Önceki testler bugünün harcama tavanını doldurdu: yeni gün.
+    harness.clock.nowMs += 3 * 86_400_000;
+    stubStripeApi(harness);
+    const session: Session = await signIn(harness);
+    await grantSubscription(session.userId, "active", harness.clock.nowMs + 20 * 86_400_000);
+    const started: Response = await startMeeting(harness, session);
+    expect(started.status).toBe(201);
+    const meeting: StartedMeetingBody = await started.json<StartedMeetingBody>();
+    const now: Date = new Date(harness.clock.nowMs);
+    const llm: UsageReservation = llmReservation(
+      { userId: session.userId, meetingId: meeting.meetingId, tokens: 100, trialAccountCall: false, subscriberAccountCall: false, estimatedMicroUsd: 700, trialSpend: false },
+      now,
+    );
+    const audio: UsageReservation = audioReservation(session.userId, meeting.meetingId, 10, 300, false, now);
+    await reserveUsage(env.DB, llm, [{ limit: meetingTokenLimit(meeting.meetingId, now), amount: 100 }]);
+    await reserveUsage(env.DB, audio, [{ limit: meetingAudioLimit(meeting.meetingId), amount: 10 }]);
+    const day: string = now.toISOString().slice(0, 10);
+    const spend = async (): Promise<{ micro_usd: number; audio_seconds: number }> =>
+      (await env.DB.prepare("SELECT micro_usd, audio_seconds FROM daily_spend WHERE day = ?").bind(day).first<{ micro_usd: number; audio_seconds: number }>()) ?? {
+        micro_usd: 0,
+        audio_seconds: 0,
+      };
+    const before = await spend();
+    expect((await harness.call(req("DELETE", "/v1/me", { token: session.accessToken }))).status).toBe(204);
+    // Silme, süren ayırmaların tahminini yazar.
+    expect(await spend()).toEqual({ micro_usd: before.micro_usd + 1000, audio_seconds: before.audio_seconds + 10 });
+    // Üst servis yanıtı sonra gelir: kesinleştirme hata vermez, ikinci kez yazmaz, silinmiş hesaba sayaç açmaz.
+    await env.DB.batch(settleLLMStatements(env.DB, llm, { inputTokens: 50, outputTokens: 50 }, 600, now));
+    await env.DB.batch(settleAudioStatements(env.DB, audio, 10, false, 300, 10, now));
+    expect(await spend()).toEqual({ micro_usd: before.micro_usd + 1000, audio_seconds: before.audio_seconds + 10 });
+    const counters = await env.DB.prepare(
+      "SELECT (SELECT COUNT(*) FROM monthly_usage WHERE user_id = ?1) + (SELECT COUNT(*) FROM daily_usage WHERE user_id = ?1) AS count",
+    )
+      .bind(session.userId)
+      .first<{ count: number }>();
+    expect(counters?.count).toBe(0);
   });
 });

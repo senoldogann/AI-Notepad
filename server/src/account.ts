@@ -2,6 +2,7 @@ import { closeStripeForDeletion } from "./billing";
 import type { Config } from "./config";
 import { log } from "./log";
 import type { Platform } from "./platform";
+import { userReservationRemovalStatements } from "./reservations";
 import { ledgerOnDeletionStatement, trialIdentityHash } from "./trialLedger";
 import type { IdentityProvider } from "./auth/users";
 import { dayKey } from "./usage";
@@ -28,6 +29,8 @@ interface StoredIdentity {
  * Hesaba bağlı raporlar (geri bildirim, çökme) bağı kaldırılarak değil, silinerek gider: serbest metin, e-posta ve
  * çökme yükü kişisel veri taşıyabilir; silme hakkı bunları kapsar. Jetonsuz gönderilmiş raporlar (site iletişim formu)
  * hesaba bağlanamaz ve 180 günlük saklama süresiyle silinir.
+ * Süren ayırmaların tahmini maliyeti silinmeden günlük harcamaya yazılır (`userReservationRemovalStatements`): silme
+ * sırasında süren çağrı kesinleşirken yabancı anahtar hatası almaz, harcama da kaybolmaz.
  * `daily_spend` (toplam, kişisel değil), `downloads`, `used_nonces` ve `stripe_events` hesaba bağlı değildir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
@@ -47,7 +50,7 @@ function accountDeletionStatements(db: D1Database, userId: string, identityHashe
     db.prepare("DELETE FROM refresh_families WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM device_challenges WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM transcription_results WHERE user_id = ?").bind(userId),
-    db.prepare("DELETE FROM usage_reservations WHERE user_id = ?").bind(userId),
+    ...userReservationRemovalStatements(db, userId),
     db.prepare("DELETE FROM meeting_sessions WHERE user_id = ?").bind(userId),
     db
       .prepare("UPDATE meeting_sessions SET device_id = NULL WHERE device_id IN (SELECT id FROM devices WHERE attested_by_user_id = ?)")

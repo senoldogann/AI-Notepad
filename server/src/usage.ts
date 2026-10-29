@@ -145,23 +145,6 @@ export async function todayTrialSpendMicroUsd(db: D1Database, now: Date): Promis
   return row?.trial_micro_usd ?? 0;
 }
 
-/** Abonelik harcamasını günlük toplama ekleyen ifade. */
-export function addSpendStatement(db: D1Database, now: Date, microUsd: number): D1PreparedStatement {
-  return db
-    .prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd")
-    .bind(dayKey(now), microUsd);
-}
-
-/** Deneme harcamasını (deneme toplantısı ya da denemedeki hesap çağrısı) hem günlük toplama hem deneme toplamına ekleyen ifade. */
-export function addTrialSpendStatement(db: D1Database, now: Date, microUsd: number): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd) VALUES (?1, ?2, ?2)
-       ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd`,
-    )
-    .bind(dayKey(now), microUsd);
-}
-
 /**
  * Günlük harcama tavanı: aşıldıysa alarm logu yazar ve 503 `spend_ceiling_reached` fırlatır. Toplantı başlatmada ve
  * her vekil çağrısında (LLM, konuşma tanıma) denetlenir.
