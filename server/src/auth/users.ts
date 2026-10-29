@@ -1,5 +1,5 @@
 import { randomId } from "../crypto";
-import { insertUserFromLedgerStatement, seedMonthlyUsageFromLedgerStatement } from "../trialLedger";
+import { insertUserFromLedgerStatement, seedDailyUsageFromLedgerStatement, seedMonthlyUsageFromLedgerStatement } from "../trialLedger";
 
 /** Giriş sağlayıcısı. */
 export type IdentityProvider = "apple" | "google";
@@ -21,6 +21,7 @@ export async function findOrCreateUser(db: D1Database, provider: IdentityProvide
     await db.batch([
       insertUserFromLedgerStatement(db, userId, identityHash, now),
       seedMonthlyUsageFromLedgerStatement(db, userId, identityHash, now),
+      seedDailyUsageFromLedgerStatement(db, userId, identityHash, now),
       db
         .prepare("INSERT INTO auth_identities (provider, subject, user_id, email, created_at) VALUES (?, ?, ?, NULL, ?)")
         .bind(provider, subject, userId, now.getTime()),

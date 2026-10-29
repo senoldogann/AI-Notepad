@@ -238,6 +238,29 @@ describe("konuşma tanıma vekili", () => {
     expect(context.harness.outbound.filter((request: Request): boolean => request.url.startsWith(elevenLabsSpeechToTextUrl))).toHaveLength(0);
   });
 
+  it("aylık süre toplantı başına süre ile sesin büyüğüdür: uzun canlı toplantı ile uzun içe aktarma birbirini örtmez", async () => {
+    const context: Context = await setup(true);
+    const { harness, session } = context;
+    // 10 dakikalık canlı toplantı (sesi yazıya dökülmedi).
+    harness.clock.nowMs += 10 * 60_000;
+    expect((await harness.call(req("POST", `/v1/meetings/${context.meeting.meetingId}/end`, { token: session.accessToken }))).status).toBe(200);
+    // İçe aktarılan 10 dakikalık dosya: oturum açılıp hemen kapanır, ses sonra yazılır.
+    const imported: StartedMeetingBody = await (
+      await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef: "ice-aktarim-l2", deferred: true } }))
+    ).json<StartedMeetingBody>();
+    expect((await harness.call(req("POST", `/v1/meetings/${imported.meetingId}/end`, { token: session.accessToken }))).status).toBe(200);
+    harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      await request.formData();
+      return Response.json({ ...transcription, audio_duration_secs: 600 });
+    });
+    const audio: Uint8Array = wavFile(8000, 1, 8, 8000 * 600);
+    expect((await upload({ harness, session, meeting: imported }, "", audio, "audio/wav")).status).toBe(200);
+    await harness.drain();
+    // Toplamların büyüğü 10 dk olurdu; toplantı başına büyüklerin toplamı 20 dk.
+    const me = await (await harness.call(req("GET", "/v1/me", { token: session.accessToken }))).json<{ monthlyHoursUsed: number }>();
+    expect(me.monthlyHoursUsed).toBe(0.4);
+  });
+
   it("toplantının en uzun süresinden uzun ses reddedilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);

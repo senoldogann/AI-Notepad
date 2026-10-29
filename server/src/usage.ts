@@ -50,6 +50,36 @@ export function transcriptionCostMicroUsd(seconds: number, usdPerHour: number): 
   return Math.ceil((seconds / 3600) * usdPerHour * 1_000_000);
 }
 
+/** Aylık süre SQL'inin girdileri: her biri SQL ifadesidir (parametre ya da sütun). */
+export interface MonthlyUsageRefs {
+  readonly user: string;
+  readonly month: string;
+  readonly now: string;
+  readonly monthStart: string;
+}
+
+/**
+ * Kullanıcının bu ay sınıra sayılan süresi (saniye; SQL ifadesi): devralınan süre + bu ay başlayan her toplantının
+ * süresi ile sesinin (kesinleşmiş + süren ayırma) büyüğü + önceki aylarda başlamış toplantıların bu ay yazılan sesi ve
+ * süren ayırmaları. Toplantı başına büyüğü alınır: uzun canlı toplantılar ile uzun içe aktarmalar birbirini örtmez
+ * (toplamların büyüğü değil).
+ */
+export function monthlyUsedSecondsSql(refs: MonthlyUsageRefs): string {
+  const { user, month, now, monthStart } = refs;
+  const thisMonth: string = `user_id = ${user} AND started_at >= ${monthStart}`;
+  return `(
+    COALESCE((SELECT carried_seconds FROM monthly_usage WHERE user_id = ${user} AND month = ${month}), 0)
+    + COALESCE((SELECT SUM(MAX(
+        MAX(0, MIN(COALESCE(s.ended_at, ${now}), s.max_ends_at, ${now}) - s.started_at) / 1000.0,
+        s.audio_seconds + COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > ${now}), 0)
+      )) FROM meeting_sessions s WHERE s.${thisMonth}), 0)
+    + MAX(0, COALESCE((SELECT audio_seconds FROM monthly_usage WHERE user_id = ${user} AND month = ${month}), 0)
+      - COALESCE((SELECT SUM(audio_seconds) FROM meeting_sessions WHERE ${thisMonth}), 0))
+    + COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.user_id = ${user} AND r.month = ${month} AND r.kind = 'audio'
+        AND r.expires_at > ${now} AND r.meeting_id NOT IN (SELECT id FROM meeting_sessions WHERE ${thisMonth})), 0)
+  )`;
+}
+
 /** Aylık kullanım özeti. */
 export interface MonthlyUsage {
   /** Bu ay başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye kadar). */
@@ -58,14 +88,18 @@ export interface MonthlyUsage {
   readonly audioSeconds: number;
   /** Aynı kimliğin bu ay silinmiş hesabından devralınan süre (bkz. `trialLedger.ts`). */
   readonly carriedSeconds: number;
-  /** Sınıra sayılan süre: devralınan + toplantı ve ses süresinden büyüğü (aynı toplantının sesi iki kez sayılmaz). */
+  /** Sınıra sayılan süre (bkz. `monthlyUsedSecondsSql`): toplantı başına süre ile sesin büyüğü, devralınan dahil. */
   readonly usedSeconds: number;
 }
 
 /** Kullanıcının bu ayki kullanımı. */
 export async function monthlyUsage(db: D1Database, userId: string, now: Date): Promise<MonthlyUsage> {
   const nowMs: number = now.getTime();
-  const [meetingRow, usageRow]: [{ seconds: number | null } | null, { audio_seconds: number; carried_seconds: number } | null] = await Promise.all([
+  const [meetingRow, usageRow, usedRow]: [
+    { seconds: number | null } | null,
+    { audio_seconds: number; carried_seconds: number } | null,
+    { used: number | null } | null,
+  ] = await Promise.all([
     db
       .prepare(
         `SELECT SUM(MAX(0, MIN(COALESCE(ended_at, ?), max_ends_at, ?) - started_at)) / 1000.0 AS seconds
@@ -82,11 +116,15 @@ export async function monthlyUsage(db: D1Database, userId: string, now: Date): P
       )
       .bind(userId, monthKey(now), nowMs)
       .first<{ audio_seconds: number; carried_seconds: number }>(),
+    db
+      .prepare(`SELECT ${monthlyUsedSecondsSql({ user: "?1", month: "?2", now: "?3", monthStart: "?4" })} AS used`)
+      .bind(userId, monthKey(now), nowMs, monthStartMs(now))
+      .first<{ used: number | null }>(),
   ]);
   const meetingSeconds: number = Math.ceil(meetingRow?.seconds ?? 0);
   const audioSeconds: number = Math.ceil(usageRow?.audio_seconds ?? 0);
   const carriedSeconds: number = Math.ceil(usageRow?.carried_seconds ?? 0);
-  return { meetingSeconds, audioSeconds, carriedSeconds, usedSeconds: carriedSeconds + Math.max(meetingSeconds, audioSeconds) };
+  return { meetingSeconds, audioSeconds, carriedSeconds, usedSeconds: Math.ceil(usedRow?.used ?? 0) };
 }
 
 /** Bugünkü tahmini toplam harcama (mikro dolar). */

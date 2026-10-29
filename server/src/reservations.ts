@@ -1,7 +1,7 @@
 import type { Config } from "./config";
 import { randomId } from "./crypto";
 import { ApiError } from "./errors";
-import { addSpendStatement, addTrialSpendStatement, dayKey, monthKey } from "./usage";
+import { addSpendStatement, addTrialSpendStatement, dayKey, monthKey, monthStartMs, monthlyUsedSecondsSql } from "./usage";
 
 /**
  * Önceden ayırma (`usage_reservations`): üst servise giden her çağrı (LLM ya da ses) için tek satır. Satır, çağrının
@@ -203,12 +203,20 @@ export function meetingAudioIdleLimit(meetingId: string, now: Date): Reservation
   };
 }
 
-/** Kullanıcının aylık süre sınırından kalan ses (deneme toplantılarında da; silinmiş hesaptan devralınan süre dahil). */
-export function monthlyAudioLimit(config: Config, userId: string, now: Date): ReservationLimit {
-  const month: string = monthKey(now);
+/**
+ * Kullanıcının aylık süre sınırından bu toplantıya yazılabilecek ses (deneme toplantılarında da; silinmiş hesaptan
+ * devralınan süre dahil): sınır − sayılan süre (`monthlyUsedSecondsSql`) + toplantının sesinin henüz süresine
+ * ulaşmamış kısmı (toplantının süresi zaten sayıldı; sesi süresini aşana dek ek sayılmaz).
+ */
+export function monthlyAudioLimit(config: Config, userId: string, meetingId: string, now: Date): ReservationLimit {
+  const used: string = monthlyUsedSecondsSql({ user: "p.user_id", month: "p.month", now: "p.now", monthStart: "p.month_start" });
+  const headroom: string = `COALESCE((SELECT MAX(0, MAX(0, MIN(COALESCE(s.ended_at, p.now), s.max_ends_at, p.now) - s.started_at) / 1000.0 - s.audio_seconds
+      - COALESCE((SELECT SUM(r.audio_seconds) FROM usage_reservations r WHERE r.meeting_id = s.id AND r.kind = 'audio' AND r.expires_at > p.now), 0))
+    FROM meeting_sessions s WHERE s.id = p.meeting_id AND s.started_at >= p.month_start), 0)`;
   return {
-    remainingSql: `? - COALESCE((SELECT audio_seconds + carried_seconds FROM monthly_usage WHERE user_id = ? AND month = ?), 0) - ${activeSum("audio_seconds", "user_id = ? AND month = ? AND kind = 'audio'")}`,
-    binds: [config.monthlyCapSeconds, userId, month, userId, month, now.getTime()],
+    remainingSql: `(SELECT p.cap - ${used} + ${headroom}
+      FROM (SELECT ? AS cap, ? AS user_id, ? AS month, ? AS now, ? AS month_start, ? AS meeting_id) p)`,
+    binds: [config.monthlyCapSeconds, userId, monthKey(now), now.getTime(), monthStartMs(now), meetingId],
     error: new ApiError("monthly_cap_reached", "Bu ayki kullanım sınırı bu kaydı işlemeye yetmiyor; sınır ay başında sıfırlanır."),
   };
 }

@@ -203,6 +203,36 @@ describe("kimlik deneme defteri (hesap silinince deneme sıfırlanmaz)", () => {
     expect(await ledgerRow(subject)).toEqual({ trial_meetings_used: 2, device_verified: 0 });
   });
 
+  it("aynı gün silinip yeniden açılan hesap günlük sayaçları (toplantı dışı deneme token'ı dahil) devralır; ertesi gün sıfırdan", async () => {
+    const harness: Harness = await defaultHarness();
+    const subject: string = `google-${crypto.randomUUID()}`;
+    const first: Session = await signInWithGoogle(harness, subject);
+    expect((await start(harness, first, null, null)).status).toBe(201);
+    const day: string = new Date(harness.clock.nowMs).toISOString().slice(0, 10);
+    await env.DB.prepare(
+      `INSERT INTO daily_usage (user_id, day, tokens_used, trial_account_tokens_used, meetings_started) VALUES (?, ?, 900, 400, 1)
+       ON CONFLICT(user_id, day) DO UPDATE SET tokens_used = 900, trial_account_tokens_used = 400, meetings_started = 1`,
+    )
+      .bind(first.userId, day)
+      .run();
+    expect((await deleteMe(harness, first, null)).status).toBe(204);
+
+    const again: Session = await signInWithGoogle(harness, subject);
+    const seeded = await env.DB.prepare("SELECT day, tokens_used, trial_account_tokens_used, meetings_started FROM daily_usage WHERE user_id = ?")
+      .bind(again.userId)
+      .first();
+    expect(seeded).toEqual({ day, tokens_used: 900, trial_account_tokens_used: 400, meetings_started: 1 });
+    // Toplantı dışı deneme payı (abone olmayan) devralınan kullanımı gösterir.
+    const me = await (await harness.call(req("GET", "/v1/me", { token: again.accessToken }))).json<{ accountTokensUsed: number }>();
+    expect(me.accountTokensUsed).toBe(400);
+    expect((await deleteMe(harness, again, null)).status).toBe(204);
+
+    harness.clock.nowMs += 86_400_000;
+    const tomorrow: Session = await signInWithGoogle(harness, subject);
+    const fresh = await env.DB.prepare("SELECT COUNT(*) AS count FROM daily_usage WHERE user_id = ?").bind(tomorrow.userId).first<{ count: number }>();
+    expect(fresh?.count).toBe(0);
+  });
+
   it("deneme harcamamış ve bu ay kullanımı olmayan hesap silinince defterde satır kalmaz", async () => {
     const harness: Harness = await defaultHarness();
     const subject: string = `google-${crypto.randomUUID()}`;

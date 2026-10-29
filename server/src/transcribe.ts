@@ -351,7 +351,7 @@ export async function proxyTranscription(
     await reserveUsage(db, reservation, [
       { limit: meetingAudioIdleLimit(meeting.id, now), amount: 1 },
       { limit: meetingAudioLimit(meeting.id), amount: audio.seconds },
-      { limit: monthlyAudioLimit(config, meeting.user_id, now), amount: audio.seconds },
+      { limit: monthlyAudioLimit(config, meeting.user_id, meeting.id, now), amount: audio.seconds },
     ]);
   } catch (error: unknown) {
     await reader.cancel();
