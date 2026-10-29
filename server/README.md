@@ -31,7 +31,9 @@ AINOTEPAD_SERVER_LIVE_TESTS=1 LIVE_ANTHROPIC_API_KEY=... LIVE_STRIPE_SECRET_KEY=
 sırrından farklı), `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `TURNSTILE_SECRET_KEY` (sitedeki iletişim formu), `DEVICECHECK_PRIVATE_KEY` (yalnızca
 `DEVICECHECK_POLICY=required` iken: Apple Developer → Keys'te DeviceCheck yetkili anahtarın `.p8` dosyasının içeriği,
-olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production < AuthKey_XXXXXXXXXX.p8`).
+olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production < AuthKey_XXXXXXXXXX.p8`),
+`DEEPGRAM_API_KEY` (yalnızca `DEEPGRAM_POLICY=on` iken: Deepgram konsolunda Member ya da üstü yetkili anahtar; yalnızca
+kısa ömürlü jeton vermek için kullanılır).
 `TRIAL_HASH_SECRET` kimlik deneme defterinin ve deneme IP özetlerinin HMAC sırrıdır; değiştirilirse defterdeki eski
 satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği denemeyi yeniden alabilir). `ACCESS_TOKEN_SECRET`
 değiştirilirse yalnızca açık oturumlar düşer. Hız sınırı ve IP özeti IPv6'da adresin /64 önekine göredir.
@@ -54,11 +56,14 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca yeni deneme toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir; açık deneme toplantıları sürer. |
 | `DEVICECHECK_POLICY` | Mac başına ücretsiz deneme (Apple DeviceCheck) için tek anahtar: `required` (üretim) ya da `off` (yerel, testler: DeviceCheck hiç çağrılmaz). Ayrıntı: aşağıda "Deneme kötüye kullanımı". |
 | `DEVICECHECK_ENVIRONMENT` | `production` (`api.devicecheck.apple.com`) ya da `development` (`api.development.devicecheck.apple.com`); üretimde `required` iken `production` olmalı. |
+| `DEEPGRAM_POLICY` | Deepgram canlı metni için tek anahtar: `on` (üretim) ya da `off` (yerel, testler, acil kapatma: jeton verilmez, `/v1/me` → `liveEngine: "whisperkit"`, uygulama canlı metni Mac'te üretir). Ayrıntı: aşağıda "Deepgram canlı metni". |
+| `DEEPGRAM_BUDGET_USD`, `DEEPGRAM_USD_PER_MINUTE` | Ücretsiz Deepgram kredisinin canlı metne ayrılan ömür boyu bütçesi (üretim 185; kredinin kalanı payı) ve akış dakikası fiyatı (Nova-3 çok dilli liste fiyatı 0,0092; temkinli). `GET /v1/admin/stats` → `deepgram: {policy, budgetUsd, estimatedUsd, percent, streamMinutes, meetings, openMeetings, usdPerMinute}`. |
 | `DEVICECHECK_TEAM_ID`, `DEVICECHECK_KEY_ID` | Yetki JWT'sinin `iss`'i (Apple ekip kimliği) ve `kid`'i (DeviceCheck anahtar kimliği); `required` iken 10 karakterlik Apple biçiminde olmalı (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez). |
 
 Hız sınırları `ratelimits`'tedir (süre 10 ya da 60 sn): `AUTH_IP_LIMITER` (giriş, IP başına 10/dk), `API_IP_LIMITER`
 (her uç, 300/dk), `START_USER_LIMITER` ve `PROXY_USER_LIMITER` (kullanıcı başına), `REPORT_IP_LIMITER` (raporlar, IP
-başına 5/dk). Her ortamın kendi `namespace_id`'si vardır.
+başına 5/dk), `DEEPGRAM_USER_LIMITER` (Deepgram jetonu, kullanıcı başına 10/dk). Her ortamın kendi `namespace_id`'si
+vardır.
 
 Eksik ya da geçersiz bir değer her istekte `500 internal_error` ve `config_invalid` logu verir. Üretimde yer tutucu
 kalmışsa da öyledir (`TEAMID…` uygulama kimliği, `placeholder` içeren Google istemci ya da fiyat kimliği, `example.com`
@@ -80,7 +85,26 @@ token sayacını (`monthly_usage.account_tokens`) ekler; eski `*_reserved` saya�
 yenileme jetonunun yerine geçen jetonu (`refresh_tokens.replaced_by`) ekler. `0014` aboneliğin `past_due`'ya geçtiği anı
 (`subscriptions.past_due_since`; var olan `past_due` satırları son webhook yazımından) ekler. `0015` giriş kimliklerindeki
 e-postaları siler (yeni girişlerde de saklanmaz) ve cihaz saklama temizliği için dizin ekler. `0016` ElevenLabs'e giden
-ses saniyesinin günlük toplamını (`daily_spend.audio_seconds`) ekler; sayaç göçle sıfırdan başlar.
+ses saniyesinin günlük toplamını (`daily_spend.audio_seconds`) ekler; sayaç göçle sıfırdan başlar. `0017` Deepgram canlı
+metninin toplantı başına jeton sayısını ve bütçe tahminini (`deepgram_live_meetings`) ekler; satırlar silinmez (bütçe
+ömür boyu) ve kullanıcıya bağlanmaz.
+
+## Deepgram canlı metni
+
+`POST /v1/live/deepgram-token` (bearer, `x-meeting-id` başlığı, gövde yok) açık (bitmemiş, ek süre sayılmaz) toplantıya
+Deepgram'ın kısa ömürlü jetonunu verir: `{accessToken, expiresIn, model: "nova-3", mipOptOut: true, grantsLeft}`.
+Sunucu `POST https://api.deepgram.com/v1/auth/grant`'ı `Authorization: Token <DEEPGRAM_API_KEY>` ve
+`{"ttl_seconds": 30}` ile çağırır (5xx/429/ağ hatası uyarıyla 3 kez, sonra `502 upstream_unavailable`); uygulama
+`wss://api.deepgram.com/v1/listen`'a `Authorization: Bearer <jeton>` ve `mip_opt_out=true` ile bağlanır. Jeton yalnızca
+bağlantı kurulurken geçerli olmalıdır; her bağlantı ve yeniden bağlanma yeni jeton ister, toplantı başına en çok 30
+(`429 deepgram_grant_limit`). Jeton loglanmaz ve saklanmaz.
+
+Sunucu akışı görmez; harcama temkinli tahmindir: toplantının ilk jetonunda kalan en çok süresi × 2 akış ("Sen" ve
+"Diğerleri") peşin sayılır, toplantı bitince (`/end`, yeni toplantının kapattığı toplantı bir sonraki bitişte ya da günlük
+Cron'da) ilk jetondan bitişe geçen gerçek süreye indirilir. Tahmin `DEEPGRAM_BUDGET_USD`'ye ulaşınca yeni toplantılar jeton
+alamaz (`503 deepgram_unavailable`, `deepgram_budget_exhausted` uyarısı) ve `/v1/me` `liveEngine: "whisperkit"` der;
+jeton almış toplantının yeniden bağlanmaları sürer. Bütçeyi en çok bir toplantının penceresi kadar (4 saat × 2 akış ≈
+4,4 $) aşabilir. %80 ve %95 aşılınca `deepgram_budget_threshold` alarmı. `DEEPGRAM_POLICY=off` iken de jeton verilmez.
 
 ## Ayırma ve kesinleştirme
 

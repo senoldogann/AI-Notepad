@@ -35,6 +35,8 @@ export type ErrorCode =
   | "upstream_unavailable"
   | "spend_ceiling_reached"
   | "trial_capacity_reached"
+  | "deepgram_unavailable"
+  | "deepgram_grant_limit"
   | "webhook_invalid"
   | "internal_error";
 
@@ -74,6 +76,8 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   upstream_unavailable: 502,
   spend_ceiling_reached: 503,
   trial_capacity_reached: 503,
+  deepgram_unavailable: 503,
+  deepgram_grant_limit: 429,
   webhook_invalid: 400,
   internal_error: 500,
 };
@@ -109,7 +113,7 @@ export class ForbiddenIdentityError extends ApiError {
   }
 }
 
-/** Üst servis (Anthropic, ElevenLabs, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
+/** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
   readonly service: string;

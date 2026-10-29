@@ -21,12 +21,15 @@
   ],
   // Hız sınırları: süre yalnızca 10 ya da 60 saniye olabilir. REPORT_IP_LIMITER: `POST /v1/reports` (geri bildirim,
   // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
+  // DEEPGRAM_USER_LIMITER: `POST /v1/live/deepgram-token` kullanıcı başına dakikada 10 (kayıt başında iki akış, kopmada
+  // yeniden bağlanma; ayrıca toplantı başına en çok 30 jeton).
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 300, "period": 60 } },
     { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
     { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } },
-    { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } }
+    { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } },
+    { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "1006", "simple": { "limit": 10, "period": 60 } }
   ],
   "vars": {
     "ENVIRONMENT": "development",
@@ -115,6 +118,15 @@
     // `GET /v1/admin/stats` → `elevenLabs`. Gün 1–28 olmalı.
     "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
     "ELEVENLABS_BILLING_DAY": "11",
+    // Deepgram canlı metni (src/deepgram.ts): "on" ise açık toplantıya kısa ömürlü Deepgram jetonu verilir (gizli
+    // DEEPGRAM_API_KEY gerekir; yoksa her istek 500), "off" ise verilmez ve uygulama canlı metni Mac'te (WhisperKit)
+    // üretir. Yerelde ve testlerde "off". Bütçe ömür boyudur (sahibin ücretsiz kredisinin canlı metne ayrılan kısmı);
+    // tahmin temkinlidir: toplantının ilk jetonunda kalan en çok süresi × 2 akış peşin sayılır, toplantı bitince gerçek
+    // süreye indirilir. Tahmin bütçeye ulaşınca yeni toplantılar Mac'e geçer (`/v1/me` → `liveEngine: "whisperkit"`);
+    // %80 ve %95'te `deepgram_budget_threshold` alarmı. Fiyat: Nova-3 çok dilli akışın dakika liste fiyatı (temkinli).
+    "DEEPGRAM_POLICY": "off",
+    "DEEPGRAM_BUDGET_USD": "185",
+    "DEEPGRAM_USD_PER_MINUTE": "0.0092",
     "DAILY_SPEND_CEILING_USD": "25",
     // Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı: aşılınca yeni deneme
     // toplantısı ve denemedeki hesap çağrısı `503 trial_capacity_reached` alır; aboneler yalnızca genel tavana tabidir
@@ -144,7 +156,8 @@
         { "name": "API_IP_LIMITER", "namespace_id": "2002", "simple": { "limit": 300, "period": 60 } },
         { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
         { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } },
-        { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } }
+        { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } },
+        { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "2006", "simple": { "limit": 10, "period": 60 } }
       ],
       "vars": {
         "ENVIRONMENT": "production",
@@ -201,6 +214,10 @@
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "ELEVENLABS_MONTHLY_AUDIO_HOURS": "110",
         "ELEVENLABS_BILLING_DAY": "11",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Gizli DEEPGRAM_API_KEY girilmeden "on" her istekte 500 verir.
+        "DEEPGRAM_POLICY": "on",
+        "DEEPGRAM_BUDGET_USD": "185",
+        "DEEPGRAM_USD_PER_MINUTE": "0.0092",
         "DAILY_SPEND_CEILING_USD": "25",
         // Bkz. üstteki geliştirme `vars` açıklaması.
         "DAILY_TRIAL_SPEND_CEILING_USD": "10",

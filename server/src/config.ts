@@ -34,6 +34,22 @@ export type DeviceCheckConfig =
       readonly privateKeyPem: string;
     };
 
+/**
+ * Deepgram canlı metninin anahtarı (bkz. `deepgram.ts`). Tek anahtar `DEEPGRAM_POLICY`'dir:
+ * - `on`: açık toplantısı olan kullanıcıya kısa ömürlü Deepgram jetonu verilir; tahmini harcama bütçeye ulaşınca durur;
+ * - `off`: jeton verilmez, `/v1/me` canlı motoru `whisperkit` der (yerel geliştirme, testler, acil kapatma).
+ */
+export type DeepgramAccess = { readonly policy: "off" } | { readonly policy: "on"; readonly apiKey: string };
+
+/** Deepgram canlı metni: anahtar ve ücretsiz kredi bütçesi (politika kapalıyken de yönetici istatistiği için okunur). */
+export interface DeepgramConfig {
+  readonly access: DeepgramAccess;
+  /** Ücretsiz kredinin canlı metne ayrılan kısmı (mikro USD; ömür boyu, aylık değil). */
+  readonly budgetMicroUsd: number;
+  /** Akış dakikası başına fiyat (mikro USD). */
+  readonly microUsdPerMinute: number;
+}
+
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
@@ -99,6 +115,7 @@ export interface Config {
     readonly monthlyAudioHours: number;
     readonly billingDay: number;
   };
+  readonly deepgram: DeepgramConfig;
   readonly dailySpendCeilingMicroUsd: number;
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
@@ -235,6 +252,10 @@ const envSchema = z.object({
   SCRIBE_KEYTERMS_USD_PER_HOUR: positiveNumber,
   ELEVENLABS_MONTHLY_AUDIO_HOURS: positiveNumber,
   ELEVENLABS_BILLING_DAY: positiveInt.max(28),
+  DEEPGRAM_POLICY: z.enum(["on", "off"]),
+  DEEPGRAM_BUDGET_USD: positiveNumber,
+  DEEPGRAM_USD_PER_MINUTE: positiveNumber,
+  DEEPGRAM_API_KEY: z.string().optional(),
   DAILY_SPEND_CEILING_USD: positiveNumber,
   DAILY_TRIAL_SPEND_CEILING_USD: positiveNumber,
   REFRESH_TOKEN_DAYS: positiveInt,
@@ -273,6 +294,7 @@ export function parseConfig(env: Env): Config {
     throw new ConfigError(["APP_ATTEST_ENVIRONMENT"]);
   }
   const deviceCheck: DeviceCheckConfig = deviceCheckConfig(value);
+  const deepgram: DeepgramConfig = deepgramConfig(value);
   if (value.ENVIRONMENT === "production" && deviceCheck.policy === "required" && deviceCheck.environment !== "production") {
     throw new ConfigError(["DEVICECHECK_ENVIRONMENT"]);
   }
@@ -327,6 +349,7 @@ export function parseConfig(env: Env): Config {
       keytermsUsdPerHour: value.SCRIBE_KEYTERMS_USD_PER_HOUR,
     },
     elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
+    deepgram,
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
@@ -382,4 +405,29 @@ function deviceCheckConfig(settings: DeviceCheckSettings): DeviceCheckConfig {
     keyId: settings.DEVICECHECK_KEY_ID,
     privateKeyPem,
   };
+}
+
+/** Deepgram ayarları. */
+interface DeepgramSettings {
+  readonly DEEPGRAM_POLICY: "on" | "off";
+  readonly DEEPGRAM_BUDGET_USD: number;
+  readonly DEEPGRAM_USD_PER_MINUTE: number;
+  readonly DEEPGRAM_API_KEY?: string | undefined;
+}
+
+/**
+ * Deepgram yapılandırması. `off` ise anahtara bakılmaz. `on` ise gizli `DEEPGRAM_API_KEY` en az 16 karakter olmalı;
+ * değilse `ConfigError`. Saf fonksiyondur.
+ */
+function deepgramConfig(settings: DeepgramSettings): DeepgramConfig {
+  const budgetMicroUsd: number = Math.round(settings.DEEPGRAM_BUDGET_USD * 1_000_000);
+  const microUsdPerMinute: number = Math.round(settings.DEEPGRAM_USD_PER_MINUTE * 1_000_000);
+  if (settings.DEEPGRAM_POLICY === "off") {
+    return { access: { policy: "off" }, budgetMicroUsd, microUsdPerMinute };
+  }
+  const apiKey: string = settings.DEEPGRAM_API_KEY ?? "";
+  if (apiKey.length < 16) {
+    throw new ConfigError(["DEEPGRAM_API_KEY"]);
+  }
+  return { access: { policy: "on", apiKey }, budgetMicroUsd, microUsdPerMinute };
 }

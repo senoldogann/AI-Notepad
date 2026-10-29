@@ -20,6 +20,7 @@ import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAss
 import { createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { type Config, ConfigError, parseConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
+import { issueDeepgramGrant } from "./deepgram";
 import { countDownload } from "./downloads";
 import { entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
@@ -319,6 +320,15 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     await requireSpendHeadroom(db, config, now);
     const params = parseTranscribeParams(new URL(request.url), request.headers.get("x-keyterms"), config.transcribe.maxKeyterms);
     return proxyTranscription(db, context, config, meeting, request, params);
+  }
+
+  if (path === "/v1/live/deepgram-token" && method === "POST") {
+    // Deepgram canlı metni için kısa ömürlü jeton: açık (bitmemiş) toplantı gerekir; her bağlantı ve yeniden bağlanma
+    // yeni jeton ister (bkz. `deepgram.ts`). Gövde yoktur; toplantı `x-meeting-id` başlığındadır.
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.DEEPGRAM_USER_LIMITER, `user:${user.userId}`);
+    const meeting = await requireUsableMeeting(db, config, user.userId, meetingIdHeader(request), now);
+    return jsonResponse(200, await issueDeepgramGrant(db, context.platform, config, meeting, now));
   }
 
   if (path === "/v1/billing/checkout" && method === "POST") {

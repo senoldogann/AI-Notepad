@@ -1,4 +1,5 @@
 import type { Config } from "./config";
+import { type LiveEngine, liveEngine } from "./deepgram";
 import { ApiError } from "./errors";
 import { type MonthlyUsage, monthlyUsage } from "./usage";
 
@@ -38,6 +39,11 @@ export interface Entitlements {
   readonly deviceTrialMeetingsLeft: number | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
+  /**
+   * Yeni toplantının canlı metin motoru: `deepgram` (bulut; jeton `POST /v1/live/deepgram-token`) ya da `whisperkit`
+   * (Mac'te; Deepgram kapalı ya da bütçesi dolu). Jeton yine reddedilebilir; istemci o zaman da Mac'e geçer.
+   */
+  readonly liveEngine: LiveEngine;
   readonly subscription: {
     readonly status: string;
     readonly currentPeriodEnd: string;
@@ -203,16 +209,18 @@ export function hoursRoundedUp(seconds: number): number {
 
 /**
  * Hak durumu: plan, etkin kalan deneme (cihaz bildirildiyse hesap ve cihazın küçüğü; süre dolduysa 0), denemenin
- * bitiş anı, aylık kullanım, sınır ve abonelik erişimi (ek süre dahil). `deviceId` istemcinin bildirdiği App Attest anahtar kimliğidir; yalnızca
+ * bitiş anı, aylık kullanım, sınır, canlı metin motoru ve abonelik erişimi (ek süre dahil). `deviceId` istemcinin bildirdiği App Attest anahtar kimliğidir; yalnızca
  * gösterim içindir, hak toplantı başlatırken imzalı onayla yeniden denetlenir.
  */
 export async function entitlements(db: D1Database, config: Config, userId: string, deviceId: string | null, now: Date): Promise<Entitlements> {
-  const [subscription, trial, deviceUsed, usage]: [SubscriptionState | null, TrialState, number | null, MonthlyUsage] = await Promise.all([
-    subscriptionState(db, userId),
-    userTrialState(db, userId),
-    deviceId === null ? Promise.resolve(null) : deviceTrialMeetingsUsed(db, deviceId),
-    monthlyUsage(db, userId, now),
-  ]);
+  const [subscription, trial, deviceUsed, usage, engine]: [SubscriptionState | null, TrialState, number | null, MonthlyUsage, LiveEngine] =
+    await Promise.all([
+      subscriptionState(db, userId),
+      userTrialState(db, userId),
+      deviceId === null ? Promise.resolve(null) : deviceTrialMeetingsUsed(db, deviceId),
+      monthlyUsage(db, userId, now),
+      liveEngine(db, config),
+    ]);
   const access: SubscriptionAccess = subscriptionAccess(subscription, now, config.pastDueGraceMs);
   const accountLeft: number = trialMeetingsLeft(trial, config, now);
   const trialEnd: number | null = access === "none" ? trialEndsAtMs(trial, config.trialDurationMs) : null;
@@ -228,6 +236,7 @@ export async function entitlements(db: D1Database, config: Config, userId: strin
     deviceTrialMeetingsLeft: deviceLeft,
     monthlyHoursUsed: hoursRoundedUp(usage.usedSeconds),
     monthlyHoursCap: config.monthlyCapSeconds / 3600,
+    liveEngine: engine,
     subscription:
       subscription === null
         ? null

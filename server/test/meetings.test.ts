@@ -83,6 +83,7 @@ describe("haklar ve toplantı oturumları", () => {
       trialEndsAt: null,
       monthlyHoursUsed: 0,
       monthlyHoursCap: 10,
+      liveEngine: "whisperkit",
       subscription: null,
     });
   });

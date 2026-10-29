@@ -1,4 +1,5 @@
 import type { Config, StripeMode } from "./config";
+import { type DeepgramUsage, deepgramUsage } from "./deepgram";
 import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
 import { ForbiddenIdentityError } from "./errors";
 import { log } from "./log";
@@ -61,6 +62,8 @@ export interface AdminStats {
   readonly stripe: { readonly mode: StripeMode };
   /** ElevenLabs bu faturalama dönemindeki ses saati / plan saati (kredi bitince konuşma tanıma durur). */
   readonly elevenLabs: ElevenLabsUsage;
+  /** Deepgram canlı metni: politika, ömür boyu bütçe ve tahmini harcama (bütçeye ulaşınca yeni toplantılar Mac'e geçer). */
+  readonly deepgram: DeepgramUsage;
 }
 
 /**
@@ -156,6 +159,7 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
  * - `meetings.hoursThisMonth`: bu ay (UTC) başlayan toplantıların süresi (açık olanlar şimdiye ya da en çok süreye dek).
  * - `spend`: `daily_spend` tahmini (Anthropic + ElevenLabs); `trialTodayUsd` bugünkü harcamanın deneme kısmı (ayrı
  *   tavanı `trialCeilingUsd`); `tokens.thisMonth`: bu ayki kesinleşmiş girdi + çıktı.
+ * - `deepgram`: canlı metnin tahmini harcaması (`deepgram.ts`; açık toplantılar kalan en çok süreleriyle peşin sayılır).
  * - `users.byProvider`: kimlik sayısı (hesaplar arası bağlama yoktur: kullanıcı başına bir kimlik).
  */
 export async function adminStats(db: D1Database, config: Config, now: Date): Promise<AdminStats> {
@@ -178,6 +182,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     tokenRow,
     reportRows,
     elevenLabs,
+    deepgram,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -236,6 +241,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .first<{ value: number }>(),
     db.prepare("SELECT kind AS key, COUNT(*) AS count FROM reports WHERE status = 'open' GROUP BY kind").all<KeyCountRow>(),
     elevenLabsUsage(db, config, now),
+    deepgramUsage(db, config),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -287,5 +293,6 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     },
     stripe: { mode: config.stripeMode },
     elevenLabs,
+    deepgram,
   };
 }

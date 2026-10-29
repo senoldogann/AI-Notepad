@@ -1,7 +1,8 @@
 import { handleRequest } from "./app";
 import { appleAppAttestationRootPem } from "./attest/appleRoot";
 import { cleanupExpiredRows, scheduledCleanupLimits } from "./cleanup";
-import { parseConfig } from "./config";
+import { type Config, parseConfig } from "./config";
+import { settleDeepgramMeetings } from "./deepgram";
 import { dailyElevenLabsCapacityCheck } from "./elevenLabsCapacity";
 import type { Env } from "./env";
 import type { Platform } from "./platform";
@@ -24,10 +25,15 @@ export default {
       clientIp: request.headers.get("cf-connecting-ip") ?? "local",
     });
   },
-  /** Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm) ve süresi dolmuş satırların temizliği. */
+  /**
+   * Günlük Cron Trigger: ElevenLabs kapasite denetimi (eşik üstündeyse alarm), bitirilmeden kalan toplantıların Deepgram
+   * tahmininin indirilmesi ve süresi dolmuş satırların temizliği.
+   */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const now: Date = new Date(controller.scheduledTime);
-    await dailyElevenLabsCapacityCheck(env.DB, parseConfig(env), now);
+    const config: Config = parseConfig(env);
+    await dailyElevenLabsCapacityCheck(env.DB, config, now);
+    await settleDeepgramMeetings(env.DB, now);
     await cleanupExpiredRows(env.DB, now, scheduledCleanupLimits);
   },
 } satisfies ExportedHandler<Env>;
