@@ -581,11 +581,14 @@ export interface ReprocessedMeeting {
 
 /**
  * Bitmiş toplantıyı yeniden işleme için açar: `meetingGraceMs` boyunca son geçiş en çok kaydın gerçek süresi kadar yeni
- * ses (`reprocessAudioCap`), toplantı kapsamlı yapay zekâ en çok `reprocessTokenBudget` token kullanabilir. Yeni deneme,
- * başlatma ya da toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının
- * bitişinden sonraki 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Toplantı zaten
- * açıksa (ek süre içinde) hak harcanmaz. En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`.
- * Başkasının ya da olmayan toplantı `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
+ * ses (`reprocessAudioCap`), toplantı kapsamlı yapay zekâ tam `reprocessTokenBudget` token kullanabilir (bütçe =
+ * şimdiye dek kullanılan + pay; ilk geçiş bütçesini neredeyse bitirmiş toplantı da tam pay alır). Toplantının toplam
+ * yapay zekâ bütçesi böylece en çok ilk bütçe + `maxMeetingReprocesses` × pay olur. Yeni deneme, başlatma ya da
+ * toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
+ * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı doluysa
+ * (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503. Toplantı zaten açıksa (ek süre içinde) hak harcanmaz.
+ * En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`. Başkasının ya da olmayan toplantı
+ * `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
  */
 export async function reprocessMeeting(db: D1Database, config: Config, userId: string, meetingId: string, now: Date): Promise<ReprocessedMeeting> {
   const row: MeetingRow | null = await findMeeting(db, userId, meetingId);
@@ -606,12 +609,13 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
   if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
     throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
   }
+  await requireSpendHeadroom(db, config, now);
   const until: number = nowMs + config.meetingGraceMs;
   const audioCap: number | null = reprocessAudioCap(row.audio_seconds, Math.max(0, endMs - row.started_at) / 1000);
   const updated: D1Result = await db
     .prepare(
       `UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ?, reprocess_audio_cap = ?,
-         token_budget = MIN(token_budget, tokens_used + ?)
+         token_budget = tokens_used + ?
        WHERE id = ? AND user_id = ? AND reprocess_count < ?`,
     )
     .bind(until, audioCap, reprocessTokenBudget, meetingId, userId, maxMeetingReprocesses)

@@ -269,6 +269,33 @@ describe("haklar ve toplantı oturumları", () => {
     expect(reprocessAudioCap(6000, 6000)).toBe(6000 + 6000 + 120);
   });
 
+  it("bütçesini neredeyse bitirmiş toplantı yeniden işlemede tam pay alır; harcama tavanı doluysa hak harcanmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
+    await harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/end`, { token: session.accessToken }));
+    const nearlySpent: number = meeting.tokenBudget - 10_000;
+    await env.DB.prepare("UPDATE meeting_sessions SET tokens_used = ? WHERE id = ?").bind(nearlySpent, meeting.meetingId).run();
+    harness.clock.nowMs += 31 * 60_000;
+    const current: Session = await refreshed(harness, session);
+    const reprocess = (testEnv: Env): Promise<Response> =>
+      harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/reprocess`, { token: current.accessToken, env: testEnv }));
+    const budgetRow = (): Promise<{ token_budget: number; reprocess_count: number } | null> =>
+      env.DB.prepare("SELECT token_budget, reprocess_count FROM meeting_sessions WHERE id = ?")
+        .bind(meeting.meetingId)
+        .first<{ token_budget: number; reprocess_count: number }>();
+
+    // Günlük harcama tavanı dolu: yapay zekâ çağrıları reddedileceği için yeniden işleme hakkı harcanmaz.
+    await env.DB.prepare("INSERT INTO daily_spend (day, micro_usd) VALUES (?, 10) ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + 10")
+      .bind(new Date(harness.clock.nowMs).toISOString().slice(0, 10))
+      .run();
+    await expectError(await reprocess(envWith({ DAILY_SPEND_CEILING_USD: "0.000001" })), 503, "spend_ceiling_reached");
+    expect(await budgetRow()).toEqual({ token_budget: meeting.tokenBudget, reprocess_count: 0 });
+
+    expect(await (await reprocess(env)).json()).toMatchObject({ reprocessesLeft: 1 });
+    expect(await budgetRow()).toEqual({ token_budget: nearlySpent + reprocessTokenBudget, reprocess_count: 1 });
+  });
+
   it("sonradan işlenen kayıt (deferred) açık toplantıyı kapatmaz", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
