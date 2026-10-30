@@ -1,6 +1,7 @@
 ---
-// İndirme sayfası: indirme düğmesi (sunucu indirmeyi sayıp en son GitHub sürümündeki DMG'ye yönlendirir), sunucudan
-// okunan sürüm numarası ve gereksinimler tek satırda, üç kurulum adımı, güncellemeler ve yardım tek satırda.
+// İndirme sayfası: indirme düğmesi (sunucu indirmeyi sayıp en son GitHub sürümündeki DMG'ye yönlendirir), altında
+// sürüm (sunucudan okunur; yeri baştan ayrılır, numara gelince sayfa kaymaz) ve gereksinimler etiket/değer satırlarında,
+// üç kurulum adımı, güncellemeler ve yardım tek satırda.
 import Base from "../layouts/Base.astro";
 import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
@@ -25,13 +26,12 @@ const text: DownloadCopy = copy.download;
           <Icon name="apple" size={18} class="button__apple" />
           {copy.common.downloadCta}
         </a>
-        <p class="small muted download-hero__meta">
-          <span id="download-version" class="download-hero__version" hidden>
-            <span>{text.versionLabel} <span id="download-version-number" class="tabular"></span></span>
-            <span aria-hidden="true">·</span>
-          </span>
-          <span>{copy.common.requirementsShort}</span>
-        </p>
+        <dl class="fact-list small download-hero__facts">
+          <dt id="download-version" class="download-hero__pending">{text.versionLabel}</dt>
+          <dd id="download-version-number" class="download-hero__pending"></dd>
+          <dt>{text.requirementsLabel}</dt>
+          <dd>{copy.common.requirementsShort}</dd>
+        </dl>
       </div>
     </div>
     <Film palette="mint" layout="clouds-left" class="download-hero__cover">
@@ -95,16 +95,17 @@ const text: DownloadCopy = copy.download;
     font-size: 1rem;
   }
 
-  .download-hero__meta,
-  .download-hero__version {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4em;
-    margin: 0;
+  .download-hero__facts {
+    gap: 2px 16px;
   }
 
-  .download-hero__version[hidden] {
-    display: none;
+  .download-hero__facts dd {
+    color: var(--muted);
+  }
+
+  /* Sürüm satırı numara gelene dek yer kaplar ama görünmez (okunamazsa öyle kalır; hata konsolda). */
+  .download-hero__pending {
+    visibility: hidden;
   }
 
   .download-hero :global(.download-hero__cover) {

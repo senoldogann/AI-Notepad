@@ -68,6 +68,8 @@ export interface Entitlements {
   readonly trialEndsAt: string | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
+  /** Aylık saat sınırının sıfırlandığı an: sonraki UTC ayının başı (ISO 8601). */
+  readonly monthlyResetsAt: string;
   /** Hiç abonelik satırı yoksa null; `plan` "subscription" ise her zaman vardır (ayrıştırıcı denetler). */
   readonly subscription: SubscriptionInfo | null;
 }
@@ -410,6 +412,7 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
     trialEndsAt: body["trialEndsAt"] === null ? null : stringField(body, "trialEndsAt", response, path),
     monthlyHoursUsed: numberField(body, "monthlyHoursUsed", response, path),
     monthlyHoursCap: numberField(body, "monthlyHoursCap", response, path),
+    monthlyResetsAt: stringField(body, "monthlyResetsAt", response, path),
     subscription,
   };
 }

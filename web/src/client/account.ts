@@ -1,10 +1,11 @@
-// Hesap sayfası: `/v1/me`'den tek plan kartı (plan adı ve durum etiketi, tek durum satırı, denemede kalan toplantı ya da
-// abonede aylık saat ölçeri ve duruma uyan eylem: Abone ol, Aboneliği yönet ya da ücretsiz erişimde hiçbiri). Abone
-// olurken plan seçimi (yıllık seçili) ve davet kodu (`POST /v1/referral/validate`) Checkout'a taşınır; abonenin davet
-// kartı `GET /v1/referral`'dan; çıkış ve onaylı hesap silme (`DELETE /v1/me`). Adresteki `?plan=`, `?code=` ve
-// `?checkout=1` (fiyat ve davet sayfalarından) girişten önce saklanır; oturum yoksa giriş sayfasına geçilir. Plan
-// seçimi tarayıcıda kalıcıdır (giriş başka bir sekmede bitse de kaybolmaz); `?checkout=1` niyeti giriş bitince hesap
-// sayfasını doğrudan Stripe Checkout'a gönderir.
+// Hesap sayfası: `/v1/me`'den tek plan kartı (plan adı ve durum etiketi; cümle gerektiren durumda tek ileti satırı,
+// tarihler için etiket/değer satırları; denemede kalan toplantı ya da abonede aylık saat ölçeri; ödeme alınamadıysa
+// eylemin yanında uyarı ve duruma uyan eylem: Abone ol, Aboneliği yönet ya da ücretsiz erişimde hiçbiri). Hesap
+// yüklenemezse hata ve yeniden deneme düğmesi görünür. Abone olurken plan seçimi (yıllık seçili) ve davet kodu
+// (`POST /v1/referral/validate`) Checkout'a taşınır; abonenin davet kartı `GET /v1/referral`'dan; çıkış ve onaylı hesap
+// silme (`DELETE /v1/me`). Adresteki `?plan=`, `?code=` ve `?checkout=1` (fiyat ve davet sayfalarından) girişten önce
+// saklanır; oturum yoksa giriş sayfasına geçilir. Plan seçimi tarayıcıda kalıcıdır (giriş başka bir sekmede bitse de
+// kaybolmaz); `?checkout=1` niyeti giriş bitince hesap sayfasını doğrudan Stripe Checkout'a gönderir.
 import {
   ApiRequestError,
   type Entitlements,
@@ -53,17 +54,37 @@ interface Pill {
   readonly tone: PillTone;
 }
 
-/** Sürmekte olan denemenin göstergesi: kalan ve toplam toplantı. */
-interface TrialMeter {
-  readonly left: number;
-  readonly total: number;
+/** Plan kartının bir etiket/değer satırı (ör. "Renews" · "30 November 2026"). */
+interface Fact {
+  readonly label: string;
+  readonly value: string;
 }
 
-/** Abonenin aylık saat göstergesi: metin ("3,4 / 10 saat"), kullanılan (sınırda kesilir) ve sınır. */
+/** Plan kartının durumu: cümle gerektiren durumda ileti (yoksa null) ve etiket/değer satırları (boş olabilir). */
+interface PlanStatus {
+  readonly message: string | null;
+  readonly facts: readonly Fact[];
+}
+
+/** Sürmekte olan denemenin göstergesi: değer metni ("2 of 3"), kalan ve toplam toplantı, son toplantıda uyarı. */
+interface TrialMeter {
+  readonly text: string;
+  readonly left: number;
+  readonly total: number;
+  readonly warn: boolean;
+}
+
+/**
+ * Abonenin aylık saat göstergesi: değer metni ("3.4 / 10.0 hours"), kullanılan (sınırda kesilir), sınır, sınırın
+ * %80'inde uyarı, ikincil değer (kalan saat) ve sınır dolduysa sıfırlanma günlü uyarı satırı (dolmadıysa null).
+ */
 interface HoursMeter {
   readonly text: string;
   readonly used: number;
   readonly cap: number;
+  readonly warn: boolean;
+  readonly left: string;
+  readonly limitReached: string | null;
 }
 
 /** Deneme durumu: başlamadı, sürüyor ya da bitti (toplantılar harcandı veya süre doldu). */
@@ -73,24 +94,36 @@ type TrialPhase = "notStarted" | "running" | "ended";
 interface AccountView {
   readonly plan: string;
   readonly planPill: Pill;
-  /** Plan kartının tek durum satırı: abonelik durumu ya da deneme. */
-  readonly status: string;
+  /** Plan kartının ileti satırı ve etiket/değer satırları: abonelik durumu ya da deneme. */
+  readonly status: PlanStatus;
   /** Deneme sürüyorsa kalan toplantı göstergesi; yoksa null. */
   readonly trialMeter: TrialMeter | null;
   /** Aylık saat yalnızca abonelik erişiminde görünür (sınır aboneliğindir; denemede kafa karıştırır); yoksa null. */
   readonly hours: HoursMeter | null;
+  /** Ödeme alınamadıysa (ek süre ya da süresi geçmiş ödeme) Aboneliği yönet düğmesinin yanındaki uyarı; yoksa null. */
+  readonly alert: string | null;
   readonly canSubscribe: boolean;
   readonly canManage: boolean;
 }
 
-/** Tarihi sitenin yerel ayarında yazar. Saf fonksiyondur. */
+/** Saat ölçeri kullanımın bu oranından sonra uyarır. */
+const hoursWarnRatio: number = 0.8;
+/** Deneme ölçeri bu kadar toplantı kalınca uyarır. */
+const trialWarnMeetingsLeft: number = 1;
+
+/** Tarihi sitenin yerel ayarında, tarayıcının saat diliminde yazar. Saf fonksiyondur. */
 function formatDate(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(new Date(iso));
 }
 
-/** Saati sitenin yerel ayarında (en çok bir ondalık) yazar. Saf fonksiyondur. */
+/** Tarihi sitenin yerel ayarında, UTC'de yazar (aylık sınır UTC ayının başında sıfırlanır). Saf fonksiyondur. */
+function formatUtcDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(iso));
+}
+
+/** Saati sitenin yerel ayarında hep bir ondalıkla yazar (değer değişince genişlik oynamaz). Saf fonksiyondur. */
 function formatHours(hours: number, locale: string): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(hours);
 }
 
 /** Deneme durumu (bkz. `TrialPhase`). Saf fonksiyondur. */
@@ -124,44 +157,61 @@ function planName(me: Entitlements, text: ClientCopy, now: Date): string {
   return describesSubscription(me, now) ? text.plan.none : text.plan.trial;
 }
 
-/** Deneme satırının metni: başlamadıysa toplantı ve gün; bittiyse "bitti"; sürüyorsa kalan ve bitiş. Saf fonksiyondur. */
-function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
+/**
+ * Denemenin durumu: başlamadıysa kapsamı ve başlangıcı, sürüyorsa bitiş tarihi (kalan toplantı ölçerdedir) satır
+ * olarak; bittiyse ileti. Saf fonksiyondur.
+ */
+function trialStatus(me: Entitlements, text: ClientCopy, locale: string, now: Date): PlanStatus {
   const phase: TrialPhase = trialPhase(me, now);
   if (phase === "notStarted" || me.trialEndsAt === null) {
-    return fill(text.trialNotStarted, { total: String(me.trialMeetingsTotal), days: String(me.trialDays) });
+    return {
+      message: null,
+      facts: [
+        { label: text.facts.trialIncludes, value: fill(text.facts.trialIncludesValue, { total: String(me.trialMeetingsTotal), days: String(me.trialDays) }) },
+        { label: text.facts.trialStarts, value: text.facts.trialStartsValue },
+      ],
+    };
   }
   if (phase === "ended") {
-    return text.trialEnded;
+    return { message: text.trialEnded, facts: [] };
   }
-  return fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal), date: formatDate(me.trialEndsAt, locale) });
+  return { message: null, facts: [{ label: text.facts.trialEnds, value: formatDate(me.trialEndsAt, locale) }] };
 }
 
 /**
- * Aboneliğin durum satırı. Ücretsiz erişimde ödeme ve yenileme yoktur: bitiş tarihi varsa o yazılır, bittiyse "ücretsiz
- * erişim bitti" (abonelik bitti değil: hiç ödeme yapılmadı). Saf fonksiyondur.
+ * Aboneliğin durumu. Ücretsiz erişimde ödeme ve yenileme yoktur: ileti yazılır (bitiş tarihi varsa onunla), bittiyse
+ * "ücretsiz erişim bitti" (abonelik bitti değil: hiç ödeme yapılmadı). Etkin, iptal edilmiş ve ek süredeki abonelik
+ * tarihleri satır olarak gösterir; ödeme alınamadıysa neden eylemin yanındaki uyarıdadır (`paymentAlert`). Saf
+ * fonksiyondur.
  */
-function subscriptionText(subscription: SubscriptionInfo, text: ClientCopy, locale: string): string {
+function subscriptionStatus(subscription: SubscriptionInfo, text: ClientCopy, locale: string): PlanStatus {
   if (subscription.complimentary) {
     if (subscription.access === "none") {
-      return text.subscriptionComplimentaryEnded;
+      return { message: text.subscriptionComplimentaryEnded, facts: [] };
     }
-    return subscription.cancelAt === null
-      ? text.subscriptionComplimentary
-      : fill(text.subscriptionComplimentaryUntil, { date: formatDate(subscription.cancelAt, locale) });
+    const message: string =
+      subscription.cancelAt === null ? text.subscriptionComplimentary : fill(text.subscriptionComplimentaryUntil, { date: formatDate(subscription.cancelAt, locale) });
+    return { message, facts: [] };
   }
   if (subscription.access === "active" && subscription.cancelAt !== null) {
-    return fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
+    return {
+      message: null,
+      facts: [
+        { label: text.facts.renewal, value: text.facts.renewalCancelled },
+        { label: text.facts.accessUntil, value: formatDate(subscription.cancelAt, locale) },
+      ],
+    };
   }
   if (subscription.access === "active") {
-    return fill(text.subscriptionActive, { date: formatDate(subscription.currentPeriodEnd, locale) });
+    return { message: null, facts: [{ label: text.facts.renews, value: formatDate(subscription.currentPeriodEnd, locale) }] };
   }
   if (subscription.access === "grace") {
-    return fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, locale) });
+    return { message: null, facts: [{ label: text.facts.accessUntil, value: formatDate(subscription.graceEndsAt, locale) }] };
   }
   if (isPaymentOverdue(subscription)) {
-    return text.subscriptionPaymentOverdue;
+    return { message: null, facts: [] };
   }
-  return text.subscriptionEnded;
+  return { message: text.subscriptionEnded, facts: [] };
 }
 
 /**
@@ -172,9 +222,20 @@ function isPaymentOverdue(subscription: SubscriptionInfo): boolean {
   return subscription.access === "none" && !subscription.complimentary && (subscription.status === "past_due" || subscription.status === "unpaid");
 }
 
-/** Plan kartının durum satırı: abonelik anlatılıyorsa abonelik, değilse deneme. Saf fonksiyondur. */
-function statusText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
-  return me.subscription !== null && describesSubscription(me, now) ? subscriptionText(me.subscription, text, locale) : trialText(me, text, locale, now);
+/** Ödeme alınamadıysa Aboneliği yönet düğmesinin yanındaki uyarı: ek sürede ya da süresi geçmiş ödemede. Saf fonksiyondur. */
+function paymentAlert(subscription: SubscriptionInfo | null, text: ClientCopy): string | null {
+  if (subscription === null || subscription.complimentary) {
+    return null;
+  }
+  if (subscription.access === "grace") {
+    return text.subscriptionGraceAlert;
+  }
+  return isPaymentOverdue(subscription) ? text.subscriptionPaymentOverdue : null;
+}
+
+/** Plan kartının durumu: abonelik anlatılıyorsa abonelik, değilse deneme. Saf fonksiyondur. */
+function planStatus(me: Entitlements, text: ClientCopy, locale: string, now: Date): PlanStatus {
+  return me.subscription !== null && describesSubscription(me, now) ? subscriptionStatus(me.subscription, text, locale) : trialStatus(me, text, locale, now);
 }
 
 /**
@@ -201,6 +262,30 @@ function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
   return trialPhase(me, now) === "ended" ? { text: text.pillEnded, tone: "plain" } : { text: text.pillTrial, tone: "plain" };
 }
 
+/** Sürmekte olan denemenin ölçeri: son toplantıda uyarır. Saf fonksiyondur. */
+function trialMeter(me: Entitlements, text: ClientCopy): TrialMeter {
+  return {
+    text: fill(text.trialMeetings, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal) }),
+    left: me.trialMeetingsLeft,
+    total: me.trialMeetingsTotal,
+    warn: me.trialMeetingsLeft <= trialWarnMeetingsLeft,
+  };
+}
+
+/** Abonenin aylık saat ölçeri: sınırın %80'inde uyarır; sınır dolunca sıfırlanma günü (UTC) yazılır. Saf fonksiyondur. */
+function hoursMeter(me: Entitlements, text: ClientCopy, locale: string): HoursMeter {
+  const cap: number = me.monthlyHoursCap;
+  const used: number = me.monthlyHoursUsed;
+  return {
+    text: fill(text.hours, { used: formatHours(used, locale), cap: formatHours(cap, locale) }),
+    used: Math.min(used, cap),
+    cap,
+    warn: used >= cap * hoursWarnRatio,
+    left: fill(text.hoursLeft, { left: formatHours(Math.max(cap - used, 0), locale) }),
+    limitReached: used >= cap ? fill(text.hoursLimitReached, { date: formatUtcDate(me.monthlyResetsAt, locale) }) : null,
+  };
+}
+
 /**
  * Sunucu yanıtından gösterilecek değerleri üretir. Aboneliği yönetme yalnızca Stripe'ta karşılığı olan (ücretsiz erişim
  * olmayan) abonelikte vardır: ücretsiz erişim bitmiş olsa da Portal'da yönetilecek bir şey yoktur. Saf fonksiyondur.
@@ -210,15 +295,10 @@ export function accountView(me: Entitlements, text: ClientCopy, locale: string, 
   return {
     plan: planName(me, text, now),
     planPill: planPill(me, text, now),
-    status: statusText(me, text, locale, now),
-    trialMeter: !subscribed && trialPhase(me, now) === "running" ? { left: me.trialMeetingsLeft, total: me.trialMeetingsTotal } : null,
-    hours: subscribed
-      ? {
-          text: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
-          used: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
-          cap: me.monthlyHoursCap,
-        }
-      : null,
+    status: planStatus(me, text, locale, now),
+    trialMeter: !subscribed && trialPhase(me, now) === "running" ? trialMeter(me, text) : null,
+    hours: subscribed ? hoursMeter(me, text, locale) : null,
+    alert: paymentAlert(me.subscription, text),
     canSubscribe: !subscribed,
     canManage: me.subscription !== null && !me.subscription.complimentary,
   };
@@ -232,13 +312,34 @@ function renderPill(pill: HTMLElement, value: Pill): void {
   pill.textContent = value.text;
 }
 
-/** Ölçerleri yazar: deneme ölçeri ve abonenin saat bloğu, olmayan gizlenir. */
+/** Plan kartının ileti satırını ve etiket/değer satırlarını yazar; boş olan gizlenir. */
+function renderStatus(status: PlanStatus): void {
+  const message: HTMLElement = element("plan-status", HTMLElement);
+  message.classList.toggle("hidden", status.message === null);
+  message.textContent = status.message ?? "";
+  const facts: HTMLElement = element("plan-facts", HTMLElement);
+  facts.classList.toggle("hidden", status.facts.length === 0);
+  facts.replaceChildren(
+    ...status.facts.flatMap((fact: Fact): HTMLElement[] => {
+      const label: HTMLElement = document.createElement("dt");
+      label.textContent = fact.label;
+      const value: HTMLElement = document.createElement("dd");
+      value.textContent = fact.value;
+      return [label, value];
+    }),
+  );
+}
+
+/** Ölçerleri yazar: deneme ölçeri ve abonenin saat bloğu, olmayan gizlenir; sınıra yaklaşan ölçer sarıdır. */
 function renderMeters(trial: TrialMeter | null, hours: HoursMeter | null): void {
-  const trialMeter: HTMLProgressElement = element("trial-meter", HTMLProgressElement);
-  trialMeter.classList.toggle("hidden", trial === null);
+  element("trial-card", HTMLElement).classList.toggle("hidden", trial === null);
   if (trial !== null) {
+    element("trial-value", HTMLElement).textContent = trial.text;
+    const trialMeter: HTMLProgressElement = element("trial-meter", HTMLProgressElement);
     trialMeter.max = trial.total;
     trialMeter.value = trial.left;
+    trialMeter.textContent = trial.text;
+    trialMeter.classList.toggle("meter--warn", trial.warn);
   }
   element("hours-card", HTMLElement).classList.toggle("hidden", hours === null);
   if (hours !== null) {
@@ -247,6 +348,12 @@ function renderMeters(trial: TrialMeter | null, hours: HoursMeter | null): void 
     meter.max = hours.cap;
     meter.value = hours.used;
     meter.textContent = hours.text;
+    meter.classList.toggle("meter--warn", hours.warn);
+    element("hours-left", HTMLElement).textContent = hours.left;
+    element("hours-foot", HTMLElement).classList.toggle("hidden", hours.limitReached !== null);
+    const limit: HTMLElement = element("hours-limit", HTMLElement);
+    limit.classList.toggle("hidden", hours.limitReached === null);
+    limit.textContent = hours.limitReached ?? "";
   }
 }
 
@@ -254,8 +361,11 @@ function renderMeters(trial: TrialMeter | null, hours: HoursMeter | null): void 
 function render(view: AccountView): void {
   element("plan-value", HTMLElement).textContent = view.plan;
   renderPill(element("plan-pill", HTMLElement), view.planPill);
-  element("plan-status", HTMLElement).textContent = view.status;
+  renderStatus(view.status);
   renderMeters(view.trialMeter, view.hours);
+  const alert: HTMLElement = element("plan-alert", HTMLElement);
+  alert.classList.toggle("hidden", view.alert === null);
+  alert.textContent = view.alert ?? "";
   element("subscribe-button", HTMLButtonElement).classList.toggle("hidden", !view.canSubscribe);
   element("plan-choice", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
   element("invite", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
@@ -479,31 +589,79 @@ async function fetchReferral(): Promise<ReferralInfo> {
   return parseReferral(response, path);
 }
 
-/** Davet kartının sayı satırı; bekleyen ödül varsa en yakınının tahmini tarihi eklenir. Saf fonksiyondur. */
-function referralStatsText(referral: ReferralInfo, text: ClientCopy, locale: string): string {
-  const stats: string = fill(text.referralStats, {
-    joined: String(referral.joined),
-    rewarded: String(referral.rewarded),
-    pending: String(referral.pending),
-    left: String(referral.rewardsLeftThisYear),
-    cap: String(referral.rewardsPerYear),
-  });
-  return referral.nextRewardAt === null ? stats : `${stats} · ${fill(text.referralNextReward, { date: formatDate(referral.nextRewardAt, locale) })}`;
+/** Davet kartının bir sayısı: etiket, değer ve (bu yıl kalan ödülde) yıllık sınır metni; sınır yoksa null. */
+interface ReferralStat {
+  readonly label: string;
+  readonly value: string;
+  readonly cap: string | null;
+}
+
+/** Davet kartının değerleri: sayı satırı (boş olabilir) ve altındaki kısa not (yoksa null). */
+interface ReferralView {
+  readonly stats: readonly ReferralStat[];
+  readonly note: string | null;
 }
 
 /**
- * Ücretsiz erişimli hesabın davet kartı satırı: arkadaşlar yine davet indirimini alır, ama ödenecek fatura olmadığından
- * 5,99 $ ödülü uygulanmaz (sunucu `referrer_complimentary` ile düşürür). Saf fonksiyondur.
+ * Davet kartının değerleri. Davetin ücretsiz ilk ayındaki hesapta sunucu kod vermez: sayı yok, not kodun ilk ücretli
+ * aydan sonra açılacağını söyler. Ücretsiz erişimli hesapta arkadaşlar yine davet indirimini alır, ama ödenecek fatura
+ * olmadığından 5,99 $ ödülü uygulanmaz (sunucu `referrer_complimentary` ile düşürür): yalnızca katılanlar ve bunu
+ * anlatan not. Diğerlerinde dört sayı ve bekleyen ödül varsa en yakınının tahmini tarihi. Saf fonksiyondur.
  */
-function complimentaryReferralStatsText(referral: ReferralInfo, text: ClientCopy): string {
-  return fill(text.referralStatsComplimentary, { joined: String(referral.joined) });
+function referralView(referral: ReferralInfo, text: ClientCopy, locale: string): ReferralView {
+  if (referral.code === null || referral.inviteUrl === null) {
+    return { stats: [], note: text.referralCodeAfterFirstPayment };
+  }
+  const joined: ReferralStat = { label: text.referralStats.joined, value: String(referral.joined), cap: null };
+  if (referral.complimentary) {
+    return { stats: [joined], note: text.referralComplimentaryNote };
+  }
+  return {
+    stats: [
+      joined,
+      { label: text.referralStats.rewarded, value: String(referral.rewarded), cap: null },
+      { label: text.referralStats.pending, value: String(referral.pending), cap: null },
+      {
+        label: text.referralStats.left,
+        value: String(referral.rewardsLeftThisYear),
+        cap: fill(text.referralStats.ofCap, { cap: String(referral.rewardsPerYear) }),
+      },
+    ],
+    note: referral.nextRewardAt === null ? null : fill(text.referralNextReward, { date: formatDate(referral.nextRewardAt, locale) }),
+  };
 }
 
-/**
- * Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. Davetin ücretsiz ilk ayındaki hesapta sunucu
- * kod vermez: kart kodsuz görünür ve kodun ilk ücretli aydan sonra açılacağını söyler. `stats` kartın sayı satırıdır.
- */
-function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy, notice: HTMLElement): void {
+/** Davet kartının sayı satırını ve notunu yazar; boş olan gizlenir. */
+function renderReferralView(view: ReferralView): void {
+  const stats: HTMLElement = element("referral-stats", HTMLElement);
+  stats.classList.toggle("hidden", view.stats.length === 0);
+  stats.replaceChildren(
+    ...view.stats.map((stat: ReferralStat): HTMLElement => {
+      const item: HTMLElement = document.createElement("div");
+      item.className = "stat";
+      const label: HTMLElement = document.createElement("dt");
+      label.className = "stat__label";
+      label.textContent = stat.label;
+      const value: HTMLElement = document.createElement("dd");
+      value.className = "stat__value";
+      value.textContent = stat.value;
+      if (stat.cap !== null) {
+        const cap: HTMLElement = document.createElement("span");
+        cap.className = "stat__cap";
+        cap.textContent = ` ${stat.cap}`;
+        value.append(cap);
+      }
+      item.append(label, value);
+      return item;
+    }),
+  );
+  const note: HTMLElement = element("referral-note", HTMLElement);
+  note.classList.toggle("hidden", view.note === null);
+  note.textContent = view.note ?? "";
+}
+
+/** Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) paylaşım alanıyla, kod yoksa yalnızca notla görünür. */
+function renderReferral(referral: ReferralInfo, text: ClientCopy, locale: string, notice: HTMLElement): void {
   const card: HTMLElement = element("referral-card", HTMLElement);
   const share: HTMLElement = element("referral-share", HTMLElement);
   const inviteUrl: string | null = referral.inviteUrl;
@@ -511,15 +669,14 @@ function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy,
     card.classList.add("hidden");
     return;
   }
+  renderReferralView(referralView(referral, text, locale));
   if (referral.code === null || inviteUrl === null) {
     share.classList.add("hidden");
-    element("referral-stats", HTMLElement).textContent = text.referralCodeAfterFirstPayment;
     card.classList.remove("hidden");
     return;
   }
   share.classList.remove("hidden");
   element("referral-code", HTMLElement).textContent = referral.code;
-  element("referral-stats", HTMLElement).textContent = stats;
   const copied: HTMLElement = element("referral-copied", HTMLElement);
   const button: HTMLButtonElement = element("referral-copy", HTMLButtonElement);
   button.onclick = (): void => {
@@ -537,15 +694,11 @@ function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy,
   card.classList.remove("hidden");
 }
 
-/**
- * Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır).
- * Ücretsiz erişimli hesapta sayı satırı ödülün uygulanmadığını söyler.
- */
+/** Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır). */
 async function loadReferral(text: ClientCopy, notice: HTMLElement): Promise<void> {
   try {
     const referral: ReferralInfo = await fetchReferral();
-    const stats: string = referral.complimentary ? complimentaryReferralStatsText(referral, text) : referralStatsText(referral, text, siteLocale);
-    renderReferral(referral, stats, text, notice);
+    renderReferral(referral, text, siteLocale, notice);
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {
       throw error;
@@ -664,6 +817,72 @@ function showPaidSignedOut(): void {
   element("payment-done-signed-out", HTMLElement).classList.remove("hidden");
 }
 
+/**
+ * Yüklenen hesabı çizer ve sonrasını yürütür: abone olabilen hesapta kayıtlı davet kodu doğrulanır, abonede davet kartı
+ * yüklenir, fiyat sayfasından gelen ödeme niyeti varsa Checkout açılır.
+ */
+async function showAccount(me: Entitlements, form: CheckoutForm, text: ClientCopy, notice: HTMLElement): Promise<void> {
+  const view: AccountView = accountView(me, text, siteLocale, new Date());
+  render(view);
+  element("account-loading", HTMLElement).classList.add("hidden");
+  element("account-content", HTMLElement).classList.remove("hidden");
+  if (view.canSubscribe) {
+    await prefillInvite(form, text);
+  }
+  if (me.plan === "subscription") {
+    await loadReferral(text, notice);
+  }
+  // Fiyat sayfasından gelen ziyaretçi planını seçti ve giriş yaptı: artık doğrudan Ödeme sayfasına geçilir
+  // (niyet yalnızca seçimin yapıldığı sekmede tutulur ve bir kez kullanılır).
+  if (checkoutIntended()) {
+    forgetCheckoutIntent();
+    if (view.canSubscribe) {
+      await subscribe(form, text);
+    }
+  }
+}
+
+/** Hesap sayfasının hatasını gösterir: oturum düştüyse giriş sayfasına geçilir, değilse "yükleniyor" gizlenip hata yazılır. */
+function reportAccountError(error: unknown, text: ClientCopy, notice: HTMLElement, signInPath: string): void {
+  if (error instanceof SignedOutError) {
+    window.location.replace(signInPath);
+    return;
+  }
+  element("account-loading", HTMLElement).classList.add("hidden");
+  showNotice(notice, errorText(error, text));
+}
+
+/**
+ * Hesabı `fetchAccount` ile okuyup gösterir. Okunamazsa hatanın altında yeniden deneme düğmesi de görünür (oturum
+ * düşmediyse); gösterdikten sonraki bir hata (davet kodu, Checkout) yalnızca bildirimde yazar.
+ */
+async function loadAccount(fetchAccount: () => Promise<Entitlements>, form: CheckoutForm, text: ClientCopy, notice: HTMLElement, signInPath: string): Promise<void> {
+  let me: Entitlements;
+  try {
+    me = await fetchAccount();
+  } catch (error: unknown) {
+    reportAccountError(error, text, notice, signInPath);
+    element("account-retry", HTMLButtonElement).classList.toggle("hidden", error instanceof SignedOutError);
+    return;
+  }
+  try {
+    await showAccount(me, form, text, notice);
+  } catch (error: unknown) {
+    reportAccountError(error, text, notice, signInPath);
+  }
+}
+
+/** Yeniden deneme düğmesini bağlar: bildirim ve düğme gizlenir, "yükleniyor" görünür, hesap yeniden okunur. */
+function bindRetry(form: CheckoutForm, text: ClientCopy, notice: HTMLElement, signInPath: string): void {
+  const retry: HTMLButtonElement = element("account-retry", HTMLButtonElement);
+  retry.addEventListener("click", (): void => {
+    retry.classList.add("hidden");
+    hideNotice(notice);
+    element("account-loading", HTMLElement).classList.remove("hidden");
+    void loadAccount(fetchMe, form, text, notice, signInPath);
+  });
+}
+
 /** Sayfayı başlatır. */
 async function main(): Promise<void> {
   const root: HTMLElement = element("account", HTMLElement);
@@ -711,35 +930,8 @@ async function main(): Promise<void> {
     }
   });
   bindDeletion(text, signInPath, homePath);
-
-  try {
-    const me: Entitlements = paymentDone ? await fetchMeAfterPayment() : await fetchMe();
-    const view: AccountView = accountView(me, text, siteLocale, new Date());
-    render(view);
-    element("account-loading", HTMLElement).classList.add("hidden");
-    element("account-content", HTMLElement).classList.remove("hidden");
-    if (view.canSubscribe) {
-      await prefillInvite(form, text);
-    }
-    if (me.plan === "subscription") {
-      await loadReferral(text, notice);
-    }
-    // Fiyat sayfasından gelen ziyaretçi planını seçti ve giriş yaptı: artık doğrudan Ödeme sayfasına geçilir
-    // (niyet yalnızca seçimin yapıldığı sekmede tutulur ve bir kez kullanılır).
-    if (checkoutIntended()) {
-      forgetCheckoutIntent();
-      if (view.canSubscribe) {
-        await subscribe(form, text);
-      }
-    }
-  } catch (error: unknown) {
-    if (error instanceof SignedOutError) {
-      window.location.replace(signInPath);
-      return;
-    }
-    element("account-loading", HTMLElement).classList.add("hidden");
-    showNotice(notice, errorText(error, text));
-  }
+  bindRetry(form, text, notice, signInPath);
+  await loadAccount(paymentDone ? fetchMeAfterPayment : fetchMe, form, text, notice, signInPath);
 }
 
 void main();

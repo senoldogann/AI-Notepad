@@ -1,11 +1,13 @@
 ---
 // Hesap sayfası, yukarıdan aşağı tek sütun: başlık ve çıkış; tek plan kartı (durgun film kapak, altında plan adı ve
-// durum etiketi, tek durum satırı, denemede kalan toplantı ya da abonede aylık kullanım ölçeri ve duruma uyan eylem:
-// abone olmayanda plan seçimi (yıllık seçili), davet kodu alanı ve Abone ol; abonede Aboneliği yönet; ücretsiz erişimde
-// eylem yok); abonede davet kartı (kod, davet bağlantısını kopyalama, sayılar, ödülün tahmini tarihi); uygulamayı indirme
-// ve yardım kartları yan yana; en altta varsayılan kapalı hesap silme alanı (<details>; onay penceresiyle). Değerler
-// tarayıcıda `/v1/me` ve `/v1/referral`'dan doldurulur (src/client/account.ts); kimlikler scripts/e2e.ts ve
-// scripts/screenshots.ts ile aynı tutulur.
+// durum etiketi, cümle gerektiren durumda tek ileti satırı, tarih gibi değerler için etiket/değer satırları, denemede
+// kalan toplantı ya da abonede aylık kullanım ölçeri (sınıra yaklaşınca sarı, dolunca sıfırlanma günüyle uyarı), ödeme
+// alınamadıysa eylemin yanında uyarı ve duruma uyan eylem: abone olmayanda plan seçimi (yıllık seçili), davet kodu alanı
+// ve Abone ol; abonede Aboneliği yönet; ücretsiz erişimde eylem yok); abonede davet kartı (kod, davet bağlantısını
+// kopyalama, sayı satırı, ödülün tahmini tarihi); uygulamayı indirme ve yardım kartları yan yana; en altta varsayılan
+// kapalı hesap silme alanı (<details>; onay penceresiyle). Hesap yüklenemezse hatanın altında yeniden deneme düğmesi
+// görünür. Değerler tarayıcıda `/v1/me` ve `/v1/referral`'dan doldurulur (src/client/account.ts); kimlikler
+// scripts/e2e.ts ve scripts/screenshots.ts ile aynı tutulur.
 import Base from "../layouts/Base.astro";
 import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
@@ -44,6 +46,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
       <a class="text-link" href={routes.signIn}>{text.paymentDoneSignedOut.signIn}</a>
     </div>
     <p id="account-error" class="notice notice--error hidden" role="alert"></p>
+    <button id="account-retry" class="button button--secondary button--small account__retry hidden" type="button">{text.retry}</button>
     <p id="account-loading" class="muted" role="status">{text.loading}</p>
 
     <div id="account-content" class="account__content hidden">
@@ -59,8 +62,16 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
             </div>
             <span id="plan-pill" class="pill hidden"></span>
           </div>
-          <p id="plan-status" class="plan-card__status"></p>
-          <progress id="trial-meter" class="meter hidden" aria-label={text.trialLabel} max="3" value="0"></progress>
+          <p id="plan-status" class="plan-card__status hidden"></p>
+          <dl id="plan-facts" class="fact-list hidden"></dl>
+
+          <div id="trial-card" class="usage hidden">
+            <div class="usage__head">
+              <span class="usage__label" id="trial-label"><Icon name="gift" size={16} class="" />{text.trialLabel}</span>
+              <span id="trial-value" class="usage__value tabular"></span>
+            </div>
+            <progress id="trial-meter" class="meter" aria-labelledby="trial-label" max="3" value="0"></progress>
+          </div>
 
           <div id="hours-card" class="usage hidden">
             <div class="usage__head">
@@ -68,7 +79,11 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
               <span id="hours-value" class="usage__value tabular"></span>
             </div>
             <progress id="hours-meter" class="meter" aria-labelledby="hours-label" max="10" value="0"></progress>
-            <p class="small muted">{text.hoursNote}</p>
+            <div id="hours-foot" class="usage__foot">
+              <span id="hours-left" class="usage__left tabular"></span>
+              <span class="small muted">{text.hoursNote}</span>
+            </div>
+            <p id="hours-limit" class="usage__limit hidden" role="status"></p>
           </div>
 
           <fieldset id="plan-choice" class="plan-choice hidden">
@@ -81,7 +96,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
                     <span class="plan-choice__text">
                       <span class="plan-choice__name">
                         {option.name}
-                        {option.badge === null ? null : <span class="pill pill--ok">{option.badge}</span>}
+                        {option.badge === null ? null : <span class="pill pill--accent">{option.badge}</span>}
                       </span>
                       <span class="plan-choice__price tabular">
                         {option.price} <span class="muted">{option.per}</span>
@@ -119,6 +134,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
             </div>
           </details>
 
+          <p id="plan-alert" class="notice notice--warn plan-card__alert hidden" role="status"></p>
           <div class="plan-card__actions">
             <button id="subscribe-button" class="button button--primary hidden" type="button">{text.subscribe}</button>
             <button id="manage-button" class="button button--secondary hidden" type="button">{text.manage}</button>
@@ -132,7 +148,8 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
         <div class="referral__text">
           <h2 class="title-m" id="referral-title">{text.referral.title}</h2>
           <p class="muted">{text.referral.text}</p>
-          <p id="referral-stats" class="small muted"></p>
+          <dl id="referral-stats" class="referral__stats hidden"></dl>
+          <p id="referral-note" class="small muted hidden"></p>
           <a class="text-link" href={routes.invite}>{text.referral.howItWorks} <Icon name="arrow-right" size={16} class="" /></a>
         </div>
         <Film palette="rose" layout="clouds-right" class="referral__cover">
@@ -244,6 +261,10 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
     gap: 20px;
   }
 
+  .account__retry {
+    justify-self: start;
+  }
+
   /* ---------- Plan kartı ---------- */
 
   .plan-card {
@@ -331,6 +352,30 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
 
   .usage__value {
     font-weight: 600;
+  }
+
+  /* Ölçerin altı: solda ikincil değer (kalan saat), sağda sıfırlanma notu. */
+  .usage__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 16px;
+  }
+
+  .usage__left {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .usage__limit {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--warn);
+  }
+
+  .plan-card__alert {
+    margin-bottom: -4px;
   }
 
   .plan-card__actions {
@@ -502,6 +547,43 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
     display: grid;
     justify-items: start;
     gap: 10px;
+  }
+
+  /* Davet sayıları: her biri üstte büyük, sabit genişlikli rakam ve altında kısa etiket (öğeler betikle eklenir). */
+  .referral__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    margin: 4px 0;
+  }
+
+  .referral__stats :global(.stat) {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+  }
+
+  .referral__stats :global(.stat__label) {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  .referral__stats :global(.stat__value) {
+    order: -1;
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .referral__stats :global(.stat__cap) {
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--muted);
   }
 
   .referral :global(.referral__cover) {
@@ -735,6 +817,10 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
   @media (max-width: 560px) {
     .plan-choice__options {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .referral__stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .dialog__actions .button {

@@ -3,8 +3,11 @@
 // birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
 // Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
 // karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir. Hesap sayfası her
-// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor, bitti; ücretsiz erişim) çekilir; abonede davet
-// kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
+// plan durumunda (deneme başlamadı, sürüyor, son toplantı; bitti; abonelik etkin, aylık sınır dolu, iptal edildi ve sınıra
+// yakın, ödeme bekliyor, ödeme gecikmiş, bitti; davetin ücretsiz ilk ayı; ücretsiz erişim) ve yüklenemeyince (yeniden deneme
+// düğmesi) çekilir; abonede davet kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir.
+// Örnek veriler yerel API adresine verilir: sunulan site yerel derleme (`npm run build:local`) değilse betik hemen durur.
+// Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
 // Yönetim panelinin blog görünümü listeyle (haftalık düzen uyarısı, sitede aç bağlantıları dahil), kaydedilmiş yayındaki yazının
@@ -32,7 +35,27 @@ interface Finding {
 }
 
 /** Hesap sayfasının örnek plan durumları (`/v1/me` yanıtı bunlardan seçilir). */
-type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace" | "ended" | "complimentary";
+type AccountState =
+  | "trial-new"
+  | "trial-running"
+  | "trial-last"
+  | "trial-ended"
+  | "active"
+  | "limit"
+  | "canceling"
+  | "grace"
+  | "overdue"
+  | "ended"
+  | "invite-month"
+  | "complimentary";
+
+/** Hesap sayfasının örnek yanıtı: bir plan durumu ya da `/v1/me`'nin hiç okunamadığı durum (yeniden deneme düğmesi). */
+type AccountFixture = AccountState | "load-failed";
+
+/** Sunulan site yerel derleme değil: istekler örnek verilerle karşılanamaz. */
+class WrongBuildError extends Error {
+  override readonly name: string = "WrongBuildError";
+}
 
 /**
  * Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). `account` hesap
@@ -43,7 +66,7 @@ interface Target {
   readonly path: string;
   readonly ready: string;
   readonly signedIn: boolean;
-  readonly account: AccountState | null;
+  readonly account: AccountFixture | null;
 }
 
 const variants: readonly Variant[] = [
@@ -74,14 +97,19 @@ const targets: readonly Target[] = [
   { name: "terms", path: "/terms", ready: "main", signedIn: false, account: null },
   { name: "invite", path: "/invite", ready: "main", signedIn: false, account: null },
   { name: "notfound", path: "/no-such-page", ready: "main", signedIn: false, account: null },
-  { name: "account", path: "/account?payment=done", ready: "#referral-card:not(.hidden) #referral-stats:not(:empty)", signedIn: true, account: "active" },
+  { name: "account", path: "/account?payment=done", ready: "#referral-card:not(.hidden) #referral-stats .stat", signedIn: true, account: "active" },
   { name: "account-trial-new", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-new" },
   { name: "account-trial-running", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-running" },
+  { name: "account-trial-last", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-last" },
   { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
-  { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
-  { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
+  { name: "account-limit", path: "/account", ready: "#referral-card:not(.hidden) #referral-stats .stat", signedIn: true, account: "limit" },
+  { name: "account-canceling", path: "/account", ready: "#referral-card:not(.hidden) #referral-stats .stat", signedIn: true, account: "canceling" },
+  { name: "account-grace", path: "/account", ready: "#referral-card:not(.hidden) #referral-stats .stat", signedIn: true, account: "grace" },
+  { name: "account-overdue", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "overdue" },
   { name: "account-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "ended" },
-  { name: "account-complimentary", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "complimentary" },
+  { name: "account-invite-month", path: "/account", ready: "#referral-card:not(.hidden) #referral-note:not(.hidden)", signedIn: true, account: "invite-month" },
+  { name: "account-complimentary", path: "/account", ready: "#referral-card:not(.hidden) #referral-stats .stat", signedIn: true, account: "complimentary" },
+  { name: "account-load-failed", path: "/account", ready: "#account-retry:not(.hidden)", signedIn: true, account: "load-failed" },
   // Davet koduyla gelinir: kod saklanır (sonraki hesap sayfalarında da dolar), bu yüzden hesap sayfalarından sonra.
   { name: "account-invite", path: "/account?code=k7m2-qx9d&plan=monthly", ready: "#invite-status.invite__ok", signedIn: true, account: "trial-ended" },
   { name: "invite-code", path: "/invite?code=K7M2QX9D", ready: "#invite-code-box:not(.hidden)", signedIn: false, account: null },
@@ -136,12 +164,16 @@ function last30Days(now: Date): string[] {
   return Array.from({ length: 30 }, (_: unknown, index: number): string => new Date(now.getTime() - (29 - index) * 86_400_000).toISOString().slice(0, 10));
 }
 
-/** Hesap durumuna göre örnek `/v1/referral` yanıtı: ücretsiz erişimde ödül uygulanmaz. Saf fonksiyondur. */
+/**
+ * Hesap durumuna göre örnek `/v1/referral` yanıtı: ücretsiz erişimde ödül uygulanmaz; davetin ücretsiz ilk ayında kod
+ * yoktur. Saf fonksiyondur.
+ */
 function referralFixture(state: AccountState, now: Date): object {
+  const inviteMonth: boolean = state === "invite-month";
   return {
     enabled: true,
-    code: "K7M2QX9D",
-    inviteUrl: "http://localhost:8788/invite?code=K7M2QX9D",
+    code: inviteMonth ? null : "K7M2QX9D",
+    inviteUrl: inviteMonth ? null : "http://localhost:8788/invite?code=K7M2QX9D",
     joined: 3,
     rewarded: 1,
     pending: 1,
@@ -157,7 +189,9 @@ function referralFixture(state: AccountState, now: Date): object {
 /** Hesap durumuna göre örnek `/v1/me` yanıtı. Saf fonksiyondur. */
 function meFixture(state: AccountState, now: Date): object {
   const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
-  const base = { userId: "usr_example", trialMeetingsTotal: 3, trialDays: 7, monthlyHoursCap: 10 };
+  // Aylık sınır sonraki UTC ayının başında sıfırlanır (sunucunun `monthlyResetsAt`'i).
+  const monthlyResetsAt: string = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  const base = { userId: "usr_example", trialMeetingsTotal: 3, trialDays: 7, monthlyHoursCap: 10, monthlyResetsAt };
   const subscription = (access: "active" | "grace", cancelAt: string | null): object => ({
     status: access === "grace" ? "past_due" : "active",
     plan: access === "grace" ? "monthly" : cancelAt === null ? "yearly" : "monthly",
@@ -170,10 +204,26 @@ function meFixture(state: AccountState, now: Date): object {
   const states: Readonly<Record<AccountState, object>> = {
     "trial-new": { ...base, plan: "trial", trialMeetingsLeft: 3, trialEndsAt: null, monthlyHoursUsed: 0, subscription: null },
     "trial-running": { ...base, plan: "trial", trialMeetingsLeft: 2, trialEndsAt: at(5), monthlyHoursUsed: 0.8, subscription: null },
+    // Son deneme toplantısı: ölçer sarı.
+    "trial-last": { ...base, plan: "trial", trialMeetingsLeft: 1, trialEndsAt: at(3), monthlyHoursUsed: 1.6, subscription: null },
     "trial-ended": { ...base, plan: "trial", trialMeetingsLeft: 0, trialEndsAt: at(-1), monthlyHoursUsed: 2.1, subscription: null },
     active: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 3.4, subscription: subscription("active", null) },
-    canceling: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 7.6, subscription: subscription("active", at(20)) },
+    // Aylık sınır dolu: ölçer sarı, kalan saat yerine sıfırlanma günü.
+    limit: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 10, subscription: subscription("active", null) },
+    // Sınırın %80'inin üstü: ölçer sarı.
+    canceling: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 8.4, subscription: subscription("active", at(20)) },
     grace: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 1.2, subscription: subscription("grace", null) },
+    // Ek süre bitti, ödeme hâlâ alınamadı: erişim yok, abonelik Stripe'ta sürer (Yönet düğmesinin yanında uyarı).
+    overdue: {
+      ...base,
+      plan: "trial",
+      trialMeetingsLeft: 0,
+      trialEndsAt: at(-60),
+      monthlyHoursUsed: 0,
+      subscription: { status: "past_due", plan: "monthly", currentPeriodEnd: at(-9), cancelAt: null, complimentary: false, access: "none", graceEndsAt: null },
+    },
+    // Davetle gelen abonenin ücretsiz ilk ayı: davet kodu ilk ücretli aydan sonra açılır.
+    "invite-month": { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 0.4, subscription: subscription("active", null) },
     // Aboneliği bitmiş, denemesi de kalmamış eski abone: "plan yok", Abone ol ve (Stripe müşterisi olduğu için) Yönet.
     ended: {
       ...base,
@@ -805,11 +855,16 @@ function argument(index: number, name: string): string {
   return value;
 }
 
-/** Beklenen konsol hataları: 404 sayfasının kendisi 404 durumuyla gelir; yönetici olmayanın yönetim isteği 403 alır. */
+/**
+ * Beklenen konsol hataları: 404 sayfasının kendisi 404 durumuyla gelir; yönetici olmayanın yönetim isteği 403 alır;
+ * yüklenemeyen hesap sayfasının `/v1/me` isteği 503 alır ve sayfa hatayı konsola yazar.
+ */
 function isExpectedConsoleError(message: ConsoleMessage, shot: string): boolean {
   const notFoundDocument: boolean = shot.startsWith("notfound") && message.text().includes("status of 404");
   const adminForbidden: boolean = shot.startsWith("admin-forbidden") && message.text().includes("status of 403");
-  return notFoundDocument || adminForbidden;
+  const accountLoadFailed: boolean =
+    shot.startsWith("account-load-failed") && (message.text().includes("status of 503") || message.text().startsWith("request_failed"));
+  return notFoundDocument || adminForbidden || accountLoadFailed;
 }
 
 /** Sayfanın konsol hatalarını ve yakalanmamış hatalarını toplar. */
@@ -844,22 +899,56 @@ async function routeApi(context: BrowserContext, findings: Finding[]): Promise<v
   });
 }
 
+/** Örnek yanıtın durum kodu ve gövdesi. */
+interface FixtureResponse {
+  readonly status: number;
+  readonly body: object;
+}
+
+/** Hesap sayfasının örnek yanıtları: plan durumunda `/v1/me` ve `/v1/referral`; yüklenemeyen hesapta 503. Saf fonksiyondur. */
+function accountResponses(fixture: AccountFixture, now: Date): Readonly<Record<string, FixtureResponse>> {
+  if (fixture === "load-failed") {
+    return { "/v1/me": { status: 503, body: { error: { code: "unavailable", message: "örnek hata" } } } };
+  }
+  return { "/v1/me": { status: 200, body: meFixture(fixture, now) }, "/v1/referral": { status: 200, body: referralFixture(fixture, now) } };
+}
+
 /**
  * Bu sayfada `/v1/me` ve `/v1/referral` isteklerini verilen hesap durumunun örnek yanıtlarıyla karşılar (bağlamın
  * yönlendirmesinden önce gelir).
  */
-async function routeAccount(page: Page, state: AccountState): Promise<void> {
-  const now: Date = new Date();
-  const bodies: Readonly<Record<string, object>> = { "/v1/me": meFixture(state, now), "/v1/referral": referralFixture(state, now) };
-  for (const [path, body] of Object.entries(bodies)) {
+async function routeAccount(page: Page, fixture: AccountFixture): Promise<void> {
+  for (const [path, response] of Object.entries(accountResponses(fixture, new Date()))) {
     await page.route(`${apiBase}${path}`, async (route: Route): Promise<void> => {
       const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, PUT, DELETE" };
       if (route.request().method() === "OPTIONS") {
         await route.fulfill({ status: 204, headers: cors });
         return;
       }
-      await route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+      await route.fulfill({ status: response.status, headers: cors, contentType: "application/json", body: JSON.stringify(response.body) });
     });
+  }
+}
+
+/**
+ * Sunulan sitenin yerel derleme olduğunu denetler: CSP'nin `connect-src`'si yerel API adresini içermeli. Üretim
+ * derlemesinde istekler gerçek API'ye gider, örnek oturum reddedilir ve hesap sayfası girişe yönlenir (ilk hesap
+ * görüntüsünün hazır seçicisi zaman aşımına düşer); bu yüzden çekime başlamadan durulur.
+ */
+async function assertLocalBuild(base: string): Promise<void> {
+  const response: Response = await fetch(`${base}/account`);
+  const csp: string | null = response.headers.get("content-security-policy");
+  if (csp === null) {
+    throw new WrongBuildError(`${base}/account CSP başlığı göndermiyor (durum ${response.status}); siteyi scripts/serve.ts ile sunun.`);
+  }
+  const connect: string | undefined = csp
+    .split(";")
+    .map((directive: string): string => directive.trim())
+    .find((directive: string): boolean => directive.startsWith("connect-src "));
+  if (connect === undefined || !connect.split(" ").includes(apiBase)) {
+    throw new WrongBuildError(
+      `Sunulan site yerel derleme değil: connect-src "${connect ?? "yok"}" içinde ${apiBase} yok. \`npm run build:local\` çalıştırıp scripts/serve.ts'i yeniden başlatın.`,
+    );
   }
 }
 
@@ -1190,6 +1279,7 @@ async function main(): Promise<void> {
   const base: string = argument(2, "site adresi").replace(/\/$/, "");
   const outDir: string = argument(3, "çıktı klasörü");
   const chromePath: string = argument(4, "Chrome yolu");
+  await assertLocalBuild(base);
   await mkdir(outDir, { recursive: true });
   const browser: Browser = await chromium.launch({ executablePath: chromePath, headless: true });
   const findings: Finding[] = [];
