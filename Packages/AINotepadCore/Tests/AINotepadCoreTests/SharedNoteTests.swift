@@ -38,15 +38,20 @@ private func sampleRecord() -> MeetingRecord {
         #expect(shared.with(note: sampleNote).sharedNotes == nil)
     }
 
-    // Paylaşım metni notun dilindeki başlıklarla; Türkçede sözlük var, paylaşım dillerinde yok.
+    // Paylaşım metni notun dilindeki başlıklarla; çeviride de konu akışı ve sözlük o dilin başlıklarıyla yer alır.
     @Test func shareTextUsesLanguageHeadings() {
         let finnish: String = shareText(record: sampleRecord(), note: sampleNote, language: .finnish)
-        #expect(finnish.contains("## Yhteenveto") && finnish.contains("## Tehtävät") && !finnish.contains("talousarvio"))
+        #expect(finnish.contains("## Yhteenveto") && finnish.contains("## Tehtävät"))
+        #expect(finnish.contains("## Aiheiden kulku") && finnish.contains("Rapor takvimi"))
+        #expect(finnish.contains("## Sanasto") && finnish.contains("talousarvio"))
         #expect(shareText(record: sampleRecord(), note: sampleNote, language: .japanese).contains("## 決定事項"))
         #expect(shareText(record: sampleRecord(), note: sampleNote, language: nil).contains("talousarvio"))
-        // Çeviride görev sayısı değişirse kullanılmaz.
+        // Çeviride görev sayısı değişirse kullanılmaz (karar, akış ve sözlük sayısı aynı; yalnızca bir görev eksik).
         #expect(throws: LLMError.self) {
-            try parseSharedNote(text: #"{"baslik":"T","ozet":"S","kararlar":["a"],"gorevler":[],"sozluk":[]}"#, original: sampleNote)
+            try parseSharedNote(
+                text: #"{"baslik":"T","ozet":"S","kararlar":["a"],"gorevler":[{"sahip":"Senol","aciklama":"Slides","tarih":"Thursday","benimMi":true}],"sozluk":[{"terim":"budget","anlam":"x"}],"akis":[{"zaman":"00:13","baslik":"Budget","ozet":"A."},{"zaman":"01:30","baslik":"Report","ozet":"B."}]}"#,
+                original: sampleNote
+            )
         }
     }
 

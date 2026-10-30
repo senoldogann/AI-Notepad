@@ -88,7 +88,7 @@ const securityHeaders: Readonly<Record<string, string>> = {
   "referrer-policy": "no-referrer",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "cross-origin-resource-policy": "same-site",
-  "permissions-policy": "()",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
 };
 
 /** Yanıta güvenlik başlıklarını ve (izinli kaynaktan gelen web isteğinde) CORS başlıklarını ekler. */
@@ -447,15 +447,14 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
   if (path === "/v1/reports" && method === "POST") {
     await enforceLimit(env.REPORT_IP_LIMITER, `ip:${ipKey}`);
-    // Geri bildirim ve çökme raporu hesap ister (jetonsuz 401); sitedeki iletişim formunda jeton isteğe bağlıdır,
-    // Turnstile zorunludur. Gönderilen jeton geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
+    // Jeton isteğe bağlıdır: hesapsız sürümler (geliştirici sürümü, iPhone) jetonsuz gönderir ve tür bütçesinin
+    // dörtte birini kullanabilir (`createReport`); sitedeki iletişim formunda Turnstile zorunludur. Gönderilen jeton
+    // geçerli olmalı (geçersiz jeton anonim rapora dönmez, 401).
     const token: string | null = optionalBearerToken(request);
     const user: AuthedUser | null = token === null ? null : await authenticate(db, config, token, now);
     const body: ReportInput = await readJsonBody(request, reportSchema, reportBodyMaxBytes);
     if (body.kind === "contact") {
       await verifyTurnstile(context.platform, config.secrets.turnstile, body.turnstileToken, context.clientIp);
-    } else if (user === null) {
-      throw new ApiError("unauthorized", "Geri bildirim ve çökme raporu için giriş yapmış olmalısın.");
     }
     await createReport(db, config, body, user === null ? null : user.userId, now);
     return jsonResponse(202, {});
@@ -498,7 +497,7 @@ const adminComplimentaryPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})\/co
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
- * `ADMIN_IDENTITIES` listesinde olmalı (değilse 403 + kendi kimliği).
+ * `ADMIN_IDENTITIES` listesinde olmalı (değilse düz 403; gövdede kimlik yok, bkz. `requireAdmin`).
  */
 async function routeAdmin(request: Request, db: D1Database, config: Config, path: string, user: AuthedUser, now: Date): Promise<Response> {
   await requireAdmin(db, config, user.userId);
@@ -527,7 +526,7 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
     if (body.grant) {
       await grantComplimentaryAccess(db, complimentaryMatch[1], complimentaryUntilMs(body.until ?? null, now), user.userId, now);
     } else {
-      await revokeComplimentaryAccess(db, complimentaryMatch[1], user.userId);
+      await revokeComplimentaryAccess(db, complimentaryMatch[1], user.userId, now);
     }
     return jsonResponse(200, await adminUserDetail(db, config, complimentaryMatch[1], now));
   }

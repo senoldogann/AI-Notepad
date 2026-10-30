@@ -189,48 +189,74 @@ public enum ShareLanguage: String, Sendable, Codable, CaseIterable {
         MeetingLanguage(rawValue: self == .norwegian ? "no" : String(rawValue.prefix { $0 != "-" }))
     }
 
-    /// Paylaşım metnindeki başlıklar: özet, kararlar, görevler.
-    public var headings: (summary: String, decisions: String, tasks: String) {
+    /// Not bölümlerinin bu dildeki başlıkları (paylaşım metni ve web sayfası).
+    public var headings: NoteHeadings {
         switch self {
-        case .finnish: ("Yhteenveto", "Päätökset", "Tehtävät")
-        case .english: ("Summary", "Decisions", "Action items")
-        case .swedish: ("Sammanfattning", "Beslut", "Uppgifter")
-        case .norwegian: ("Sammendrag", "Beslutninger", "Oppgaver")
-        case .danish: ("Resumé", "Beslutninger", "Opgaver")
-        case .estonian: ("Kokkuvõte", "Otsused", "Ülesanded")
-        case .german: ("Zusammenfassung", "Entscheidungen", "Aufgaben")
-        case .dutch: ("Samenvatting", "Besluiten", "Actiepunten")
-        case .french: ("Résumé", "Décisions", "Actions")
-        case .spanish: ("Resumen", "Decisiones", "Tareas")
-        case .portuguese: ("Resumo", "Decisões", "Tarefas")
-        case .italian: ("Riepilogo", "Decisioni", "Attività")
-        case .polish: ("Podsumowanie", "Decyzje", "Zadania")
-        case .czech: ("Shrnutí", "Rozhodnutí", "Úkoly")
-        case .slovak: ("Zhrnutie", "Rozhodnutia", "Úlohy")
-        case .hungarian: ("Összefoglaló", "Döntések", "Feladatok")
-        case .romanian: ("Rezumat", "Decizii", "Sarcini")
-        case .bulgarian: ("Резюме", "Решения", "Задачи")
-        case .croatian: ("Sažetak", "Odluke", "Zadaci")
-        case .greek: ("Περίληψη", "Αποφάσεις", "Εργασίες")
-        case .latvian: ("Kopsavilkums", "Lēmumi", "Uzdevumi")
-        case .lithuanian: ("Santrauka", "Sprendimai", "Užduotys")
-        case .russian: ("Краткое содержание", "Решения", "Задачи")
-        case .ukrainian: ("Підсумок", "Рішення", "Завдання")
-        case .turkish: ("Özet", "Kararlar", "Görevler")
-        case .azerbaijani: ("Xülasə", "Qərarlar", "Tapşırıqlar")
-        case .arabic: ("الملخص", "القرارات", "المهام")
-        case .hebrew: ("סיכום", "החלטות", "משימות")
-        case .persian: ("خلاصه", "تصمیم‌ها", "وظایف")
-        case .hindi: ("सारांश", "निर्णय", "कार्य")
-        case .chineseSimplified: ("摘要", "决定", "待办事项")
-        case .chineseTraditional: ("摘要", "決定", "待辦事項")
-        case .japanese: ("概要", "決定事項", "タスク")
-        case .korean: ("요약", "결정 사항", "할 일")
-        case .indonesian: ("Ringkasan", "Keputusan", "Tugas")
-        case .vietnamese: ("Tóm tắt", "Quyết định", "Công việc")
-        case .thai: ("สรุป", "การตัดสินใจ", "งานที่ต้องทำ")
+        case .finnish: NoteHeadings(summary: "Yhteenveto", outline: "Aiheiden kulku", decisions: "Päätökset", tasks: "Tehtävät", glossary: "Sanasto")
+        case .english: NoteHeadings(summary: "Summary", outline: "Topic flow", decisions: "Decisions", tasks: "Action items", glossary: "Glossary")
+        case .swedish: NoteHeadings(summary: "Sammanfattning", outline: "Ämnesflöde", decisions: "Beslut", tasks: "Uppgifter", glossary: "Ordlista")
+        case .norwegian: NoteHeadings(summary: "Sammendrag", outline: "Temaflyt", decisions: "Beslutninger", tasks: "Oppgaver", glossary: "Ordliste")
+        case .danish: NoteHeadings(summary: "Resumé", outline: "Emneforløb", decisions: "Beslutninger", tasks: "Opgaver", glossary: "Ordliste")
+        case .estonian: NoteHeadings(summary: "Kokkuvõte", outline: "Teemade käik", decisions: "Otsused", tasks: "Ülesanded", glossary: "Sõnastik")
+        case .german: NoteHeadings(summary: "Zusammenfassung", outline: "Themenverlauf", decisions: "Entscheidungen", tasks: "Aufgaben", glossary: "Glossar")
+        case .dutch: NoteHeadings(summary: "Samenvatting", outline: "Onderwerpverloop", decisions: "Besluiten", tasks: "Actiepunten", glossary: "Woordenlijst")
+        case .french: NoteHeadings(summary: "Résumé", outline: "Déroulé des sujets", decisions: "Décisions", tasks: "Actions", glossary: "Glossaire")
+        case .spanish: NoteHeadings(summary: "Resumen", outline: "Desarrollo de los temas", decisions: "Decisiones", tasks: "Tareas", glossary: "Glosario")
+        case .portuguese: NoteHeadings(summary: "Resumo", outline: "Sequência de temas", decisions: "Decisões", tasks: "Tarefas", glossary: "Glossário")
+        case .italian: NoteHeadings(summary: "Riepilogo", outline: "Svolgimento dei temi", decisions: "Decisioni", tasks: "Attività", glossary: "Glossario")
+        case .polish: NoteHeadings(summary: "Podsumowanie", outline: "Przebieg tematów", decisions: "Decyzje", tasks: "Zadania", glossary: "Słowniczek")
+        case .czech: NoteHeadings(summary: "Shrnutí", outline: "Průběh témat", decisions: "Rozhodnutí", tasks: "Úkoly", glossary: "Slovníček")
+        case .slovak: NoteHeadings(summary: "Zhrnutie", outline: "Priebeh tém", decisions: "Rozhodnutia", tasks: "Úlohy", glossary: "Slovník")
+        case .hungarian: NoteHeadings(summary: "Összefoglaló", outline: "Témák menete", decisions: "Döntések", tasks: "Feladatok", glossary: "Szójegyzék")
+        case .romanian: NoteHeadings(summary: "Rezumat", outline: "Desfășurarea subiectelor", decisions: "Decizii", tasks: "Sarcini", glossary: "Glosar")
+        case .bulgarian: NoteHeadings(summary: "Резюме", outline: "Ход на темите", decisions: "Решения", tasks: "Задачи", glossary: "Речник")
+        case .croatian: NoteHeadings(summary: "Sažetak", outline: "Tijek tema", decisions: "Odluke", tasks: "Zadaci", glossary: "Pojmovnik")
+        case .greek: NoteHeadings(summary: "Περίληψη", outline: "Ροή θεμάτων", decisions: "Αποφάσεις", tasks: "Εργασίες", glossary: "Γλωσσάρι")
+        case .latvian: NoteHeadings(summary: "Kopsavilkums", outline: "Tēmu gaita", decisions: "Lēmumi", tasks: "Uzdevumi", glossary: "Glosārijs")
+        case .lithuanian: NoteHeadings(summary: "Santrauka", outline: "Temų eiga", decisions: "Sprendimai", tasks: "Užduotys", glossary: "Žodynėlis")
+        case .russian: NoteHeadings(summary: "Краткое содержание", outline: "Ход обсуждения", decisions: "Решения", tasks: "Задачи", glossary: "Глоссарий")
+        case .ukrainian: NoteHeadings(summary: "Підсумок", outline: "Хід обговорення", decisions: "Рішення", tasks: "Завдання", glossary: "Глосарій")
+        case .turkish: NoteHeadings(summary: "Özet", outline: "Konu akışı", decisions: "Kararlar", tasks: "Görevler", glossary: "Sözlük")
+        case .azerbaijani: NoteHeadings(summary: "Xülasə", outline: "Mövzuların gedişi", decisions: "Qərarlar", tasks: "Tapşırıqlar", glossary: "Lüğət")
+        case .arabic: NoteHeadings(summary: "الملخص", outline: "تسلسل الموضوعات", decisions: "القرارات", tasks: "المهام", glossary: "مسرد المصطلحات")
+        case .hebrew: NoteHeadings(summary: "סיכום", outline: "רצף הנושאים", decisions: "החלטות", tasks: "משימות", glossary: "מילון מונחים")
+        case .persian: NoteHeadings(summary: "خلاصه", outline: "روند موضوعات", decisions: "تصمیم‌ها", tasks: "وظایف", glossary: "واژه‌نامه")
+        case .hindi: NoteHeadings(summary: "सारांश", outline: "विषयों का क्रम", decisions: "निर्णय", tasks: "कार्य", glossary: "शब्दावली")
+        case .chineseSimplified: NoteHeadings(summary: "摘要", outline: "议题流程", decisions: "决定", tasks: "待办事项", glossary: "术语表")
+        case .chineseTraditional: NoteHeadings(summary: "摘要", outline: "議題流程", decisions: "決定", tasks: "待辦事項", glossary: "術語表")
+        case .japanese: NoteHeadings(summary: "概要", outline: "議題の流れ", decisions: "決定事項", tasks: "タスク", glossary: "用語集")
+        case .korean: NoteHeadings(summary: "요약", outline: "주제 흐름", decisions: "결정 사항", tasks: "할 일", glossary: "용어집")
+        case .indonesian: NoteHeadings(summary: "Ringkasan", outline: "Alur topik", decisions: "Keputusan", tasks: "Tugas", glossary: "Glosarium")
+        case .vietnamese: NoteHeadings(summary: "Tóm tắt", outline: "Diễn biến chủ đề", decisions: "Quyết định", tasks: "Công việc", glossary: "Thuật ngữ")
+        case .thai: NoteHeadings(summary: "สรุป", outline: "ลำดับหัวข้อ", decisions: "การตัดสินใจ", tasks: "งานที่ต้องทำ", glossary: "อภิธานศัพท์")
         }
     }
+
+    /// Sağdan sola yazılan dil mi (Arapça, İbranice, Farsça): web sayfası `dir="rtl"` alır.
+    public var isRightToLeft: Bool {
+        switch self {
+        case .arabic, .hebrew, .persian: true
+        default: false
+        }
+    }
+}
+
+/// Not bölümlerinin başlıkları: özet, konu akışı, kararlar, görevler, sözlük.
+public struct NoteHeadings: Sendable, Equatable {
+    public let summary: String
+    public let outline: String
+    public let decisions: String
+    public let tasks: String
+    public let glossary: String
+}
+
+/// Paylaşım metni ve web sayfasındaki bölüm başlıkları: paylaşım sürümünde (`language`) o dilde, asıl notta (nil)
+/// arayüz dilinde. Saf fonksiyondur.
+func noteHeadings(language: ShareLanguage?) -> NoteHeadings {
+    language?.headings ?? NoteHeadings(
+        summary: String(localized: "Özet"), outline: String(localized: "Konu akışı"), decisions: String(localized: "Kararlar"),
+        tasks: String(localized: "Görevler"), glossary: String(localized: "Sözlük")
+    )
 }
 
 /// Not dili ayarından önceki sürümlerden gelen kullanıcının not dili: o sürümlerde not her zaman Türkçeydi. Bu sürümün
@@ -334,17 +360,15 @@ public func isSharedNoteComplete(shared: MeetingNote, original: MeetingNote) -> 
     (shared.outline ?? []).count == (original.outline ?? []).count && shared.glossary.count == original.glossary.count
 }
 
-/// Paylaşılacak not metni (Markdown; e-posta, Slack, Teams sohbetine yapıştırılır): başlık, tarih, özet, kararlar,
-/// görevler (sahibiyle). Asıl notta (`language` nil) konu akışı ve sözlük de eklenir; başlıklar ve tarih asıl notta arayüz
-/// dilinde, paylaşım sürümünde o dilde. Saf fonksiyondur.
+/// Paylaşılacak not metni (Markdown; e-posta, Slack, Teams sohbetine yapıştırılır): başlık, tarih, özet, konu akışı,
+/// kararlar, görevler (sahibiyle) ve sözlük; başlıklar ve tarih asıl notta (`language` nil) arayüz dilinde, paylaşım
+/// sürümünde o dilde. Saf fonksiyondur.
 public func shareText(record: MeetingRecord, note: MeetingNote, language: ShareLanguage?) -> String {
-    let headings: (summary: String, decisions: String, tasks: String, glossary: String) = language.map { (language: ShareLanguage) -> (summary: String, decisions: String, tasks: String, glossary: String) in
-        (summary: language.headings.summary, decisions: language.headings.decisions, tasks: language.headings.tasks, glossary: "")
-    } ?? (summary: String(localized: "Özet"), decisions: String(localized: "Kararlar"), tasks: String(localized: "Görevler"), glossary: String(localized: "Sözlük"))
+    let headings: NoteHeadings = noteHeadings(language: language)
     let date: String = record.startedAt.formatted(Date.FormatStyle(date: .long, time: .shortened).locale(language.map { Locale(identifier: $0.rawValue) } ?? interfaceLocale()))
     var lines: [String] = ["# \(note.title)", "", "_\(date)_", "", "## \(headings.summary)", "", note.summary, ""]
-    if language == nil, let outline = note.outline, !outline.isEmpty {
-        lines += ["## " + String(localized: "Konu akışı"), ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] \($0.title) — \($0.summary)" } + [""]
+    if let outline = note.outline, !outline.isEmpty {
+        lines += ["## \(headings.outline)", ""] + outline.map { "- [\(timestamp(seconds: $0.startSec))] \($0.title) — \($0.summary)" } + [""]
     }
     if !note.decisions.isEmpty {
         lines += ["## \(headings.decisions)", ""] + note.decisions.map { "- \($0)" } + [""]
@@ -354,7 +378,7 @@ public func shareText(record: MeetingRecord, note: MeetingNote, language: ShareL
             "- [ ] **\(task.owner)** — \(task.description)\(task.dueDate.map { " (\($0))" } ?? "")"
         } + [""]
     }
-    if language == nil, !note.glossary.isEmpty {
+    if !note.glossary.isEmpty {
         lines += ["## \(headings.glossary)", ""] + note.glossary.map { "- **\($0.term)** — \($0.meaning)" } + [""]
     }
     return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)

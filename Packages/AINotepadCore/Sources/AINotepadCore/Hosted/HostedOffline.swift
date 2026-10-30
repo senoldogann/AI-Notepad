@@ -33,10 +33,10 @@ public func hostedOfflinePermit(entitlements: HostedEntitlements, now: Date) -> 
     switch hostedPlanStatus(entitlements: entitlements) {
     case .trial:
         minutes = hostedUsualTrialMeetingMinutes
-    case .expired:
+    case .expired, .paymentOverdue:
         // `hostedStartBlock` bu durumda kaydı engeller; buraya gelinmez.
         minutes = 0
-    case .subscribed, .ending, .grace:
+    case .subscribed, .complimentary, .ending, .grace:
         let remaining: Int = Int(((entitlements.monthlyHoursCap - entitlements.monthlyHoursUsed) * 60).rounded(.down))
         minutes = max(0, min(hostedUsualSubscriberMeetingMinutes, remaining))
     }

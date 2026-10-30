@@ -40,14 +40,24 @@ public final class MicrophoneCapture {
         }
         let (stream, continuation): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
         self.continuation = continuation
+        #if os(iOS)
+        var sessionActivated: Bool = false
+        #endif
         do {
             #if os(iOS)
             try activateRecordingSession()
+            sessionActivated = true
             #endif
             try startEngine(continuation: continuation)
         } catch {
             continuation.finish()
             self.continuation = nil
+            #if os(iOS)
+            // Açılan oturum bırakılır: yoksa diğer uygulamaların sesi (müzik) kesik kalırdı.
+            if sessionActivated {
+                deactivateRecordingSession()
+            }
+            #endif
             throw error
         }
         configurationObserver = NotificationCenter.default.addObserver(
@@ -106,9 +116,12 @@ public final class MicrophoneCapture {
             NotificationCenter.default.removeObserver(observer)
         }
         activationObserver = nil
-        isInterrupted = false
         #if os(iOS)
+        // Kesinti sürerken durdurulduysa dinleyen de öğrenir: yoksa "Mikrofon kesildi" sonraki kayıtta da kalırdı.
+        setInterrupted(false)
         let wasRunning: Bool = continuation != nil
+        #else
+        isInterrupted = false
         #endif
         stopEngine()
         continuation?.finish()

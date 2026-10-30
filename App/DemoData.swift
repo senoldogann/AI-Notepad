@@ -156,7 +156,7 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
         router.section = .settings
         #if HOSTED_EDITION
         // Ayarlar › Hesap: yıllık abone, davet kodu ve sayıları.
-        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: nil, now: now), referral: demoReferral())
+        HostedAccount.shared.showAccountForDemo(entitlements: demoEntitlements(trialLeft: nil, now: now), referral: demoReferral(now: now))
         #endif
     case .people:
         router.section = .people
@@ -232,7 +232,7 @@ func showDemoScene(scene: DemoScene, model: AppModel, router: MainWindowRouter, 
 private func demoEntitlements(trialLeft: Int?, now: Date) -> HostedEntitlements {
     let iso: (Date) -> String = { (date: Date) -> String in date.formatted(Date.ISO8601FormatStyle()) }
     let subscription: String = trialLeft == nil
-        ? #"{"status":"active","currentPeriodEnd":"\#(iso(now.addingTimeInterval(300 * 86_400)))","cancelAt":null,"access":"active","graceEndsAt":null,"plan":"yearly"}"#
+        ? #"{"status":"active","complimentary":false,"currentPeriodEnd":"\#(iso(now.addingTimeInterval(300 * 86_400)))","cancelAt":null,"access":"active","graceEndsAt":null,"plan":"yearly"}"#
         : "null"
     let left: Int = trialLeft ?? 0
     let json: String = """
@@ -253,11 +253,12 @@ private func demoEntitlements(trialLeft: Int?, now: Date) -> HostedEntitlements 
     }
 }
 
-/// Tanıtım hesabının davet bilgisi: iki arkadaş katılmış, biri için bir ay kazanılmış.
-private func demoReferral() -> HostedReferral {
+/// Tanıtım hesabının davet bilgisi: iki arkadaş katılmış, biri için bir ay kazanılmış, biri 24 gün sonra.
+private func demoReferral(now: Date) -> HostedReferral {
     HostedReferral(
         enabled: true, code: "K7M2QX9D", inviteUrl: URL(string: "https://gistsmith.com/invite?code=K7M2QX9D"), joined: 2, rewarded: 1,
-        pending: 1, rewardsLeftThisYear: 11, rewardsPerYear: 12, rewardUsd: 5.99, holdDays: 30
+        pending: 1, nextRewardAt: now.addingTimeInterval(24 * 86_400), complimentary: false, rewardsLeftThisYear: 11, rewardsPerYear: 12,
+        rewardUsd: 5.99, holdDays: 30
     )
 }
 #endif
@@ -613,7 +614,7 @@ func demoAskConversation(now: Date) -> AskConversation {
     - **€40k moves from paid ads to customer research and the beta.** You proposed it in the investor update and Maria agreed [1][2].
     - **Hiring stays flat** until the beta results are in [1].
 
-    For the beta itself, pricing stays on the current tiers, with no discounts until the usage numbers are in [3]. Your open task is to send Maria the updated budget before the board meeting.
+    For the beta itself, pricing stays on the current tiers, with no discounts until the usage numbers are in [3]. You already sent Maria the updated budget; your open task from that meeting is to plan the customer research interviews.
     """
     let askedAt: Date = now.addingTimeInterval(-25 * 60)
     let turn: AskConversationTurn = AskConversationTurn(

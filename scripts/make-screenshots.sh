@@ -3,17 +3,33 @@
 # kopyada, ayrı paket kimliğiyle ve geçici bir ev klasörüyle (CFFIXED_USER_HOME) açılır; kullanıcının toplantılarına,
 # ayarlarına ve Anahtar Zinciri öğelerine dokunulmaz (bkz. App/DemoData.swift). Yalnızca bu betiğin açtığı sürecin
 # pencereleri numarasıyla çekilir (tam ekran ya da başka uygulama çekilmez); bitince yalnızca o süreç kapatılır.
-# Çıktı: .build/screenshots/<sahne>.png (Retina, gölgesiz, köşeleri saydam) ve sitenin kaynağı
-# web/src/assets/screenshots/<ad>.webp (yüksek kaliteli WebP; site derlemede AVIF/WebP boyutlarını bundan üretir).
+# Çıktı: her sahne için .build/screenshots/<sahne>.png (Retina, gölgesiz, köşeleri saydam); site sahneleri için ayrıca
+# sitenin kaynağı web/src/assets/screenshots/<ad>.webp (yüksek kaliteli WebP; site derlemede AVIF/WebP boyutlarını
+# bundan üretir).
 # Gerekenler: xcodegen, Xcode, cwebp (brew install webp); çekim Retina ekranda yapılır (App/DemoData.swift taşır).
-# Kullanım: scripts/make-screenshots.sh [sahne ...]   (varsayılan: ana not sor canli)
+# Kullanım: scripts/make-screenshots.sh [sahne ...]   (varsayılan: site sahneleri)
+#   Site sahneleri (PNG + WebP): ana not sor canli
+#   Görsel kontrol sahneleri (yalnızca PNG): abone deneme-bitiyor deneme-bitti guncelleme ayarlar kisiler gorevler
+# Sahneler App/DemoData.swift'teki `DemoScene` ile aynıdır (biri değişirse ikisi birlikte değişir).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+site_scenes=(ana not sor canli)
+check_scenes=(abone deneme-bitiyor deneme-bitti guncelleme ayarlar kisiler gorevler)
+
 scenes=("$@")
 if [ ${#scenes[@]} -eq 0 ]; then
-    scenes=(ana not sor canli)
+    scenes=("${site_scenes[@]}")
 fi
+
+# Sahne adları derleme ve açılıştan önce denetlenir: yanlış ad uzun işten sonra değil hemen durdurur.
+known_scenes=" ${site_scenes[*]} ${check_scenes[*]} "
+for scene in "${scenes[@]}"; do
+    if [[ "$known_scenes" != *" $scene "* ]]; then
+        echo "Bilinmeyen sahne: $scene. Site sahneleri: ${site_scenes[*]}; görsel kontrol sahneleri: ${check_scenes[*]}" >&2
+        exit 1
+    fi
+done
 
 if ! command -v cwebp >/dev/null; then
     echo "cwebp yok: brew install webp" >&2
@@ -30,6 +46,20 @@ app="$work/Gistsmith.app"
 out=".build/screenshots"
 assets="web/src/assets/screenshots"
 mkdir -p "$out" "$assets"
+
+# Çıkışta (hata dahil) yalnızca bu betiğin açtığı tanıtım süreci kapatılır, sonra tanıtım ayarları ve geçici kopya
+# silinir: süreç silinmiş bir paketten çalışmaya devam etmez.
+pid=""
+cleanup() {
+    # `kill` başarısızsa süreç zaten kapanmıştır. `wait` sinyalle biten sürecin sıfır olmayan kodunu döndürür; beklenen
+    # sonuçtur.
+    if [[ -n "$pid" ]] && kill "$pid" 2>/dev/null; then
+        wait "$pid" 2>/dev/null || true
+    fi
+    defaults delete "$demo_id" >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
 
 # Ayrı paket kimliği: ayarlar sahibin uygulamasının alanına değil tanıtım alanına yazılır (sonda silinir). Güncelleme
 # anahtarı kaldırılır: tanıtım kopyası güncelleme denetlemez. Değişen Info.plist için kopya geçici imzayla yeniden
@@ -48,12 +78,6 @@ codesign --force --deep --sign - "$app" 2>/dev/null
 utc_hour=$((10#$(date -u +%H)))
 offset=$(( (10 - utc_hour + 36) % 24 - 12 ))
 if [ "$offset" -ge 0 ]; then tz="Etc/GMT-$offset"; else tz="Etc/GMT+$((-offset))"; fi
-
-cleanup() {
-    defaults delete "$demo_id" >/dev/null 2>&1 || true
-    rm -rf "$work"
-}
-trap cleanup EXIT
 
 for scene in "${scenes[@]}"; do
     home="$work/home-$scene"
@@ -79,18 +103,24 @@ for scene in "${scenes[@]}"; do
     fi
     if [ -z "$window" ]; then
         echo "Tanıtım penceresi bulunamadı ($scene)." >&2
-        kill "$pid"
         exit 1
     fi
     screencapture -x -o -l "$window" "$out/$scene.png"
     kill "$pid"
+    # Sinyalle kapanan süreç sıfır olmayan kod döndürür; beklenen sonuçtur.
     wait "$pid" 2>/dev/null || true
+    pid=""
+    # Site sahnesi WebP olarak sitenin kaynağına yazılır; görsel kontrol sahnesi yalnızca PNG kalır (ad yukarıda
+    # denetlendi).
     case "$scene" in
         ana) asset=home ;;
         not) asset=note ;;
         sor) asset=ask ;;
         canli) asset=live ;;
-        *) echo "Bilinmeyen sahne: $scene" >&2; exit 1 ;;
+        *)
+            echo "$out/$scene.png (görsel kontrol)"
+            continue
+            ;;
     esac
     cwebp -quiet -q 94 -m 6 -alpha_q 100 "$out/$scene.png" -o "$assets/$asset.webp"
     echo "$assets/$asset.webp ($(sips -g pixelWidth -g pixelHeight "$out/$scene.png" | awk '/pixel/ { printf "%s ", $2 }'))"

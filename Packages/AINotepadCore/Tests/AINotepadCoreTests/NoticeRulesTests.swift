@@ -12,7 +12,8 @@ import Testing
         #expect(visibleErrorMessages(errors: ["x", "x"], shownElsewhere: [], resolved: []) == ["x"])
     }
 
-    // Kayıt başlayamama nedeni hak durumundan: deneme bitti, aylık sınır doldu; ek sürede kayıt yapılabilir.
+    // Kayıt başlayamama nedeni hak durumundan: deneme bitti, aylık sınır doldu, ödeme alınamadı, abonelik bitti; ek
+    // sürede kayıt yapılabilir.
     @Test func startBlockFollowsEntitlements() throws {
         func decoded(_ text: String) throws -> HostedEntitlements {
             try testHostedDecoder().decode(HostedEntitlements.self, from: Data(text.utf8))
@@ -20,16 +21,19 @@ import Testing
         let subscriber: String = #"""
         {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
          "monthlyHoursUsed":10,"monthlyHoursCap":10,
-         "subscription":{"status":"past_due","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"grace","graceEndsAt":"2026-11-27T00:00:00.000Z"}}
+         "subscription":{"status":"past_due","complimentary":false,"currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"grace","graceEndsAt":"2026-11-27T00:00:00.000Z"}}
         """#
         #expect(hostedStartBlock(entitlements: try decoded(subscriber)) == .monthlyCapReached)
         #expect(hostedStartBlock(entitlements: try decoded(subscriber.replacingOccurrences(of: #""monthlyHoursUsed":10"#, with: #""monthlyHoursUsed":4"#))) == nil)
         // Hiç abone olmamış deneme hesabı; eski abone (abonelik bitti, deneme yok) "abonelik sona erdi".
         let trial: String = subscriber.replacingOccurrences(
-            of: #"{"status":"past_due","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"grace","graceEndsAt":"2026-11-27T00:00:00.000Z"}"#, with: "null"
+            of: #"{"status":"past_due","complimentary":false,"currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"grace","graceEndsAt":"2026-11-27T00:00:00.000Z"}"#, with: "null"
         )
         #expect(hostedStartBlock(entitlements: try decoded(trial)) == .trialEnded)
-        #expect(hostedStartBlock(entitlements: try decoded(subscriber.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#))) == .subscriptionEnded)
+        // Ek süresi bitmiş ödenmemiş abonelik "ödeme alınamadı"; iptal edilmiş abonelik "abonelik sona erdi".
+        let lapsed: String = subscriber.replacingOccurrences(of: #""access":"grace""#, with: #""access":"none""#)
+        #expect(hostedStartBlock(entitlements: try decoded(lapsed)) == .paymentOverdue)
+        #expect(hostedStartBlock(entitlements: try decoded(lapsed.replacingOccurrences(of: #""status":"past_due""#, with: #""status":"canceled""#))) == .subscriptionEnded)
         #expect(hostedStartBlock(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":2"#))) == nil)
     }
 

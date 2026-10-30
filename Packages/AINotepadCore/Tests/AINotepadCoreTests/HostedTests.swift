@@ -136,6 +136,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
     @Test func keytermsMatchServerRules() {
         #expect(hostedKeyterms(terms: [" Aino ", "aino", "", "a{b}", String(repeating: "x", count: 50), "bir iki üç dört beş altı", "Kone Oyj"], limit: 5) == ["Aino", "Kone Oyj"])
         #expect(hostedKeyterms(terms: ["a", "b", "c"], limit: 2) == ["a", "b"])
+        // Sunucu uzunluğu UTF-16 birimiyle sayar: 30 emoji (60 birim) 49'u aşar.
+        #expect(hostedKeyterms(terms: [String(repeating: "🎉", count: 30), "Aino"], limit: 5) == ["Aino"])
     }
 
     // Anahtar terimler adreste değil, başlıkta: UTF-8 JSON dizisinin dolgusuz base64url'i.
@@ -339,7 +341,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let json: String = #"""
         {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":1,"accountTrialMeetingsLeft":1,"deviceTrialMeetingsLeft":null,
          "monthlyHoursUsed":2.5,"monthlyHoursCap":10,
-         "subscription":{"status":"past_due","currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z"}}
+         "subscription":{"status":"past_due","complimentary":false,"currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z"}}
         """#
         let entitlements: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(json.utf8))
         #expect(entitlements.monthlyHoursUsed == 2.5)
@@ -361,6 +363,17 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             .replacingOccurrences(of: #""access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""access":"active","graceEndsAt":null"#)
             .replacingOccurrences(of: #""status":"past_due","#, with: #""status":"active","cancelAt":"2026-10-01T00:00:00.000Z","#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(ending.utf8))) == .ending(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Ek süresi bitmiş ödenmemiş abonelik "sona erdi" değil: ödeme alınamadı, kayıt kart güncellenene dek başlamaz.
+        let overdueJSON: String = trial.replacingOccurrences(of: #""trialMeetingsLeft":1"#, with: #""trialMeetingsLeft":0"#)
+            .replacingOccurrences(of: #""graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""graceEndsAt":null"#)
+        let overdue: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(overdueJSON.utf8))
+        #expect(hostedPlanStatus(entitlements: overdue) == .paymentOverdue)
+        #expect(hostedStartBlock(entitlements: overdue) == .paymentOverdue)
+        let canceled: String = overdueJSON.replacingOccurrences(of: #""status":"past_due""#, with: #""status":"canceled""#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(canceled.utf8))) == .expired(endedAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Yöneticinin verdiği ücretsiz erişim: yenileme ya da iptal tarihi değil "ücretsiz erişim".
+        let complimentary: String = ending.replacingOccurrences(of: #""complimentary":false"#, with: #""complimentary":true"#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(complimentary.utf8))) == .complimentary)
         // Toplantı dışı yapay zekâ payı yeni alan: yoksa nil, varsa okunur.
         #expect(entitlements.accountTokensCap == nil)
         let withTokens: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"accountTokensUsed":250,"accountTokensCap":1000,"#)
@@ -382,7 +395,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedEntitlementsOnThisMac(entitlements: trial, trialRefusedOnThisMac: false) == trial)
         let subscriberJSON: String = trialJSON
             .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
-            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#)
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","complimentary":false,"currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#)
         let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(subscriberJSON.utf8))
         #expect(hostedEntitlementsOnThisMac(entitlements: subscriber, trialRefusedOnThisMac: true) == subscriber)
     }
@@ -404,7 +417,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(hostedUpsellMoment(entitlements: ended, lastShownAt: nil, trialEndedShown: true, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
         let subscriber: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON
             .replacingOccurrences(of: #""plan":"trial""#, with: #""plan":"subscription""#)
-            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#).utf8))
+            .replacingOccurrences(of: #""subscription":null"#, with: #""subscription":{"status":"active","complimentary":false,"currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active"}"#).utf8))
         #expect(hostedUpsellMoment(entitlements: subscriber, lastShownAt: nil, trialEndedShown: false, trialEndingShown: false, now: now, intervalSec: hostedUpsellIntervalSec) == nil)
         // Son toplantı kaldı: günlük aralık beklenmeden bir kez "bitmek üzere"; gösterildiyse günlük teklif sürer.
         let lastOne: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(trialJSON.replacingOccurrences(of: #""trialMeetingsLeft":2"#, with: #""trialMeetingsLeft":1"#).utf8))
@@ -415,7 +428,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
     // Abonelik planı yanıttan okunur; tanınmayan ya da eksik plan hak yanıtını bozmaz.
     @Test func subscriptionPlanDecodes() throws {
         func subscription(_ plan: String) throws -> HostedSubscription {
-            let json: String = #"{"status":"active","currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active""# + plan + "}"
+            let json: String = #"{"status":"active","complimentary":false,"currentPeriodEnd":"2026-11-29T00:00:00.000Z","access":"active""# + plan + "}"
             return try hostedJSONDecoder().decode(HostedSubscription.self, from: Data(json.utf8))
         }
         #expect(try subscription(#","plan":"yearly""#).billingPlan == .yearly)
@@ -508,14 +521,14 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let subscriber: String = #"""
         {"userId":"u","plan":"subscription","trialMeetingsTotal":3,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
          "monthlyHoursUsed":8.5,"monthlyHoursCap":10,
-         "subscription":{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}}
+         "subscription":{"status":"active","complimentary":false,"currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}}
         """#
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber)) == .monthlyWarning)
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "10"))) == .monthlyFull)
         #expect(hostedUsageNotice(entitlements: try decoded(subscriber.replacingOccurrences(of: "8.5", with: "2"))) == nil)
         // Hiç abone olmamış deneme hesabı (eski abone "abonelik sona erdi" görür; bkz. HostedOfflineTests).
         let trial: String = subscriber.replacingOccurrences(
-            of: #"{"status":"active","currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}"#, with: "null"
+            of: #"{"status":"active","complimentary":false,"currentPeriodEnd":"2026-11-20T00:00:00.000Z","access":"active","graceEndsAt":null}"#, with: "null"
         )
         #expect(hostedUsageNotice(entitlements: try decoded(trial)) == .trialEnded)
         #expect(hostedUsageNotice(entitlements: try decoded(trial.replacingOccurrences(of: #""trialMeetingsLeft":0"#, with: #""trialMeetingsLeft":1"#))) == .trialOneLeft)

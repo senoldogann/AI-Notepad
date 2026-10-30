@@ -95,6 +95,24 @@ import Testing
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: ["et-EE"], languageCodes: codes) == .english)
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: ["az-AZ"], languageCodes: codes) == .english)
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: [], languageCodes: codes) == .english)
+        // Abonelik sürümünde model sınırı yok: cihazın dili toplantı dillerindeyse o, yoksa İngilizce.
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["fi-FI"]) == .finnish)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["et-EE"]) == .estonian)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["nb-NO"]) == .norwegian)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["xx-YY"]) == .english)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: []) == .english)
+    }
+
+    // LLM yoksa notu olan toplantı "Hata"ya dönmez (eski not kalır); notu olmayan toplantı "Hata"da kalır.
+    @Test func missingLLMKeepsExistingNote() async throws {
+        let note: MeetingNote = MeetingNote(title: "T", summary: "Ö", decisions: [], tasks: [], glossary: [])
+        let kept: MeetingRecord = await regenerateNote(
+            record: meeting(id: "n", language: .english).with(note: note), directory: try temporaryDirectory(), llm: nil, userName: "Ada", language: .turkish
+        )
+        #expect(kept.status == .done)
+        #expect(kept.note == note)
+        let fresh: MeetingRecord = await regenerateNote(record: meeting(id: "m", language: .english), directory: try temporaryDirectory(), llm: nil, userName: "Ada", language: .turkish)
+        #expect(fresh.status == .failed)
     }
 
     // Arşiv sorusu: Fince toplantılar okunmaz ve model satırında yazılır; okunacak toplantı kalmazsa ya da cevap dili
@@ -191,6 +209,28 @@ import Testing
         #expect((3_000...8_000).contains(local.archiveChars), "arşiv: \(local.archiveChars)")
         // Daha büyük bağlamda parça büyür.
         #expect(noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 8192, languageCodes: []))).chunkChars > local.chunkChars)
+    }
+
+    // Not düzenleme: uzun toplantının transkripti 4096 token'lık cihaz içi modele sığmaz, yalnızca not gider ve istem
+    // yanıta yer bırakır; bulutta transkript tam gider; kısa toplantıda cihaz içinde de transkript gider.
+    @Test func noteEditFitsOnDeviceContext() {
+        let note: MeetingNote = MeetingNote(
+            title: "Bütçe", summary: "Bütçe konuşuldu.", decisions: ["Bütçe artar."],
+            tasks: [NoteTask(owner: "Aino", description: "Raporu gönder", dueDate: "Cuma", isMine: false)], glossary: []
+        )
+        let sentence: String = "Budjetti on 10 000 euroa ja raportti valmistuu perjantaina."
+        let long: MeetingRecord = record(id: "a", startedAt: Date(), status: .done, audioDeleted: false)
+            .with(finalSegments: (0..<300).map { stored("final-\($0)", .others, 1, Double($0 * 3), sentence) }, language: .finnish)
+            .with(note: note)
+        let local: NoteLimits = noteLimits(provider: .onDevice(config))
+        let onDevice: LLMRequest = meetingNoteEditRequest(record: long, note: note, instruction: "Kısalt.", limits: local, userName: "Senol")
+        #expect(!onDevice.userText.contains(sentence))
+        let schemaTokens: Int = 350
+        #expect(estimatedOnDeviceTokens(text: onDevice.system + onDevice.userText) + schemaTokens < 4096 - onDeviceMinResponseTokens)
+        let inCloud: LLMRequest = meetingNoteEditRequest(record: long, note: note, instruction: "Kısalt.", limits: noteLimits(provider: cloud), userName: "Senol")
+        #expect(inCloud.userText.contains(sentence))
+        let short: MeetingRecord = long.with(finalSegments: [stored("final-0", .others, 1, 0, sentence)], language: .finnish)
+        #expect(meetingNoteEditRequest(record: short, note: note, instruction: "Kısalt.", limits: local, userName: "Senol").userText.contains(sentence))
     }
 
     @Test func condensesPartSummariesButKeepsTasks() {

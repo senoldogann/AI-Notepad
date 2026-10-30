@@ -1,6 +1,6 @@
 ---
 // Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
-// transcribe.ts, deepgram.ts, llm/, auth/, billing.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması
+// transcribe.ts, deepgram.ts, llm/, auth/, billing.ts, referrals.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması
 // (App/Hosted: canlı metin Deepgram'la, kapasite dolunca ya da bağlantı yoksa Mac'te; iCloud eşitlemesi yok, güncellemeler
 // GitHub'dan) ve bu sitenin tarayıcı depolaması (public/theme.js,
 // src/client/session.ts). Sağlayıcıların saklama ve eğitim kuralları resmî belgelerinden alınmıştır (2026-10-29):
@@ -80,8 +80,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         may use their own cookies on the pages where you use them (see section 6). We don't sell your data.
       </li>
       <li>
-        You can delete your account yourself at any time; the data on our server is deleted immediately, except a
-        pseudonymous record of how many free-trial meetings your sign-in identity has used (see section 9).
+        You can delete your account yourself at any time; the data on our server is deleted immediately, except a few
+        records kept for a limited time to prevent abuse and handle payments, such as a pseudonymous record of your
+        free-trial use (section 9 lists them all).
       </li>
     </ul>
   </LegalSection>
@@ -225,7 +226,10 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
               invite code: which account the code belongs to, which account used it, when it was used, when the first
               payment was made, and the reward's status (waiting, given or cancelled) with the time it changed. To stop the
               same person using an invite twice, we also keep a keyed one-way hash of the sign-in identity of the account
-              that used it. The reward itself is a credit Stripe holds on the inviter's customer record.
+              that used it and, for a payment made with an invite code, a keyed one-way hash of the card fingerprint
+              Stripe gives that card (an identifier of the card, not its number), so the same card can't collect
+              invite discounts on several accounts. The reward itself is a credit Stripe holds on the inviter's customer
+              record.
             </td>
             <td>Running the invite programme: giving the discount and the reward, and preventing self-referral and abuse</td>
             <td>(b) contract; (f) legitimate interest in preventing fraud and abuse</td>
@@ -489,8 +493,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <li>Cancellation reasons and comments: 180 days; deleted immediately when you delete your account.</li>
       <li>
         Invite records: while the accounts involved exist. When you delete your account, your invite code and the records
-        that link an invite to your account are deleted; for an account that used an invite, the keyed hash of its
-        sign-in identity and the dates are kept for up to 24 months so the same person can't use an invite again.
+        that link an invite to your account are deleted; for an account that used an invite, the keyed hashes of its
+        sign-in identity and of the card fingerprint, and the dates, are kept for up to 24 months so the same person or
+        card can't use an invite again.
       </li>
       <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
       <li>Daily download and error totals (not linked to you): 400 days.</li>
@@ -517,7 +522,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       new account continues the trial where the old one left off and, within the same month, starts from the old
       account's usage; the DeviceCheck bit for your Mac, which Apple stores; today's trial and download counters for
       your network (a hashed IP address, not linked to any account, deleted at the end of the day); if your account used an
-      invite code, a keyed hash of your sign-in identity with the dates, for up to 24 months; payment records kept by
+      invite code, keyed hashes of your sign-in identity and of the paying card's fingerprint with the dates, for up to
+      24 months; payment records kept by
       Stripe and Link; messages you sent through the contact form until their 180 days run out (ask us if you want them
       deleted sooner — feedback and crash reports linked to your account are deleted with it); if a duplicate
       subscription was ever created by mistake, its Stripe identifiers for up to 400 days so a double charge can be

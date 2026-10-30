@@ -187,14 +187,14 @@ public func resolveHostedBrowserCallback(
 public func hostedBrowserSignInMessage(error: HostedBrowserSignInError) -> String {
     switch error {
     case .sessionNotStarted:
-        String(localized: "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.")
+        String(localized: "Giriş penceresi açılamadı. Uygulamayı öne getirip Apple ya da Google ile yeniden devam et.")
     case .noPendingAttempt:
-        String(localized: "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. \"Giriş yap\"a yeniden bas.")
+        String(localized: "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. Apple ya da Google ile yeniden devam et.")
     case .attemptExpired:
-        String(localized: "Giriş 10 dakika içinde tamamlanmadı. \"Giriş yap\"a yeniden bas.")
+        String(localized: "Giriş 10 dakika içinde tamamlanmadı. Apple ya da Google ile yeniden devam et.")
     case .invalidCallback:
-        String(localized: "Girişten dönen bağlantı geçersiz. \"Giriş yap\"a yeniden bas.")
+        String(localized: "Girişten dönen bağlantı geçersiz. Apple ya da Google ile yeniden devam et.")
     case .nonceMismatch:
-        String(localized: "Giriş başka bir denemeden döndü. \"Giriş yap\"a yeniden bas.")
+        String(localized: "Giriş başka bir denemeden döndü. Apple ya da Google ile yeniden devam et.")
     }
 }

@@ -19,6 +19,16 @@ func timed(_ speaker: Speaker, _ index: Int, _ start: Double, _ end: Double, _ t
         #expect(suppressEchoes(transcript: [others, echo]) == [others])
     }
 
+    // Yankının hemen ardındaki boş hata satırı kalır: komşusuyla birleşik metni yankıyla aynı olsa da.
+    @Test func keepsEmptyFailureRowNextToEcho() {
+        let others: LiveSegment = timed(.others, 0, 10, 14, "Tässä lähetyksessä tapaamme Jarnon joka valmentaa koripalloa")
+        let echo: LiveSegment = timed(.me, 0, 10.5, 12, "Tässä lähetyksessä tapaamme Jarnon")
+        let failure: LiveSegment = LiveSegment(
+            id: SegmentID(speaker: .me, index: 1), startSec: 12.2, endSec: 13.5, text: "", isFinal: true, failureMessage: "Yazıya dökülemedi", person: nil
+        )
+        #expect(suppressEchoes(transcript: [others, echo, failure]) == [others, failure])
+    }
+
     @Test func keepsOwnDifferentSpeech() {
         let others: LiveSegment = timed(.others, 0, 10, 14, "Tässä lähetyksessä tapaamme Jarnon")
         let mine: LiveSegment = timed(.me, 0, 11, 13, "Minulla on kysymys raportista")

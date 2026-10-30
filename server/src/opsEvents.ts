@@ -43,6 +43,7 @@ export const countedRefusalCodes: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "reprocess_limit_reached",
   "deepgram_unavailable",
   "deepgram_grant_limit",
+  "referral_limit_reached",
 ]);
 
 /**
@@ -72,7 +73,8 @@ export function failureEvents(error: unknown): OpsEvent[] {
 /**
  * Toplantının olağan akışındaki kodlar; toplantıya hata olarak yazılmaz: `transcription_in_progress` (aynı parçanın
  * süren isteği; istemci bekleyip yeniden dener), `deepgram_unavailable` ve `deepgram_grant_limit` (canlı metin Mac'te
- * sürer). Ret sayaçlarında (`countedRefusalCodes`) yine görünürler.
+ * sürer). Deepgram kodları ret sayaçlarında (`countedRefusalCodes`) yine görünür; `transcription_in_progress` istemcinin
+ * bekleyip yeniden denediği eşzamanlılık yanıtı olduğu için sayılmaz.
  */
 const routineMeetingCodes: ReadonlySet<ErrorCode> = new Set<ErrorCode>(["transcription_in_progress", "deepgram_unavailable", "deepgram_grant_limit"]);
 

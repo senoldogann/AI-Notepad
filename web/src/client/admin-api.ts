@@ -1,4 +1,4 @@
-// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, içgörüler, kullanıcı listesi ve ayrıntısı,
+// Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, içgörüler (davet özeti dahil), kullanıcı listesi ve ayrıntısı (davetler dahil),
 // işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği. Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
 // Zaman alanları (`generatedAt`, `createdAt`) Unix ms sayısı ya da ISO 8601 metni olabilir; ikisi de ms'ye çevrilir.
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
@@ -15,6 +15,7 @@ import {
   parseObject,
   stringField,
 } from "./api";
+import type { InviteStatus, InviteTimelineKind } from "./admin-invites-copy";
 import { authorizedSend } from "./session";
 import { type BillingPlan, billingPlans } from "../lib/plans";
 
@@ -64,8 +65,17 @@ export interface AdminStats {
     readonly complimentary: number;
     readonly freeInviteMonth: number;
   };
-  /** Davet programı: katılan, 30 günlük bekleme süresindeki, ödülü verilen ve iptal edilen davetler. */
-  readonly referrals: { readonly joined: number; readonly pending: number; readonly granted: number; readonly voided: number };
+  /**
+   * Davet programı: katılan, ödülü bekleyen, ödülü verilen ve düşen davetler; düşenlerin nedene göre dökümü (`capped`:
+   * yıllık ödül sınırı).
+   */
+  readonly referrals: {
+    readonly joined: number;
+    readonly pending: number;
+    readonly granted: number;
+    readonly voided: number;
+    readonly voidedByReason: readonly { readonly reason: string; readonly count: number }[];
+  };
   readonly meetings: { readonly last30Days: readonly DayMeetings[]; readonly hoursThisMonth: number };
   readonly spend: { readonly todayUsd: number; readonly ceilingUsd: number; readonly last30Days: readonly DaySpend[] };
   readonly tokens: { readonly thisMonth: number };
@@ -108,8 +118,11 @@ export interface TrialRefusalCounts {
   readonly ipDailyLimit: number;
 }
 
-/** Kullanıcı listesi kesimi. */
-export type UserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free" | "no_meeting" | "trial_ended" | "inactive" | "failed";
+/** Kullanıcı listesi kesimi (`invited`: davet koduyla abone olmuş). */
+export type UserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free" | "invited" | "no_meeting" | "trial_ended" | "inactive" | "failed";
+
+/** Listedeki davet rozeti: davetle abone oldu ya da şu an davetin ücretsiz ilk ayında. */
+export type UserInvite = "invited" | "free_month";
 
 /** Giriş sağlayıcısı süzgeci. */
 export type UserProvider = "apple" | "google";
@@ -149,6 +162,8 @@ export interface UserSummary {
   /** İsteği başarısız olmuş toplantı sayısı ve en son hatanın kodu. */
   readonly failedMeetings: number;
   readonly lastFailureCode: string | null;
+  /** Davetle abone olduysa rozeti; olmadıysa null. */
+  readonly invite: UserInvite | null;
 }
 
 /** Kullanıcı listesinin bir sayfası; `nextCursor` sonraki sayfanın imleci (yoksa null). */
@@ -206,8 +221,8 @@ export interface ProblemWindow {
   readonly serverErrorsTotal: number;
 }
 
-/** Huninin adımı. */
-export type FunnelStep = "downloads" | "accounts" | "first_meeting" | "first_note" | "three_meetings" | "subscribed" | "canceled";
+/** Huninin adımı (`subscribed_via_invite` ve `canceled` `subscribed`'ın alt kümesidir). */
+export type FunnelStep = "downloads" | "accounts" | "first_meeting" | "first_note" | "three_meetings" | "subscribed" | "subscribed_via_invite" | "canceled";
 
 /** Son iptal (Unix ms). */
 export interface RecentCancellation {
@@ -216,6 +231,30 @@ export interface RecentCancellation {
   readonly reason: string | null;
   readonly feedback: string | null;
   readonly comment: string | null;
+}
+
+/** En çok davet eden: davet sayaçları (tüm zamanlar). */
+export interface InviteReferrer {
+  readonly userId: string;
+  readonly joined: number;
+  readonly pending: number;
+  readonly granted: number;
+  readonly voided: number;
+}
+
+/**
+ * Davet programının özeti: son 30 günde Checkout'a götürülen kodlar, katılımlar, ilk ücretli faturalar, verilen ödüller
+ * ve nedene göre düşen davetler; şu an ücretsiz aydakiler; en çok davet edenler.
+ */
+export interface InviteSummary {
+  readonly days: number;
+  readonly checkouts: number;
+  readonly joined: number;
+  readonly firstPayments: number;
+  readonly granted: number;
+  readonly voided: readonly DetailCount[];
+  readonly inFreeMonth: number;
+  readonly topReferrers: readonly InviteReferrer[];
 }
 
 /** `GET /v1/admin/insights` yanıtı. */
@@ -230,10 +269,11 @@ export interface Insights {
     readonly byReason: readonly DetailCount[];
     readonly recent: readonly RecentCancellation[];
   };
+  readonly invites: InviteSummary;
 }
 
-/** Zaman çizelgesi olayı. */
-export type TimelineKind =
+/** Hesap ve abonelik zaman çizelgesi olayı. */
+export type AccountTimelineKind =
   | "account_created"
   | "trial_started"
   | "trial_device_verified"
@@ -242,6 +282,9 @@ export type TimelineKind =
   | "subscription_past_due"
   | "subscription_cancel_at"
   | "subscription_period_end";
+
+/** Zaman çizelgesi olayı: hesap ve abonelik ya da davet olayı. */
+export type TimelineKind = AccountTimelineKind | InviteTimelineKind;
 
 /** Zaman çizelgesi satırı. */
 export interface TimelineEntry {
@@ -257,6 +300,50 @@ export interface UserReport {
   readonly status: ReportStatus;
   readonly createdAt: number;
   readonly summary: string;
+}
+
+/** Hesabın kullandığı davet (davet edilen tarafı). Zamanlar Unix ms. */
+export interface UserInvitedBy {
+  /** Davet edenin hesabı; hesabını silmişse null. */
+  readonly referrerUserId: string | null;
+  readonly code: string;
+  readonly status: InviteStatus;
+  readonly voidReason: string | null;
+  readonly inFreeMonth: boolean;
+  /** Katılımda kart denetimi yapıldı mı (kart özeti yazıldı). */
+  readonly cardChecked: boolean;
+  readonly createdAt: number;
+  readonly joinedAt: number | null;
+  readonly qualifiedAt: number | null;
+  readonly rewardDueAt: number | null;
+  readonly rewardedAt: number | null;
+  readonly updatedAt: number;
+}
+
+/** Hesabın davet ettiği arkadaş. Zamanlar Unix ms. */
+export interface UserInviteFriend {
+  /** Arkadaşın hesabı; hesabını silmişse null. */
+  readonly userId: string | null;
+  readonly status: InviteStatus;
+  readonly voidReason: string | null;
+  readonly createdAt: number;
+  readonly joinedAt: number | null;
+  readonly qualifiedAt: number | null;
+  readonly rewardDueAt: number | null;
+  readonly rewardedAt: number | null;
+}
+
+/** Hesabın davetleri (davet eden tarafı). */
+export interface UserInvites {
+  readonly code: string | null;
+  readonly joined: number;
+  readonly pending: number;
+  readonly rewarded: number;
+  readonly voided: number;
+  readonly rewardsLeftThisYear: number;
+  readonly rewardsPerYear: number;
+  readonly nextRewardAt: number | null;
+  readonly friends: readonly UserInviteFriend[];
 }
 
 /** `GET /v1/admin/users/{id}` yanıtı. */
@@ -276,6 +363,10 @@ export interface UserDetail {
   };
   readonly meetings: readonly UserMeeting[];
   readonly reports: readonly UserReport[];
+  /** Kullandığı davet; davet koduyla Checkout'a hiç gitmemişse null. */
+  readonly invitedBy: UserInvitedBy | null;
+  /** Davetleri; kodu ve davet ettiği arkadaşı yoksa null. */
+  readonly invites: UserInvites | null;
   readonly timeline: readonly TimelineEntry[];
 }
 
@@ -471,6 +562,12 @@ export function parseAdminStats(response: RawResponse, path: string): AdminStats
       pending: numberField(referrals, "pending", response, path),
       granted: numberField(referrals, "granted", response, path),
       voided: numberField(referrals, "voided", response, path),
+      voidedByReason: objectArrayField(referrals, "voidedByReason", response, path).map(
+        (item: JsonObject): { readonly reason: string; readonly count: number } => ({
+          reason: stringField(item, "reason", response, path),
+          count: numberField(item, "count", response, path),
+        }),
+      ),
     },
     meetings: {
       last30Days: objectArrayField(meetings, "last30Days", response, path).map(
@@ -578,8 +675,10 @@ function nullableObjectField(object: JsonObject, key: string, response: RawRespo
   return object[key] === null ? null : objectField(object, key, response, path);
 }
 
-const segments: readonly UserSegment[] = ["subscribed", "past_due", "canceled", "trial", "free", "no_meeting", "trial_ended", "inactive", "failed"];
-const funnelSteps: readonly FunnelStep[] = ["downloads", "accounts", "first_meeting", "first_note", "three_meetings", "subscribed", "canceled"];
+const segments: readonly UserSegment[] = ["subscribed", "past_due", "canceled", "trial", "free", "invited", "no_meeting", "trial_ended", "inactive", "failed"];
+const funnelSteps: readonly FunnelStep[] = ["downloads", "accounts", "first_meeting", "first_note", "three_meetings", "subscribed", "subscribed_via_invite", "canceled"];
+const userInvites: readonly UserInvite[] = ["invited", "free_month"];
+const inviteStatuses: readonly InviteStatus[] = ["checkout", "joined", "qualified", "granted", "capped", "void"];
 const providers: readonly UserProvider[] = ["apple", "google"];
 const plans: readonly UserPlan[] = ["subscription", "trial", "free"];
 const accesses: readonly UserAccess[] = ["active", "grace", "none"];
@@ -594,6 +693,14 @@ const timelineKinds: readonly TimelineKind[] = [
   "subscription_past_due",
   "subscription_cancel_at",
   "subscription_period_end",
+  "invite_checkout",
+  "invite_joined",
+  "invite_first_payment",
+  "invite_reward_due",
+  "invite_rewarded",
+  "invite_voided",
+  "invite_friend_joined",
+  "invite_friend_rewarded",
 ];
 
 /** Kesim adının geçerli olup olmadığı (sayfadaki seçimden okunurken). Saf fonksiyondur. */
@@ -640,7 +747,56 @@ function parseUserSummary(item: JsonObject, response: RawResponse, path: string)
     lastActiveAt: nullableTimestampField(item, "lastActiveAt", response, path),
     failedMeetings: numberField(item, "failedMeetings", response, path),
     lastFailureCode: nullableStringField(item, "lastFailureCode", response, path),
+    invite: nullableLiteralField(item, "invite", userInvites, response, path),
   };
+}
+
+/** Kullanılan daveti okur (null korunur). */
+function parseInvitedBy(object: JsonObject | null, response: RawResponse, path: string): UserInvitedBy | null {
+  return object === null
+    ? null
+    : {
+        referrerUserId: nullableStringField(object, "referrerUserId", response, path),
+        code: stringField(object, "code", response, path),
+        status: literalField(object, "status", inviteStatuses, response, path),
+        voidReason: nullableStringField(object, "voidReason", response, path),
+        inFreeMonth: booleanField(object, "inFreeMonth", response, path),
+        cardChecked: booleanField(object, "cardChecked", response, path),
+        createdAt: timestampField(object, "createdAt", response, path),
+        joinedAt: nullableTimestampField(object, "joinedAt", response, path),
+        qualifiedAt: nullableTimestampField(object, "qualifiedAt", response, path),
+        rewardDueAt: nullableTimestampField(object, "rewardDueAt", response, path),
+        rewardedAt: nullableTimestampField(object, "rewardedAt", response, path),
+        updatedAt: timestampField(object, "updatedAt", response, path),
+      };
+}
+
+/** Hesabın davetlerini okur (null korunur). */
+function parseInvites(object: JsonObject | null, response: RawResponse, path: string): UserInvites | null {
+  return object === null
+    ? null
+    : {
+        code: nullableStringField(object, "code", response, path),
+        joined: numberField(object, "joined", response, path),
+        pending: numberField(object, "pending", response, path),
+        rewarded: numberField(object, "rewarded", response, path),
+        voided: numberField(object, "voided", response, path),
+        rewardsLeftThisYear: numberField(object, "rewardsLeftThisYear", response, path),
+        rewardsPerYear: numberField(object, "rewardsPerYear", response, path),
+        nextRewardAt: nullableTimestampField(object, "nextRewardAt", response, path),
+        friends: objectArrayField(object, "friends", response, path).map(
+          (item: JsonObject): UserInviteFriend => ({
+            userId: nullableStringField(item, "userId", response, path),
+            status: literalField(item, "status", inviteStatuses, response, path),
+            voidReason: nullableStringField(item, "voidReason", response, path),
+            createdAt: timestampField(item, "createdAt", response, path),
+            joinedAt: nullableTimestampField(item, "joinedAt", response, path),
+            qualifiedAt: nullableTimestampField(item, "qualifiedAt", response, path),
+            rewardDueAt: nullableTimestampField(item, "rewardDueAt", response, path),
+            rewardedAt: nullableTimestampField(item, "rewardedAt", response, path),
+          }),
+        ),
+      };
 }
 
 /** `GET /v1/admin/users` yanıtını okur. */
@@ -699,6 +855,8 @@ export function parseUserDetail(response: RawResponse, path: string): UserDetail
         summary: stringField(item, "summary", response, path),
       }),
     ),
+    invitedBy: parseInvitedBy(nullableObjectField(body, "invitedBy", response, path), response, path),
+    invites: parseInvites(nullableObjectField(body, "invites", response, path), response, path),
     timeline: objectArrayField(body, "timeline", response, path).map(
       (item: JsonObject): TimelineEntry => ({
         kind: literalField(item, "kind", timelineKinds, response, path),
@@ -747,6 +905,7 @@ export function parseInsights(response: RawResponse, path: string): Insights {
   const funnel: JsonObject = objectField(body, "funnel", response, path);
   const downloads: JsonObject = objectField(body, "downloads", response, path);
   const cancellations: JsonObject = objectField(body, "cancellations", response, path);
+  const invites: JsonObject = objectField(body, "invites", response, path);
   return {
     generatedAt: timestampField(body, "generatedAt", response, path),
     problems: {
@@ -776,6 +935,24 @@ export function parseInsights(response: RawResponse, path: string): Insights {
           reason: nullableStringField(item, "reason", response, path),
           feedback: nullableStringField(item, "feedback", response, path),
           comment: nullableStringField(item, "comment", response, path),
+        }),
+      ),
+    },
+    invites: {
+      days: numberField(invites, "days", response, path),
+      checkouts: numberField(invites, "checkouts", response, path),
+      joined: numberField(invites, "joined", response, path),
+      firstPayments: numberField(invites, "firstPayments", response, path),
+      granted: numberField(invites, "granted", response, path),
+      voided: detailCounts(invites, "voided", response, path),
+      inFreeMonth: numberField(invites, "inFreeMonth", response, path),
+      topReferrers: objectArrayField(invites, "topReferrers", response, path).map(
+        (item: JsonObject): InviteReferrer => ({
+          userId: stringField(item, "userId", response, path),
+          joined: numberField(item, "joined", response, path),
+          pending: numberField(item, "pending", response, path),
+          granted: numberField(item, "granted", response, path),
+          voided: numberField(item, "voided", response, path),
         }),
       ),
     },

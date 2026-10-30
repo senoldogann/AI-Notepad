@@ -247,14 +247,17 @@ final class PhoneStore {
     }
 
     /// Konuşmacılara ad verir ("Konuşmacı 2 = Aino"; boş ad etiketi geri getirir). Kayıttaki, işlenen ya da notu
-    /// yazılan toplantıda yapılmaz (işleme bitince kayıt bütünüyle yazılır, ad kaybolurdu).
+    /// yazılan toplantıda yapılmaz (işleme bitince kayıt bütünüyle yazılır, ad kaybolurdu). Değişiklik diskteki en güncel
+    /// kayda uygulanır (Mac'te iCloud'la gelmiş düzenlemeler bellekteki eski kopyayla ezilmesin).
     func renameSpeakers(meetingID: String, names: [Int: String]) throws {
         guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing,
               !regeneratingIDs.contains(meetingID) else {
             throw StorageError.writeFailed(path: meetingID, reason: "kayıtta ya da işleniyor")
         }
-        let updated: MeetingRecord = record.with(speakerNames: renamingSpeakers(names: record.speakerNames, edits: names))
-        try saveMeeting(record: updated, directory: try sessionDirectory(id: meetingID))
+        let directory: URL = try sessionDirectory(id: meetingID)
+        let fresh: MeetingRecord = try loadMeeting(directory: directory)
+        let updated: MeetingRecord = fresh.with(speakerNames: renamingSpeakers(names: fresh.speakerNames, edits: names))
+        try saveMeeting(record: updated, directory: directory)
         upsert(record: updated)
     }
 
@@ -274,10 +277,12 @@ final class PhoneStore {
         }
     }
 
-    /// Toplantıyı kalıcı olarak siler (onay arayüzde sorulur). Kayıttaki ya da işlenen toplantı silinmez.
+    /// Toplantıyı kalıcı olarak siler (onay arayüzde sorulur). Kayıttaki, işlenen ya da notu yazılan toplantı silinmez
+    /// (not isteği boşa harcanır, silinmiş toplantı için hata görünürdü).
     func deleteMeeting(id: String) throws {
-        guard let record = meetings.first(where: { $0.id == id }), record.status != .recording, record.status != .processing else {
-            throw StorageError.deleteFailed(path: id, reason: "kayıtta ya da işleniyor")
+        guard let record = meetings.first(where: { $0.id == id }), record.status != .recording, record.status != .processing,
+              !regeneratingIDs.contains(id) else {
+            throw StorageError.deleteFailed(path: id, reason: "kayıtta, işleniyor ya da notu yazılıyor")
         }
         try deleteMeetingDirectory(directory: try sessionDirectory(id: id))
         meetings.removeAll { $0.id == id }
@@ -332,8 +337,9 @@ final class PhoneStore {
     }
 
     /// Notu kullanıcının isteğine göre düzenler (Mac'teki "Notu değiştir": "özeti kısalt", "görevlere tarih ekle").
-    /// Düzenlenirken toplantı kilitlidir; eski not geçmişe girer (⋯ › Önceki sürümler ile geri alınır). Olmazsa not
-    /// değişmez ve neden sorunlarda görünür.
+    /// Düzenlenirken toplantı kilitlidir; eski not geçmişe girer (⋯ › Önceki sürümler ile geri alınır). Düzenlenen not
+    /// diskteki güncel kayda uygulanır (Mac'te bu arada yapılan düzenlemeler korunur). Olmazsa not değişmez ve neden
+    /// sorunlarda görünür.
     func editNote(meetingID: String, instruction: String) async {
         let trimmed: String = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let record = meetings.first(where: { $0.id == meetingID }), record.note != nil,
@@ -346,10 +352,14 @@ final class PhoneStore {
             let llm: LLMProvider = try await phoneLLMProvider()
             let directory: URL = try sessionDirectory(id: meetingID)
             let edited: MeetingRecord = try await editMeetingNote(record: record, instruction: trimmed, llm: llm, userName: phoneUserName())
-            // Düzenleme sürerken işaretlenen görevler kaybolmasın: işaretler listedeki güncel kayıttan taşınır.
-            let current: MeetingRecord = meetings.first(where: { $0.id == meetingID }) ?? record
+            guard let note = edited.note else {
+                throw LLMError.empty
+            }
+            // Not düzenlenirken Mac'te değişmiş olabilir (başlık, adlar, görev işaretleri): yeni not diskteki güncel kayda
+            // uygulanır, işaretler oradan taşınır; diskteki not geçmişe girer.
+            let fresh: MeetingRecord = try loadMeeting(directory: directory)
             let versioned: MeetingRecord = withNoteVersion(
-                updated: withCarriedTaskMarks(old: current, new: edited), previous: record,
+                updated: withCarriedTaskMarks(old: fresh, new: fresh.with(note: note)), previous: fresh,
                 reason: String(localized: "Düzenlendi: \(trimmed)"), savedAt: Date()
             )
             try saveMeeting(record: versioned, directory: directory)
@@ -361,16 +371,28 @@ final class PhoneStore {
     }
 
     /// Notun önceki sürümünü geri yükler (`index`: geçmişte yeniden eskiye sıra); şimdiki not geçmişe girer. Kayıttaki,
-    /// işlenen ya da notu yazılan toplantıda yapılmaz.
+    /// işlenen ya da notu yazılan toplantıda yapılmaz. Seçilen sürüm diskteki güncel kayıtta aranır ve ona uygulanır
+    /// (Mac'te iCloud'la gelmiş düzenlemeler ezilmesin); geçmiş bu arada değiştiyse sıra numarası değil sürümün kendisi
+    /// geri yüklenir, artık yoksa `versionNotFound`.
     func restoreNoteVersion(meetingID: String, index: Int) throws {
         guard let record = meetings.first(where: { $0.id == meetingID }), record.status != .recording, record.status != .processing,
               !regeneratingIDs.contains(meetingID) else {
             throw StorageError.writeFailed(path: meetingID, reason: "kayıtta ya da işleniyor")
         }
+        let shown: [NoteVersion] = record.noteHistory ?? []
+        guard shown.indices.contains(index) else {
+            throw NoteHistoryError.versionNotFound(index: index, count: shown.count)
+        }
+        let directory: URL = try sessionDirectory(id: meetingID)
+        let fresh: MeetingRecord = try loadMeeting(directory: directory)
+        let freshHistory: [NoteVersion] = fresh.noteHistory ?? []
+        guard let freshIndex = freshHistory.firstIndex(of: shown[index]) else {
+            throw NoteHistoryError.versionNotFound(index: index, count: freshHistory.count)
+        }
         let restored: MeetingRecord = try restoringNoteVersion(
-            record: record, index: index, reason: String(localized: "Önceki sürüm geri yüklendi"), savedAt: Date()
+            record: fresh, index: freshIndex, reason: String(localized: "Önceki sürüm geri yüklendi"), savedAt: Date()
         )
-        try saveMeeting(record: restored, directory: try sessionDirectory(id: meetingID))
+        try saveMeeting(record: restored, directory: directory)
         upsert(record: restored)
     }
 

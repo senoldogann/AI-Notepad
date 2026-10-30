@@ -83,6 +83,36 @@ describe("ElevenLabs kapasite sayacı", () => {
     }
   });
 
+  it("deneme toplantısının yeniden işlenmesi ElevenLabs deneme durağında hak harcanmadan 503 alır", async () => {
+    const harness: Harness = await defaultHarness();
+    // Dosyanın diğer günlerinden ayrı bir dönem: 2027-08-20, dönem 2027-08-11'de başlar.
+    harness.clock.nowMs = Date.UTC(2027, 7, 20, 12);
+    // Plan 0,05 saat = 180 saniye; deneme durağı %85 = 153 saniye.
+    const small: Env = envWith({ ELEVENLABS_MONTHLY_AUDIO_HOURS: "0.05" });
+    const session: Session = await signIn(harness);
+    const started: Response = await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: {}, env: small }));
+    expect(started.status).toBe(201);
+    const meeting: StartedMeetingBody = await started.json<StartedMeetingBody>();
+    expect(meeting.kind).toBe("trial");
+    // Toplantı bitti ve sesi yazıldı; sonra dönemin kullanımı deneme durağını geçti.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE meeting_sessions SET ended_at = ?, end_reason = 'ended', audio_seconds = 60 WHERE id = ?").bind(
+        harness.clock.nowMs - 2 * 3_600_000,
+        meeting.meetingId,
+      ),
+      env.DB.prepare("INSERT INTO daily_spend (day, audio_seconds) VALUES ('2027-08-15', 160)"),
+    ]);
+    const reprocess = (target: Env): Promise<Response> =>
+      harness.call(req("POST", `/v1/meetings/${meeting.meetingId}/reprocess`, { token: session.accessToken, env: target }));
+    const refused: Response = await reprocess(small);
+    expect(refused.status).toBe(503);
+    expect((await refused.json<{ error: { code: string } }>()).error.code).toBe("trial_capacity_reached");
+    const row = await env.DB.prepare("SELECT reprocess_count FROM meeting_sessions WHERE id = ?").bind(meeting.meetingId).first<{ reprocess_count: number }>();
+    expect(row?.reprocess_count).toBe(0);
+    // Plan büyükken (durağın altında) aynı istek geçer.
+    expect((await reprocess(env)).status).toBe(200);
+  });
+
   it("eşiğin altındayken günlük denetim alarm yazmaz", async () => {
     const config = parseConfig(envWith({}));
     const alerts = vi.spyOn(console, "error");

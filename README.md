@@ -82,6 +82,8 @@ cp Config/Local.xcconfig.example Config/Local.xcconfig   # put your DEVELOPMENT_
 xcodegen generate
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug \
   -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64' build
+xcodebuild -project AINotepad.xcodeproj -scheme AINotepadHosted -configuration Debug \
+  -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64' build   # subscription edition (Gistsmith)
 xcodebuild -project AINotepad.xcodeproj -scheme AINotepadiOS -configuration Debug \
   -derivedDataPath .build/xcode-ios -destination 'platform=iOS Simulator,name=iPhone 17' build   # iPhone app
 scripts/install-app.sh          # Release build into /Applications (permissions persist)

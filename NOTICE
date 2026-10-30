@@ -4,11 +4,19 @@ Copyright 2026 Senol Dogan
 This product includes software developed by third parties under their own licenses,
 including WhisperKit and SpeakerKit (MIT, Copyright 2024 argmax, inc.). Their license text and their
 third-party notices (including swift-transformers, Apache License 2.0, Copyright 2022 Hugging Face SAS)
-are in App/Licenses; they and this NOTICE are bundled in the app (Contents/Resources).
+are in App/Licenses; they and this NOTICE are bundled in the apps (Contents/Resources).
+
+The Mac apps (AI-Notepad and Gistsmith) include Sparkle (MIT; Copyright (c) 2006-2013 Andy Matuschak and the other
+contributors listed in its license), which contains bsdiff, sais-lite, Ed25519 and SUSignatureVerifier code under
+their own licenses. Sparkle's license, including those notices, is in App/Licenses/Sparkle-LICENSE.txt and is bundled
+in both Mac apps (Contents/Resources).
 
 The bundled Inter typeface (App/Fonts) is licensed under the SIL Open Font License 1.1
 (Copyright 2016 The Inter Project Authors); see App/Fonts/Inter-OFL.txt.
 
-Service logos in Connections (App/Assets.xcassets/Brand) come from Simple Icons (https://simpleicons.org),
-released under CC0 1.0. The logos and names are trademarks of their respective owners and are used only to show
-which services AI-Notepad connects to.
+Service logos in Connections (App/Assets.xcassets/Brand, except brand-google) come from Simple Icons
+(https://simpleicons.org), released under CC0 1.0. The logos and names are trademarks of their respective owners and
+are used only to show which services AI-Notepad connects to.
+
+The Google "G" logo on the Sign in with Google button (App/Assets.xcassets/Brand/brand-google) is a trademark of
+Google LLC, used per Google's Sign-In branding guidelines.

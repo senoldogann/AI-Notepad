@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseConfig } from "../src/config";
 import { randomId, randomToken } from "../src/crypto";
 import type { Env } from "../src/env";
@@ -138,13 +138,41 @@ describe("ücretsiz tam erişim", () => {
     await expectError(await setComplimentary(harness, admin, user.userId, { grant: "yes" }), 400, "invalid_body");
     await expectError(await setComplimentary(harness, admin, randomId(), { grant: true }), 404, "not_found");
 
+    // Kaldırma erişimi şimdi bitirir; satır kalır (süresi kendiliğinden dolmuş erişimle aynı durum).
     const revoked: Response = await setComplimentary(harness, admin, user.userId, { grant: false });
     expect(revoked.status).toBe(200);
-    expect((await revoked.json<DetailBody>()).user).toMatchObject({ plan: "free", subscription: null });
-    expect(await subscriptionRow(user.userId)).toBeNull();
+    const nowIso: string = new Date(harness.clock.nowMs).toISOString();
+    expect((await revoked.json<DetailBody>()).user).toMatchObject({
+      plan: "free",
+      subscription: { complimentary: true, access: "none", currentPeriodEnd: nowIso, cancelAt: nowIso },
+    });
+    expect(await subscriptionRow(user.userId)).toMatchObject({ complimentary: 1, current_period_end: harness.clock.nowMs, cancel_at: harness.clock.nowMs });
     expect((await me(harness, user)).plan).toBe("trial");
     await expectError(await setComplimentary(harness, admin, user.userId, { grant: false }), 404, "not_found");
+    // Yeniden verilebilir: yapay kimlikler korunur.
+    expect((await setComplimentary(harness, admin, user.userId, { grant: true })).status).toBe(200);
+    expect(await subscriptionRow(user.userId)).toMatchObject({ stripe_subscription_id: row?.stripe_subscription_id, complimentary: 1, cancel_at: null });
     expect(stripeRequests(harness)).toHaveLength(0);
+  });
+
+  it("biten ücretsiz erişim davet kodunu açmaz: kaldırılan da süresi dolan da `referral_not_eligible` alır", async () => {
+    const harness: Harness = await defaultHarness();
+    const { admin, user: owner } = await complimentaryUser(harness);
+    const code: string = (await (await harness.call(req("GET", "/v1/referral", { token: owner.accessToken }))).json<{ code: string }>()).code;
+    const validate = (session: Session): Promise<Response> =>
+      harness.call(req("POST", "/v1/referral/validate", { token: session.accessToken, json: { code } }));
+
+    const revoked: Session = await signIn(harness);
+    expect((await setComplimentary(harness, admin, revoked.userId, { grant: true })).status).toBe(200);
+    expect((await setComplimentary(harness, admin, revoked.userId, { grant: false })).status).toBe(200);
+    await expectError(await validate(revoked), 409, "referral_not_eligible");
+
+    const expired: Session = await signIn(harness);
+    expect((await setComplimentary(harness, admin, expired.userId, { grant: true, until: new Date(harness.clock.nowMs + dayMs).toISOString() })).status).toBe(200);
+    harness.clock.nowMs += 2 * dayMs;
+    await expectError(await validate(await refreshed(harness, expired)), 409, "referral_not_eligible");
+    // Hiç ücretsiz erişimi ya da aboneliği olmamış hesap kodu kullanabilir.
+    expect((await validate(await signIn(harness))).status).toBe(200);
   });
 
   it("yönetici olmayan veremez ve kaldıramaz (403); yönetici listesi boşsa kimse veremez", async () => {
@@ -196,8 +224,10 @@ describe("ücretsiz tam erişim", () => {
     const { user } = await complimentaryUser(harness);
     const response: Response = await harness.call(req("GET", "/v1/referral", { token: user.accessToken }));
     expect(response.status).toBe(200);
-    const body: { code: string | null; inviteUrl: string | null } = await response.json<{ code: string | null; inviteUrl: string | null }>();
+    const body: { code: string | null; inviteUrl: string | null; complimentary: boolean } = await response.json<{ code: string | null; inviteUrl: string | null; complimentary: boolean }>();
     expect(body.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+    // Ödül uygulanmaz (ödenecek fatura yok): istemciler bunu söyler.
+    expect(body.complimentary).toBe(true);
     // Kod başka hesapta geçerlidir (sahibinin erişimi var).
     const friend: Session = await signIn(harness);
     const validated: Response = await harness.call(req("POST", "/v1/referral/validate", { token: friend.accessToken, json: { code: body.code } }));
@@ -220,6 +250,9 @@ describe("ücretsiz tam erişim", () => {
     const stripe: FakeStripe = stubStripeApi(harness);
     const session: Session = await refreshed(harness, user);
     expect((await me(harness, session)).plan).toBe("trial");
+    // Bitmiş ücretsiz erişimde Stripe müşterisi yoksa Portal yine hesap sayfasıdır (eski uygulamalar genel hata göstermez).
+    const ended: Response = await harness.call(req("POST", "/v1/billing/portal", { token: session.accessToken }));
+    expect((await ended.json<{ url: string }>()).url).toBe("http://localhost:8788/account");
     expect((await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken, json: { plan: "monthly" } }))).status).toBe(200);
     expect(stripe.checkoutForms).toHaveLength(1);
   });
@@ -316,7 +349,19 @@ describe("ücretsiz tam erişim", () => {
     const now: number = Math.floor(harness.clock.nowMs / 1000);
     const subscriptionId: string = `sub_${randomToken(8)}`;
     const live: FakeSubscription = { ...fakeSubscription(subscriptionId, customer, "active", now, now + 30 * 86_400), metadata: { user_id: user.userId } };
-    expect((await sendSubscription(harness, stripe, `evt_${randomToken(8)}`, "customer.subscription.created", now, live)).status).toBe(200);
+    // Stripe ücretlendirmeye devam eder; tek güvence operatöre giden alarmdır.
+    const alerts = vi.spyOn(console, "error");
+    try {
+      expect((await sendSubscription(harness, stripe, `evt_${randomToken(8)}`, "customer.subscription.created", now, live)).status).toBe(200);
+      const kept: string[] = alerts.mock.calls
+        .map((call: unknown[]): string => String(call[0]))
+        .filter((line: string): boolean => line.includes('"event":"stripe_event_complimentary_kept"'));
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toContain(user.userId);
+      expect(kept[0]).toContain(subscriptionId);
+    } finally {
+      alerts.mockRestore();
+    }
     expect(await subscriptionRow(user.userId)).toEqual(granted);
     expect(stripeRequests(harness)).toHaveLength(0);
 

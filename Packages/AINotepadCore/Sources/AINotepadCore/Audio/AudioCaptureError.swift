@@ -7,7 +7,6 @@ public enum AudioCaptureError: Error, Equatable {
     case microphoneStartFailed(code: Int32)
     /// `start()` yakalama zaten çalışırken çağrıldı.
     case alreadyRunning(source: String)
-    case systemAudioPermissionDenied
     case converterCreationFailed(inputDescription: String)
     case conversionFailed(reason: String)
     /// Bir Core Audio çağrısı `noErr` dışında bir durum döndürdü.

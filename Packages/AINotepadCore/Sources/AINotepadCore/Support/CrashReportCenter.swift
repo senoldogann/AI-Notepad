@@ -90,8 +90,11 @@ private final class DiagnosticPayloadSubscriber: NSObject, MXMetricManagerSubscr
 public final class CrashReportCenter {
     /// Saklanan raporlar, yeniden eskiye.
     public private(set) var reports: [CrashReport] = []
-    /// Okuma, yazma ya da silme hatası (Ayarlar'da görünür).
+    /// Son işlemin okuma, yazma ya da silme hatası ya da okunamayan dosyalar (Ayarlar'da görünür); sonraki silme ya da
+    /// saklama başarılıysa kalkar.
     public private(set) var problem: String?
+    /// Rapor olarak okunamayan dosyaların adları: listede görünmez, "Okunamayanları sil" ile kaldırılır.
+    public private(set) var unreadableFiles: [String] = []
     /// Bu oturumda gönderilen, gönderilmekte olan ya da gönderilemeyen raporların durumu (kimliğe göre).
     public private(set) var sendStates: [String: CrashReportSendState] = [:]
     /// Şeritte gösterilip kapatılan ya da gönderilen raporlar.
@@ -128,6 +131,7 @@ public final class CrashReportCenter {
 
     /// Raporun dosyasını siler.
     public func delete(id: String) {
+        problem = nil
         do {
             let url: URL = try crashReportFile(id: id)
             do {
@@ -175,7 +179,29 @@ public final class CrashReportCenter {
         try AppPaths.crashReportsDirectory().appending(path: "\(id).json", directoryHint: .notDirectory)
     }
 
+    /// Rapor olarak okunamayan dosyaları siler (listede silinecek satırları yok); kullanıcının açık isteğiyle.
+    public func deleteUnreadable() {
+        problem = nil
+        do {
+            let directory: URL = try AppPaths.crashReportsDirectory()
+            for name in unreadableFiles {
+                let url: URL = directory.appending(path: name, directoryHint: .notDirectory)
+                do {
+                    try FileManager.default.removeItem(at: url)
+                } catch {
+                    throw StorageError.deleteFailed(path: url.path, reason: error.localizedDescription)
+                }
+                crashLogger.info("Okunamayan çökme raporu silindi, dosya: \(name, privacy: .public)")
+            }
+        } catch {
+            crashLogger.error("Okunamayan çökme raporu silinemedi, hata: \(String(describing: error), privacy: .private)")
+            problem = userFacingMessage(error: error)
+        }
+        reload()
+    }
+
     private func receive(payloads: [Data], receivedAt: Date) {
+        problem = nil
         do {
             let directory: URL = try AppPaths.crashReportsDirectory()
             for payload in payloads {
@@ -196,7 +222,9 @@ public final class CrashReportCenter {
         do {
             let result: CrashReportLoadResult = try loadCrashReports(directory: try AppPaths.crashReportsDirectory())
             reports = result.reports
-            if !result.unreadableFiles.isEmpty {
+            unreadableFiles = result.unreadableFiles
+            // İşlemin kendi hatası önce gelir; yoksa okunamayan dosyalar söylenir.
+            if problem == nil, !result.unreadableFiles.isEmpty {
                 problem = String(localized: "Okunamayan çökme raporu: \(result.unreadableFiles.joined(separator: ", "))")
             }
         } catch {

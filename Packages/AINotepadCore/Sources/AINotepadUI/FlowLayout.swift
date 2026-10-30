@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Öğeleri satıra dizer, sığmayanı alt satıra geçirir (dar panelde düğmeler taşmasın).
+/// Öğeleri satıra dizer, sığmayanı alt satıra geçirir (dar panelde düğmeler taşmasın). Kaptan geniş öğe kap genişliğine
+/// daraltılır (uzun başlıklı @ etiketi kesilir, kenardan taşmaz).
 public struct FlowLayout: Layout {
     let spacing: CGFloat
     let lineSpacing: CGFloat
@@ -11,7 +12,7 @@ public struct FlowLayout: Layout {
     }
 
     public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows: [[CGSize]] = arrange(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, maxWidth: proposal.width ?? .infinity)
+        let rows: [[CGSize]] = arrange(sizes: fittedSizes(subviews: subviews, maxWidth: proposal.width ?? .infinity), maxWidth: proposal.width ?? .infinity)
         let width: CGFloat = rows.map { (row: [CGSize]) -> CGFloat in
             row.map(\.width).reduce(0, +) + spacing * CGFloat(max(0, row.count - 1))
         }.max() ?? 0
@@ -20,7 +21,7 @@ public struct FlowLayout: Layout {
     }
 
     public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let sizes: [CGSize] = subviews.map { $0.sizeThatFits(.unspecified) }
+        let sizes: [CGSize] = fittedSizes(subviews: subviews, maxWidth: bounds.width)
         var origin: CGPoint = bounds.origin
         var rowHeight: CGFloat = 0
         for (index, subview) in subviews.enumerated() {
@@ -33,6 +34,18 @@ public struct FlowLayout: Layout {
             subview.place(at: origin, proposal: ProposedViewSize(size))
             origin.x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+
+    /// Öğelerin boyutu: doğal genişliği `maxWidth`'i aşan öğe o genişlikte yeniden ölçülür (yüksekliği daralmış hale
+    /// göre).
+    private func fittedSizes(subviews: Subviews, maxWidth: CGFloat) -> [CGSize] {
+        subviews.map { (subview: LayoutSubview) -> CGSize in
+            let ideal: CGSize = subview.sizeThatFits(.unspecified)
+            guard ideal.width > maxWidth else {
+                return ideal
+            }
+            return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
         }
     }
 

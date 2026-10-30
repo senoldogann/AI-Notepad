@@ -3,7 +3,8 @@
 // hatası olmaması; Mac uygulaması adına giriş (sağlayıcıya doğrudan yönlendirme, geçersiz istek, iki düğme, vazgeçme
 // dönüşü, jetonun uygulamaya iletilmesi, `state` uyuşmazlığı); sitenin Google yönlendirmesi ve Apple açılır pencere
 // kurulumu (ham nonce'un özeti sağlayıcıya, ham hali sunucuya); hesap sayfası (gerçek `/v1/me`, `?payment=done` oturumlu
-// ve oturumsuz, Checkout'a geçiş, erişim jetonu yenilemesi, çıkış, hesap silme); kopyalanan sekmenin oturumu silmesi;
+// ve oturumsuz, Checkout'a geçiş, davet koduyla Checkout (biçimsiz kod Checkout açmaz, davet bağlantısından gelen kod
+// Checkout gövdesine girer), erişim jetonu yenilemesi, çıkış, Enter'la hesap silme); kopyalanan sekmenin oturumu silmesi;
 // indirme sayfasındaki sürüm.
 // Üçüncü taraflara istek gitmez: Apple'ın betiği ve Turnstile sahte betikle karşılanır, Apple ve Google yetkilendirme
 // sayfalarına gidiş yakalanıp durdurulur; kimlik jetonu doğrulaması (Apple/Google JWKS) ve Stripe çağrıları sunucunun
@@ -29,6 +30,12 @@ interface Check {
 interface SeededSession {
   readonly userId: string;
   readonly refreshToken: string;
+}
+
+/** Oturumu yazılmış sayfa ve ilk yüklemeden beri toplanan konsol hataları. */
+interface SessionPage {
+  readonly page: Page;
+  readonly errors: string[];
 }
 
 /** Sunucunun oturum yanıtı (`/v1/auth/refresh`). */
@@ -90,6 +97,37 @@ function sha256Hex(text: string): string {
 /** Yerel D1'de SQL çalıştırır (yalnızca `--local`). */
 function localSql(command: string): void {
   execFileSync("npx", ["wrangler", "d1", "execute", "ainotepad", "--local", "--command", command], { cwd: serverDir, stdio: "pipe" });
+}
+
+/** Sunucunun davet kodu alfabesi (server/src/referrals.ts `referralCodeAlphabet`). */
+const referralCodeAlphabet: string = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+/** Rastgele, sunucu biçiminde (8 karakter) davet kodu. */
+function randomReferralCode(): string {
+  return Array.from(randomBytes(8), (byte: number): string => referralCodeAlphabet.charAt(byte % referralCodeAlphabet.length)).join("");
+}
+
+/**
+ * Yerel D1'e davet eden bir abone ekler: kullanıcı, etkin abonelik ve davet kodu (sunucu `requireReferral` kodun
+ * sahibinde abonelik erişimi arar). Davet kodunu döndürür.
+ */
+function seedReferrer(): string {
+  const userId: string = `e2e-web-${randomUUID()}`;
+  const code: string = randomReferralCode();
+  const now: number = Date.now();
+  localSql(
+    [
+      `INSERT INTO users (id, created_at) VALUES ('${userId}', ${now});`,
+      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, last_event_created, updated_at) VALUES ('${userId}', 'cus_${userId}', 'sub_${userId}', 'active', ${now + 30 * 86_400_000}, 1, ${now});`,
+      `INSERT INTO referral_codes (user_id, code, created_at) VALUES ('${userId}', '${code}', ${now});`,
+    ].join(" "),
+  );
+  return code;
+}
+
+/** Kullanıcıya giriş kimliği ekler (sunucu davet kodunu doğrularken kimliğin özetini alır). */
+function seedIdentity(userId: string): void {
+  localSql(`INSERT INTO auth_identities (provider, subject, user_id, created_at) VALUES ('google', 'e2e-${randomUUID()}', '${userId}', ${Date.now()});`);
 }
 
 /** Yerel D1'e kullanıcı, oturum ailesi ve yenileme jetonu ekler (sunucunun saklama biçimi: SHA-256 onaltılık). */
@@ -558,9 +596,13 @@ async function checkSiteSignIn(context: BrowserContext, siteOrigin: string, apiB
   }
 }
 
-/** Sayfaya bu sekmenin oturumunu (gerçek sunucu oturumu) yazar. */
-async function openWithSession(context: BrowserContext, siteOrigin: string, path: string, session: SessionBody, accessExpiresAt: number): Promise<Page> {
+/**
+ * Sayfaya bu sekmenin oturumunu (gerçek sunucu oturumu) yazar ve verilen adresi açar. Konsol hataları sayfa açılır
+ * açılmaz toplanır: modülün ilk çalışması ve süresi dolmuş jetonun yenilenmesi de denetime girer.
+ */
+async function openWithSession(context: BrowserContext, siteOrigin: string, path: string, session: SessionBody, accessExpiresAt: number): Promise<SessionPage> {
   const page: Page = await context.newPage();
+  const errors: string[] = watchConsole(page);
   await page.goto(`${siteOrigin}/privacy`);
   await page.evaluate(
     ({ stored }: { stored: string }): void => {
@@ -569,7 +611,7 @@ async function openWithSession(context: BrowserContext, siteOrigin: string, path
     { stored: JSON.stringify({ accessToken: session.accessToken, refreshToken: session.refreshToken, accessExpiresAt }) },
   );
   await page.goto(`${siteOrigin}${path}`);
-  return page;
+  return { page, errors };
 }
 
 /** Sekmede saklanan oturum. */
@@ -607,19 +649,19 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
   // Oturumlu: deneme başlamamış hesap gerçek /v1/me ile; erişim jetonu süresi dolmuşsa yenilenir (jeton döner).
   const seeded: SeededSession = seedSession();
   const session: SessionBody = await refreshSession(apiBase, seeded.refreshToken);
-  const page: Page = await openWithSession(context, siteOrigin, "/account", session, Date.now() - 1000);
-  const errors: string[] = watchConsole(page);
+  const { page, errors }: SessionPage = await openWithSession(context, siteOrigin, "/account", session, Date.now() - 1000);
   await page.locator("#account-content:not(.hidden)").waitFor({ timeout: 10_000 }).catch((): void => undefined);
   const renewed: { accessToken: string; refreshToken: string } | null = await storedSession(page);
   check(
-    "hesap sayfası süresi dolmuş erişim jetonunu yeniler (yenileme jetonu döner) ve deneme planını gösterir",
-    (await isShown(page, "#account-content")) &&
+    "hesap sayfası süresi dolmuş erişim jetonunu hatasız yeniler (yenileme jetonu döner) ve deneme planını gösterir",
+    errors.length === 0 &&
+      (await isShown(page, "#account-content")) &&
       renewed !== null &&
       renewed.refreshToken !== session.refreshToken &&
       (await isShown(page, "#subscribe-button")) &&
       !(await isShown(page, "#manage-button")) &&
-      (await page.locator("#trial-value").textContent()) !== "",
-    JSON.stringify({ errors, trial: await page.locator("#trial-value").textContent() }),
+      (await page.locator("#plan-status").textContent()) !== "",
+    JSON.stringify({ errors, status: await page.locator("#plan-status").textContent() }),
   );
   // Eski (dönmüş) yenileme jetonu artık geçmez (30 sn içindeki kayıp yanıt payı dışında aile düşmez; burada yalnızca
   // dönüşün sunucuda olduğu denetlenir: yeni jeton çalışır).
@@ -645,6 +687,53 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
       page.url().startsWith("https://checkout.stripe.com/"),
     JSON.stringify({ url: page.url(), body: captures.checkoutBodies.at(-1) }),
   );
+
+  // Davetle abone olma (yeni bir hesapla): davet bağlantısından gelen kod hesap sayfasında sunucuda doğrulanır ve
+  // Checkout gövdesine girer; alana biçimsiz bir kod yazılıp Abone ol'a basılırsa Checkout açılmaz, neden satırda yazar.
+  {
+    const code: string = seedReferrer();
+    const friend: SeededSession = seedSession();
+    seedIdentity(friend.userId);
+    const friendSession: SessionBody = await refreshSession(apiBase, friend.refreshToken);
+    const invitePage: Page = await context.newPage();
+    await invitePage.goto(`${siteOrigin}/invite?code=${code}`);
+    await invitePage.locator("#invite-code-box:not(.hidden)").waitFor({ timeout: 10_000 }).catch((): void => undefined);
+    await invitePage.close();
+    const { page: friendPage, errors: friendErrors }: SessionPage = await openWithSession(
+      context,
+      siteOrigin,
+      "/account",
+      friendSession,
+      Date.now() + friendSession.expiresIn * 1000,
+    );
+    await friendPage.locator("#invite-status.invite__ok").waitFor({ timeout: 10_000 }).catch((): void => undefined);
+    const prefilled: boolean = await isShown(friendPage, "#invite-status.invite__ok");
+
+    const checkoutsBeforeTypo: number = captures.checkoutRequests.length;
+    await friendPage.locator("#invite-input").fill("K7M2");
+    await friendPage.locator("#subscribe-button").click();
+    await friendPage.locator("#invite-status.invite__error").waitFor({ timeout: 10_000 }).catch((): void => undefined);
+    check(
+      "hesap sayfası: biçimsiz davet koduyla Abone ol Checkout açmaz, neden davet satırında yazar",
+      (await isShown(friendPage, "#invite-status.invite__error")) && captures.checkoutRequests.length === checkoutsBeforeTypo && friendPage.url() === `${siteOrigin}/account`,
+      JSON.stringify({ url: friendPage.url(), status: await friendPage.locator("#invite-status").textContent() }),
+    );
+
+    await friendPage.locator("#invite-input").fill(code);
+    await friendPage.locator("#subscribe-button").click();
+    await friendPage.waitForURL("https://checkout.stripe.com/**", { timeout: 10_000 }).catch((): void => undefined);
+    check(
+      "davet bağlantısından gelen kod hesap sayfasında doğrulanır ve Checkout gövdesine (önceden seçili yıllık planla) girer",
+      prefilled && captures.checkoutBodies.at(-1) === JSON.stringify({ plan: "yearly", referralCode: code }) && friendErrors.length === 0,
+      JSON.stringify({ prefilled, body: captures.checkoutBodies.at(-1), errors: friendErrors }),
+    );
+    await friendPage.close();
+    // Kayıtlı davet kodu sonraki hesap sayfalarını etkilemesin.
+    const cleanup: Page = await context.newPage();
+    await cleanup.goto(`${siteOrigin}/privacy`);
+    await cleanup.evaluate((): void => window.localStorage.removeItem("gistsmith.invite"));
+    await cleanup.close();
+  }
 
   // Webhook'un yazdığı etkin abonelik: `?payment=done` bildirimi, Yönet düğmesi, saat kartı.
   const periodEnd: number = Date.now() + 30 * 86_400_000;
@@ -715,21 +804,25 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
   {
     const deleting: SeededSession = seedSession();
     const deletingSession: SessionBody = await refreshSession(apiBase, deleting.refreshToken);
-    const deletePage: Page = await openWithSession(context, siteOrigin, "/account", deletingSession, Date.now() + deletingSession.expiresIn * 1000);
+    const { page: deletePage }: SessionPage = await openWithSession(context, siteOrigin, "/account", deletingSession, Date.now() + deletingSession.expiresIn * 1000);
     await deletePage.locator("#account-content:not(.hidden)").waitFor({ timeout: 10_000 });
     // Silme bölümü varsayılan kapalıdır (`<details>`).
     await deletePage.locator(".danger__summary").click();
     await deletePage.locator("#delete-button").click();
     const word: string = (await deletePage.locator("#delete-dialog").getAttribute("data-confirm-word")) ?? "";
     const disabledBefore: boolean = await deletePage.locator("#confirm-delete").isDisabled();
+    // Onay kelimesi yazılmadan Enter pencereyi kapatmaz ve bir şey silmez.
+    await deletePage.locator("#confirm-input").press("Enter");
+    const openAfterEarlyEnter: boolean = await deletePage.locator("#delete-dialog").evaluate((dialog: HTMLDialogElement): boolean => dialog.open);
     await deletePage.locator("#confirm-input").fill(word);
-    await deletePage.locator("#confirm-delete:enabled").click();
+    // Kelime yazılınca Enter silme düğmesine basar (pencereyi kapatan örtük form gönderimi değil).
+    await deletePage.locator("#confirm-input").press("Enter");
     await deletePage.locator("#account-deleted").waitFor({ state: "visible", timeout: 10_000 }).catch((): void => undefined);
     const me: Response = await fetch(`${apiBase}/v1/me`, { headers: { authorization: `Bearer ${deletingSession.accessToken}` } });
     check(
-      "hesap silme: onay kelimesiyle açılır, silindi kartı, oturum silinir, sunucuda hesap yok",
-      disabledBefore && word !== "" && (await isShown(deletePage, "#account-deleted")) && (await storedSession(deletePage)) === null && me.status === 401,
-      JSON.stringify({ word, meStatus: me.status }),
+      "hesap silme: onay kelimesiyle açılır, Enter siler, silindi kartı, oturum silinir, sunucuda hesap yok",
+      disabledBefore && openAfterEarlyEnter && word !== "" && (await isShown(deletePage, "#account-deleted")) && (await storedSession(deletePage)) === null && me.status === 401,
+      JSON.stringify({ word, openAfterEarlyEnter, meStatus: me.status }),
     );
     await deletePage.waitForURL(`${siteOrigin}/`, { timeout: 10_000 }).catch((): void => undefined);
     check("hesap silindikten sonra ana sayfaya dönülür", deletePage.url() === `${siteOrigin}/`, deletePage.url());

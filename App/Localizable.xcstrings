@@ -11,17 +11,6 @@
         }
       }
     },
-    "\"%1$@\" toplantısı öncesi brifing. Katılımcılar: %2$@. Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Briefing for \"%1$@\" with %2$@: what was discussed in earlier meetings with these people or on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
-          }
-        }
-      }
-    },
     "\"%@\" klasörüne, hesap gerekmez": {
       "localizations": {
         "en": {
@@ -378,7 +367,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ sign-in isn't available in this version yet. For now you can connect with the \"Webhook address\" card."
+            "value": "%@ sign-in isn't available in this version yet. For now you can connect with the \"Webhook URL\" card."
           }
         }
       }
@@ -1732,16 +1721,6 @@
         }
       }
     },
-    "35 dil; konuşmacılar ayrılır, %@ çevirisi altında akar.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "35 languages; speakers separated, %@ translation underneath."
-          }
-        }
-      }
-    },
     "AI-Notepad": {
       "localizations": {
         "en": {
@@ -2126,17 +2105,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your name marks your tasks in the note; the main language sets which language live text starts in."
-          }
-        }
-      }
-    },
-    "Adın notta sana düşen görevleri ayırır; canlı metin bu Mac'te yazılır.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your name picks out your tasks in the note; live text is transcribed on this Mac."
           }
         }
       }
@@ -2886,16 +2854,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Network error (%lld); check your internet connection and try again."
-          }
-        }
-      }
-    },
-    "Bana düşenleri %@'e gönder": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send my tasks to %@"
           }
         }
       }
@@ -3886,33 +3844,12 @@
         }
       }
     },
-    "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. \"Giriş yap\"a yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This sign-in wasn't started from the app or was already used. Click \"Sign in\" again."
-          }
-        }
-      }
-    },
     "Bu görev aracı artık yok (kaldırılmış); Ayarlar › Bağlantılar'ı yeniden aç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This task tool no longer exists (it was removed); reopen Settings › Connections."
-          }
-        }
-      }
-    },
-    "Bu hafta": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This week"
           }
         }
       }
@@ -4573,26 +4510,6 @@
         }
       }
     },
-    "Canlı metin ve %@ çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live text and its %@ translation, \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
-          }
-        }
-      }
-    },
-    "Canlı metin ve çeviri": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live text and translation"
-          }
-        }
-      }
-    },
     "Canlı metin ve çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
       "localizations": {
         "en": {
@@ -4755,32 +4672,12 @@
         }
       }
     },
-    "Cihaz içi model %@ desteklemiyor; bu toplantı için Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur), sonra \"Notu yenile\"ye bas.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The on-device model doesn't support %@. For this meeting, choose a model with your own key in Settings (Ollama on the Mac also works without a key), then click \"Refresh note\"."
-          }
-        }
-      }
-    },
     "Cihaz içi model %@ yazamıyor; not dilini değiştir ya da Ayarlar'da kendi anahtarınla bir model seç.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The on-device model can't write %@. Change the note language or choose a model with your own key in Settings."
-          }
-        }
-      }
-    },
-    "Cihaz içi model bu toplantının dilini desteklemiyor (ör. Fince). Bu toplantı için Ayarlar'da kendi anahtarınla bir sağlayıcı seçip \"Notu yenile\"ye bas.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The on-device model doesn't support this meeting's language (e.g. Finnish). For this meeting, choose a provider with your own key in Settings and click \"Refresh note\"."
           }
         }
       }
@@ -5878,16 +5775,6 @@
         }
       }
     },
-    "Fince, İngilizce ve 33 dil daha; %@ çevirisi altında akar.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Finnish, English and 33 more languages; the %@ translation flows underneath."
-          }
-        }
-      }
-    },
     "Finder'da göster": {
       "localizations": {
         "en": {
@@ -5999,39 +5886,6 @@
         }
       }
     },
-    "Giriş 10 dakika içinde tamamlanmadı. \"Giriş yap\"a yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign-in wasn't completed within 10 minutes. Click \"Sign in\" again."
-          }
-        }
-      }
-    },
-    "Giriş başka bir denemeden döndü. \"Giriş yap\"a yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This sign-in came back from a different attempt. Click \"Sign in\" again."
-          }
-        }
-      }
-    },
-    "Giriş penceresi açılamadı. Uygulamayı öne getirip \"Giriş yap\"a yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The sign-in window couldn't open. Bring the app to the front and click \"Sign in\" again."
-          }
-        }
-      }
-    },
     "Giriş penceresinde devam et. Vazgeçersen pencereyi kapatman yeter.": {
       "extractionState": "manual",
       "localizations": {
@@ -6105,17 +5959,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sign in…"
-          }
-        }
-      }
-    },
-    "Girişten dönen bağlantı geçersiz. \"Giriş yap\"a yeniden bas.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The link returned from sign-in is invalid. Click \"Sign in\" again."
           }
         }
       }
@@ -7344,47 +7187,6 @@
         }
       }
     },
-    "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "The first %lld minute of the recording was transcribed; the rest could not be processed: %@"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
-                }
-              }
-            }
-          }
-        },
-        "tr": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Kaydın tamamı işleniyor": {
       "localizations": {
         "en": {
@@ -7756,16 +7558,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A meeting that is recording or being processed can't be deleted."
-          }
-        }
-      }
-    },
-    "Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Telling participants before recording is a legal requirement in most places. When the period ends, audio files are deleted and the text and note remain; audio of interrupted or failed meetings is kept twice as long."
           }
         }
       }
@@ -8566,7 +8358,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook address from Teams (channel › ⋯ › Workflows) into the \"Webhook address\" card."
+            "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook URL from Teams (channel › ⋯ › Workflows) into the \"Webhook URL\" card."
           }
         }
       }
@@ -10867,17 +10659,6 @@
         }
       }
     },
-    "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'nda bu uygulamaya izin ver.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No system audio recording permission. Allow this app in System Settings › Privacy & Security › Screen & System Audio Recording."
-          }
-        }
-      }
-    },
     "Sistem sesi yakalanamadı (%@, kod %lld). Çıkış cihazını kontrol edip kaydı yeniden başlat.": {
       "extractionState": "manual",
       "localizations": {
@@ -11350,17 +11131,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't reach the server; check your internet connection."
-          }
-        }
-      }
-    },
-    "Sunucuya ulaşılamıyor ve hesap durumun son 7 günde doğrulanmadı. Kayıt için internete bağlan.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server can't be reached and your account hasn't been checked in the last 7 days. Connect to the internet to record."
           }
         }
       }
@@ -12453,16 +12223,6 @@
         }
       }
     },
-    "Toplantını dinlemeye başla": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start listening to your meeting"
-          }
-        }
-      }
-    },
     "Toplantını dinler, notunu yazar.": {
       "localizations": {
         "en": {
@@ -12609,16 +12369,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Group all actions by person: who, what, by when. Put mine at the top; flag those without a date."
-          }
-        }
-      }
-    },
-    "Tüm görevleri %@'e gönder": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send all tasks to %@"
           }
         }
       }
@@ -13774,16 +13524,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sync with iCloud"
-          }
-        }
-      }
-    },
-    "iCloud kullanılamıyor. Ayarlar'da iCloud'a giriş yapıp iCloud Drive'ı aç.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iCloud isn't available. Sign in to iCloud in Settings and turn on iCloud Drive."
           }
         }
       }
@@ -15699,17 +15439,6 @@
         }
       }
     },
-    "Arkadaşın davet koduyla abone olunca ilk ayı ücretsiz olur. Onun ilk ödemesinden %lld gün sonra sana bir ay ücretsiz yazılır (yılda en çok %lld).": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When a friend subscribes with your code, their first month is free. %lld days after their first payment, you get a free month too (up to %lld a year)."
-          }
-        }
-      }
-    },
     "Davet metnini kopyala": {
       "extractionState": "manual",
       "localizations": {
@@ -15728,17 +15457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Friends joined: %lld · Months earned: %lld"
-          }
-        }
-      }
-    },
-    "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan ilk ayın ücretsiz: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "I use Gistsmith for my meetings: it transcribes the conversation live and has the note and tasks ready when the meeting ends. Subscribe with this link and your first month is free: %@"
           }
         }
       }
@@ -15800,6 +15518,579 @@
           "stringUnit": {
             "state": "translated",
             "value": "The on-device model requires macOS 26. In Settings, choose a provider with your own key (e.g. Anthropic)."
+          }
+        }
+      }
+    },
+    "Otomatik dilde canlı metin bu dilde yazılır. Toplantı bitince konuşulan dil (35 dil) kendiliğinden bulunur ve not ona göre yazılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With automatic language, live text is written in this language. After the meeting, the spoken language (35 languages) is detected and the note follows it."
+          }
+        }
+      }
+    },
+    "Kaydın ilk %lld dakikası yeniden yazıya döküldü; kalanında canlı metin kullanıldı: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first %lld minutes of the recording were transcribed again; live text was used for the rest: %@"
+          }
+        }
+      }
+    },
+    "Hesabının ücretsiz tam erişimi var; ödenecek ya da yönetilecek bir şey yok.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account has free full access; there's nothing to pay or manage."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim: ödeme ve yenileme yok.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access: nothing to pay, nothing renews."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access"
+          }
+        }
+      }
+    },
+    "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan aylık planda ilk ayın ücretsiz, yıllık planda ilk yılın %@ indirimli: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I use Gistsmith for my meetings: it transcribes the conversation live and has the note and tasks ready when the meeting ends. Subscribe with this link and your first month is free on the monthly plan, or your first year is %@ off on the yearly plan: %@"
+          }
+        }
+      }
+    },
+    "Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Hesabın zaten ücretsiz olduğu için sana ödül yazılmaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a friend subscribes with your code, their first month on the monthly plan is free. Your account is already free, so you don't receive rewards."
+          }
+        }
+      }
+    },
+    "Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Onun ilk ödemesinden %lld gün sonra sana da bir ay bedava: sonraki ödemenden %@ düşülür (yılda en çok %lld).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a friend subscribes with your code, their first month on the monthly plan is free. %lld days after their first payment, you get a free month too: %@ comes off your next payment (up to %lld a year)."
+          }
+        }
+      }
+    },
+    "Katılan arkadaş: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends joined: %lld"
+          }
+        }
+      }
+    },
+    "Sıradaki ödül: %@ civarı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next reward: around %@"
+          }
+        }
+      }
+    },
+    "Bu hesabın ücretsiz erişimi var; abonelik gerekmiyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account has free access; no subscription is needed."
+          }
+        }
+      }
+    },
+    "Bu davet kodu şu an yeni arkadaş kabul etmiyor; daha sonra yeniden dene ya da kodsuz abone ol.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This invite code can't take new friends right now. Try again later, or subscribe without it."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim: ödeme yok; %@ tarihine kadar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access: nothing to pay; until %@."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim, bitiş %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access, ends %@"
+          }
+        }
+      }
+    },
+    "Bildirim izni istenemedi: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't request notification permission: %@"
+          }
+        }
+      }
+    },
+    "İngilizce kısa bildirim; toplantı sohbetine yapıştır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short English notice; paste it into the meeting chat"
+          }
+        }
+      }
+    },
+    "Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A short reminder in the panel and an English notice to paste into the meeting chat. In many places you're legally required to tell participants before you record."
+          }
+        }
+      }
+    },
+    "Adın notta sana düşen görevleri ayırır; canlı metin bulutta yazılır, bulut kullanılamazsa bu Mac'te.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name picks out your tasks in the note; live text is transcribed in the cloud, or on this Mac when the cloud isn't available."
+          }
+        }
+      }
+    },
+    "Fince, İngilizce ve 33 dil daha; istersen %@ çevirisi altında akar.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finnish, English and 33 more languages; if you like, the %@ translation flows underneath."
+          }
+        }
+      }
+    },
+    "Canlı metin (istersen %@ çevirisiyle), \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text (with a %@ translation if you like), \"What did I miss?\" and questions; the notch island shows the time and the latest sentence."
+          }
+        }
+      }
+    },
+    "Klasör seçildi; notlar hazır olunca buraya yazılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder selected; notes will be written here when they're ready."
+          }
+        }
+      }
+    },
+    "Okunuyor…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
+          }
+        }
+      }
+    },
+    "Kayıt ya da işleme sürerken güncellenmez; bitince güncelleyebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app won't update while recording or processing; you can update when it's done."
+          }
+        }
+      }
+    },
+    "Bana düşenleri gönder: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send my tasks to %@"
+          }
+        }
+      }
+    },
+    "Tüm görevleri gönder: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send all tasks to %@"
+          }
+        }
+      }
+    },
+    "Sunucuya ulaşılamıyor ve son bilinen hesap durumun çevrimdışı kayda izin vermiyor (7 günden eski ya da kayıt hakkın kalmamış). Kayıt için internete bağlan.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't reach the server, and your last known account status doesn't allow offline recording (it's older than 7 days or you have no recording allowance left). Connect to the internet to record."
+          }
+        }
+      }
+    },
+    "Cihaz içi model bu toplantının dilini desteklemiyor (ör. Fince); Ayarlar'da kendi anahtarınla bir sağlayıcı seçip yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model doesn't support this meeting's language (e.g. Finnish). Choose a provider with your own key in Settings and try again."
+          }
+        }
+      }
+    },
+    "Cihaz içi model %@ desteklemiyor; Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur) ve yeniden dene.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The on-device model doesn't support %@. Choose a model with your own key in Settings (on a Mac, Ollama works without a key) and try again."
+          }
+        }
+      }
+    },
+    "Önceki 7 gün": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous 7 Days"
+          }
+        }
+      }
+    },
+    "Güvenlik işlemi tamamlanamadı (%@, kod %lld). Uygulamayı yeniden açıp tekrar dene; sürerse geri bildirim gönder.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A security operation couldn't be completed (%@, code %lld). Reopen the app and try again; if it keeps happening, send feedback."
+          }
+        }
+      }
+    },
+    "iCloud kullanılamıyor. Sistem Ayarları › Apple Hesabı › iCloud'da iCloud Drive'ı aç.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud isn't available. Turn on iCloud Drive in System Settings › Apple Account › iCloud."
+          }
+        }
+      }
+    },
+    "iCloud kullanılamıyor. Ayarlar › Apple Hesabı › iCloud'da iCloud Drive'ı aç.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud isn't available. Turn on iCloud Drive in Settings › Apple Account › iCloud."
+          }
+        }
+      }
+    },
+    "Ödeme alınamadığı için bu toplantı işlenemedi. Ses bu Mac'te kalır; kartını \"Hesabı yönet\"ten güncelleyince kendiliğinden işlenir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting couldn't be processed because your payment failed. The audio stays on this Mac and will be processed automatically once you update your card in \"Manage account\"."
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı. Kayda devam etmek için Ayarlar › Hesap'ta \"Hesabı yönet\"ten kartını güncelle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed. To keep recording, update your card via \"Manage account\" in Settings › Account."
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz. \"Hesabı yönet\"ten kartını güncelle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed; you can't start new meetings until you update your card. Update it via \"Manage account\"."
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed; you can't start new meetings until you update your card."
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı, ek süre bitti": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed, grace period over"
+          }
+        }
+      }
+    },
+    "Ödeme alınamadı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment failed"
+          }
+        }
+      }
+    },
+    "Yenileme ödemesi alınamadı ve ek süre bitti. Toplantıların ve notların bu Mac'te; yeni kayıt için kartını güncelle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The renewal payment failed and the grace period is over. Your meetings and notes are on this Mac; update your card to record again."
+          }
+        }
+      }
+    },
+    "Okunamayanları sil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Unreadable"
+          }
+        }
+      }
+    },
+    "Konuşma yazıya dökülür, %@ çevirisi altında akar; anahtarlarınla 35 dil ve konuşmacı ayrımı.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech is transcribed with a %@ translation underneath; with your keys, 35 languages and speaker separation."
+          }
+        }
+      }
+    },
+    "Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır. iCloud eşitlemesi açıksa Mac'te kaydedilen toplantıların sesi de bu süreye göre silinir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telling participants before recording is a legal requirement in most places. When the period ends, audio files are deleted and the text and note remain; audio of interrupted or failed meetings is kept twice as long. If iCloud sync is on, audio of meetings recorded on your Mac is also deleted after this period."
+          }
+        }
+      }
+    },
+    "Not yazılır": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note gets written"
+          }
+        }
+      }
+    },
+    "\"%@\" toplantısı öncesi brifing. Katılımcılar: %@. Bu kişilerle ya da bu konuda önceki toplantılarda neler konuşuldu, hangi kararlar alındı, hangi görevler hâlâ açık? Kısa maddelerle, en yeniden başlayarak.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing for \"%@\" with %@: what was discussed in earlier meetings with these people or on this topic, what was decided and which tasks are still open? Short bullet points, newest first."
+          }
+        }
+      }
+    },
+    "Not yenilenemedi: LLM anahtarı ya da ayarı yok. Önceki not gösteriliyor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't refresh the note: no LLM key or setting. Showing the previous note."
+          }
+        }
+      }
+    },
+    "": {
+      "shouldTranslate": false
+    },
+    "%@": {
+      "shouldTranslate": false
+    },
+    "⌘K": {
+      "shouldTranslate": false
+    },
+    "aino@ornek.fi": {
+      "shouldTranslate": false
+    },
+    "Canlı metin ve çeviri": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live text and translation"
+          }
+        }
+      }
+    },
+    "Giriş penceresi açılamadı. Uygulamayı öne getirip Apple ya da Google ile yeniden devam et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sign-in window couldn't open. Bring the app to the front and continue with Apple or Google again."
+          }
+        }
+      }
+    },
+    "Bu giriş uygulamadan başlatılmamış ya da zaten kullanılmış. Apple ya da Google ile yeniden devam et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in wasn't started from the app or was already used. Continue with Apple or Google again."
+          }
+        }
+      }
+    },
+    "Giriş 10 dakika içinde tamamlanmadı. Apple ya da Google ile yeniden devam et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in wasn't finished within 10 minutes. Continue with Apple or Google again."
+          }
+        }
+      }
+    },
+    "Girişten dönen bağlantı geçersiz. Apple ya da Google ile yeniden devam et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link returned from sign-in isn't valid. Continue with Apple or Google again."
+          }
+        }
+      }
+    },
+    "Giriş başka bir denemeden döndü. Apple ya da Google ile yeniden devam et.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in came back from a different attempt. Continue with Apple or Google again."
           }
         }
       }

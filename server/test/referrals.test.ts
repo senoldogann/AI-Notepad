@@ -1,14 +1,14 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { monthlyRecurringRevenueUsd } from "../src/admin";
 import { type Config, parseConfig } from "../src/config";
 import type { Env } from "../src/env";
 import { randomId, randomToken } from "../src/crypto";
 import { ReferralRewardFailedError, type ReferralRewardReport, grantDueReferralRewards } from "../src/referralRewards";
-import { normalizeReferralCode, referralCodeAlphabet, referralCodeFromBytes } from "../src/referrals";
+import { newReferralCode, normalizeReferralCode, referralCodeAlphabet, referralCodeFromBytes } from "../src/referrals";
 import { type Harness, type Session, defaultHarness, envWith, expectError, grantSubscription, refreshed, req, signIn, signInWithGoogle } from "./helpers";
 import { eventOf, invoicePaidEvent, postEvent, sendSubscription } from "./stripeEvents";
-import { type FakeStripe, type FakeSubscription, fakeSubscription, fakeYearlySubscription, stubStripeApi } from "./stripeFake";
+import { type FakePaymentMethod, type FakeStripe, type FakeSubscription, fakeCard, fakeSubscription, fakeYearlySubscription, stubStripeApi } from "./stripeFake";
 
 const siteOrigin: string = "http://localhost:8788";
 const daySeconds: number = 86_400;
@@ -36,6 +36,8 @@ interface ReferralBody {
   readonly joined: number;
   readonly rewarded: number;
   readonly pending: number;
+  readonly nextRewardAt: string | null;
+  readonly complimentary: boolean;
   readonly rewardsLeftThisYear: number;
   readonly rewardsPerYear: number;
   readonly rewardUsd: number;
@@ -67,7 +69,7 @@ async function subscriber(harness: Harness, stripe: FakeStripe, id: (name: strin
   return { session, customer };
 }
 
-/** Davetle abone olan arkadaş: kodlu Checkout, kodu taşıyan abonelik olayı. */
+/** Davetle abone olan arkadaş: kodlu Checkout, kodu ve ödeme yöntemini (yoksa null) taşıyan abonelik olayı. */
 async function referredFriend(
   harness: Harness,
   stripe: FakeStripe,
@@ -76,6 +78,7 @@ async function referredFriend(
   session: Session,
   code: string,
   yearly: boolean,
+  card: FakePaymentMethod | null,
 ): Promise<{ customer: string; subscriptionId: string }> {
   expect((await checkout(harness, session, { plan: yearly ? "yearly" : "monthly", referralCode: code })).status).toBe(200);
   const customer: string = await customerOf(session.userId);
@@ -83,7 +86,7 @@ async function referredFriend(
   const base: FakeSubscription = yearly
     ? fakeYearlySubscription(id(`sub_${name}`), customer, "active", now, now + 365 * daySeconds)
     : fakeSubscription(id(`sub_${name}`), customer, "active", now, now + 30 * daySeconds);
-  const subscription: FakeSubscription = { ...base, metadata: { user_id: session.userId, referral_code: code } };
+  const subscription: FakeSubscription = { ...base, default_payment_method: card, metadata: { user_id: session.userId, referral_code: code } };
   expect((await sendSubscription(harness, stripe, id(`evt_${name}`), "customer.subscription.created", now, subscription)).status).toBe(200);
   return { customer, subscriptionId: subscription.id };
 }
@@ -229,6 +232,8 @@ describe("davet kodu", () => {
       joined: 0,
       rewarded: 0,
       pending: 0,
+      nextRewardAt: null,
+      complimentary: false,
       rewardsLeftThisYear: 12,
       rewardsPerYear: 12,
       rewardUsd: 5.99,
@@ -332,9 +337,15 @@ describe("davet kodu", () => {
       { id: "gistsmith_invite_first_month", duration: "once", percent: "100", amount: null, currency: null },
       { id: "gistsmith_invite_yearly_599", duration: "once", percent: null, amount: "599", currency: "usd" },
     ]);
-    // Panodan değiştirilmiş kupon kullanılmaz.
+    // Panodan değiştirilmiş kupon kullanılmaz (açık davet sınırı bu denetim için yükseltilir: üç Checkout yer tutuyor).
     stripe.coupons.set("gistsmith_invite_first_month", { ...(stripe.coupons.get("gistsmith_invite_first_month") ?? { id: "", object: "coupon", valid: true, duration: "once", percent_off: 100, amount_off: null, currency: null }), percent_off: 50 });
-    await expectError(await checkout(harness, await signIn(harness), { plan: "monthly", referralCode: code }), 503, "referral_unavailable");
+    const roomy: Env = envWith({ REFERRAL_MAX_PENDING: "10" });
+    const mismatched: Session = await signIn(harness);
+    await expectError(
+      await harness.call(req("POST", "/v1/billing/checkout", { token: mismatched.accessToken, json: { plan: "monthly", referralCode: code }, env: roomy })),
+      503,
+      "referral_unavailable",
+    );
     // Kodsuz yeni Checkout bekleyen davet satırını siler.
     expect((await redemptionStatus(another.userId))?.status).toBe("checkout");
     expect((await checkout(harness, another, { plan: "monthly" })).status).toBe(200);
@@ -350,10 +361,13 @@ describe("davet ödülü", () => {
     const owner = await subscriber(harness, stripe, id, "owner");
     const code: string = (await referral(harness, owner.session)).code ?? "";
     const friendSession: Session = await signIn(harness);
-    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, null);
 
     await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
-    expect(await referral(harness, owner.session)).toMatchObject({ joined: 1, pending: 1, rewarded: 0 });
+    const joined: ReferralBody = await referral(harness, owner.session);
+    expect(joined).toMatchObject({ joined: 1, pending: 1, rewarded: 0 });
+    // Ücretsiz aydaki arkadaşta tahmini tarih: ilk ücretli fatura (dönem sonu) + 30 gün.
+    expect(new Date(joined.nextRewardAt ?? 0).getTime()).toBeGreaterThan(harness.clock.nowMs + 30 * dayMs);
     expect((await redemptionStatus(friendSession.userId))?.status).toBe("joined");
     expect((await grant(harness)).processed).toBe(0);
 
@@ -362,13 +376,15 @@ describe("davet ödülü", () => {
     const ownerLater: Session = await refreshed(harness, owner.session);
     await payInvoice(harness, stripe, friend, id("in_second"), 599, code);
     expect((await redemptionStatus(friendSession.userId))?.status).toBe("qualified");
+    // İlk gerçek ödemeden sonra kesin tarih: ödeme + 30 gün.
+    expect((await referral(harness, ownerLater)).nextRewardAt).toBe(new Date(harness.clock.nowMs + 30 * dayMs).toISOString());
     harness.clock.nowMs += 29 * dayMs;
     expect((await grant(harness)).processed).toBe(0);
     harness.clock.nowMs += 2 * dayMs;
     expect(await grant(harness)).toEqual({ processed: 1, granted: 1, capped: 0, voided: 0, failed: 0 });
     expect(stripe.balanceTransactions).toHaveLength(1);
     expect(stripe.balanceTransactions[0]).toMatchObject({ customer: owner.customer, amount: -599, currency: "usd", metadata: { purpose: "referral_reward" } });
-    expect(await referral(harness, await refreshed(harness, ownerLater))).toMatchObject({ joined: 1, pending: 0, rewarded: 1, rewardsLeftThisYear: 11 });
+    expect(await referral(harness, await refreshed(harness, ownerLater))).toMatchObject({ joined: 1, pending: 0, rewarded: 1, rewardsLeftThisYear: 11, nextRewardAt: null });
 
     // Yeniden çalıştırma, aynı olayın tekrarı ve sonraki aylar ödül vermez.
     expect((await grant(harness)).processed).toBe(0);
@@ -386,7 +402,7 @@ describe("davet ödülü", () => {
 
     // Yıllık: ilk fatura (43,01 $) hemen `qualified`; kısmi iade webhook'u ödülü düşürür.
     const refundedSession: Session = await signIn(harness);
-    const refunded = await referredFriend(harness, stripe, id, "refunded", refundedSession, code, true);
+    const refunded = await referredFriend(harness, stripe, id, "refunded", refundedSession, code, true, null);
     await payInvoice(harness, stripe, refunded, id("in_refunded"), 4301, code);
     expect((await redemptionStatus(refundedSession.userId))?.status).toBe("qualified");
     const refund: string = eventOf(id("evt_refund"), "charge.refunded", Math.floor(harness.clock.nowMs / 1000), {
@@ -403,7 +419,7 @@ describe("davet ödülü", () => {
 
     // İtiraz webhook'u.
     const disputedSession: Session = await signIn(harness);
-    const disputed = await referredFriend(harness, stripe, id, "disputed", disputedSession, code, true);
+    const disputed = await referredFriend(harness, stripe, id, "disputed", disputedSession, code, true, null);
     await payInvoice(harness, stripe, disputed, id("in_disputed"), 4301, code);
     stripe.charges.set(id("ch_disputed"), disputed.customer);
     const dispute: string = eventOf(id("evt_dispute"), "charge.dispute.created", Math.floor(harness.clock.nowMs / 1000), {
@@ -419,13 +435,13 @@ describe("davet ödülü", () => {
 
     // Webhook'u kaçmış itiraz: ödül anında Stripe'ta görülür.
     const lateSession: Session = await signIn(harness);
-    const late = await referredFriend(harness, stripe, id, "late", lateSession, code, true);
+    const late = await referredFriend(harness, stripe, id, "late", lateSession, code, true, null);
     await payInvoice(harness, stripe, late, id("in_late"), 4301, code);
     stripe.disputedIntents.add(`pi_${id("in_late")}`);
 
     // Sonradan aynı Mac'te görülen hesap.
     const sameMacSession: Session = await signIn(harness);
-    const sameMac = await referredFriend(harness, stripe, id, "same", sameMacSession, code, true);
+    const sameMac = await referredFriend(harness, stripe, id, "same", sameMacSession, code, true, null);
     await payInvoice(harness, stripe, sameMac, id("in_same"), 4301, code);
     const device: string = `dev_${randomId()}`;
     await env.DB.batch([
@@ -465,7 +481,7 @@ describe("davet ödülü", () => {
     }
     expect((await referral(harness, owner.session)).rewardsLeftThisYear).toBe(0);
     const friendSession: Session = await signIn(harness);
-    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, true);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, true, null);
     await payInvoice(harness, stripe, friend, id("in_friend"), 4301, code);
     harness.clock.nowMs += 31 * dayMs;
     expect(await grant(harness)).toEqual({ processed: 1, granted: 0, capped: 1, voided: 0, failed: 0 });
@@ -480,7 +496,7 @@ describe("davet ödülü", () => {
     const owner = await subscriber(harness, stripe, id, "owner");
     const code: string = (await referral(harness, owner.session)).code ?? "";
     const friendSession: Session = await signIn(harness);
-    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, true);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, true, null);
     await payInvoice(harness, stripe, friend, id("in_friend"), 4301, code);
     harness.clock.nowMs += 31 * dayMs;
     stripe.loseBalanceResponses = true;
@@ -506,7 +522,7 @@ describe("davet ödülü", () => {
     const code: string = (await referral(harness, owner.session)).code ?? "";
     const subject: string = `google-${randomId()}`;
     const friendSession: Session = await signInWithGoogle(harness, subject);
-    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, null);
     await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
     expect((await harness.call(req("DELETE", "/v1/me", { token: friendSession.accessToken }))).status).toBe(204);
     const anonymous = await env.DB.prepare("SELECT referred_user_id, status FROM referral_redemptions WHERE referrer_user_id = ?")
@@ -518,7 +534,7 @@ describe("davet ödülü", () => {
 
     // Davet eden silinir: bekleyen ödül düşer, kod artık geçersiz.
     const pendingSession: Session = await signIn(harness);
-    const pending = await referredFriend(harness, stripe, id, "pending", pendingSession, code, true);
+    const pending = await referredFriend(harness, stripe, id, "pending", pendingSession, code, true, null);
     await payInvoice(harness, stripe, pending, id("in_pending"), 4301, code);
     expect((await harness.call(req("DELETE", "/v1/me", { token: owner.session.accessToken }))).status).toBe(204);
     expect(await redemptionStatus(pendingSession.userId)).toEqual({ status: "void", void_reason: "referrer_deleted" });
@@ -528,56 +544,395 @@ describe("davet ödülü", () => {
   });
 });
 
-/** Yönetici istatistiğindeki abonelik sayıları (denetlenen alanlar). */
-interface StatsSubscriptions {
-  readonly monthly: number;
-  readonly mrrUsd: number;
-  readonly freeInviteMonth: number;
+/** Yönetici istatistiğindeki abonelik ve davet sayıları (denetlenen alanlar). */
+interface StatsBody {
+  readonly subscriptions: { readonly monthly: number; readonly mrrUsd: number; readonly freeInviteMonth: number };
+  readonly referrals: {
+    readonly joined: number;
+    readonly pending: number;
+    readonly granted: number;
+    readonly voided: number;
+    readonly voidedByReason: ReadonlyArray<{ readonly reason: string; readonly count: number }>;
+  };
 }
 
 const adminSubject: string = "davet-yonetici";
 const adminEnv: Env = envWith({ ADMIN_IDENTITIES: `google:${adminSubject}` });
 
-async function subscriptionStats(harness: Harness, admin: Session): Promise<StatsSubscriptions> {
-  const response: Response = await harness.call(req("GET", "/v1/admin/stats", { token: admin.accessToken, env: adminEnv }));
+async function adminGet(harness: Harness, admin: Session, path: string): Promise<Response> {
+  const response: Response = await harness.call(req("GET", path, { token: admin.accessToken, env: adminEnv }));
   expect(response.status).toBe(200);
-  return (await response.json<{ subscriptions: StatsSubscriptions }>()).subscriptions;
+  return response;
+}
+
+async function adminStats(harness: Harness, admin: Session): Promise<StatsBody> {
+  return (await adminGet(harness, admin, "/v1/admin/stats")).json<StatsBody>();
+}
+
+/** Nedenin düşen davet sayısı (yoksa 0). */
+function voidedFor(stats: StatsBody, reason: string): number {
+  return stats.referrals.voidedByReason.find((item: { readonly reason: string; readonly count: number }): boolean => item.reason === reason)?.count ?? 0;
 }
 
 describe("yönetici MRR ve davet sayaçları", () => {
-  it("davetle gelen aylık abonenin ücretsiz ilk ayı MRR'a girmez, ayrı sayılır; ilk ücretli faturadan sonra MRR'a girer", async () => {
+  it("davetle gelen aylık abonenin ücretsiz ilk ayı MRR'a girmez, ayrı sayılır; ilk ücretli faturadan sonra MRR'a girer; davet sayaçları ilerler", async () => {
     const harness: Harness = await defaultHarness();
     const stripe: FakeStripe = stubStripeApi(harness);
     const id = uniqueIds();
     const admin: Session = await signInWithGoogle(harness, adminSubject);
-    const before: StatsSubscriptions = await subscriptionStats(harness, admin);
+    const before: StatsBody = await adminStats(harness, admin);
     const owner = await subscriber(harness, stripe, id, "owner");
     const code: string = (await referral(harness, owner.session)).code ?? "";
     const friendSession: Session = await signIn(harness);
-    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, null);
     await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
 
     // Paylaşılan veritabanında başka testlerin satırları da var: fark denetlenir.
-    const inFreeMonth: StatsSubscriptions = await subscriptionStats(harness, admin);
-    expect(inFreeMonth.monthly - before.monthly).toBe(1);
-    expect(inFreeMonth.freeInviteMonth - before.freeInviteMonth).toBe(1);
-    expect(Math.round((inFreeMonth.mrrUsd - before.mrrUsd) * 100)).toBe(599);
+    const inFreeMonth: StatsBody = await adminStats(harness, admin);
+    expect(inFreeMonth.subscriptions.monthly - before.subscriptions.monthly).toBe(1);
+    expect(inFreeMonth.subscriptions.freeInviteMonth - before.subscriptions.freeInviteMonth).toBe(1);
+    expect(Math.round((inFreeMonth.subscriptions.mrrUsd - before.subscriptions.mrrUsd) * 100)).toBe(599);
+    // Ücretsiz ilk faturada davet katılır ve ödülü bekler.
+    expect(inFreeMonth.referrals.joined - before.referrals.joined).toBe(1);
+    expect(inFreeMonth.referrals.pending - before.referrals.pending).toBe(1);
+    expect(inFreeMonth.referrals.granted - before.referrals.granted).toBe(0);
 
     harness.clock.nowMs += 30 * dayMs;
     await payInvoice(harness, stripe, friend, id("in_second"), 599, code);
     // Erişim jetonu 15 dakikada dolar: oturum bir kez yenilenir (eski yenileme jetonu yeniden kullanılmaz).
-    const paid: StatsSubscriptions = await subscriptionStats(harness, await refreshed(harness, admin));
-    expect(paid.monthly - before.monthly).toBe(2);
-    expect(paid.freeInviteMonth - before.freeInviteMonth).toBe(0);
-    expect(Math.round((paid.mrrUsd - before.mrrUsd) * 100)).toBe(1198);
+    const adminLater: Session = await refreshed(harness, admin);
+    const paid: StatsBody = await adminStats(harness, adminLater);
+    expect(paid.subscriptions.monthly - before.subscriptions.monthly).toBe(2);
+    expect(paid.subscriptions.freeInviteMonth - before.subscriptions.freeInviteMonth).toBe(0);
+    expect(Math.round((paid.subscriptions.mrrUsd - before.subscriptions.mrrUsd) * 100)).toBe(1198);
+    expect(paid.referrals.pending - before.referrals.pending).toBe(1);
+
+    // Bekleme süresi dolunca ödül verilir: bekleyen biri verilene geçer.
+    harness.clock.nowMs += 31 * dayMs;
+    expect(await grant(harness)).toMatchObject({ granted: 1 });
+    const granted: StatsBody = await adminStats(harness, await refreshed(harness, adminLater));
+    expect(granted.referrals.joined - before.referrals.joined).toBe(1);
+    expect(granted.referrals.pending - before.referrals.pending).toBe(0);
+    expect(granted.referrals.granted - before.referrals.granted).toBe(1);
   });
 
-  it("MRR yıllığı ayda 1/12 sayar; davet sayaçları istatistikte görünür", async () => {
+  it("davet eden ücretsiz ay sürerken hesabını silse de arkadaşın ücretsiz ayı MRR'a girmez; ilk ücretli faturada girer", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const friendSession: Session = await signIn(harness);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, null);
+    await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
+    const before: StatsBody = await adminStats(harness, admin);
+    expect((await harness.call(req("DELETE", "/v1/me", { token: owner.session.accessToken }))).status).toBe(204);
+    expect(await redemptionStatus(friendSession.userId)).toEqual({ status: "void", void_reason: "referrer_deleted" });
+
+    // Davet eden silindi (kendi aboneliği sayılmaz); arkadaşın ücretsiz ayı sürer ve yine MRR'a girmez.
+    const deleted: StatsBody = await adminStats(harness, admin);
+    expect(deleted.subscriptions.freeInviteMonth).toBe(before.subscriptions.freeInviteMonth);
+    expect(deleted.subscriptions.monthly - before.subscriptions.monthly).toBe(-1);
+    expect(voidedFor(deleted, "referrer_deleted") - voidedFor(before, "referrer_deleted")).toBe(1);
+
+    harness.clock.nowMs += 30 * dayMs;
+    await payInvoice(harness, stripe, friend, id("in_second"), 599, code);
+    const paid: StatsBody = await adminStats(harness, await refreshed(harness, admin));
+    expect(paid.subscriptions.freeInviteMonth - before.subscriptions.freeInviteMonth).toBe(-1);
+    expect(paid.subscriptions.monthly - before.subscriptions.monthly).toBe(0);
+    // İlk ücretli fatura düşmüş satıra da yazılır; durum değişmez, ödül verilmez.
+    const row = await env.DB.prepare("SELECT status, qualifying_invoice_id FROM referral_redemptions WHERE referred_user_id = ?")
+      .bind(friendSession.userId)
+      .first<{ status: string; qualifying_invoice_id: string | null }>();
+    expect(row).toEqual({ status: "void", qualifying_invoice_id: id("in_second") });
+  });
+
+  it("MRR yıllığı ayda 1/12 sayar", async () => {
     // 3 aylık × 5,99 + 2 yıllık × 49 / 12 = 17,97 + 8,1667 = 26,14.
     expect(monthlyRecurringRevenueUsd(3, 2, 5.99, 49)).toBe(26.14);
     expect(monthlyRecurringRevenueUsd(0, 1, 5.99, 49)).toBe(4.08);
     expect(monthlyRecurringRevenueUsd(0, 0, 5.99, 49)).toBe(0);
     const config: Config = parseConfig(env);
     expect(config.priceUsdYearly).toBe(49);
+  });
+});
+
+/** Davet satırının kart özeti. */
+async function cardHashOf(referredUserId: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT card_fingerprint_hash AS hash FROM referral_redemptions WHERE referred_user_id = ?")
+    .bind(referredUserId)
+    .first<{ hash: string | null }>();
+  return row?.hash ?? null;
+}
+
+describe("davet kötüye kullanımı", () => {
+  it("kart: başka davetteki kart card_reused (herhangi bir davet eden), davet edenin kartı self_card; arkadaş indirimi korur, ödül yok; düşen davet yer tutar", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const reused: FakePaymentMethod = fakeCard(id("fp_reused"));
+
+    // İlk arkadaş kartıyla katılır: kartın özeti yazılır (parmak izi açık saklanmaz), davet ödülü bekler.
+    const firstSession: Session = await signIn(harness);
+    const first = await referredFriend(harness, stripe, id, "first", firstSession, code, false, reused);
+    await payInvoice(harness, stripe, first, id("in_first"), 0, code);
+    expect(await redemptionStatus(firstSession.userId)).toEqual({ status: "joined", void_reason: null });
+    const firstHash: string | null = await cardHashOf(firstSession.userId);
+    expect(firstHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(firstHash).not.toContain(id("fp_reused"));
+
+    // Aynı kartla yeni hesap: davet düşer, ilk ay yine ücretsizdir (aboneliğe ve Stripe'a dokunulmaz).
+    const secondSession: Session = await signIn(harness);
+    const second = await referredFriend(harness, stripe, id, "second", secondSession, code, false, reused);
+    await payInvoice(harness, stripe, second, id("in_second"), 0, code);
+    expect(await redemptionStatus(secondSession.userId)).toEqual({ status: "void", void_reason: "card_reused" });
+    expect(await cardHashOf(secondSession.userId)).toBe(firstHash);
+    expect(stripe.canceled).toEqual([]);
+
+    // Başka davet edenin kodu da aynı kartı kabul etmez (yıllık: ilk ödeme düşmüş satıra yazılır, ödül yok).
+    const other = await subscriber(harness, stripe, id, "other");
+    const otherCode: string = (await referral(harness, other.session)).code ?? "";
+    const thirdSession: Session = await signIn(harness);
+    const third = await referredFriend(harness, stripe, id, "third", thirdSession, otherCode, true, reused);
+    await payInvoice(harness, stripe, third, id("in_third"), 4301, otherCode);
+    expect(await redemptionStatus(thirdSession.userId)).toEqual({ status: "void", void_reason: "card_reused" });
+
+    // Davet edenin Stripe'taki kartı: self_card.
+    stripe.customerCards.set(owner.customer, [fakeCard(id("fp_owner"))]);
+    const selfSession: Session = await signIn(harness);
+    const self = await referredFriend(harness, stripe, id, "self", selfSession, code, false, fakeCard(id("fp_owner")));
+    await payInvoice(harness, stripe, self, id("in_self"), 0, code);
+    expect(await redemptionStatus(selfSession.userId)).toEqual({ status: "void", void_reason: "self_card" });
+
+    // Bekleyen bir davet ve kart yüzünden düşen iki davet sınırı (3) doldurur: tek kartla sınırsız ücretsiz ay yok.
+    await expectError(await validate(harness, await signIn(harness), code), 409, "referral_limit_reached");
+    expect(await referral(harness, await refreshed(harness, owner.session))).toMatchObject({ joined: 3, pending: 1, rewarded: 0 });
+
+    // Yalnızca ilk arkadaş ikinci ayı ödeyip bekleme süresini doldurunca ödül verilir.
+    harness.clock.nowMs += 30 * dayMs;
+    await payInvoice(harness, stripe, first, id("in_first_paid"), 599, code);
+    await payInvoice(harness, stripe, second, id("in_second_paid"), 599, code);
+    harness.clock.nowMs += 31 * dayMs;
+    expect(await grant(harness)).toEqual({ processed: 1, granted: 1, capped: 0, voided: 0, failed: 0 });
+    expect(stripe.balanceTransactions.map((transaction): string => transaction.customer)).toEqual([owner.customer]);
+  });
+
+  it("kart olmayan ödeme yöntemi: kart denetimi yapılamaz, davet kartsız katılır ve uyarı yazılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const friendSession: Session = await signIn(harness);
+    const link: FakePaymentMethod = { id: id("pm_link"), object: "payment_method", type: "link", card: null };
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, link);
+    const warnings = vi.spyOn(console, "warn");
+    try {
+      await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
+      expect(warnings.mock.calls.some((call: unknown[]): boolean => String(call[0]).includes('"event":"referral_join_without_card"'))).toBe(true);
+    } finally {
+      warnings.mockRestore();
+    }
+    expect(await redemptionStatus(friendSession.userId)).toEqual({ status: "joined", void_reason: null });
+    expect(await cardHashOf(friendSession.userId)).toBeNull();
+  });
+
+  it("ücretsiz ayındaki hesap kod paylaşamaz (zincir yok); ilk ödemeden sonra paylaşır ve kendi davetindeki kart arkadaşında self_card olur", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const middleSession: Session = await signIn(harness);
+    const middleCard: FakePaymentMethod = fakeCard(id("fp_middle"));
+    const middle = await referredFriend(harness, stripe, id, "middle", middleSession, code, false, middleCard);
+    await payInvoice(harness, stripe, middle, id("in_middle_free"), 0, code);
+
+    // Ücretsiz ayda kod verilmez; önceden üretilmiş kod da kabul edilmez.
+    expect((await referral(harness, middleSession)).code).toBeNull();
+    const chainCode: string = newReferralCode();
+    await env.DB.prepare("INSERT INTO referral_codes (user_id, code, created_at) VALUES (?, ?, 0)").bind(middleSession.userId, chainCode).run();
+    await expectError(await validate(harness, await signIn(harness), chainCode), 404, "referral_invalid");
+
+    // İlk ücretli fatura: kod paylaşılabilir.
+    harness.clock.nowMs += 29 * dayMs;
+    await payInvoice(harness, stripe, middle, id("in_middle_paid"), 599, code);
+    const middleLater: Session = await refreshed(harness, middleSession);
+    expect((await referral(harness, middleLater)).code).toBe(chainCode);
+
+    // Arkadaşı, davet edenin kendi davetinde kullandığı kartla katılır (kart Stripe'ta kayıtlı olmasa da): self_card.
+    const friendSession: Session = await signIn(harness);
+    expect((await checkout(harness, friendSession, { plan: "monthly", referralCode: chainCode })).status).toBe(200);
+    const customer: string = await customerOf(friendSession.userId);
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    const subscription: FakeSubscription = {
+      ...fakeSubscription(id("sub_chain"), customer, "active", now, now + 30 * daySeconds),
+      default_payment_method: middleCard,
+      metadata: { user_id: friendSession.userId, referral_code: chainCode },
+    };
+    expect((await sendSubscription(harness, stripe, id("evt_chain"), "customer.subscription.created", now, subscription)).status).toBe(200);
+    await payInvoice(harness, stripe, { customer, subscriptionId: subscription.id }, id("in_chain"), 0, chainCode);
+    expect(await redemptionStatus(friendSession.userId)).toEqual({ status: "void", void_reason: "self_card" });
+  });
+
+  it("açık davet sınırı: Checkout'taki ve bekleyen davetler sayılır; dolunca doğrulama ve Checkout 409, Stripe'a gidilmez; 24 saat sonra yer açılır", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const joinedSession: Session = await signIn(harness);
+    const joined = await referredFriend(harness, stripe, id, "joined", joinedSession, code, false, fakeCard(id("fp_joined")));
+    await payInvoice(harness, stripe, joined, id("in_joined"), 0, code);
+    const pendingCheckouts: Session[] = [await signIn(harness), await signIn(harness)];
+    for (const session of pendingCheckouts) {
+      expect((await checkout(harness, session, { plan: "monthly", referralCode: code })).status).toBe(200);
+    }
+
+    const late: Session = await signIn(harness);
+    await expectError(await validate(harness, late, code), 409, "referral_limit_reached");
+    const forms: number = stripe.checkoutForms.length;
+    await expectError(await checkout(harness, late, { plan: "monthly", referralCode: code }), 409, "referral_limit_reached");
+    expect(stripe.checkoutForms).toHaveLength(forms);
+    // Hesabın kendi Checkout satırı sayılmaz: ödeme sayfasını yeniden açabilir.
+    expect((await checkout(harness, pendingCheckouts[0] ?? late, { plan: "yearly", referralCode: code })).status).toBe(200);
+
+    // Terk edilen ödeme sayfaları 24 saat sonra yer tutmaz.
+    harness.clock.nowMs += 25 * 3_600_000;
+    expect((await validate(harness, await refreshed(harness, late), code)).status).toBe(200);
+  });
+
+  it("ücretsiz ayında iptal eden arkadaşın daveti düşer: tahmini ödül tarihi iptalde kalkar, abonelik bitince bekleyen sayılmaz", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const friendSession: Session = await signIn(harness);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, null);
+    await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
+    const waiting: ReferralBody = await referral(harness, owner.session);
+    expect(waiting).toMatchObject({ joined: 1, pending: 1 });
+    expect(waiting.nextRewardAt).not.toBeNull();
+
+    const now: number = Math.floor(harness.clock.nowMs / 1000);
+    const base: FakeSubscription = {
+      ...fakeSubscription(friend.subscriptionId, friend.customer, "active", now, now + 30 * daySeconds),
+      metadata: { user_id: friendSession.userId, referral_code: code },
+    };
+    // Dönem sonunda bitecek: ikinci fatura gelmeyecek, tahmini tarih gösterilmez; davet henüz düşmez.
+    await sendSubscription(harness, stripe, id("evt_cancel"), "customer.subscription.updated", now + 1, { ...base, cancel_at_period_end: true });
+    expect(await referral(harness, owner.session)).toMatchObject({ pending: 1, nextRewardAt: null });
+    // Abonelik bitti: davet düşer.
+    await sendSubscription(harness, stripe, id("evt_deleted"), "customer.subscription.deleted", now + 2, { ...base, status: "canceled" });
+    expect(await redemptionStatus(friendSession.userId)).toEqual({ status: "void", void_reason: "canceled_before_payment" });
+    expect(await referral(harness, owner.session)).toMatchObject({ joined: 1, pending: 0, nextRewardAt: null });
+  });
+});
+
+/** Yönetim panelindeki davet alanları (denetlenen). */
+interface AdminUserItem {
+  readonly id: string;
+  readonly invite: string | null;
+}
+
+interface AdminDetailBody {
+  readonly user: AdminUserItem;
+  readonly invitedBy: Readonly<Record<string, string | boolean | null>> | null;
+  readonly invites: {
+    readonly code: string | null;
+    readonly joined: number;
+    readonly pending: number;
+    readonly rewarded: number;
+    readonly voided: number;
+    readonly rewardsLeftThisYear: number;
+    readonly nextRewardAt: string | null;
+    readonly friends: ReadonlyArray<Readonly<Record<string, string | null>>>;
+  } | null;
+  readonly timeline: ReadonlyArray<{ readonly kind: string; readonly at: string; readonly detail: string | null }>;
+}
+
+interface AdminInsightsBody {
+  readonly funnel: { readonly steps: ReadonlyArray<{ readonly step: string; readonly count: number }> };
+  readonly invites: {
+    readonly days: number;
+    readonly checkouts: number;
+    readonly joined: number;
+    readonly firstPayments: number;
+    readonly granted: number;
+    readonly inFreeMonth: number;
+    readonly topReferrers: ReadonlyArray<{ readonly userId: string; readonly joined: number }>;
+  };
+}
+
+describe("yönetim panelinde davet", () => {
+  it("liste rozeti ve `invited` kesimi, ayrıntıda davet eden ve davetler, zaman çizelgesi, içgörü özeti ve huni", async () => {
+    const harness: Harness = await defaultHarness();
+    const stripe: FakeStripe = stubStripeApi(harness);
+    const id = uniqueIds();
+    const iso = (ms: number): string => new Date(ms).toISOString();
+    const admin: Session = await signInWithGoogle(harness, adminSubject);
+    const owner = await subscriber(harness, stripe, id, "owner");
+    const code: string = (await referral(harness, owner.session)).code ?? "";
+    const friendSession: Session = await signIn(harness);
+    const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false, fakeCard(id("fp_friend")));
+    const joinedAt: number = harness.clock.nowMs;
+    await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
+
+    const invitedItems: AdminUserItem[] = (await (await adminGet(harness, admin, "/v1/admin/users?segment=invited")).json<{ items: AdminUserItem[] }>()).items;
+    expect(invitedItems.find((item: AdminUserItem): boolean => item.id === friendSession.userId)).toMatchObject({ invite: "free_month" });
+    expect(invitedItems.map((item: AdminUserItem): string => item.id)).not.toContain(owner.session.userId);
+
+    const friendDetail: AdminDetailBody = await (await adminGet(harness, admin, `/v1/admin/users/${friendSession.userId}`)).json<AdminDetailBody>();
+    expect(friendDetail.invitedBy).toMatchObject({
+      referrerUserId: owner.session.userId,
+      code,
+      status: "joined",
+      voidReason: null,
+      inFreeMonth: true,
+      cardChecked: true,
+      joinedAt: iso(joinedAt),
+      qualifiedAt: null,
+    });
+    expect(friendDetail.invites).toBeNull();
+    expect(friendDetail.timeline).toContainEqual({ kind: "invite_joined", at: iso(joinedAt), detail: null });
+    expect(friendDetail.timeline.map((entry): string => entry.kind)).toContain("invite_checkout");
+
+    const ownerDetail: AdminDetailBody = await (await adminGet(harness, admin, `/v1/admin/users/${owner.session.userId}`)).json<AdminDetailBody>();
+    expect(ownerDetail.invitedBy).toBeNull();
+    expect(ownerDetail.invites).toMatchObject({ code, joined: 1, pending: 1, rewarded: 0, voided: 0, rewardsLeftThisYear: 12, rewardsPerYear: 12 });
+    expect(ownerDetail.invites?.nextRewardAt).not.toBeNull();
+    expect(ownerDetail.invites?.friends).toEqual([
+      expect.objectContaining({ userId: friendSession.userId, status: "joined", voidReason: null, joinedAt: iso(joinedAt) }),
+    ]);
+    expect(ownerDetail.timeline).toContainEqual({ kind: "invite_friend_joined", at: iso(joinedAt), detail: friendSession.userId });
+
+    const insights: AdminInsightsBody = await (await adminGet(harness, admin, "/v1/admin/insights")).json<AdminInsightsBody>();
+    expect(insights.invites.days).toBe(30);
+    expect(insights.invites.joined).toBeGreaterThanOrEqual(1);
+    expect(insights.invites.checkouts).toBeGreaterThanOrEqual(1);
+    expect(insights.invites.inFreeMonth).toBeGreaterThanOrEqual(1);
+    expect(insights.invites.topReferrers.length).toBeGreaterThan(0);
+    expect(insights.invites.topReferrers.length).toBeLessThanOrEqual(10);
+    const joinedCounts: number[] = insights.invites.topReferrers.map((item): number => item.joined);
+    expect(joinedCounts).toEqual([...joinedCounts].sort((left: number, right: number): number => right - left));
+    const steps: string[] = insights.funnel.steps.map((step): string => step.step);
+    expect(steps.indexOf("subscribed_via_invite")).toBe(steps.indexOf("subscribed") + 1);
+    expect(insights.funnel.steps.find((step): boolean => step.step === "subscribed_via_invite")?.count).toBeGreaterThanOrEqual(1);
+
+    // İlk ücretli fatura: ücretsiz ay biter, rozet "invited" olur, ödül tarihi zaman çizelgesindedir.
+    harness.clock.nowMs += 30 * dayMs;
+    const paidAt: number = harness.clock.nowMs;
+    await payInvoice(harness, stripe, friend, id("in_paid"), 599, code);
+    const adminLater: Session = await refreshed(harness, admin);
+    const paidItems: AdminUserItem[] = (await (await adminGet(harness, adminLater, "/v1/admin/users?segment=invited")).json<{ items: AdminUserItem[] }>()).items;
+    expect(paidItems.find((item: AdminUserItem): boolean => item.id === friendSession.userId)).toMatchObject({ invite: "invited" });
+    const paidDetail: AdminDetailBody = await (await adminGet(harness, adminLater, `/v1/admin/users/${friendSession.userId}`)).json<AdminDetailBody>();
+    expect(paidDetail.invitedBy).toMatchObject({ status: "qualified", inFreeMonth: false, qualifiedAt: iso(paidAt), rewardDueAt: iso(paidAt + 30 * dayMs) });
+    expect(paidDetail.timeline).toContainEqual({ kind: "invite_first_payment", at: iso(paidAt), detail: null });
+    expect(paidDetail.timeline).toContainEqual({ kind: "invite_reward_due", at: iso(paidAt + 30 * dayMs), detail: null });
   });
 });

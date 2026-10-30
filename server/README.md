@@ -34,8 +34,9 @@ sırrından farklı), `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `STRIPE_SECRET_
 olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production < AuthKey_XXXXXXXXXX.p8`),
 `DEEPGRAM_API_KEY` (yalnızca `DEEPGRAM_POLICY=on` iken: Deepgram konsolunda Member ya da üstü yetkili anahtar; yalnızca
 kısa ömürlü jeton vermek için kullanılır).
-`TRIAL_HASH_SECRET` kimlik deneme defterinin ve deneme IP özetlerinin HMAC sırrıdır; değiştirilirse defterdeki eski
-satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği denemeyi yeniden alabilir). `ACCESS_TOKEN_SECRET`
+`TRIAL_HASH_SECRET` kimlik deneme defterinin, deneme IP özetlerinin ve davet edilenin kart parmak izi özetinin HMAC
+sırrıdır (webhook da okur); değiştirilirse defterdeki eski satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği
+denemeyi yeniden alabilir, eski davetlerin kartları yeniden kullanılabilir). `ACCESS_TOKEN_SECRET`
 değiştirilirse yalnızca açık oturumlar düşer. Hız sınırı ve IP özeti IPv6'da adresin /64 önekine göredir.
 
 ## Ayarlar (`wrangler.jsonc` → `vars`)
@@ -51,6 +52,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `STRIPE_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID` | Aynı ürünün aylık (varsayılan) ve yıllık fiyatı. Checkout `plan`'a göre birini kullanır; webhook, iade ve itiraz ikisini de "bizim" sayar; abonelik satırına plan (`monthly`/`yearly`) yazılır. Haklar plana bakmaz. İkisi aynı olamaz. |
 | `PRICE_USD_MONTHLY`, `PRICE_USD_YEARLY` | Fiyatlar (Stripe fiyatlarıyla elle aynı tutulur; Stripe çağrılmaz). Aylık: MRR, yıllık davet indirimi tutarı ve davet ödülü (bakiye alacağı). Yıllık: yalnızca MRR (ayda 1/12'si). |
 | `REFERRAL_POLICY` | Davet programı: `on` ise abonelere kod verilir ve Checkout kodu kabul eder; `off` ise kod verilmez, kod `503 referral_unavailable` alır; hak kazanılmış bekleyen ödüller yine verilir. Ayrıntı: aşağıda "Davet programı". |
+| `REFERRAL_MAX_PENDING` | Davet edenin aynı anda açık tutabileceği en çok davet (3): ödülü bekleyen, son 24 saatte Checkout'a götürülen ve son 365 günde kart yüzünden düşen davetler; dolunca kod `409 referral_limit_reached` alır. |
 | `MONTHLY_ACCOUNT_TOKEN_CAP` | Abonenin toplantıya bağlı olmayan çağrılarının (Sor, not düzenleme…) aylık token sınırı; `MONTHLY_TOKEN_CAP`'in parçası, ondan büyük olamaz. Toplantı bütçeleri değişmez. |
 | `ELEVENLABS_MONTHLY_AUDIO_HOURS`, `ELEVENLABS_BILLING_DAY` | ElevenLabs aylık kredi planının ses saati (Creator: ~110 saat) ve yenilendiği gün (1–28, UTC). Dönem kullanımı `daily_spend.audio_seconds`'tan; %80 ve %95 aşılınca `elevenlabs_capacity_threshold` alarmı, eşik üstündeyken her gün Cron'da `elevenlabs_capacity_high` alarmı; `GET /v1/admin/stats` → `elevenLabs: {cycleStart, usedHours, capHours, percent}`. |
 | `REPORT_BYTES_PER_DAY` | Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günlük bayt bütçesi; ayrıca hesap başına günde 20 rapor. |
@@ -99,7 +101,8 @@ güncellenir; var olan satırlardan doldurulur) ekler: bütçe denetimi tabloyu 
 (`ops_events`) ve tavan alarmlarının günlük işaretini (`daily_spend.ceiling_alerted_at`, `trial_ceiling_alerted_at`),
 `0034` indirme kaynaklarını (`download_sources`) ve ağ başına günlük tekilleştirmeyi (`download_visitors`), `0035`
 toplantının ilk not anını ve hata alanlarını (`meeting_sessions.first_note_at`, `failure_count`, `last_failure_code`,
-`last_failure_at`), `0036` Stripe iptal nedenlerini (`subscription_cancellations`) ekler.
+`last_failure_at`), `0036` Stripe iptal nedenlerini (`subscription_cancellations`), `0040` davet edilenin kart parmak
+izi özetini (`referral_redemptions.card_fingerprint_hash`; aşağıda "Davet programı") ekler.
 
 ## Deepgram canlı metni
 
@@ -108,8 +111,8 @@ Deepgram'ın kısa ömürlü jetonunu verir: `{accessToken, expiresIn, model: "n
 Sunucu `POST https://api.deepgram.com/v1/auth/grant`'ı `Authorization: Token <DEEPGRAM_API_KEY>` ve
 `{"ttl_seconds": 30}` ile çağırır (5xx/429/ağ hatası uyarıyla 3 kez, sonra `502 upstream_unavailable`); uygulama
 `wss://api.deepgram.com/v1/listen`'a `Authorization: Bearer <jeton>` ve `mip_opt_out=true` ile bağlanır. Jeton yalnızca
-bağlantı kurulurken geçerli olmalıdır; her bağlantı ve yeniden bağlanma yeni jeton ister, toplantı başına en çok 30
-(`429 deepgram_grant_limit`). Jeton loglanmaz ve saklanmaz.
+bağlantı kurulurken geçerli olmalıdır; her bağlantı ve yeniden bağlanma yeni jeton ister: toplantı başına en çok 30
+(deneme toplantısında 12), 5 dakikada en çok 8 (`429 deepgram_grant_limit`). Jeton loglanmaz ve saklanmaz.
 
 Sunucu akışı görmez; harcama temkinli tahmindir: toplantının ilk jetonunda kalan en çok süresi × 2 akış ("Sen" ve
 "Diğerleri") peşin sayılır, toplantı bitince (`/end`, yeni toplantının kapattığı toplantı bir sonraki bitişte ya da günlük
@@ -153,7 +156,8 @@ engel vardır:
   DeviceCheck hiç çağrılmaz.
 - **IP başına yeni deneme hesabı**: `TRIAL_ACCOUNTS_PER_IP_PER_DAY` (IP'nin HMAC özeti, gün sonunda silinir).
 
-App Attest (`APP_ATTEST_POLICY`) macOS'ta desteklenmediği için bugün cihaz sınırı vermez; kodu yerinde durur.
+App Attest (`APP_ATTEST_POLICY`) macOS'ta desteklenmediği için bugün cihaz sınırı vermez; kodu yerinde durur. Bu
+yüzden davet programındaki cihaz denetimi (`sharesDevice`) de Mac'te eşleşmez (aşağıda "Davet programı").
 
 ## Davet programı
 
@@ -170,17 +174,34 @@ App Attest (`APP_ATTEST_POLICY`) macOS'ta desteklenmediği için bugün cihaz s�
   (`metadata.purpose=referral_reward`); Stripe sonraki faturalarından düşer. Müşteri bakiyesi seçildi çünkü plandan
   bağımsızdır, birden çok ödül birikir ve aboneliği değiştirmez. Çift ödül yok: satır durumu, idempotency anahtarı ve
   çağrıdan önce bakiye hareketlerinde aynı ödül araması.
-- Kötüye kullanım: kendi kodu ve aynı App Attest cihazını paylaşan hesaplar `403 referral_self`; daha önce abonelik
-  açmış hesap ya da aynı giriş kimliğiyle (hesap silinmiş olsa da; kimlik özeti 730 gün) daha önce davetle abone olmuş
-  kimlik `409 referral_not_eligible`; davet eden son 365 günde en çok 12 ödül (`capped`); doğrulama kullanıcı başına
-  dakikada 10.
+- Ücretsiz ayında aboneliği biten (Stripe'ta `canceled`/`incomplete_expired`) arkadaşın daveti düşer
+  (`void`/`canceled_before_payment`): davet edenin "bekleyen" sayısında ve tahmini ödül tarihinde kalmaz.
+- Kötüye kullanım:
+  - Kendi kodu `403 referral_self`. App Attest cihazını paylaşan hesaplar da `referral_self` alır (`sharesDevice`), ama
+    App Attest macOS'ta desteklenmediği için bu denetim Mac'te hiç eşleşmez: Mac'te aynı bilgisayarda açılan yeni
+    Google/Apple hesaplarını cihaz denetimi durdurmaz. Onları aşağıdaki kart denetimi ve açık davet sınırı karşılar.
+  - Daha önce abonelik ya da ücretsiz erişim satırı olan hesap (ücretsiz erişimin süresi dolsa ya da yönetici kaldırsa
+    da satır kalır) ya da aynı giriş kimliğiyle (hesap silinmiş olsa da; kimlik özeti 730 gün) daha önce davetle abone
+    olmuş kimlik `409 referral_not_eligible`.
+  - Kodun sahibi kod paylaşabilmeli: abonelik erişimi var ve kendisi davetin ücretsiz ilk ayında değil (ilk ücretli
+    faturası ödenmeden kodu yoktur ve kodu `404 referral_invalid` alır): ücretsiz aylar hesaptan hesaba zincirlenemez.
+  - Kart: kodla açılan aboneliğin ilk faturası ödenince (`invoice.paid`) aboneliğin varsayılan ödeme yönteminin kart
+    parmak izi okunur ve `TRIAL_HASH_SECRET` ile HMAC özeti saklanır (göç `0040`; parmak izi açık saklanmaz). Kart davet
+    edenin Stripe'ta kayıtlı kartlarından biriyse ya da davet edenin kendi davetindeki kartsa `void`/`self_card`, başka
+    bir davette kullanılmışsa (herhangi bir davet eden) `void`/`card_reused`: ödül verilmez, arkadaşın Stripe'ta aldığı
+    indirim geri alınmaz. Ödeme yöntemi kart değilse (ör. Link) denetim yapılamaz (`referral_join_without_card`
+    uyarısı; yönetim panelinde "kart denetlenmedi").
+  - Açık davet sınırı `REFERRAL_MAX_PENDING` (3): ödülü bekleyen (`joined`, `qualified`), son 24 saatte Checkout'a
+    götürülen ve son 365 günde kart yüzünden düşen davetler sayılır; dolunca kod yeni arkadaşa `409
+    referral_limit_reached` döner. Böylece tek kod ve tek kartla açılan hesaplar sınırsız ücretsiz ay alamaz.
+  - Davet eden son 365 günde en çok 12 ödül (`capped`); doğrulama kullanıcı başına dakikada 10.
 
 ## Zamanlanmış temizlik
 
 `wrangler.jsonc` → `triggers.crons` her gün 03:17 UTC'de `scheduled` işleyicisini çalıştırır (`src/cleanup.ts`). Silinenler:
 süresi dolmuş ayırmalar (tahmini maliyeti harcamaya yazılarak), süresi dolmuş nonce'lar (Apple ve Google), süresi dolmuş
-ya da kullanılmış cihaz meydan okumaları, süresi dolmuş, ailesi düşürülmüş ya da ailede daha yenisi kullanılmış yenileme
-jetonları ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük harcama, bugünden eski deneme
+ya da kullanılmış cihaz meydan okumaları, süresi dolmuş ya da ailesi düşürülmüş yenileme jetonları (kullanılmış jeton,
+önceki kuşak ve geçersiz yazılmış halef çalınma algılaması için süresi dolana dek kalır) ve jetonu kalmamış aileler, 90 günden eski Stripe olayları ve günlük harcama, bugünden eski deneme
 başlangıçları, 2 günden eski kullanıcı günlük kullanımı, 13 aydan eski toplantılar (deneme toplantıları önce
 `users.carried_trial_meetings`'e eklenir: deneme hakkı geri gelmez) ve aylık kullanım, 13 aydır kullanılmayan cihazlar,
 180 günden eski raporlar (durumundan bağımsız), 730 gündür güncellenmemiş kimlik deneme defteri satırları ve hesabı
@@ -212,7 +233,9 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 6. `npm run deploy`
 7. Stripe panelinde webhook uç noktası: `https://api.gistsmith.com/v1/billing/webhook`, olaylar
    `customer.subscription.created|updated|deleted|paused|resumed`, `customer.deleted`, `charge.refunded`,
-   `charge.dispute.created`, `invoice.paid` (kopya aboneliğin geç ödemesi ve davet ödülü); imza sırrını `STRIPE_WEBHOOK_SECRET` yap. Canlıya geçerken anahtar (`sk_live_`/`rk_live_`)
+   `charge.dispute.created`, `invoice.paid` (kopya aboneliğin geç ödemesi ve davet ödülü); imza sırrını `STRIPE_WEBHOOK_SECRET` yap.
+   Davetin kart denetimi için webhook'un anahtarı abonelikleri (`default_payment_method` genişletilmiş), ödeme
+   yöntemlerini ve müşterinin ödeme yöntemleri listesini okuyabilmelidir (kısıtlı anahtarda "Payment Methods: Read"). Canlıya geçerken anahtar (`sk_live_`/`rk_live_`)
    ve canlı moddaki webhook birlikte değişmeli: olayın modu anahtarınkiyle uyuşmazsa webhook `500` ve
    `stripe_mode_mismatch` alarmı verir; anahtarın modu `GET /v1/admin/stats` → `stripe.mode`'dadır.
    Stripe Tax'i ve Müşteri Portalı'nı panelden aç.
@@ -228,26 +251,31 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `GET /v1/health` | — | |
 | `POST /v1/auth/apple` | — | `{identityToken, nonce}`; Apple'a `sha256hex(nonce)` verilir; e-posta saklanmaz |
 | `POST /v1/auth/google` | — | `{identityToken, nonce}`; Google'a `sha256hex(nonce)` verilir. `iss` `https://accounts.google.com` ya da `accounts.google.com`, `aud` ∈ `GOOGLE_CLIENT_IDS`, RS256, nonce tek kullanımlık. Kimlik `google:<sub>`; e-posta saklanmaz. Apple hesabıyla otomatik bağlama yoktur (ayrı kullanıcı). Oturum yanıtı ve deneme kuralları Apple ile aynı |
-| `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür; yalnızca hemen önceki jeton 10 dk içinde yeniden sunulursa ve halefi hiç kullanılmadıysa (yanıtı kaybolan yenileme) yeni çift verilir; kaybolan halef geçersiz işaretlenir, sonradan sunulursa tüm aile düşer. Ailede en son kullanılmış jeton dışındaki kullanılmış jetonlar dönüşte silinir |
+| `POST /v1/auth/refresh`, `/v1/auth/logout` | — | `{refreshToken}`; dönen jeton, yeniden kullanım aileyi düşürür; yalnızca hemen önceki jeton 10 dk içinde yeniden sunulursa ve halefi hiç kullanılmadıysa (yanıtı kaybolan yenileme) yeni çift verilir; kaybolan halef geçersiz işaretlenir, sonradan sunulursa tüm aile düşer. Dönüşte ailede en son kullanılmış jeton, ondan önceki ve geçersiz işaretli halefler dışındaki kullanılmış jetonlar silinir; kalanlar süresi dolana dek tutulur |
 | `GET /v1/me` | Bearer | plan, etkin kalan deneme (isteğe bağlı `x-device-key-id` ile hesap ve cihazın küçüğü; süre dolduysa 0), `trialDays`, `trialEndsAt` (ilk deneme toplantısı + `TRIAL_DAYS`, ISO 8601; deneme başlamadıysa ya da abonelikte `null`), aylık saat ve sınır, `monthlyResetsAt` (aylık sınırların sıfırlandığı an: sonraki UTC ayının başı), toplantı dışı yapay zekâ hakkı (`accountTokensUsed`, `accountTokensCap`, `accountTokensPeriod`: abonede `month` ve `MONTHLY_ACCOUNT_TOKEN_CAP`, denemede `day` ve `TRIAL_ACCOUNT_DAILY_TOKENS`; `accountTokensResetsAt`), `liveEngine` (`deepgram` / `whisperkit`, bkz. "Deepgram canlı metni"), abonelik erişimi (`active` / `grace` / `none`) ve planı (`subscription.plan`: `monthly` / `yearly`; fiyatı tanınmayan eski abonelikte `null`) |
 | `DELETE /v1/me` | Bearer | hesabı siler (GDPR), `204`: önce Stripe'taki bitmemiş abonelikler hemen iptal edilir (başarısızsa hiçbir şey silinmez, `502`); sonra kimlikler, oturumlar, cihazlar, toplantılar, kullanım, abonelik ve Stripe müşteri eşlemesi, deneme kayıtları ve hesabın raporları tek işlemde silinir; aynı işlemde önce her kimliğin deneme defteri satırı yazılır (harcanan deneme ve Mac doğrulaması, kimliğin HMAC özetiyle; deneme harcanmadıysa yazılmaz) (raporlar serbest metin ve e-posta taşıyabildiği için bağı kaldırılmaz, silinir; jetonsuz gönderilmiş raporlar hesaba bağlanamaz, 180 günde silinir). Bugünkü deneme başlangıcı IP özeti başına günlük sayaçta hesap bağı olmadan kalır. Stripe'taki müşteri ve faturalar vergi kayıtları için Stripe'ta kalır. Tekrarı (aynı jetonla) `204` |
 | `POST /v1/device/challenge` | Bearer | `{purpose: "attest" \| "assert"}` |
 | `POST /v1/device/attest` | Bearer | `{keyId, attestation, challenge}` (base64) |
-| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}, deviceCheckToken?: <base64>}`; clientData = `{"action":"meetings.start","challenge":…}`; `deviceCheckToken` (`DCDevice.generateToken()`) denemesi henüz bir Mac'e bağlanmamış hesabın deneme toplantısında gerekir (bkz. "Deneme kötüye kullanımı"); yeni hesabın ilk denemesi IP başına günde 3; kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır, reddedilen başlatma açık toplantıya dokunmaz ve sayılmaz |
+| `POST /v1/meetings/start` | Bearer | `{device?: {keyId, assertion, clientData}, deviceCheckToken?: <base64>, clientRef?, deferred?}`; clientData = `{"action":"meetings.start","challenge":…}`; `deviceCheckToken` (`DCDevice.generateToken()`) denemesi henüz bir Mac'e bağlanmamış hesabın deneme toplantısında gerekir (bkz. "Deneme kötüye kullanımı"); `clientRef` (`[A-Za-z0-9._-]{1,64}`) istemcinin kayıt kimliğidir: aynı kimlikle yinelenen başlatma aynı oturumu döndürür; `deferred: true` sonradan işlenen kayıttır, açık toplantıyı kapatmaz. Yeni hesabın ilk denemesi IP başına günde `TRIAL_ACCOUNTS_PER_IP_PER_DAY` (üretimde 10); kullanıcı başına günde en çok 20 başlatma; yeni toplantı açık olanı ek süresiz kapatır, reddedilen başlatma açık toplantıya dokunmaz ve sayılmaz |
 | `POST /v1/meetings/{id}/end` | Bearer | |
+| `POST /v1/meetings/{id}/reprocess` | Bearer | gövde yok → `{meetingId, usableUntil, reprocessesLeft}`; bitmiş toplantıyı `MEETING_GRACE_MINUTES` boyunca yeniden yazıya dökme ve not için açar (toplantı başına en çok 2 kez, `409 reprocess_limit_reached`). Aboneliği ya da denemesi olmayan hesap yalnızca bitişten sonraki 7 gün içinde (`402 subscription_required`). Harcama tavanı doluysa hak harcanmadan `503 spend_ceiling_reached`; deneme toplantısında deneme tavanı ya da ElevenLabs deneme durağı doluysa `503 trial_capacity_reached`. Tanımlar `src/meetings.ts` → `reprocessMeeting` |
+| `POST /v1/live/deepgram-token` | Bearer + `x-meeting-id` | kısa ömürlü Deepgram jetonu; bkz. "Deepgram canlı metni" |
 | `POST /v1/llm/messages` | Bearer, isteğe bağlı `x-meeting-id` | zorunlu `effort: "low" \| "medium"` + Anthropic Messages alt kümesi; `thinking` yok; `stream: true` ise SSE. `x-meeting-id` varsa (kayıt sırasındaki çeviri, "Ne kaçırdım?", soru) toplantı açık ya da ek sürede olmalı, toplantı bütçesinden düşer, çağrı başı `LLM_MAX_TOKENS`. Yoksa hesap çağrısıdır (Sor, notu yeniden yazma, düzenleme, paylaşım çevirisi, görev aracı): erişimi olan abonelik ya da ilk toplantıyla başlamış (DeviceCheck `required` iken Mac'e bağlanmış), bitmemiş deneme gerekir (deneme hiç başlamadıysa `403 trial_not_started`, bittiyse `402 subscription_required`), çağrı başı daha küçük `LLM_ACCOUNT_MAX_TOKENS`; aboneliği olmayan kullanıcıda bu çağrılar ayrıca günlük `TRIAL_ACCOUNT_DAILY_TOKENS` (300 K; türetme `wrangler.jsonc`'ta) ile sınırlıdır (`429 daily_cap_reached`), abonede aylık `MONTHLY_ACCOUNT_TOKEN_CAP` (1,5 M) ile (`403 monthly_cap_reached`). Her iki durumda kullanıcı başına aylık (6,5 M) ve günlük (3 M) token sınırı ve harcama tavanı. Akışsız çağrı 120 sn, akışın ilk baytı 30 sn zaman aşımlıdır |
 | `POST /v1/transcribe` | Bearer + `x-meeting-id` | gövde ham PCM WAV (`Content-Type: audio/wav`, `Content-Length`; başka tür `415`); `?language_code=&diarize=`; anahtar terimler `x-keyterms` başlığında: UTF-8 JSON dizgi dizisinin dolgusuz base64url'i (en çok `TRANSCRIBE_MAX_KEYTERMS`; terim <50 karakter, ≤5 kelime, `<>{}[]\` yok; değerler loglanmaz). Yayımlanmış 0.1.4 uygulaması için tekrar eden `?keyterms=` de kabul edilir (ikisi birlikte `400`). Süre WAV başlığından kesin hesaplanıp önceden ayrılır; toplantının sesi en çok toplantının süresi kadar; toplantıda aynı anda tek istek (`409 transcription_in_progress`). ElevenLabs isteği 15 dk zaman aşımlıdır. Uzun toplantıda WAV parçalar halinde sırayla gönderilir |
-| `POST /v1/billing/checkout` | Bearer | `{plan: "monthly" \| "yearly", referralCode?}` (katı; kod plansız gönderilemez). Plansız istek aylıktır: yalnızca eski istemciler için (uygulama ≤ 0.1.5 gövdesiz, eski site `{}`). Kod verilirse `POST /v1/referral/validate` ile aynı denetim ve hatalar; planın davet kuponu eklenir |
-| `GET /v1/referral` | Bearer | `{enabled, code, inviteUrl, joined, rewarded, pending, rewardsLeftThisYear, rewardsPerYear, rewardUsd, holdDays}`; `code` yalnızca program açık ve abonelik erişimi varken (ilk istekte üretilir) |
-| `POST /v1/referral/validate` | Bearer | `{code}` → `{code}` (normalize: boşluk ve tire atılır, büyük harf). `404 referral_invalid`, `403 referral_self`, `409 referral_not_eligible`, `503 referral_unavailable`; kullanıcı başına dakikada 10 |
-| `POST /v1/billing/checkout`, `/v1/billing/portal` | Bearer | `{url}` döner; bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da; yerel satırda ya da Stripe'taki listede) Checkout `409 subscription_exists` döner, istemci Portal'ı açar. Süren ücretsiz erişimde ikisi de Stripe'a gitmeden `409 complimentary_subscription` döner |
+| `POST /v1/billing/checkout` | Bearer | `{plan: "monthly" \| "yearly", referralCode?}` (katı; kod plansız gönderilemez) → `{url}`. Plansız istek aylıktır: yalnızca eski istemciler için (uygulama ≤ 0.1.5 gövdesiz, eski site `{}`). Kod verilirse `POST /v1/referral/validate` ile aynı denetim ve hatalar; planın davet kuponu eklenir. Bitmemiş abonelik varken (`active`, `trialing`, `past_due`, `unpaid`, `incomplete`, `paused`; ek süre geçmiş olsa da; yerel satırda ya da Stripe'taki listede) `409 subscription_exists`, istemci Portal'ı açar; süren ücretsiz erişimde Stripe'a gitmeden `409 complimentary_subscription` |
+| `POST /v1/billing/portal` | Bearer | `{url}`: Stripe Müşteri Portalı; süren ücretsiz erişimde Stripe'a gitmeden sitedeki hesap sayfası (`<SITE_ORIGIN>/account`); Stripe müşterisi yoksa `402 subscription_required` |
+| `GET /v1/referral` | Bearer | `{enabled, code, inviteUrl, joined, rewarded, pending, nextRewardAt, complimentary, rewardsLeftThisYear, rewardsPerYear, rewardUsd, holdDays}`; `code` yalnızca program açık, abonelik erişimi var ve hesap davetin ücretsiz ilk ayında değilken (ilk istekte üretilir); `nextRewardAt` bekleyen ödülün en yakın tahmini tarihi (ücretsiz aydaki arkadaşta yenilenecek aboneliğin ilk ücretli faturası + 30 gün, ödeme alınmışsa kesin tarih) ya da null; `complimentary` ücretsiz erişimde true (ödül uygulanmaz) |
+| `POST /v1/referral/validate` | Bearer | `{code}` → `{code}` (normalize: boşluk ve tire atılır, büyük harf). `404 referral_invalid`, `403 referral_self`, `409 referral_not_eligible`, `409 referral_limit_reached`, `503 referral_unavailable` (bkz. "Davet programı"); kullanıcı başına dakikada 10 |
 | `POST /v1/billing/webhook` | Stripe imzası | olayın anlık görüntüsüne değil Stripe'taki güncel duruma güvenilir: müşterinin abonelikleri listelenir, kullanıcı başına tek geçerli abonelik yazılır (yaşayanlardan erişimi en yüksek, eşitse en eski). Yaşayan ikinci abonelik alarmla iptal edilir; tanınmayan müşterinin yaşayan aboneliği iptal edilir. `past_due` ek süresi (`PAST_DUE_GRACE_DAYS`) `past_due`'ya geçişten sayılır. `customer.deleted` eşlemeyi siler; `charge.refunded` alarm; `charge.dispute.created` alarm ve aboneliği hemen iptal. Hesap silinirken müşterinin açık Checkout oturumları da sona erdirilir |
-| `POST /v1/reports` | `feedback` ve `crash` için Bearer; `contact` için isteğe bağlı | `{kind, message?, email?, appVersion?, os?, payload?, turnstileToken?}` → `202 {}`. `contact` (site): `message` (≤5000), `email` (≤254) ve `turnstileToken` zorunlu, Turnstile doğrulanır. `feedback`: `message` zorunlu. `crash`: `payload` zorunlu (JSON nesnesi, ≤64 KB, aşarsa `413`; MetricKit ise listede kısa imza). `appVersion` ≤40, `os` ≤80. Türe ait olmayan alan reddedilir (ör. `feedback` + `payload`, `crash` + `turnstileToken`). Jeton varsa geçerli olmalı (`401`), rapor hesaba bağlanır; `feedback`/`crash` jetonsuz `401 unauthorized`. Gövde ayrıştırmadan önce en çok 160 KB (`413`); IP başına 5/dk, hesap başına günde 20, tür başına günde `REPORT_BYTES_PER_DAY` bayt (`429 daily_cap_reached`) |
+| `POST /v1/reports` | İsteğe bağlı Bearer | `{kind, message?, email?, appVersion?, os?, payload?, turnstileToken?}` → `202 {}`. `contact` (site): `message` (≤5000), `email` (≤254) ve `turnstileToken` zorunlu, Turnstile doğrulanır. `feedback`: `message` zorunlu. `crash`: `payload` zorunlu (JSON nesnesi, ≤64 KB, aşarsa `413`; MetricKit ise listede kısa imza). `appVersion` ≤40, `os` ≤80. Türe ait olmayan alan reddedilir (ör. `feedback` + `payload`, `crash` + `turnstileToken`). Jeton varsa geçerli olmalı (`401`), rapor hesaba bağlanır; jetonsuz `feedback`/`crash` (hesapsız geliştirici sürümü ve iPhone) kabul edilir ama birlikte tür bütçesinin en çok dörtte birini kullanır. Gövde ayrıştırmadan önce en çok 160 KB (`413`); IP başına 5/dk, hesap başına günde 20, tür başına günde `REPORT_BYTES_PER_DAY` bayt (`429 daily_cap_reached`) |
+| `GET /v1/download/mac/version` | — | `{version}`: DMG ile aynı sürümün Sparkle akışından (`APPCAST_URL`) okunan sürüm numarası (sitedeki indirme sayfası); `Cache-Control: public, max-age=300`, D1'e dokunmaz |
 | `GET /v1/download/mac` | — | `?src=<home-hero \| home-cta \| download-page \| account>` (yoksa `direct`, tanınmayan `other`) → `302` → `DMG_URL`; ağ başına günde bir indirme sayılır: UTC gün toplamı ve kaynak + Referer alan adı sayacı (`download_sources`; yol ya da tam adres değil). Tekilleştirme için ağın gün ile HMAC özeti ertesi güne dek tutulur; tekrar indirme D1'e yazmaz. Sayaç yazılamazsa yine yönlendirir (`download_count_failed` uyarısı) |
-| `GET /v1/admin/stats` | Bearer + yönetici | indirme, kullanıcı, deneme, abonelik (plan başına yenilenecek sayılar; MRR = aylık × `PRICE_USD_MONTHLY` + yıllık × `PRICE_USD_YEARLY` / 12), davet sayaçları, toplantı, harcama, token ve açık rapor özetleri; 30 günlük seriler (UTC, eskiden yeniye, boş gün 0). Tanımlar `src/admin.ts` → `adminStats` |
-| `GET /v1/admin/insights` | Bearer + yönetici | sorunlar (son 7 ve 30 gün: deneme kapasitesi ve harcama tavanı retleri, koda göre retler, servise göre üst servis hataları, 5xx), son 30 günün hunisi (indirme → hesap → ilk toplantı → ilk not → ≥ 3 toplantı → abone → iptal), indirme kaynakları ve Referer alan adları, Stripe iptal nedenleri. Tanımlar `src/adminInsights.ts` |
-| `GET /v1/admin/users` | Bearer + yönetici | `?q=<kimlik öneki>&segment=&provider=&cursor=`; `segment`: `subscribed`, `past_due`, `canceled`, `trial`, `free` ya da bırakma kesimleri `no_meeting`, `trial_ended`, `inactive` (7 gündür toplantı yok), `failed` (toplantısında istek başarısız). Tanımlar `src/adminUsers.ts` |
-| `POST /v1/admin/users/{id}/complimentary` | Bearer + yönetici | `{grant: true, until?: <ISO 8601 tarih ya da zaman>}` ücretsiz tam erişim verir (yoksa süresiz; varsa süresini değiştirir), `{grant: false}` kaldırır → kullanıcının ayrıntısı. Bitmemiş Stripe aboneliği varsa `409 subscription_exists`; kaldırılacak ücretsiz erişim yoksa `404`. Tanımlar `src/complimentary.ts` |
+| `GET /v1/admin/stats` | Bearer + yönetici | indirme, kullanıcı, deneme, abonelik (plan başına yenilenecek sayılar; MRR = aylık × `PRICE_USD_MONTHLY` + yıllık × `PRICE_USD_YEARLY` / 12), davet sayaçları (nedene göre düşen davetler dahil), toplantı, harcama, token ve açık rapor özetleri; 30 günlük seriler (UTC, eskiden yeniye, boş gün 0). Tanımlar `src/admin.ts` → `adminStats` |
+| `GET /v1/admin/insights` | Bearer + yönetici | sorunlar (son 7 ve 30 gün: deneme kapasitesi ve harcama tavanı retleri, koda göre retler, servise göre üst servis hataları, 5xx), son 30 günün hunisi (indirme → hesap → ilk toplantı → ilk not → ≥ 3 toplantı → abone → davetle abone → iptal), indirme kaynakları ve Referer alan adları, Stripe iptal nedenleri, davet özeti (son 30 günde Checkout, katılım, ilk ödeme, ödül, nedene göre düşen davetler; şu an ücretsiz aydakiler; en çok davet edenler). Tanımlar `src/adminInsights.ts` |
+| `GET /v1/admin/operations` | Bearer + yönetici | açık ve bitirilmemiş toplantılar, takılı ayırmalar, kesinleşmemiş Deepgram tahminleri, Stripe olayları (son olay, 24 saat, 7 günün türleri) ve son çökmeler. Tanımlar `src/adminOps.ts` |
+| `GET /v1/admin/users` | Bearer + yönetici | `?q=<kimlik öneki>&segment=&provider=&cursor=`; `segment`: `subscribed`, `past_due`, `canceled`, `trial`, `free`, `invited` (davet koduyla abone olmuş) ya da bırakma kesimleri `no_meeting`, `trial_ended`, `inactive` (7 gündür toplantı yok), `failed` (toplantısında istek başarısız). Öğede `invite`: `invited` / `free_month` (davetin ücretsiz ilk ayında) / `null`. Tanımlar `src/adminUsers.ts` |
+| `GET /v1/admin/users/{id}` | Bearer + yönetici | hesabın ayrıntısı: özet, Mac doğrulaması, Stripe müşterisi, son iptal nedeni, bu ayın kullanımı, toplantılar (en çok 100), raporlar (en çok 20), kullandığı davet (`invitedBy`: davet eden, kod, durum ve düşme nedeni, ücretsiz ayda mı, kart denetlendi mi, zamanlar), davetleri (`invites`: kod, sayaçlar, tahmini ödül tarihi, arkadaşlar) ve zaman çizelgesi (davet olayları dahil). Tanımlar `src/adminUsers.ts` |
+| `POST /v1/admin/users/{id}/complimentary` | Bearer + yönetici | `{grant: true, until?: <ISO 8601 tarih ya da zaman>}` ücretsiz tam erişim verir (yoksa süresiz; varsa süresini değiştirir), `{grant: false}` süren ücretsiz erişimi şimdi bitirir (satır kalır: hesap yeniden abone olabilir, davet kodu kullanamaz) → kullanıcının ayrıntısı. Bitmemiş Stripe aboneliği varsa `409 subscription_exists`; süren ücretsiz erişim yoksa kaldırma `404`. Tanımlar `src/complimentary.ts` |
 | `GET /v1/admin/reports` | Bearer + yönetici | `?kind=&status=&before=<ms>` → `{items: [{id, kind, status, createdAt, userId, email, appVersion, os, summary}], nextBefore}`; sayfa 50, yeniden eskiye, `createdAt` ISO 8601, `nextBefore` ms ya da son sayfada `null` |
 | `GET /v1/admin/reports/{id}` | Bearer + yönetici | `{id, kind, status, createdAt, userId, email, appVersion, os, message, payload}` |
 | `POST /v1/admin/reports/{id}` | Bearer + yönetici | `{status: "open" \| "done"}` → `204` |
@@ -259,5 +287,6 @@ harcaması tavanı aşılınca deneme harcaması açan her istek (yeni deneme to
 yeniden açılmış deneme toplantısının yapay zekâ ve yazıya dökme çağrıları, deneme toplantısını yeniden işleme)
 `503 trial_capacity_reached` döner. İki tavanın alarmı günde bir kez yazılır; retlerin sayısı yönetim panelindedir
 (`ops_events`). Site kaynağı
-(`SITE_ORIGIN`) CORS'u yalnızca site uçlarında (giriş, `/v1/me`, ödeme, raporlar) ve yönetici uçlarında alır; her yanıt
-`Cache-Control: no-store` taşır.
+(`SITE_ORIGIN`) CORS'u yalnızca site uçlarında (`src/app.ts` → `webRoutes`: `/v1/health`, `/v1/download/mac/version`,
+giriş, yenileme ve çıkış, `/v1/me`, ödeme ve Portal, `/v1/referral`, `/v1/referral/validate`, `/v1/reports`) ve yönetici
+uçlarında alır; `GET /v1/download/mac/version` dışında her yanıt `Cache-Control: no-store` taşır.

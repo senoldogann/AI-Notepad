@@ -60,7 +60,7 @@ struct MeetingsTab: View {
                             .buttonStyle(PressableCardStyle())
                             .contextMenu {
                                 Button("Sil", systemImage: "trash", role: .destructive) { pendingDelete = record }
-                                    .disabled(record.status == .recording || record.status == .processing)
+                                    .disabled(record.status == .recording || record.status == .processing || store.regeneratingIDs.contains(record.id))
                             }
                         }
                     }
@@ -144,7 +144,7 @@ struct MeetingReadView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     hero(paragraphs: paragraphs)
                     // Çalma hatası (dosya açılamadı, ses oturumu) da burada görünür.
-                    let messages: [String] = [errorMessage, player.errorMessage].compactMap { $0 }
+                    let messages: [String] = [errorMessage, player.errorMeetingID == record.id ? player.errorMessage : nil].compactMap { $0 }
                     if !messages.isEmpty {
                         PhoneErrorList(messages: messages)
                     }
@@ -214,7 +214,7 @@ struct MeetingReadView: View {
                         .disabled(record.status == .recording || record.status == .processing || store.regeneratingIDs.contains(record.id))
                     }
                     Button("Sil", systemImage: "trash", role: .destructive, action: onDelete)
-                        .disabled(record.status == .recording || record.status == .processing)
+                        .disabled(!isEditable)
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -513,7 +513,7 @@ private struct ShareRow: View {
                     Text(share.key.person.flatMap { speakerNames[$0] } ?? speakerLabel(speaker: share.key.speaker, person: share.key.person))
                         .appFont(size: 14, weight: .medium)
                     Spacer()
-                    Text(verbatim: "%\(Int((share.fraction * 100).rounded()))")
+                    Text(verbatim: share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
                         .appFont(size: 13, weight: .medium)
                         .monospacedDigit()
                         .foregroundStyle(Theme.muted)

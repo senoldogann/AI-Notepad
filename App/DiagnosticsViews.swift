@@ -193,6 +193,11 @@ private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>)
     }
 }
 
+/// Son hatalar bölümü, günlük henüz okunurken: "hata yok" denmez (yanlış tanı olurdu).
+private func pendingErrorDiagnostics() -> DiagnosticsSection {
+    DiagnosticsSection(title: String(localized: "Son hatalar"), items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunuyor…"))])
+}
+
 /// Son hatalar bölümü, kopyalanan tanılamada (destek için): zaman, kod ve günlük metni (kişisel bilgiler ayıklanmış).
 private func errorDiagnosticsForSupport(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
     let title: String = String(localized: "Son hatalar")
@@ -319,12 +324,16 @@ struct DiagnosticsSettings: View {
     let model: AppModel
     let updater: AppUpdater
     @State private var health: APIHealth?
-    @State private var errors: Result<[DiagnosticErrorEntry], any Error> = .success([])
+    /// Son hatalar; okunurken nil.
+    @State private var errors: Result<[DiagnosticErrorEntry], any Error>?
     @State private var isRefreshing: Bool = false
     @State private var copied: Bool = false
 
     var body: some View {
-        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorDiagnostics(errors: errors))
+        let errorSection: DiagnosticsSection = errors.map { (loaded: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection in
+            errorDiagnostics(errors: loaded)
+        } ?? pendingErrorDiagnostics()
+        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorSection)
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Tanılama")) {
                 Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
@@ -335,7 +344,11 @@ struct DiagnosticsSettings: View {
                     }
                     Button("Yenile") { Task { await refresh() } }
                         .disabled(isRefreshing)
+                    // Yenilenirken kopyalanmaz: sunucu denetimi ve son hatalar henüz okunmadı.
                     Button(copied ? "Kopyalandı" : "Tanılama bilgisini kopyala") {
+                        guard let errors else {
+                            return
+                        }
                         let support: [DiagnosticsSection] = collectDiagnostics(
                             model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors)
                         )
@@ -343,6 +356,7 @@ struct DiagnosticsSettings: View {
                         copied = true
                     }
                     .buttonStyle(.pillPrimary)
+                    .disabled(isRefreshing || errors == nil)
                 }
             }
             ForEach(Array(sections.enumerated()), id: \.offset) { (entry: (offset: Int, element: DiagnosticsSection)) in
@@ -362,7 +376,11 @@ struct DiagnosticsSettings: View {
         copied = false
         defer { isRefreshing = false }
         health = nil
-        health = await probeAPI(base: Result { try diagnosticsAPIBase() })
-        errors = await loadAppErrors()
+        errors = nil
+        // Sunucu denetimi (en çok `healthTimeoutSec`) ve günlük okuması birbirini beklemez.
+        async let probed: APIHealth? = probeAPI(base: Result { try diagnosticsAPIBase() })
+        async let loaded: Result<[DiagnosticErrorEntry], any Error> = loadAppErrors()
+        errors = await loaded
+        health = await probed
     }
 }

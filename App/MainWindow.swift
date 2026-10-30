@@ -97,17 +97,25 @@ func openMainWindow(router: MainWindowRouter, section: MainSection) {
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Bildirimdeki "Dinlemeye başla" (ya da bildirime tıklama) kaydı başlatır; uygulama açılışında bağlanır.
     @MainActor static var onStartFromNotification: (@MainActor () -> Void)?
+    /// "Kayıt başlatılamadı" bildirimine tıklama Ana sayfayı açar (neden başlat düğmesinin yanında); açılışta bağlanır.
+    @MainActor static var onOpenHomeFromNotification: (@MainActor () -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard response.notification.request.content.categoryIdentifier == MeetingNotificationID.category,
-              response.actionIdentifier != UNNotificationDismissActionIdentifier else {
+        guard response.actionIdentifier != UNNotificationDismissActionIdentifier else {
             return
         }
-        await MainActor.run { AppDelegate.onStartFromNotification?() }
+        switch response.notification.request.content.categoryIdentifier {
+        case MeetingNotificationID.category:
+            await MainActor.run { AppDelegate.onStartFromNotification?() }
+        case MeetingNotificationID.autoFailedCategory:
+            await MainActor.run { AppDelegate.onOpenHomeFromNotification?() }
+        default:
+            return
+        }
     }
 
     // Uygulama öndeyken de toplantı bildirimi görünsün.
@@ -443,11 +451,11 @@ private struct SidebarAvatar: View {
     }
 }
 
-/// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
-/// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
 /// Ana penceredeki kenar çubuğunun genişliği.
 private let sidebarWidth: CGFloat = 228
 
+/// Üst çubuk: sayfa adı, arama hapı (tıklayınca ya da ⌘K / ⌘F ile orta ekranda arama penceresi açılır; yazı alanı
+/// değildir, imleç yanıp sönmez), "Canlı panel". Listeye uygulanmış arama hapta görünür, × ile temizlenir.
 private struct TopBar: View {
     let model: AppModel
     let router: MainWindowRouter
@@ -644,6 +652,7 @@ private struct HomePage: View {
     let onShowPanel: @MainActor () -> Void
 
     var body: some View {
+        let startBlock: StartBlockNotice? = startBlockNotice(model: model)
         ScrollView {
             VStack(spacing: 28) {
                 if router.quitWarning {
@@ -651,13 +660,13 @@ private struct HomePage: View {
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     heading
-                    RecordBar(model: model, startBlock: startBlockNotice(model: model), onStartRecording: onStartRecording, onShowPanel: onShowPanel) { (action: StartBlockAction) -> Void in
+                    RecordBar(model: model, startBlock: startBlock, onStartRecording: onStartRecording, onShowPanel: onShowPanel) { (action: StartBlockAction) -> Void in
                         resolveStartBlock(action: action, router: router)
                     }
                 }
                 .padding(.top, 24)
                 Shortcuts(model: model, router: router, onShowPanel: onShowPanel)
-                UpcomingMeetings(model: model, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
+                UpcomingMeetings(model: model, startBlock: startBlock, onStartRecording: onStartRecording) { (meeting: CalendarMeeting) -> Void in
                     #if HOSTED_EDITION
                     // Hakkı yoksa mevcut sohbet silinmez; teklif açılır.
                     if HostedAccount.shared.requiresSubscription {
@@ -761,8 +770,8 @@ private struct LocalModelNoticeView: View {
     }
 }
 
-/// Kayıt çubuğu (ElevenLabs'in "oluştur" çubuğu gibi): küre, açıklama, seçenek çipleri ve siyah "Başlat"; kayıtta
-/// "Paneli göster" ve "Bitir".
+/// Kayıt kartı: boşta büyük gradyan kart (küre, "Dinlemeye başla", seçenek çipleri); kayıtta ve bitirilirken çubuk
+/// (ElevenLabs'in "oluştur" çubuğu gibi): küre, durum, "Paneli göster" ve "Bitir".
 private struct RecordBar: View {
     @Bindable var model: AppModel
     /// Kayıt başlatılamıyorsa nedeni: düğme kapanır, neden ve çözüm düğmenin yanında tek satır.
@@ -825,46 +834,30 @@ private struct RecordBar: View {
     /// Seçenekler ortalı ve gerekirse alt satıra geçer: dar pencerede, İngilizcede ya da büyük arayüz boyutunda kartın
     /// dışına taşıp kesilmez.
     private var options: some View {
-        VStack {
-            if model.phase == .idle {
-                FlowLayout(spacing: 8, lineSpacing: 8) {
-                    languageChip
-                    chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
-                        .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
-                    if !model.isInPerson {
-                        chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
-                            model.toggleMicrophone()
-                        }
-                    }
-                    chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
-                        model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
-                    }
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            languageChip
+            chip(title: "Yüz yüze", isOn: model.isInPerson) { model.toggleInPerson() }
+                .hoverHint("Aynı odadaki toplantı: mikrofondaki herkes konuşmacılara ayrılır", alignment: .center, edge: .bottom)
+            if !model.isInPerson {
+                chip(title: model.isMicMuted ? "Yalnız karşı taraf" : "Benim sesim de", isOn: !model.isMicMuted) {
+                    model.toggleMicrophone()
                 }
-                .fixedSize(horizontal: false, vertical: true)
+            }
+            chip(title: "Canlı çeviri", isOn: model.displayMode.needsLiveTranslation) {
+                model.selectDisplayMode(mode: model.displayMode.needsLiveTranslation ? .originalOnly : .bilingual)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: 620)
     }
 
+    /// Kayıtta ve bitirilirken gösterilen çubuk (boşta `hero` gösterilir).
     private var bar: some View {
         HStack(spacing: 10) {
             orb(size: 34)
             switch model.phase {
             case .idle:
-                if let startBlock {
-                    StartBlockView(notice: startBlock, onResolve: onResolve)
-                } else if let notice = model.localModelNotice {
-                    LocalModelNoticeView(notice: notice) { Task { await model.retryLocalModel() } }
-                } else {
-                    Text("Toplantını dinlemeye başla")
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 6)
-                Button("Başlat", systemImage: "record.circle", action: onStartRecording)
-                    .buttonStyle(.pillPrimary)
-                    .disabled(!model.isReadyToRecord || model.isStarting || startBlock != nil)
-                    .fixedSize()
+                EmptyView()
             case .recording:
                 Text(model.isPaused ? "Kayıt duraklatıldı" : "Kayıt sürüyor — konuşmalar canlı panelde")
                     .foregroundStyle(Theme.muted)
@@ -1078,6 +1071,8 @@ private struct HomeTasks: View {
 /// başlamak üzereyse (10 dk) ya da sürüyorsa "Dinle".
 private struct UpcomingMeetings: View {
     let model: AppModel
+    /// Kayıt başlatılamıyorsa nedeni (kayıt kartında yazar): "Dinle" de kayıt kartındaki düğme gibi kapanır.
+    let startBlock: StartBlockNotice?
     let onStartRecording: @MainActor () -> Void
     /// Toplantı öncesi brifing (arşive sorulur, Sor sayfasında açılır).
     let onBriefing: @MainActor (CalendarMeeting) -> Void
@@ -1179,10 +1174,13 @@ private struct UpcomingMeetings: View {
                     .controlSize(.small)
                     .hoverHint("Görüşme bağlantısını aç: \(url.host() ?? "")", alignment: .trailing, edge: .bottom)
             }
-            if isSoon, !model.isRecording {
+            // Kayıt kartındaki "Dinlemeye başla" ile aynı koşul: bitirilirken, devredilirken, başlarken ya da model hazır
+            // değilken kapalı (yoksa boş panel açılırdı).
+            if isSoon, model.phase == .idle {
                 Button("Dinle", systemImage: "record.circle") { onStartRecording() }
                     .buttonStyle(.pillPrimary)
                     .controlSize(.small)
+                    .disabled(!model.isReadyToRecord || model.isStarting || startBlock != nil)
             }
         }
         .padding(.vertical, 10)

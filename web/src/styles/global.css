@@ -817,15 +817,6 @@ p {
   color: var(--muted);
 }
 
-.legal-quote {
-  margin: 0 0 14px;
-  padding: 16px 20px;
-  border-left: 3px solid var(--line);
-  border-radius: 0 var(--radius-s) var(--radius-s) 0;
-  background: var(--soft);
-  font-size: 0.9375rem;
-}
-
 .prose th,
 .prose td {
   text-align: left;

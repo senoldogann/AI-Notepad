@@ -4,10 +4,17 @@
 // standart şekil saymaz, küçültüp gri bir çerçeveye koyar (Dock'ta logo görünmez olur). Açılış ekranındaki işaret
 // (`AppMark`) aynı ölçüleri kullanır.
 // Kullanım: swift scripts/render-app-icon.swift <çıktı.png> <mac|ios>
-// ios: iPhone simgesi kenara kadar kare çizilir (iOS köşeleri kendi maskesiyle yuvarlar).
+// ios: iPhone simgesi kenara kadar kare ve saydamlık kanalı olmadan çizilir (iOS köşeleri kendi maskesiyle yuvarlar;
+// App Store Connect saydamlık kanallı simgeyi reddeder, ITMS-90717).
 import AppKit
 import CoreGraphics
 import Foundation
+
+/// Komut satırı: çıktı dosyası ve platform (yalnızca `mac` ya da `ios`; başka değer sessizce macOS simgesine dönmez).
+guard CommandLine.arguments.count == 3, ["mac", "ios"].contains(CommandLine.arguments[2]) else {
+    FileHandle.standardError.write(Data("Kullanım: swift scripts/render-app-icon.swift <çıktı.png> <mac|ios>\n".utf8))
+    exit(1)
+}
 
 let canvas: CGFloat = 1024
 let isIOS: Bool = CommandLine.arguments[2] == "ios"
@@ -25,9 +32,11 @@ func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat) ->
 }
 
 let space: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+/// macOS simgesinin saydam payı ve gölgesi için saydamlık kanalı gerekir; iOS simgesi opak (kanal yok).
+let alphaInfo: CGImageAlphaInfo = isIOS ? .noneSkipLast : .premultipliedLast
 let context: CGContext = CGContext(
     data: nil, width: Int(canvas), height: Int(canvas), bitsPerComponent: 8, bytesPerRow: 0,
-    space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    space: space, bitmapInfo: alphaInfo.rawValue
 )!
 let bodyPath: CGPath = CGPath(roundedRect: body, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
 

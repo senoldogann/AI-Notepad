@@ -101,7 +101,7 @@ struct PhoneSettingsTab: View {
                 } header: {
                     Text("Kayıt")
                 } footer: {
-                    Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır.")
+                    Text("Kayıttan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur. Süre dolunca ses dosyaları silinir, metin ve not kalır; yarıda kalan ya da başarısız toplantının sesi iki kat süre saklanır. iCloud eşitlemesi açıksa Mac'te kaydedilen toplantıların sesi de bu süreye göre silinir.")
                 }
                 CalendarSettingsSection(calendar: calendar)
                 Section {

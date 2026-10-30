@@ -76,10 +76,10 @@ public func hostedUsageNotice(entitlements: HostedEntitlements) -> HostedUsageNo
             return .trialEnded
         }
         return left == 1 ? .trialOneLeft : nil
-    case .expired:
+    case .expired, .paymentOverdue:
         // Başlat düğmesinin yanındaki neden yeterli (bkz. `hostedStartBlock`).
         return nil
-    case .subscribed, .ending, .grace:
+    case .subscribed, .complimentary, .ending, .grace:
         switch hostedUsageLevel(fraction: hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)) {
         case .full:
             return .monthlyFull
@@ -122,6 +122,8 @@ public enum HostedStartBlock: Sendable, Equatable {
     case monthlyCapReached
     /// Abonelik sona erdi, deneme hakkı da yok.
     case subscriptionEnded
+    /// Yenileme ödemesi alınamadı ve ek süre bitti: kart güncellenene dek kayıt başlamaz.
+    case paymentOverdue
 }
 
 /// Hak durumuna göre kayıt başlayabilir mi; başlayamıyorsa neden. Ek süredeki ve iptal edilip dönemi süren abonelik
@@ -132,7 +134,9 @@ public func hostedStartBlock(entitlements: HostedEntitlements) -> HostedStartBlo
         return left == 0 ? .trialEnded : nil
     case .expired:
         return .subscriptionEnded
-    case .subscribed, .ending, .grace:
+    case .paymentOverdue:
+        return .paymentOverdue
+    case .subscribed, .complimentary, .ending, .grace:
         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
         return hostedUsageLevel(fraction: fraction) == .full ? .monthlyCapReached : nil
     }

@@ -129,10 +129,12 @@ struct HostedUsageCard: View {
             switch hostedPlanStatus(entitlements: entitlements) {
             case .trial(let left, let total):
                 trial(left: left, total: total)
-            case .subscribed, .ending, .grace:
+            case .subscribed, .complimentary, .ending, .grace:
                 subscriber
             case .expired(let endedAt):
                 expired(endedAt: endedAt)
+            case .paymentOverdue:
+                paymentOverdue
             }
         }
         .padding(18)
@@ -224,6 +226,23 @@ struct HostedUsageCard: View {
 }
 
 extension HostedUsageCard {
+    /// Yenileme ödemesi alınamadı ve ek süre bitti: abonelik Stripe'ta sürer, kart "Hesabı yönet"ten güncellenir (yeni
+    /// abonelik açılamaz).
+    fileprivate var paymentOverdue: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ödeme alınamadı")
+                .appFont(size: 17, weight: .medium)
+                .foregroundStyle(Theme.ink)
+            Text("Yenileme ödemesi alınamadı ve ek süre bitti. Toplantıların ve notların bu Mac'te; yeni kayıt için kartını güncelle.")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Hesabı yönet") { Task { await account.manageSubscription() } }
+                .buttonStyle(.pillPrimary)
+                .disabled(account.isWorking)
+        }
+    }
+
     /// Abonelik sona erdi: toplantılar ve notlar yerinde; yeni kayıt için yeniden abone ol.
     @ViewBuilder
     fileprivate func expired(endedAt: Date) -> some View {
@@ -262,7 +281,11 @@ struct HostedSidebarUsage: View {
                         Text("Abonelik sona erdi")
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(meterFull)
-                    case .subscribed, .ending, .grace:
+                    case .paymentOverdue:
+                        Text("Ödeme alınamadı")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(meterFull)
+                    case .subscribed, .complimentary, .ending, .grace:
                         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
                         Text(verbatim: hostedCompactHoursText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
                             .appFont(size: 12, weight: .regular)

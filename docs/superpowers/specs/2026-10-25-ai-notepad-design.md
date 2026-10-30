@@ -303,8 +303,8 @@ Böylece mantık `swift test` ile uygulama açılmadan test edilir.
 
 ### 4.3 Görsel tasarım (aşama 3)
 
-**İlke:** kurumsal, temiz, anlaşılır, lüks-sade. Tek vurgu rengi, bol boşluk, SF Pro, Liquid Glass yüzeyler;
-süs, gölge oyunu ve gereksiz ikon yok. Bilgi hiyerarşisi: metin > konuşmacı > durum.
+**İlke:** kurumsal, temiz, anlaşılır, lüks-sade. Tek vurgu rengi (varsayılan turuncu), bol boşluk, gömülü Inter
+yazı tipi, düz yüzeyler (cam isteğe bağlı); süs, gölge oyunu ve gereksiz ikon yok. Bilgi hiyerarşisi: metin > konuşmacı > durum.
 
 **Tasarım ölçüleri (`DesignTokens`):** boşluk 4/8/12/16/24; köşe yarıçapı panel 22, çip 10;
 yazı: metin 14 pt regular (satır aralığı 4), konuşmacı etiketi 11 pt semibold büyük harf (harf aralığı 0,6),

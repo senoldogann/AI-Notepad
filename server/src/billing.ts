@@ -14,10 +14,13 @@ import { errorName, log } from "./log";
 import type { Platform } from "./platform";
 import {
   type AcceptedReferral,
+  type ReferralJoin,
+  referralCardHash,
   referralCheckoutStatements,
   referralInvoicePaidStatements,
   referralVoidByReferredStatement,
   referralVoidBySubscriptionStatement,
+  referralVoidUnpaidStatement,
   requireReferral,
   usdCents,
 } from "./referrals";
@@ -462,7 +465,8 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
 /**
  * Hesap yönetimi adresi. Süren ücretsiz erişimde (`complimentary.ts`) Stripe'ta yönetilecek bir şey yoktur: Stripe
  * çağrılmaz, sitedeki hesap sayfası döner (orada "Free access" yazar). Yayındaki uygulama portal adresini yalnızca
- * açar; hata kodu dönülseydi genel bir hata gösterirdi. Müşteri yoksa `subscription_required`.
+ * açar; hata kodu dönülseydi genel bir hata gösterirdi. Bitmiş ücretsiz erişimde Stripe müşterisi yoksa yine hesap
+ * sayfası döner. Başka hesapta müşteri yoksa `subscription_required`.
  */
 export async function createPortal(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
   const current: SubscriptionState | null = await subscriptionState(db, userId);
@@ -471,6 +475,11 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
     return `${config.siteOrigin}/account`;
   }
   const customer: string | null = await storedCustomerId(db, userId);
+  if (customer === null && current !== null && current.complimentary) {
+    // Bitmiş ücretsiz erişim, Stripe müşterisi yok: eski uygulama sürümleri de genel hata yerine hesap sayfasını açar.
+    log("info", "portal_complimentary_account_page", { userId });
+    return `${config.siteOrigin}/account`;
+  }
   if (customer === null) {
     throw new ApiError("subscription_required", "Henüz bir aboneliğin yok.");
   }
@@ -596,6 +605,8 @@ type EventStatements = D1PreparedStatement[];
  * - Süren ücretsiz erişim (`complimentary.ts`) ezilmez: olay Stripe çağrılmadan işlenmiş sayılır ve alarm yazılır
  *   (ücretsiz erişimi olan hesabın Stripe'ta yaşayan aboneliği elle incelenmeli). Süresi geçmiş ücretsiz erişimin
  *   yerini Stripe aboneliği alır. Koşul yazımın kendisinde de vardır (arada verilen ücretsiz erişim ezilmez).
+ * - Davet: Stripe'ta bitmiş (`canceled`, `incomplete_expired`) aboneliklerin ücretsiz ayındaki (`joined`) davetleri
+ *   düşer (`referralVoidUnpaidStatement`): ilk ücretli fatura hiç gelmeyecek.
  * Yazım `last_event_created` ile sıralanır: eşzamanlı iki webhook'tan daha eski olayınki daha yeniyi ezmez.
  */
 async function subscriptionEventStatements(
@@ -675,6 +686,9 @@ async function subscriptionEventStatements(
     // İptal nedeni yalnızca geçerli abonelik için yazılır: bizim iptal ettiğimiz kopya aboneliklerin nedeni
     // (`cancellation_requested`) kullanıcının iptali değildir.
     ...(subscription.id === current.id ? cancellationStatements(db, event, subscription, owner.user_id, nowMs) : []),
+    ...ours
+      .filter((candidate: Stripe.Subscription): boolean => !isLiveInStripe(candidate))
+      .map((ended: Stripe.Subscription): D1PreparedStatement => referralVoidUnpaidStatement(db, ended.id, nowMs)),
   ];
 }
 
@@ -863,11 +877,83 @@ async function invoicePaidDuplicateRefund(db: D1Database, stripe: Stripe, platfo
 }
 
 /**
+ * Aboneliğin varsayılan ödeme yönteminin kart parmak izi (Checkout aboneliği toplanan kartla açar); ödeme yöntemi yoksa
+ * ya da kart değilse (ör. Link) null.
+ */
+async function subscriptionCardFingerprint(stripe: Stripe, platform: Platform, subscriptionId: string, userId: string): Promise<string | null> {
+  const subscription: Stripe.Subscription = await callStripe(platform, "subscriptions.retrieve", userId, () =>
+    stripe.subscriptions.retrieve(subscriptionId, { expand: ["default_payment_method"] }),
+  );
+  const method: string | Stripe.PaymentMethod | null = subscription.default_payment_method;
+  if (method === null) {
+    return null;
+  }
+  const resolved: Stripe.PaymentMethod =
+    typeof method === "string" ? await callStripe(platform, "paymentMethods.retrieve", userId, () => stripe.paymentMethods.retrieve(method)) : method;
+  return resolved.card?.fingerprint ?? null;
+}
+
+/** Müşterinin Stripe'ta kayıtlı kartlarının parmak izleri (tek sayfa, en çok 100). */
+async function customerCardFingerprints(stripe: Stripe, platform: Platform, customer: string, userId: string): Promise<string[]> {
+  const page: Stripe.ApiList<Stripe.PaymentMethod> = await callStripe(platform, "customers.listPaymentMethods", userId, () =>
+    stripe.customers.listPaymentMethods(customer, { type: "card", limit: 100 }),
+  );
+  return page.data
+    .map((method: Stripe.PaymentMethod): string | null => method.card?.fingerprint ?? null)
+    .filter((fingerprint: string | null): fingerprint is string => fingerprint !== null);
+}
+
+/**
+ * Faturanın davet katılımı: hesabın katılmamış (`joined_at` boş, `checkout` ya da davet eden silindiği için `void`)
+ * satırı faturanın koduyla eşleşiyorsa aboneliğin kartı (`subscriptionCardFingerprint`) özetlenir ve davet edenin
+ * Stripe kartlarıyla karşılaştırılır; eşleşen satır yoksa Stripe çağrılmaz, null. Kart bulunamazsa uyarı yazılır ve
+ * katılım kartsız yazılır (kart denetimi yapılamadı; yönetim panelinde görünür).
+ */
+async function referralJoinOf(
+  db: D1Database,
+  stripe: Stripe,
+  platform: Platform,
+  config: StripeWebhookConfig,
+  userId: string,
+  subscriptionId: string,
+  code: string,
+): Promise<ReferralJoin | null> {
+  const row: { referrer_user_id: string | null } | null = await db
+    .prepare(
+      `SELECT referrer_user_id FROM referral_redemptions
+       WHERE referred_user_id = ? AND code = ? AND joined_at IS NULL AND status IN ('checkout', 'void')`,
+    )
+    .bind(userId, code)
+    .first<{ referrer_user_id: string | null }>();
+  if (row === null) {
+    return null;
+  }
+  const fingerprint: string | null = await subscriptionCardFingerprint(stripe, platform, subscriptionId, userId);
+  if (fingerprint === null) {
+    log("warn", "referral_join_without_card", { userId, subscriptionId });
+    return { code, cardHash: null, referrersCard: false };
+  }
+  const referrer: string | null = row.referrer_user_id;
+  const referrerCustomer: string | null = referrer === null ? null : await storedCustomerId(db, referrer);
+  const referrerCards: string[] =
+    referrer === null || referrerCustomer === null ? [] : await customerCardFingerprints(stripe, platform, referrerCustomer, referrer);
+  const referrersCard: boolean = referrerCards.includes(fingerprint);
+  log("info", "referral_join_card_checked", { userId, subscriptionId, referrerUserId: referrer, referrersCard });
+  return { code, cardHash: await referralCardHash(config.secrets.trialHash, fingerprint), referrersCard };
+}
+
+/**
  * `invoice.paid` davet ifadeleri (`referralInvoicePaidStatements`): faturanın müşterisi tanınan kullanıcıysa ve
  * abonelik kopya değilse. Davet kodu, Checkout'un aboneliğe yazdığı `metadata.referral_code`'un faturadaki kopyasından
- * (`parent.subscription_details.metadata`) okunur.
+ * (`parent.subscription_details.metadata`) okunur; katılım kartı `referralJoinOf` ile denetlenir.
  */
-async function invoicePaidReferralStatements(db: D1Database, platform: Platform, invoice: Stripe.Invoice): Promise<EventStatements> {
+async function invoicePaidReferralStatements(
+  db: D1Database,
+  stripe: Stripe,
+  platform: Platform,
+  config: StripeWebhookConfig,
+  invoice: Stripe.Invoice,
+): Promise<EventStatements> {
   const subscriptionId: string | null = invoiceSubscriptionId(invoice);
   if (subscriptionId === null || invoice.id === undefined || invoice.customer === null) {
     return [];
@@ -877,11 +963,12 @@ async function invoicePaidReferralStatements(db: D1Database, platform: Platform,
     return [];
   }
   const metadata: Stripe.Metadata | null = invoice.parent?.subscription_details?.metadata ?? null;
+  const code: string | null = metadata?.["referral_code"] ?? null;
   return referralInvoicePaidStatements(db, {
     userId,
     subscriptionId,
     invoiceId: invoice.id,
-    referralCode: metadata?.["referral_code"] ?? null,
+    join: code === null ? null : await referralJoinOf(db, stripe, platform, config, userId, subscriptionId, code),
     amountPaid: invoice.amount_paid,
     nowMs: platform.now().getTime(),
   });
@@ -898,9 +985,11 @@ async function eventStatements(db: D1Database, platform: Platform, config: Strip
       return customerDeletedStatements(db, event, event.data.object.id);
     case "charge.refunded":
       return chargeRefundedStatements(db, stripeClient(platform, config), platform, event, event.data.object, config.stripePrices);
-    case "invoice.paid":
-      await invoicePaidDuplicateRefund(db, stripeClient(platform, config), platform, event, event.data.object);
-      return invoicePaidReferralStatements(db, platform, event.data.object);
+    case "invoice.paid": {
+      const stripe: Stripe = stripeClient(platform, config);
+      await invoicePaidDuplicateRefund(db, stripe, platform, event, event.data.object);
+      return invoicePaidReferralStatements(db, stripe, platform, config, event.data.object);
+    }
     case "charge.dispute.created":
       return disputeStatements(db, stripeClient(platform, config), platform, event, event.data.object, config.stripePrices);
     default:
@@ -915,9 +1004,8 @@ async function eventStatements(db: D1Database, platform: Platform, config: Strip
  * `stripe_events` tablosuna, durum değişiklikleri aynı toplu işlemde yazılır: aynı olay eşzamanlı ikinci kez gelirse
  * birincil anahtar çakışır, hiçbir şey değişmez. İşlenen olaylar: abonelik olayları (`subscriptionEventStatements`),
  * `customer.deleted`, `charge.refunded` (alarm; tam iadede ödemenin aboneliği biter; davet ödülü düşer), `invoice.paid`
- * (kopya aboneliğin geç ödemesi iade edilir; davetle aboneliğin ilerlemesi), `charge.dispute.created` (alarm, abonelik
- * iptali, davet ödülü düşer); diğerleri
- * yalnızca kaydedilir.
+ * (kopya aboneliğin geç ödemesi iade edilir; davetle aboneliğin ilerlemesi ve katılımda kart denetimi),
+ * `charge.dispute.created` (alarm, abonelik iptali, davet ödülü düşer); diğerleri yalnızca kaydedilir.
  */
 export async function handleStripeWebhook(db: D1Database, platform: Platform, config: StripeWebhookConfig, payload: string, signature: string): Promise<{ duplicate: boolean }> {
   warnIfStripeTestMode(config, "webhook");

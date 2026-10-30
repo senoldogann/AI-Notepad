@@ -37,6 +37,7 @@ public struct HostedFinalTranscriber: FinalTranscriber {
         let terms: [String] = hostedKeyterms(terms: keyterms, limit: 30)
         var results: [ChunkTranscription] = []
         var stoppedNotice: String?
+        var coveredUntilSec: Double?
         for (index, chunk) in chunks.enumerated() {
             let overlapSec: Double = index == 0 ? 0 : Double(chunks[index - 1].span.startSample + chunks[index - 1].span.sampleCount - chunk.span.startSample) / Double(hostedTranscribeSampleRate)
             let durationSec: Double = Double(chunk.span.sampleCount) / Double(hostedTranscribeSampleRate)
@@ -49,12 +50,17 @@ public struct HostedFinalTranscriber: FinalTranscriber {
                     offsetSec: chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate), overlapSec: overlapSec, result: try parseElevenLabsResponse(data: data)
                 ))
                 finalLogger.info("Son geçiş parçası yazıya döküldü, parça: \(results.count, privacy: .public)/\(chunks.count, privacy: .public), saniye: \(durationSec, privacy: .public)")
-            } catch let error as HostedAPIError where !results.isEmpty {
-                // Sonraki parça reddedildi (ör. toplantının ses hakkı ya da aylık süre doldu): yazıya dökülmüş (ve
-                // faturalanmış) parçalar atılmaz; kalan kısım nedeniyle birlikte bildirilir.
-                let doneMinutes: Int = Int((chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate) / 60).rounded())
-                finalLogger.warning("Son geçiş yarıda kaldı, yazıya dökülen dakika: \(doneMinutes, privacy: .public), kod: \(error.rawCode, privacy: .public)")
-                stoppedNotice = String(localized: "Kaydın ilk \(doneMinutes) dakikası yazıya döküldü; kalanı işlenemedi: \(hostedErrorMessage(error: error))")
+            } catch let error where !results.isEmpty && !(error is CancellationError) {
+                // Sonraki parça reddedildi (ör. toplantının ses hakkı ya da aylık süre doldu) ya da bağlantı koptu:
+                // yazıya dökülmüş (ve faturalanmış) parçalar atılmaz; kalan kısmın canlı metni korunur
+                // (`coveredUntilSec`), neden bildirilir.
+                let previous: WavChunkFile = chunks[index - 1]
+                let covered: Double = previous.span.offsetSec(sampleRate: hostedTranscribeSampleRate) + Double(previous.span.sampleCount) / Double(hostedTranscribeSampleRate)
+                let doneMinutes: Int = Int((covered / 60).rounded())
+                let reason: String = (error as? HostedAPIError).map { hostedErrorMessage(error: $0) } ?? userFacingMessage(error: error)
+                finalLogger.warning("Son geçiş yarıda kaldı, yazıya dökülen dakika: \(doneMinutes, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                stoppedNotice = String(localized: "Kaydın ilk \(doneMinutes) dakikası yeniden yazıya döküldü; kalanında canlı metin kullanıldı: \(reason)")
+                coveredUntilSec = covered
                 break
             }
         }
@@ -62,7 +68,8 @@ public struct HostedFinalTranscriber: FinalTranscriber {
         return FinalPassResult(
             segments: finalSegments(words: merged.words, gapSec: 1.5),
             language: merged.languageCode.flatMap { meetingLanguage(elevenLabsCode: $0) },
-            notice: stoppedNotice
+            notice: stoppedNotice,
+            coveredUntilSec: coveredUntilSec
         )
     }
 }

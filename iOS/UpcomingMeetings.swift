@@ -12,26 +12,30 @@ struct UpcomingCalendarSection: View {
     var body: some View {
         switch calendar.state {
         case .on:
-            let now: Date = Date()
-            let items: [CalendarMeeting] = upcomingMeetings(meetings: calendar.meetings, now: now, horizonSec: 12 * 3600)
-            let current: CalendarMeeting? = currentMeeting(meetings: calendar.meetings, now: now)
-            VStack(alignment: .leading, spacing: 10) {
-                PhoneSectionHeader(title: "Sıradaki toplantılar", actionTitle: nil, action: nil)
-                if items.isEmpty {
-                    Text("Önümüzdeki 12 saatte takvimde toplantı yok.")
-                        .appFont(size: 13, weight: .regular)
-                        .foregroundStyle(Theme.muted)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(items.prefix(4).enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
-                            if item.offset > 0 {
-                                Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 14)
+            // Saat ilerledikçe (dakikada bir) "Şimdi", vurgular ve biten toplantılar güncellenir; liste yalnız takvim
+            // değişince çizilseydi eskirdi.
+            TimelineView(.everyMinute) { (context: TimelineViewDefaultContext) in
+                let now: Date = context.date
+                let items: [CalendarMeeting] = upcomingMeetings(meetings: calendar.meetings, now: now, horizonSec: 12 * 3600)
+                let current: CalendarMeeting? = currentMeeting(meetings: calendar.meetings, now: now)
+                VStack(alignment: .leading, spacing: 10) {
+                    PhoneSectionHeader(title: "Sıradaki toplantılar", actionTitle: nil, action: nil)
+                    if items.isEmpty {
+                        Text("Önümüzdeki 12 saatte takvimde toplantı yok.")
+                            .appFont(size: 13, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(items.prefix(4).enumerated()), id: \.element.id) { (item: (offset: Int, element: CalendarMeeting)) in
+                                if item.offset > 0 {
+                                    Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 14)
+                                }
+                                UpcomingMeetingRow(meeting: item.element, isCurrent: item.element.id == current?.id, now: now)
                             }
-                            UpcomingMeetingRow(meeting: item.element, isCurrent: item.element.id == current?.id, now: now)
                         }
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
                     }
-                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
                 }
             }
         case .denied:

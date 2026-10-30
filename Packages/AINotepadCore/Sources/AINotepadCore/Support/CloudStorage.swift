@@ -387,6 +387,9 @@ public final class CloudSyncController {
     @ObservationIgnored private let watcher: ICloudMeetingWatcher = ICloudMeetingWatcher()
     /// Süren taşıma (kapatma bunu bekler; iki taşıma üst üste binmez).
     @ObservationIgnored private var currentMove: Task<Void, Never>?
+    /// Toplantıların iCloud'a taşınmasından gelen son hata: sonraki taşıma temiz biterse `state` yalnızca bu hatayı
+    /// temizler (kapatmanın "eşitleme açık kaldı" hatası kullanıcı yeniden deneyene dek kalır).
+    @ObservationIgnored private var lastMoveFailure: SyncWorkState?
 
     public init() {}
 
@@ -426,11 +429,15 @@ public final class CloudSyncController {
             let result: CloudMoveResult = try await moveFinishedMeetingsToCloudInBackground(excluding: excluding)
             cloudLogger.info("iCloud eşitlemesi açıldı, taşınan: \(result.moved.count, privacy: .public), birleştirilen: \(result.merged.count, privacy: .public)")
             state = result.failures.isEmpty ? .idle : .failed(failureSummary(failures: result.failures))
+            lastMoveFailure = result.failures.isEmpty ? nil : state
         } catch {
             cloudLogger.error("iCloud eşitlemesi açılamadı, hata: \(String(describing: error), privacy: .private)")
             state = .failed(userFacingMessage(error: error))
+            lastMoveFailure = nil
         }
         onChange()
+        // Açılış sürerken biten toplantılar (otomatik taşıma bu sırada başlamaz) şimdi taşınır.
+        await moveFinishedMeetings(excluding: excluding, onChange: onChange)
     }
 
     /// iCloud eşitlemesini kapatır: iCloud'daki toplantılar bu cihaza kopyalanır (diğer cihazınkiler iCloud'da kalır).
@@ -456,6 +463,7 @@ public final class CloudSyncController {
             save(location: .local)
             cloudLogger.info("iCloud eşitlemesi kapatıldı, kopyalanan: \(result.moved.count, privacy: .public)")
             state = .idle
+            lastMoveFailure = nil
         } catch {
             cloudLogger.error("iCloud eşitlemesi kapatılamadı, hata: \(String(describing: error), privacy: .private)")
             state = .failed(userFacingMessage(error: error))
@@ -464,16 +472,19 @@ public final class CloudSyncController {
     }
 
     /// iCloud açık ve hazırsa yerelde bekleyen bitmiş toplantıları taşır (her toplantı bitince); `excluding`
-    /// toplantılara (düzenlenen, çalan) dokunulmaz. Önceki taşıma bitmeden yenisi başlamaz.
+    /// toplantılara (düzenlenen, çalan) dokunulmaz. Önceki taşıma bitmeden yenisi başlamaz. Açma ya da kapatma sürerken
+    /// (`state == .working`) taşımaz: kapatmanın kopyası klasörü bir kez listeler, araya taşınan toplantı bu cihazda
+    /// görünmez kalırdı; açılışta biten toplantıları `enable` sonunda kendisi taşır. Temiz biten taşıma önceki taşıma
+    /// hatasını temizler.
     public func moveFinishedMeetings(excluding: Set<String>, onChange: @escaping @MainActor () -> Void) async {
-        guard activeLocation == .iCloud else {
+        guard activeLocation == .iCloud, state != .working else {
             return
         }
         let previous: Task<Void, Never>? = currentMove
         let move: Task<Void, Never> = Task {
             await previous?.value
-            // Bekleme sırasında eşitleme kapatılmış olabilir.
-            guard self.activeLocation == .iCloud else {
+            // Bekleme sırasında eşitleme kapatılmış ya da açma/kapatma başlamış olabilir.
+            guard self.activeLocation == .iCloud, self.state != .working else {
                 return
             }
             do {
@@ -484,10 +495,15 @@ public final class CloudSyncController {
                 }
                 if !result.failures.isEmpty {
                     self.state = .failed(failureSummary(failures: result.failures))
+                    self.lastMoveFailure = self.state
+                } else if let failure = self.lastMoveFailure, self.state == failure {
+                    self.state = .idle
+                    self.lastMoveFailure = nil
                 }
             } catch {
                 cloudLogger.error("Toplantı iCloud'a taşınamadı, hata: \(String(describing: error), privacy: .private)")
                 self.state = .failed(userFacingMessage(error: error))
+                self.lastMoveFailure = self.state
             }
         }
         currentMove = move

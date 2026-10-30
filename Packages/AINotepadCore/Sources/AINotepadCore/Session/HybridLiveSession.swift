@@ -204,14 +204,16 @@ private actor HybridRouter {
         case .deepgram(let inputs, _), .local(let inputs, _):
             inputs[speaker]?.yield(chunk)
         case .preparingLocal:
-            var buffer: [Float] = pending[speaker, default: []] + chunk
+            // Yerinde eklenir (sözlüğün `default:` alt simgesi değiştirerek erişir): her parçada tüm tamponu kopyalamak
+            // 10 dakikalık bekletmede saniyede yüzlerce MB kopya ederdi.
+            pending[speaker, default: []].append(contentsOf: chunk)
             // Her parçada kırpmak pahalı: sınır 10 sn aşılınca bir kez kırpılır.
-            if buffer.count > maxPendingSamples + hybridSampleRate * 10 {
-                let excess: Int = buffer.count - maxPendingSamples
-                buffer.removeFirst(excess)
+            let count: Int = pending[speaker, default: []].count
+            if count > maxPendingSamples + hybridSampleRate * 10 {
+                let excess: Int = count - maxPendingSamples
+                pending[speaker, default: []].removeFirst(excess)
                 pendingStart[speaker, default: 0] += excess
             }
-            pending[speaker] = buffer
         case .unavailable:
             break
         }
@@ -331,6 +333,8 @@ private func consumeDeepgram(
             )))
             index += 1
         case .failed(let message):
+            // Mac'e geçişte bölüm numaraları başka yerden başlar: bu kimliğin geçici metni hiç yenilenmez, silinir.
+            events.yield(.segment(clearingPartial(id: SegmentID(speaker: speaker, index: index))))
             switch await router.beginFallback() {
             case .started:
                 hybridLogger.warning("Deepgram akışı durdu, canlı metin Mac'e geçiyor, konuşmacı: \(speaker.rawValue, privacy: .public), neden: \(message, privacy: .private)")

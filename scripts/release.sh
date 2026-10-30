@@ -40,9 +40,11 @@ out=".build/release"
 app="$out/export/AINotepad.app"
 dmg="$out/AI-Notepad-$version.dmg"
 
-# Uzun derlemeden önce: yayın yalnızca işlenmiş koddan; aynı derleme numarası appcast'te varsa güncelleme görünmez.
+# Uzun derlemeden önce: yayın yalnızca işlenmiş koddan; aynı derleme numarası appcast'te varsa güncelleme görünmez,
+# aynı sürüm varsa indirme adresi ve yayın etiketi eski sürümle çakışır.
 require_clean_worktree
 require_new_build "$archive_dir/appcast.xml" "$build"
+require_new_version "$archive_dir/appcast.xml" "$version"
 
 xcodegen generate
 rm -rf "$out"

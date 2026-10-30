@@ -19,7 +19,8 @@ export const refreshRetryWindowMs: number = 10 * 60_000;
 /**
  * Yeniden denemede yerine yenisi verilen (kullanılmamış) eski halefin `replaced_by` işareti. Satır silinmez: o jeton
  * sonradan gelirse eski jeton iki ayrı eldeymiş demektir (biri yeniden denedi, öbürü halefi tutuyordu) ve tüm aile
- * düşürülür. Dönüşteki temizlik bu satırları silmez.
+ * düşürülür. Ne dönüşteki temizlik ne günlük temizlik (`cleanup.ts`) bu satırları silmez; süresi dolunca ya da aile
+ * düşürülünce silinir.
  */
 const supersededMarker: string = "superseded";
 

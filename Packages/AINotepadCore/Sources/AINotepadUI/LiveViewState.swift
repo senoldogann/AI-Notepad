@@ -7,7 +7,7 @@ public enum DisplayMode: String, Sendable, CaseIterable {
     case bilingual
     /// Yalnızca çeviri (ham değer eski sürümlerle uyumlu kalsın diye "turkishOnly"); çevirisi olmayan metin orijinal haliyle soluk.
     case turkishOnly
-    /// Yalnızca orijinal (Fince/İngilizce); canlı çeviri yapılmaz, toplantı sonu not yine üretilir.
+    /// Yalnızca orijinal (toplantı dili); canlı çeviri yapılmaz, toplantı sonu not yine üretilir.
     case originalOnly
 
     /// Bu görünümde canlı çeviri gerekir mi.
@@ -191,6 +191,33 @@ public struct DisplayPart: Sendable, Equatable {
         self.text = text
         self.isTranslated = isTranslated
         self.isFinal = isFinal
+    }
+}
+
+/// Panelde görünen metnin düz hali ("Kopyala", "Tümünü kopyala"): blok başına `[mm:ss] Etiket: metin`; "Sadece
+/// orijinal"de orijinal, "Sadece çeviri"de çeviri (çevirisi olmayan bölüm orijinal haliyle, panelde olduğu gibi), iki
+/// dilde orijinalin altında çevirisi. Saf fonksiyondur.
+public func displayedPlainText(blocks: [SpeakerBlock], translations: [SegmentID: String], displayMode: DisplayMode) -> String {
+    switch displayMode {
+    case .originalOnly:
+        return plainText(blocks: blocks)
+    case .turkishOnly:
+        return blocks
+            .compactMap { (block: SpeakerBlock) -> String? in
+                let text: String = turkishOnlyParts(block: block, translations: translations).map(\.text).joined(separator: " ")
+                return text.isEmpty ? nil : "[\(timestamp(seconds: block.startSec))] \(speakerLabel(speaker: block.speaker, person: block.person)): \(text)"
+            }
+            .joined(separator: "\n\n")
+    case .bilingual:
+        return blocks
+            .compactMap { (block: SpeakerBlock) -> String? in
+                let original: String = plainText(blocks: [block])
+                guard !original.isEmpty else {
+                    return nil
+                }
+                return blockTurkishText(block: block, translations: translations).map { "\(original)\n\($0)" } ?? original
+            }
+            .joined(separator: "\n\n")
     }
 }
 

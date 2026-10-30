@@ -568,14 +568,15 @@ export function mayReprocess(hasAccess: boolean, meetingEndMs: number, nowMs: nu
 
 /**
  * Yeniden işlemenin ses sınırı (toplantının toplam yazılmış sesi): şimdiye dek yazılan + kaydın gerçek süresi (toplantı
- * süresi ile ilk geçişin sesinin büyüğü) + parça örtüşme payı. Sesi hiç yazılmamış toplantıda null (ilk geçiş sınırı:
- * toplantının en uzun süresi). Saf fonksiyondur.
+ * süresi ile bir geçişin sesinin büyüğü; bir geçiş = yazılan ses / şimdiye dek yapılan geçiş sayısı, yani
+ * `reprocessCount` + 1) + parça örtüşme payı. Sesi hiç yazılmamış toplantıda null (ilk geçiş sınırı: toplantının en
+ * uzun süresi). Saf fonksiyondur.
  */
-export function reprocessAudioCap(audioSeconds: number, meetingSeconds: number): number | null {
+export function reprocessAudioCap(audioSeconds: number, meetingSeconds: number, reprocessCount: number): number | null {
   if (audioSeconds <= 0) {
     return null;
   }
-  const recording: number = Math.max(meetingSeconds, audioSeconds);
+  const recording: number = Math.max(meetingSeconds, audioSeconds / (reprocessCount + 1));
   return audioSeconds + recording + chunkOverlapAllowance(recording);
 }
 
@@ -593,9 +594,12 @@ export interface ReprocessedMeeting {
  * ses (`reprocessAudioCap`), toplantı kapsamlı yapay zekâ tam `reprocessTokenBudget` token kullanabilir (bütçe =
  * şimdiye dek kullanılan + pay; ilk geçiş bütçesini neredeyse bitirmiş toplantı da tam pay alır). Toplantının toplam
  * yapay zekâ bütçesi böylece en çok ilk bütçe + `maxMeetingReprocesses` × pay olur. Yeni deneme, başlatma ya da
- * toplantı süresi düşmez. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
- * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı (deneme
- * toplantısında deneme tavanı da) doluysa (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503. Toplantı zaten açıksa (ek süre içinde) hak harcanmaz.
+ * toplantı süresi düşmez. Ek süre içinde ses henüz yazılmamışsa toplantı zaten açıktır (hak harcanmaz); ses yazılmışsa
+ * kayıt yeniden yükleneceği için hak harcanır ve ses sınırı açılır. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
+ * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı doluysa
+ * (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan `503 spend_ceiling_reached`; deneme toplantısında deneme
+ * tavanı doluysa ya da ElevenLabs kullanımı deneme durağını (`elevenLabsTrialStopRatio`) geçtiyse hak harcanmadan
+ * `503 trial_capacity_reached`.
  * En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`. Başkasının ya da olmayan toplantı
  * `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
  */
@@ -605,7 +609,7 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
     throw new ApiError("not_found", "Toplantı oturumu bulunamadı.");
   }
   const nowMs: number = now.getTime();
-  if (nowMs < meetingUsableUntil(row, config.meetingGraceMs)) {
+  if (nowMs < meetingUsableUntil(row, config.meetingGraceMs) && row.audio_seconds <= 0) {
     return {
       meetingId,
       usableUntil: new Date(meetingUsableUntil(row, config.meetingGraceMs)).toISOString(),
@@ -618,13 +622,15 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
   if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
     throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
   }
-  // Deneme toplantısının yeniden işlenmesi deneme harcaması açar: deneme tavanı doluysa hak harcanmadan 503.
+  // Deneme toplantısının yeniden işlenmesi deneme harcaması açar: deneme tavanı doluysa ya da ElevenLabs kullanımı
+  // deneme durağını geçtiyse (yeni deneme toplantısıyla aynı kural) hak harcanmadan 503.
   if (row.kind === "trial") {
     await requireTrialSpendHeadroom(db, config, now);
+    await requireElevenLabsTrialHeadroom(db, config, now);
   }
   await requireSpendHeadroom(db, config, now);
   const until: number = nowMs + config.meetingGraceMs;
-  const audioCap: number | null = reprocessAudioCap(row.audio_seconds, Math.max(0, endMs - row.started_at) / 1000);
+  const audioCap: number | null = reprocessAudioCap(row.audio_seconds, Math.max(0, endMs - row.started_at) / 1000, row.reprocess_count);
   const updated: D1Result = await db
     .prepare(
       `UPDATE meeting_sessions SET reprocess_count = reprocess_count + 1, reprocess_until = ?, reprocess_audio_cap = ?,

@@ -48,9 +48,17 @@ const text: ContactCopy = copy.contact;
         <div class="field">
           <div class="field__row">
             <label for="contact-message">{text.messageLabel}</label>
-            <span id="contact-counter" class="small muted tabular" aria-live="polite"></span>
+            <span id="contact-counter" class="small muted tabular"></span>
           </div>
-          <textarea id="contact-message" class="input textarea" name="message" required maxlength="5000" rows="8" placeholder={text.messagePlaceholder}></textarea>
+          <textarea
+            id="contact-message"
+            class="input textarea"
+            name="message"
+            required
+            maxlength="5000"
+            rows="8"
+            aria-describedby="contact-counter"
+            placeholder={text.messagePlaceholder}></textarea>
         </div>
         <div id="turnstile" class="turnstile" role="group" aria-label={text.turnstileLabel}></div>
         <button id="contact-submit" class="button button--primary button--block" type="submit" disabled>{text.submit}</button>

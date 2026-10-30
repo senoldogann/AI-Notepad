@@ -6,9 +6,10 @@ import Sparkle
 
 private let updateLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Update")
 
-/// Açılıştaki ek denetimin en kısa aralığı: son denetim bundan yeniyse açılışta yeniden denetlenmez (art arda açılışlar
-/// sunucuyu yormasın). Sparkle'ın kendi zamanlanmış denetimi Info.plist'te (`SUScheduledCheckInterval`, 6 saat; Sparkle
-/// 1 saatten sıkına izin vermez).
+/// Açılıştaki ek denetimin en kısa aralığı: son denetim bundan yeniyse açılışta yeniden denetlenmez (ör. güncelleme
+/// sonrası yeniden açılışta hemen yeniden denetlenmesin). Uygulama açıkken asıl denetim `frequentCheckIntervalSec`
+/// döngüsüdür; Sparkle'ın kendi zamanlanmış denetimi de (Info.plist'te `SUScheduledCheckInterval`, 6 saat; Sparkle 1
+/// saatten sıkına izin vermez) açık kalır.
 private let launchCheckMinimumIntervalSec: TimeInterval = 3600
 
 /// Uygulama açıkken yeni sürümün denetlendiği aralık (saniye): yeni sürüm birkaç dakikada kullanıcıya ulaşsın. Denetim
@@ -34,7 +35,7 @@ func shouldCheckForUpdatesAtLaunch(lastCheck: Date?, now: Date, minimumIntervalS
     return now.timeIntervalSince(lastCheck) >= minimumIntervalSec
 }
 
-/// Şeritte ve menüde gösterilen güncelleme: sürüm, sürüm notları ve indirilip kurulmaya hazır olup olmadığı.
+/// Kartta ve menüde gösterilen güncelleme: sürüm, sürüm notları ve indirilip kurulmaya hazır olup olmadığı.
 struct AvailableAppUpdate: Equatable {
     /// Kullanıcıya görünen sürüm (ör. "0.1.6").
     let version: String
@@ -46,7 +47,7 @@ struct AvailableAppUpdate: Equatable {
     let isReadyToInstall: Bool
 }
 
-/// Sparkle öğesinden şerit bilgisi.
+/// Sparkle öğesinden kart bilgisi.
 @MainActor
 private func availableUpdate(item: SUAppcastItem, isReadyToInstall: Bool) -> AvailableAppUpdate {
     AvailableAppUpdate(
@@ -58,8 +59,8 @@ private func availableUpdate(item: SUAppcastItem, isReadyToInstall: Bool) -> Ava
 }
 
 /// Sparkle'ın temsilcisi (dış sistem bağlantısı; Sparkle NSObject ister ve temsilciyi zayıf tutar, `AppUpdater` saklar).
-/// Zamanlanmış denetimde bulunan güncelleme Sparkle'ın penceresiyle değil uygulamadaki sakin şeritle gösterilir ("nazik
-/// hatırlatma"); arka planda indirilen güncelleme çıkışta kurulur, şeritteki "Yeniden başlat ve güncelle" hemen kurar.
+/// Zamanlanmış denetimde bulunan güncelleme Sparkle'ın penceresiyle değil uygulamadaki sakin kartla gösterilir ("nazik
+/// hatırlatma"); arka planda indirilen güncelleme çıkışta kurulur, karttaki "Yeniden başlat ve güncelle" hemen kurar.
 /// Kayıt ya da işleme sürerken yeniden başlatma ertelenir. Kullanıcının başlattığı denetim Sparkle'ın kendi arayüzünde.
 @MainActor
 private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
@@ -71,7 +72,7 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
         true
     }
 
-    /// Zamanlanmış denetimde bulunan güncellemeyi Sparkle göstermez; uygulama şeritte gösterir.
+    /// Zamanlanmış denetimde bulunan güncellemeyi Sparkle göstermez; uygulama kartta gösterir.
     func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
         false
     }
@@ -81,18 +82,18 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
             return
         }
         let isReady: Bool = state.stage == .downloaded || state.stage == .installing
-        updateLogger.info("Güncelleme bulundu, şeritte gösteriliyor, sürüm: \(update.displayVersionString, privacy: .public), hazır: \(isReady, privacy: .public)")
+        updateLogger.info("Güncelleme bulundu, kartta gösteriliyor, sürüm: \(update.displayVersionString, privacy: .public), hazır: \(isReady, privacy: .public)")
         owner?.showFound(update: availableUpdate(item: update, isReadyToInstall: isReady))
     }
 
-    /// Kullanıcı güncellemeyle ilgilendi ya da oturum bitti: şeritteki "bulundu" bilgisi kalkar.
+    /// Kullanıcı güncellemeyle ilgilendi ya da oturum bitti: karttaki "bulundu" bilgisi kalkar.
     func standardUserDriverWillFinishUpdateSession() {
         owner?.clearFound()
     }
 
     // MARK: Güncelleyici (SPUUpdaterDelegate)
 
-    /// Arka planda indirilen güncelleme çıkışta sessizce kurulur; kurulumu uygulama üstlenir (şeritteki düğme
+    /// Arka planda indirilen güncelleme çıkışta sessizce kurulur; kurulumu uygulama üstlenir (karttaki düğme
     /// `immediateInstallHandler`'ı çağırır). Sparkle kendi hatırlatmasını göstermez.
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
         updateLogger.info("Güncelleme indirildi, çıkışta kurulacak, sürüm: \(item.displayVersionString, privacy: .public)")
@@ -124,7 +125,7 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
 
 /// Sparkle güncelleyicisine bağlantı: GitHub'daki appcast.xml'den yeni sürümü açılışta ve uygulama açıkken 5 dakikada bir denetler, arka
 /// planda indirir (ayardan kapatılabilir) ve çıkışta kurar (uygulama sandbox'sız; Sparkle'ın XPC servisleri gerekmez).
-/// Bulunan ya da indirilen güncelleme ana penceredeki şeritte ve menüde gösterilir; kayıt ya da işleme sürerken
+/// Bulunan ya da indirilen güncelleme ana penceredeki kartta ve menüde gösterilir; kayıt ya da işleme sürerken
 /// yeniden başlatılmaz. İmza anahtarı yoksa Sparkle hiç başlatılmaz (başlatılsa açılışta hata penceresi gösterirdi),
 /// uyarı loglanır ve güncelleme menüsü ile ayarı gizlenir. Dış sisteme (Sparkle) bağlandığı için sınıftır.
 @MainActor
@@ -140,7 +141,7 @@ final class AppUpdater {
     private(set) var readyUpdate: AvailableAppUpdate?
     /// Bulunmuş ama indirilmemiş güncelleme (otomatik indirme kapalıyken).
     private(set) var foundUpdate: AvailableAppUpdate?
-    /// Kullanıcı şeridi bu sürüm için kapattı (menüde görünmeye devam eder).
+    /// Kullanıcı kartı bu sürüm için kapattı (menüde görünmeye devam eder).
     private(set) var dismissedVersion: String?
     /// Yeniden başlatma, kayıt ya da işleme bitince yapılacak.
     private(set) var isRelaunchPostponed: Bool = false
@@ -169,7 +170,8 @@ final class AppUpdater {
         controller.startUpdater()
         let updater: SPUUpdater = controller.updater
         // Açılışta ek denetim (Sparkle'ın önerdiği gibi başlatmanın hemen ardından ve yalnızca otomatik denetim açıksa);
-        // son denetim bir saatten yeniyse atlanır. Sonrası Sparkle'ın 6 saatlik zamanlayıcısıyla.
+        // son denetim bir saatten yeniyse atlanır. Sonrasında uygulama açıkken `frequentCheckIntervalSec`'te (5 dk) bir
+        // `checkInBackground`; Sparkle'ın 6 saatlik zamanlayıcısı da açık kalır.
         if updater.automaticallyChecksForUpdates,
            shouldCheckForUpdatesAtLaunch(lastCheck: updater.lastUpdateCheckDate, now: Date(), minimumIntervalSec: launchCheckMinimumIntervalSec) {
             updater.checkForUpdatesInBackground()
@@ -196,7 +198,7 @@ final class AppUpdater {
     }
 
     /// Sık denetim: otomatik denetim açıksa, bir denetim sürmüyorsa ve bulunmuş bir güncelleme beklemiyorsa arka planda
-    /// denetlenir (sonuç şeritte değil sağ alttaki kartta gösterilir; Sparkle penceresi açılmaz).
+    /// denetlenir (sonuç sağ alttaki kartta gösterilir; Sparkle penceresi açılmaz).
     private func checkInBackground() {
         // Bulunan sürüm beklerken (kart "Sonra" ile kapatılsa da) denetlenmez: Sparkle o sürümün oturumunu kullanıcı
         // karar verene dek açık tutar (açıkken `checkForUpdatesInBackground` reddedilir), indirilmiş sürümde de yeni
@@ -220,12 +222,12 @@ final class AppUpdater {
         controller?.updater.lastUpdateCheckDate
     }
 
-    /// Şeritte ve menüde gösterilecek güncelleme: indirilmiş olan önce.
+    /// Kartta ve menüde gösterilecek güncelleme: indirilmiş olan önce.
     var availableUpdate: AvailableAppUpdate? {
         readyUpdate ?? foundUpdate
     }
 
-    /// Ana penceredeki şerit görünsün mü (kullanıcı bu sürüm için kapatmadıysa).
+    /// Ana penceredeki kart görünsün mü (kullanıcı bu sürüm için kapatmadıysa).
     var showsBanner: Bool {
         guard let update = availableUpdate else {
             return false
@@ -242,7 +244,7 @@ final class AppUpdater {
         controller.checkForUpdates(nil)
     }
 
-    /// Şeritteki düğme: indirilmiş güncelleme hemen kurulur ve uygulama yeniden açılır; indirilmemişse Sparkle'ın
+    /// Karttaki düğme: indirilmiş güncelleme hemen kurulur ve uygulama yeniden açılır; indirilmemişse Sparkle'ın
     /// güncelleme penceresi öne getirilir. Kayıt ya da işleme sürerken hiçbir şey yapılmaz (düğme de kapalıdır).
     func installUpdate() {
         guard !isBusy() else {
@@ -257,7 +259,7 @@ final class AppUpdater {
         checkForUpdates()
     }
 
-    /// Şeridi bu sürüm için kapatır (menüde görünmeye devam eder; yeni sürüm gelince şerit yeniden çıkar).
+    /// Kartı bu sürüm için kapatır (menüde görünmeye devam eder; yeni sürüm gelince kart yeniden çıkar).
     func dismissBanner() {
         dismissedVersion = availableUpdate?.version
     }
@@ -274,7 +276,7 @@ final class AppUpdater {
     }
 
     /// Otomatik güncellemeyi açar ya da kapatır. Açıkken denetim de açılır; kapalıyken denetim sürer, yeni sürüm
-    /// yalnızca şeritte haber verilir (kendiliğinden indirilmez).
+    /// yalnızca kartta haber verilir (kendiliğinden indirilmez).
     func setAutomaticallyUpdates(enabled: Bool) {
         guard let controller else {
             updateLogger.error("Otomatik güncelleme ayarlanamadı: Sparkle başlatılmadı (açık anahtar yok)")
@@ -291,7 +293,7 @@ final class AppUpdater {
     // MARK: Sparkle temsilcisinden
 
     /// Zamanlanmış denetimde bulunan güncelleme. Önceki oturumda indirilmiş olsa da anında kurma bloğu yoksa
-    /// şeritteki düğme Sparkle'ın penceresini öne getirir (bkz. `installUpdate`).
+    /// karttaki düğme Sparkle'ın penceresini öne getirir (bkz. `installUpdate`).
     fileprivate func showFound(update: AvailableAppUpdate) {
         foundUpdate = update
     }

@@ -157,8 +157,8 @@ struct HostedAccountSettings: View {
     private func signedIn(entitlements: HostedEntitlements) -> some View {
         let status: HostedPlanStatus = hostedPlanStatus(entitlements: entitlements)
         SettingsRow(title: Text("Plan")) {
-            // Erişimi olan aboneliğin planı (aylık ya da yıllık); bitmiş abonelikte gösterilmez.
-            if let subscription = entitlements.subscription, subscription.access != .none, let plan = subscription.billingPlan {
+            // Erişimi olan aboneliğin planı (aylık ya da yıllık); bitmiş abonelikte ve ücretsiz erişimde gösterilmez.
+            if let subscription = entitlements.subscription, subscription.access != .none, !subscription.complimentary, let plan = subscription.billingPlan {
                 Text(verbatim: hostedPlanLineText(plan: plan))
                     .foregroundStyle(Theme.ink)
             }
@@ -168,16 +168,29 @@ struct HostedAccountSettings: View {
                 Text("Ücretsiz deneme")
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(hostedDayText(date: renewsAt)) tarihinde yenilenir.")
+            case .complimentary:
+                // Bitiş tarihli ücretsiz erişimde (sunucu bitişi `cancelAt`'e yazar) erişim o gün kendiliğinden biter: tarih
+                // önceden görünür.
+                if let until = entitlements.subscription?.cancelAt {
+                    Text("Ücretsiz tam erişim: ödeme yok; \(hostedDayText(date: until)) tarihine kadar.")
+                        .foregroundStyle(Theme.ink)
+                } else {
+                    Text("Ücretsiz tam erişim: ödeme ve yenileme yok.")
+                        .foregroundStyle(Theme.ink)
+                }
             case .ending(let endsAt):
                 Text("Abonelik iptal edildi; \(hostedDayText(date: endsAt)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):
                 NoticeText("Ödeme alınamadı; erişimin \(hostedDayText(date: endsAt)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
             case .expired(let endedAt):
                 Text("Aboneliğin \(hostedDayText(date: endedAt)) tarihinde sona erdi; toplantıların ve notların bu Mac'te.")
+            case .paymentOverdue:
+                NoticeText("Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
             }
         } control: {
             HStack(spacing: 8) {
-                if entitlements.subscription != nil {
+                // Ücretsiz erişimde Stripe'ta yönetilecek bir şey yoktur.
+                if let subscription = entitlements.subscription, !subscription.complimentary {
                     Button("Hesabı yönet") { Task { await account.manageSubscription() } }
                         .disabled(account.isWorking)
                 }
@@ -185,9 +198,9 @@ struct HostedAccountSettings: View {
         }
         HostedUsageCard(account: account, entitlements: entitlements)
         switch status {
-        case .subscribed, .ending, .grace:
+        case .subscribed, .complimentary, .ending, .grace:
             HostedReferralRow(account: account)
-        case .trial, .expired:
+        case .trial, .expired, .paymentOverdue:
             EmptyView()
         }
         HostedSignOutRow(account: account, isMeetingInFlight: isMeetingInFlight)
@@ -259,12 +272,16 @@ struct HostedSignInStep: View {
                     Text(verbatim: hostedTrialText(left: left, total: total))
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
-                case .subscribed, .ending, .grace:
+                case .subscribed, .complimentary, .ending, .grace:
                     Text("Aboneliğin etkin.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 case .expired:
                     Text("Aboneliğin sona erdi; yeni kayıt için yeniden abone ol.")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                case .paymentOverdue:
+                    Text("Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 }

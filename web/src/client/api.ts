@@ -36,8 +36,9 @@ export type SubscriptionInfo =
 
 /**
  * `GET /v1/referral` yanıtı: davet programı açık mı, abonenin kodu ve davet adresi (abonelik erişimi yoksa ya da program
- * kapalıysa null), katılan, ödülü verilen ve bekleyen arkadaş sayısı, bu yıl kalan ödül, yıllık en çok ödül, ödülün
- * tutarı (USD) ve ödülden önce iadesiz geçmesi gereken gün.
+ * kapalıysa null), katılan, ödülü verilen ve bekleyen arkadaş sayısı, bekleyen ödülün en yakın tahmini tarihi (ISO 8601;
+ * yoksa null), hesabın ücretsiz erişimi (ödül uygulanmaz), bu yıl kalan ödül, yıllık en çok ödül, ödülün tutarı (USD) ve
+ * ödülden önce iadesiz geçmesi gereken gün.
  */
 export interface ReferralInfo {
   readonly enabled: boolean;
@@ -46,6 +47,8 @@ export interface ReferralInfo {
   readonly joined: number;
   readonly rewarded: number;
   readonly pending: number;
+  readonly nextRewardAt: string | null;
+  readonly complimentary: boolean;
   readonly rewardsLeftThisYear: number;
   readonly rewardsPerYear: number;
   readonly rewardUsd: number;
@@ -65,6 +68,7 @@ export interface Entitlements {
   readonly trialEndsAt: string | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
+  /** Hiç abonelik satırı yoksa null; `plan` "subscription" ise her zaman vardır (ayrıştırıcı denetler). */
   readonly subscription: SubscriptionInfo | null;
 }
 
@@ -128,7 +132,7 @@ export interface ApiCall {
   readonly body: JsonObject | null;
   /** Bearer erişim jetonu; kimliksiz istekte null. */
   readonly accessToken: string | null;
-  /** Ağ hatası ve 502/503'te toplam deneme sayısı; yan etkili istekte 1. */
+  /** Ağ hatası ve 502/503/504'te toplam deneme sayısı; yan etkili istekte 1. */
   readonly attempts: number;
 }
 
@@ -235,7 +239,7 @@ function requestError(response: RawResponse, path: string): ApiRequestError {
   return new ApiRequestError(path, response.status, `http_${response.status}`, response.text.slice(0, 300), null);
 }
 
-/** Yeniden denenebilir durum (Worker'ın üst servis ya da harcama hatası değil, geçici ağ geçidi hatası). */
+/** Yeniden denenebilir durum: 502/503/504 (ağ geçidi ya da Worker'ın geçici üst servis hatası). */
 function isRetryableStatus(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
@@ -352,25 +356,18 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   return { status, plan, currentPeriodEnd, cancelAt, complimentary, access, graceEndsAt: null };
 }
 
-/** Nesnedeki mantıksal alan; değilse `ApiResponseError`. */
-function booleanValue(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
-  const value: JsonValue | undefined = object[key];
-  if (typeof value !== "boolean") {
-    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değer değil`, response.text);
-  }
-  return value;
-}
-
 /** `GET /v1/referral` yanıtını okur. */
 export function parseReferral(response: RawResponse, path: string): ReferralInfo {
   const body: JsonObject = parseObject(response, path);
   return {
-    enabled: booleanValue(body, "enabled", response, path),
+    enabled: booleanField(body, "enabled", response, path),
     code: nullableStringField(body, "code", response, path),
     inviteUrl: nullableStringField(body, "inviteUrl", response, path),
     joined: numberField(body, "joined", response, path),
     rewarded: numberField(body, "rewarded", response, path),
     pending: numberField(body, "pending", response, path),
+    nextRewardAt: nullableStringField(body, "nextRewardAt", response, path),
+    complimentary: booleanField(body, "complimentary", response, path),
     rewardsLeftThisYear: numberField(body, "rewardsLeftThisYear", response, path),
     rewardsPerYear: numberField(body, "rewardsPerYear", response, path),
     rewardUsd: numberField(body, "rewardUsd", response, path),
@@ -399,6 +396,11 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
   if (plan !== "trial" && plan !== "subscription") {
     throw new ApiResponseError(path, response.status, `bilinmeyen plan "${plan}"`, response.text);
   }
+  const subscription: SubscriptionInfo | null = parseSubscription(body["subscription"], response, path);
+  // Sunucu planı aboneliğin erişiminden üretir: abonelik planı abonelik satırı olmadan gelmez.
+  if (plan === "subscription" && subscription === null) {
+    throw new ApiResponseError(path, response.status, "abonelik planında abonelik bilgisi yok", response.text);
+  }
   return {
     userId: stringField(body, "userId", response, path),
     plan,
@@ -408,6 +410,6 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
     trialEndsAt: body["trialEndsAt"] === null ? null : stringField(body, "trialEndsAt", response, path),
     monthlyHoursUsed: numberField(body, "monthlyHoursUsed", response, path),
     monthlyHoursCap: numberField(body, "monthlyHoursCap", response, path),
-    subscription: parseSubscription(body["subscription"], response, path),
+    subscription,
   };
 }

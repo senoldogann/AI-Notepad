@@ -101,7 +101,7 @@ public struct LocalFinalTranscriber: FinalTranscriber {
             notice = String(localized: "Konuşmacılar ayrılamadı (\(userFacingMessage(error: error))); metin tek konuşmacı olarak kaydedildi. İnternete bağlanıp \"Tekrar işle\"yi dene.")
         }
         localPassLogger.info("Yerel son geçiş bitti, kelime: \(words.count, privacy: .public), dönem: \(turns.count, privacy: .public)")
-        return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language, notice: notice)
+        return FinalPassResult(segments: finalSegments(words: attributeSpeakers(words: words, turns: turns), gapSec: 1.5), language: language, notice: notice, coveredUntilSec: nil)
     }
 
     /// Sabit dil ya da otomatikte konuşmanın ortasından alınan 30 sn'lik örnekle aday diller arasında algılanan dil

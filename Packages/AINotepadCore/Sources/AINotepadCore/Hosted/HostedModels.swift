@@ -60,6 +60,9 @@ public struct HostedSubscription: Decodable, Sendable, Equatable {
     /// Aboneliğin planı (`monthly`, `yearly`); tanınmayan eski fiyatta ve alanı bilmeyen eski sunucuda nil. Tanınmayan
     /// değer hak yanıtını bozmasın diye metin olarak okunur; arayüz `billingPlan`'ı kullanır.
     public let plan: String?
+    /// Yöneticinin verdiği ücretsiz erişim (Stripe'ta karşılığı yok): plan `monthly` görünür ama ödeme, yenileme ve
+    /// yönetilecek bir şey yoktur; davet ödülü uygulanmaz.
+    public let complimentary: Bool
 
     /// Aboneliğin planı; bilinmiyorsa nil.
     public var billingPlan: HostedBillingPlan? {
@@ -88,10 +91,14 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
     public let inviteUrl: URL?
     /// Kodla abone olan arkadaş sayısı.
     public let joined: Int
-    /// Kazanılan (hesaba yazılan) ücretsiz ay sayısı.
+    /// Verilen ödül sayısı (her biri bir aylık ücret kadar alacak).
     public let rewarded: Int
     /// Abone olmuş ama ödülü henüz yazılmamış arkadaş sayısı (ilk ödemesi bekleme süresinde).
     public let pending: Int
+    /// Bekleyen ödüllerin en yakınının tahmini tarihi; bekleyen yoksa nil.
+    public let nextRewardAt: Date?
+    /// Hesabın ücretsiz erişimi var: ödenecek fatura olmadığından ödül uygulanmaz.
+    public let complimentary: Bool
     public let rewardsLeftThisYear: Int
     public let rewardsPerYear: Int
     /// Ödülün tutarı (USD; bir aylık abonelik).
@@ -100,8 +107,8 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
     public let holdDays: Int
 
     public init(
-        enabled: Bool, code: String?, inviteUrl: URL?, joined: Int, rewarded: Int, pending: Int,
-        rewardsLeftThisYear: Int, rewardsPerYear: Int, rewardUsd: Double, holdDays: Int
+        enabled: Bool, code: String?, inviteUrl: URL?, joined: Int, rewarded: Int, pending: Int, nextRewardAt: Date?,
+        complimentary: Bool, rewardsLeftThisYear: Int, rewardsPerYear: Int, rewardUsd: Double, holdDays: Int
     ) {
         self.enabled = enabled
         self.code = code
@@ -109,6 +116,8 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
         self.joined = joined
         self.rewarded = rewarded
         self.pending = pending
+        self.nextRewardAt = nextRewardAt
+        self.complimentary = complimentary
         self.rewardsLeftThisYear = rewardsLeftThisYear
         self.rewardsPerYear = rewardsPerYear
         self.rewardUsd = rewardUsd
@@ -282,10 +291,15 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case trial(left: Int, total: Int)
     /// Abonelik etkin; dönem sonunda yenilenir.
     case subscribed(renewsAt: Date)
+    /// Yöneticinin verdiği ücretsiz tam erişim: ödeme ve yenileme yok.
+    case complimentary
     /// Abonelik iptal edildi; erişim bu ana dek sürer, yenilenmez.
     case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
     case grace(endsAt: Date)
+    /// Ödeme alınamadı ve ek süre bitti, ama abonelik Stripe'ta sürüyor (`past_due`, `unpaid`): ödeme yeniden denenir;
+    /// yeni kayıt için kart "Hesabı yönet"ten güncellenir (yeni abonelik açılamaz, sunucu `subscription_exists` der).
+    case paymentOverdue
     /// Abonelik sona erdi (iptal edildi ya da ödenmedi) ve deneme hakkı kalmadı: yeni kayıt için yeniden abone olunmalı.
     case expired(endedAt: Date)
 }
@@ -315,11 +329,18 @@ public func isHostedTrialRefusalActive(refusedAt: Date?, now: Date, maxAgeSec: D
     return now.timeIntervalSince(refusedAt) < maxAgeSec
 }
 
-/// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.
+/// Ödemesi alınamamış ama Stripe'ta süren aboneliğin durumları: erişim ek süreden sonra kapanır, abonelik bitmez.
+private let hostedUnpaidSubscriptionStatuses: Set<String> = ["past_due", "unpaid"]
+
+/// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Erişimi kapanmış abonelikte deneme
+/// hakkı kalmadıysa ödemesi alınamamış (`paymentOverdue`) ya da bitmiş (`expired`) abonelik. Saf fonksiyondur.
 public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStatus {
     if let subscription = entitlements.subscription {
         switch subscription.access {
         case .active:
+            if subscription.complimentary {
+                return .complimentary
+            }
             if let cancelAt = subscription.cancelAt {
                 return .ending(endsAt: cancelAt)
             }
@@ -327,8 +348,12 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
         case .grace:
             return .grace(endsAt: subscription.graceEndsAt ?? subscription.currentPeriodEnd)
         case .none:
-            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi".
+            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi". Stripe yenilemede dönem sonunu
+            // hemen ilerlettiği için ödemesi alınamamış abonelikte dönem sonu gelecektedir: "sona erdi" denmez.
             if entitlements.trialMeetingsLeft == 0 {
+                if hostedUnpaidSubscriptionStatuses.contains(subscription.status) {
+                    return .paymentOverdue
+                }
                 return .expired(endedAt: subscription.cancelAt ?? subscription.currentPeriodEnd)
             }
         }

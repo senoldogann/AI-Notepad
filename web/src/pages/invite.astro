@@ -1,6 +1,8 @@
 ---
-// Davet sayfası ("bir ay ver, bir ay kazan"): nasıl çalıştığı (üç adım), kurallar (yıllık en çok 12 ödül, kişi başına bir
-// ödül, iade ve itirazda ödül yok, nakit değeri yok, program değişebilir), indirme ve fiyat bağlantıları. Davet
+// Davet sayfası ("bir ay ver, bir ay kazan"): nasıl çalıştığı (üç adım), kurallar (yıllık en çok 12 ödül, aynı anda en
+// çok 3 bekleyen davet, yeni ödeyen hesap ya da kart başına bir ödül, iade ve itirazda ödül yok, ücretsiz erişimde ödül
+// yok, nakit değeri yok, program değişebilir), indirme ve fiyat bağlantıları. Davetin tek tam anlatımı burasıdır; fiyat
+// sayfası buraya bağlanır, yasal kurallar terms.astro `#invites`'tadır. Davet
 // bağlantısıyla (`/invite?code=…`) gelinirse kod kutusu görünür ve kod bu tarayıcıda saklanır (src/client/invite.ts);
 // hesap sayfası abone olurken onu doldurur. Kurallar sunucunun davet kurallarıyla aynı tutulur.
 import Base from "../layouts/Base.astro";

@@ -23,12 +23,6 @@ export interface TitledText {
   readonly text: string;
 }
 
-/** Ürün gerçekleri kartı: büyük değer ve kısa açıklama. */
-export interface FactCopy {
-  readonly value: string;
-  readonly label: string;
-}
-
 /** Simgeli, başlıklı kısa metin (kartlar). */
 export interface IconText extends TitledText {
   readonly icon: IconName;
@@ -64,13 +58,10 @@ export interface CommonCopy {
   readonly darkMode: string;
   readonly price: string;
   readonly perMonth: string;
-  /** Yıllık planın fiyatı (`$49`) ve dönemi. */
+  /** Yıllık planın fiyatı (`$49`). */
   readonly yearlyPrice: string;
-  readonly perYear: string;
   readonly offer: string;
   readonly requirementsShort: string;
-  /** Fiyatın vergiler dahil olduğu (fiyatın hemen altında). */
-  readonly taxNote: string;
   /** Otomatik yenileme ve iptal (Abone ol düğmesinin yanında). */
   readonly renewalNote: string;
   /** Paylaşım kartı görselinin (public/og.png) metin karşılığı. */
@@ -134,11 +125,12 @@ export interface HomeCopy {
   /** Kahraman düğmelerinin altındaki kısa güvenceler (engel kaldıranlar). */
   readonly assurances: readonly string[];
   readonly demo: DemoCopy;
-  /** Kahramanın altındaki tanıtım videosu (public/video; kendiliğinden oynamaz). */
+  /** Kahramanın altındaki tanıtım videosu (public/video; sessiz, döngülü, görününce oynar). */
   readonly launchVideo: {
     readonly eyebrow: string;
     readonly title: string;
-    readonly caption: string;
+    /** Videonun erişilebilir adı: ekranda yazı yok, ekran okuyucular için ne gösterdiği. */
+    readonly description: string;
     /** Video oynatılamazsa görünen metin ve dosya bağlantısı. */
     readonly fallback: string;
     readonly fallbackLink: string;
@@ -156,14 +148,6 @@ export interface HomeCopy {
     readonly live: ShowcaseShot;
     readonly ask: ShowcaseShot;
     readonly home: ShowcaseShot;
-  };
-  /** Doğrulanabilir ürün gerçekleri kartları (uydurma kullanıcı sayısı yok); her kartın küçük bir örnek görseli var. */
-  readonly facts: {
-    readonly label: string;
-    readonly noBot: FactCopy & { readonly people: readonly string[]; readonly note: string };
-    readonly live: FactCopy & { readonly status: string; readonly line: string };
-    readonly languages: FactCopy & { readonly sample: readonly string[] };
-    readonly tasks: FactCopy & { readonly sample: readonly string[] };
   };
   readonly featuresEyebrow: string;
   readonly featuresTitle: string;
@@ -204,12 +188,12 @@ export interface HomeCopy {
       readonly source: string;
     };
   };
-  /** Gizlilik ve güven ızgarası. */
+  /** Gizlilik ve güven ızgarası (her öğe kendi simgesiyle). */
   readonly trust: {
     readonly eyebrow: string;
     readonly title: string;
     readonly lead: string;
-    readonly items: readonly TitledText[];
+    readonly items: readonly IconText[];
     readonly link: string;
   };
   readonly pricingTitle: string;
@@ -326,10 +310,10 @@ export interface AccountCopy {
   /** Ödeme uygulamadan açıldıysa tarayıcıda oturum yoktur: giriş sayfası yerine bu not görünür. */
   readonly paymentDoneSignedOut: { readonly title: string; readonly text: string; readonly signIn: string };
   readonly planLabel: string;
+  /** Denemede kalan toplantı ölçerinin erişilebilir adı. */
   readonly trialLabel: string;
   readonly hoursLabel: string;
   readonly hoursNote: string;
-  readonly renewalLabel: string;
   readonly subscribe: string;
   /** Abone olmadan önce plan seçimi (seçenekler `copy.pricing.plans`'tan). */
   readonly planChoiceLegend: string;
@@ -341,7 +325,7 @@ export interface AccountCopy {
     readonly apply: string;
     readonly remove: string;
   };
-  /** Abone ol düğmesinin yanında: vergiler dahil, otomatik yenileme, iptal, satıcı. */
+  /** Abone ol düğmesinin altında: otomatik yenileme, iptal, satıcı (vergiler plan seçeneklerinde yazar). */
   readonly subscribeNote: string;
   readonly manage: string;
   /** Aboneliği yönet düğmesinin yanında (kart, iptal; makbuzlar Link'ten e-postayla, sipariş geçmişi link.com'da). */
@@ -663,7 +647,6 @@ export interface BlogCopy {
   readonly byline: string;
   /** "6 min read" gibi okuma süresinin eki. */
   readonly minutesRead: string;
-  readonly readPost: string;
   readonly backToBlog: string;
   readonly ctaTitle: string;
   readonly ctaText: string;
@@ -764,10 +747,8 @@ export const copy: Copy = {
     price: "$5.99",
     perMonth: "/ month",
     yearlyPrice: "$49",
-    perYear: "/ year",
     offer: "3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included",
     requirementsShort: "macOS 15 or later · Apple silicon",
-    taxNote: "Taxes included.",
     renewalNote: "Renews automatically every month or year, depending on your plan, until you cancel. Cancel anytime.",
     ogImageAlt: `The ${productName} logo and the tagline “${tagline}” on a soft pastel gradient, above a small sound wave.`,
     footer: {
@@ -794,32 +775,7 @@ export const copy: Copy = {
     title: tagline,
     lead: `${productName} transcribes the conversation live, translates it if you like, and has your note ready when the meeting ends: your tasks first, then decisions and a summary. No bot joins the call, and no one else in the meeting needs to install anything.`,
     secondaryCta: "See pricing",
-    assurances: ["3 meetings or 7 days free", "No credit card", "No bot joins your call"],
-    facts: {
-      label: "At a glance",
-      noBot: {
-        value: "No bot",
-        label: `Nothing joins your call. ${productName} listens on your Mac.`,
-        people: ["E", "M", "A", "Y"],
-        note: "4 people · no bots",
-      },
-      live: {
-        value: "Live",
-        label: "Transcript and translation appear while people talk.",
-        status: "Listening · 23:20",
-        line: "So the beta opens on the fourteenth?",
-      },
-      languages: {
-        value: "30+",
-        label: "Languages for your meetings, notes and translations.",
-        sample: ["English", "Suomi", "Türkçe", "Deutsch", "Español", "日本語"],
-      },
-      tasks: {
-        value: "Tasks first",
-        label: "Every note opens with who does what, by when.",
-        sample: ["Release notes · Fri", "Pricing table · Today"],
-      },
-    },
+    assurances: ["3 meetings or 7 days free", "No credit card"],
     demo: {
       label: `${productName} recording a meeting and writing the note`,
       listening: "Listening",
@@ -846,8 +802,7 @@ export const copy: Copy = {
     launchVideo: {
       eyebrow: "In one minute",
       title: "See it at work.",
-      caption:
-        "A 66-second tour, with music: the live transcript and translation, your tasks on top of the note, asking across your meetings, and sending notes where your team works.",
+      description: `A one-minute tour of ${productName}: the live transcript and translation during a meeting, the note with your tasks on top, asking across your meetings, and sending notes where your team works.`,
       fallback: "Your browser can't play this video here.",
       fallbackLink: "Open the video file",
     },
@@ -863,20 +818,20 @@ export const copy: Copy = {
     showcase: {
       eyebrow: "Inside the app",
       title: "Quiet while you talk. Organised when you're done.",
-      lead: "One window for all your meetings, and a small panel that stays out of the way while you record.",
+      lead: "Real screens from the app: one window for all your meetings, and a small panel while you record.",
       note: {
         label: "After the meeting",
-        title: "Your note, tasks first",
+        title: "Ready when you hang up",
         alt: `The Product weekly note in the ${productName} app: a list of recent meetings on the left and, under the meeting cover and a who-spoke-when timeline, your three tasks with due dates: write the beta release notes by Friday, send Ayşe the pricing table today, set up a weekly call with support on Wednesday.`,
       },
       live: {
         label: "During the meeting",
-        title: "Live transcript and translation",
+        title: "Every sentence, as it's said",
         alt: `The ${productName} live panel while recording a Finnish meeting: each speaker's Finnish sentences with the English translation underneath, your own lines in English, and a “What did I miss?” button at the bottom.`,
       },
       ask: {
         label: "Any time later",
-        title: "Answers with sources",
+        title: "Search every meeting",
         alt: `The Ask page in ${productName}: the question “What did we decide about the budget?” answered in two bullet points with numbered citations, and a row showing 3 sources from 2 meetings.`,
       },
       home: {
@@ -930,12 +885,14 @@ export const copy: Copy = {
       title: "Your meetings stay yours.",
       lead: "Built for conversations you'd rather keep private, by a small company in Finland.",
       items: [
-        { title: "No bot in your call", text: "Gistsmith listens on your Mac. Nobody sees an extra participant, and you don't have to ask anyone to let it in." },
-        { title: "Notes stay on your Mac", text: "Notes, transcripts and recordings live in the app on your Mac. Our servers don't keep your notes or recordings." },
-        { title: "Audio isn't kept by us", text: "Audio is sent only to be transcribed. Our servers don't store it, and your recordings stay on your Mac." },
-        { title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
-        { title: "EU company, GDPR", text: "Gistsmith is run from Finland under EU data protection law. Our account database is hosted in the EU." },
-        { title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
+        {
+          icon: "laptop",
+          title: "Stored on your Mac",
+          text: "Notes, transcripts and recordings live in the app on your Mac. Audio is sent only to be transcribed; our servers don't store your audio or notes.",
+        },
+        { icon: "sparkle", title: "Not used to train AI", text: "Your meetings aren't used to train our providers' models. We've opted out wherever that's a setting." },
+        { icon: "globe", title: "EU company, GDPR", text: `${productName} is run from Finland under EU data protection law. Our account database is hosted in the EU.` },
+        { icon: "check-circle", title: "Delete any time", text: "Delete your account from the website whenever you like; your account is removed and any subscription ends." },
       ],
       link: "Read the privacy policy",
     },
@@ -975,7 +932,7 @@ export const copy: Copy = {
       },
     },
     pricingTitle: "Simple pricing, monthly or yearly.",
-    pricingLead: "Free for 3 meetings or 7 days, whichever comes first, no card needed. Then $5.99 a month or $49 a year, taxes included. Cancel anytime.",
+    pricingLead: "One plan with everything in it, billed monthly or yearly. Try it on your own meetings before you pay.",
     pricingCta: "Pricing details",
     pricingCompare: "Compare with Granola and Otter",
     faqTitle: "Questions",
@@ -994,20 +951,12 @@ export const copy: Copy = {
           "While you record, the audio streams from your Mac to Deepgram for the live transcript; Deepgram is asked not to keep it or use it for training. If that isn't available, the live transcript is produced on your Mac instead. When the meeting ends, the audio is passed through our server to ElevenLabs to separate speakers and produce the final transcript; for notes and translation the text goes to Anthropic's Claude model. Our servers don't store audio or notes; they count the duration and hold the final transcript encrypted for up to 2 hours, only so it can be re-sent if the connection drops. ElevenLabs and Anthropic may keep what they process for a time under their own retention rules (Anthropic deletes it within 30 days); the privacy policy has the details.",
       },
       {
-        question: "Where are my notes stored?",
-        answer: "On your Mac. Notes, transcripts and recordings live in the app's folder on your Mac; our servers don't keep them (the final transcript is held encrypted for up to 2 hours so it can be re-sent, then deleted). You can export, share or delete them in the app.",
-      },
-      {
         question: "Which languages are supported?",
-        answer: "English, Finnish, Turkish and dozens more. You choose the language of your notes and translations.",
-      },
-      {
-        question: "How do I cancel?",
-        answer: "With “Manage subscription” on your account page, or at link.com. After cancelling you keep access until the end of the period you paid for.",
+        answer: "More than 30, including English, Finnish and Turkish. You choose the language of your notes and translations.",
       },
     ],
     finalTitle: "Let it write the note for your next meeting.",
-    finalLead: "3 meetings or 7 days free. Set up in a minute.",
+    finalLead: "Set up in a minute, then just start listening.",
   },
   pricing: {
     meta: {
@@ -1015,7 +964,7 @@ export const copy: Copy = {
       description: "$5.99 a month or $49 a year, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
     title: "Simple pricing, monthly or yearly.",
-    lead: "Try it free for 3 meetings or 7 days. If you like it, continue for $5.99 a month, or $49 a year and save 32%. Taxes included.",
+    lead: "Try it free for 3 meetings or 7 days, no card needed. If you like it, pick monthly or yearly.",
     plansTitle: "Plans",
     plans: [
       {
@@ -1037,18 +986,16 @@ export const copy: Copy = {
         cta: "Choose yearly",
       },
     ],
-    plansNote: "Both plans include everything below and start with 3 meetings or 7 days free. Got an invite from a friend? {invite}",
+    plansNote: "Both plans include everything below. Got an invite from a friend? {invite}",
     plansInviteLink: "How invites work",
     includedTitle: "Everything included",
     planTagline: "Everything from live transcript to tasks.",
     included: [
-      { icon: "gift", text: "3 meetings or 7 days free, no card needed" },
-      { icon: "calendar", text: "Up to 10 hours of meetings a month (fair use)" },
-      { icon: "timer", text: "Up to 4 hours per meeting" },
-      { icon: "waveform", text: "Live transcript, live translation, “What did I miss?” and Ask" },
-      { icon: "note", text: "Post-meeting note: tasks, decisions, summary and speaker separation" },
+      { icon: "waveform", text: "Live transcript and live translation" },
+      { icon: "note", text: "A note after every meeting: your tasks, decisions, summary and who said what" },
+      { icon: "search", text: "“What did I miss?” and Ask across all your meetings" },
       { icon: "plug", text: "Send to Notion, Slack, Linear, Jira and more" },
-      { icon: "check-circle", text: "Cancel anytime" },
+      { icon: "sparkle", text: "Your AI apps can read your meetings through MCP" },
     ],
     startFree: "Start free",
     limitsTitle: "The limits, plainly",
@@ -1073,17 +1020,12 @@ export const copy: Copy = {
       },
       {
         question: "What if a payment fails?",
-        answer: "The payment is retried over a few days. You keep access meanwhile and can update your card under “Manage subscription” or at link.com.",
+        answer: "The payment is retried over the following days. You keep access for up to 7 days; after that you can't start new meetings until the payment goes through. Update your card under “Manage subscription” or at link.com.",
       },
       {
         question: "Can I switch between monthly and yearly?",
         answer:
           "Not with a single click yet. Cancel your current plan with “Manage subscription” on your account page; you keep access until the end of the period you paid for. When it has ended, subscribe again from your account page and choose the other plan.",
-      },
-      {
-        question: "How do invites work?",
-        answer:
-          "Subscribers get a personal invite code in the app and on their account page. A friend who subscribes with it gets their first month free on the monthly plan, or $5.99 off their first year on the yearly plan. Once your friend's first payment has gone through and hasn't been refunded for 30 days, you get $5.99 off your next payment. You can earn up to 12 rewards a year.",
       },
       {
         question: "Can I get a refund?",
@@ -1108,7 +1050,7 @@ export const copy: Copy = {
     installSteps: [
       { title: "Install", text: `Open the disk image and drag ${productName} into Applications.` },
       { title: "Allow audio", text: "Open the app and allow the microphone and system audio, so it hears both sides of the call." },
-      { title: "Sign in", text: "Sign in with Apple or Google and start listening. Your first 3 meetings or 7 days are free." },
+      { title: "Sign in", text: "Sign in with Apple or Google and start listening." },
     ],
     footnote: "Updates arrive automatically inside the app.",
     helpCta: "Questions? Contact us",
@@ -1148,7 +1090,8 @@ export const copy: Copy = {
       languages: "30+ languages, with live translation during the meeting",
       notes: "The note starts with your own tasks, then decisions and a summary; templates for different kinds of meetings",
       ask: "Ask across all your meetings; answers link to the meetings they came from",
-      integrations: "Slack, Microsoft Teams, Discord, Notion, Apple Notes, an Obsidian folder, webhooks and MCP",
+      integrations:
+        "Notion, Apple Notes, Slack, Microsoft Teams, Discord, Zoom Team Chat; tasks to Linear, Jira and Apple Reminders; Markdown folders (Obsidian), webhooks (Zapier, Make, n8n) and MCP",
       storage: "Notes, transcripts and recordings are saved on your Mac",
       plans: "One personal plan, billed monthly or yearly",
     },
@@ -1171,8 +1114,8 @@ export const copy: Copy = {
         },
         name: "Granola",
         title: `${productName} vs Granola`,
-        lead: "Both take notes without a bot joining the call. Granola runs on more devices and has team plans; Gistsmith is a Mac app with simple pricing, notes that start with your tasks and live translation.",
-        summary: "Both work without a bot. Granola has a free plan, mobile apps and team plans; Gistsmith is Mac-only, with one personal plan.",
+        lead: `Both take notes without a bot joining the call. Granola runs on more devices and has team plans; ${productName} is a Mac app with simple pricing, notes that start with your tasks and live translation.`,
+        summary: `Both work without a bot. Granola has a free plan, mobile apps and team plans; ${productName} is Mac-only, with one personal plan.`,
         pricingUrl: "https://www.granola.ai/pricing",
         values: {
           price: "Basic $0; Business $14 per user a month; Enterprise $35 per user a month",
@@ -1220,8 +1163,8 @@ export const copy: Copy = {
         },
         name: "Otter.ai",
         title: `${productName} vs Otter.ai`,
-        lead: "Otter joins Zoom, Microsoft Teams and Google Meet as a bot to write notes. Gistsmith listens on your Mac instead, so nothing extra appears in the call. Otter has a free tier and team plans; Gistsmith has one personal plan.",
-        summary: "Otter joins calls as a bot and has a free tier. Gistsmith listens on your Mac, with no bot in the call.",
+        lead: `Otter joins Zoom, Microsoft Teams and Google Meet as a bot to write notes. ${productName} listens on your Mac instead, so nothing extra appears in the call. Otter has a free tier and team plans; ${productName} has one personal plan.`,
+        summary: `Otter joins calls as a bot and has a free tier. ${productName} listens on your Mac, with no bot in the call.`,
         pricingUrl: "https://otter.ai/pricing",
         values: {
           price: "Basic free; Pro $16.99 per user a month billed monthly ($8.33 a month billed annually); Business $19.99 per user a month billed annually",
@@ -1267,7 +1210,7 @@ export const copy: Copy = {
   blog: {
     meta: {
       title: `Blog — ${productName}`,
-      description: "Practical guides on meeting notes, task lists and recording calls on a Mac, from the team behind Gistsmith.",
+      description: `Practical guides on meeting notes, task lists and recording calls on a Mac, from the team behind ${productName}.`,
     },
     eyebrow: "Blog",
     title: "Notes on better meetings",
@@ -1276,7 +1219,6 @@ export const copy: Copy = {
     feedLink: "RSS feed",
     byline: "By",
     minutesRead: "min read",
-    readPost: "Read the post",
     backToBlog: "All posts",
     ctaTitle: `Try ${productName}`,
     ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included.",
@@ -1416,10 +1358,9 @@ export const copy: Copy = {
       signIn: "Sign in to see your account here",
     },
     planLabel: "Plan",
-    trialLabel: "Free trial",
+    trialLabel: "Free trial meetings left",
     hoursLabel: "Usage this month",
     hoursNote: "Resets on the first day of each month (UTC).",
-    renewalLabel: "Subscription",
     subscribe: "Subscribe",
     planChoiceLegend: "Choose a plan",
     invite: {
@@ -1429,13 +1370,13 @@ export const copy: Copy = {
       apply: "Apply",
       remove: "Remove",
     },
-    subscribeNote: "Taxes included. Your plan renews automatically every month or year until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
+    subscribeNote: "Your plan renews automatically every month or year until you cancel. Cancel anytime. Sold through Link, Stripe's payment service.",
     manage: "Manage subscription",
     manageNote: "Update your card or cancel anytime. Receipts are emailed to you by Link, and your order history is at link.com. Your plan renews automatically until you cancel.",
     signOut: "Sign out",
     referral: {
       title: "Give a month, get a month",
-      text: "Friends who subscribe with your code get their first month free. For each one who stays, you get $5.99 off your next payment, up to 12 times a year.",
+      text: "Friends who subscribe with your code get their first month free on the monthly plan, or $5.99 off their first year on the yearly plan. For each one who stays, you get a free month: $5.99 off your next payment, up to 12 times a year.",
       codeLabel: "Your invite code",
       copyLink: "Copy invite link",
       copied: "Link copied",
@@ -1447,7 +1388,7 @@ export const copy: Copy = {
     helpContact: "Contact support",
     dangerTitle: "Delete account",
     dangerText:
-      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law. To prevent free-trial abuse, a pseudonymous record of how many free-trial meetings your sign-in has used is kept for up to 24 months, so signing in again with the same account continues the trial instead of restarting it.",
+      "Your account, sessions, device registrations and usage history are permanently deleted, and any unfinished subscription is cancelled immediately. Your notes and recordings stay on your Mac. Receipts and payment records are kept by Stripe and Link as required by law. To prevent free-trial abuse, a pseudonymous record of how many free-trial meetings your sign-in has used is kept for up to 24 months, so signing in again with the same account continues the trial instead of restarting it. If you subscribed with an invite, a pseudonymous record that you used one is also kept for up to 24 months so it can't be used twice.",
     deleteButton: "Delete account",
     dialogTitle: "Delete your account?",
     dialogText: "This can't be undone. If you have a subscription, it is cancelled immediately and ends with your account; the remaining time is not refunded automatically.",
@@ -1456,7 +1397,7 @@ export const copy: Copy = {
     cancel: "Cancel",
     confirmDelete: "Permanently delete my account",
     deletedTitle: "Your account was deleted",
-    deletedText: "Your account data on our server is gone, apart from the pseudonymous free-trial record described in the privacy policy. The notes and recordings on your Mac are still there.",
+    deletedText: "Your account data on our server is gone, apart from the pseudonymous free-trial and invite records described in the privacy policy. The notes and recordings on your Mac are still there.",
     deletedRedirect: "Taking you to the home page…",
     backHome: "Back to the home page",
     noScript: "The account page needs JavaScript.",
@@ -1464,11 +1405,11 @@ export const copy: Copy = {
   invite: {
     meta: {
       title: `Invite a friend — ${productName}`,
-      description: `Give a month, get a month: a friend who subscribes to ${productName} with your invite code gets their first month free, and you get $5.99 off your next payment.`,
+      description: `Give a month, get a month: a friend who subscribes to ${productName} with your invite code gets their first month free (or $5.99 off a yearly plan), and you get $5.99 off your next payment.`,
     },
     eyebrow: "Invite a friend",
     title: "Give a month, get a month.",
-    lead: `Share ${productName} with a friend. They get their first month free, and when they stay, you get a month too.`,
+    lead: `Share ${productName} with a friend. They get their first month free (or $5.99 off a yearly plan), and when they stay, you get $5.99 off your next payment.`,
     stepsTitle: "How it works",
     steps: [
       {
@@ -1484,18 +1425,19 @@ export const copy: Copy = {
       {
         icon: "check-circle",
         title: "You get a month",
-        text: "Once your friend's first payment has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month.",
+        text: "Once your friend's first paid charge (after the free month on the monthly plan) has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month; on the yearly plan it comes off your next renewal.",
       },
     ],
     rulesTitle: "The rules, plainly",
     rules: [
-      "Up to 12 rewards per person in any 12 months.",
-      "One reward for each new paying account. Your own account, or another account of yours, doesn't count.",
+      "Up to 12 rewards per person in any 12 months, and up to 3 invites waiting for their reward at a time.",
+      "One reward for each new paying account. Your own account, another account of yours, or the same card on several invited accounts doesn't count.",
       "A reward is cancelled if your friend's first payment is refunded or disputed.",
       "Rewards are credit on your next payments, not cash, and can't be exchanged or transferred.",
+      "Accounts with free access from us can share their code, and their friends still get the discount, but they don't earn rewards while that access lasts.",
       "We may change or end the invite programme; rewards already earned stay yours.",
     ],
-    codeLabel: "Your invite code",
+    codeLabel: "Your friend's invite code",
     codeNote: "We've saved it in this browser. Subscribe here, or sign in to the Mac app and enter it when you subscribe.",
     subscribeWithCode: "Subscribe with this code",
     ownCodeTitle: "Looking for your own code?",

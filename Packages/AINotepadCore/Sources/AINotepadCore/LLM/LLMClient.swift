@@ -5,7 +5,7 @@ import os
 public enum LLMTier: String, Sendable {
     /// Canlı cümle çevirisi: hızlı ve ucuz (Claude Haiku).
     case fast
-    /// Toplantı notu, not düzenleme ve arşiv soruları (Claude Opus).
+    /// Toplantı notu, not düzenleme ve arşiv soruları (sağlayıcının akıllı sınıf modeli; Claude'da varsayılan Haiku).
     case smart
     /// Kayıt sırasında kullanıcının beklediği akıllı istekler: "Ne kaçırdım?" ve toplantı sorusu. Kendi anahtarlı
     /// sağlayıcılar bunu `smart` gibi işler; abonelik sürümü daha düşük effort'la (hızlı yanıt) gönderir.
@@ -177,18 +177,27 @@ public func sendLLM(provider: LLMProvider, request: LLMRequest) async throws -> 
         }
         return try await sendOnDevice(config: config, request: request)
     case .hosted(let config):
+        return try await withHostedTokenRefresh(config: config) { () async throws -> String in
+            try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
+        }
+    }
+}
+
+/// Abonelik sunucusuna yapay zekâ çağrısı (tek istek ya da akış): erişim jetonu süresinden önce reddedilirse (401; ör.
+/// sunucu anahtarı döndü) bir kez yenilenip `operation` yeniden çalıştırılır. Abonelik gerektiren ret (deneme bitti vb.)
+/// ilk denemede de yeniden denemede de uygulamaya teklifi gösterttirir, sonra fırlatılır.
+func withHostedTokenRefresh(config: HostedLLMConfig, operation: () async throws -> String) async throws -> String {
+    do {
         do {
-            return try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
+            return try await operation()
         } catch LLMError.hosted(let error) where error.status == 401 {
-            // Erişim jetonu süresinden önce reddedildi (ör. sunucu anahtarı döndü): bir kez yenilenip yeniden denenir.
             llmLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
             try await config.credentials.refreshAccessToken()
-            return try await sendPreparedLLM(call: try await prepareHostedCall(config: config, request: request))
-        } catch LLMError.hosted(let error) {
-            // Abonelik gerektiren ret (deneme bitti vb.): uygulama teklifi gösterir.
-            announceIfSubscriptionRequired(error: error)
-            throw LLMError.hosted(error)
+            return try await operation()
         }
+    } catch LLMError.hosted(let error) {
+        announceIfSubscriptionRequired(error: error)
+        throw LLMError.hosted(error)
     }
 }
 

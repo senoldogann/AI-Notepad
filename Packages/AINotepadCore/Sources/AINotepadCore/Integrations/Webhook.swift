@@ -277,9 +277,6 @@ func teamsCardText(markdown: String) -> String {
 private let webhookLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "Webhook")
 private let webhookAttempts: Int = 3
 
-/// Gövdeyi JSON olarak gönderir. Yalnızca istek sunucuya ulaşmadıysa (bağlantı kurulamadı) ya da 429'da 3 deneme (1, 2 sn
-/// bekleyerek, uyarı logu): zaman aşımı ve 5xx'te sunucu mesajı almış olabilir, yeniden deneme notu kanala iki kez
-/// düşürürdü. Adres gizli olduğu için log ve hatada yalnızca sunucu adı yer alır.
 /// Discord'da girişle oluşturulan webhook'u siler (bağlantı kaldırılınca sunucuda kullanılabilir adres kalmasın).
 /// Zaten silinmişse (404) hata değildir.
 public func deleteDiscordWebhook(url: URL) async throws {
@@ -298,6 +295,9 @@ public func deleteDiscordWebhook(url: URL) async throws {
     }
 }
 
+/// Gövdeyi JSON olarak gönderir. Yalnızca istek sunucuya ulaşmadıysa (bağlantı kurulamadı) ya da 429'da 3 deneme (1, 2 sn
+/// bekleyerek, uyarı logu): zaman aşımı ve 5xx'te sunucu mesajı almış olabilir, yeniden deneme notu kanala iki kez
+/// düşürürdü. Adres gizli olduğu için log ve hatada yalnızca sunucu adı yer alır.
 public func sendWebhook(url: URL, payload: Data) async throws {
     let host: String = url.host() ?? "?"
     var request: URLRequest = URLRequest(url: url)

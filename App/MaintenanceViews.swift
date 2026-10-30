@@ -145,8 +145,12 @@ struct UpdateToast: View {
         if updater.isRelaunchPostponed {
             return "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek."
         }
+        // Çıkışta kendiliğinden kurulum yalnızca indirilmiş güncellemede olur (otomatik güncelleme kapalıyken bulunan
+        // güncelleme indirilmemiştir).
         if isBusy {
-            return "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+            return update.isReadyToInstall
+                ? "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+                : "Kayıt ya da işleme sürerken güncellenmez; bitince güncelleyebilirsin."
         }
         return nil
     }
@@ -222,7 +226,12 @@ struct CrashReportsSettings: View {
                 NoticeText(problem, severity: .error)
             }
         } control: {
-            Button(isExpanded ? "Çökme raporlarını gizle" : "Çökme raporlarını göster") { isExpanded.toggle() }
+            HStack(spacing: 8) {
+                if !center.unreadableFiles.isEmpty {
+                    Button("Okunamayanları sil") { center.deleteUnreadable() }
+                }
+                Button(isExpanded ? "Çökme raporlarını gizle" : "Çökme raporlarını göster") { isExpanded.toggle() }
+            }
         }
         if isExpanded {
             if center.reports.isEmpty {
