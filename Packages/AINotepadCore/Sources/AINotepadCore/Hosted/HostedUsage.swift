@@ -79,7 +79,7 @@ public func hostedUsageNotice(entitlements: HostedEntitlements) -> HostedUsageNo
     case .expired:
         // Başlat düğmesinin yanındaki neden yeterli (bkz. `hostedStartBlock`).
         return nil
-    case .subscribed, .ending, .grace:
+    case .subscribed, .complimentary, .ending, .grace:
         switch hostedUsageLevel(fraction: hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)) {
         case .full:
             return .monthlyFull
@@ -132,7 +132,7 @@ public func hostedStartBlock(entitlements: HostedEntitlements) -> HostedStartBlo
         return left == 0 ? .trialEnded : nil
     case .expired:
         return .subscriptionEnded
-    case .subscribed, .ending, .grace:
+    case .subscribed, .complimentary, .ending, .grace:
         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
         return hostedUsageLevel(fraction: fraction) == .full ? .monthlyCapReached : nil
     }

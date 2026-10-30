@@ -129,7 +129,7 @@ struct HostedUsageCard: View {
             switch hostedPlanStatus(entitlements: entitlements) {
             case .trial(let left, let total):
                 trial(left: left, total: total)
-            case .subscribed, .ending, .grace:
+            case .subscribed, .complimentary, .ending, .grace:
                 subscriber
             case .expired(let endedAt):
                 expired(endedAt: endedAt)
@@ -262,7 +262,7 @@ struct HostedSidebarUsage: View {
                         Text("Abonelik sona erdi")
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(meterFull)
-                    case .subscribed, .ending, .grace:
+                    case .subscribed, .complimentary, .ending, .grace:
                         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
                         Text(verbatim: hostedCompactHoursText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
                             .appFont(size: 12, weight: .regular)

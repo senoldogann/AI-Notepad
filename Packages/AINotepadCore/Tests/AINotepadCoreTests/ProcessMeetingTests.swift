@@ -8,6 +8,19 @@ final class StepLog {
     var steps: [ProcessingStep] = []
 }
 
+// Yarıda kalan son geçiş: yazıya dökülen kısmın son geçişi, kalan kısmın canlı "Diğerleri" metni; "Sen" canlıdan
+// buraya girmez. Geçiş tamamsa canlı metin eklenmez.
+@Test func partialFinalPassKeepsLiveTail() {
+    let final: [StoredSegment] = [stored("final-0", .others, 1, 10, "Alku")]
+    let live: [StoredSegment] = [
+        stored("live-0", .others, nil, 12, "Alku live"),
+        stored("live-1", .others, nil, 3000, "Loppu"),
+        stored("live-2", .me, nil, 3100, "Minä"),
+    ]
+    #expect(finalSegmentsWithLiveTail(final: final, live: live, coveredUntilSec: 2940).map(\.key) == ["final-0", "live-1"])
+    #expect(finalSegmentsWithLiveTail(final: final, live: live, coveredUntilSec: nil).map(\.key) == ["final-0"])
+}
+
 extension CloudTests {
 @Suite struct ProcessMeetingTests {
     @Test func processesRecordedMeetingIntoNote() async throws {

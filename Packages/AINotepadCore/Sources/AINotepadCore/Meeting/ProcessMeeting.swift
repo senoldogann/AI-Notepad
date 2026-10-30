@@ -10,11 +10,15 @@ public struct FinalPassResult: Sendable, Equatable {
     public let segments: [StoredSegment]
     public let language: MeetingLanguage?
     public let notice: String?
+    /// Geçiş yarıda kaldıysa yazıya dökülen kaydın sonu (sn); kaydın tamamı yazıldıysa nil. Bu andan sonraki canlı
+    /// metin korunur (bkz. `finalSegmentsWithLiveTail`).
+    public let coveredUntilSec: Double?
 
-    public init(segments: [StoredSegment], language: MeetingLanguage?, notice: String?) {
+    public init(segments: [StoredSegment], language: MeetingLanguage?, notice: String?, coveredUntilSec: Double?) {
         self.segments = segments
         self.language = language
         self.notice = notice
+        self.coveredUntilSec = coveredUntilSec
     }
 }
 
@@ -61,7 +65,8 @@ public struct ElevenLabsFinalTranscriber: FinalTranscriber {
         return FinalPassResult(
             segments: finalSegments(words: result.words, gapSec: 1.5),
             language: result.languageCode.flatMap { meetingLanguage(elevenLabsCode: $0) },
-            notice: nil
+            notice: nil,
+            coveredUntilSec: nil
         )
     }
 }
@@ -202,7 +207,11 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
                 alignTranslations(final: result.segments, live: record.liveSegments, translations: liveTranslations)
             ) { (_: String, aligned: String) -> String in aligned })
             // Önceki "Sen" son geçişi korunur: bu tekrar işlemede "Sen" geçişi başarısız olursa iyi metin kaybolmasın.
-            .with(finalSegments: result.segments + record.finalSegments.filter { $0.speaker == .me }, language: record.language ?? result.language)
+            .with(
+                finalSegments: finalSegmentsWithLiveTail(final: result.segments, live: record.liveSegments, coveredUntilSec: result.coveredUntilSec)
+                    + record.finalSegments.filter { $0.speaker == .me },
+                language: record.language ?? result.language
+            )
             // Yeni son geçiş konuşmacıları baştan numaralar: eski adlar ("Konuşmacı 2 = Aino") başka kişiye düşerdi ve
             // not yanlış kişilere görev yazardı. Adlar yeniden verilir ("Gözden geçir" önerir).
             .with(speakerNames: [:])
@@ -213,6 +222,16 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
         processLogger.error("Son geçiş başarısız, eldeki metinle devam ediliyor, hata: \(String(describing: error), privacy: .private)")
         return record.with(notice: failedFinalPassNotice(error: error, hasFinalTranscript: hasOthersFinalTranscript(record: record)))
     }
+}
+
+/// "Diğerleri"nin son geçiş bölümleri; geçiş yarıda kaldıysa (`coveredUntilSec`) o andan sonra başlayan canlı
+/// "Diğerleri" bölümleri eklenir: son geçiş varken canlı metin gösterilmediği için (`meetingSegments`) kalan kısım
+/// transkriptten ve nottan düşerdi. Saf fonksiyondur.
+func finalSegmentsWithLiveTail(final: [StoredSegment], live: [StoredSegment], coveredUntilSec: Double?) -> [StoredSegment] {
+    guard let coveredUntilSec else {
+        return final
+    }
+    return final + live.filter { $0.speaker == .others && $0.startSec >= coveredUntilSec }
 }
 
 /// Kayıtta önceki son geçişin "Diğerleri" metni var mı (yeniden işlemede yeni geçiş olmazsa o metin kalır). Saf fonksiyondur.

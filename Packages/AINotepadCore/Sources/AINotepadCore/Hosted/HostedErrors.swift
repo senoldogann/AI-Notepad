@@ -20,6 +20,7 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case challengeInvalid = "challenge_invalid"
     case subscriptionRequired = "subscription_required"
     case subscriptionExists = "subscription_exists"
+    case complimentarySubscription = "complimentary_subscription"
     case trialExhausted = "trial_exhausted"
     case trialNotStarted = "trial_not_started"
     case trialIPLimit = "trial_ip_limit"
@@ -202,6 +203,8 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bu işlem için abonelik gerekiyor. Ayarlar › Hesap'tan abone ol.")
     case .subscriptionExists:
         return String(localized: "Zaten bir aboneliğin var; \"Hesabı yönet\" ile düzenleyebilirsin.")
+    case .complimentarySubscription:
+        return String(localized: "Hesabının ücretsiz tam erişimi var; ödenecek ya da yönetilecek bir şey yok.")
     case .trialCapacityReached:
         return String(localized: "Ücretsiz denemeler bugün kapasitede. Yarın yeniden dene ya da Ayarlar › Hesap'tan abone ol.")
     case .spendCeilingReached:

@@ -297,7 +297,11 @@ private struct GeneralSettings: View {
             }
             #endif
             SettingsRow(title: Text("Ana toplantı dili")) {
+                #if HOSTED_EDITION
+                Text("Otomatik dilde canlı metin bu dilde yazılır. Toplantı bitince konuşulan dil (35 dil) kendiliğinden bulunur ve not ona göre yazılır.")
+                #else
                 Text("Otomatik dilde kayıt bu dille başlar; ilk dakikada konuşulan dil (35 dil) bulunup ona geçilir. Mac'te tanımada bu dil ile İngilizce arasında seçilir.")
+                #endif
             } control: {
                 SettingsMenu(selection: $primaryLanguage, options: MeetingLanguage.allCases.map { (language: MeetingLanguage) -> (String, Text) in
                     (language.rawValue, Text(verbatim: languageName(language: language)))

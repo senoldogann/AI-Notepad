@@ -464,6 +464,24 @@ func chooseOnDeviceOnFirstRun(defaults: UserDefaults) async -> Bool {
     return true
 }
 
+#if HOSTED_EDITION
+/// Abonelik sürümünde ana toplantı dili kayıtlı değilse cihazın dili (`deviceDefaultMeetingLanguage`) yazılır: kayıtlı
+/// varsayılan Fince'dir ve Deepgram canlı akışı dil algılamadığı için başka dilde konuşan aboneye Fince metin yazılırdı.
+/// Kullanıcının seçtiği dile dokunulmaz.
+func chooseHostedMeetingLanguageOnFirstRun(defaults: UserDefaults) {
+    guard let bundleID = Bundle.main.bundleIdentifier else {
+        settingsLogger.error("Paket kimliği yok, ana toplantı dili seçilmedi")
+        return
+    }
+    guard defaults.persistentDomain(forName: bundleID)?[SettingsKey.primaryMeetingLanguage] == nil else {
+        return
+    }
+    let language: MeetingLanguage = deviceDefaultMeetingLanguage(preferredLanguages: Locale.preferredLanguages)
+    defaults.set(language.rawValue, forKey: SettingsKey.primaryMeetingLanguage)
+    settingsLogger.info("Ana toplantı dili cihaz dilinden seçildi, dil: \(language.rawValue, privacy: .public)")
+}
+#endif
+
 /// Kayıtlı OpenAI uyumlu ayar; adres ya da model eksikse `LLMError.notConfigured`.
 func storedOpenAIConfig(apiKey: String?) throws -> OpenAICompatibleConfig {
     let defaults: UserDefaults = UserDefaults.standard

@@ -612,7 +612,7 @@ final class HostedAccount {
                 return false
             }
             switch hostedPlanStatus(entitlements: entitlements) {
-            case .subscribed, .ending, .grace:
+            case .subscribed, .complimentary, .ending, .grace:
                 return true
             case .trial, .expired:
                 break

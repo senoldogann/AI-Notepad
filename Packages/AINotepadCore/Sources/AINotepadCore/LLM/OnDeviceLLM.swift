@@ -211,19 +211,22 @@ public func onDeviceModeWarning(config: OnDeviceConfig, primaryLanguage: Meeting
     }
 }
 
-/// Anahtarsız ilk kurulumda (cihaz içi mod) ana toplantı dili: cihazın tercih ettiği dil (`Locale.preferredLanguages`'ın
-/// ilki, ör. "tr-TR") uygulamanın toplantı dillerinden biriyse ve cihaz içi model destekliyorsa o; değilse İngilizce.
-/// Norveççe ("nb", "nn") toplantıda "no"dur. Saf fonksiyondur.
-public func onDeviceDefaultMeetingLanguage(preferredLanguages: [String], languageCodes: Set<String>) -> MeetingLanguage {
+/// Cihazın tercih ettiği dil (`Locale.preferredLanguages`'ın ilki, ör. "tr-TR") uygulamanın toplantı dillerinden biriyse
+/// o; değilse İngilizce. Norveççe ("nb", "nn") toplantıda "no"dur. Abonelik sürümünde ilk açılışta ana toplantı dili
+/// budur. Saf fonksiyondur.
+public func deviceDefaultMeetingLanguage(preferredLanguages: [String]) -> MeetingLanguage {
     guard let first = preferredLanguages.first else {
         return .english
     }
     let base: String = localeLanguagePart(identifier: first)
-    guard let language = MeetingLanguage(rawValue: ["nb", "nn"].contains(base) ? "no" : base),
-          onDeviceSupports(language: language, languageCodes: languageCodes) else {
-        return .english
-    }
-    return language
+    return MeetingLanguage(rawValue: ["nb", "nn"].contains(base) ? "no" : base) ?? .english
+}
+
+/// Anahtarsız ilk kurulumda (cihaz içi mod) ana toplantı dili: cihazın dili (`deviceDefaultMeetingLanguage`) cihaz içi
+/// model destekliyorsa o; değilse İngilizce. Saf fonksiyondur.
+public func onDeviceDefaultMeetingLanguage(preferredLanguages: [String], languageCodes: Set<String>) -> MeetingLanguage {
+    let language: MeetingLanguage = deviceDefaultMeetingLanguage(preferredLanguages: preferredLanguages)
+    return onDeviceSupports(language: language, languageCodes: languageCodes) ? language : .english
 }
 
 /// Cihaz içi modelin yazabildiği toplantı dillerinin adları (Ayarlar'da). Saf fonksiyondur.

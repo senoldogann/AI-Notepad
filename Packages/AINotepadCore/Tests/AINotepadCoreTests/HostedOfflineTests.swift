@@ -4,7 +4,7 @@ import Testing
 
 /// Sunucu biçimindeki hak durumu.
 private func entitlements(plan: String, access: String, trialLeft: Int, used: Double) throws -> HostedEntitlements {
-    let subscription: String = access == "none" ? "null" : #"{"status":"active","currentPeriodEnd":"2026-12-01T00:00:00.000Z","access":"\#(access)","graceEndsAt":null}"#
+    let subscription: String = access == "none" ? "null" : #"{"status":"active","complimentary":false,"currentPeriodEnd":"2026-12-01T00:00:00.000Z","access":"\#(access)","graceEndsAt":null}"#
     let json: String = #"""
     {"userId":"u1","plan":"\#(plan)","trialMeetingsTotal":3,"trialMeetingsLeft":\#(trialLeft),"accountTrialMeetingsLeft":\#(trialLeft),
      "deviceTrialMeetingsLeft":null,"monthlyHoursUsed":\#(used),"monthlyHoursCap":10,"subscription":\#(subscription)}
@@ -64,7 +64,7 @@ private func record(id: String, startedAt: Double, status: MeetingStatus) -> Mee
         let json: String = #"""
         {"userId":"u1","plan":"trial","trialMeetingsTotal":3,"trialDays":7,"trialMeetingsLeft":0,"accountTrialMeetingsLeft":0,"deviceTrialMeetingsLeft":null,
          "monthlyHoursUsed":0,"monthlyHoursCap":10,
-         "subscription":{"status":"canceled","currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"none","graceEndsAt":null}}
+         "subscription":{"status":"canceled","complimentary":false,"currentPeriodEnd":"2026-10-01T00:00:00.000Z","access":"none","graceEndsAt":null}}
         """#
         let decoder: JSONDecoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { (decoder: any Decoder) throws -> Date in

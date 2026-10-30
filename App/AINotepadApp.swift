@@ -349,6 +349,7 @@ struct AINotepadApp: App {
             // Abonelik: hesap ve hak durumu açılışta okunur, kurulum eksikleri (giriş) güncellenir. Mac modeli (~630 MB)
             // yalnızca sunucu bulut canlı metnini önermiyorsa ya da hak durumu okunamadıysa yüklenir; bulut
             // kullanılabiliyorsa ilk Mac'e geçişte iner (bkz. `hostedPreloadsLocalModel`).
+            chooseHostedMeetingLanguageOnFirstRun(defaults: .standard)
             await HostedAccount.shared.refresh()
             await model.refreshSetupProblems()
             if hostedPreloadsLocalModel(account: .shared) {

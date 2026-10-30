@@ -60,6 +60,9 @@ public struct HostedSubscription: Decodable, Sendable, Equatable {
     /// Aboneliğin planı (`monthly`, `yearly`); tanınmayan eski fiyatta ve alanı bilmeyen eski sunucuda nil. Tanınmayan
     /// değer hak yanıtını bozmasın diye metin olarak okunur; arayüz `billingPlan`'ı kullanır.
     public let plan: String?
+    /// Yöneticinin verdiği ücretsiz erişim (Stripe'ta karşılığı yok): plan `monthly` görünür ama ödeme, yenileme ve
+    /// yönetilecek bir şey yoktur; davet ödülü uygulanmaz.
+    public let complimentary: Bool
 
     /// Aboneliğin planı; bilinmiyorsa nil.
     public var billingPlan: HostedBillingPlan? {
@@ -88,10 +91,14 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
     public let inviteUrl: URL?
     /// Kodla abone olan arkadaş sayısı.
     public let joined: Int
-    /// Kazanılan (hesaba yazılan) ücretsiz ay sayısı.
+    /// Verilen ödül sayısı (her biri bir aylık ücret kadar alacak).
     public let rewarded: Int
     /// Abone olmuş ama ödülü henüz yazılmamış arkadaş sayısı (ilk ödemesi bekleme süresinde).
     public let pending: Int
+    /// Bekleyen ödüllerin en yakınının tahmini tarihi; bekleyen yoksa nil.
+    public let nextRewardAt: Date?
+    /// Hesabın ücretsiz erişimi var: ödenecek fatura olmadığından ödül uygulanmaz.
+    public let complimentary: Bool
     public let rewardsLeftThisYear: Int
     public let rewardsPerYear: Int
     /// Ödülün tutarı (USD; bir aylık abonelik).
@@ -100,8 +107,8 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
     public let holdDays: Int
 
     public init(
-        enabled: Bool, code: String?, inviteUrl: URL?, joined: Int, rewarded: Int, pending: Int,
-        rewardsLeftThisYear: Int, rewardsPerYear: Int, rewardUsd: Double, holdDays: Int
+        enabled: Bool, code: String?, inviteUrl: URL?, joined: Int, rewarded: Int, pending: Int, nextRewardAt: Date?,
+        complimentary: Bool, rewardsLeftThisYear: Int, rewardsPerYear: Int, rewardUsd: Double, holdDays: Int
     ) {
         self.enabled = enabled
         self.code = code
@@ -109,6 +116,8 @@ public struct HostedReferral: Decodable, Sendable, Equatable {
         self.joined = joined
         self.rewarded = rewarded
         self.pending = pending
+        self.nextRewardAt = nextRewardAt
+        self.complimentary = complimentary
         self.rewardsLeftThisYear = rewardsLeftThisYear
         self.rewardsPerYear = rewardsPerYear
         self.rewardUsd = rewardUsd
@@ -282,6 +291,8 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case trial(left: Int, total: Int)
     /// Abonelik etkin; dönem sonunda yenilenir.
     case subscribed(renewsAt: Date)
+    /// Yöneticinin verdiği ücretsiz tam erişim: ödeme ve yenileme yok.
+    case complimentary
     /// Abonelik iptal edildi; erişim bu ana dek sürer, yenilenmez.
     case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
@@ -320,6 +331,9 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
     if let subscription = entitlements.subscription {
         switch subscription.access {
         case .active:
+            if subscription.complimentary {
+                return .complimentary
+            }
             if let cancelAt = subscription.cancelAt {
                 return .ending(endsAt: cancelAt)
             }

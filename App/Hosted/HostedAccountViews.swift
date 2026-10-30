@@ -157,8 +157,8 @@ struct HostedAccountSettings: View {
     private func signedIn(entitlements: HostedEntitlements) -> some View {
         let status: HostedPlanStatus = hostedPlanStatus(entitlements: entitlements)
         SettingsRow(title: Text("Plan")) {
-            // Erişimi olan aboneliğin planı (aylık ya da yıllık); bitmiş abonelikte gösterilmez.
-            if let subscription = entitlements.subscription, subscription.access != .none, let plan = subscription.billingPlan {
+            // Erişimi olan aboneliğin planı (aylık ya da yıllık); bitmiş abonelikte ve ücretsiz erişimde gösterilmez.
+            if let subscription = entitlements.subscription, subscription.access != .none, !subscription.complimentary, let plan = subscription.billingPlan {
                 Text(verbatim: hostedPlanLineText(plan: plan))
                     .foregroundStyle(Theme.ink)
             }
@@ -168,6 +168,9 @@ struct HostedAccountSettings: View {
                 Text("Ücretsiz deneme")
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(hostedDayText(date: renewsAt)) tarihinde yenilenir.")
+            case .complimentary:
+                Text("Ücretsiz tam erişim: ödeme ve yenileme yok.")
+                    .foregroundStyle(Theme.ink)
             case .ending(let endsAt):
                 Text("Abonelik iptal edildi; \(hostedDayText(date: endsAt)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):
@@ -177,7 +180,8 @@ struct HostedAccountSettings: View {
             }
         } control: {
             HStack(spacing: 8) {
-                if entitlements.subscription != nil {
+                // Ücretsiz erişimde Stripe'ta yönetilecek bir şey yoktur.
+                if let subscription = entitlements.subscription, !subscription.complimentary {
                     Button("Hesabı yönet") { Task { await account.manageSubscription() } }
                         .disabled(account.isWorking)
                 }
@@ -185,7 +189,7 @@ struct HostedAccountSettings: View {
         }
         HostedUsageCard(account: account, entitlements: entitlements)
         switch status {
-        case .subscribed, .ending, .grace:
+        case .subscribed, .complimentary, .ending, .grace:
             HostedReferralRow(account: account)
         case .trial, .expired:
             EmptyView()
@@ -259,7 +263,7 @@ struct HostedSignInStep: View {
                     Text(verbatim: hostedTrialText(left: left, total: total))
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
-                case .subscribed, .ending, .grace:
+                case .subscribed, .complimentary, .ending, .grace:
                     Text("Aboneliğin etkin.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)

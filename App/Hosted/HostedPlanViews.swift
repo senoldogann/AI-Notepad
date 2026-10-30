@@ -55,9 +55,11 @@ func hostedReferralDiscountText(plan: HostedBillingPlan) -> String {
     }
 }
 
-/// Arkadaşa gönderilecek davet metni (bağlantı dahil). Saf fonksiyondur.
+/// Arkadaşa gönderilecek davet metni (bağlantı dahil): aylıkta ilk ay ücretsiz, yıllıkta bir aylık ücret kadar indirim.
+/// Saf fonksiyondur.
 func hostedInviteText(inviteURL: URL) -> String {
-    String(localized: "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan ilk ayın ücretsiz: \(inviteURL.absoluteString)")
+    let discount: String = hostedUSDText(cents: hostedMonthlyPriceCents)
+    return String(localized: "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan aylık planda ilk ayın ücretsiz, yıllık planda ilk yılın \(discount) indirimli: \(inviteURL.absoluteString)")
 }
 
 /// Abone olma teklifi (ana pencerede açılan kart): üstte durağan film gradyanı, uygulama simgesi ve "Gistsmith" rozeti;
@@ -432,9 +434,9 @@ struct HostedTrialValueTiles: View {
     }
 }
 
-/// Ayarlar › Hesap'taki davet bölümü (yalnızca abonede ve program açıkken): kod, kopyalanabilir davet metni ve kaç
-/// arkadaşın katıldığı. Davet bilgisi Ayarlar › Hesap açılınca okunur (`HostedAccount.loadReferral`); okunamazsa bölüm
-/// görünmez.
+/// Ayarlar › Hesap'taki davet bölümü (yalnızca abonede ve program açıkken): kod, kopyalanabilir davet metni, kaç
+/// arkadaşın katıldığı ve bekleyen ödülün tahmini tarihi. Ücretsiz erişimli hesapta ödülün uygulanmadığı yazar. Davet
+/// bilgisi Ayarlar › Hesap açılınca okunur (`HostedAccount.loadReferral`); okunamazsa bölüm görünmez.
 struct HostedReferralRow: View {
     let account: HostedAccount
     @State private var copied: Bool = false
@@ -443,7 +445,11 @@ struct HostedReferralRow: View {
         Group {
             if let referral = account.referral, referral.enabled, let code = referral.code, let inviteURL = referral.inviteUrl {
                 SettingsRow(title: Text("Arkadaşını davet et")) {
-                    Text("Arkadaşın davet koduyla abone olunca ilk ayı ücretsiz olur. Onun ilk ödemesinden \(referral.holdDays) gün sonra sana bir ay ücretsiz yazılır (yılda en çok \(referral.rewardsPerYear)).")
+                    if referral.complimentary {
+                        Text("Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Hesabın zaten ücretsiz olduğu için sana ödül yazılmaz.")
+                    } else {
+                        Text("Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Onun ilk ödemesinden \(referral.holdDays) gün sonra sana da bir ay bedava: sonraki ödemenden \(hostedUSDText(cents: hostedMonthlyPriceCents)) düşülür (yılda en çok \(referral.rewardsPerYear)).")
+                    }
                     Text(verbatim: code)
                         .font(.system(size: 17, weight: .semibold, design: .monospaced))
                         .tracking(2)
@@ -465,6 +471,13 @@ struct HostedReferralRow: View {
     }
 
     private func statsText(referral: HostedReferral) -> String {
-        String(localized: "Katılan arkadaş: \(referral.joined) · Kazandığın ay: \(referral.rewarded)")
+        if referral.complimentary {
+            return String(localized: "Katılan arkadaş: \(referral.joined)")
+        }
+        let stats: String = String(localized: "Katılan arkadaş: \(referral.joined) · Kazandığın ay: \(referral.rewarded)")
+        guard let next = referral.nextRewardAt else {
+            return stats
+        }
+        return stats + " · " + String(localized: "Sıradaki ödül: \(hostedDayText(date: next)) civarı")
     }
 }
