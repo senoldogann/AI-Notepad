@@ -413,15 +413,16 @@ async function fetchReferral(): Promise<ReferralInfo> {
   return parseReferral(response, path);
 }
 
-/** Davet kartının sayı satırı. Saf fonksiyondur. */
-function referralStatsText(referral: ReferralInfo, text: ClientCopy): string {
-  return fill(text.referralStats, {
+/** Davet kartının sayı satırı; bekleyen ödül varsa en yakınının tahmini tarihi eklenir. Saf fonksiyondur. */
+function referralStatsText(referral: ReferralInfo, text: ClientCopy, locale: string): string {
+  const stats: string = fill(text.referralStats, {
     joined: String(referral.joined),
     rewarded: String(referral.rewarded),
     pending: String(referral.pending),
     left: String(referral.rewardsLeftThisYear),
     cap: String(referral.rewardsPerYear),
   });
+  return referral.nextRewardAt === null ? stats : `${stats} · ${fill(text.referralNextReward, { date: formatDate(referral.nextRewardAt, locale) })}`;
 }
 
 /**
@@ -463,10 +464,10 @@ function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy,
  * Abonenin davet kartını yükler; yüklenemezse kart gizli kalır ve hata konsola yazılır (hesabın geri kalanı çalışır).
  * Ücretsiz erişimli hesapta sayı satırı ödülün uygulanmadığını söyler.
  */
-async function loadReferral(me: Entitlements, text: ClientCopy, notice: HTMLElement): Promise<void> {
+async function loadReferral(text: ClientCopy, notice: HTMLElement): Promise<void> {
   try {
     const referral: ReferralInfo = await fetchReferral();
-    const stats: string = hasComplimentaryAccess(me) ? complimentaryReferralStatsText(referral, text) : referralStatsText(referral, text);
+    const stats: string = referral.complimentary ? complimentaryReferralStatsText(referral, text) : referralStatsText(referral, text, siteLocale);
     renderReferral(referral, stats, text, notice);
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {
@@ -626,7 +627,7 @@ async function main(): Promise<void> {
       await prefillInvite(form, text);
     }
     if (me.plan === "subscription") {
-      await loadReferral(me, text, notice);
+      await loadReferral(text, notice);
     }
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {

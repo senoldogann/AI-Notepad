@@ -36,8 +36,9 @@ export type SubscriptionInfo =
 
 /**
  * `GET /v1/referral` yanıtı: davet programı açık mı, abonenin kodu ve davet adresi (abonelik erişimi yoksa ya da program
- * kapalıysa null), katılan, ödülü verilen ve bekleyen arkadaş sayısı, bu yıl kalan ödül, yıllık en çok ödül, ödülün
- * tutarı (USD) ve ödülden önce iadesiz geçmesi gereken gün.
+ * kapalıysa null), katılan, ödülü verilen ve bekleyen arkadaş sayısı, bekleyen ödülün en yakın tahmini tarihi (ISO 8601;
+ * yoksa null), hesabın ücretsiz erişimi (ödül uygulanmaz), bu yıl kalan ödül, yıllık en çok ödül, ödülün tutarı (USD) ve
+ * ödülden önce iadesiz geçmesi gereken gün.
  */
 export interface ReferralInfo {
   readonly enabled: boolean;
@@ -46,6 +47,8 @@ export interface ReferralInfo {
   readonly joined: number;
   readonly rewarded: number;
   readonly pending: number;
+  readonly nextRewardAt: string | null;
+  readonly complimentary: boolean;
   readonly rewardsLeftThisYear: number;
   readonly rewardsPerYear: number;
   readonly rewardUsd: number;
@@ -352,25 +355,18 @@ function parseSubscription(value: JsonValue | undefined, response: RawResponse, 
   return { status, plan, currentPeriodEnd, cancelAt, complimentary, access, graceEndsAt: null };
 }
 
-/** Nesnedeki mantıksal alan; değilse `ApiResponseError`. */
-function booleanValue(object: JsonObject, key: string, response: RawResponse, path: string): boolean {
-  const value: JsonValue | undefined = object[key];
-  if (typeof value !== "boolean") {
-    throw new ApiResponseError(path, response.status, `"${key}" mantıksal değer değil`, response.text);
-  }
-  return value;
-}
-
 /** `GET /v1/referral` yanıtını okur. */
 export function parseReferral(response: RawResponse, path: string): ReferralInfo {
   const body: JsonObject = parseObject(response, path);
   return {
-    enabled: booleanValue(body, "enabled", response, path),
+    enabled: booleanField(body, "enabled", response, path),
     code: nullableStringField(body, "code", response, path),
     inviteUrl: nullableStringField(body, "inviteUrl", response, path),
     joined: numberField(body, "joined", response, path),
     rewarded: numberField(body, "rewarded", response, path),
     pending: numberField(body, "pending", response, path),
+    nextRewardAt: nullableStringField(body, "nextRewardAt", response, path),
+    complimentary: booleanField(body, "complimentary", response, path),
     rewardsLeftThisYear: numberField(body, "rewardsLeftThisYear", response, path),
     rewardsPerYear: numberField(body, "rewardsPerYear", response, path),
     rewardUsd: numberField(body, "rewardUsd", response, path),

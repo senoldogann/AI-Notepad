@@ -38,6 +38,8 @@ export interface ClientCopy {
   readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
   /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
   readonly referralStats: string;
+  /** Bekleyen ödülün tahmini tarihi: `{date}`. */
+  readonly referralNextReward: string;
   /** Ücretsiz erişimli hesapta davet kartı: `{joined}`. */
   readonly referralStatsComplimentary: string;
   /** `plan`: abonelik planı bilinmiyorsa (eski fiyat) `subscription`. */
@@ -248,6 +250,7 @@ export const clientCopy: ClientCopy = {
     yearly: "Invite applied: $5.99 off your first year.",
   },
   referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
+  referralNextReward: "next reward around {date}",
   referralStatsComplimentary: "{joined} joined. Your friends still get their first month free; your account is already free, so the $5.99 rewards don't apply.",
   plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly`, complimentary: "Free access" },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",

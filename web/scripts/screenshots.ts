@@ -113,6 +113,24 @@ function last30Days(now: Date): string[] {
   return Array.from({ length: 30 }, (_: unknown, index: number): string => new Date(now.getTime() - (29 - index) * 86_400_000).toISOString().slice(0, 10));
 }
 
+/** Hesap durumuna göre örnek `/v1/referral` yanıtı: ücretsiz erişimde ödül uygulanmaz. Saf fonksiyondur. */
+function referralFixture(state: AccountState, now: Date): object {
+  return {
+    enabled: true,
+    code: "K7M2QX9D",
+    inviteUrl: "http://localhost:8788/invite?code=K7M2QX9D",
+    joined: 3,
+    rewarded: 1,
+    pending: 1,
+    nextRewardAt: new Date(now.getTime() + 24 * 86_400_000).toISOString(),
+    complimentary: state === "complimentary",
+    rewardsLeftThisYear: 11,
+    rewardsPerYear: 12,
+    rewardUsd: 5.99,
+    holdDays: 30,
+  };
+}
+
 /** Hesap durumuna göre örnek `/v1/me` yanıtı. Saf fonksiyondur. */
 function meFixture(state: AccountState, now: Date): object {
   const at = (days: number): string => new Date(now.getTime() + days * 86_400_000).toISOString();
@@ -197,18 +215,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
   });
   return {
     "/v1/me": meFixture("active", now),
-    "/v1/referral": {
-      enabled: true,
-      code: "K7M2QX9D",
-      inviteUrl: "http://localhost:8788/invite?code=K7M2QX9D",
-      joined: 3,
-      rewarded: 1,
-      pending: 1,
-      rewardsLeftThisYear: 11,
-      rewardsPerYear: 12,
-      rewardUsd: 5.99,
-      holdDays: 30,
-    },
+    "/v1/referral": referralFixture("active", now),
     "/v1/referral/validate": { code: "K7M2QX9D" },
     "/v1/download/mac/version": { version: "0.1.5" },
     "/v1/admin/stats": {
@@ -491,17 +498,23 @@ async function routeApi(context: BrowserContext, findings: Finding[]): Promise<v
   });
 }
 
-/** Bu sayfada `/v1/me` isteğini verilen hesap durumunun örnek yanıtıyla karşılar (bağlamın yönlendirmesinden önce gelir). */
-async function routeMe(page: Page, state: AccountState): Promise<void> {
-  const body: object = meFixture(state, new Date());
-  await page.route(`${apiBase}/v1/me`, async (route: Route): Promise<void> => {
-    const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
-    if (route.request().method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: cors });
-      return;
-    }
-    await route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
-  });
+/**
+ * Bu sayfada `/v1/me` ve `/v1/referral` isteklerini verilen hesap durumunun örnek yanıtlarıyla karşılar (bağlamın
+ * yönlendirmesinden önce gelir).
+ */
+async function routeAccount(page: Page, state: AccountState): Promise<void> {
+  const now: Date = new Date();
+  const bodies: Readonly<Record<string, object>> = { "/v1/me": meFixture(state, now), "/v1/referral": referralFixture(state, now) };
+  for (const [path, body] of Object.entries(bodies)) {
+    await page.route(`${apiBase}${path}`, async (route: Route): Promise<void> => {
+      const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      await route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+    });
+  }
 }
 
 /** Yatay taşmayı denetler: belge genişliği ve ekran dışına taşan öğeler. */
@@ -574,7 +587,7 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await signIn(page);
       }
       if (target.account !== null) {
-        await routeMe(page, target.account);
+        await routeAccount(page, target.account);
       }
       await page.goto(`${base}${target.path}`, { waitUntil: "load" });
       await page.waitForSelector(target.ready, { timeout: 20_000 });

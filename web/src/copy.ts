@@ -1435,7 +1435,7 @@ export const copy: Copy = {
     signOut: "Sign out",
     referral: {
       title: "Give a month, get a month",
-      text: "Friends who subscribe with your code get their first month free. For each one who stays, you get $5.99 off your next payment, up to 12 times a year.",
+      text: "Friends who subscribe with your code get their first month free. For each one who stays, you get a free month too: $5.99 off your next payment, up to 12 times a year.",
       codeLabel: "Your invite code",
       copyLink: "Copy invite link",
       copied: "Link copied",
@@ -1484,7 +1484,7 @@ export const copy: Copy = {
       {
         icon: "check-circle",
         title: "You get a month",
-        text: "Once your friend's first payment has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month.",
+        text: "Once your friend's first payment has gone through and hasn't been refunded for 30 days, $5.99 is taken off your next payment. On the monthly plan that is a free month; on the yearly plan it comes off your next renewal.",
       },
     ],
     rulesTitle: "The rules, plainly",
