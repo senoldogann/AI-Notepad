@@ -47,6 +47,8 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case referralUnavailable = "referral_unavailable"
     case referralLimitReached = "referral_limit_reached"
     case webhookInvalid = "webhook_invalid"
+    /// `x-llm-purpose` başlığı bilinen bir amaç değil (istemci sunucudan yeni).
+    case llmPurposeInvalid = "llm_purpose_invalid"
     // Blog yayını yalnızca yönetim panelinindir (`server/src/blog.ts`); uygulama bu uçları çağırmaz.
     case blogUnavailable = "blog_unavailable"
     case blogPostExists = "blog_post_exists"
@@ -91,6 +93,8 @@ public enum HostedClientError: Error, Sendable, Equatable {
     case invalidBaseURL(value: String)
     /// Info.plist'te Anahtar Zinciri servis adı yok (derleme yapılandırması hatası).
     case keychainServiceNotConfigured(key: String)
+    /// Paketin sürümü sunucunun kabul ettiği biçimde değil (derleme yapılandırması hatası; bkz. `hostedClientInfo`).
+    case invalidAppVersion(value: String)
     /// Sunucuya ulaşılamıyor ve son bilinen hak durumu çevrimdışı kayda izin vermiyor (7 günden eski ya da izin yok).
     case offlineNotAllowed
     /// Kayıt çevrimdışı sürüyor: toplantıya bağlı yapay zekâ çağrıları (canlı çeviri…) yapılamaz.
@@ -265,7 +269,7 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bu işleme izin yok.")
     case .internalError:
         return String(localized: "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
-    case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid,
+    case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid, .llmPurposeInvalid,
          .blogUnavailable, .blogPostExists, .blogConflict, .blogPostInvalid, .blogImageExists, .analyticsUnavailable:
         return String(localized: "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.")
     }
@@ -314,6 +318,8 @@ public func hostedClientMessage(error: HostedClientError) -> String {
         String(localized: "Uygulamanın sunucu ayarı eksik ya da bozuk; uygulamayı yeniden kur.")
     case .keychainServiceNotConfigured:
         String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.")
+    case .invalidAppVersion:
+        String(localized: "Uygulamanın sürüm bilgisi bozuk; uygulamayı yeniden kur.")
     case .offlineNotAllowed:
         String(localized: "Sunucuya ulaşılamıyor ve son bilinen hesap durumun çevrimdışı kayda izin vermiyor (7 günden eski ya da kayıt hakkın kalmamış). Kayıt için internete bağlan.")
     case .offlineRecording:
@@ -350,8 +356,8 @@ public func stopsLiveTranslation(error: any Error) -> Bool {
         return isClosedHostedAccess(error: hosted)
     case let client as HostedClientError:
         switch client {
-        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured, .offlineNotAllowed, .offlineRecording,
-             .serverOutdated:
+        case .notSignedIn, .sessionEnded, .noActiveMeeting, .insecureBaseURL, .invalidBaseURL, .keychainServiceNotConfigured, .invalidAppVersion, .offlineNotAllowed,
+             .offlineRecording, .serverOutdated:
             return true
         case .network, .malformedResponse:
             return false

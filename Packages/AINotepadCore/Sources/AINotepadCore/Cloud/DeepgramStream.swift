@@ -76,21 +76,36 @@ public struct DeepgramStream: Sendable {
 /// Geçersiz anahtar gibi 4xx el sıkışma hataları yeniden denenmez.
 /// Ses akışı bitince `CloseStream` gönderilir, kalan sonuçlar alınır ve olay akışı biter.
 public func startDeepgramStream(apiKey: String, language: MeetingLanguage, keyterms: [String], audio: AsyncStream<[Float]>) -> DeepgramStream {
-    startDeepgramStream(authorization: .apiKey(apiKey), options: developerDeepgramListenOptions, language: language, keyterms: keyterms, audio: audio)
+    // Geliştirici sürümünde telemetri yok: bağlantı olayları kimseye bildirilmez.
+    startDeepgramStream(
+        authorization: .apiKey(apiKey), options: developerDeepgramListenOptions, language: language, keyterms: keyterms,
+        onConnectionEvent: { (_: DeepgramConnectionEvent) -> Void in }, audio: audio
+    )
 }
 
 /// Kısa ömürlü jetonla akış (abonelik sürümü): her bağlantı ve yeniden bağlanma `token`'dan yeni jeton alır
 /// (`Authorization: Bearer`); jeton saklanmaz ve loglanmaz. Jeton alınamazsa (sunucu reddi, ağ) akış yeniden denemeden
-/// kalıcı olarak durur (`.failed`): çağıran Mac'teki motora geçebilsin. Diğer davranış `startDeepgramStream(apiKey:…)`
-/// ile aynıdır.
+/// kalıcı olarak durur (`.failed`): çağıran Mac'teki motora geçebilsin. Bağlantının kopması ve yeniden kurulması
+/// `onConnectionEvent`'e bildirilir (telemetri). Diğer davranış `startDeepgramStream(apiKey:…)` ile aynıdır.
 public func startDeepgramStream(
     token: @escaping @Sendable () async throws -> String,
     options: DeepgramListenOptions,
     language: MeetingLanguage,
     keyterms: [String],
+    onConnectionEvent: @escaping @Sendable (DeepgramConnectionEvent) -> Void,
     audio: AsyncStream<[Float]>
 ) -> DeepgramStream {
-    startDeepgramStream(authorization: .temporaryToken(token), options: options, language: language, keyterms: keyterms, audio: audio)
+    startDeepgramStream(
+        authorization: .temporaryToken(token), options: options, language: language, keyterms: keyterms, onConnectionEvent: onConnectionEvent, audio: audio
+    )
+}
+
+/// Deepgram bağlantısının olayı (abonelik sürümünün güvenilirlik telemetrisi; içerik taşımaz).
+public enum DeepgramConnectionEvent: Sendable, Equatable {
+    /// Kurulu bağlantı koptu (ağ hatası ya da 20 sn sessizlik).
+    case dropped
+    /// Kopan bağlantı yeniden kuruldu.
+    case reconnected
 }
 
 /// Deepgram bağlantısının kimliği.
@@ -107,7 +122,8 @@ public struct DeepgramTokenError: Error {
 }
 
 private func startDeepgramStream(
-    authorization: DeepgramAuthorization, options: DeepgramListenOptions, language: MeetingLanguage, keyterms: [String], audio: AsyncStream<[Float]>
+    authorization: DeepgramAuthorization, options: DeepgramListenOptions, language: MeetingLanguage, keyterms: [String],
+    onConnectionEvent: @escaping @Sendable (DeepgramConnectionEvent) -> Void, audio: AsyncStream<[Float]>
 ) -> DeepgramStream {
     let (events, sink): (AsyncStream<StreamingEvent>, AsyncStream<StreamingEvent>.Continuation) =
         AsyncStream.makeStream(of: StreamingEvent.self)
@@ -116,7 +132,8 @@ private func startDeepgramStream(
         options: options,
         url: deepgramListenURL(language: language, keyterms: keyterms, options: options),
         keyterms: keyterms,
-        events: sink
+        events: sink,
+        onConnectionEvent: onConnectionEvent
     )
     Task {
         await connection.run(audio: audio)
@@ -195,13 +212,21 @@ private actor DeepgramConnection {
 
     /// Adlar ve terimler; dil değişince yeni adrese de eklenir.
     private let keyterms: [String]
+    /// Bağlantının kopması ve yeniden kurulması (telemetri).
+    private let onConnectionEvent: @Sendable (DeepgramConnectionEvent) -> Void
+    /// Kopan bağlantı yeniden kuruluyor: kurulunca `.reconnected` bildirilir (dil değişimiyle yeniden bağlanma sayılmaz).
+    private var isRecoveringFromDrop: Bool = false
 
-    init(authorization: DeepgramAuthorization, options: DeepgramListenOptions, url: URL, keyterms: [String], events: AsyncStream<StreamingEvent>.Continuation) {
+    init(
+        authorization: DeepgramAuthorization, options: DeepgramListenOptions, url: URL, keyterms: [String], events: AsyncStream<StreamingEvent>.Continuation,
+        onConnectionEvent: @escaping @Sendable (DeepgramConnectionEvent) -> Void
+    ) {
         self.authorization = authorization
         self.options = options
         self.url = url
         self.keyterms = keyterms
         self.events = events
+        self.onConnectionEvent = onConnectionEvent
     }
 
     func run(audio: AsyncStream<[Float]>) async {
@@ -317,6 +342,8 @@ private actor DeepgramConnection {
             return
         }
         deepgramLogger.warning("Deepgram bağlantısı koptu: \(String(describing: error), privacy: .private)")
+        onConnectionEvent(.dropped)
+        isRecoveringFromDrop = true
         await reconnect()
     }
 
@@ -352,6 +379,10 @@ private actor DeepgramConnection {
         do {
             try await connectWithRetry()
             isReconnecting = false
+            if isRecoveringFromDrop {
+                isRecoveringFromDrop = false
+                onConnectionEvent(.reconnected)
+            }
             await reconnectIfLanguageChanged()
             await flush()
         } catch {

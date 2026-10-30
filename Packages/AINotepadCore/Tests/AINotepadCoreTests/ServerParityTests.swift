@@ -26,4 +26,24 @@ func serverDirectory() -> URL {
         let missing: [String] = serverCodes.subtracting(clientCodes).sorted()
         #expect(missing.isEmpty, "Sunucuda olup istemcide olmayan: \(missing)")
     }
+
+    // Yapay zekâ amaçları ve telemetri listeleri sunucunun dizileriyle birebir aynı olmalı: eksik amaç 400
+    // `llm_purpose_invalid`, eksik telemetri değeri `invalid_body` alır (istek düşer).
+    @Test func telemetryListsMatchServer() throws {
+        let purpose: String = try String(contentsOf: serverDirectory().appending(path: "src/llm/purpose.ts"), encoding: .utf8)
+        #expect(try serverArray(source: purpose, name: "llmPurposes") == LLMPurpose.allCases.map(\.rawValue))
+        let telemetry: String = try String(contentsOf: serverDirectory().appending(path: "src/telemetry.ts"), encoding: .utf8)
+        #expect(try serverArray(source: telemetry, name: "telemetryCountKinds") == TelemetryCountKind.allCases.map(\.rawValue))
+        #expect(try serverArray(source: telemetry, name: "telemetryDurationKinds") == TelemetryDurationKind.allCases.map(\.rawValue))
+        #expect(try serverArray(source: telemetry, name: "telemetryIntegrations") == TelemetryIntegration.allCases.map(\.rawValue))
+        #expect(try serverArray(source: telemetry, name: "telemetryExportFormats") == TelemetryExportFormat.allCases.map(\.rawValue))
+        #expect(try serverArray(source: telemetry, name: "telemetryLanguages") == ShareLanguage.allCases.map(\.rawValue))
+    }
+}
+
+/// Sunucu kaynağındaki `export const <ad> = [ ... ] as const;` dizisinin dizgeleri (sırasıyla).
+private func serverArray(source: String, name: String) throws -> [String] {
+    let start: Substring = try #require(source.firstRange(of: "export const \(name) = [").map { source[$0.upperBound...] })
+    let body: Substring = try #require(start.firstRange(of: "] as const;").map { start[..<$0.lowerBound] })
+    return body.matches(of: #/"([A-Za-z_-]+)"/#).map { String($0.output.1) }
 }

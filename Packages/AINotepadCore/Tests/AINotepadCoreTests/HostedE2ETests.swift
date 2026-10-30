@@ -15,6 +15,9 @@ import Testing
 /// günlük harcama tavanı 25 $, deneme tavanı 10 $, `DEVICECHECK_POLICY=off`).
 let hostedE2EEnabled: Bool = ProcessInfo.processInfo.environment["AINOTEPAD_HOSTED_E2E"] == "1"
 
+/// Denemelerin sürüm başlıkları (`x-app-version`, `x-os-version`).
+let e2eClientInfo: HostedClientInfo = HostedClientInfo(appVersion: "0.1.10 (19)", osVersion: "macOS 15.4.1")
+
 /// Bellekte oturum (Anahtar Zinciri'ne dokunulmaz).
 private final class MemoryTokenStorage: HostedTokenStorage {
     private let tokens: Mutex<HostedTokens?>
@@ -84,6 +87,40 @@ private func localMeetingIsEnded(meetingID: String) throws -> Bool {
         throw HostedClientError.malformedResponse(path: "wrangler d1 execute --json", status: Int(process.terminationStatus), body: String(decoding: data, as: UTF8.self))
     }
     return row.ended_at != nil
+}
+
+/// Yerel D1'de sorgu çalıştırır (`--json`) ve ilk ifadenin satırlarını çözer.
+private func localD1Rows<Row: Decodable>(sql: String, as type: Row.Type) throws -> [Row] {
+    let process: Process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["npx", "wrangler", "d1", "execute", "ainotepad", "--local", "--json", "--command", sql]
+    process.currentDirectoryURL = serverDirectory()
+    let output: Pipe = Pipe()
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    let data: Data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+        throw HostedClientError.malformedResponse(path: "wrangler d1 execute --json", status: Int(process.terminationStatus), body: String(decoding: data, as: UTF8.self))
+    }
+    return try JSONDecoder().decode([LocalD1Statement<Row>].self, from: data).first?.results ?? []
+}
+
+/// `wrangler d1 execute --json` çıktısındaki bir ifadenin satırları.
+private struct LocalD1Statement<Row: Decodable>: Decodable {
+    let results: [Row]
+}
+
+/// Hesabın son bildirilen sürümleri.
+private struct UserVersionRow: Decodable {
+    let last_app_version: String?
+    let last_os_version: String?
+}
+
+/// Günün olay sayısı.
+private struct EventCountRow: Decodable {
+    let count: Int
 }
 
 /// Toplantı kaydı (yalnızca kuyruğun sahiplik ayrımı için gereken alanlarla).
@@ -164,7 +201,7 @@ private func signedInUser(baseURL: URL) async throws -> SignedInUser {
     let storage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
         accessToken: "gecersiz", refreshToken: seedRefreshToken, accessExpiresAt: Date.distantPast, userId: userID
     ))
-    let client: HostedClient = HostedClient(baseURL: baseURL, storage: storage) { () async -> Void in }
+    let client: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: storage) { () async -> Void in }
     _ = try await awaitingAuthLimit { try await client.validAccessToken() }
     return SignedInUser(client: client, storage: storage, userID: userID, seedRefreshToken: seedRefreshToken)
 }
@@ -236,7 +273,7 @@ private func silentFlac(directory: URL) throws -> URL {
             accessToken: "gecersiz", refreshToken: seedRefreshToken, accessExpiresAt: Date.distantPast, userId: userID
         ))
         let ended: SessionEndCounter = SessionEndCounter()
-        let client: HostedClient = HostedClient(baseURL: baseURL, storage: storage) { () async -> Void in
+        let client: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: storage) { () async -> Void in
             ended.count.withLock { $0 += 1 }
         }
         #expect(try await client.isSignedIn())
@@ -264,7 +301,7 @@ private func silentFlac(directory: URL) throws -> URL {
         // Erişim jetonu bitmiş sayılınca istek öncesi yenilenir; yenileme jetonu döner.
         let original: HostedTokens = try #require(try storage.load())
         try storage.save(tokens: HostedTokens(accessToken: original.accessToken, refreshToken: original.refreshToken, accessExpiresAt: Date.distantPast, userId: original.userId))
-        let refreshingClient: HostedClient = HostedClient(baseURL: baseURL, storage: storage) { () async -> Void in
+        let refreshingClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: storage) { () async -> Void in
             ended.count.withLock { $0 += 1 }
         }
         _ = try await refreshingClient.entitlements()
@@ -277,7 +314,7 @@ private func silentFlac(directory: URL) throws -> URL {
         let retryStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: original.accessToken, refreshToken: original.refreshToken, accessExpiresAt: Date.distantPast, userId: original.userId
         ))
-        let retryClient: HostedClient = HostedClient(baseURL: baseURL, storage: retryStorage) { () async -> Void in
+        let retryClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: retryStorage) { () async -> Void in
             ended.count.withLock { $0 += 1 }
         }
         _ = try await retryClient.entitlements()
@@ -294,21 +331,21 @@ private func silentFlac(directory: URL) throws -> URL {
         let successorStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: retried.accessToken, refreshToken: retried.refreshToken, accessExpiresAt: Date.distantPast, userId: retried.userId
         ))
-        let successorClient: HostedClient = HostedClient(baseURL: baseURL, storage: successorStorage) { () async -> Void in }
+        let successorClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: successorStorage) { () async -> Void in }
         _ = try await successorClient.entitlements()
         let newest: HostedTokens = try #require(try successorStorage.load())
         #expect(newest.refreshToken != retried.refreshToken)
         let replayStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: original.accessToken, refreshToken: original.refreshToken, accessExpiresAt: Date.distantPast, userId: original.userId
         ))
-        let replayClient: HostedClient = HostedClient(baseURL: baseURL, storage: replayStorage) { () async -> Void in
+        let replayClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: replayStorage) { () async -> Void in
             ended.count.withLock { $0 += 1 }
         }
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await replayClient.entitlements() }
         #expect(try replayStorage.load() == nil)
         #expect(ended.count.withLock { $0 } == 1)
         // Aile düştüğü için en yeni jeton da artık geçmez.
-        let familyClient: HostedClient = HostedClient(baseURL: baseURL, storage: MemoryTokenStorage(tokens: HostedTokens(
+        let familyClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: MemoryTokenStorage(tokens: HostedTokens(
             accessToken: newest.accessToken, refreshToken: newest.refreshToken, accessExpiresAt: Date.distantPast, userId: newest.userId
         ))) { () async -> Void in }
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await familyClient.entitlements() }
@@ -317,6 +354,30 @@ private func silentFlac(directory: URL) throws -> URL {
     // Rapor ucu: hesapsız sürümlerin (geliştirici sürümü, iPhone) jetonsuz geri bildirimi kabul edilir
     // (`anonymousReportDestination`; sunucu tür bütçesinin dörtte birini ayırır); hesaplı (bearer) geri bildirim ve çökme
     // raporu da 2xx alır.
+    // Telemetri: `/v1/me` sürüm başlıklarını hesaba yazar; olaylar günün toplamına eklenir (hesaba bağlanmaz); günün
+    // özellik raporu hesap başına bir kez sayılır.
+    @Test func telemetryAndVersionsAgainstLocalServer() async throws {
+        let baseURL: URL = try localServerBase()
+        let user: SignedInUser = try await signedInUser(baseURL: baseURL)
+        _ = try await user.client.entitlements()
+        let versions: [UserVersionRow] = try localD1Rows(sql: "SELECT last_app_version, last_os_version FROM users WHERE id = '\(user.userID)';", as: UserVersionRow.self)
+        #expect(versions.first?.last_app_version == e2eClientInfo.appVersion)
+        #expect(versions.first?.last_os_version == e2eClientInfo.osVersion)
+
+        let countSQL: String = "SELECT count FROM client_event_counts WHERE day = '\(utcDayKey())' AND kind = 'recording_overrun' AND app_version = '\(e2eClientInfo.appVersion)';"
+        let before: Int = try localD1Rows(sql: countSQL, as: EventCountRow.self).first?.count ?? 0
+        let pending: TelemetryPendingEvents = addingTelemetryDuration(
+            pending: addingTelemetryCount(pending: TelemetryPendingEvents(counts: [], durations: []), kind: .recordingOverrun),
+            kind: .finalPassDuration, seconds: 42
+        )
+        try await user.client.sendTelemetryEvents(body: try #require(try hostedTelemetryEventsBody(pending: pending)))
+        #expect(try localD1Rows(sql: countSQL, as: EventCountRow.self).first?.count == before + 1)
+
+        let usage: TelemetryFeatureUsage = recordingFeature(usage: emptyFeatureUsage(day: telemetryDayKey(date: Date())), feature: .export(.pdf))
+        #expect(try await user.client.sendFeatureUsage(body: try hostedFeatureUsageBody(usage: usage)))
+        #expect(try await !user.client.sendFeatureUsage(body: try hostedFeatureUsageBody(usage: usage)))
+    }
+
     @Test func reportsAcceptedWithAndWithoutAccountAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
         let diagnostics: ReportDiagnostics = currentReportDiagnostics(bundle: .main, platformName: "macOS")
@@ -603,7 +664,7 @@ private func silentFlac(directory: URL) throws -> URL {
         await #expect(throws: HostedClientError.notSignedIn) { _ = try await leaving.client.entitlements() }
         let stale: HostedTokens = HostedTokens(accessToken: "gecersiz", refreshToken: leaving.seedRefreshToken, accessExpiresAt: Date.distantPast, userId: leaving.userID)
         let staleStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: stale)
-        let staleClient: HostedClient = HostedClient(baseURL: baseURL, storage: staleStorage) { () async -> Void in }
+        let staleClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: staleStorage) { () async -> Void in }
         await #expect(throws: HostedClientError.sessionEnded) {
             _ = try await awaitingAuthLimit { try await staleClient.entitlements() }
         }
@@ -616,7 +677,7 @@ private func silentFlac(directory: URL) throws -> URL {
         let deletedStorage: MemoryTokenStorage = MemoryTokenStorage(tokens: HostedTokens(
             accessToken: "gecersiz", refreshToken: current.refreshToken, accessExpiresAt: Date.distantPast, userId: current.userId
         ))
-        let deletedClient: HostedClient = HostedClient(baseURL: baseURL, storage: deletedStorage) { () async -> Void in }
+        let deletedClient: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: deletedStorage) { () async -> Void in }
         await #expect(throws: HostedClientError.sessionEnded) {
             _ = try await awaitingAuthLimit { try await deletedClient.entitlements() }
         }
@@ -639,7 +700,7 @@ private func silentFlac(directory: URL) throws -> URL {
         let stored: HostedTokens = try #require(try owner.storage.load())
         try owner.storage.save(tokens: HostedTokens(accessToken: stored.accessToken, refreshToken: stored.refreshToken, accessExpiresAt: Date.distantPast, userId: stored.userId))
         let endedSessions: SessionEndCounter = SessionEndCounter()
-        let offline: HostedClient = HostedClient(baseURL: try parseHostedBaseURL(value: "http://127.0.0.1:1"), storage: owner.storage) { () async -> Void in
+        let offline: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: try parseHostedBaseURL(value: "http://127.0.0.1:1"), storage: owner.storage) { () async -> Void in
             endedSessions.count.withLock { $0 += 1 }
         }
         let recordID: String = "kayit-\(UUID().uuidString.lowercased())"
@@ -663,7 +724,7 @@ private func silentFlac(directory: URL) throws -> URL {
         #expect(asOther.foreign.map(\.id) == [recordID])
 
         // Bağlantı geldi: sahibinin kuyruğunda; ertelenmiş oturum açılır, yinelenen açılış aynı oturumu döndürür.
-        let online: HostedClient = HostedClient(baseURL: baseURL, storage: owner.storage) { () async -> Void in }
+        let online: HostedClient = HostedClient(clientInfo: e2eClientInfo, baseURL: baseURL, storage: owner.storage) { () async -> Void in }
         let asOwner: HostedQueuedRecords = hostedQueuedRecords(records: [queuedRecord(id: recordID)], owners: owners, userId: try #require(try await online.signedInUserID()))
         #expect(asOwner.own.map(\.id) == [recordID])
         let queued: HostedStartedMeeting = try await awaitingAuthLimit {

@@ -39,7 +39,8 @@ private func hybridConfig(directory: URL) -> HybridLiveSessionConfig {
         meInput.finish()
         let refused: HostedAPIError = HostedAPIError(code: .deepgramUnavailable, rawCode: "deepgram_unavailable", status: 503, serverMessage: "", path: "/v1/live/deepgram-token")
         let source: DeepgramLiveSource = DeepgramLiveSource(
-            language: .finnish, keyterms: [], options: DeepgramListenOptions(model: "nova-3", optOutOfModelImprovement: true)
+            language: .finnish, keyterms: [], options: DeepgramListenOptions(model: "nova-3", optOutOfModelImprovement: true),
+            onConnectionEvent: { (_: DeepgramConnectionEvent) -> Void in }
         ) { () async throws -> String in
             throw refused
         }

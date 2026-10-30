@@ -77,6 +77,8 @@ public func hostedKeytermsHeader(keyterms: [String]) throws -> String? {
 /// `onSessionEnded` çağrılır.
 public actor HostedClient: HostedLLMCredentialSource {
     public nonisolated let baseURL: URL
+    /// Her isteğe eklenen sürüm başlıkları (bkz. `HostedClientInfo`).
+    public nonisolated let clientInfo: HostedClientInfo
     private let storage: any HostedTokenStorage
     private let onSessionEnded: @Sendable () async -> Void
     private var cachedTokens: HostedTokens?
@@ -89,7 +91,8 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// Doğrulanmış App Attest anahtarı (base64); `/v1/me` cihazın deneme hakkını da göstersin diye gönderilir.
     private var deviceKeyID: String?
 
-    public init(baseURL: URL, storage: any HostedTokenStorage, onSessionEnded: @escaping @Sendable () async -> Void) {
+    public init(clientInfo: HostedClientInfo, baseURL: URL, storage: any HostedTokenStorage, onSessionEnded: @escaping @Sendable () async -> Void) {
+        self.clientInfo = clientInfo
         self.baseURL = baseURL
         self.storage = storage
         self.onSessionEnded = onSessionEnded
@@ -260,8 +263,8 @@ public actor HostedClient: HostedLLMCredentialSource {
         let path: String = "/v1/transcribe"
         let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode)
         let keytermsHeader: String? = try hostedKeytermsHeader(keyterms: keyterms)
-        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { (accessToken: String) async throws -> (Data, URLResponse) in
-            var request: URLRequest = URLRequest(url: url)
+        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { [clientInfo] (accessToken: String) async throws -> (Data, URLResponse) in
+            var request: URLRequest = withHostedClientHeaders(request: URLRequest(url: url), info: clientInfo)
             request.httpMethod = "POST"
             request.timeoutInterval = timeoutSec
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
@@ -281,12 +284,29 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// loglanmaz ve saklanmaz.
     public func deepgramGrant(meetingID: String) async throws -> HostedDeepgramGrant {
         let path: String = "/v1/live/deepgram-token"
-        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { [baseURL] (accessToken: String) async throws -> (Data, URLResponse) in
-            var request: URLRequest = try hostedJSONRequest(baseURL: baseURL, path: path, method: "POST", body: nil, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec)
+        let attempt: @Sendable (String) async throws -> (Data, URLResponse) = { [baseURL, clientInfo] (accessToken: String) async throws -> (Data, URLResponse) in
+            var request: URLRequest = withHostedClientHeaders(
+                request: try hostedJSONRequest(baseURL: baseURL, path: path, method: "POST", body: nil, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec), info: clientInfo
+            )
             request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
             return try await URLSession.shared.data(for: request)
         }
         return try decode(HostedDeepgramGrant.self, data: try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt), path: path)
+    }
+
+    // MARK: Telemetri
+
+    /// Güvenilirlik ve süre olaylarını gönderir (`POST /v1/telemetry`, gövde `hostedTelemetryEventsBody`). Sunucu
+    /// toplamlara ekler: tekrar iki kez sayabileceği için yalnızca işlenmediği kesin hatalar yeniden denenir.
+    public func sendTelemetryEvents(body: Data) async throws {
+        _ = try await authorized(path: "/v1/telemetry", method: "POST", body: body, isRetryable: isRetryableOneShotRequest)
+    }
+
+    /// Bir günün özellik kullanımını gönderir (`POST /v1/telemetry/features`, gövde `hostedFeatureUsageBody`). Sunucu
+    /// hesap başına günü bir kez sayar (tekrarı zararsız); o gün zaten sayıldıysa false döner.
+    public func sendFeatureUsage(body: Data) async throws -> Bool {
+        let path: String = "/v1/telemetry/features"
+        return try decode(HostedFeatureUsageResponse.self, data: try await authorized(path: path, method: "POST", body: body, isRetryable: isRetryableRepeatableRequest), path: path).counted
     }
 
     /// Erişim jetonunu süresine bakmadan yeniler (yapay zekâ çağrısı 401 aldıysa; tek uçuşlu).
@@ -406,8 +426,10 @@ public actor HostedClient: HostedLLMCredentialSource {
     /// Kimlikli JSON isteği; sunucu erişim jetonunu 401 ile reddederse jeton bir kez yenilenip istek yinelenir.
     private func authorized(path: String, method: String, body: Data?, isRetryable: @escaping @Sendable (HostedAttemptFailure) -> Bool) async throws -> Data {
         let deviceKey: String? = path == "/v1/me" && method == "GET" ? deviceKeyID : nil
-        let make: @Sendable (String) throws -> URLRequest = { [baseURL] (accessToken: String) throws -> URLRequest in
-            var request: URLRequest = try hostedJSONRequest(baseURL: baseURL, path: path, method: method, body: body, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec)
+        let make: @Sendable (String) throws -> URLRequest = { [baseURL, clientInfo] (accessToken: String) throws -> URLRequest in
+            var request: URLRequest = withHostedClientHeaders(
+                request: try hostedJSONRequest(baseURL: baseURL, path: path, method: method, body: body, accessToken: accessToken, timeoutSec: hostedRequestTimeoutSec), info: clientInfo
+            )
             if let deviceKey {
                 request.setValue(deviceKey, forHTTPHeaderField: "x-device-key-id")
             }
@@ -432,7 +454,7 @@ public actor HostedClient: HostedLLMCredentialSource {
     }
 
     private func jsonRequest(path: String, method: String, body: Data?, accessToken: String?, timeoutSec: Double) throws -> URLRequest {
-        try hostedJSONRequest(baseURL: baseURL, path: path, method: method, body: body, accessToken: accessToken, timeoutSec: timeoutSec)
+        withHostedClientHeaders(request: try hostedJSONRequest(baseURL: baseURL, path: path, method: method, body: body, accessToken: accessToken, timeoutSec: timeoutSec), info: clientInfo)
     }
 
     private func send(path: String, isRetryable: @escaping @Sendable (HostedAttemptFailure) -> Bool, request: URLRequest) async throws -> (data: Data, status: Int) {

@@ -60,7 +60,10 @@ const trialLedgerRetentionMs: number = 730 * dayMs;
 /** Toplantılar, aylık kullanım ve kullanılmayan cihazlar 13 ay (~395 gün) tutulur (yıllık karşılaştırma + bir ay). */
 const usageRetentionMs: number = 395 * dayMs;
 
-/** İndirme kaynakları ve "Sorunlar" sayaçları 400 gün tutulur (yıllık karşılaştırma). */
+/**
+ * İndirme kaynakları, "Sorunlar" sayaçları ve telemetri toplamları (amaç başına tokenlar, istemci olayları ve süreleri,
+ * özellik kullanımı) 400 gün tutulur (yıllık karşılaştırma).
+ */
 const aggregateCounterRetentionMs: number = 400 * dayMs;
 /** Abonelik iptal nedenleri (serbest yorum içerebilir) raporlar gibi 180 gün tutulur. */
 const cancellationRetentionMs: number = 180 * dayMs;
@@ -70,8 +73,8 @@ const dailyMetricsRetentionMs: number = 1826 * dayMs;
 const revenueRetentionMs: number = 3653 * dayMs;
 
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 26 tablo koşulu × 3 tur
- * = 78 silme sorgusu + 3 toplu işlemin 6 ifadesi = 84 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 30 tablo koşulu × 3 tur
+ * = 90 silme sorgusu + 3 toplu işlemin 6 ifadesi = 96 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
  * ekler). Workers Paid planının çağrı başına 1000 sorgu sınırının çok altındadır; ücretsiz plana (50) dönülürse
  * `maxBatchesPerTable` 2'ye indirilmelidir. Kalan satırlar ertesi gün silinir. Koşul eklerken bu sayıyı güncelle.
  */
@@ -118,6 +121,10 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { name: "download_visitors", table: "download_visitors", where: "day < ?", binds: [today] },
     { name: "download_sources", table: "download_sources", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "ops_events", table: "ops_events", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "llm_purpose_usage", table: "llm_purpose_usage", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "client_event_counts", table: "client_event_counts", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "client_event_durations", table: "client_event_durations", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "feature_usage_daily", table: "feature_usage_daily", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "subscription_cancellations", table: "subscription_cancellations", where: "created_at < ?", binds: [nowMs - cancellationRetentionMs] },
     // Günlük toplamlar (token kovaları, konuşma tanıma dilleri, indirme kampanyaları) sayaçlar gibi 400 gün.
     { name: "llm_usage_daily", table: "llm_usage_daily", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },

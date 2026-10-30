@@ -609,6 +609,7 @@ final class AppModel {
         }
         do {
             let translated: String = try await translateSentence(provider: provider, sentence: unit.text, context: context, language: selectedNoteLanguage())
+            recordFeatureUsage(feature: .liveTranslation(selectedNoteLanguage()))
             // Bu arada yeni kayıt başladıysa sonuç başka bir toplantının aynı numaralı bölümüne yazılmaz.
             guard generation == recordingGeneration else {
                 return
@@ -1180,6 +1181,7 @@ final class AppModel {
                     }
                 case .reached:
                     Self.logger.info("Toplantının süre sınırına ulaşıldı, kayıt bitiriliyor")
+                    recordTelemetryCount(kind: .recordingOverrun)
                     self.errorMessages = appendUnique(messages: self.errorMessages, message: String(localized: "Bu toplantının süre sınırına ulaşıldı; kayıt bitirildi."))
                     self.stopRecording()
                     return
@@ -1480,7 +1482,11 @@ final class AppModel {
                 noteLanguage: selectedNoteLanguage(), voiceEmbedder: voiceEmbedderIfEnabled(), registry: registeredVoices
             ) { (step: ProcessingStep) async -> Void in
                 self.processingSteps[record.id] = step
+                if step == .writingNote {
+                    self.noteWritingStartedAt[record.id] = .now
+                }
             }
+            recordNoteOutcome(result: result, writingStartedAt: noteWritingStartedAt.removeValue(forKey: record.id))
             // Tekrar işlemede eski not geçmişe girer (ilk işlemede not yoktur).
             let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: String(localized: "Tekrar işlendi"), savedAt: Date())
             let saved: MeetingRecord = withLatestMarks(result: versioned, start: record, directory: directory)
@@ -1559,6 +1565,9 @@ final class AppModel {
             ProcessInfo.processInfo.endActivity(activity)
         }
     }
+
+    /// Kayıt sonrası işlemede notun yazılmaya başladığı an (toplantı kimliği → an; telemetri: not süresi).
+    @ObservationIgnored private var noteWritingStartedAt: [String: ContinuousClock.Instant] = [:]
 
     /// Bu kayıt yüz yüze başladı (mod kayıt sırasında değişmez).
     @ObservationIgnored private var recordingInPerson: Bool = false
@@ -1875,7 +1884,9 @@ final class AppModel {
             }
             Task {
                 let llm: LLMProvider? = await optionalLLMProvider()
+                let noteStartedAt: ContinuousClock.Instant = .now
                 let result: MeetingRecord = await AINotepadCore.regenerateNote(record: record, directory: directory, llm: llm, userName: userName, language: selectedNoteLanguage())
+                recordNoteOutcome(result: result, writingStartedAt: noteStartedAt)
                 let versioned: MeetingRecord = withNoteVersion(updated: result, previous: record, reason: reason, savedAt: Date())
                 saveRecord(record: withLatestMarks(result: versioned, start: record, directory: directory), directory: directory)
                 processingMeetingIDs.remove(meetingID)
@@ -2330,6 +2341,7 @@ final class AppModel {
             return
         }
         #endif
+        recordFeatureUsage(feature: .ask)
         let history: [ArchiveTurn] = archiveHistory(exchanges: archiveExchanges)
         let id: UUID = UUID()
         let scoped: [MeetingRecord]
@@ -2757,6 +2769,7 @@ final class AppModel {
         clearUncertain(meetingID: meetingID, destinationID: destinationID)
         do {
             try await deliverNote(vault: destinationVault(), destination: destination, record: record, note: note)
+            recordFeatureUsage(feature: .integration(telemetryIntegration(target: destination.target)))
             markSent(meetingID: meetingID, destination: destination)
             Self.logger.info("Not hedefe gönderildi, toplantı: \(meetingID, privacy: .public), hedef: \(destinationName(destination: destination), privacy: .public)")
             return nil
@@ -3134,6 +3147,7 @@ final class AppModel {
             // Sonuç uygulamanın kendi cümlesiyle gösterilir: ajanın serbest özeti (kabul testinde) başarılı gönderimi
             // "yanlışlıkla açıldı" diye anlatabiliyordu. Ajanın özeti yalnızca loglanır.
             Self.logger.info("Görevler araca gönderildi, araç: \(tracker.service.rawValue, privacy: .public), sayı: \(result.createdTaskIndices.count, privacy: .public), özet: \(result.summary, privacy: .private)")
+            recordFeatureUsage(feature: .integration(telemetryIntegration(tracker: tracker.service)))
             showSendState(state: .done(String(localized: "\(tracker.service.displayName): \(result.createdTaskIndices.count) görev açıldı")), meetingID: meetingID, states: \.trackerStates)
         } catch TaskTrackerError.partial(let service, let created, let total, let reason) {
             // Açılanlar işaretlenir: yeniden gönderimde yalnızca kalanlar gider.
@@ -3239,6 +3253,7 @@ final class AppModel {
             return String(localized: "Apple Notlar'a yazılamadı: \(failure). Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'da \(appName) için Notlar'a izin ver.")
         }
         Self.logger.info("Not Apple Notlar'a yazıldı, toplantı: \(meetingID, privacy: .public)")
+        recordFeatureUsage(feature: .integration(.appleNotes))
         return nil
     }
 
@@ -3255,6 +3270,7 @@ final class AppModel {
         do {
             let file: URL = try exportMarkdown(record: record, folder: URL(fileURLWithPath: path, isDirectory: true))
             Self.logger.info("Not klasöre yazıldı, dosya: \(file.lastPathComponent, privacy: .private)")
+            recordFeatureUsage(feature: .integration(.markdownFolder))
             return nil
         } catch {
             return userFacingMessage(error: error)

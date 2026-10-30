@@ -7,6 +7,8 @@ export interface Env {
   readonly PROXY_USER_LIMITER: RateLimit;
   readonly REPORT_IP_LIMITER: RateLimit;
   readonly DEEPGRAM_USER_LIMITER: RateLimit;
+  /** `POST /v1/telemetry` ve `/v1/telemetry/features`: kullanıcı başına dakikada 6 (ayrıca günde 200, bkz. `telemetry.ts`). */
+  readonly TELEMETRY_USER_LIMITER: RateLimit;
 
   readonly ENVIRONMENT: string;
   readonly SITE_ORIGIN: string;

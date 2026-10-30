@@ -28,6 +28,11 @@ private func hostedURL(bundle: Bundle, key: String) throws -> URL {
 private func makeHostedClient(bundle: Bundle) -> Result<HostedClient, HostedClientError> {
     do {
         let client: HostedClient = HostedClient(
+            clientInfo: try hostedClientInfo(
+                shortVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+                buildNumber: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+                operatingSystem: ProcessInfo.processInfo.operatingSystemVersion
+            ),
             baseURL: try hostedURL(bundle: bundle, key: "HostedAPIBase"),
             storage: HostedKeychainTokenStorage(service: try hostedKeychainService(bundle: bundle))
         ) { () async -> Void in
@@ -40,7 +45,7 @@ private func makeHostedClient(bundle: Bundle) -> Result<HostedClient, HostedClie
         accountLogger.error("Sunucu bağlantısı kurulamadı, hata: \(String(describing: error), privacy: .private)")
         return .failure(error)
     } catch {
-        // `hostedURL` ve `hostedKeychainService` yalnızca `HostedClientError` fırlatır.
+        // `hostedClientInfo`, `hostedURL` ve `hostedKeychainService` yalnızca `HostedClientError` fırlatır.
         return .failure(.invalidBaseURL(value: String(describing: error)))
     }
 }

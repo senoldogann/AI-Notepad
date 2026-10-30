@@ -12,7 +12,7 @@ import Testing
                 try await Task.sleep(for: .seconds(6.5))
                 return "gec-gelen-jeton"
             },
-            options: developerDeepgramListenOptions, language: .finnish, keyterms: [], audio: audio
+            options: developerDeepgramListenOptions, language: .finnish, keyterms: [], onConnectionEvent: { (_: DeepgramConnectionEvent) -> Void in }, audio: audio
         )
         var failures: [String] = []
         for await event in stream.events {
@@ -46,7 +46,7 @@ import Testing
                 }
                 throw rejection
             },
-            options: developerDeepgramListenOptions, language: .finnish, keyterms: [], audio: audio
+            options: developerDeepgramListenOptions, language: .finnish, keyterms: [], onConnectionEvent: { (_: DeepgramConnectionEvent) -> Void in }, audio: audio
         )
         var failures: [String] = []
         for await event in stream.events {

@@ -10,11 +10,17 @@ public struct DeepgramLiveSource: Sendable {
     public let options: DeepgramListenOptions
     /// Her bağlantıda yeni jeton (sunucudan); jeton saklanmaz.
     public let token: @Sendable () async throws -> String
+    /// Akışlardan birinin bağlantısı koptu ya da yeniden kuruldu (güvenilirlik telemetrisi).
+    public let onConnectionEvent: @Sendable (DeepgramConnectionEvent) -> Void
 
-    public init(language: MeetingLanguage, keyterms: [String], options: DeepgramListenOptions, token: @escaping @Sendable () async throws -> String) {
+    public init(
+        language: MeetingLanguage, keyterms: [String], options: DeepgramListenOptions, onConnectionEvent: @escaping @Sendable (DeepgramConnectionEvent) -> Void,
+        token: @escaping @Sendable () async throws -> String
+    ) {
         self.language = language
         self.keyterms = keyterms
         self.options = options
+        self.onConnectionEvent = onConnectionEvent
         self.token = token
     }
 }
@@ -100,7 +106,10 @@ public func runHybridLiveSession(
         for speaker in liveSpeakers {
             let (audio, input): (AsyncStream<[Float]>, AsyncStream<[Float]>.Continuation) = AsyncStream.makeStream(of: [Float].self)
             inputs[speaker] = input
-            streams.append((speaker, startDeepgramStream(token: source.token, options: source.options, language: source.language, keyterms: source.keyterms, audio: audio)))
+            streams.append((speaker, startDeepgramStream(
+                token: source.token, options: source.options, language: source.language, keyterms: source.keyterms, onConnectionEvent: source.onConnectionEvent,
+                audio: audio
+            )))
         }
         router = HybridRouter(backend: .deepgram(inputs: inputs, streams: streams.map(\.1)), consumers: streams.count, maxPendingSamples: maxPendingSamples)
         for (speaker, stream) in streams {

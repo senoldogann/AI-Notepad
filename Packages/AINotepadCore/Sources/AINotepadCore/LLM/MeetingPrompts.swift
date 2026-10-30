@@ -63,6 +63,7 @@ let translationSchema: String = """
 public func translationRequest(sentence: String, context: [String], language: ShareLanguage) -> LLMRequest {
     let contextText: String = context.isEmpty ? "(yok)" : context.joined(separator: "\n")
     return LLMRequest(
+        purpose: .liveTranslation,
         tier: .fast,
         system: """
         Bir toplantının canlı çevirmenisin. <cumle> içindeki konuşmayı doğal, akıcı \(language.promptName) diline çevir
@@ -120,6 +121,7 @@ public func missedSummaryRequest(segments: [LiveSegment], nowSec: Double, window
         return nil
     }
     return LLMRequest(
+        purpose: .missedSummary,
         tier: .live,
         system: """
         Toplantıyı takip etmekte zorlanan bir kullanıcıya yardım ediyorsun. Transkriptte "Sen" kullanıcıdır.
@@ -164,6 +166,7 @@ public func questionRequest(segments: [LiveSegment], question: String, language:
         return nil
     }
     return LLMRequest(
+        purpose: .liveQuestion,
         tier: .live,
         system: """
         Toplantıyı takip etmekte zorlanan bir kullanıcının sorusunu yalnızca transkripte dayanarak cevapla.

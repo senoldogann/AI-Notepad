@@ -6,6 +6,7 @@ import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
 import { adminInsights } from "./adminInsights";
 import { adminOperations } from "./adminOps";
+import { adminTelemetry } from "./adminTelemetry";
 import { adminTrends } from "./adminTrends";
 import { fetchSiteAnalytics, requireSiteAnalytics } from "./siteAnalytics";
 import { adminProduct } from "./adminProduct";
@@ -47,6 +48,7 @@ import { createChallenge, deviceAssertionSchema, registerDevice, verifyDeviceAss
 import { type CheckoutRequest, createCheckout, createPortal, handleStripeWebhook } from "./billing";
 import { complimentaryRequestSchema, complimentaryUntilMs, grantComplimentaryAccess, revokeComplimentaryAccess } from "./complimentary";
 import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
+import { type ClientVersions, optionalClientVersions, recordClientVersions, requiredAppVersion } from "./clientVersions";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
 import { type DownloadOrigin, countDownload, downloadCampaignOf, downloadSourceOf, latestMacVersion, referrerHostOf } from "./downloads";
@@ -58,6 +60,7 @@ import { type AcceptedReferral, referralSummary, requireReferral } from "./refer
 import { clientIpKey } from "./ip";
 import { llmRequestSchema } from "./llm/request";
 import { proxyLLM } from "./llm/proxy";
+import { type LLMPurpose, llmPurposeOf } from "./llm/purpose";
 import { errorName, log } from "./log";
 import { type MeetingRow, type MeetingStartRequest, endMeeting, reprocessMeeting, requireUsableMeeting, startMeeting } from "./meetings";
 import {
@@ -72,6 +75,7 @@ import {
   setReportStatus,
 } from "./reports";
 import { failureEvents, meetingFailureCode, recordMeetingFailure, recordOpsEvents } from "./opsEvents";
+import { countTelemetryRequest, featureUsageSchema, recordFeatureUsage, recordTelemetryEvents, telemetryEventsSchema } from "./telemetry";
 import { dayKey, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { cachedTranscriptionResponse, parseTranscribeParams, proxyTranscription } from "./transcribe";
@@ -328,6 +332,11 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
   if (path === "/v1/me" && method === "GET") {
     const user: AuthedUser = await authed();
+    // Uygulamanın sürüm başlıkları hesabın son sürümü olarak yazılır (site ve eski uygulamalar göndermez).
+    const versions: ClientVersions | null = optionalClientVersions(request);
+    if (versions !== null) {
+      await recordClientVersions(db, user.userId, versions, now);
+    }
     return jsonResponse(200, await entitlements(db, config, user.userId, deviceKeyIdHeader(request), now));
   }
   if (path === "/v1/me" && method === "DELETE") {
@@ -389,6 +398,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   if (path === "/v1/llm/messages" && method === "POST") {
     const user: AuthedUser = await authed();
     await enforceLimit(env.PROXY_USER_LIMITER, `user:${user.userId}`);
+    const purpose: LLMPurpose = llmPurposeOf(request.headers.get("x-llm-purpose"));
     // Toplantı kimliği varsa çağrı o toplantının bütçesinden düşer; yoksa hesap çağrısıdır (deneme ya da abonelik
     // hakkı gerekir, kullanıcının günlük ve aylık sınırı geçerlidir).
     const meetingId: string | null = optionalMeetingIdHeader(request);
@@ -399,7 +409,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       }
       await requireSpendHeadroom(db, config, now);
       const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
-      return proxyLLM(db, context, config, { kind: "account", userId: user.userId, access }, body);
+      return proxyLLM(db, context, config, { kind: "account", userId: user.userId, access, purpose }, body);
     }
     return withMeetingFailures(db, user.userId, meetingId, now, async (): Promise<Response> => {
       const meeting: MeetingRow = await requireUsableMeeting(db, config, user.userId, meetingId, now);
@@ -410,7 +420,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
       }
       await requireSpendHeadroom(db, config, now);
       const body = await readJsonBody(request, llmRequestSchema, config.llm.maxRequestBytes);
-      return proxyLLM(db, context, config, { kind: "meeting", userId: user.userId, meeting }, body);
+      return proxyLLM(db, context, config, { kind: "meeting", userId: user.userId, meeting, purpose }, body);
     });
   }
   if (path === "/v1/transcribe" && method === "POST") {
@@ -481,6 +491,21 @@ async function route(request: Request, env: Env, config: Config, context: Reques
     }
     await createReport(db, config, body, user === null ? null : user.userId, now);
     return jsonResponse(202, {});
+  }
+  if ((path === "/v1/telemetry" || path === "/v1/telemetry/features") && method === "POST") {
+    // İstemci telemetrisi (yalnızca uygulama; bkz. `telemetry.ts`): kullanıcı başına dakikada 6 ve günde 200 istek.
+    const user: AuthedUser = await authed();
+    await enforceLimit(env.TELEMETRY_USER_LIMITER, `user:${user.userId}`);
+    const appVersion: string = requiredAppVersion(request);
+    if (path === "/v1/telemetry") {
+      const body = await readJsonBody(request, telemetryEventsSchema, smallBodyBytes);
+      await countTelemetryRequest(db, user.userId, now);
+      await recordTelemetryEvents(db, body.events, appVersion, now);
+      return jsonResponse(202, {});
+    }
+    const body = await readJsonBody(request, featureUsageSchema, smallBodyBytes);
+    await countTelemetryRequest(db, user.userId, now);
+    return jsonResponse(200, { counted: await recordFeatureUsage(db, user.userId, body, now) });
   }
   if (path === "/v1/download/mac/version" && method === "GET") {
     // İndirme sayfasındaki sürüm numarası. `max-age=300` yalnızca tarayıcıda işe yarar: Worker yanıtı Cloudflare
@@ -576,6 +601,9 @@ async function routeAdmin(request: Request, env: Env, config: Config, context: R
   }
   if (path === "/v1/admin/operations" && method === "GET") {
     return jsonResponse(200, await adminOperations(db, config, now));
+  }
+  if (path === "/v1/admin/telemetry" && method === "GET") {
+    return jsonResponse(200, await adminTelemetry(db, now));
   }
   if (path === "/v1/admin/insights" && method === "GET") {
     return jsonResponse(200, await adminInsights(db, now));

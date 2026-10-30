@@ -1,8 +1,9 @@
 ---
 // Gizlilik politikası. Gerçek davranışa dayanır: sunucu (server/README.md, server/src/account.ts, cleanup.ts,
-// transcribe.ts, deepgram.ts, llm/, auth/, billing.ts, referrals.ts, trialLedger.ts, deviceCheck.ts, migrations/, wrangler.jsonc), abonelik uygulaması
+// transcribe.ts, deepgram.ts, llm/, auth/, billing.ts, referrals.ts, trialLedger.ts, deviceCheck.ts, telemetry.ts, migrations/, wrangler.jsonc), abonelik uygulaması
 // (App/Hosted: canlı metin Deepgram'la, kapasite dolunca ya da bağlantı yoksa Mac'te; iCloud eşitlemesi yok, güncellemeler
-// GitHub'dan) ve bu sitenin tarayıcı depolaması (public/theme.js,
+// GitHub'dan; sürüm başlıkları, yapay zekâ isteğinin amacı ve Ayarlar › Genel'den kapatılabilen kullanım
+// istatistikleri) ve bu sitenin tarayıcı depolaması (public/theme.js,
 // src/client/session.ts). Sağlayıcıların saklama ve eğitim kuralları resmî belgelerinden alınmıştır (2026-10-29):
 // ElevenLabs (elevenlabs.io/dpa, docs "Zero Retention Mode" ve "Data residency", terms-of-use-eu §4), Anthropic
 // (anthropic.com/legal/commercial-terms ve /legal/data-processing-addendum, privacy.claude.com saklama makalesi,
@@ -23,6 +24,7 @@ const sections: readonly LegalSectionInfo[] = [
   { id: "meetings", title: "Your meeting content" },
   { id: "data", title: "Data we process, why, and on what legal basis" },
   { id: "messages", title: "Contact form, email, feedback and crash reports" },
+  { id: "statistics", title: "App version and usage statistics" },
   { id: "website", title: "This website, cookies and browser storage" },
   { id: "providers", title: "Service providers and international transfers" },
   { id: "retention", title: "How long we keep data" },
@@ -71,18 +73,23 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         transcript (directly from your Mac), ElevenLabs for the final transcript and Anthropic for notes (both through our
         server, which keeps no audio or notes and holds the final transcript encrypted for up to 2 hours). Deepgram keeps no
         audio or text after transcribing; the others may keep request data for
-        a time under their own retention rules (see section 7). We keep only usage numbers (how long, how many tokens) to
+        a time under their own retention rules (see section 8). We keep only usage numbers (how long, how many tokens) to
         apply the plan limits.
       </li>
       <li>
         We set no cookies of our own and use no advertising trackers on this website. We count visits with Cloudflare Web
         Analytics, which uses no cookies and collects no personal data. Apple and Google sign-in and Cloudflare Turnstile
-        may use their own cookies on the pages where you use them (see section 6). We don't sell your data.
+        may use their own cookies on the pages where you use them (see section 7). We don't sell your data.
+      </li>
+      <li>
+        The Mac app tells our server its version and the macOS version, and which feature each AI request is for. Unless
+        you turn off “Share anonymous usage statistics” in its settings, it also sends daily reliability and
+        feature-usage counts. None of this contains meeting content (see section 6).
       </li>
       <li>
         You can delete your account yourself at any time; the data on our server is deleted immediately, except a few
         records kept for a limited time to prevent abuse and handle payments, such as a pseudonymous record of your
-        free-trial use (section 9 lists them all).
+        free-trial use (section 10 lists them all).
       </li>
     </ul>
   </LegalSection>
@@ -129,7 +136,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       meeting content to perform our contract with you. Meetings also involve other people. You decide whether to record a
       meeting and what to do with the result, so for the other participants' personal data you are the controller and we
       act as your processor under GDPR Article 28: we process it only on your instructions — to transcribe the meeting and
-      write your note — using the sub-processors listed in section 7, and never for any other purpose. You are responsible
+      write your note — using the sub-processors listed in section 8, and never for any other purpose. You are responsible
       for telling participants that you are recording and, where the law requires it, getting their consent.
       Participants who want to use their rights should contact the person who recorded the meeting; if they contact us,
       we will pass the request on or help that person answer it.
@@ -247,6 +254,25 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           </tr>
           <tr>
             <td>
+              <strong>App and macOS version.</strong> The version and build number of the Mac app and the macOS version,
+              sent with the app's requests; we keep the latest values on your account with the time the app last checked
+              in. For each AI request, which feature it is for; kept only as daily token totals per feature, not linked to
+              any account (see section 6)
+            </td>
+            <td>Knowing which versions are in use, supporting older versions and planning updates; measuring the cost of each feature</td>
+            <td>(f) legitimate interest in operating the service</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Usage statistics.</strong> Only while “Share anonymous usage statistics” is on in the Mac app:
+              reliability and performance counts and a daily summary of which features were used, stored as daily totals
+              not linked to any account (see section 6). No meeting content
+            </td>
+            <td>Finding and fixing reliability problems, measuring performance, deciding which features to improve, planning capacity and cost</td>
+            <td>(f) legitimate interest in operating and improving the service; you can object by turning the setting off</td>
+          </tr>
+          <tr>
+            <td>
               <strong>Technical logs.</strong> Endpoint, result or error code, account ID and time. Logs never contain
               meeting audio or text. We also keep daily error totals (for example how many requests were refused because a
               limit was reached), not linked to anyone.
@@ -262,7 +288,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Downloads and updates.</strong> The app and its updates are downloaded from GitHub, which processes
-              your IP address and browser or app information to deliver the files (see section 7). We count downloads per
+              your IP address and browser or app information to deliver the files (see section 8). We count downloads per
               day, by which button on our site was used, by campaign (the <code>utm_source</code> and
               <code>utm_campaign</code> parameters of the download link) and by the domain of the referring page (only the
               domain, never the full address); no IP address or other identifier is stored with the counts. To count each network once a day,
@@ -274,7 +300,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Website statistics.</strong> Aggregated page views, referring sites, countries and device types,
-              counted by Cloudflare Web Analytics without cookies or personal data (see section 6)
+              counted by Cloudflare Web Analytics without cookies or personal data (see section 7)
             </td>
             <td>Understanding how the website is used and improving it</td>
             <td>(f) legitimate interest in a useful website</td>
@@ -284,7 +310,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
     </div>
     <p>
       Where we rely on legitimate interest, we have weighed it against your interests and kept the data to the minimum
-      needed. You can object at any time (see section 10).
+      needed. You can object at any time (see section 11).
     </p>
   </LegalSection>
 
@@ -293,7 +319,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       <li>
         <strong>Contact form.</strong> When you write to us through the <a href={routes.contact}>contact form</a>, we
         store your email address and message so that we can answer you. The form is protected by Cloudflare Turnstile
-        (see section 6). We delete the message and email address 180 days after we receive them.
+        (see section 7). We delete the message and email address 180 days after we receive them.
       </li>
       <li>
         <strong>Email.</strong> If you email us directly, or we answer you by email, the messages are kept in our mailbox,
@@ -306,6 +332,64 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         and delete them 180 days after we receive them.
       </li>
     </ul>
+  </LegalSection>
+
+  <LegalSection sections={sections} id="statistics">
+    <p>
+      <strong>Always sent.</strong> These are part of providing the service and can't be turned off:
+    </p>
+    <ul>
+      <li>
+        <strong>App and macOS version.</strong> The {productName} Mac app sends its version and build number and the
+        macOS version with its requests to our server. We keep the latest values on your account together with the time
+        the app last checked in, to know which versions are in use, to support older versions and to plan updates. They
+        are deleted with your account.
+      </li>
+      <li>
+        <strong>Feature of each AI request.</strong> Every AI request says which feature it is for (for example live
+        translation, meeting notes or Ask). We keep daily token totals per feature, which are not linked to any account.
+      </li>
+    </ul>
+    <p>
+      <strong>Usage statistics.</strong> Only if “Share anonymous usage statistics” is on (it is on by default in the{" "}
+      {productName} Mac app), the app also sends:
+    </p>
+    <ul>
+      <li>
+        <strong>Reliability and performance counts:</strong> live transcription connection drops and reconnects, final
+        transcription giving up, note generation failures, recordings reaching their time limit, and how long final
+        transcription and note writing took. These are summed per day and app version.
+      </li>
+      <li>
+        <strong>Daily feature usage:</strong> once a day, which features were used that day — whether live translation was
+        used and its target language, whether Ask was used, how many times each integration type (for example Slack,
+        Notion or Apple Notes) and each export format (for example PDF or Markdown) was used, whether your meeting archive
+        was accessed over MCP, and whether the live transcript ran on your Mac.
+      </li>
+    </ul>
+    <p>
+      These statistics are stored only as daily totals and are not linked to your account. To avoid counting the same day
+      twice, your account keeps the date of the last daily report and how many statistics uploads were made today.
+    </p>
+    <p>
+      <strong>Never included:</strong> audio, transcripts, notes, prompts, meeting titles, names, email addresses, file
+      names or paths, links, or any other meeting content.
+    </p>
+    <p>
+      <strong>Purpose and legal basis.</strong> We use this to find and fix reliability problems, measure performance,
+      decide which features to improve and plan capacity and cost. Our legal basis is our legitimate interest in operating
+      and improving the service (GDPR Art. 6(1)(f)); you can object at any time by turning the setting off.
+    </p>
+    <p>
+      <strong>Retention.</strong> Daily totals are kept for 400 days; the version fields on your account until the
+      account is deleted.
+    </p>
+    <p>
+      <strong>How to turn it off.</strong> In the {productName} Mac app, open Settings › General and turn off “Share
+      anonymous usage statistics”. When it is off, the app sends no usage statistics; the app and macOS version and the
+      feature of each AI request are still sent because the service needs them. The iPhone app and the self-hosted
+      developer edition (AI-Notepad) send none of this.
+    </p>
   </LegalSection>
 
   <LegalSection sections={sections} id="website">
@@ -486,7 +570,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         encrypted for up to 2 hours (see section 3), then deleted. At our AI providers: Deepgram keeps the live audio and
         transcript only
         while processing them; Anthropic deletes it within 30 days (up to 2 years if flagged under its usage policy);
-        ElevenLabs keeps it under its own retention rules (see section 7).
+        ElevenLabs keeps it under its own retention rules (see section 8).
       </li>
       <li>Account, sign-in identities and device registrations: while your account exists; deleted immediately when you delete it.</li>
       <li>Meeting session records and monthly usage: up to 13 months, then deleted automatically; deleted immediately when you delete your account.</li>
@@ -507,7 +591,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         card can't use an invite again.
       </li>
       <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
-      <li>Daily download, campaign, error, AI token and transcription language totals (not linked to you): 400 days.</li>
+      <li>Daily download, campaign, error, AI token and transcription language totals and daily usage statistics (not linked to you): 400 days.</li>
+      <li>The latest app and macOS version on your account, the time the app last checked in and the date of the last daily usage report: while your account exists; deleted immediately when you delete it.</li>
       <li>Technical logs: kept for a short period by Cloudflare, normally no more than a few days.</li>
       <li>Database backups (Cloudflare D1 point-in-time recovery): up to 30 days, after which deleted data is gone from backups too.</li>
       <li>

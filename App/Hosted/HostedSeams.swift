@@ -31,6 +31,7 @@ struct HostedLiveChoice {
 func hostedLiveChoice(language: MeetingLanguage, keyterms: [String]) async -> HostedLiveChoice {
     let expected: HostedLiveStatus = hostedExpectedLiveStatus(account: .shared)
     guard expected.engine == .deepgram else {
+        recordFeatureUsage(feature: .onDeviceLive)
         return HostedLiveChoice(start: .local, status: expected)
     }
     let client: HostedClient
@@ -45,13 +46,23 @@ func hostedLiveChoice(language: MeetingLanguage, keyterms: [String]) async -> Ho
         grant = try await client.deepgramGrant(meetingID: meetingID)
     } catch {
         seamsLogger.warning("Deepgram jetonu alınamadı, canlı metin Mac'te, hata: \(String(describing: error), privacy: .private)")
+        recordFeatureUsage(feature: .onDeviceLive)
         return HostedLiveChoice(
             start: .local,
             status: HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Bulut canlı metni için jeton alınamadı: \(userFacingMessage(error: error))"))
         )
     }
-    let source: DeepgramLiveSource = DeepgramLiveSource(language: language, keyterms: keyterms, options: hostedDeepgramListenOptions(grant: grant)) {
-        () async throws -> String in
+    let source: DeepgramLiveSource = DeepgramLiveSource(
+        language: language, keyterms: keyterms, options: hostedDeepgramListenOptions(grant: grant),
+        onConnectionEvent: { (event: DeepgramConnectionEvent) -> Void in
+            Task { @MainActor in
+                switch event {
+                case .dropped: recordTelemetryCount(kind: .deepgramSocketDrop)
+                case .reconnected: recordTelemetryCount(kind: .deepgramReconnect)
+                }
+            }
+        }
+    ) { () async throws -> String in
         try await client.deepgramGrant(meetingID: meetingID).accessToken
     }
     return HostedLiveChoice(start: .deepgram(source), status: HostedLiveStatus(engine: .deepgram, reason: String(localized: "Sunucu bulut canlı metnine izin verdi")))
@@ -180,7 +191,7 @@ func hostedFinalPassPlan(keyterms: [String], recordID: String) async -> FinalPas
         seamsLogger.warning("Kaydın sunucu oturumu yeniden açılamadı, hata: \(String(describing: error), privacy: .private)")
         return .skip(reason: userFacingMessage(error: error))
     }
-    return .run(HostedFinalTranscriber(client: client, meetingID: meetingID, keyterms: keyterms))
+    return .run(TelemetryFinalTranscriber(inner: HostedFinalTranscriber(client: client, meetingID: meetingID, keyterms: keyterms)))
 }
 
 /// Toplantı sunucuda var mı: kapatma isteği (bitmiş toplantıda etkisiz) yanıtlanıyorsa evet, `not_found` ise hayır; diğer

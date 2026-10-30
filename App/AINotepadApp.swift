@@ -95,6 +95,11 @@ enum AppEntry {
             FileHandle.standardError.write(Data("\(appName) MCP: \(userFacingMessage(error: error))\n".utf8))
             exit(1)
         }
+        // Arşiv bugün MCP ile açıldı: yalnızca bu Mac'teki günlük kayda yazılır (paylaşım açıksa); uygulama gönderir.
+        registerDefaultSettings()
+        MainActor.assumeIsolated {
+            recordFeatureUsage(feature: .mcp)
+        }
         let version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         runMCPServer(
             input: .standardInput, output: .standardOutput, sessionsDirectories: [archive.sessionsDirectory],
@@ -357,6 +362,8 @@ struct AINotepadApp: App {
             // kullanılabiliyorsa ilk Mac'e geçişte iner (bkz. `hostedPreloadsLocalModel`).
             chooseHostedMeetingLanguageOnFirstRun(defaults: .standard)
             await HostedAccount.shared.refresh()
+            // Kullanım istatistikleri (paylaşım açıksa): önceki oturumdan bekleyenler hemen, sonra düzenli gönderilir.
+            HostedTelemetryCenter.shared.start()
             await model.refreshSetupProblems()
             if hostedPreloadsLocalModel(account: .shared) {
                 await model.loadModel()

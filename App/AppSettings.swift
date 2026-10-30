@@ -110,6 +110,9 @@ enum SettingsKey {
     /// Pencere yüzeyi (dolu, buzlu cam, şeffaf cam), cam opaklığı ve zemin tonu.
     static let surface: String = "appearance.surface"
     static let surfaceOpacity: String = "appearance.surfaceOpacity"
+    /// "Anonim kullanım istatistiklerini paylaş" (yalnızca abonelik sürümünde görünür ve kullanılır; bkz.
+    /// `HostedTelemetryCenter`).
+    static let shareUsageStatistics: String = "privacy.shareUsageStatistics"
 }
 
 /// Arayüz dili; macOS'ta uygulama dili yeniden başlatınca uygulanır.
@@ -302,6 +305,8 @@ func registerDefaultSettings() {
         SettingsKey.islandEnabled: true,
         SettingsKey.surface: PanelAppearance.standard.surface.rawValue,
         SettingsKey.surfaceOpacity: PanelAppearance.standard.surfaceOpacity,
+        // Abonelik sürümünde varsayılan açık (Ayarlar › Genel'den kapatılır); geliştirici sürümü hiçbir şey göndermez.
+        SettingsKey.shareUsageStatistics: true,
     ])
 }
 

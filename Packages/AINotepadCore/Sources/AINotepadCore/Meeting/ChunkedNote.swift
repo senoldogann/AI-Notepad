@@ -103,6 +103,7 @@ public func noteChunkRequest(
         ? "(yok)"
         : state.tasks.enumerated().map { numberedTaskLine(number: $0.offset + 1, task: $0.element) }.joined(separator: "\n")
     return LLMRequest(
+        purpose: .noteChunk,
         tier: .smart,
         system: """
         Uzun bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptini parça parça okuyup \(language.promptName)
@@ -212,6 +213,7 @@ public func noteOverviewRequest(state: ChunkedNoteState, userName: String, templ
     let mine: (rule: String, block: String) = myNotesPrompt(myNotes: myNotes)
     let tasks: String = state.tasks.enumerated().map { numberedTaskLine(number: $0.offset + 1, task: $0.element) }.joined(separator: "\n")
     return LLMRequest(
+        purpose: .noteOverview,
         tier: .smart,
         system: """
         Uzun bir toplantının parça parça çıkarılmış notları veriliyor. Kullanıcının adı \(user). Tüm toplantı için

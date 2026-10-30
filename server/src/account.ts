@@ -58,7 +58,9 @@ function accountDeletedCounterStatement(db: D1Database, userId: string, now: Dat
  * Silme, "Sorunlar" sayacına hesabın kesimiyle sayılır (`accountDeletedCounterStatement`). Gelir satırları
  * (`revenue_invoices`; muhasebe kaydı) kalır, hesap bağı kaldırılır (`revenueDeletionStatement`).
  * `daily_spend` (toplam, kişisel değil), `downloads`, `download_sources`, `download_visitors`, `ops_events`,
- * `used_nonces` ve `stripe_events` hesaba bağlı değildir.
+ * `used_nonces`, `stripe_events` ve telemetri toplamları (`llm_purpose_usage`, `client_event_counts`,
+ * `client_event_durations`, `feature_usage_daily`) hesaba bağlı değildir; hesabın son uygulama ve macOS sürümü ile
+ * telemetri sayaçları `users` satırıyla silinir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
   return [

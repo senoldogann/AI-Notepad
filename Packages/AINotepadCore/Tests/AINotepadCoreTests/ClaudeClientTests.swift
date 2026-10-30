@@ -25,7 +25,7 @@ func completeStream(texts: [String], stopReason: String) -> Data {
 }
 
 func request(model: ClaudeModel, schema: String?) -> LLMRequest {
-    LLMRequest(tier: model == .haiku ? .fast : .smart, system: "sistem", userText: "metin", maxTokens: 1024, jsonSchema: schema, timeoutSec: 20)
+    LLMRequest(purpose: .note, tier: model == .haiku ? .fast : .smart, system: "sistem", userText: "metin", maxTokens: 1024, jsonSchema: schema, timeoutSec: 20)
 }
 
 @Suite struct ClaudeClientTests {
@@ -134,7 +134,7 @@ extension CloudTests {
     @Test func haikuAnswers() async throws {
         let text: String = try await sendLLM(
             provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
-            request: LLMRequest(tier: .fast, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, jsonSchema: nil, timeoutSec: 20)
+            request: LLMRequest(purpose: .note, tier: .fast, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 64, jsonSchema: nil, timeoutSec: 20)
         )
         #expect(text.lowercased().contains("ankara"), "metin: \(text)")
     }
@@ -160,7 +160,7 @@ extension CloudTests {
             let config: AnthropicConfig = AnthropicConfig(apiKey: key, fastModel: model, smartModel: model, fastEffort: effort, smartEffort: effort)
             let text: String = try await sendLLM(
                 provider: .anthropic(config),
-                request: LLMRequest(tier: tier, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120)
+                request: LLMRequest(purpose: .note, tier: tier, system: "Yalnızca tek kelimeyle cevap ver.", userText: "Türkiye'nin başkenti?", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120)
             )
             #expect(text.lowercased().contains("ankara"), "model: \(model.rawValue), effort: \(effort.rawValue), metin: \(text)")
         }

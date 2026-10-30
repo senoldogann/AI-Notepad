@@ -629,7 +629,7 @@ func trackerAgentRequest(
     Şimdiye kadar:
     \(transcript.isEmpty ? "(henüz bir şey yapılmadı)" : transcript.joined(separator: "\n"))
     """
-    return LLMRequest(tier: .smart, system: system, userText: user, maxTokens: 2000, jsonSchema: trackerAgentSchema, timeoutSec: 90)
+    return LLMRequest(purpose: .taskAgent, tier: .smart, system: system, userText: user, maxTokens: 2000, jsonSchema: trackerAgentSchema, timeoutSec: 90)
 }
 
 /// Görev aracı hataları.

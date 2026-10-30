@@ -1,6 +1,6 @@
 // Yönetim paneli: yedi görünüm — genel bakış (özet kutuları ve son 30 günün çubuk grafikleri; satır içi SVG,
 // kütüphanesiz, her grafiğin metin özeti var), içgörüler (admin-insights.ts: sorunlar, huni, indirme kaynakları, iptal
-// nedenleri), ürün (admin-product.ts: kohortlar, tutunma, güvenilirlik, birim ekonomisi), eğilimler (admin-trends.ts), kullanıcılar (admin-users.ts), işletim (admin-ops.ts), bildirim kutusu
+// nedenleri), ürün (admin-product.ts: kohortlar, tutunma, güvenilirlik, birim ekonomisi), eğilimler (admin-trends.ts), telemetri (admin-telemetry.ts: sürümler, amaca göre token, istemci olayları, özellikler), kullanıcılar (admin-users.ts), işletim (admin-ops.ts), bildirim kutusu
 // (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme) ve blog (admin-blog.ts: haftalık
 // yazılar, düzenleyici, zamanlama, paylaşım). Panel yalnızca `/v1/admin/stats`
 // başarılı olunca şablondan eklenir; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
@@ -27,6 +27,7 @@ import { type InsightsView, createInsightsView } from "./admin-insights";
 import { type OperationsView, createOperationsView } from "./admin-ops";
 import { type ProductView, createProductView } from "./admin-product";
 import { type TrendsView, createTrendsView } from "./admin-trends";
+import { type TelemetryView, createTelemetryView } from "./admin-telemetry";
 import { type UsersView, createUsersView } from "./admin-users";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
 import { MissingElementError, dataValue, element, errorText, hideNotice, showNotice } from "./dom";
@@ -40,8 +41,8 @@ const chartHeight: number = 60;
 const barGap: number = 3;
 
 /** Panelin görünümleri. */
-type AdminView = "overview" | "insights" | "product" | "trends" | "users" | "operations" | "inbox" | "blog";
-const adminViews: readonly AdminView[] = ["overview", "insights", "product", "trends", "users", "operations", "inbox", "blog"];
+type AdminView = "overview" | "insights" | "product" | "trends" | "telemetry" | "users" | "operations" | "inbox" | "blog";
+const adminViews: readonly AdminView[] = ["overview", "insights", "product", "trends", "telemetry", "users", "operations", "inbox", "blog"];
 
 /** Grafikteki bir günün çubuk parçaları (yığılmış: alttan üste). */
 interface ChartDay {
@@ -490,6 +491,9 @@ async function main(): Promise<void> {
     if (next === "trends") {
       trends.ensureLoaded().catch(showFailure);
     }
+    if (next === "telemetry") {
+      telemetry.ensureLoaded().catch(showFailure);
+    }
     if (next === "operations") {
       operations.ensureLoaded().catch(showFailure);
     }
@@ -515,6 +519,7 @@ async function main(): Promise<void> {
   const insights: InsightsView = createInsightsView(openUser);
   const product: ProductView = createProductView();
   const trends: TrendsView = createTrendsView();
+  const telemetry: TelemetryView = createTelemetryView();
   const blog: BlogView = createBlogView(showFailure);
 
   const refresh = async (): Promise<void> => {
@@ -528,6 +533,7 @@ async function main(): Promise<void> {
       current === "insights" ? insights.refresh() : Promise.resolve(),
       current === "product" ? product.refresh() : Promise.resolve(),
       current === "trends" ? trends.refresh() : Promise.resolve(),
+      current === "telemetry" ? telemetry.refresh() : Promise.resolve(),
       current === "blog" ? blog.refresh() : Promise.resolve(),
     ]);
     renderStats(stats);

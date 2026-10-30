@@ -1,8 +1,9 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): sekiz görünüm — genel
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): dokuz görünüm — genel
 // bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
 // davet özeti), ürün (etkinlik, kohortlar, tutunma, güvenilirlik, yaklaşık birim ekonomisi, sürüme göre çökmeler),
 // eğilimler (günlük anlık görüntüler, gerçek gelir, token kovaları, diller, kampanyalar, site istatistikleri),
+// telemetri (sürüm benimsenmesi, amaca göre token, istemci olayları ve süreleri, özellik kullanımı),
 // kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
 // işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, kapak
 // seçici, görsel ekleme, önizleme, sitede açma, paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
@@ -25,6 +26,7 @@ import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-c
 import { type AdminBlogCopy, adminBlogCopy } from "../client/admin-blog-copy";
 import { type AdminProductCopy, adminProductCopy } from "../client/admin-product-copy";
 import { type AdminTrendsCopy, type TrendChartId, type TrendTableId, adminTrendsCopy } from "../client/admin-trends-copy";
+import { type AdminTelemetryCopy, adminTelemetryCopy, countEventKinds, durationEventKinds } from "../client/admin-telemetry-copy";
 
 const text: AdminCopy = copy.admin;
 const inviteText: AdminInviteCopy = adminInviteCopy;
@@ -35,6 +37,7 @@ const trendsText: AdminTrendsCopy = adminTrendsCopy;
 /** Eğilimler görünümünün grafikleri ve tabloları (betik `chart-trend-<id>`, `trend-<id>-rows` doldurur). */
 const trendCharts: readonly TrendChartId[] = ["mrr", "subscribers", "active", "spend", "revenue"];
 const trendTables: readonly TrendTableId[] = ["revenue", "tokens", "languages", "events", "campaigns", "paths", "referrers"];
+const telemetryText: AdminTelemetryCopy = adminTelemetryCopy;
 
 /** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
 interface KpiSpec {
@@ -119,6 +122,7 @@ const views: readonly { readonly id: string; readonly label: string; readonly ic
   { id: "insights", label: text.views.insights, icon: "sparkle" },
   { id: "product", label: productText.view, icon: "waveform" },
   { id: "trends", label: trendsText.view, icon: "clock" },
+  { id: "telemetry", label: telemetryText.view, icon: "waveform" },
   { id: "users", label: text.views.users, icon: "users" },
   { id: "operations", label: text.views.operations, icon: "laptop" },
   { id: "inbox", label: text.views.inbox, icon: "inbox" },
@@ -224,6 +228,94 @@ const blogColumns: readonly Column[] = [
 const stripeColumns: readonly Column[] = [textColumn(text.operations.stripeColumns.type), numberColumn(text.operations.stripeColumns.count)];
 
 /** İçgörüler görünümünün tabloları (betik `<id>-rows` gövdesini, varsa `<id>-empty` bildirimini doldurur). */
+/**
+ * Telemetri görünümünün tabloları (betik `<id>-rows`, `<id>-empty` ve `summary` ise `<id>-summary` doldurur; bkz.
+ * admin-telemetry.ts). `wide` tablo iki sütunu kaplar.
+ */
+interface TelemetryTable {
+  readonly id: string;
+  readonly title: string;
+  readonly columns: readonly Column[];
+  readonly empty: string;
+  readonly summary: boolean;
+  readonly wide: boolean;
+}
+
+const versionColumns: readonly Column[] = [
+  textColumn(telemetryText.versionColumns.version),
+  numberColumn(telemetryText.versionColumns.users),
+  textColumn(telemetryText.versionColumns.share),
+];
+const featureColumns: readonly Column[] = [
+  textColumn(telemetryText.featureColumns.feature),
+  numberColumn(telemetryText.featureColumns.userDays),
+  textColumn(telemetryText.featureColumns.share),
+  numberColumn(telemetryText.featureColumns.uses),
+];
+const valueFeatureColumns: readonly Column[] = [textColumn(telemetryText.valueColumn), ...featureColumns.slice(1)];
+
+const telemetryTables: readonly TelemetryTable[] = [
+  { id: "telemetry-apps", title: telemetryText.appVersionsTitle, columns: versionColumns, empty: telemetryText.noVersions, summary: false, wide: false },
+  { id: "telemetry-os", title: telemetryText.osVersionsTitle, columns: versionColumns, empty: telemetryText.noVersions, summary: false, wide: false },
+  {
+    id: "telemetry-purposes",
+    title: telemetryText.purposesTitle,
+    columns: [
+      textColumn(telemetryText.purposeColumns.purpose),
+      numberColumn(telemetryText.purposeColumns.calls),
+      numberColumn(telemetryText.purposeColumns.input),
+      numberColumn(telemetryText.purposeColumns.output),
+      textColumn(telemetryText.purposeColumns.share),
+    ],
+    empty: telemetryText.noPurposes,
+    summary: false,
+    wide: true,
+  },
+  {
+    id: "telemetry-tokens-daily",
+    title: telemetryText.purposesDailyTitle,
+    columns: [
+      textColumn(telemetryText.dailyTokenColumns.day),
+      numberColumn(telemetryText.dailyTokenColumns.calls),
+      numberColumn(telemetryText.dailyTokenColumns.tokens),
+      textColumn(telemetryText.dailyTokenColumns.trend),
+    ],
+    empty: telemetryText.noPurposes,
+    summary: false,
+    wide: true,
+  },
+  {
+    id: "telemetry-events",
+    title: telemetryText.reliabilityTitle,
+    columns: [textColumn(telemetryText.reliabilityColumns.event), numberColumn(telemetryText.reliabilityColumns.total), textColumn(telemetryText.reliabilityColumns.versions)],
+    empty: telemetryText.noEvents,
+    summary: false,
+    wide: true,
+  },
+  {
+    id: "telemetry-events-daily",
+    title: telemetryText.reliabilityDailyTitle,
+    columns: [textColumn(telemetryText.dayColumn), ...countEventKinds.map((kind) => numberColumn(telemetryText.countKindsShort[kind]))],
+    empty: telemetryText.noEvents,
+    summary: false,
+    wide: true,
+  },
+  ...durationEventKinds.map(
+    (kind): TelemetryTable => ({
+      id: `telemetry-duration-${kind}`,
+      title: telemetryText.durationKinds[kind],
+      columns: [textColumn(telemetryText.durationColumns.bucket), numberColumn(telemetryText.durationColumns.runs), textColumn(telemetryText.durationColumns.share)],
+      empty: telemetryText.noDurations,
+      summary: true,
+      wide: false,
+    }),
+  ),
+  { id: "telemetry-features", title: telemetryText.featuresTitle, columns: featureColumns, empty: telemetryText.noFeatures, summary: true, wide: true },
+  { id: "telemetry-languages", title: telemetryText.languagesTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
+  { id: "telemetry-integrations", title: telemetryText.integrationsTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
+  { id: "telemetry-exports", title: telemetryText.exportsTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
+];
+
 const problemColumns: readonly Column[] = [
   textColumn(text.insights.problemsColumns.problem),
   numberColumn(text.insights.problemsColumns.last7),
@@ -765,6 +857,42 @@ const productSections: readonly ProductSection[] = [
                 </section>
               ))
             }
+          </div>
+
+          {/* ---------- Telemetri ---------- */}
+          <div id="panel-telemetry" class="admin__panel hidden">
+            <p id="telemetry-window" class="small muted telemetry-lead"></p>
+            <p id="telemetry-active" class="telemetry-lead"></p>
+            <div class="insights-grid">
+              {
+                telemetryTables.map((table: TelemetryTable) => (
+                  <section class:list={["card", "table-card", { "ops-grid__wide": table.wide }]} aria-labelledby={`${table.id}-title`}>
+                    <h2 class="detail__label table-card__title" id={`${table.id}-title`}>
+                      {table.title}
+                    </h2>
+                    {table.summary ? <p id={`${table.id}-summary`} class="small muted table-note" /> : null}
+                    <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
+                      <table class="data-table">
+                        <thead>
+                          <tr>
+                            {table.columns.map((column: Column) => (
+                              <th scope="col" class:list={{ numeric: column.numeric }}>
+                                {column.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody id={`${table.id}-rows`} />
+                      </table>
+                    </div>
+                    <p id={`${table.id}-empty`} class="muted table-empty hidden">
+                      {table.empty}
+                    </p>
+                  </section>
+                ))
+              }
+            </div>
+            <p class="small muted telemetry-lead">{telemetryText.featuresNote}</p>
           </div>
 
           {/* ---------- Kullanıcılar ---------- */}
@@ -2225,6 +2353,26 @@ const productSections: readonly ProductSection[] = [
 
   .ops-grid__wide {
     grid-column: 1 / -1;
+  }
+
+  /* ---------- Telemetri ---------- */
+
+  .telemetry-lead {
+    margin: 0 0 12px;
+    line-height: 1.5;
+  }
+
+  /* Pay hücresi: ince ölçer ve yüzde (betik çizer). */
+  .data-table :global(.telemetry-share) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+  }
+
+  .data-table :global(.telemetry-share__meter) {
+    width: 72px;
+    flex: none;
   }
 
   /* ---------- Ürün ---------- */
