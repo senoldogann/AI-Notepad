@@ -24,20 +24,31 @@ export const elevenLabsSpeechToTextUrl: string = "https://api.elevenlabs.io/v1/s
 export const scribeModel: string = "scribe_v2";
 
 /**
- * ElevenLabs isteğinin toplam zaman aşımı: yükleme istemciden akarak gider (95 MB) ve uzun ses dakikalar sürer;
- * istemcinin parça zaman aşımından (300 sn + dakika başına 10 sn, ~49 dakikalık parçada ~13 dk) uzundur.
+ * ElevenLabs isteğinin toplam zaman aşımı: yükleme istemciden akarak gider (en çok 95 MB) ve uzun ses dakikalar sürer.
+ * Uygulamanın parçaları ~49 dakikalık WAV (eski sürümler) ya da en çok 60 dakikalık FLAC'tır; istemcinin parça zaman
+ * aşımı en az 16 dakikadır (bundan uzun).
  */
 const elevenLabsTimeoutMs: number = 15 * 60_000;
 
 /**
- * Kabul edilen ses türleri: yalnızca PCM WAV (Mac uygulamasının gönderdiği tek tür, `audio/wav`; eş adları). Süre
- * başlıktan kesin hesaplanır (veri baytı / bayt hızı); sıkıştırılmış türlerde boyuttan süreye güvenilir üst sınır
- * çıkmadığı için (düşük bit hızı, sessizlik) kabul edilmez.
+ * Kabul edilen ses türleri: PCM WAV (`audio/wav` ve eş adları; FLAC'tan önceki uygulama sürümleri) ve 16 kHz mono
+ * 16 bit FLAC (`audio/flac`, `audio/x-flac`; uygulamanın kayıpsız sıkıştırılmış yüklemesi). Süre iki türde de baştaki
+ * baytlardan kesin hesaplanır: WAV'da veri baytı / bayt hızı, FLAC'ta STREAMINFO'daki toplam örnek / örnekleme hızı.
+ * Diğer sıkıştırılmış türlerde süreye güvenilir üst sınır çıkmadığı için (düşük bit hızı, sessizlik) kabul edilmez.
  */
 const wavTypes: ReadonlySet<string> = new Set(["audio/wav", "audio/x-wav", "audio/wave"]);
+const flacTypes: ReadonlySet<string> = new Set(["audio/flac", "audio/x-flac"]);
 
 /** WAV başlığı için okunacak en çok bayt. */
 const maxWavHeaderBytes: number = 64 * 1024;
+
+/** FLAC'ın STREAMINFO'yu taşıyan baştaki baytları: `fLaC` (4) + blok başlığı (4) + STREAMINFO (34). */
+const flacStreamInfoBytes: number = 42;
+
+/** Kabul edilen tek FLAC biçimi: uygulamanın gönderdiği 16 kHz mono 16 bit. */
+const flacSampleRate: number = 16_000;
+const flacChannels: number = 1;
+const flacBitsPerSample: number = 16;
 
 /** ElevenLabs'e iletilecek izinli parametreler. */
 export interface TranscribeParams {
@@ -129,13 +140,18 @@ export function parseTranscribeParams(url: URL, keytermsHeader: string | null, m
   return { languageCode: language, diarize: diarize === "true", keyterms };
 }
 
-/** Ses türü (parametresiz, küçük harf); WAV değilse `unsupported_media_type`. Saf fonksiyondur. */
+/** Ses türü (parametresiz, küçük harf); WAV ya da FLAC değilse `unsupported_media_type`. Saf fonksiyondur. */
 export function audioContentType(header: string | null): string {
   const type: string = (header ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
-  if (!wavTypes.has(type)) {
-    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor; yalnızca PCM WAV (audio/wav) kabul edilir.");
+  if (!wavTypes.has(type) && !flacTypes.has(type)) {
+    throw new ApiError("unsupported_media_type", "Ses türü desteklenmiyor; yalnızca PCM WAV (audio/wav) ya da 16 kHz mono FLAC (audio/flac) kabul edilir.");
   }
   return type;
+}
+
+/** ElevenLabs'e giden dosyanın adı: türün uzantısıyla. Saf fonksiyondur. */
+export function audioFileName(contentType: string): string {
+  return flacTypes.has(contentType) ? "audio.flac" : "audio.wav";
 }
 
 /** WAV veri bölümünün başladığı konum ve bayt hızı. */
@@ -204,32 +220,147 @@ export function wavLayout(head: Uint8Array): WavLayout | null {
   return null;
 }
 
+/** FLAC STREAMINFO'sunun süre için gereken alanları. */
+export interface FlacStreamInfo {
+  readonly sampleRate: number;
+  readonly channels: number;
+  readonly bitsPerSample: number;
+  readonly totalSamples: number;
+}
+
+function invalidFlac(reason: string): ApiError {
+  return new ApiError("invalid_body", `FLAC başlığı geçersiz: ${reason}.`);
+}
+
+/**
+ * FLAC'ın başını okur: `fLaC` imzası ve ilk metadata bloğu 34 baytlık STREAMINFO olmalı; biçim 16 kHz, mono, 16 bit ve
+ * toplam örnek sayısı bildirilmiş (0 değil) olmalı. Blok verisinin 10. baytından itibaren büyük uçlu: 20 bit örnekleme
+ * hızı, 3 bit kanal − 1, 5 bit örnek biti − 1, 36 bit toplam örnek. 42 bayt henüz gelmediyse null. Saf fonksiyondur.
+ */
+export function flacStreamInfo(head: Uint8Array): FlacStreamInfo | null {
+  if (head.byteLength < flacStreamInfoBytes) {
+    return null;
+  }
+  const view: DataView = new DataView(head.buffer, head.byteOffset, head.byteLength);
+  if (String.fromCharCode(...head.subarray(0, 4)) !== "fLaC") {
+    throw invalidFlac("fLaC imzası yok");
+  }
+  // Blok başlığı: ilk bit "son blok" işareti, kalan 7 bit tür (0 = STREAMINFO), sonraki 3 bayt uzunluk.
+  if ((view.getUint8(4) & 0x7f) !== 0 || (view.getUint32(4) & 0xffffff) !== 34) {
+    throw invalidFlac("ilk metadata bloğu STREAMINFO değil");
+  }
+  const packed: number = view.getUint32(18);
+  const info: FlacStreamInfo = {
+    sampleRate: packed >>> 12,
+    channels: ((packed >>> 9) & 0x07) + 1,
+    bitsPerSample: ((packed >>> 4) & 0x1f) + 1,
+    totalSamples: (packed & 0x0f) * 2 ** 32 + view.getUint32(22),
+  };
+  if (info.sampleRate !== flacSampleRate) {
+    throw invalidFlac("örnekleme hızı 16 kHz değil");
+  }
+  if (info.channels !== flacChannels) {
+    throw invalidFlac("ses mono değil");
+  }
+  if (info.bitsPerSample !== flacBitsPerSample) {
+    throw invalidFlac("örnekler 16 bit değil");
+  }
+  if (info.totalSamples === 0) {
+    throw invalidFlac("toplam örnek sayısı bildirilmemiş");
+  }
+  return info;
+}
+
+/**
+ * Bildirilen örnek sayısındaki FLAC'ın olabilecek en büyük boyutu (bayt): kodlayıcı sıkışmayan çerçeveyi ham PCM olarak
+ * yazar (Apple'ın kodlayıcısı beyaz gürültüde PCM'in %0,11 fazlası); %1 çerçeve payı ve 4 KB metadata payı (Apple'ın
+ * kodlayıcısı ~100 bayt metadata yazar). Daha büyük dosyanın STREAMINFO'su süreyi eksik bildiriyordur (ElevenLabs
+ * gerçek sesi çözer, ayırma eksik kalırdı). Saf fonksiyondur.
+ */
+export function flacMaxBytes(totalSamples: number): number {
+  return Math.ceil(totalSamples * 2 * 1.01) + 4096;
+}
+
 /** Gövdenin baştan okunmuş baytları ve kesin süresi. */
 interface AudioHead {
   readonly head: Uint8Array;
   readonly seconds: number;
 }
 
-/** WAV başlığını akıştan okur (en çok 64 KB) ve kesin süreyi hesaplar; okunan baytlar sonra aynen iletilir. */
-async function readWavHead(reader: ReadableStreamDefaultReader<Uint8Array>, declaredBytes: number): Promise<AudioHead> {
+/**
+ * Gövdenin başını `seconds` süreyi çıkarana dek akıştan okur; okunan baytlar sonra aynen iletilir. `limit` bayta
+ * gelindiyse `limitError`, gövde önce bittiyse `endError`.
+ */
+async function readHead(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  limit: number,
+  seconds: (head: Uint8Array) => number | null,
+  limitError: ApiError,
+  endError: ApiError,
+): Promise<AudioHead> {
   let head: Uint8Array = new Uint8Array(0);
   for (;;) {
-    const layout: WavLayout | null = wavLayout(head);
-    if (layout !== null) {
-      return { head, seconds: Math.max(0, declaredBytes - layout.dataOffset) / layout.byteRate };
+    const found: number | null = seconds(head);
+    if (found !== null) {
+      return { head, seconds: found };
     }
-    if (head.byteLength >= Math.min(maxWavHeaderBytes, declaredBytes)) {
-      throw invalidWav("data bölümü bulunamadı");
+    if (head.byteLength >= limit) {
+      throw limitError;
     }
     const { done, value }: ReadableStreamReadResult<Uint8Array> = await reader.read();
     if (done) {
-      throw invalidWav("dosya başlıktan önce bitti");
+      throw endError;
     }
     const joined: Uint8Array = new Uint8Array(head.byteLength + value.byteLength);
     joined.set(head);
     joined.set(value, head.byteLength);
     head = joined;
   }
+}
+
+/** WAV başlığını akıştan okur (en çok 64 KB) ve kesin süreyi hesaplar (veri baytı / bayt hızı). */
+function readWavHead(reader: ReadableStreamDefaultReader<Uint8Array>, declaredBytes: number): Promise<AudioHead> {
+  return readHead(
+    reader,
+    Math.min(maxWavHeaderBytes, declaredBytes),
+    (head: Uint8Array): number | null => {
+      const layout: WavLayout | null = wavLayout(head);
+      return layout === null ? null : Math.max(0, declaredBytes - layout.dataOffset) / layout.byteRate;
+    },
+    invalidWav("data bölümü bulunamadı"),
+    invalidWav("dosya başlıktan önce bitti"),
+  );
+}
+
+/**
+ * FLAC STREAMINFO'sunu akıştan okur ve kesin süreyi hesaplar (toplam örnek / örnekleme hızı); dosya boyutu bildirilen
+ * süreye sığmıyorsa (`flacMaxBytes`) reddedilir. Daha iyi sıkışan seste STREAMINFO'nun eksik bildirdiği süre ancak
+ * ElevenLabs yanıtındaki gerçek süreyle ortaya çıkar: kesinleştirme gerçek süreyi yazar, toplantının ses hakkını kapatır
+ * ve alarm yazar (`transcription_overrun`).
+ */
+function readFlacHead(reader: ReadableStreamDefaultReader<Uint8Array>, declaredBytes: number): Promise<AudioHead> {
+  const tooShort: ApiError = invalidFlac("dosya STREAMINFO'dan önce bitti");
+  return readHead(
+    reader,
+    Math.min(flacStreamInfoBytes, declaredBytes),
+    (head: Uint8Array): number | null => {
+      const info: FlacStreamInfo | null = flacStreamInfo(head);
+      if (info === null) {
+        return null;
+      }
+      if (declaredBytes > flacMaxBytes(info.totalSamples)) {
+        throw invalidFlac("dosya boyutu STREAMINFO'daki örnek sayısından büyük");
+      }
+      return info.totalSamples / info.sampleRate;
+    },
+    tooShort,
+    tooShort,
+  );
+}
+
+/** Türüne göre ses başlığını okur (`readWavHead` ya da `readFlacHead`). */
+function readAudioHead(contentType: string, reader: ReadableStreamDefaultReader<Uint8Array>, declaredBytes: number): Promise<AudioHead> {
+  return flacTypes.has(contentType) ? readFlacHead(reader, declaredBytes) : readWavHead(reader, declaredBytes);
 }
 
 /** ElevenLabs çok parçalı gövdesinin metin alanları; dosya en sondadır. Saf fonksiyondur. */
@@ -294,12 +425,14 @@ type ElevenLabsResult =
   | { readonly ok: false; readonly error: ApiError; readonly uploaded: boolean };
 
 /**
- * Ses dosyasını ElevenLabs Scribe v2 toplu konuşma tanımaya iletir (konuşmacı ayırma isteğe bağlı). Gövde ham PCM
- * WAV'dır (`Content-Type: audio/wav`, `Content-Length` zorunlu); parametreler sorguda, anahtar terimler `x-keyterms`
+ * Ses dosyasını ElevenLabs Scribe v2 toplu konuşma tanımaya iletir (konuşmacı ayırma isteğe bağlı). Gövde 16 kHz mono
+ * 16 bit FLAC (`Content-Type: audio/flac`) ya da eski sürümlerden ham PCM WAV'dır (`audio/wav`); `Content-Length`
+ * zorunlu; dosya ElevenLabs'e aynı türle ve uzantıyla gider. Parametreler sorguda, anahtar terimler `x-keyterms`
  * başlığındadır. Ses bellekte biriktirilmeden akış olarak iletilir (Worker belleği 128 MB); bu yüzden üst istek
  * yeniden denenemez, istemci yeniden dener.
  *
- * Süre sınırı: istekten önce WAV başlığından kesin süre okunur ve toplantının kalan ses süresine ve aylık süreye karşı
+ * Süre sınırı: istekten önce ses başlığından (WAV başlığı ya da FLAC STREAMINFO; `readAudioHead`) kesin süre okunur
+ * ve toplantının kalan ses süresine ve aylık süreye karşı
  * tek koşullu ifadeyle süreli bir ayırma satırı olarak ayrılır; toplantının yüklemeleri birikimli sayılır ve toplantıda
  * aynı anda tek ses isteği olabilir (süren varsa `409 transcription_in_progress`). Yanıttaki gerçek süreyle kesinleşir;
  * gerçek süre ayrılanı aşarsa süre yine de yazılır, toplantının ses hakkı kapanır ve alarm logu yazılır. Gönderim ve
@@ -336,7 +469,7 @@ export async function proxyTranscription(
   let audio: AudioHead;
   let reservation: UsageReservation;
   try {
-    audio = await readWavHead(reader, declaredBytes);
+    audio = await readAudioHead(contentType, reader, declaredBytes);
     await requireElevenLabsHeadroom(db, config, audio.seconds, now);
     reservation = audioReservation(meeting.user_id, meeting.id, audio.seconds, transcriptionCostMicroUsd(audio.seconds, usdPerHour), meeting.kind === "trial", now);
     await reserveUsage(db, reservation, [
@@ -388,7 +521,7 @@ async function transcribeAndSettle(
   }
   const reserved: number = audio.seconds;
   const seconds: number = billableSeconds(result.transcription, reserved);
-  // Ayırma WAV başlığından kesindir; 1 saniyelik pay yuvarlama içindir.
+  // Ayırma ses başlığından (WAV başlığı ya da FLAC STREAMINFO) kesindir; 1 saniyelik pay yuvarlama içindir.
   const overrun: boolean = seconds > reserved + 1;
   await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now));
   // Kesinleşmeden sonraki denetim yanıtı düşürmez (ses faturalandı; istemci yeniden göndermesin).
@@ -400,7 +533,7 @@ async function transcribeAndSettle(
   if (overrun) {
     log("alert", "transcription_overrun", { userId: meeting.user_id, meetingId: meeting.id, reservedSeconds: reserved, actualSeconds: seconds, contentType });
   }
-  log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, keyterms: params.keyterms.length });
+  log("info", "transcription_usage", { userId: meeting.user_id, meetingId: meeting.id, seconds, bytes: declaredBytes, contentType, keyterms: params.keyterms.length });
   if (uploadKey !== null) {
     // Ses kesinleşti ve faturalandı: saklama hatası yanıtı düşürmez (düşürseydi istemci yeniden gönderir, ses yeniden
     // faturalanırdı); alarm yazılır, sonuç döner.
@@ -448,7 +581,7 @@ async function sendToElevenLabs(
   head: Uint8Array,
 ): Promise<ElevenLabsResult> {
   const boundary: string = `ainotepad-${randomToken(18)}`;
-  const { prefix, suffix } = multipartEnvelope(boundary, multipartFields(params), "audio.wav", contentType);
+  const { prefix, suffix } = multipartEnvelope(boundary, multipartFields(params), audioFileName(contentType), contentType);
   const { readable, writable } = new FixedLengthStream(prefix.byteLength + declaredBytes + suffix.byteLength);
   let uploaded: boolean = false;
   const upload: Promise<void> = pipeAudio(reader, head, writable, prefix, suffix, declaredBytes).then((): void => {

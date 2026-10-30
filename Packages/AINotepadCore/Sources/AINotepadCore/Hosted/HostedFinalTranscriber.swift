@@ -4,7 +4,8 @@ import Security
 
 private let finalLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "HostedFinal")
 
-/// Abonelik sürümünün son geçişi: kayıt 16 kHz mono WAV parçalarına (≤95 MB, ~49 dk) çevrilir, her parça sunucunun
+/// Abonelik sürümünün son geçişi: kayıt 16 kHz mono 16 bit kayıpsız FLAC parçalarına (≤95 MB, ≤60 dk; bkz.
+/// `writeHostedFlacChunks`, `hostedFlacChunkMaxSec`) çevrilir, her parça sunucunun
 /// `/v1/transcribe` ucuna (ElevenLabs Scribe vekili, konuşmacı ayırma açık) sırayla gönderilir, sonuçlar parça
 /// konumlarıyla kaydırılıp birleştirilir; ardışık parçalar bir dakika örtüşür ve konuşmacılar ortak bölgedeki
 /// kelimelerle eşlenir (bkz. `mergeChunkTranscriptions`). Sınır: ortak dakikada konuşmayan kişi sonraki parçada yeni
@@ -30,8 +31,9 @@ public struct HostedFinalTranscriber: FinalTranscriber {
             throw StorageError.writeFailed(path: directory.path, reason: error.localizedDescription)
         }
         defer { removeChunkDirectory(directory: directory) }
-        let chunks: [WavChunkFile] = try writeHostedWavChunks(
+        let chunks: [AudioChunkFile] = try writeHostedFlacChunks(
             source: audioURL, directory: directory, maxBytes: hostedTranscribeMaxBytes,
+            maxSamples: Int(hostedFlacChunkMaxSec * Double(hostedTranscribeSampleRate)),
             overlapSamples: Int(hostedChunkOverlapSec * Double(hostedTranscribeSampleRate))
         )
         let terms: [String] = hostedKeyterms(terms: keyterms, limit: 30)
@@ -49,12 +51,12 @@ public struct HostedFinalTranscriber: FinalTranscriber {
                 results.append(ChunkTranscription(
                     offsetSec: chunk.span.offsetSec(sampleRate: hostedTranscribeSampleRate), overlapSec: overlapSec, result: try parseElevenLabsResponse(data: data)
                 ))
-                finalLogger.info("Son geçiş parçası yazıya döküldü, parça: \(results.count, privacy: .public)/\(chunks.count, privacy: .public), saniye: \(durationSec, privacy: .public)")
+                finalLogger.info("Son geçiş parçası yazıya döküldü, parça: \(results.count, privacy: .public)/\(chunks.count, privacy: .public), saniye: \(durationSec, privacy: .public), bayt: \(chunk.bytes, privacy: .public)")
             } catch let error where !results.isEmpty && !(error is CancellationError) {
                 // Sonraki parça reddedildi (ör. toplantının ses hakkı ya da aylık süre doldu) ya da bağlantı koptu:
                 // yazıya dökülmüş (ve faturalanmış) parçalar atılmaz; kalan kısmın canlı metni korunur
                 // (`coveredUntilSec`), neden bildirilir.
-                let previous: WavChunkFile = chunks[index - 1]
+                let previous: AudioChunkFile = chunks[index - 1]
                 let covered: Double = previous.span.offsetSec(sampleRate: hostedTranscribeSampleRate) + Double(previous.span.sampleCount) / Double(hostedTranscribeSampleRate)
                 let doneMinutes: Int = Int((covered / 60).rounded())
                 let reason: String = (error as? HostedAPIError).map { hostedErrorMessage(error: $0) } ?? userFacingMessage(error: error)
@@ -83,7 +85,7 @@ extension HostedFinalTranscriber {
         while true {
             do {
                 // Aynı parçanın her denemesi aynı anahtarla: önceki yanıt kaybolduysa sunucu saklı sonucu döndürür.
-                return try await client.transcribe(meetingID: meetingID, wavFile: url, languageCode: languageCode, keyterms: keyterms, uploadKey: uploadKey, timeoutSec: timeoutSec)
+                return try await client.transcribe(meetingID: meetingID, flacFile: url, languageCode: languageCode, keyterms: keyterms, uploadKey: uploadKey, timeoutSec: timeoutSec)
             } catch let error as HostedAPIError where error.code == .transcriptionInProgress && attempt < hostedTranscribeBusyAttempts {
                 finalLogger.warning("Toplantının önceki yüklemesi sürüyor, bekleniyor, deneme: \(attempt, privacy: .public)")
                 try await Task.sleep(for: .seconds(hostedTranscribeBusyDelaySec))
@@ -112,6 +114,6 @@ private func removeChunkDirectory(directory: URL) {
     do {
         try FileManager.default.removeItem(at: directory)
     } catch {
-        finalLogger.warning("Geçici WAV parçaları silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+        finalLogger.warning("Geçici ses parçaları silinemedi, klasör: \(directory.lastPathComponent, privacy: .public), hata: \(String(describing: error), privacy: .private)")
     }
 }

@@ -252,10 +252,11 @@ public actor HostedClient: HostedLLMCredentialSource {
 
     // MARK: Ses ve yapay zekâ
 
-    /// WAV dosyasını `/v1/transcribe`'a ham gövde olarak gönderir; ElevenLabs yanıtının JSON'unu döndürür.
+    /// 16 kHz mono 16 bit FLAC dosyasını (`writeHostedFlacChunks`) `/v1/transcribe`'a ham gövde olarak gönderir
+    /// (`audio/flac`; sunucu süreyi STREAMINFO'dan okur); ElevenLabs yanıtının JSON'unu döndürür.
     /// `uploadKey`: parçanın yükleme anahtarı (32 bayt base64url; parçanın her yeniden denemesinde aynı): yanıt yolda
     /// kaybolursa sunucu sesi yeniden işlemeden ve faturalamadan aynı sonucu döndürür.
-    public func transcribe(meetingID: String, wavFile: URL, languageCode: String?, keyterms: [String], uploadKey: String, timeoutSec: Double) async throws -> Data {
+    public func transcribe(meetingID: String, flacFile: URL, languageCode: String?, keyterms: [String], uploadKey: String, timeoutSec: Double) async throws -> Data {
         let path: String = "/v1/transcribe"
         let url: URL = hostedTranscribeURL(baseURL: baseURL, languageCode: languageCode)
         let keytermsHeader: String? = try hostedKeytermsHeader(keyterms: keyterms)
@@ -265,12 +266,12 @@ public actor HostedClient: HostedLLMCredentialSource {
             request.timeoutInterval = timeoutSec
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "authorization")
             request.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
-            request.setValue("audio/wav", forHTTPHeaderField: "content-type")
+            request.setValue("audio/flac", forHTTPHeaderField: "content-type")
             request.setValue(uploadKey, forHTTPHeaderField: "x-upload-key")
             if let keytermsHeader {
                 request.setValue(keytermsHeader, forHTTPHeaderField: "x-keyterms")
             }
-            return try await URLSession.shared.upload(for: request, fromFile: wavFile)
+            return try await URLSession.shared.upload(for: request, fromFile: flacFile)
         }
         return try await authorizedOperation(path: path, isRetryable: isRetryableRepeatableRequest, operation: attempt)
     }
