@@ -99,7 +99,7 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
             LiveSegment(id: SegmentID(speaker: .me, index: 0), startSec: 3, endSec: 4, text: "kesk", isFinal: false, failureMessage: nil, person: nil),
             LiveSegment(id: SegmentID(speaker: .others, index: 4), startSec: 5, endSec: 6, text: "", isFinal: true, failureMessage: "x", person: nil),
         ]
-        #expect(storedSegments(transcript: transcript) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei", words: nil)])
+        #expect(storedSegments(transcript: transcript, spokenLanguages: [:]) == [StoredSegment(key: "others-3", speaker: .others, person: 2, startSec: 1, endSec: 2, text: "Hei", words: nil)])
     }
 }
 

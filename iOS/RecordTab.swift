@@ -270,7 +270,7 @@ private struct LiveRecordingView: View {
                         .padding(.top, 60)
                     }
                     ForEach(blocks) { (block: SpeakerBlock) in
-                        LiveBlockView(block: block, translations: recorder.translations)
+                        LiveBlockView(block: block, translations: recorder.translations, otherLanguage: recorder.otherLanguageSegments)
                             .transition(.opacity.combined(with: .offset(y: 8)))
                     }
                     Color.clear.frame(height: 1).id(bottomID)
@@ -474,6 +474,8 @@ private struct ConsentCard: View {
 private struct LiveBlockView: View {
     let block: SpeakerBlock
     let translations: [SegmentID: String]
+    /// Sabit toplantı dilinden başka dildeki bölümler: soluk ve eğik (çevrilmez, toplantıdan atlanır).
+    let otherLanguage: Set<SegmentID>
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -488,7 +490,7 @@ private struct LiveBlockView: View {
                         .monospacedDigit()
                         .foregroundStyle(Theme.muted)
                 }
-                Text("\(Text(finalText))\(Text(partialText).foregroundStyle(Theme.muted))")
+                Text("\(finalText)\(Text(partialText).foregroundStyle(Theme.muted))")
                     .appFont(size: 17, weight: .regular)
                     .lineSpacing(4)
                 if !translation.isEmpty {
@@ -506,13 +508,18 @@ private struct LiveBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var finalText: String {
-        block.segments.filter(\.isFinal).map(\.text).joined(separator: " ")
+    /// Kesin bölümler; başka dildeki bölüm soluk ve eğik.
+    private var finalText: Text {
+        block.segments.filter(\.isFinal).enumerated().reduce(Text(verbatim: "")) { (combined: Text, item: (offset: Int, element: LiveSegment)) -> Text in
+            let piece: Text = Text(verbatim: (item.offset == 0 ? "" : " ") + item.element.text)
+            let styled: Text = otherLanguage.contains(item.element.id) ? piece.italic().foregroundStyle(Theme.muted) : piece
+            return Text("\(combined)\(styled)")
+        }
     }
 
     private var partialText: String {
         let partial: String = block.segments.filter { !$0.isFinal }.map(\.text).joined(separator: " ")
-        return finalText.isEmpty || partial.isEmpty ? partial : " " + partial
+        return !block.segments.contains(where: \.isFinal) || partial.isEmpty ? partial : " " + partial
     }
 
     /// Bloğun çevirisi; kapsanan bölümlerin boş çevirisi atlanır (çevirileri birimin son bölümünde).

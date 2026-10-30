@@ -42,6 +42,7 @@ private struct ViewStateInputs: Equatable {
     let transcript: [LiveSegment]
     let translations: [SegmentID: String]
     let failedTranslations: Set<SegmentID>
+    let otherLanguageSegments: Set<SegmentID>
     let displayMode: DisplayMode
     let assistantCard: AssistantCard?
     let phase: RecordingPhase
@@ -107,6 +108,13 @@ final class AppModel {
     /// Bir sonraki kaydın dil modu (kayıt sırasında dil `setLanguage` ile değişir).
     var languageMode: LanguageMode = .automatic
     var lockedLanguage: MeetingLanguage?
+    /// Süren kaydın kullanıcının sabitlediği dili: kayıt başında seçili sabit dil ya da kayıtta "Dili değiştir" ile seçilen;
+    /// Otomatikte nil. Kayda yazılır; doluysa başka dildeki konuşma çevrilmez ve toplantıdan atlanır.
+    private(set) var recordingFixedLanguage: MeetingLanguage?
+    /// Kesinleşen bölümlerin güvenle algılanan dilleri (bkz. `confidentSpokenLanguage`); bölümlerle birlikte saklanır.
+    private(set) var spokenLanguages: [SegmentID: String] = [:]
+    /// Metni toplantı dilinden başka dilde olduğu için çevrilmeyen birimlerin bölümleri (panelde soluk).
+    private(set) var languageSkippedSegments: Set<SegmentID> = []
     /// Adı verilmiş kişilerin ses izleri (sesinden tanıma; `Voices.json`).
     var registeredVoices: [RegisteredVoice] = []
     /// Kayıtlı sesler okunamadı ya da yazılamadı (Ayarlar'da gösterilir).
@@ -285,8 +293,9 @@ final class AppModel {
     /// Ada ve panelin gösterdiği durum; girdiler değişmedikçe önbellekten (ada ve panel aynı değişiklikte iki kez okur).
     var viewState: LiveViewState {
         let inputs: ViewStateInputs = ViewStateInputs(
-            transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations, displayMode: displayMode,
-            assistantCard: assistantCard, phase: phase,
+            transcript: correctedTranscript, translations: translations, failedTranslations: failedTranslations,
+            otherLanguageSegments: liveOtherLanguageSegments,
+            displayMode: displayMode, assistantCard: assistantCard, phase: phase,
             newPersonNumber: nextFreePerson(transcript: transcript, corrections: speakerCorrections), isPaused: isPaused, isMicMuted: isMicMuted, canToggleMic: !isRecording || micOpenedForRecording, isInPerson: isRecording && recordingInPerson, canStart: isReadyToRecord && !isStarting,
             startedAt: recordingStartedAt, statusText: statusText,
             // Algılanan dil yalnızca kayıt sürerken anlamlı: bittikten sonra seçili mod (ör. "Otomatik") görünür.
@@ -300,7 +309,7 @@ final class AppModel {
         }
         let state: LiveViewState = makeLiveViewState(
             transcript: inputs.transcript, translations: inputs.translations, displayMode: inputs.displayMode,
-            failedTranslations: inputs.failedTranslations, assistantCard: inputs.assistantCard, phase: inputs.phase,
+            failedTranslations: inputs.failedTranslations, otherLanguageSegments: inputs.otherLanguageSegments, assistantCard: inputs.assistantCard, phase: inputs.phase,
             newPersonNumber: inputs.newPersonNumber, isPaused: inputs.isPaused, isMicMuted: inputs.isMicMuted, canToggleMic: inputs.canToggleMic, isInPerson: inputs.isInPerson, canStart: inputs.canStart, startedAt: inputs.startedAt, statusText: inputs.statusText, languageText: inputs.languageText, noteLanguageText: inputs.noteLanguageText, errors: inputs.errors
         )
         viewStateCache = (inputs, state)
@@ -360,6 +369,19 @@ final class AppModel {
         applyCorrections(transcript: transcript, corrections: speakerCorrections)
     }
 
+    /// Sabit toplantı dilinden başka dildeki canlı bölümler: dili algılananlar ve çevrilmeyen birimlerdekiler (panelde
+    /// soluk, asistana girmez).
+    private var liveOtherLanguageSegments: Set<SegmentID> {
+        otherLanguageSegmentIDs(spokenLanguages: spokenLanguages, fixedLanguage: recordingFixedLanguage).union(languageSkippedSegments)
+    }
+
+    /// "Ne kaçırdım?" ve soruların okuduğu transkript: yankısı süzülmüş, başka dildeki bölümler atlanmış (toplantı
+    /// sayfası ve notla aynı kural).
+    private var assistantTranscript: [LiveSegment] {
+        let skipped: Set<SegmentID> = liveOtherLanguageSegments
+        return suppressEchoes(transcript: correctedTranscript).filter { !skipped.contains($0.id) }
+    }
+
     /// Bir bloğu başka konuşmacıya atar (otomatik ayırma yanıldıysa); sonraki ayırma pencereleri bunu ezmez.
     func reassignBlock(segments: [SegmentID], person: Int) {
         speakerCorrections = speakerCorrections.assigning(segments: segments, to: person)
@@ -400,7 +422,7 @@ final class AppModel {
     /// Son N dakikanın (Ayarlar) not dilinde özeti.
     func askWhatIMissed() {
         let minutes: Int = clampedSetting(key: SettingsKey.missedWindowMinutes, range: SettingsRange.missedWindowMinutes)
-        let segments: [LiveSegment] = suppressEchoes(transcript: correctedTranscript)
+        let segments: [LiveSegment] = assistantTranscript
         let nowSec: Double = transcript.map(\.endSec).max() ?? 0
         guard let request = missedSummaryRequest(segments: segments, nowSec: nowSec, windowSec: Double(minutes * 60), language: selectedNoteLanguage()) else {
             cancelAssistant()
@@ -414,7 +436,7 @@ final class AppModel {
 
     /// Toplantı hakkında soru (cevap not dilinde); henüz konuşma yoksa istek atılmaz.
     func ask(question: String) {
-        guard let request = questionRequest(segments: suppressEchoes(transcript: correctedTranscript), question: question, language: selectedNoteLanguage()) else {
+        guard let request = questionRequest(segments: assistantTranscript, question: question, language: selectedNoteLanguage()) else {
             cancelAssistant()
             assistantCard = .answer(question: question, text: String(localized: "Henüz konuşma yok; sorular toplantıda konuşulanlara göre cevaplanır."))
             return
@@ -526,8 +548,14 @@ final class AppModel {
         step.ready.forEach { (unit: TranslationUnit) -> Void in startTranslation(unit: unit) }
     }
 
-    /// Yeni kurulan birimi kaydın birimlerine ekleyip çeviriye gönderir.
+    /// Yeni kurulan birimi kaydın birimlerine ekleyip çeviriye gönderir. Metni sabit toplantı dilinden başka dildeyse
+    /// çevrilmez (toplantıdan zaten atlanır; maliyet), bölümleri panelde soluk kalır.
     private func startTranslation(unit: TranslationUnit) {
+        if isOtherLanguageUnit(unit: unit, fixedLanguage: recordingFixedLanguage) {
+            languageSkippedSegments.formUnion(unit.segmentIDs)
+            Self.logger.info("Başka dildeki birim çevrilmedi, birim sonu: \(segmentKey(id: unit.carrierID), privacy: .public), bölüm sayısı: \(unit.segmentIDs.count, privacy: .public)")
+            return
+        }
         translationUnits.append(unit)
         enqueueTranslation(unit: unit)
     }
@@ -860,6 +888,9 @@ final class AppModel {
         closeAssistantCard()
         translationDisabled = false
         lockedLanguage = nil
+        recordingFixedLanguage = fixedLanguage(mode: languageMode)
+        spokenLanguages = [:]
+        languageSkippedSegments = []
         errorMessages = []
         startedSpeakers = []
         isPaused = false
@@ -1215,11 +1246,13 @@ final class AppModel {
         session?.micGate.set(isOpen: !isMicMuted)
     }
 
-    /// Kayıt sırasında toplantı dilini değiştirir; o andan sonraki metin yeni dille yazılır.
+    /// Kayıt sırasında toplantı dilini değiştirir; o andan sonraki metin yeni dille yazılır. Elle seçilen dil kaydın sabit
+    /// dili olur: başka dildeki konuşma çevrilmez ve toplantıdan atlanır.
     func setLanguage(language: MeetingLanguage) {
         guard isRecording, !isFinishing, let handle = session?.handle else {
             return
         }
+        recordingFixedLanguage = language
         Task {
             await handle.setLanguage(language)
         }
@@ -1229,6 +1262,11 @@ final class AppModel {
         transcript = applyEvent(transcript: transcript, event: event)
         switch event {
         case .segment(let segment):
+            // Dil, bölüm kesinleşince bir kez algılanır (iki taraf da): sabit dilli kayıtta başka dildeki bölüm soluk görünür
+            // ve toplantıdan atlanır.
+            if segment.isFinal, !segment.text.isEmpty {
+                spokenLanguages[segment.id] = confidentSpokenLanguage(text: segment.text)
+            }
             if segment.id.speaker == .others, segment.isFinal, !segment.text.isEmpty {
                 addForTranslation(segment: segment)
             }
@@ -1371,7 +1409,7 @@ final class AppModel {
         let base: MeetingRecord = MeetingRecord(
             id: directory.lastPathComponent, title: linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
-            liveSegments: storedSegments(transcript: correctedTranscript), finalSegments: [],
+            liveSegments: storedSegments(transcript: correctedTranscript, spokenLanguages: spokenLanguages), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false,
             engine: engine.recordingEngine, notice: nil,
@@ -1379,6 +1417,8 @@ final class AppModel {
         )
         // Not, kayıt başladığında seçili şablonla yazılır; kayıtta işaretlenen anlar öne çıkar.
         .with(template: recordingTemplate)
+        // Sabit dil kayda yazılır: başka dildeki bölümler toplantı okunurken atlanır.
+        .with(fixedLanguage: recordingFixedLanguage)
         .with(highlights: liveHighlights)
         .with(myNotes: liveMyNotes)
         return linkedMeeting.map { base.with(attendees: $0.attendees).with(calendarEventID: $0.id) } ?? base

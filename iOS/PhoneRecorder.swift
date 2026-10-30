@@ -49,6 +49,13 @@ final class PhoneRecorder {
     private(set) var transcript: [LiveSegment] = []
     private(set) var translations: [SegmentID: String] = [:]
     private(set) var lockedLanguage: MeetingLanguage?
+    /// Süren kaydın kullanıcının sabitlediği dili: kayıt başında seçili sabit dil ya da kayıtta seçilen; Otomatikte nil.
+    /// Kayda yazılır; doluysa başka dildeki konuşma çevrilmez ve toplantıdan atlanır.
+    private(set) var recordingFixedLanguage: MeetingLanguage?
+    /// Kesinleşen bölümlerin güvenle algılanan dilleri (bkz. `confidentSpokenLanguage`); bölümlerle birlikte saklanır.
+    private(set) var spokenLanguages: [SegmentID: String] = [:]
+    /// Metni toplantı dilinden başka dilde olduğu için çevrilmeyen birimlerin bölümleri.
+    private(set) var languageSkippedSegments: Set<SegmentID> = []
     private(set) var errorMessages: [String] = []
     private(set) var startedAt: Date?
     /// İşlenen toplantıların adımı (kimlik → adım).
@@ -118,6 +125,9 @@ final class PhoneRecorder {
         idleFlushTasks.values.forEach { $0.cancel() }
         idleFlushTasks = [:]
         lockedLanguage = nil
+        recordingFixedLanguage = fixedMeetingLanguage(mode: languageMode)
+        spokenLanguages = [:]
+        languageSkippedSegments = []
         errorMessages = []
         highlights = []
         myNotes = ""
@@ -269,6 +279,8 @@ final class PhoneRecorder {
             languageMode = .fixed(language)
             return
         }
+        // Elle seçilen dil kaydın sabit dili olur: başka dildeki konuşma çevrilmez ve toplantıdan atlanır.
+        recordingFixedLanguage = language
         Task {
             await handle.setLanguage(language)
         }
@@ -350,6 +362,9 @@ final class PhoneRecorder {
         switch event {
         case .segment(let segment):
             if segment.isFinal, !segment.text.isEmpty {
+                // Dil, bölüm kesinleşince bir kez algılanır: sabit dilli kayıtta başka dildeki bölüm soluk görünür ve
+                // toplantıdan atlanır.
+                spokenLanguages[segment.id] = confidentSpokenLanguage(text: segment.text)
                 addForTranslation(segment: segment)
                 updateActivityThrottled(state: RecordingActivityAttributes.ContentState(
                     lastLine: segment.text, speaker: segment.person.map { speakerLabel(speaker: segment.id.speaker, person: $0) } ?? "",
@@ -662,6 +677,11 @@ final class PhoneRecorder {
 
     // MARK: Çeviri
 
+    /// Sabit toplantı dilinden başka dildeki bölümler (kayıt ekranında soluk): dili algılanan ve çevrilmeyen birimlerdeki.
+    var otherLanguageSegments: Set<SegmentID> {
+        otherLanguageSegmentIDs(spokenLanguages: spokenLanguages, fixedLanguage: recordingFixedLanguage).union(languageSkippedSegments)
+    }
+
     /// Kesinleşmiş bölümü çeviri birimlerine ekler (Mac'teki gibi): tamamlanan birimler (cümle sonu, süre ya da uzunluk
     /// sınırı) çeviriye gider; yarım birim konuşmacı susunca (`liveTranslationUnitLimits.idleSec`) çevrilir. Toplantı
     /// not dilindeyse metin olduğu gibi kalır.
@@ -730,8 +750,14 @@ final class PhoneRecorder {
         step.ready.forEach { (unit: TranslationUnit) -> Void in enqueueTranslation(unit: unit) }
     }
 
-    /// Birimi kaydın birimlerine ekleyip çeviri sırasına alır.
+    /// Birimi kaydın birimlerine ekleyip çeviri sırasına alır. Metni sabit toplantı dilinden başka dildeyse çevrilmez
+    /// (toplantıdan zaten atlanır; maliyet), bölümleri soluk kalır.
     private func enqueueTranslation(unit: TranslationUnit) {
+        if isOtherLanguageUnit(unit: unit, fixedLanguage: recordingFixedLanguage) {
+            languageSkippedSegments.formUnion(unit.segmentIDs)
+            Self.logger.info("Başka dildeki birim çevrilmedi, birim sonu: \(segmentKey(id: unit.carrierID), privacy: .public), bölüm sayısı: \(unit.segmentIDs.count, privacy: .public)")
+            return
+        }
         translationUnits.append(unit)
         translationQueue.append(unit)
         startQueuedTranslations()
@@ -776,12 +802,14 @@ final class PhoneRecorder {
         let base: MeetingRecord = MeetingRecord(
             id: recording.directory.lastPathComponent, title: recording.linkedMeeting?.title ?? String(localized: "Toplantı"), startedAt: recording.startedAt, endedAt: endedAt,
             language: lockedLanguage, status: status, failureMessage: nil,
-            liveSegments: storedSegments(transcript: transcript), finalSegments: [],
+            liveSegments: storedSegments(transcript: transcript, spokenLanguages: spokenLanguages), finalSegments: [],
             translations: Dictionary(uniqueKeysWithValues: translations.map { (segmentKey(id: $0.key), $0.value) }),
             speakerNames: [:], note: nil, audioDeleted: false, engine: recording.engine, notice: nil, meNeedsFinalPass: nil
         )
         .with(highlights: highlights)
         .with(myNotes: myNotes)
+        // Sabit dil kayda yazılır: başka dildeki bölümler toplantı okunurken atlanır.
+        .with(fixedLanguage: recordingFixedLanguage)
         // Mac'teki gibi: takvim etkinliğine bağlı kayıt katılımcıları ve etkinlik kimliğini taşır.
         return recording.linkedMeeting.map { base.with(attendees: $0.attendees).with(calendarEventID: $0.id) } ?? base
     }

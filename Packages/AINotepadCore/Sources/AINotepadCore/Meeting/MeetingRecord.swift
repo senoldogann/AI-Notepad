@@ -36,6 +36,9 @@ public struct StoredSegment: Sendable, Equatable, Codable {
     public let text: String
     /// Son geçişin kelime zamanları (çalarken kelime vurgusu); canlı bölümlerde ve eski kayıtlarda nil.
     public let words: [StoredWord]?
+    /// Bölümün güvenle algılanan dili (bkz. `confidentSpokenLanguage`); kısa ya da belirsiz bölümde ve eski kayıtlarda nil.
+    /// Sabit dilli toplantıda başka dildeki bölüm okunurken atlanır (bkz. `isSkippedForLanguage`).
+    public private(set) var spokenLanguage: String?
 
     public init(key: String, speaker: Speaker, person: Int?, startSec: Double, endSec: Double, text: String, words: [StoredWord]?) {
         self.key = key
@@ -47,14 +50,23 @@ public struct StoredSegment: Sendable, Equatable, Codable {
         self.words = words
     }
 
-    /// Konuşmacısı "Sen" ve kişisiz kopya (son geçiş "Sen" kaydından üretildiğinde).
+    /// Konuşmacısı "Sen" ve kişisiz kopya (son geçiş "Sen" kaydından üretildiğinde); dili korunur.
     public func asMe() -> StoredSegment {
         StoredSegment(key: "me-\(key)", speaker: .me, person: nil, startSec: startSec, endSec: endSec, text: text, words: words)
+            .with(spokenLanguage: spokenLanguage)
     }
 
-    /// Kişisi değişmiş kopya (konuşmacı birleştirme/düzeltme).
+    /// Kişisi değişmiş kopya (konuşmacı birleştirme/düzeltme); dili korunur.
     public func with(person newPerson: Int?) -> StoredSegment {
         StoredSegment(key: key, speaker: speaker, person: newPerson, startSec: startSec, endSec: endSec, text: text, words: words)
+            .with(spokenLanguage: spokenLanguage)
+    }
+
+    /// Algılanan dili değişmiş kopya.
+    public func with(spokenLanguage newLanguage: String?) -> StoredSegment {
+        var copy: StoredSegment = self
+        copy.spokenLanguage = newLanguage
+        return copy
     }
 }
 
@@ -210,6 +222,10 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
     public private(set) var sentTaskKeys: [String: [String]]?
     /// Notun önceki sürümleri (yeniden eskiye, en fazla `noteHistoryLimit`); geri almak için. Eski toplantılarda nil.
     public private(set) var noteHistory: [NoteVersion]?
+    /// Kullanıcının kayıtta sabitlediği toplantı dili (kayıt başında seçili dil ya da kayıtta "Dili değiştir" ile
+    /// seçilen); Otomatik dilde, içe aktarmada ve eski toplantılarda nil. Doluysa başka dildeki bölümler okunurken atlanır
+    /// (bkz. `isSkippedForLanguage`).
+    public private(set) var fixedLanguage: MeetingLanguage?
 
     public init(
         id: String, title: String, startedAt: Date, endedAt: Date?, language: MeetingLanguage?, status: MeetingStatus,
@@ -437,6 +453,13 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Sabit toplantı dili değişmiş kopya (nil: Otomatik).
+    public func with(fixedLanguage newLanguage: MeetingLanguage?) -> MeetingRecord {
+        var copy: MeetingRecord = self
+        copy.fixedLanguage = newLanguage
+        return copy
+    }
+
     /// "Sen" son geçiş işareti değişmiş kopya.
     public func with(meNeedsFinalPass newValue: Bool?) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -450,8 +473,9 @@ public func segmentKey(id: SegmentID) -> String {
     "\(id.speaker.rawValue)-\(id.index)"
 }
 
-/// Canlı transkriptten saklanacak bölümler: metinli kesin bölümler. Saf fonksiyondur.
-public func storedSegments(transcript: [LiveSegment]) -> [StoredSegment] {
+/// Canlı transkriptten saklanacak bölümler: metinli kesin bölümler, kesinleşince algılanan dilleriyle
+/// (`spokenLanguages`; bkz. `confidentSpokenLanguage`, dili algılanmayan bölüm listede yoktur). Saf fonksiyondur.
+public func storedSegments(transcript: [LiveSegment], spokenLanguages: [SegmentID: String]) -> [StoredSegment] {
     transcript
         .filter { (segment: LiveSegment) -> Bool in segment.isFinal && !segment.text.isEmpty && segment.failureMessage == nil }
         .map { (segment: LiveSegment) -> StoredSegment in
@@ -459,5 +483,6 @@ public func storedSegments(transcript: [LiveSegment]) -> [StoredSegment] {
                 key: segmentKey(id: segment.id), speaker: segment.id.speaker, person: segment.person,
                 startSec: segment.startSec, endSec: segment.endSec, text: segment.text, words: nil
             )
+            .with(spokenLanguage: spokenLanguages[segment.id])
         }
 }

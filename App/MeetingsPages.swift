@@ -509,6 +509,14 @@ struct MeetingDetailPage: View {
                         }
                     case .transcript:
                         SpeakerChips(model: model, record: record, isLocked: isLocked, onPlay: { (startSec: Double) -> Void in play(from: startSec) })
+                        let skipped: [StoredSegment] = skippedLanguageSegments(record: record)
+                        if !skipped.isEmpty, let language = record.fixedLanguage {
+                            SkippedLanguageSection(
+                                record: record, segments: skipped, language: language, canPlay: !playableAudio.isEmpty,
+                                onPlay: { (startSec: Double) -> Void in play(from: startSec) }
+                            )
+                            .frame(maxWidth: 820, alignment: .leading)
+                        }
                         if paragraphs.isEmpty {
                             EmptyStateCard(symbol: "text.bubble", title: "Bu toplantının metni yok", message: "Kayıt sırasında konuşma algılanmadı.")
                         }
@@ -680,8 +688,9 @@ struct MeetingDetailPage: View {
             .tracking(-0.7)
             .padding(.top, 6)
             FlowLayout(spacing: 6, lineSpacing: 6) {
-                // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla.
-                let speakers: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+                // Konuşanlar: üst üste binen rozetler (en çok konuşan önde), fazlası sayıyla; kısa konuşmalar (bkz.
+                // `groupedSpeakers`) rozet ve listede yer almaz.
+                let speakers: [SpeakerShare] = groupedSpeakers(shares: speakerShares(paragraphs: paragraphs), speakerNames: record.speakerNames).major
                 if !speakers.isEmpty {
                     HStack(spacing: -7) {
                         ForEach(Array(speakers.prefix(4).enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
@@ -1376,24 +1385,27 @@ private struct SummaryTab: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
     /// Kendi notları yazılıyor (henüz notu yokken "Kendi notun" düğmesiyle açılır).
     @State private var isEditingMyNotes: Bool = false
+    /// Konuşma payında kısa konuşmaların tek tek satırları açık.
+    @State private var showsMinorSpeakers: Bool = false
 
     var body: some View {
-        let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+        let groups: SpeakerGroups = groupedSpeakers(shares: speakerShares(paragraphs: paragraphs), speakerNames: record.speakerNames)
+        let hasSpeakers: Bool = !groups.major.isEmpty || !groups.minor.isEmpty
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 24) {
                 main.frame(minWidth: 380, idealWidth: 380, maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 12) {
-                    glance(shares: shares)
-                    if !shares.isEmpty {
-                        talkShare(shares: shares)
+                    glance(groups: groups)
+                    if hasSpeakers {
+                        talkShare(groups: groups)
                     }
                 }
                 .frame(width: 250)
             }
             VStack(alignment: .leading, spacing: 30) {
                 main
-                if !shares.isEmpty {
-                    talkShare(shares: shares)
+                if hasSpeakers {
+                    talkShare(groups: groups)
                 }
             }
         }
@@ -1534,11 +1546,12 @@ private struct SummaryTab: View {
         .lineSpacing(appearance.lineSpacing)
     }
 
-    /// "Bir bakışta": süre, konuşmacı, karar ve senin görev sayın.
-    private func glance(shares: [SpeakerShare]) -> some View {
+    /// "Bir bakışta": süre, konuşmacı (kısa konuşmalar ayrıca sayılır), karar ve senin görev sayın.
+    private func glance(groups: SpeakerGroups) -> some View {
+        let speakersLabel: LocalizedStringKey = groups.minor.isEmpty ? "konuşmacı" : "konuşmacı (+\(groups.minor.count) kısa)"
         let stats: [(value: String, label: LocalizedStringKey)] = [
             (meetingDurationMinutes(record: record).map { String(localized: "\($0) dk") } ?? "–", "süre"),
-            ("\(shares.count)", "konuşmacı"),
+            ("\(groups.major.count)", speakersLabel),
             ("\(note.decisions.count)", "karar"),
             ("\(note.tasks.filter(\.isMine).count)", "senin görevin"),
         ]
@@ -1562,46 +1575,80 @@ private struct SummaryTab: View {
         }
     }
 
-    /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde.
-    private func talkShare(shares: [SpeakerShare]) -> some View {
+    /// Kim ne kadar konuştu: harf rozeti, ad, pay çubuğu ve yüzde. Kısa konuşmalar (bkz. `groupedSpeakers`) tek satırda
+    /// toplanır; tıklayınca tek tek görünür.
+    private func talkShare(groups: SpeakerGroups) -> some View {
         asideCard {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(shares, id: \.key) { (share: SpeakerShare) in
-                    // Ad ve yüzde üstte, pay çubuğu altta tam genişlikte: dar yan sütunda ad kesilmez.
-                    HStack(alignment: .top, spacing: 10) {
-                        SpeakerAvatar(text: avatarText(key: share.key, speakerNames: record.speakerNames), color: speakerColor(key: share.key), size: 24)
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(speakerName(key: share.key, speakerNames: record.speakerNames))
-                                    .appFont(size: 13, weight: .regular)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Spacer(minLength: 4)
-                                Text(String(localized: "\(max(1, Int((share.seconds / 60).rounded()))) dk"))
-                                    .appFont(size: 11, weight: .regular)
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.muted)
-                                    .fixedSize()
-                                Text(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
-                                    .appFont(size: 12, weight: .semibold)
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.ink)
-                                    .fixedSize()
-                            }
-                            // Pay çubuğu kişinin renginde (gradyanla hafif derinlik).
-                            GeometryReader { (proxy: GeometryProxy) in
-                                Capsule()
-                                    .fill(Theme.soft)
-                                    .overlay(alignment: .leading) {
-                                        Capsule()
-                                            .fill(LinearGradient(colors: [speakerColor(key: share.key).opacity(0.65), speakerColor(key: share.key)], startPoint: .leading, endPoint: .trailing))
-                                            .frame(width: max(4, proxy.size.width * share.fraction))
-                                    }
-                            }
-                            .frame(height: 6)
+                ForEach(groups.major, id: \.key) { (share: SpeakerShare) in
+                    shareRow(
+                        avatar: SpeakerAvatar(text: avatarText(key: share.key, speakerNames: record.speakerNames), color: speakerColor(key: share.key), size: 24),
+                        name: speakerName(key: share.key, speakerNames: record.speakerNames), seconds: share.seconds, fraction: share.fraction,
+                        color: speakerColor(key: share.key)
+                    )
+                }
+                if !groups.minor.isEmpty {
+                    Button {
+                        showsMinorSpeakers.toggle()
+                    } label: {
+                        shareRow(
+                            avatar: SpeakerAvatar(text: "…", color: Color.gray, size: 24),
+                            name: String(localized: "Kısa konuşmalar (\(groups.minor.count))"), seconds: groups.minorSeconds,
+                            fraction: groups.minorFraction, color: Color.gray
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .hoverHint(showsMinorSpeakers ? "Kısa konuşmaları gizle" : "Az konuşan kişileri tek tek göster", alignment: .leading, edge: .bottom)
+                    if showsMinorSpeakers {
+                        ForEach(groups.minor, id: \.key) { (share: SpeakerShare) in
+                            shareRow(
+                                avatar: SpeakerAvatar(text: avatarText(key: share.key, speakerNames: record.speakerNames), color: speakerColor(key: share.key), size: 20),
+                                name: speakerName(key: share.key, speakerNames: record.speakerNames), seconds: share.seconds, fraction: share.fraction,
+                                color: speakerColor(key: share.key)
+                            )
+                            .padding(.leading, 14)
                         }
                     }
                 }
+            }
+            .animation(.smooth(duration: 0.2), value: showsMinorSpeakers)
+        }
+    }
+
+    /// Konuşma payı satırı: ad ve yüzde üstte, pay çubuğu altta tam genişlikte (dar yan sütunda ad kesilmez).
+    private func shareRow(avatar: SpeakerAvatar, name: String, seconds: Double, fraction: Double, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            avatar
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(name)
+                        .appFont(size: 13, weight: .regular)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Text(String(localized: "\(max(1, Int((seconds / 60).rounded()))) dk"))
+                        .appFont(size: 11, weight: .regular)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize()
+                    Text(fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                        .appFont(size: 12, weight: .semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.ink)
+                        .fixedSize()
+                }
+                // Pay çubuğu kişinin renginde (gradyanla hafif derinlik).
+                GeometryReader { (proxy: GeometryProxy) in
+                    Capsule()
+                        .fill(Theme.soft)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(LinearGradient(colors: [color.opacity(0.65), color], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: max(4, proxy.size.width * fraction))
+                        }
+                }
+                .frame(height: 6)
             }
         }
     }
@@ -2255,17 +2302,33 @@ private struct SpeakerChips: View {
     let record: MeetingRecord
     let isLocked: Bool
     let onPlay: @MainActor (Double) -> Void
+    /// Kısa konuşmaların çipleri açık.
+    @State private var showsMinor: Bool = false
 
     var body: some View {
-        // Gösterilen transkriptle aynı bölüm kümesi.
+        // Gösterilen transkriptle aynı bölüm kümesi. Az konuşanlar (bkz. `groupedSpeakers`) tek "Kısa konuşmalar (N)"
+        // çipinde toplanır; açınca kendi çipleriyle ad verilir ya da birleştirilir.
         let persons: [Int] = Array(Set(meetingSegments(record: record).compactMap(\.person))).sorted()
+        let minor: [Int] = groupedSpeakers(shares: speakerShares(record: record), speakerNames: record.speakerNames).minor
+            .compactMap(\.key.person)
+            .filter { persons.contains($0) }
+        let major: [Int] = persons.filter { !minor.contains($0) }
         if !persons.isEmpty {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
                 HStack(alignment: .top, spacing: DesignTokens.Spacing.s) {
                     FlowLayout(spacing: 8, lineSpacing: 8) {
-                        ForEach(persons, id: \.self) { (person: Int) in
+                        ForEach(major, id: \.self) { (person: Int) in
                             SpeakerChip(model: model, record: record, person: person, others: persons.filter { $0 != person })
                                 .disabled(isLocked)
+                        }
+                        if !minor.isEmpty {
+                            minorToggle(count: minor.count)
+                        }
+                        if showsMinor {
+                            ForEach(minor, id: \.self) { (person: Int) in
+                                SpeakerChip(model: model, record: record, person: person, others: persons.filter { $0 != person })
+                                    .disabled(isLocked)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2279,6 +2342,81 @@ private struct SpeakerChips: View {
                 if let state = model.speakerReviews[record.id] {
                     SpeakerReviewCard(model: model, record: record, state: state, isLocked: isLocked, onPlay: onPlay)
                 }
+            }
+        }
+    }
+
+    /// "Kısa konuşmalar (N)" çipi: az konuşanların çiplerini açar/kapatır (konuşmacı çipiyle aynı görünüm).
+    private func minorToggle(count: Int) -> some View {
+        Button {
+            withAnimation(.smooth(duration: 0.2)) { showsMinor.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                SpeakerAvatar(text: "…", color: Color.gray, size: 24)
+                Text("Kısa konuşmalar (\(count))")
+                    .appFont(size: 13, weight: .medium)
+                    .foregroundStyle(Theme.ink)
+                Image(systemName: showsMinor ? "chevron.up" : "chevron.down")
+                    .appFont(size: 9, weight: .semibold)
+                    .foregroundStyle(Theme.muted)
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            .background(Theme.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.line))
+        }
+        .buttonStyle(.hoverCapsule)
+        .fixedSize()
+        .hoverHint(showsMinor ? "Kısa konuşmaları gizle" : "Az konuşan kişileri tek tek göster", alignment: .leading, edge: .bottom)
+    }
+}
+
+/// Sabit toplantı dilinden başka dilde olduğu için transkriptten, nottan ve Sor'dan atlanan bölümler: tek satır
+/// ("Başka dilde N bölüm atlandı") ve isteyene soluk liste (zamanına tıklayınca oradan çalar). Bölümler kayıtta durur.
+private struct SkippedLanguageSection: View {
+    let record: MeetingRecord
+    let segments: [StoredSegment]
+    let language: MeetingLanguage
+    let canPlay: Bool
+    let onPlay: @MainActor (Double) -> Void
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .foregroundStyle(Theme.muted)
+                Text("Başka dilde \(segments.count) bölüm atlandı")
+                    .foregroundStyle(Theme.muted)
+                    .hoverHint("Toplantı dili \(meetingLanguageName(language: language)) seçildi: başka dildeki konuşma transkripte, nota ve Sor'a girmez.", alignment: .leading, edge: .bottom)
+                Button(isExpanded ? "Gizle" : "Göster") {
+                    withAnimation(.smooth(duration: 0.2)) { isExpanded.toggle() }
+                }
+                .buttonStyle(.link)
+            }
+            .appFont(size: 12, weight: .regular)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(segments, id: \.key) { (segment: StoredSegment) in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Button(timestamp(seconds: segment.startSec)) {
+                                onPlay(segment.startSec)
+                            }
+                            .buttonStyle(.link)
+                            .disabled(!canPlay)
+                            .monospacedDigit()
+                            Text(verbatim: "\(speakerName(key: SpeakerKey(speaker: segment.speaker, person: segment.person), speakerNames: record.speakerNames)): \(segment.text)")
+                                .italic()
+                                .foregroundStyle(Theme.muted)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .appFont(size: 12, weight: .regular)
+                .padding(.leading, 20)
+                .transition(.opacity)
             }
         }
     }

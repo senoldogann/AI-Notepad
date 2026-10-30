@@ -90,7 +90,9 @@ struct SpeakerNamingSheet: View {
     @Environment(\.dismiss) private var dismiss: DismissAction
 
     var body: some View {
-        let persons: [SpeakerShare] = shares.filter { $0.key.person != nil }
+        // Az konuşanlar (bkz. `groupedSpeakers`) ayrı bölümde, sonda: ad verilebilir ama listeyi kalabalıklaştırmaz.
+        let groups: SpeakerGroups = groupedSpeakers(shares: shares, speakerNames: speakerNames)
+        let persons: [SpeakerShare] = groups.major.filter { $0.key.person != nil }
         NavigationStack {
             List {
                 if let errorMessage {
@@ -108,6 +110,15 @@ struct SpeakerNamingSheet: View {
                     }
                 } footer: {
                     Text("Ad transkriptte \"Konuşmacı N\" yerine görünür. Notu yeni adlarla yazmak için ⋯ › Notu yenile.")
+                }
+                if !groups.minor.isEmpty {
+                    Section("Kısa konuşmalar (\(groups.minor.count))") {
+                        ForEach(Array(groups.minor.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                            if let person = item.element.key.person {
+                                row(share: item.element, person: person)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Konuşmacılar")
