@@ -1,8 +1,8 @@
-// Hesap sayfası: `/v1/me` (plan durumu etiketi, aylık ya da yıllık plan, kalan deneme ve bitiş tarihi, abonede aylık
-// saat, abonelik ve ek süre), plan seçimi (yıllık seçili) ve davet kodu (`POST /v1/referral/validate`) ile Abone ol
-// (Checkout), Aboneliği yönet (Portal), abonenin davet kartı (`GET /v1/referral`), çıkış ve onaylı hesap silme
-// (`DELETE /v1/me`). Adresteki `?plan=` ve `?code=` (fiyat ve davet sayfalarından) girişten önce saklanır; oturum yoksa
-// giriş sayfasına geçilir.
+// Hesap sayfası: `/v1/me`'den tek plan kartı (plan adı ve durum etiketi, tek durum satırı, denemede kalan toplantı ya da
+// abonede aylık saat ölçeri ve duruma uyan eylem: Abone ol, Aboneliği yönet ya da ücretsiz erişimde hiçbiri). Abone
+// olurken plan seçimi (yıllık seçili) ve davet kodu (`POST /v1/referral/validate`) Checkout'a taşınır; abonenin davet
+// kartı `GET /v1/referral`'dan; çıkış ve onaylı hesap silme (`DELETE /v1/me`). Adresteki `?plan=` ve `?code=` (fiyat ve
+// davet sayfalarından) girişten önce saklanır; oturum yoksa giriş sayfasına geçilir.
 import {
   ApiRequestError,
   type Entitlements,
@@ -47,21 +47,26 @@ interface TrialMeter {
   readonly total: number;
 }
 
+/** Abonenin aylık saat göstergesi: metin ("3,4 / 10 saat"), kullanılan (sınırda kesilir) ve sınır. */
+interface HoursMeter {
+  readonly text: string;
+  readonly used: number;
+  readonly cap: number;
+}
+
+/** Deneme durumu: başlamadı, sürüyor ya da bitti (toplantılar harcandı veya süre doldu). */
+type TrialPhase = "notStarted" | "running" | "ended";
+
 /** Hesap sayfasında gösterilecek değerler. */
 interface AccountView {
   readonly plan: string;
   readonly planPill: Pill;
-  /** Deneme satırı; abonede gösterilmez (null). */
-  readonly trial: string | null;
+  /** Plan kartının tek durum satırı: abonelik durumu ya da deneme. */
+  readonly status: string;
   /** Deneme sürüyorsa kalan toplantı göstergesi; yoksa null. */
   readonly trialMeter: TrialMeter | null;
-  /** Abonelik satırı; hiç abonelik yoksa gösterilmez (null). */
-  readonly subscription: string | null;
-  /** Aylık saat satırı yalnızca abonede görünür (sınır aboneliğindir; denemede kafa karıştırır). */
-  readonly showHours: boolean;
-  readonly hours: string;
-  readonly hoursUsed: number;
-  readonly hoursCap: number;
+  /** Aylık saat yalnızca abonelik erişiminde görünür (sınır aboneliğindir; denemede kafa karıştırır); yoksa null. */
+  readonly hours: HoursMeter | null;
   readonly canSubscribe: boolean;
   readonly canManage: boolean;
 }
@@ -76,40 +81,40 @@ function formatHours(hours: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
-/**
- * Süren ücretsiz erişim mi (yöneticinin verdiği; `complimentary.ts`). Plan yine `monthly` görünür, bu yüzden plan adı,
- * etiketi ve yönetim düğmesi buna bakar. Saf fonksiyondur.
- */
-function hasComplimentaryAccess(me: Entitlements): boolean {
-  return me.plan === "subscription" && me.subscription !== null && me.subscription.complimentary;
-}
-
-/**
- * Planın adı: denemede deneme; ücretsiz erişimde "Free access"; abonelikte aylık, yıllık ya da (fiyat tanınmıyorsa)
- * yalnızca ürün adı. Saf fonksiyondur.
- */
-function planName(me: Entitlements, text: ClientCopy): string {
-  if (me.plan !== "subscription") {
-    return text.plan.trial;
-  }
-  if (hasComplimentaryAccess(me)) {
-    return text.plan.complimentary;
-  }
-  const plan: BillingPlan | null = me.subscription === null ? null : me.subscription.plan;
-  return plan === null ? text.plan.subscription : text.plan[plan];
-}
-
-/** Deneme durumu: başlamadı, sürüyor ya da bitti (toplantılar harcandı veya süre doldu). Saf fonksiyondur. */
-function trialPhase(me: Entitlements, now: Date): "notStarted" | "running" | "ended" {
+/** Deneme durumu (bkz. `TrialPhase`). Saf fonksiyondur. */
+function trialPhase(me: Entitlements, now: Date): TrialPhase {
   if (me.trialEndsAt === null) {
     return "notStarted";
   }
   return me.trialMeetingsLeft === 0 || new Date(me.trialEndsAt).getTime() <= now.getTime() ? "ended" : "running";
 }
 
+/**
+ * Plan kartı aboneliği mi anlatır: abonelik erişimi varsa ya da abonelik (ücretli ya da ücretsiz erişim) bitmiş ve
+ * deneme de kalmamışsa. Bitmiş abonelikte deneme hâlâ kullanılabiliyorsa kart denemeyi anlatır. Saf fonksiyondur.
+ */
+function describesSubscription(me: Entitlements, now: Date): boolean {
+  return me.subscription !== null && (me.plan === "subscription" || trialPhase(me, now) === "ended");
+}
+
+/**
+ * Planın adı: abonelik erişiminde aylık, yıllık, ücretsiz erişim ya da (fiyat tanınmıyorsa) yalnızca ürün adı;
+ * aboneliği bitmiş ve denemesi kalmamış hesapta "plan yok"; diğerlerinde deneme. Saf fonksiyondur.
+ */
+function planName(me: Entitlements, text: ClientCopy, now: Date): string {
+  const subscription: SubscriptionInfo | null = me.subscription;
+  if (me.plan === "subscription" && subscription !== null) {
+    if (subscription.complimentary) {
+      return text.plan.complimentary;
+    }
+    return subscription.plan === null ? text.plan.subscription : text.plan[subscription.plan];
+  }
+  return describesSubscription(me, now) ? text.plan.none : text.plan.trial;
+}
+
 /** Deneme satırının metni: başlamadıysa toplantı ve gün; bittiyse "bitti"; sürüyorsa kalan ve bitiş. Saf fonksiyondur. */
 function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
-  const phase: "notStarted" | "running" | "ended" = trialPhase(me, now);
+  const phase: TrialPhase = trialPhase(me, now);
   if (phase === "notStarted" || me.trialEndsAt === null) {
     return fill(text.trialNotStarted, { total: String(me.trialMeetingsTotal), days: String(me.trialDays) });
   }
@@ -119,13 +124,18 @@ function trialText(me: Entitlements, text: ClientCopy, locale: string, now: Date
   return fill(text.trialLeft, { left: String(me.trialMeetingsLeft), total: String(me.trialMeetingsTotal), date: formatDate(me.trialEndsAt, locale) });
 }
 
-/** Abonelik satırının metni; hiç abonelik yoksa null. Ücretsiz erişimde yenileme tarihi yoktur. Saf fonksiyondur. */
-function subscriptionText(subscription: SubscriptionInfo | null, text: ClientCopy, locale: string): string | null {
-  if (subscription === null) {
-    return null;
-  }
-  if (subscription.complimentary && subscription.access === "active") {
-    return text.subscriptionComplimentary;
+/**
+ * Aboneliğin durum satırı. Ücretsiz erişimde ödeme ve yenileme yoktur: bitiş tarihi varsa o yazılır, bittiyse "ücretsiz
+ * erişim bitti" (abonelik bitti değil: hiç ödeme yapılmadı). Saf fonksiyondur.
+ */
+function subscriptionText(subscription: SubscriptionInfo, text: ClientCopy, locale: string): string {
+  if (subscription.complimentary) {
+    if (subscription.access === "none") {
+      return text.subscriptionComplimentaryEnded;
+    }
+    return subscription.cancelAt === null
+      ? text.subscriptionComplimentary
+      : fill(text.subscriptionComplimentaryUntil, { date: formatDate(subscription.cancelAt, locale) });
   }
   if (subscription.access === "active" && subscription.cancelAt !== null) {
     return fill(text.subscriptionCanceling, { date: formatDate(subscription.cancelAt, locale) });
@@ -139,39 +149,52 @@ function subscriptionText(subscription: SubscriptionInfo | null, text: ClientCop
   return text.subscriptionEnded;
 }
 
-/** Başlıktaki plan etiketi: abonede yenileme durumu, denemede deneme durumu. Saf fonksiyondur. */
+/** Plan kartının durum satırı: abonelik anlatılıyorsa abonelik, değilse deneme. Saf fonksiyondur. */
+function statusText(me: Entitlements, text: ClientCopy, locale: string, now: Date): string {
+  return me.subscription !== null && describesSubscription(me, now) ? subscriptionText(me.subscription, text, locale) : trialText(me, text, locale, now);
+}
+
+/**
+ * Plan adının yanındaki durum etiketi: ücretsiz erişim (bitiş tarihi olsa da "bitiyor" uyarısı değil), ek süre,
+ * iptal edilmiş, etkin; abonelik erişimi yoksa bitmiş ya da deneme. Saf fonksiyondur.
+ */
 function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
   const subscription: SubscriptionInfo | null = me.subscription;
-  if (me.plan === "subscription" && subscription !== null && subscription.access === "grace") {
-    return { text: text.pillGrace, tone: "warn" };
-  }
-  if (me.plan === "subscription" && subscription !== null && subscription.cancelAt !== null) {
-    return { text: text.pillCanceling, tone: "warn" };
-  }
-  if (hasComplimentaryAccess(me)) {
-    return { text: text.pillComplimentary, tone: "ok" };
-  }
-  if (me.plan === "subscription") {
+  if (me.plan === "subscription" && subscription !== null) {
+    if (subscription.complimentary) {
+      return { text: text.pillComplimentary, tone: "ok" };
+    }
+    if (subscription.access === "grace") {
+      return { text: text.pillGrace, tone: "warn" };
+    }
+    if (subscription.cancelAt !== null) {
+      return { text: text.pillCanceling, tone: "warn" };
+    }
     return { text: text.pillActive, tone: "ok" };
   }
   return trialPhase(me, now) === "ended" ? { text: text.pillEnded, tone: "plain" } : { text: text.pillTrial, tone: "plain" };
 }
 
-/** Sunucu yanıtından gösterilecek değerleri üretir. Saf fonksiyondur. */
+/**
+ * Sunucu yanıtından gösterilecek değerleri üretir. Aboneliği yönetme yalnızca Stripe'ta karşılığı olan (ücretsiz erişim
+ * olmayan) abonelikte vardır: ücretsiz erişim bitmiş olsa da Portal'da yönetilecek bir şey yoktur. Saf fonksiyondur.
+ */
 export function accountView(me: Entitlements, text: ClientCopy, locale: string, now: Date): AccountView {
   const subscribed: boolean = me.plan === "subscription";
   return {
-    plan: planName(me, text),
+    plan: planName(me, text, now),
     planPill: planPill(me, text, now),
-    trial: subscribed ? null : trialText(me, text, locale, now),
+    status: statusText(me, text, locale, now),
     trialMeter: !subscribed && trialPhase(me, now) === "running" ? { left: me.trialMeetingsLeft, total: me.trialMeetingsTotal } : null,
-    subscription: subscriptionText(me.subscription, text, locale),
-    showHours: subscribed,
-    hours: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
-    hoursUsed: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
-    hoursCap: me.monthlyHoursCap,
+    hours: subscribed
+      ? {
+          text: fill(text.hours, { used: formatHours(me.monthlyHoursUsed, locale), cap: formatHours(me.monthlyHoursCap, locale) }),
+          used: Math.min(me.monthlyHoursUsed, me.monthlyHoursCap),
+          cap: me.monthlyHoursCap,
+        }
+      : null,
     canSubscribe: !subscribed,
-    canManage: me.subscription !== null && !hasComplimentaryAccess(me),
+    canManage: me.subscription !== null && !me.subscription.complimentary,
   };
 }
 
@@ -183,28 +206,30 @@ function renderPill(pill: HTMLElement, value: Pill): void {
   pill.textContent = value.text;
 }
 
-/** Satırı metinle gösterir; metin yoksa gizler. */
-function renderRow(row: HTMLElement, value: HTMLElement, content: string | null): void {
-  row.classList.toggle("hidden", content === null);
-  value.textContent = content ?? "";
+/** Ölçerleri yazar: deneme ölçeri ve abonenin saat bloğu, olmayan gizlenir. */
+function renderMeters(trial: TrialMeter | null, hours: HoursMeter | null): void {
+  const trialMeter: HTMLProgressElement = element("trial-meter", HTMLProgressElement);
+  trialMeter.classList.toggle("hidden", trial === null);
+  if (trial !== null) {
+    trialMeter.max = trial.total;
+    trialMeter.value = trial.left;
+  }
+  element("hours-card", HTMLElement).classList.toggle("hidden", hours === null);
+  if (hours !== null) {
+    element("hours-value", HTMLElement).textContent = hours.text;
+    const meter: HTMLProgressElement = element("hours-meter", HTMLProgressElement);
+    meter.max = hours.cap;
+    meter.value = hours.used;
+    meter.textContent = hours.text;
+  }
 }
 
 /** Değerleri sayfaya yazar. */
 function render(view: AccountView): void {
   element("plan-value", HTMLElement).textContent = view.plan;
   renderPill(element("plan-pill", HTMLElement), view.planPill);
-  renderRow(element("trial-row", HTMLElement), element("trial-value", HTMLElement), view.trial);
-  const trialMeter: HTMLProgressElement = element("trial-meter", HTMLProgressElement);
-  trialMeter.classList.toggle("hidden", view.trialMeter === null);
-  trialMeter.max = view.trialMeter?.total ?? 1;
-  trialMeter.value = view.trialMeter?.left ?? 0;
-  renderRow(element("subscription-row", HTMLElement), element("subscription-value", HTMLElement), view.subscription);
-  element("hours-card", HTMLElement).classList.toggle("hidden", !view.showHours);
-  element("hours-value", HTMLElement).textContent = view.hours;
-  const meter: HTMLProgressElement = element("hours-meter", HTMLProgressElement);
-  meter.max = view.hoursCap;
-  meter.value = view.hoursUsed;
-  meter.textContent = view.hours;
+  element("plan-status", HTMLElement).textContent = view.status;
+  renderMeters(view.trialMeter, view.hours);
   element("subscribe-button", HTMLButtonElement).classList.toggle("hidden", !view.canSubscribe);
   element("plan-choice", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
   element("invite", HTMLElement).classList.toggle("hidden", !view.canSubscribe);
@@ -346,12 +371,26 @@ function removeInvite(form: CheckoutForm, text: ClientCopy): void {
 }
 
 /**
- * Abone ol: alanda doğrulanmamış bir kod varsa önce doğrulanır (geçersizse Checkout açılmaz, satırda neden yazar).
- * Bitmemiş abonelik varsa sunucu 409 döner, Portal açılır; Checkout davet kodunu reddederse neden satırda yazar.
+ * Alanda uygulanmış koddan farklı bir şey yazılı mı: boş değil ve biçimsiz ya da doğrulanan koddan farklı. Biçimsiz
+ * metin de sayılır (yoksa yazım hatalı bir kod sessizce atlanır ve Checkout tam fiyatla açılır). Saf fonksiyondur.
+ */
+function hasUnappliedInvite(typed: string, validatedCode: string | null): boolean {
+  if (typed === "") {
+    return false;
+  }
+  const typedCode: string | null = normalizedInviteCode(typed);
+  return typedCode === null || typedCode !== validatedCode;
+}
+
+/**
+ * Abone ol: alanda uygulanmamış bir kod varsa önce doğrulanır; biçimsiz ya da geçersizse Checkout açılmaz, davet alanı
+ * açılır ve satırda neden yazar. Bitmemiş abonelik varsa sunucu 409 döner, Portal açılır; Checkout davet kodunu
+ * reddederse neden satırda yazar.
  */
 async function subscribe(form: CheckoutForm, text: ClientCopy): Promise<void> {
   const typed: string = element("invite-input", HTMLInputElement).value.trim();
-  if (typed !== "" && form.validatedCode !== normalizedInviteCode(typed) && !(await applyInvite(form, text))) {
+  if (hasUnappliedInvite(typed, form.validatedCode) && !(await applyInvite(form, text))) {
+    element("invite", HTMLDetailsElement).open = true;
     return;
   }
   try {
@@ -365,6 +404,7 @@ async function subscribe(form: CheckoutForm, text: ClientCopy): Promise<void> {
     if (reason !== null) {
       form.validatedCode = null;
       renderAppliedInvite(form, text);
+      element("invite", HTMLDetailsElement).open = true;
       showInviteStatus(text.inviteErrors[reason], "error");
       return;
     }
@@ -426,7 +466,7 @@ function referralStatsText(referral: ReferralInfo, text: ClientCopy, locale: str
 }
 
 /**
- * Ücretsiz erişimli hesabın davet kartı satırı: arkadaşlar yine ilk ayı ücretsiz alır, ama ödenecek fatura olmadığından
+ * Ücretsiz erişimli hesabın davet kartı satırı: arkadaşlar yine davet indirimini alır, ama ödenecek fatura olmadığından
  * 5,99 $ ödülü uygulanmaz (sunucu `referrer_complimentary` ile düşürür). Saf fonksiyondur.
  */
 function complimentaryReferralStatsText(referral: ReferralInfo, text: ClientCopy): string {
@@ -526,7 +566,10 @@ function showPaymentNotice(): void {
   }, paymentNoticeMs);
 }
 
-/** Silme penceresini bağlar: onay kelimesi yazılınca silme düğmesi açılır. */
+/**
+ * Silme penceresini bağlar: onay kelimesi yazılınca silme düğmesi açılır. Alanda Enter, pencereyi kapatan örtük form
+ * gönderimi (`method="dialog"`) yerine silme düğmesine basar (düğme kapalıysa hiçbir şey olmaz); Escape pencereyi kapatır.
+ */
 function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): void {
   const dialog: HTMLDialogElement = element("delete-dialog", HTMLDialogElement);
   const input: HTMLInputElement = element("confirm-input", HTMLInputElement);
@@ -546,6 +589,15 @@ function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): v
   input.addEventListener("input", (): void => {
     confirm.disabled = input.value.trim().toUpperCase() !== confirmWord;
   });
+  input.addEventListener("keydown", (event: KeyboardEvent): void => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    if (!confirm.disabled) {
+      confirm.click();
+    }
+  });
   bindAction(confirm, dialogNotice, text, signInPath, async (): Promise<void> => {
     await authorizedSend({ method: "DELETE", path: "/v1/me", body: null, attempts: 1 });
     clearSession();
@@ -553,7 +605,6 @@ function bindDeletion(text: ClientCopy, signInPath: string, homePath: string): v
     element("account-content", HTMLElement).classList.add("hidden");
     // Oturum yok: çıkış düğmesi de gizlenir.
     element("signout-button", HTMLButtonElement).classList.add("hidden");
-    element("plan-pill", HTMLElement).classList.add("hidden");
     const deleted: HTMLElement = element("account-deleted", HTMLElement);
     deleted.classList.remove("hidden");
     deleted.focus();

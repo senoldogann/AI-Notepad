@@ -68,6 +68,7 @@ export interface Entitlements {
   readonly trialEndsAt: string | null;
   readonly monthlyHoursUsed: number;
   readonly monthlyHoursCap: number;
+  /** Hiç abonelik satırı yoksa null; `plan` "subscription" ise her zaman vardır (ayrıştırıcı denetler). */
   readonly subscription: SubscriptionInfo | null;
 }
 
@@ -131,7 +132,7 @@ export interface ApiCall {
   readonly body: JsonObject | null;
   /** Bearer erişim jetonu; kimliksiz istekte null. */
   readonly accessToken: string | null;
-  /** Ağ hatası ve 502/503'te toplam deneme sayısı; yan etkili istekte 1. */
+  /** Ağ hatası ve 502/503/504'te toplam deneme sayısı; yan etkili istekte 1. */
   readonly attempts: number;
 }
 
@@ -238,7 +239,7 @@ function requestError(response: RawResponse, path: string): ApiRequestError {
   return new ApiRequestError(path, response.status, `http_${response.status}`, response.text.slice(0, 300), null);
 }
 
-/** Yeniden denenebilir durum (Worker'ın üst servis ya da harcama hatası değil, geçici ağ geçidi hatası). */
+/** Yeniden denenebilir durum: 502/503/504 (ağ geçidi ya da Worker'ın geçici üst servis hatası). */
 function isRetryableStatus(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
@@ -395,6 +396,11 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
   if (plan !== "trial" && plan !== "subscription") {
     throw new ApiResponseError(path, response.status, `bilinmeyen plan "${plan}"`, response.text);
   }
+  const subscription: SubscriptionInfo | null = parseSubscription(body["subscription"], response, path);
+  // Sunucu planı aboneliğin erişiminden üretir: abonelik planı abonelik satırı olmadan gelmez.
+  if (plan === "subscription" && subscription === null) {
+    throw new ApiResponseError(path, response.status, "abonelik planında abonelik bilgisi yok", response.text);
+  }
   return {
     userId: stringField(body, "userId", response, path),
     plan,
@@ -404,6 +410,6 @@ export function parseEntitlements(response: RawResponse, path: string): Entitlem
     trialEndsAt: body["trialEndsAt"] === null ? null : stringField(body, "trialEndsAt", response, path),
     monthlyHoursUsed: numberField(body, "monthlyHoursUsed", response, path),
     monthlyHoursCap: numberField(body, "monthlyHoursCap", response, path),
-    subscription: parseSubscription(body["subscription"], response, path),
+    subscription,
   };
 }

@@ -42,9 +42,18 @@ export interface ClientCopy {
   readonly referralNextReward: string;
   /** Ücretsiz erişimli hesapta davet kartı: `{joined}`. */
   readonly referralStatsComplimentary: string;
-  /** `plan`: abonelik planı bilinmiyorsa (eski fiyat) `subscription`. */
-  /** `complimentary`: yöneticinin verdiği ücretsiz erişim. */
-  readonly plan: { readonly trial: string; readonly subscription: string; readonly monthly: string; readonly yearly: string; readonly complimentary: string };
+  /**
+   * Planın adı: `subscription` abonelik planı bilinmiyorsa (eski fiyat); `complimentary` yöneticinin verdiği ücretsiz
+   * erişim; `none` aboneliği (ya da ücretsiz erişimi) bitmiş ve denemesi kalmamış hesap.
+   */
+  readonly plan: {
+    readonly trial: string;
+    readonly subscription: string;
+    readonly monthly: string;
+    readonly yearly: string;
+    readonly complimentary: string;
+    readonly none: string;
+  };
   /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
   readonly trialLeft: string;
   /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
@@ -53,7 +62,6 @@ export interface ClientCopy {
   readonly trialEnded: string;
   /** `{used}` ve `{cap}` saatlerle değişir. */
   readonly hours: string;
-  readonly subscriptionNone: string;
   /** `{date}` tarihle değişir. */
   readonly subscriptionActive: string;
   /** İptal edilmiş, dönem sonuna dek süren abonelik. */
@@ -62,6 +70,10 @@ export interface ClientCopy {
   readonly subscriptionEnded: string;
   /** Ücretsiz erişim: ödeme ve yönetilecek bir şey yok. */
   readonly subscriptionComplimentary: string;
+  /** Bitiş tarihli ücretsiz erişim: `{date}`. */
+  readonly subscriptionComplimentaryUntil: string;
+  /** Ücretsiz erişim bitti (hiç ödeme yapılmadı; "abonelik bitti" değil). */
+  readonly subscriptionComplimentaryEnded: string;
   readonly pillActive: string;
   readonly pillCanceling: string;
   readonly pillGrace: string;
@@ -113,7 +125,7 @@ export interface AdminClientCopy {
   readonly noMessage: string;
   /** Kullanıcılar kutusu alt satırına eklenir: `{today}`, `{week}`. */
   readonly usersRecent: string;
-  /** `{rate}`, `{converted}`, `{started}`, `{recentRate}`, `{direct}`. */
+  /** `{converted}`, `{started}`, `{recentRate}`, `{direct}`. */
   readonly conversionSub: string;
   /** `{pastDue}`, `{unpaid}`, `{ending}`. */
   readonly churnSub: string;
@@ -178,8 +190,6 @@ export interface AdminClientCopy {
   readonly opsWebhookNever: string;
   /** `{feedback}`, `{crash}`, `{contact}`. */
   readonly opsReportsSub: string;
-  /** Göreli zaman: `{value}` önce. */
-  readonly ago: string;
   /** Huni adımlarının adları. */
   readonly funnelSteps: {
     readonly downloads: string;
@@ -251,18 +261,26 @@ export const clientCopy: ClientCopy = {
   },
   referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
   referralNextReward: "next reward around {date}",
-  referralStatsComplimentary: "{joined} joined. Your friends still get their first month free; your account is already free, so the $5.99 rewards don't apply.",
-  plan: { trial: "Free trial", subscription: productName, monthly: `${productName} monthly`, yearly: `${productName} yearly`, complimentary: "Free access" },
+  referralStatsComplimentary: "{joined} joined. Your friends still get their invite discount; your account is already free, so the $5.99 rewards don't apply.",
+  plan: {
+    trial: "Free trial",
+    subscription: productName,
+    monthly: `${productName} monthly`,
+    yearly: `${productName} yearly`,
+    complimentary: "Free access",
+    none: "No active plan",
+  },
   trialLeft: "{left} of {total} meetings left · Trial ends {date}",
   trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
   trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
   hours: "{used} / {cap} hours",
-  subscriptionNone: "No subscription",
   subscriptionActive: "Renews on {date}",
   subscriptionCanceling: "Cancelled; you can use it until {date}. It won't renew.",
   subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
   subscriptionEnded: "Your subscription has ended.",
   subscriptionComplimentary: "Full access, free of charge. Nothing to pay or manage.",
+  subscriptionComplimentaryUntil: "Full access, free of charge until {date}. Nothing to pay.",
+  subscriptionComplimentaryEnded: "Your free access has ended. Subscribe to start new meetings.",
   pillActive: "Active",
   pillCanceling: "Ending",
   pillGrace: "Payment due",
@@ -340,7 +358,6 @@ export const clientCopy: ClientCopy = {
     opsWebhookSub: "{count} events in the last 24 hours",
     opsWebhookNever: "No events stored in the last 90 days",
     opsReportsSub: "{feedback} feedback · {crash} crashes · {contact} contact",
-    ago: "{value} ago",
     funnelSteps: {
       downloads: "Downloads",
       accounts: "Accounts created",

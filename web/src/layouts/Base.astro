@@ -26,6 +26,9 @@ const canonical: string = `${origin}${sitePagePath(page)}`;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Tarayıcı çubuğunun rengi; theme.js elle seçilen temaya göre ikisini de günceller, bu yüzden betikten önce gelir. */}
+    <meta name="theme-color" content="#fdfcfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     {/* Tema ilk boyamadan önce uygulanır: engelleyici ama harici (CSP satır içi betiğe izin vermez). */}
     <script is:inline src="/theme.js"></script>
     <title>{meta.title}</title>
@@ -35,8 +38,6 @@ const canonical: string = `${origin}${sitePagePath(page)}`;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title={copy.blog.feedTitle} href={blogFeedPath} />
-    <meta name="theme-color" content="#fdfcfc" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={productName} />
     <meta property="og:title" content={meta.title} />

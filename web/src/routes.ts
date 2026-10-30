@@ -1,6 +1,8 @@
 // Sayfaların adresleri (sonda eğik çizgi yok). Sunucu ve Mac uygulaması bu adreslerin bir kısmını sabit yazar:
 // Stripe Checkout dönüşü `/account?payment=done`, Checkout iptali `/pricing`, Müşteri Portalı dönüşü `/account`, Mac
-// uygulaması `/sign-in?app=1&nonce=…`, Apple ile giriş dönüşü `/sign-in`. Burada değişen adres oralarda da değişmelidir.
+// uygulaması `/sign-in?app=1&nonce=…`, Apple ile giriş dönüşü `/sign-in`, davet bağlantısı `/invite?code=…`
+// (server/src/referrals.ts `inviteUrl`; değişirse paylaşılmış bağlantılar kırılır). Burada değişen adres oralarda
+// da değişmelidir.
 
 /** Sayfa kimlikleri. */
 export type PageKey =

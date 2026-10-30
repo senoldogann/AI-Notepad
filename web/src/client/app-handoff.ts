@@ -100,11 +100,6 @@ export function parsePendingAppSignIn(text: string | null): PendingAppSignIn | n
   return { provider, state, hashedNonce: hashedNonce.toLowerCase() };
 }
 
-/** Yeni `state` değerinin geçerli olup olmadığı (bkz. `statePattern`). Saf fonksiyondur. */
-export function isValidState(state: string): boolean {
-  return statePattern.test(state);
-}
-
 /** Sorgu değerlerini `%20` ile kodlar (Apple `response_type` boşluğunu `+` yerine böyle bekler). Saf fonksiyondur. */
 function query(params: ReadonlyArray<readonly [string, string]>): string {
   return params.map(([key, value]: readonly [string, string]): string => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join("&");

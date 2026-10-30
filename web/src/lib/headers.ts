@@ -82,7 +82,7 @@ export function contentSecurityPolicy(config: SiteConfig, services: readonly Ext
     directive("script-src", ["'self'", webAnalyticsScriptOrigin], services, (sources: ServiceSources): readonly string[] => sources.script),
     directive("style-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.style),
     "img-src 'self'",
-    // Ana sayfadaki tanıtım videosu (public/video) yalnızca siteden yüklenir.
+    // Ana sayfadaki sessiz tanıtım videosu (public/video) yalnızca siteden yüklenir.
     "media-src 'self'",
     "font-src 'self'",
     directive("connect-src", ["'self'", originOf(config.apiBase), webAnalyticsConnectOrigin], services, (sources: ServiceSources): readonly string[] => sources.connect),
@@ -97,10 +97,13 @@ export function contentSecurityPolicy(config: SiteConfig, services: readonly Ext
   return directives.join("; ");
 }
 
-/** Tarayıcı özellikleri: sitenin hiçbirine ihtiyacı yok. */
+/**
+ * Tarayıcı özellikleri: kendiliğinden oynatma yalnızca sitenin kendisine açık (ana sayfadaki sessiz tanıtım videosu,
+ * src/client/launch-video.ts); diğerlerinin hiçbirine ihtiyaç yok.
+ */
 const permissionsPolicy: string = [
   "accelerometer=()",
-  "autoplay=()",
+  "autoplay=(self)",
   "camera=()",
   "display-capture=()",
   "geolocation=()",

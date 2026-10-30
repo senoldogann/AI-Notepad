@@ -221,7 +221,24 @@ function setUpGoogleRedirect(text: ClientCopy, notice: HTMLElement, redirectUri:
       window.location.assign(googleAuthorizeRedirect(googleAuthorizeUrl, siteConfig.googleClientId, redirectUri, pending.state, nonce.hashed));
     })();
   });
+  reenableOnBackForwardRestore(notice, [button]);
   button.disabled = false;
+}
+
+/**
+ * Sağlayıcıdan Geri ile dönülünce tarayıcı sayfayı geri/ileri önbellekten olduğu gibi açabilir: betik yeniden çalışmaz
+ * ve yönlendirmeden önce kapatılan düğmeler kapalı kalır. Bu durumda (`pageshow`, `persisted`) düğmeler yeniden açılır.
+ */
+function reenableOnBackForwardRestore(notice: HTMLElement, buttons: readonly HTMLButtonElement[]): void {
+  window.addEventListener("pageshow", (event: PageTransitionEvent): void => {
+    if (!event.persisted) {
+      return;
+    }
+    hideNotice(notice);
+    for (const button of buttons) {
+      button.disabled = false;
+    }
+  });
 }
 
 /**
@@ -300,6 +317,7 @@ function startAppSignIn(text: ClientCopy, notice: HTMLElement, redirectUri: stri
   };
   apple.addEventListener("click", (): void => go("apple"));
   google.addEventListener("click", (): void => go("google"));
+  reenableOnBackForwardRestore(notice, [apple, google]);
   apple.disabled = false;
   google.disabled = false;
   if (chosen !== null) {
